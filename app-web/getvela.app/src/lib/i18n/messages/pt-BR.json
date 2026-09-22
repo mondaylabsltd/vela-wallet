@@ -102,7 +102,7 @@
 		},
 		"hero": {
 			"headline": "Uma carteira Ethereum que é realmente sua",
-			"subtitle": "A assinatura acontece no seu aparelho. A Vela nunca recebe sua passkey.",
+			"subtitle": "A assinatura é feita no seu aparelho. A chave privada da sua passkey nunca chega à Vela.",
 			"ctaCreate": "Começar",
 			"ctaCode": "Ler o código",
 			"facts": [
@@ -115,12 +115,12 @@
 					"link": "Até sete chaves, definidas na criação — chaves de segurança físicas incluídas"
 				},
 				{
-					"term": "O que você vê na tela nem sempre é o que é assinado.",
-					"link": "Como a Bybit perdeu US$ 1,5 bilhão, e o que a Vela faz a respeito"
+					"term": "O que você vê é o que você assina: a Vela decodifica a transação exata antes de você aprová-la.",
+					"link": "Como a Bybit perdeu US$ 1,5 bilhão, e como a Vela mostra o que você assina"
 				},
 				{
-					"term": "Tudo o que a Vela roda para a sua carteira é de código aberto, e você pode rodar por conta própria.",
-					"link": "O que rodar, o que continua funcionando sem o getvela.app e o que ainda depende de nós"
+					"term": "Se a Vela parar de funcionar, você continua com acesso à sua carteira.",
+					"link": "Como continuar usando sua carteira se a Vela deixar de existir"
 				}
 			]
 		},
@@ -144,7 +144,7 @@
 			"items": [
 				{
 					"title": "Cada transação paga uma taxa de relay além do gas",
-					"body": "Uma transação da Vela verifica a assinatura da sua passkey on-chain e passa pelo ERC-4337, por isso gasta várias vezes o gas de uma transferência comum.\n\nA carteira reserva mais gas do que a transação precisa e cobra o triplo dessa reserva, ao maior preço entre a leitura de gas da própria carteira e a cotação do relay para a velocidade escolhida — muitas vezes dez vezes ou mais o custo real on-chain, e ainda mais no seu primeiro envio numa rede, com mínimo de US$ 0,01. O valor exato aparece antes de você assinar e não pode mudar depois.\n\nVocê pode apontar a carteira para outro relay ou <a href=\"/docs/self-hosting#relay\">rodar o seu</a> — aí a taxa fica com quem opera o relay."
+					"body": "Uma transação da Vela verifica a assinatura da sua passkey on-chain e passa pelo ERC-4337, por isso gasta várias vezes o gas de uma transferência comum.\n\nVocê paga uma única taxa ao relay que envia a sua transação — o da Vela, a menos que você o troque. Ela é o triplo do gas que a carteira reserva, ao preço da velocidade que você escolher, com mínimo de US$ 0,01 (<a href=\"/docs/networks-and-fees#fee\">como ela é calculada</a>); o relay paga o gas com ela e fica com o restante. Você vê o valor exato antes de assinar, e ele não pode mudar depois.\n\nVocê pode apontar a carteira para outro relay ou <a href=\"/docs/self-hosting#relay\">rodar o seu</a>, e aí a taxa fica com quem opera o relay."
 				},
 				{
 					"title": "Cada chave é uma porta de entrada para a sua carteira",
@@ -292,7 +292,7 @@
 				},
 				{
 					"q": "O que acontece se a Vela fechar, ou se o getvela.app cair?",
-					"a": "Seus fundos continuam no seu Safe, on-chain. Todos os serviços que a Vela opera são de código aberto, para qualquer pessoa rodar — o relay precisa de uma mudança no código para deixar de ler dados de chain do servidor da Vela.\n\nSe o getvela.app sair do ar, a extensão da Vela para navegador continua assinando com as chaves que você já tem — a passkey deste aparelho, uma chave de segurança ou um celular por QR code — e o mesmo vale para apps que você mesmo compilar, com um celular ou uma chave de segurança."
+					"a": "Seus fundos continuam no seu Safe, on-chain. Todos os serviços que a Vela opera são de código aberto, e você pode rodar cada um por conta própria — o relay, o índice de chaves públicas, os dados de chain e as cotações.\n\nSe o getvela.app sair do ar, a extensão da Vela para navegador continua assinando com as chaves que você já tem — a passkey deste aparelho, uma chave de segurança ou um celular por QR code — e o mesmo vale para apps que você mesmo compilar, com um celular ou uma chave de segurança."
 				}
 			]
 		}
@@ -351,7 +351,7 @@
 			},
 			{
 				"title": "Todos os apps respeitando os seus próprios serviços",
-				"body": "Hoje, alguns apps ignoram partes de Configurações → Endpoints de serviço — o app de iPhone por completo, o app web ao criar uma carteira ou fazer login, e o Android ao buscar nomes. Todos deveriam respeitar essa configuração, e o relay deveria conseguir ler dados de chain do seu próprio servidor."
+				"body": "Hoje, alguns apps ignoram partes de Configurações → Endpoints de serviço — o app de iPhone por completo, o app web ao criar uma carteira ou fazer login, e o Android ao buscar nomes. Todos deveriam respeitar essa configuração."
 			},
 			{
 				"title": "A página de assinatura independente, conectada",
@@ -486,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "09e59832402d",
+		"home": "c775da953511",
 		"about": "44b20f016140",
-		"roadmap": "cc826c697f61",
+		"roadmap": "ec62c4af0a9f",
 		"getStarted": "f7262f86ca9e"
 	}
 }

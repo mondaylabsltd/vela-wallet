@@ -1,7 +1,7 @@
 ---
 title: FAQ
 description: "Des réponses courtes sur la conservation des fonds, les clés, la récupération, les réseaux, les frais, ce que Vela peut voir, l'open source, et ce qui se passe si Vela disparaît."
-source: 0762e55bf54d
+source: 2d38e6a0b6d9
 ---
 
 # FAQ
@@ -50,11 +50,12 @@ la même sur tous les réseaux. Voir [réseaux et frais](/fr/docs/networks-and-f
   sur les stores ; vous pouvez aussi compiler n'importe quelle app gratuitement
   depuis les sources.
 - **Chaque transaction :** des frais payés depuis votre portefeuille au relais qui
-  la soumet. Ils couvrent le gas plus la marge du relais, et représentent souvent
-  dix fois ou plus le coût on-chain de la transaction, avec un minimum d'environ
-  0,01 $. Le montant exact figure sur l'écran de confirmation et fait partie de ce
-  que vous signez. Il n'y a ni dépôt ni abonnement.
-  [Comment les frais sont calculés](/fr/docs/networks-and-fees).
+  la soumet — celui de Vela, sauf si vous faites pointer le portefeuille vers un
+  autre relais ou faites tourner le vôtre. Ils couvrent le gas plus la marge du
+  relais, avec un minimum d'environ 0,01 $. Le montant exact figure sur l'écran de
+  confirmation avant que vous signiez, et fait partie de ce que vous signez. Il n'y
+  a ni dépôt ni abonnement.
+  [Comment les frais sont calculés](/fr/docs/networks-and-fees#fee).
 - **Aucun jeton.** Vela n'en a pas et n'en prévoit pas.
 
 ## Puis-je utiliser Vela avec des dApps ?
@@ -94,8 +95,7 @@ programmé. Voir [audits et problèmes connus](/fr/docs/security-audits).
 Vos fonds restent dans votre Safe, on-chain. Pour un portefeuille existant,
 l'extension Vela pour navigateur et les apps que vous compilez vous-même continuent
 de fonctionner sans getvela.app, et chaque service est open source, donc
-exploitable par quelqu'un d'autre (le relais demande une modification du code pour
-cesser de lire les données de chaîne sur le serveur de Vela). Le
+exploitable par quelqu'un d'autre. Le
 [guide d'auto-hébergement](/fr/docs/self-hosting#if-getvela-app-disappears) liste
 ces solutions et leurs limites.
 

@@ -102,7 +102,7 @@
 		},
 		"hero": {
 			"headline": "Gerçekten size ait bir Ethereum cüzdanı",
-			"subtitle": "İmzalama cihazınızda gerçekleşir. Geçiş anahtarınız Vela'ya asla ulaşmaz.",
+			"subtitle": "İmzalama cihazınızda yapılır. Geçiş anahtarınızın özel anahtarı hiçbir zaman Vela'ya gitmez.",
 			"ctaCreate": "Başlayın",
 			"ctaCode": "Kodu okuyun",
 			"facts": [
@@ -115,12 +115,12 @@
 					"link": "Kurulumda yedi anahtara kadar — donanım güvenlik anahtarları dahil"
 				},
 				{
-					"term": "Ekranda gördüğünüz şey, imzalanan şeyle aynı olmayabilir.",
-					"link": "Bybit 1,5 milyar doları nasıl kaybetti ve Vela buna karşı ne yapıyor"
+					"term": "Ne görüyorsanız onu imzalarsınız: Vela, tam olarak imzalayacağınız işlemi siz onaylamadan önce çözer.",
+					"link": "Bybit 1,5 milyar doları nasıl kaybetti ve Vela neyi imzaladığınızı size nasıl gösteriyor"
 				},
 				{
-					"term": "Vela'nın cüzdanınız için çalıştırdığı her şey açık kaynak ve hepsini kendiniz çalıştırabilirsiniz.",
-					"link": "Neyi çalıştırmanız gerekir, getvela.app olmadan neler çalışmaya devam eder, neler hâlâ bize bağlı"
+					"term": "Vela hizmeti durdursa bile cüzdanınıza yine de erişebilirsiniz.",
+					"link": "Vela ortadan kalkarsa cüzdanınızı kullanmaya nasıl devam edersiniz"
 				}
 			]
 		},
@@ -144,7 +144,7 @@
 			"items": [
 				{
 					"title": "Her işlem, gas ücretinin üstüne bir relay ücreti öder",
-					"body": "Bir Vela işlemi geçiş anahtarı imzanızı zincir üstünde doğrular ve ERC-4337 üzerinden yürür; bu yüzden sıradan bir transferin birkaç katı gas harcar.\n\nCüzdan, işlemin gerektirdiğinden fazla gas ayırır ve ücret olarak bunun üç katını alır; fiyat, cüzdanın kendi gas okuması ile relay'in seçtiğiniz hız için verdiği fiyattan hangisi yüksekse odur. Sonuç çoğu zaman gerçek zincir üstü maliyetin on katı ya da daha fazlasıdır; bir ağdaki ilk gönderiminizde daha da yüksektir ve asgari tutar 0,01 dolardır. Kesin tutar siz imzalamadan önce gösterilir ve sonradan değişemez.\n\nCüzdanı başka bir relay'e yönlendirebilir ya da <a href=\"/docs/self-hosting#relay\">kendi relay'inizi çalıştırabilirsiniz</a> — ücret o zaman onu çalıştırana gider."
+					"body": "Bir Vela işlemi geçiş anahtarı imzanızı zincir üstünde doğrular ve ERC-4337 üzerinden yürür; bu yüzden sıradan bir transferin birkaç katı gas harcar.\n\nTek bir ücret ödersiniz ve bu ücret işleminizi zincire gönderen relay'e gider — siz değiştirmedikçe Vela'nın relay'ine. Ücret, cüzdanın ayırdığı gas'ın üç katıdır; seçtiğiniz hızın fiyatıyla hesaplanır ve asgari tutar 0,01 dolardır (<a href=\"/docs/networks-and-fees#fee\">nasıl hesaplanır</a>). Relay gas bedelini bu ücretten öder ve gerisini kendisi tutar. Kesin tutarı siz imzalamadan önce görürsünüz ve bu tutar sonradan değişemez.\n\nCüzdanı başka bir relay'e yönlendirebilir ya da <a href=\"/docs/self-hosting#relay\">kendi relay'inizi çalıştırabilirsiniz</a>; ücret o zaman onu çalıştırana gider."
 				},
 				{
 					"title": "Her anahtar, cüzdanınıza açılan bir kapıdır",
@@ -292,7 +292,7 @@
 				},
 				{
 					"q": "Vela kapanırsa ya da getvela.app erişilemez olursa ne olur?",
-					"a": "Paranız zincir üstünde, kendi Safe'inizde kalır. Vela'nın çalıştırdığı her servis açık kaynak ve herkes çalıştırabilir — yalnız relay'in zincir verisini Vela'nın sunucusundan okumayı bırakması için kodunda bir değişiklik gerekir.\n\ngetvela.app çevrimdışı olursa Vela tarayıcı uzantısı mevcut anahtarlarınızla imzalamayı sürdürür — bu cihazdaki geçiş anahtarı, bir güvenlik anahtarı ya da QR kodla bağlanan bir telefon; kendiniz derlediğiniz uygulamalar da bir telefon ya da güvenlik anahtarıyla aynısını yapar."
+					"a": "Paranız zincir üstünde, kendi Safe'inizde kalır. Vela'nın çalıştırdığı her servis açık kaynaktır ve her birini kendiniz çalıştırabilirsiniz — relay, açık anahtar dizini, zincir verisi ve döviz kurları.\n\ngetvela.app çevrimdışı olursa Vela tarayıcı uzantısı mevcut anahtarlarınızla imzalamayı sürdürür — bu cihazdaki geçiş anahtarı, bir güvenlik anahtarı ya da QR kodla bağlanan bir telefon; kendiniz derlediğiniz uygulamalar da bir telefon ya da güvenlik anahtarıyla aynısını yapar."
 				}
 			]
 		}
@@ -351,7 +351,7 @@
 			},
 			{
 				"title": "Her uygulama kendi servislerinize uysun",
-				"body": "Bugün bazı uygulamalar Ayarlar → Servis Uç Noktaları bölümünün bir kısmını yok sayıyor — iPhone uygulaması tamamen, web uygulaması cüzdan oluştururken ya da giriş yaparken, Android ise adresler için ad ararken. Hepsinin bu ayarlara uyması, relay'in de zincir verisini sizin sunucunuzdan okuyabilmesi gerekiyor."
+				"body": "Bugün bazı uygulamalar Ayarlar → Servis Uç Noktaları bölümünün bir kısmını yok sayıyor — iPhone uygulaması tamamen, web uygulaması cüzdan oluştururken ya da giriş yaparken, Android ise adresler için ad ararken. Hepsinin bu ayarlara uyması gerekiyor."
 			},
 			{
 				"title": "Bağımsız imza sayfasını bağlamak",
@@ -486,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "09e59832402d",
+		"home": "c775da953511",
 		"about": "44b20f016140",
-		"roadmap": "cc826c697f61",
+		"roadmap": "ec62c4af0a9f",
 		"getStarted": "f7262f86ca9e"
 	}
 }

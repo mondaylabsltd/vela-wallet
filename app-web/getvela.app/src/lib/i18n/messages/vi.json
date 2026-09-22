@@ -102,7 +102,7 @@
 		},
 		"hero": {
 			"headline": "Ví Ethereum thực sự là của bạn",
-			"subtitle": "Việc ký diễn ra ngay trên thiết bị của bạn. Vela không bao giờ nhận được passkey đó.",
+			"subtitle": "Việc ký được thực hiện ngay trên thiết bị của bạn. Khóa riêng tư của passkey không bao giờ được gửi tới Vela.",
 			"ctaCreate": "Bắt đầu",
 			"ctaCode": "Đọc mã nguồn",
 			"facts": [
@@ -115,12 +115,12 @@
 					"link": "Tối đa bảy khóa, chọn ngay khi tạo ví — kể cả khóa bảo mật phần cứng"
 				},
 				{
-					"term": "Thứ bạn thấy trên màn hình chưa chắc là thứ được ký.",
-					"link": "Bybit mất 1,5 tỷ USD như thế nào, và Vela làm gì trước rủi ro đó"
+					"term": "Bạn ký đúng những gì bạn thấy: trước khi bạn duyệt, Vela giải mã chính giao dịch sẽ được ký.",
+					"link": "Bybit mất 1,5 tỷ USD như thế nào, và cách Vela cho bạn thấy mình đang ký gì"
 				},
 				{
-					"term": "Mọi thứ Vela vận hành cho ví của bạn đều là mã nguồn mở, và bạn có thể tự vận hành chúng.",
-					"link": "Cần chạy những gì, thứ gì vẫn hoạt động khi không có getvela.app, và thứ gì vẫn phụ thuộc vào chúng tôi"
+					"term": "Dù Vela ngừng hoạt động, bạn vẫn truy cập được ví của mình.",
+					"link": "Cách tiếp tục dùng ví nếu Vela không còn nữa"
 				}
 			]
 		},
@@ -144,7 +144,7 @@
 			"items": [
 				{
 					"title": "Mỗi giao dịch trả thêm phí relay ngoài tiền gas",
-					"body": "Giao dịch Vela xác minh chữ ký passkey của bạn ngay trên chuỗi và chạy qua ERC-4337, nên tốn lượng gas gấp nhiều lần một lệnh chuyển thông thường.\n\nVí dự trù nhiều gas hơn mức giao dịch cần và tính phí gấp ba lượng đó, theo mức cao hơn giữa giá gas ví tự đọc được và giá relay báo cho tốc độ bạn chọn — thường gấp mười lần chi phí thực trên chuỗi trở lên, còn cao hơn ở lần gửi đầu tiên trên một mạng, tối thiểu 0,01 USD. Số tiền chính xác hiện ra trước khi bạn ký và không thể thay đổi sau đó.\n\nBạn có thể trỏ ví sang một relay khác hoặc <a href=\"/docs/self-hosting#relay\">tự chạy relay của mình</a> — khi đó phí thuộc về người vận hành relay ấy."
+					"body": "Giao dịch Vela xác minh chữ ký passkey của bạn ngay trên chuỗi và chạy qua ERC-4337, nên tốn lượng gas gấp nhiều lần một lệnh chuyển thông thường.\n\nBạn trả một khoản phí duy nhất cho relay gửi giao dịch của bạn lên chuỗi — relay của Vela, trừ khi bạn đổi. Phí bằng ba lần lượng gas ví dự trù, tính theo giá cho tốc độ bạn chọn, tối thiểu 0,01 USD (<a href=\"/docs/networks-and-fees#fee\">cách tính</a>); relay dùng khoản này để trả gas và giữ phần còn lại. Bạn thấy số tiền chính xác trước khi ký, và nó không thể thay đổi sau đó.\n\nBạn có thể trỏ ví sang một relay khác hoặc <a href=\"/docs/self-hosting#relay\">tự chạy relay của mình</a>, và khi đó phí thuộc về người vận hành relay ấy."
 				},
 				{
 					"title": "Mỗi khóa là một lối vào ví của bạn",
@@ -292,7 +292,7 @@
 				},
 				{
 					"q": "Nếu Vela đóng cửa, hoặc getvela.app ngừng hoạt động thì sao?",
-					"a": "Tiền của bạn vẫn nằm trong Safe của bạn trên chuỗi. Mọi dịch vụ Vela vận hành đều là mã nguồn mở để bất kỳ ai cũng chạy được — riêng relay cần sửa mã để thôi đọc dữ liệu chuỗi từ máy chủ của Vela.\n\nNếu getvela.app ngừng hoạt động, tiện ích trình duyệt Vela vẫn ký được bằng các khóa bạn đang có — passkey trên thiết bị này, khóa bảo mật, hoặc điện thoại quét mã QR — và các ứng dụng bạn tự biên dịch cũng vậy, với điện thoại hoặc khóa bảo mật."
+					"a": "Tiền của bạn vẫn nằm trong Safe của bạn trên chuỗi. Mọi dịch vụ Vela vận hành đều là mã nguồn mở, và bạn có thể tự chạy từng dịch vụ — relay, chỉ mục khóa công khai, dữ liệu chuỗi và tỷ giá.\n\nNếu getvela.app ngừng hoạt động, tiện ích trình duyệt Vela vẫn ký được bằng các khóa bạn đang có — passkey trên thiết bị này, khóa bảo mật, hoặc điện thoại quét mã QR — và các ứng dụng bạn tự biên dịch cũng vậy, với điện thoại hoặc khóa bảo mật."
 				}
 			]
 		}
@@ -351,7 +351,7 @@
 			},
 			{
 				"title": "Mọi ứng dụng đều dùng đúng dịch vụ của bạn",
-				"body": "Hiện nay một số ứng dụng bỏ qua một phần của Cài đặt → Điểm cuối dịch vụ — ứng dụng iPhone bỏ qua hoàn toàn, ứng dụng web khi tạo ví hoặc đăng nhập, còn Android khi tra tên. Tất cả đều phải tuân theo thiết lập này, và relay cũng phải đọc được dữ liệu chuỗi từ máy chủ của riêng bạn."
+				"body": "Hiện nay một số ứng dụng bỏ qua một phần của Cài đặt → Điểm cuối dịch vụ — ứng dụng iPhone bỏ qua hoàn toàn, ứng dụng web khi tạo ví hoặc đăng nhập, còn Android khi tra tên. Tất cả đều phải tuân theo thiết lập này."
 			},
 			{
 				"title": "Kết nối trang ký độc lập",
@@ -486,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "09e59832402d",
+		"home": "c775da953511",
 		"about": "44b20f016140",
-		"roadmap": "cc826c697f61",
+		"roadmap": "ec62c4af0a9f",
 		"getStarted": "f7262f86ca9e"
 	}
 }

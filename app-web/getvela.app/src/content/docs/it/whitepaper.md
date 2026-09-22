@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Come funziona Vela e di cosa devi — e non devi — fidarti per usarlo: l'account, le chiavi, la commissione, il modello delle minacce, il recupero e cosa succede se Vela sparisce."
-source: d072d6710855
+source: 662b69510225
 ---
 
 <script>
@@ -31,8 +31,7 @@ quindi **non può spostare, congelare o sequestrare i tuoi fondi** per conto
 proprio. Scrive e distribuisce però il software che chiede alle tue chiavi di
 firmare — ed è per questo che il modello delle minacce qui sotto conta. Le app, il relay che invia le
 transazioni e i servizi di supporto sono open source, e puoi gestire una tua copia
-di ciascuno; oggi il relay legge ancora i dati delle chain dal server di Vela, a
-meno che tu non ne modifichi il codice. Di cosa ti fidi, in breve: dei contratti,
+di ciascuno. Di cosa ti fidi, in breve: dei contratti,
 degli autenticatori che custodiscono le tue chiavi, del codice dell'app con cui
 firmi, del dominio a cui appartengono le tue passkey e dei servizi verso cui
 indirizzi l'app.
@@ -152,9 +151,12 @@ dipendenza su cui questo documento torna più avanti.
   (le stime simulate aumentate della metà, con dei minimi), **al prezzo più alto
   tra la lettura del prezzo del gas fatta dal wallet e il prezzo del relay per la
   velocità scelta**, con un minimo di circa 0,01 dollari. Su Tempo il
-  moltiplicatore è due. A causa di questo margine sulla riserva e sul prezzo, la
-  commissione è spesso dieci volte o più il costo reale on-chain dell'operazione,
-  e di più per la prima transazione su una rete; il relay tiene la differenza.
+  moltiplicatore è due. Il margine sulla riserva e sul prezzo rende la commissione
+  più alta del costo reale on-chain dell'operazione, e ancora di più per la prima
+  transazione su una rete; il relay tiene la differenza. L'importo esatto è nella
+  schermata di conferma prima che tu firmi.
+- La commissione va al relay impostato nel wallet: quello di Vela per impostazione
+  predefinita, oppure qualsiasi istanza di vela-relay, compresa una che gestisci tu.
 - La commissione si paga nella moneta della rete o in una stablecoin in dollari
   accettata dal relay (pathUSD su Tempo, che non ha moneta nativa). **Non c'è
   alcun paymaster**: nessuno sponsorizza il gas, e nessuno può filtrare le
@@ -290,9 +292,8 @@ Dettagli: [recupero e accesso](/it/docs/recovery).
 ## Se Vela sparisce
 
 I tuoi fondi restano nel tuo Safe, on-chain. I contratti non dipendono da Vela, e
-ogni servizio che Vela gestisce è open source perché qualcun altro possa gestirlo
-— al relay serve una modifica al codice per smettere di leggere i dati delle chain
-dal server di Vela. L'unica cosa che non si può spostare è la relying party delle
+ogni servizio che Vela gestisce è open source perché qualcun altro possa gestirlo.
+L'unica cosa che non si può spostare è la relying party delle
 passkey, `getvela.app`: una copia del wallet web su un altro dominio crea un
 wallet diverso. Per i wallet esistenti, l'estensione Vela per il browser (che può
 usare le passkey di `getvela.app` grazie a un permesso) e le app che compili tu

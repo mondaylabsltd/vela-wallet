@@ -1,7 +1,7 @@
 ---
 title: Kendi sunucunuzda barındırma kılavuzu
 description: "Vela'nın sizin için çalıştırdığı her şey, her parçanın ne yaptığı ve onu kendinizinkiyle nasıl değiştireceğiniz — relay, açık anahtar dizini, zincir verisi, döviz kurları ve uygulamalar — ayrıca değiştiremeyeceğiniz tek şey ve getvela.app olmadan nasıl idare edeceğiniz."
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -19,9 +19,7 @@ kaynağı ve uygulamaların kendileri.
 Bu sayfa bu parçaların her birini, onsuz neyin bozulduğunu ve kendinizinkini nasıl
 çalıştıracağınızı listeliyor. Değiştiremeyeceğiniz tek parçayı — geçiş
 anahtarlarınızın ait olduğu alan adını — ve getvela.app ortadan kalkarsa ne
-yapacağınızı da anlatıyor. Baştan bir sınır: relay bugün zincir verisini Vela'nın
-sunucusundan okuyor; yani hiç Vela altyapısı olmadan gönderim yapmak, relay'in kodunda
-bir adresi değiştirmeyi gerektiriyor.
+yapacağınızı da anlatıyor.
 
 <Callout type="info" title="Bu sayfa kimler için">
 Terminal, Docker ya da Cloudflare Workers kullanmaya ve bir zincirdeki bir adrese para
@@ -155,7 +153,8 @@ bundler'larının uygulamadığı, Vela'ya özgü bir yöntemle ister.
 git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
-# .env içinde: VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET
+# .env içinde: VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET,
+# kendi zincir verinizi çalıştırıyorsanız VELA_RELAY_CHAIN_DIRECTORY_URL
 # ve güvendiğiniz bir sürüm imajına ayarlanmış VELA_RELAY_IMAGE (bkz. docs/docker.md)
 docker compose pull relay
 docker compose up -d --no-build
@@ -173,6 +172,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# kendi zincir veriniz için: wrangler.jsonc içinde "vars" altına "VELA_RELAY_CHAIN_DIRECTORY_URL" ekleyin
 npx wrangler deploy
 ```
 
@@ -191,10 +191,10 @@ Ardından `https://your-relay` adresini **Vela Relay** alanına girin.
   kullanın ücreti aynı şekilde hesaplar (bkz. [ağlar ve ücretler](/tr/docs/networks-and-fees)).
 - Relay'i değiştirmeden önce eklediğiniz özel bir ağ, eklendiği sıradaki relay
   adresini korur.
-- Relay, her zincirin ayrıntılarını ve stabilcoin listesini
-  `ethereum-data.getvela.app` adresinden okur. Bu adres bugün relay'in koduna sabit
-  yazılmıştır (`src/utils/rpc.rs` ve `vela-relay-cf/src/arms/market.rs`); onu
-  değiştirmek, bu iki satırı değiştirip relay'i kendiniz derlemek demektir.
+- Relay, her zincirin ayrıntılarını ve kabul ettiği stabilcoinleri bir zincir
+  dizininden okur. `VELA_RELAY_CHAIN_DIRECTORY_URL` ile [kendinizinkini](#chain-data)
+  belirtmediğiniz sürece bu dizin `ethereum-data.getvela.app` adresidir. Bu ayar Eylül
+  2026'da eklendi; daha eski bir relay sürümü her zaman Vela'nın kopyasını okur.
 
 ## Kendi açık anahtar dizininizi çalıştırın
 
@@ -265,9 +265,10 @@ curl http://localhost:3000/api/health   # "service":"ethereum-data","status":"ok
 README'si kaynak koddan derlemeyi ve Cloudflare'e dağıtmayı da anlatıyor. HTTPS
 üzerinden sunun ve adresi **Zincir Veri Dizini** alanına girin.
 
-Relay bu dosyalardaki Vela'ya özgü alanlara da bağlıdır (`stables` listesi, ücretleri
-hangi stabilcoinlerin ödeyebileceğini belirler) ve — yukarıda belirtildiği gibi —
-onları Vela'nın kopyasından okur.
+Relay de bu dosyaları okur; Vela'ya özgü bir alan da buna dahildir (`stables` listesi,
+ücretleri hangi stabilcoinlerin ödeyebileceğini belirler). Relay'i
+`VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data` ile kendi kopyanıza
+yönlendirin; relay her ağın kaydını bir saat önbellekte tutar.
 
 ## Kendi döviz kuru servisinizi çalıştırın
 
@@ -318,8 +319,6 @@ yalnızca ilk anahtar imzalayabilir.
 
 Yukarıdakilerin hepsini değiştirseniz de şunlar kalır:
 
-- **Relay'in zincir dizini** — relay'in kodunda `ethereum-data.getvela.app` olarak
-  sabit.
 - Güvenlik anahtarı modellerini adlandıran **kimlik doğrulayıcı dizini** — yalnızca
   görünümü etkiler; uygulamalar genel bir ada geri döner.
 - Mağaza uygulamalarının "bu cihaz" geçiş anahtarları için ihtiyaç duyduğu

@@ -1,7 +1,7 @@
 ---
 title: Guide d'auto-hébergement
 description: "Tout ce que Vela fait tourner pour vous, le rôle de chaque élément, et comment le remplacer par le vôtre — le relais, l'index des clés publiques, les données de chaîne, les taux de change et les apps —, plus le seul élément que vous ne pouvez pas remplacer, et comment vous passer de getvela.app."
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -20,10 +20,7 @@ elles-mêmes.
 Cette page liste chacun de ces éléments, ce qui ne fonctionne plus sans lui, et
 comment faire tourner le vôtre. Elle traite aussi du seul élément que vous ne
 pouvez pas remplacer — le domaine auquel appartiennent vos passkeys — et de ce
-qu'il faut faire si getvela.app disparaît. Une limite, d'emblée : aujourd'hui, le
-relais lit les données de chaîne sur le serveur de Vela ; envoyer des transactions
-sans aucune infrastructure Vela suppose donc de modifier une adresse dans le code
-du relais.
+qu'il faut faire si getvela.app disparaît.
 
 <Callout type="info" title="À qui s'adresse cette page">
 Vous devez être à l'aise avec un terminal, avec Docker ou Cloudflare Workers, et
@@ -166,6 +163,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # dans .env : VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET,
+# VELA_RELAY_CHAIN_DIRECTORY_URL si vous faites tourner vos propres données de chaîne,
 # et VELA_RELAY_IMAGE pointant vers une image publiée de confiance (voir docs/docker.md)
 docker compose pull relay
 docker compose up -d --no-build
@@ -183,6 +181,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# vos propres données de chaîne : ajoutez "VELA_RELAY_CHAIN_DIRECTORY_URL" sous "vars" dans wrangler.jsonc
 npx wrangler deploy
 ```
 
@@ -202,10 +201,11 @@ Saisissez ensuite `https://your-relay` dans le champ **Vela Relay**.
   [réseaux et frais](/fr/docs/networks-and-fees)).
 - Un réseau personnalisé ajouté avant le changement de relais garde l'adresse de
   relais avec laquelle il a été ajouté.
-- Le relais lit les informations de chaque chaîne et sa liste de stablecoins sur
-  `ethereum-data.getvela.app`. Cette adresse est aujourd'hui figée dans le code du
-  relais (`src/utils/rpc.rs` et `vela-relay-cf/src/arms/market.rs`) ; la remplacer
-  suppose de modifier ces deux lignes et de compiler le relais vous-même.
+- Le relais lit les informations de chaque chaîne et les stablecoins qu'il accepte
+  dans un annuaire de chaînes : `ethereum-data.getvela.app`, sauf si vous faites
+  pointer `VELA_RELAY_CHAIN_DIRECTORY_URL` vers [le vôtre](#chain-data). Cette
+  variable existe depuis septembre 2026 ; une version plus ancienne du relais lit
+  toujours la copie de Vela.
 
 ## Faire tourner votre propre index des clés publiques
 
@@ -279,9 +279,10 @@ Son README explique aussi comment compiler depuis les sources et déployer sur
 Cloudflare. Servez-le en HTTPS et saisissez l'adresse dans le champ **Index des
 données de chaîne**.
 
-Le relais dépend aussi de champs propres à Vela dans ces fichiers (la liste
-`stables` détermine quels stablecoins peuvent payer les frais), et — comme indiqué
-plus haut — les lit sur la copie de Vela.
+Le relais lit aussi ces fichiers, y compris un champ propre à Vela (la liste
+`stables` détermine quels stablecoins peuvent payer les frais). Faites-le pointer
+vers votre copie avec `VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data` ; il
+met en cache l'entrée de chaque réseau pendant une heure.
 
 ## Faire tourner vos propres taux de change
 
@@ -332,8 +333,6 @@ pas encore — sans elle, seule la première clé peut signer sur cette chaîne.
 
 Si vous remplacez tout ce qui précède, il reste :
 
-- **L'annuaire de chaînes du relais** — figé sur `ethereum-data.getvela.app` dans
-  le code du relais.
 - **L'annuaire d'authentificateurs** qui donne le nom des modèles de clés de
   sécurité — purement cosmétique ; à défaut, les apps affichent un nom générique.
 - **Les fichiers d'association de getvela.app**, dont les apps des stores ont

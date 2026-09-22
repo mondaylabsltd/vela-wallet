@@ -1,7 +1,7 @@
 ---
 title: Jaringan & biaya
 description: "24 jaringan bawaan Vela, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
-source: 84328d162a3a
+source: fdc50dbbf13a
 ---
 
 <script>
@@ -66,6 +66,8 @@ transaksi Anda karena kebijakan sponsor.
 
 ### Berapa biayanya
 
+<span id="fee"></span>
+
 Layar konfirmasi menampilkan satu jumlah, dalam koin biaya dan dalam mata uang tampilan
 Anda. Cara menghitungnya:
 
@@ -80,12 +82,18 @@ Anda. Cara menghitungnya:
 - **Biaya = 3 × gas yang dicadangkan × harga gas**, dengan minimum sekitar $0,01. Di
   Tempo, pengalinya 2 dan biayanya dibayar dengan pathUSD.
 
-Karena cadangannya jauh di atas pemakaian sebenarnya dan harganya diberi ruang lebih,
-**biayanya sering sepuluh kali lipat atau lebih dari biaya on-chain transaksi yang
-sebenarnya**, dan lebih besar lagi untuk transaksi pertama di suatu jaringan. Relay
+Cadangannya jauh di atas pemakaian sebenarnya dan harganya diberi ruang lebih, jadi
+biayanya lebih besar daripada biaya on-chain transaksinya — dan lebih besar lagi untuk
+transaksi pertama Anda di suatu jaringan, yang sekaligus men-deploy dompet Anda. Relay
 membayar biaya sebenarnya dan menyimpan sisanya; tidak ada yang dikembalikan. Di
 jaringan yang murah, jumlahnya hanya beberapa sen; di mainnet Ethereum, jumlahnya bisa
-lumayan besar. Jumlah pastinya ada di layar konfirmasi sebelum Anda menandatangani.
+lumayan besar. Anda tidak perlu menebak: jumlah pastinya ada di layar konfirmasi
+sebelum Anda menandatangani.
+
+**Siapa yang menerimanya.** Biaya itu masuk ke siapa pun yang menjalankan relay yang
+dipakai dompet — relay Vela, kecuali Anda menggantinya. Deployment vela-relay mana pun
+bisa dipakai, termasuk [yang Anda jalankan sendiri](/id/docs/self-hosting#relay), dan
+dompet memakai rumus yang sama, relay mana pun yang Anda pilih.
 
 <Callout type="info" title="Yang Anda lihat adalah yang Anda bayar">
 Jumlah biaya dan alamat tujuannya adalah bagian dari operasi yang Anda tandatangani.

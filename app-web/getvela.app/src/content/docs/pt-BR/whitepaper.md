@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Como a Vela funciona e em que você precisa — e não precisa — confiar para usá-la: a conta, as chaves, a taxa, o modelo de ameaças, a recuperação e o que acontece se a Vela deixar de existir."
-source: d072d6710855
+source: 662b69510225
 ---
 
 <script>
@@ -31,11 +31,10 @@ então **não consegue mover, congelar nem confiscar os seus fundos** por conta
 própria. Mas é ela que escreve e distribui o software que pede às suas chaves para
 assinar — e é por isso que o modelo de ameaças abaixo importa. Os apps, o relay que
 envia as transações e os serviços de apoio são de código aberto, e você pode rodar a
-sua própria cópia de cada um; hoje, o relay ainda lê dados de chain do servidor da
-Vela, a menos que você altere o código dele. Em que você confia, em resumo: nos
-contratos, nos autenticadores que guardam as suas chaves, no código do app com que
-você assina, no domínio ao qual as suas passkeys pertencem e nos serviços para os
-quais você aponta o app.
+sua própria cópia de cada um. Em que você confia, em resumo: nos contratos, nos
+autenticadores que guardam as suas chaves, no código do app com que você assina,
+no domínio ao qual as suas passkeys pertencem e nos serviços para os quais você
+aponta o app.
 
 ## Por que a Vela existe
 
@@ -152,10 +151,12 @@ adiante.
 - A taxa é **o triplo do gas que a carteira reserva para a operação** (as estimativas
   simuladas aumentadas em metade, com mínimos), **precificado pelo maior entre a
   leitura de preço de gas da própria carteira e o preço do relay para a velocidade
-  escolhida**, com mínimo de cerca de US$ 0,01. Na Tempo, o multiplicador é dois. Por
-  causa dessa folga na reserva e no preço, a taxa muitas vezes é dez vezes ou mais o
-  custo real da operação on-chain, e ainda maior na primeira transação numa rede; o
-  relay fica com a diferença.
+  escolhida**, com mínimo de cerca de US$ 0,01. Na Tempo, o multiplicador é dois. A
+  folga na reserva e no preço deixa a taxa acima do custo real da operação on-chain,
+  ainda mais na primeira transação numa rede; o relay fica com a diferença. O valor
+  exato aparece na tela de confirmação antes de você assinar.
+- A taxa vai para o relay configurado na carteira: o da Vela, por padrão, ou
+  qualquer implantação do vela-relay, inclusive uma que você mesmo rode.
 - A taxa é paga na moeda da rede ou numa stablecoin em dólar que o relay aceite
   (pathUSD na Tempo, que não tem moeda nativa). **Não há paymaster**: ninguém
   patrocina o gas, e ninguém pode filtrar transações por uma política de patrocínio.
@@ -286,8 +287,7 @@ Detalhes: [recuperação e login](/pt-BR/docs/recovery).
 
 Os seus fundos continuam no seu Safe, on-chain. Os contratos não dependem da Vela, e
 todos os serviços que a Vela opera são de código aberto, para que outra pessoa possa
-rodá-los — o relay precisa de uma mudança no código para deixar de ler dados de chain
-do servidor da Vela. A única coisa que não pode mudar de lugar é a relying party das
+rodá-los. A única coisa que não pode mudar de lugar é a relying party das
 passkeys, `getvela.app`: uma cópia da carteira web em outro domínio cria outra
 carteira. Para carteiras existentes, a extensão da Vela para navegador (que pode usar
 passkeys do `getvela.app` por permissão) e os apps que você mesmo compilar (com um

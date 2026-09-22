@@ -1,7 +1,7 @@
 ---
 title: Livre blanc
 description: "Comment fonctionne Vela, et ce à quoi vous devez — ou non — faire confiance pour l'utiliser : le compte, les clés, les frais, le modèle de menaces, la récupération, et ce qui se passe si Vela disparaît."
-source: d072d6710855
+source: 662b69510225
 ---
 
 <script>
@@ -32,11 +32,10 @@ elle **ne peut donc ni déplacer, ni geler, ni saisir vos fonds** d'elle-même. 
 écrit et distribue en revanche le logiciel qui demande à vos clés de signer — c'est
 pourquoi le modèle de menaces ci-dessous compte. Les apps, le relais qui soumet les
 transactions et les services annexes sont open source, et vous pouvez faire tourner
-votre propre copie de chacun ; aujourd'hui, le relais lit encore les données de
-chaîne sur le serveur de Vela, sauf si vous modifiez son code. Ce à quoi vous faites
-confiance, en bref : les contrats, les authentificateurs qui détiennent vos clés,
-le code de l'app avec laquelle vous signez, le domaine auquel appartiennent vos
-passkeys, et les services vers lesquels vous faites pointer l'app.
+votre propre copie de chacun. Ce à quoi vous faites confiance, en bref : les
+contrats, les authentificateurs qui détiennent vos clés, le code de l'app avec
+laquelle vous signez, le domaine auquel appartiennent vos passkeys, et les
+services vers lesquels vous faites pointer l'app.
 
 ## Pourquoi Vela existe
 
@@ -159,10 +158,13 @@ bas.
   l'opération** (les estimations simulées majorées de moitié, avec des minimums),
   **au plus élevé du prix du gas relevé par le portefeuille lui-même et du prix du
   relais pour la vitesse choisie**, avec un minimum d'environ 0,01 $. Sur Tempo, le
-  multiplicateur est de deux. En raison de cette marge sur la réserve et sur le prix,
-  les frais représentent souvent dix fois ou plus le coût réel de l'opération
-  on-chain, et davantage pour la première transaction sur un réseau ; le relais
-  garde la différence.
+  multiplicateur est de deux. La marge sur la réserve et sur le prix place les frais
+  au-dessus du coût réel de l'opération on-chain, et plus encore pour la première
+  transaction sur un réseau ; le relais garde la différence. Le montant exact figure
+  sur l'écran de confirmation avant que vous signiez.
+- Les frais vont au relais configuré dans le portefeuille : celui de Vela par
+  défaut, ou n'importe quel déploiement de vela-relay, y compris celui que vous
+  faites tourner.
 - Les frais se paient dans la monnaie du réseau ou dans un stablecoin en dollars que
   le relais accepte (du pathUSD sur Tempo, qui n'a pas de monnaie native). Il n'y a
   **pas de paymaster** : personne ne sponsorise le gas, et personne ne peut filtrer
@@ -307,10 +309,9 @@ Détails : [récupération et connexion](/fr/docs/recovery).
 
 Vos fonds restent dans votre Safe, on-chain. Les contrats ne dépendent pas de Vela,
 et chaque service que Vela fait tourner est open source, donc exploitable par
-quelqu'un d'autre — le relais demande une modification du code pour cesser de lire
-les données de chaîne sur le serveur de Vela. La seule chose qui ne peut pas
-changer de place, c'est la partie de confiance des passkeys, `getvela.app` : une
-copie du portefeuille web sur un autre domaine crée un autre portefeuille. Pour les
+quelqu'un d'autre. La seule chose qui ne peut pas changer de place, c'est la
+partie de confiance des passkeys, `getvela.app` : une copie du portefeuille web
+sur un autre domaine crée un autre portefeuille. Pour les
 portefeuilles existants, l'extension Vela pour navigateur (qui peut utiliser les
 passkeys `getvela.app` sur autorisation) et les apps que vous compilez vous-même
 (avec un téléphone ou une clé de sécurité) continuent de fonctionner sans

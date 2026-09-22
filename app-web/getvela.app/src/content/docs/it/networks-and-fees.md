@@ -1,7 +1,7 @@
 ---
 title: Reti e commissioni
 description: "Le 24 reti integrate in Vela, come aggiungerne un'altra, come si calcola esattamente la commissione di una transazione e chi la riceve, e cosa succede quando un relay resta senza gas."
-source: 84328d162a3a
+source: fdc50dbbf13a
 ---
 
 <script>
@@ -66,6 +66,8 @@ sponsorizzazione.
 
 ### A quanto ammonta la commissione
 
+<span id="fee"></span>
+
 La schermata di conferma mostra un solo importo, nella moneta della commissione e
 nella tua valuta di visualizzazione. Si calcola così:
 
@@ -81,13 +83,18 @@ nella tua valuta di visualizzazione. Si calcola così:
 - **Commissione = 3 × gas riservato × prezzo del gas**, con un minimo di circa
   0,01 dollari. Su Tempo il moltiplicatore è 2 e la commissione si paga in pathUSD.
 
-Poiché la riserva è maggiorata ben oltre ciò che la transazione userà e il prezzo
-include un margine, **la commissione è spesso dieci volte o più ciò che la
-transazione costa davvero on-chain**, e di più per la prima transazione su una
-rete. Il relay paga il costo reale e tiene il resto; non viene rimborsato nulla.
-Sulle reti economiche sono centesimi; sulla mainnet di Ethereum può essere una
-cifra significativa. L'importo esatto è nella schermata di conferma prima che tu
-firmi.
+La riserva è maggiorata ben oltre ciò che la transazione userà e il prezzo include
+un margine, quindi la commissione è più alta di quanto la transazione costi davvero
+on-chain — e ancora più alta alla tua prima transazione su una rete, che deploya
+anche il tuo wallet. Il relay paga il costo reale e tiene il resto; non
+viene rimborsato nulla. Sulle reti economiche sono centesimi; sulla mainnet di
+Ethereum può essere una cifra significativa. Non devi mai tirare a indovinare:
+l'importo esatto è nella schermata di conferma prima che tu firmi.
+
+**A chi va.** La commissione va a chi gestisce il relay impostato nel wallet —
+quello di Vela, se non lo cambi. Funziona qualsiasi istanza di vela-relay, compresa
+[una che gestisci tu](/it/docs/self-hosting#relay), e il wallet usa la stessa
+formula qualunque relay tu scelga.
 
 <Callout type="info" title="Paghi quello che vedi">
 L'importo della commissione e l'indirizzo a cui va fanno parte dell'operazione che

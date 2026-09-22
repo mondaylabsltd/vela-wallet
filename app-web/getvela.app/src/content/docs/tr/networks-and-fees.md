@@ -1,7 +1,7 @@
 ---
 title: Ağlar ve ücretler
 description: "Vela'ya yerleşik 24 ağ, başka bir ağın nasıl ekleneceği, bir işlemin ücretinin tam olarak nasıl hesaplandığı ve kime gittiği, bir relay'in gas'ı bittiğinde ne olduğu."
-source: 84328d162a3a
+source: fdc50dbbf13a
 ---
 
 <script>
@@ -65,6 +65,8 @@ bir sponsorluk politikası yüzünden işleminizi reddedemez.
 
 ### Ücret nedir
 
+<span id="fee"></span>
+
 Onay ekranı tek bir tutar gösterir; hem ücret coininde hem de görüntüleme para
 biriminizde. Şöyle hesaplanır:
 
@@ -78,12 +80,17 @@ biriminizde. Şöyle hesaplanır:
 - **Ücret = 3 × ayrılan gas × gas fiyatı**; asgari yaklaşık 0,01 dolar. Tempo'da çarpan
   2'dir ve ücret pathUSD ile ödenir.
 
-Ayrılan miktar işlemin kullanacağının epey üstünde tutulduğu ve fiyata pay
-bırakıldığı için **ücret çoğu zaman işlemin gerçek zincir üstü maliyetinin on katı ya
-da daha fazlasıdır**; bir ağdaki ilk işlemde daha da fazladır. Gerçek maliyeti relay
+Ayrılan miktar işlemin kullanacağının epey üstünde tutulur ve fiyata pay bırakılır;
+bu yüzden ücret, işlemin zincir üstü maliyetinden fazladır — bir ağdaki ilk
+işleminizde, cüzdanınızı da dağıttığı için, daha da fazladır. Gerçek maliyeti relay
 öder ve gerisini kendisi tutar; hiçbir şey iade edilmez. Ucuz ağlarda bu birkaç
-senttir; Ethereum ana ağında ciddi bir tutar olabilir. Kesin tutar, siz imzalamadan
-önce onay ekranındadır.
+senttir; Ethereum ana ağında ciddi bir tutar olabilir. Tahmin yürütmeniz gerekmez:
+kesin tutar, siz imzalamadan önce onay ekranındadır.
+
+**Ücret kime gider.** Ücret, cüzdanın ayarlı olduğu relay'i kim çalıştırıyorsa ona
+gider — siz değiştirmedikçe Vela'ya. Herhangi bir vela-relay dağıtımı kullanılabilir,
+[kendi çalıştırdığınız](/tr/docs/self-hosting#relay) da dahil; hangi relay'i seçerseniz
+seçin cüzdan aynı formülü kullanır.
 
 <Callout type="info" title="Ne görüyorsanız onu ödersiniz">
 Ücret tutarı ve gittiği adres, imzaladığınız işlemin parçasıdır. Bunlardan birini

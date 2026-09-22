@@ -1,7 +1,7 @@
 ---
 title: 自行架設指南
 description: "Vela 為你運行的一切、每個部分的用途，以及如何換成你自己的——中繼、公鑰索引、鏈數據、匯率和各個 App；還有你唯一無法替換的東西，以及沒有 getvela.app 時如何繼續使用。"
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -14,8 +14,7 @@ source: 24c423d10c89
 方便的那套機制：替你提交交易的中繼、幫助新裝置找到你錢包的索引、鏈數據目錄、匯率來源，以及各個 App 本身。
 
 本頁逐一列出這些部分：沒有它會有甚麼失效，以及如何自行運行。本頁也會說明你唯一無法替換的部分——你的
-通行密鑰所屬的域名——以及 getvela.app 消失時應該怎麼辦。先說明一個限制：目前中繼會從 Vela 的伺服器讀取
-鏈數據，所以要完全不依賴 Vela 的基礎設施來轉賬，就需要修改中繼程式碼中的一個地址。
+通行密鑰所屬的域名——以及 getvela.app 消失時應該怎麼辦。
 
 <Callout type="info" title="本頁適合誰">
 你應該熟悉終端機、Docker 或 Cloudflare Workers，也懂得為鏈上地址注資。日常使用 Vela 完全不需要這裏的內容。
@@ -125,6 +124,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # 在 .env 中設定 VELA_RELAY_IGGY_URL、VELA_RELAY_REDIS_URL、OPERATOR_SECRET，
+# 如自行運行鏈數據，再設定 VELA_RELAY_CHAIN_DIRECTORY_URL，
 # 並把 VELA_RELAY_IMAGE 設為你信任的發佈映像（見 docs/docker.md）
 docker compose pull relay
 docker compose up -d --no-build
@@ -141,6 +141,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# 自行運行鏈數據：在 wrangler.jsonc 的 "vars" 中加入 "VELA_RELAY_CHAIN_DIRECTORY_URL"
 npx wrangler deploy
 ```
 
@@ -158,8 +159,9 @@ curl https://your-relay/v1/treasury/100   # 你在 Gnosis 上的資金庫地址�
 - 錢包支付的手續費會進入你的資金庫。無論你用哪個中繼，錢包計算手續費的方式都一樣
   （見[網絡與費用](/zh-HK/docs/networks-and-fees)）。
 - 在更換中繼之前加入的自訂網絡，會沿用加入時的中繼地址。
-- 中繼會從 `ethereum-data.getvela.app` 讀取每條鏈的資料和穩定幣列表。這個地址目前寫死在中繼的程式碼中
-  （`src/utils/rpc.rs` 和 `vela-relay-cf/src/arms/market.rs`）；要替換它，就要修改這兩行並自行編譯中繼。
+- 中繼會從鏈目錄讀取每條鏈的資料和它接受的穩定幣：預設是 `ethereum-data.getvela.app`，
+  把 `VELA_RELAY_CHAIN_DIRECTORY_URL` 設為[你自己的鏈數據](#chain-data)即可替換。
+  這個設定於 2026 年 9 月加入；較舊的中繼版本一律讀取 Vela 的那一份。
 
 ## 運行你自己的公鑰索引
 
@@ -220,8 +222,9 @@ curl http://localhost:3000/api/health   # "service":"ethereum-data","status":"ok
 
 它的 README 也說明了如何從原始碼建置及部署到 Cloudflare。請以 HTTPS 提供服務，並把地址填入「區塊鏈數據索引」欄位。
 
-中繼也依賴這些檔案中 Vela 專屬的欄位（`stables` 列表決定哪些穩定幣可以支付手續費），而且——如上所述——
-它讀取的是 Vela 的那一份。
+中繼也會讀取這些檔案，包括一個 Vela 專屬的欄位（`stables` 列表決定哪些穩定幣可以支付手續費）。
+用 `VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data` 讓它改為讀取你的那一份；
+每條網絡的資料，它會快取一小時。
 
 ## 運行你自己的匯率服務
 
@@ -267,7 +270,6 @@ App 使用 `getvela.app` 通行密鑰。
 
 即使你替換了以上所有部分，仍會剩下這些：
 
-- **中繼的鏈目錄**——在中繼的程式碼中寫死為 `ethereum-data.getvela.app`。
 - **用來顯示安全密鑰型號的驗證器目錄**——只影響顯示；App 會改為顯示通用名稱。
 - **getvela.app 的關聯檔案**——應用程式商店版 App 使用「本裝置」通行密鑰時需要它們。手機或安全密鑰則不需要。
 

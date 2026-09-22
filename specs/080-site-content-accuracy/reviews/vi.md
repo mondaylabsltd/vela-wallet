@@ -125,3 +125,24 @@ Callouts, every table and every code block kept; only code comments translated.
 
 ## Result
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into vi. Each changed string checked on the
+five single-string axes; no High or Medium left open.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | «Việc ký được thực hiện ngay trên thiết bị của bạn. Khóa riêng tư của passkey không bao giờ được gửi tới Vela.» | — | *khóa riêng tư* as `passkeys.md` says; *diễn ra* → *được thực hiện* follows en "happens" → "is done" |
+| `home.hero.facts[2]` | «Bạn ký đúng những gì bạn thấy: trước khi bạn duyệt, Vela giải mã chính giao dịch sẽ được ký.» / «…và cách Vela cho bạn thấy mình đang ký gì» | — | Vietnamese has no settled WYSIWYS term. *Thấy gì, ký nấy* (to match the callout «Thấy bao nhiêu, trả bấy nhiêu») was rejected: *thấy gì … nấy* also reads "whatever you see, you sign", the opposite of the point |
+| `home.hero.facts[3]` | term = 059 string; link «Cách tiếp tục dùng ví nếu Vela không còn nữa» | — | 059 «Dù Vela ngừng hoạt động, bạn vẫn truy cập được ví của mình.» **kept**: same meaning as en and zh, natural. F-5 against it predates the en reinstatement; the overclaiming 059 link is not restored |
+| `home.tradeoffs.items[0].body` | paragraph 2 rewritten (one fee to the relay, Vela's unless changed; formula + `#fee` link *cách tính*; relay pays the gas and keeps the rest); paragraph 3 tail aligned with en (", và khi đó…") | — | both hrefs identical to en |
+| `home.faq.items[6].a` | code-change clause replaced by the four services you can run | — | second paragraph untouched |
+| `roadmap.upcoming[1].body` | chain-data clause removed | — | |
+| docs `networks-and-fees` | `<span id="fee">`; "gấp mười lần" paragraph replaced; **Ai nhận phí.** paragraph | — | |
+| docs `faq` | cost bullet (relay choice, `#fee` link); shutdown answer without the code-change parenthesis | — | |
+| docs `whitepaper` | intro clause dropped; Fees bullet + new "who gets the fee" bullet; «Nếu Vela biến mất» clause dropped | — | |
+| docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; **Cần biết** bullet; chain-data paragraph; relay line removed from the final list | — | *danh mục chuỗi* / *bản của Vela* as the file already said; "tháng 9/2026"; older builds = *các phiên bản relay cũ hơn*, so *bản* keeps meaning "copy" |
+
+Nothing fixed beyond the brief.

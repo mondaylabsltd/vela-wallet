@@ -1,7 +1,7 @@
 ---
 title: SSS
 description: "Saklama, anahtarlar, kurtarma, ağlar, ücretler, Vela'nın neleri görebildiği, açık kaynak ve Vela ortadan kalkarsa ne olacağı hakkında kısa yanıtlar."
-source: 0762e55bf54d
+source: 2d38e6a0b6d9
 ---
 
 # SSS
@@ -46,11 +46,12 @@ Yerel coinler ve ERC-20 tokenları. Adres her ağda aynıdır. Bkz.
 - **Uygulamalar:** web cüzdanı, tarayıcı uzantısı ve masaüstü uygulamaları ücretsizdir.
   iOS ve Android uygulamaları mağazalarda tek seferlik satın alma olacak; herhangi bir
   uygulamayı kaynak koddan ücretsiz olarak kendiniz de derleyebilirsiniz.
-- **Her işlem:** cüzdanınızdan, işlemi zincire gönderen relay'e ödenen bir ücret. Gas
-  bedelini ve relay'in payını karşılar; çoğu zaman işlemin zincir üstü maliyetinin on
-  katı ya da daha fazlasıdır ve asgari tutar yaklaşık 0,01 dolardır. Kesin tutar onay
-  ekranındadır ve imzaladığınız şeyin parçasıdır. Depozito ya da abonelik yoktur.
-  [Ücret nasıl hesaplanır](/tr/docs/networks-and-fees).
+- **Her işlem:** cüzdanınızdan, işlemi zincire gönderen relay'e ödenen bir ücret —
+  cüzdanı başka bir relay'e yönlendirmediğiniz ya da kendi relay'inizi çalıştırmadığınız
+  sürece Vela'nın relay'ine. Gas bedelini ve relay'in payını karşılar; asgari tutar
+  yaklaşık 0,01 dolardır. Kesin tutar siz imzalamadan önce onay ekranındadır ve
+  imzaladığınız şeyin parçasıdır. Depozito ya da abonelik yoktur.
+  [Ücret nasıl hesaplanır](/tr/docs/networks-and-fees#fee).
 - **Token yok.** Vela'nın tokenı yok ve çıkarma planı da yok.
 
 ## Vela'yı dApp'lerle kullanabilir miyim?
@@ -88,9 +89,7 @@ Bkz. [denetimler ve bilinen sorunlar](/tr/docs/security-audits).
 
 Paranız zincir üstünde, kendi Safe'inizde kalır. Mevcut bir cüzdan için Vela tarayıcı
 uzantısı ve kendi derlediğiniz uygulamalar getvela.app olmadan çalışmaya devam eder ve
-her servis açık kaynaktır, başka biri de çalıştırabilir (relay'in zincir verisini
-Vela'nın sunucusundan okumayı bırakması için kodunda bir değişiklik gerekir). Yolları
-ve sınırlarını
+her servis açık kaynaktır, başka biri de çalıştırabilir. Yolları ve sınırlarını
 [kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting#if-getvela-app-disappears)
 listeliyor.
 

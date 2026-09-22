@@ -117,3 +117,24 @@ Callouts and every code block kept, only code comments translated.
 
 ## Result
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into es-MX. Each changed string checked
+on the five single-string axes; no High or Medium left open.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | «La firma se hace en tu dispositivo. La llave privada de tu passkey nunca llega a Vela.» | — | *llave privada*, as `passkeys.md` and `create-wallet.md` already say (the locale's *llave* umbrella), not the more generic *clave privada* |
+| `home.hero.facts[2]` | «Lo que ves es lo que firmas: Vela decodifica la transacción exacta antes de que la apruebes.» / «…y cómo Vela te muestra lo que firmas» | — | *Lo que ves es lo que firmas* is the Spanish rendering of WYSIWYS and mirrors the existing callout «Lo que ves es lo que pagas» |
+| `home.hero.facts[3]` | term = 059 string, kept; link «Cómo seguir usando tu wallet si Vela desaparece» | — | 059 «Aunque Vela deje de operar, sigues teniendo acceso a tu wallet.» **kept**: it says what en ("doesn't depend on Vela staying online") and zh (即使 Vela 停止服务…) say, in natural Mexican Spanish. The link reuses the whitepaper heading «Si Vela desaparece» |
+| `home.tradeoffs.items[0].body` | paragraph 2 rewritten (one fee, to the relay; Vela's unless changed; formula + `#fee` link; relay keeps the rest); paragraph 3 tail aligned | — | both hrefs identical to en |
+| `home.faq.items[6].a` | code-change clause replaced by the four services you can run | — | second paragraph untouched |
+| `roadmap.upcoming[1].body` | chain-data clause removed | — | |
+| docs `networks-and-fees` | `<span id="fee">`; "ten times" paragraph replaced; **Quién la recibe.** paragraph | — | |
+| docs `faq` | cost bullet (relay choice, `#fee` link); shutdown answer without the code-change parenthesis | — | parentheses rather than a dash: es-MX files avoid em dashes |
+| docs `whitepaper` | intro clause dropped; Fees bullet + new "who gets the fee" bullet; "Si Vela desaparece" clause dropped | — | |
+| docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; "Toma en cuenta" bullet; chain-data paragraph; relay line removed from the final list | — | *directorio de cadenas*, as the removed list line named it |
+
+Nothing fixed beyond the brief.

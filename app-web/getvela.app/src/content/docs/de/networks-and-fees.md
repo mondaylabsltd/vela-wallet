@@ -1,7 +1,7 @@
 ---
 title: Netzwerke und Gebühren
 description: "Die 24 in Vela eingebauten Netzwerke, wie du ein weiteres hinzufügst, wie genau die Gebühr einer Transaktion berechnet wird und wer sie erhält, und was passiert, wenn einem Relay das Gas ausgeht."
-source: 84328d162a3a
+source: fdc50dbbf13a
 ---
 
 <script>
@@ -67,6 +67,8 @@ Sponsoring-Richtlinie ablehnen.
 
 ### Wie hoch die Gebühr ist
 
+<span id="fee"></span>
+
 Der Bestätigungsbildschirm zeigt einen einzigen Betrag, im Gebühren-Coin und in deiner
 Anzeigewährung. Er wird so berechnet:
 
@@ -82,13 +84,18 @@ Anzeigewährung. Er wird so berechnet:
 - **Gebühr = 3 × reserviertes Gas × Gaspreis**, mindestens etwa 0,01 US-Dollar. Auf
   Tempo ist der Faktor 2, und die Gebühr wird in pathUSD bezahlt.
 
-Weil die Reserve deutlich über dem liegt, was die Transaktion verbrauchen wird, und
-der Preis Spielraum enthält, **ist die Gebühr oft zehnmal so hoch wie die
-tatsächlichen On-Chain-Kosten der Transaktion oder höher**, bei der ersten
-Transaktion in einem Netzwerk noch mehr. Das Relay zahlt die echten Kosten und behält
-den Rest; erstattet wird nichts. In günstigen Netzwerken sind das Cent-Beträge; im
-Ethereum-Mainnet kann es ein spürbarer Betrag sein. Der genaue Betrag steht vor dem
-Signieren auf dem Bestätigungsbildschirm.
+Die Reserve liegt deutlich über dem, was die Transaktion verbrauchen wird, und der
+Preis enthält Spielraum; die Gebühr ist deshalb höher als die On-Chain-Kosten der
+Transaktion – und noch höher bei deiner ersten Transaktion in einem Netzwerk, die
+zugleich deine Wallet bereitstellt. Das Relay zahlt die echten Kosten und behält den
+Rest; erstattet wird nichts. In günstigen Netzwerken sind das Cent-Beträge; im
+Ethereum-Mainnet kann es ein spürbarer Betrag sein. Raten musst du nie: Der genaue
+Betrag steht vor dem Signieren auf dem Bestätigungsbildschirm.
+
+**Wer sie bekommt.** Die Gebühr geht an den Betreiber des Relays, auf das die Wallet
+eingestellt ist – das von Vela, sofern du es nicht änderst. Jede vela-relay-Instanz
+funktioniert, auch [eine, die du selbst betreibst](/de/docs/self-hosting#relay), und
+die Wallet rechnet mit derselben Formel, egal welches Relay du wählst.
 
 <Callout type="info" title="Was du siehst, zahlst du">
 Der Gebührenbetrag und die Adresse, an die er geht, sind Teil der Operation, die du

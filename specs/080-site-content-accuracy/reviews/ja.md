@@ -111,3 +111,24 @@ were reviewed and kept: each is what a Japanese docs site says (このページ�
 ## Result
 
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into ja. Each changed string checked on the
+five single-string axes; no High or Medium left open. Docs keep one line per paragraph.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | 署名はあなたの端末で行われます。パスキーの秘密鍵が Vela に渡ることはありません。 | — | 秘密鍵 as the docs already say; first sentence already meant "is done" |
+| `home.hero.facts[2]` | 画面で見たものが、そのまま署名されます。Vela は承認の前に、署名する取引そのものをデコードします。 / …と、Vela が署名の中身を見せるしくみ | — | Japanese has no settled term for WYSIWYS, so it is said plainly; it answers the old term 画面に見えているものが、署名されるものとは限りません |
+| `home.hero.facts[3]` | term = 059 string; link Vela がなくなっても、ウォレットを使い続ける方法 | — | 059 Vela がサービスを止めても、あなたのウォレットにはアクセスできます。 **kept**: same meaning as en and zh (即使 Vela 停止服务…), natural. The 080 finding #2 against it rested on the relay code change, which no longer exists; the overclaiming 059 link is not restored |
+| `home.tradeoffs.items[0].body` | paragraph 2 rewritten (one fee to the relay, Vela's unless changed; formula + `#fee` link 計算方法; relay pays the gas and keeps the rest) | — | both hrefs identical to en; paragraph 3 unchanged |
+| `home.faq.items[6].a` | code-change sentence replaced by the four services you can run | — | second paragraph untouched |
+| `roadmap.upcoming[1].body` | chain-data clause removed | — | |
+| docs `networks-and-fees` | `<span id="fee">`; "10 倍以上" paragraph replaced; **受け取るのは誰か。** paragraph | — | |
+| docs `faq` | cost bullet (relay choice, `#fee` link); shutdown answer without the code-change parenthesis | — | |
+| docs `whitepaper` | intro sentence dropped; Fees bullet + new "who gets the fee" bullet; 「Vela がなくなったら」 sentence dropped | — | |
+| docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; 知っておくこと bullet; chain-data paragraph; relay line removed from the final list | — | チェーンディレクトリ / Vela のコピー as the file already said |
+
+Nothing fixed beyond the brief.

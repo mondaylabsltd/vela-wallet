@@ -121,3 +121,26 @@ New: `self-hosting.md` (all six anchors in their English sections).
 
 ## Result
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into `id.json` and four docs. Terms
+unchanged from the table above: *relay*, *direktori chain*, *data chain*, *men-deploy*,
+*kunci privat*, *mendekode*, *hosting sendiri*. A running relay is *deployment
+vela-relay*, as Indonesian developer writing borrows it.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | "Kunci privat passkey Anda tidak pernah dikirim ke Vela." | – | first sentence unchanged; it already said "is done" (*dilakukan*) |
+| `home.hero.facts[2]` | "Yang Anda lihat adalah yang Anda tandatangani: sebelum Anda menyetujui, Vela mendekode transaksi persis seperti yang akan ditandatangani." + new link | – | Indonesian has no settled native term for WYSIWYS; the form mirrors the fee callout "Yang Anda lihat adalah yang Anda bayar". *persis seperti yang akan ditandatangani* carries "exact transaction" (decoded from what is signed) |
+| `home.hero.facts[3]` | 059 string restored; new link "Cara tetap memakai dompet Anda kalau Vela menghilang" | – | **059 string kept**: "Kalau Vela berhenti beroperasi, Anda tetap bisa mengakses dompet Anda." matches en and zh (即使 Vela 停止服务…) and reads naturally. Finding #3 above (High, "a promise the domain limit makes false") is superseded by the founder's 2026-09-22 ruling. Link echoes the whitepaper heading *Kalau Vela menghilang* |
+| `home.tradeoffs.items[0].body` | middle paragraph rewritten (one fee, to the relay, Vela's by default, formula + `#fee` link, relay keeps the rest) | – | both hrefs verbatim and unprefixed; closing paragraph's dash became ", dan", as en |
+| `home.faq.items[6].a` | relay code-change clause replaced by the list of services you can run | – | second paragraph untouched |
+| `roadmap.upcoming[1].body` | relay clause dropped | – | |
+| docs `networks-and-fees` | `<span id="fee">` under "Berapa biayanya"; "sepuluh kali lipat" paragraph replaced (bold dropped, as en); "**Siapa yang menerimanya.**" added | – | |
+| docs `faq` | fee bullet (relay choice, `#fee` link); shutdown answer without the parenthesis | – | |
+| docs `whitepaper` | intro clause, fee bullet + new bullet on who gets the fee, "Kalau Vela menghilang" clause | – | |
+| docs `self-hosting` | intro limit removed; two code comments; "Perlu diketahui" bullet; chain-data paragraph; relay line removed from "Yang masih mengarah ke Vela" | – | |
+
+No High or Medium findings open.

@@ -158,3 +158,24 @@ addresses unchanged; no hard line break lands inside a Korean word (a newline re
 ## Result
 
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into ko. Each changed string checked on the
+five single-string axes; no High or Medium left open.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | 서명은 당신의 기기에서 이뤄집니다. 패스키의 개인 키는 절대 Vela에 전달되지 않습니다. | — | 개인 키 as `passkeys.md` says; 당신 kept, as in the other founder-approved hero strings |
+| `home.hero.facts[2]` | 보이는 그대로 서명합니다. Vela는 승인하기 전에 실제로 서명할 거래를 디코딩합니다. / …그리고 Vela가 서명할 내용을 보여 주는 방법 | — | no settled Korean term for WYSIWYS; 보이는 그대로 서명 is the plain idiom and answers the old term 화면에 보이는 것이 반드시… |
+| `home.hero.facts[3]` | term = 059 string; link Vela가 사라져도 지갑을 계속 쓰는 방법 | — | 059 Vela가 서비스를 멈춰도 당신의 지갑에는 계속 접근할 수 있습니다. **kept**: same meaning as en and zh, natural. Finding #4 against it predates the en reinstatement; the overclaiming 059 link is not restored |
+| `home.tradeoffs.items[0].body` | paragraph 2 rewritten (one fee to the relay, Vela's unless changed; formula + `#fee` link 계산 방식; relay pays the gas and keeps the rest) | — | both hrefs identical to en; paragraph 3 unchanged |
+| `home.faq.items[6].a` | code-change sentence replaced by the four services you can run | — | second paragraph untouched |
+| `roadmap.upcoming[1].body` | chain-data clause removed | — | |
+| docs `networks-and-fees` | `<span id="fee">`; "10배 이상" paragraph replaced; **수수료는 누가 받나.** paragraph | — | |
+| docs `faq` | cost bullet (relay choice, `#fee` link); shutdown answer without the code-change parenthesis | — | |
+| docs `whitepaper` | intro sentence dropped; Fees bullet + new "who gets the fee" bullet; "Vela가 사라진다면" sentence dropped | — | re-wrapped at spaces only |
+| docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; 알아 둘 것 bullet; chain-data paragraph; relay line removed from the final list | — | 체인 디렉터리 / Vela의 사본 as the file already said |
+
+Nothing fixed beyond the brief.

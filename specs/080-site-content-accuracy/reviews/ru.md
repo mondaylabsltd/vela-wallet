@@ -120,3 +120,27 @@ High fixed: 26 · Medium fixed: 17.
 
 ## Result
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into `ru.json` and four docs. Terms
+unchanged from the table above: *релей*, *справочник сетей*, *данные сетей*,
+*развёртывание*, *закрытый ключ* (the docs' term; the catalog's single *приватный ключ*
+in the comparison table was left alone), *расшифровывать* (decode), *держать* (run a
+service), passkey indeclinable and never the bare object of *подписывать*.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | «Закрытый ключ вашего passkey никогда не попадает к Vela.» | – | first sentence unchanged («Подпись создаётся на вашем устройстве» already says it is done on the device) |
+| `home.hero.facts[2]` | «Что видите, то и подписываете: Vela расшифровывает именно ту транзакцию, которую вы подпишете, до того как вы её подтвердите.» + new link | – | «что видишь, то и подписываешь» is the established Russian rendering of WYSIWYS, here in the вы-form; mirrors the fee callout «Сколько видите, столько и платите» |
+| `home.hero.facts[3]` | 059 string restored; new link «Как продолжать пользоваться кошельком, если Vela исчезнет» | – | **059 string kept**: «Даже если Vela перестанет работать, доступ к кошельку останется у вас.» matches en and zh (即使 Vela 停止服务…) and reads naturally. Finding #2 above (High, "unconditional promise") is superseded by the founder's 2026-09-22 ruling. Link echoes the whitepaper heading «Если Vela исчезнет» |
+| `home.tradeoffs.items[0].body` | middle paragraph rewritten (one fee, to the relay, Vela's by default, formula + `#fee` link, relay keeps the rest) | – | both hrefs verbatim and unprefixed; "cost of three times the reserved gas" phrased as the whitepaper already does («стоимость трёхкратного объёма газа») |
+| `home.faq.items[6].a` | relay code-change clause replaced by the list of services you can run | – | second paragraph untouched |
+| `roadmap.upcoming[1].body` | relay clause dropped | – | |
+| docs `networks-and-fees` | `<span id="fee">` under «Из чего складывается комиссия»; "в десять и более раз" paragraph replaced (bold dropped, as en; the doubled «запас» smoothed); «**Кому она достаётся.**» added | – | |
+| docs `faq` | fee bullet (relay choice, `#fee` link); shutdown answer without the parenthesis | – | |
+| docs `whitepaper` | intro clause, fee bullet + new bullet on who gets the fee, «Если Vela исчезнет» clause | – | two lines re-wrapped after the cuts |
+| docs `self-hosting` | intro limit removed; two code comments; «Что нужно знать» bullet; chain-data paragraph; relay line removed from «Что всё равно указывает на Vela» | – | Docker comment gets a comma after `OPERATOR_SECRET` so the added item joins the list before «и» |
+
+No High or Medium findings open.

@@ -102,7 +102,7 @@
 		},
 		"hero": {
 			"headline": "Un wallet Ethereum davvero tuo",
-			"subtitle": "La firma avviene sul tuo dispositivo. Vela non riceve mai la tua passkey.",
+			"subtitle": "La firma avviene sul tuo dispositivo. La chiave privata della tua passkey non arriva mai a Vela.",
 			"ctaCreate": "Inizia",
 			"ctaCode": "Leggi il codice",
 			"facts": [
@@ -115,12 +115,12 @@
 					"link": "Fino a sette chiavi, fissate alla creazione — chiavi hardware comprese"
 				},
 				{
-					"term": "Quello che vedi sullo schermo non sempre è quello che viene firmato.",
-					"link": "Come Bybit ha perso 1,5 miliardi di dollari, e cosa fa Vela al riguardo"
+					"term": "Quello che vedi è quello che firmi: Vela decodifica la transazione esatta prima che tu la approvi.",
+					"link": "Come Bybit ha perso 1,5 miliardi di dollari, e come Vela ti mostra cosa firmi"
 				},
 				{
-					"term": "Tutto quello che Vela gestisce per il tuo wallet è open source, e puoi gestirlo tu.",
-					"link": "Cosa gestire, cosa funziona anche senza getvela.app e cosa dipende ancora da noi"
+					"term": "Anche se Vela smette di funzionare, continui ad accedere al tuo wallet.",
+					"link": "Come continuare a usare il tuo wallet se Vela sparisce"
 				}
 			]
 		},
@@ -144,7 +144,7 @@
 			"items": [
 				{
 					"title": "Ogni transazione paga una commissione al relay, oltre al gas",
-					"body": "Una transazione Vela verifica on-chain la firma della tua passkey e passa per ERC-4337, quindi consuma diverse volte il gas di un normale trasferimento.\n\nIl wallet riserva più gas di quanto serva alla transazione e ne addebita il triplo, al prezzo più alto tra la propria lettura del gas e quello del relay per la velocità che hai scelto: spesso dieci volte o più il costo reale on-chain, ancora di più al primo invio su una rete, con un minimo di 0,01 dollari. L'importo esatto viene mostrato prima che tu firmi e non può cambiare dopo.\n\nPuoi indirizzare il wallet verso un altro relay oppure <a href=\"/docs/self-hosting#relay\">gestirne uno tuo</a>: a quel punto la commissione va a chi lo gestisce."
+					"body": "Una transazione Vela verifica on-chain la firma della tua passkey e passa per ERC-4337, quindi consuma diverse volte il gas di un normale trasferimento.\n\nPaghi una sola commissione, al relay che invia la tua transazione: quello di Vela, se non lo cambi. È il triplo del gas che il wallet riserva, al prezzo del gas per la velocità che scegli, con un minimo di 0,01 dollari (<a href=\"/docs/networks-and-fees#fee\">come si calcola</a>); il relay la usa per pagare il gas e tiene il resto. L'importo esatto viene mostrato prima che tu firmi e non può cambiare dopo.\n\nPuoi indirizzare il wallet verso un altro relay oppure <a href=\"/docs/self-hosting#relay\">gestirne uno tuo</a>: a quel punto la commissione va a chi lo gestisce."
 				},
 				{
 					"title": "Ogni chiave è un ingresso nel tuo wallet",
@@ -292,7 +292,7 @@
 				},
 				{
 					"q": "Cosa succede se Vela chiude, o se getvela.app va offline?",
-					"a": "I tuoi fondi restano nel tuo Safe, on-chain. Ogni servizio gestito da Vela è open source e chiunque può gestirlo — al relay serve una modifica al codice per smettere di leggere i dati delle chain dal server di Vela.\n\nSe getvela.app va offline, l'estensione Vela per il browser firma ancora con le chiavi che hai già — la passkey di questo dispositivo, una chiave di sicurezza o un telefono tramite codice QR — e lo stesso vale per le app che compili tu, con un telefono o una chiave di sicurezza."
+					"a": "I tuoi fondi restano nel tuo Safe, on-chain. Ogni servizio gestito da Vela è open source, e ciascuno puoi gestirlo tu — il relay, l'indice delle chiavi pubbliche, i dati delle chain e i tassi di cambio.\n\nSe getvela.app va offline, l'estensione Vela per il browser firma ancora con le chiavi che hai già — la passkey di questo dispositivo, una chiave di sicurezza o un telefono tramite codice QR — e lo stesso vale per le app che compili tu, con un telefono o una chiave di sicurezza."
 				}
 			]
 		}
@@ -351,7 +351,7 @@
 			},
 			{
 				"title": "Ogni app rispetta i servizi che scegli",
-				"body": "Oggi alcune app ignorano in parte Impostazioni → Endpoint dei servizi: l'app iPhone del tutto, l'app web quando crei un wallet o accedi, e Android quando cerca i nomi degli indirizzi. Tutte dovrebbero rispettare queste impostazioni, e il relay dovrebbe poter leggere i dati delle chain dal tuo server."
+				"body": "Oggi alcune app ignorano in parte Impostazioni → Endpoint dei servizi: l'app iPhone del tutto, l'app web quando crei un wallet o accedi, e Android quando cerca i nomi degli indirizzi. Tutte dovrebbero rispettare queste impostazioni."
 			},
 			{
 				"title": "La pagina di firma indipendente, collegata",
@@ -486,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "09e59832402d",
+		"home": "c775da953511",
 		"about": "44b20f016140",
-		"roadmap": "cc826c697f61",
+		"roadmap": "ec62c4af0a9f",
 		"getStarted": "f7262f86ca9e"
 	}
 }

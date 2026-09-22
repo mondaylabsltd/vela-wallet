@@ -1,7 +1,7 @@
 ---
 title: セルフホスティングガイド
 description: "Vela があなたのために動かしているもの、それぞれの役割、そして自分のものに置き換える方法（リレー、公開鍵インデックス、チェーンデータ、為替レート、アプリ）。置き換えられない唯一のものと、getvela.app なしで使い続ける方法も。"
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -12,7 +12,7 @@ source: 24c423d10c89
 
 あなたの資金はオンチェーンの Safe コントラクトにあり、あなたの鍵で管理されています。Vela が動かしているものは、どれもそれを動かせません。Vela が動かしているのは、ウォレットを便利にするための仕組みです。取引を送信するリレー、新しい端末がウォレットを見つけるためのインデックス、チェーンデータのディレクトリ、為替レートの配信、そしてアプリそのものです。
 
-このページでは、そのひとつひとつについて、何をしているのか、それがないと何が困るのか、自分で動かすにはどうするのかを説明します。置き換えられない唯一のもの、つまりパスキーが属するドメインと、getvela.app がなくなったときにどうすればいいかも扱います。先に限界をひとつ書いておきます。現在、リレーは Vela のサーバーからチェーンデータを読んでいるため、Vela のインフラをまったく使わずに送金するには、リレーのコードにあるアドレスをひとつ書き換える必要があります。
+このページでは、そのひとつひとつについて、何をしているのか、それがないと何が困るのか、自分で動かすにはどうするのかを説明します。置き換えられない唯一のもの、つまりパスキーが属するドメインと、getvela.app がなくなったときにどうすればいいかも扱います。
 
 <Callout type="info" title="このページの対象読者">
 ターミナル、Docker または Cloudflare Workers の扱いと、チェーン上のアドレスへの入金に慣れていることを前提にしています。日常的に Vela を使うだけなら、ここにあるものは何も必要ありません。
@@ -98,6 +98,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # .env に VELA_RELAY_IGGY_URL、VELA_RELAY_REDIS_URL、OPERATOR_SECRET を設定し、
+# 自分のチェーンデータを動かすなら VELA_RELAY_CHAIN_DIRECTORY_URL も加え、
 # VELA_RELAY_IMAGE を信頼できるリリースイメージにする（docs/docker.md を参照）
 docker compose pull relay
 docker compose up -d --no-build
@@ -113,6 +114,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# 自分のチェーンデータを使うなら、wrangler.jsonc の "vars" に "VELA_RELAY_CHAIN_DIRECTORY_URL" を追加する
 npx wrangler deploy
 ```
 
@@ -129,7 +131,7 @@ curl https://your-relay/v1/treasury/100   # Gnosis でのトレジャリーの�
 
 - ウォレットが払う手数料は、あなたのトレジャリーに入ります。どのリレーを使っても、ウォレットは同じ方法で手数料を計算します（[ネットワークと手数料](/ja/docs/networks-and-fees)を参照）。
 - リレーを変更する前に追加したカスタムネットワークは、追加したときのリレーのアドレスを使い続けます。
-- リレーは、各チェーンの情報とステーブルコインの一覧を `ethereum-data.getvela.app` から読みます。このアドレスは現在リレーのコード（`src/utils/rpc.rs` と `vela-relay-cf/src/arms/market.rs`）に固定されており、置き換えるにはこの 2 行を変更して、リレーを自分でビルドする必要があります。
+- リレーは、各チェーンの情報と、受け付けるステーブルコインの一覧を、チェーンディレクトリから読みます。`VELA_RELAY_CHAIN_DIRECTORY_URL` に[自分のもの](#chain-data)を設定しないかぎり、読み先は `ethereum-data.getvela.app` です。この設定は 2026 年 9 月に追加されました。それより古いリレーのビルドは、常に Vela のコピーを読みます。
 
 ## 自分の公開鍵インデックスを動かす
 
@@ -180,7 +182,7 @@ curl http://localhost:3000/api/health   # "service":"ethereum-data","status":"ok
 
 ソースからのビルドと Cloudflare へのデプロイについても、README で説明しています。HTTPS で配信し、そのアドレスを **チェーンデータインデックス** 欄に入力してください。
 
-リレーは、これらのファイルに含まれる Vela 独自のフィールドにも依存しており（手数料の支払いに使えるステーブルコインは `stables` の一覧で決まります）、前述のとおり、それを Vela のコピーから読んでいます。
+リレーもこれらのファイルを読みます。その中には Vela 独自のフィールドもあります（手数料の支払いに使えるステーブルコインは `stables` の一覧で決まります）。`VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data` で、リレーの読み先を自分のコピーにしてください。リレーは各ネットワークのエントリを 1 時間キャッシュします。
 
 ## 自分の為替レートを動かす
 
@@ -219,7 +221,6 @@ Vela は、P-256 プリコンパイルと、Vela が確認する標準コント�
 
 ここまでのものをすべて置き換えても、次のものは残ります。
 
-- **リレーのチェーンディレクトリ** —— リレーのコードで `ethereum-data.getvela.app` に固定されています。
 - **セキュリティキーの機種名を表示する認証器ディレクトリ** —— 見た目だけの問題で、アプリは汎用の名前で代用します。
 - **getvela.app の関連付けファイル** —— ストア版のアプリが「この端末」のパスキーを使うのに必要です。スマートフォンやセキュリティキーには必要ありません。
 

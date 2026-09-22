@@ -102,7 +102,7 @@
 		},
 		"hero": {
 			"headline": "Un portefeuille Ethereum qui vous appartient vraiment",
-			"subtitle": "La signature a lieu sur votre appareil. Vela ne reçoit jamais votre passkey.",
+			"subtitle": "La signature se fait sur votre appareil. La clé privée de votre passkey n'est jamais transmise à Vela.",
 			"ctaCreate": "Commencer",
 			"ctaCode": "Lire le code",
 			"facts": [
@@ -115,12 +115,12 @@
 					"link": "Jusqu'à sept clés, fixées à la création — clés matérielles comprises"
 				},
 				{
-					"term": "Ce que vous voyez à l'écran n'est pas forcément ce qui est signé.",
-					"link": "Comment Bybit a perdu 1,5 milliard de dollars, et ce que fait Vela contre ce risque"
+					"term": "Ce que vous voyez est ce que vous signez : Vela décode la transaction exacte avant que vous ne l'approuviez.",
+					"link": "Comment Bybit a perdu 1,5 milliard de dollars, et comment Vela vous montre ce que vous signez"
 				},
 				{
-					"term": "Tout ce que Vela fait tourner pour votre portefeuille est open source, et vous pouvez le faire tourner vous-même.",
-					"link": "Ce qu'il faut faire tourner, ce qui marche encore sans getvela.app, et ce qui dépend encore de nous"
+					"term": "Même si Vela cesse de fonctionner, vous gardez l'accès à votre portefeuille.",
+					"link": "Comment continuer à utiliser votre portefeuille si Vela disparaît"
 				}
 			]
 		},
@@ -144,7 +144,7 @@
 			"items": [
 				{
 					"title": "Chaque transaction paie des frais de relais en plus du gas",
-					"body": "Une transaction Vela vérifie la signature de votre passkey on-chain et passe par ERC-4337 : elle consomme donc plusieurs fois le gas d'un simple transfert.\n\nLe portefeuille réserve plus de gas que la transaction n'en a besoin et facture trois fois cette réserve, au plus élevé de deux prix : le prix du gas qu'il relève lui-même et celui du relais pour la vitesse choisie. Cela représente souvent dix fois le coût réel on-chain, voire davantage — plus encore pour votre premier envoi sur un réseau —, avec un minimum de 0,01 $. Le montant exact s'affiche avant que vous signiez et ne peut plus changer ensuite.\n\nVous pouvez faire pointer le portefeuille vers un autre relais ou <a href=\"/docs/self-hosting#relay\">faire tourner le vôtre</a> — les frais reviennent alors à celui qui l'exploite."
+					"body": "Une transaction Vela vérifie la signature de votre passkey on-chain et passe par ERC-4337 : elle consomme donc plusieurs fois le gas d'un simple transfert.\n\nVous ne payez qu'un seul montant : les frais du relais qui soumet votre transaction — celui de Vela, sauf si vous en changez. Ces frais valent trois fois le gas que le portefeuille réserve, au prix correspondant à la vitesse choisie, avec un minimum de 0,01 $ (<a href=\"/docs/networks-and-fees#fee\">comment ils sont calculés</a>) ; le relais s'en sert pour payer le gas et garde le reste. Vous voyez le montant exact avant de signer, et il ne peut plus changer ensuite.\n\nVous pouvez faire pointer le portefeuille vers un autre relais ou <a href=\"/docs/self-hosting#relay\">faire tourner le vôtre</a> : les frais reviennent alors à celui qui l'exploite."
 				},
 				{
 					"title": "Chaque clé est une porte d'entrée dans votre portefeuille",
@@ -292,7 +292,7 @@
 				},
 				{
 					"q": "Que se passe-t-il si Vela ferme, ou si getvela.app tombe ?",
-					"a": "Vos fonds restent dans votre Safe, on-chain. Chaque service que Vela fait tourner est open source et peut être exploité par n'importe qui — le relais demande une modification du code pour cesser de lire les données de chaîne sur le serveur de Vela.\n\nSi getvela.app est hors ligne, l'extension Vela pour navigateur signe toujours avec vos clés existantes — la passkey de cet appareil, une clé de sécurité ou un téléphone via QR code —, tout comme les apps que vous compilez vous-même, avec un téléphone ou une clé de sécurité."
+					"a": "Vos fonds restent dans votre Safe, on-chain. Tous les services que Vela fait tourner sont open source, et vous pouvez faire tourner chacun d'eux vous-même — le relais, l'index des clés publiques, les données de chaîne et les taux de change.\n\nSi getvela.app est hors ligne, l'extension Vela pour navigateur signe toujours avec vos clés existantes — la passkey de cet appareil, une clé de sécurité ou un téléphone via QR code —, tout comme les apps que vous compilez vous-même, avec un téléphone ou une clé de sécurité."
 				}
 			]
 		}
@@ -351,7 +351,7 @@
 			},
 			{
 				"title": "Vos propres services, respectés par toutes les apps",
-				"body": "Aujourd'hui, certaines apps ignorent une partie de Réglages → Points d'accès des services — l'app iPhone entièrement, l'app web lors de la création d'un portefeuille ou de la connexion, et Android pour la recherche de noms. Toutes devraient les respecter, et le relais devrait pouvoir lire les données de chaîne sur votre propre serveur."
+				"body": "Aujourd'hui, certaines apps ignorent une partie de Réglages → Points d'accès des services — l'app iPhone entièrement, l'app web lors de la création d'un portefeuille ou de la connexion, et Android pour la recherche de noms. Toutes devraient les respecter."
 			},
 			{
 				"title": "La page de signature indépendante, reliée aux apps",
@@ -486,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "09e59832402d",
+		"home": "c775da953511",
 		"about": "44b20f016140",
-		"roadmap": "cc826c697f61",
+		"roadmap": "ec62c4af0a9f",
 		"getStarted": "f7262f86ca9e"
 	}
 }

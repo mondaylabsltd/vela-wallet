@@ -1,7 +1,7 @@
 ---
 title: Häufige Fragen
 description: "Kurze Antworten zu Verwahrung, Schlüsseln, Wiederherstellung, Netzwerken, Gebühren, dazu, was Vela sehen kann, zu Open Source und dazu, was passiert, wenn es Vela nicht mehr gibt."
-source: 0762e55bf54d
+source: 2d38e6a0b6d9
 ---
 
 # Häufige Fragen
@@ -50,11 +50,12 @@ dieselbe. Siehe [Netzwerke und Gebühren](/de/docs/networks-and-fees).
   kostenlos. Die iOS- und Android-Apps werden als Einmalkauf in den Stores angeboten;
   du kannst außerdem jede App kostenlos aus dem Quellcode bauen.
 - **Jede Transaktion:** eine Gebühr, die aus deiner Wallet an das Relay geht, das sie
-  einreicht. Sie deckt das Gas plus die Marge des Relays und beträgt oft das Zehnfache
-  der On-Chain-Kosten der Transaktion oder mehr, mindestens etwa 0,01 US-Dollar. Der
-  genaue Betrag steht auf dem Bestätigungsbildschirm und ist Teil dessen, was du
-  signierst. Es gibt keine Einzahlung und kein Abo.
-  [Wie die Gebühr berechnet wird](/de/docs/networks-and-fees).
+  einreicht – an das von Vela, es sei denn, du stellst die Wallet auf ein anderes Relay
+  um oder betreibst ein eigenes. Sie deckt das Gas plus die Marge des Relays und
+  beträgt mindestens etwa 0,01 US-Dollar. Der genaue Betrag steht vor dem Signieren auf
+  dem Bestätigungsbildschirm und ist Teil dessen, was du signierst. Es gibt keine
+  Einzahlung und kein Abo.
+  [Wie die Gebühr berechnet wird](/de/docs/networks-and-fees#fee).
 - **Kein Token.** Vela hat keinen und plant keinen.
 
 ## Kann ich Vela mit dApps nutzen?
@@ -94,8 +95,7 @@ derzeit nicht angesetzt. Siehe [Audits und bekannte Probleme](/de/docs/security-
 
 Dein Guthaben bleibt on-chain in deinem Safe. Für eine bestehende Wallet funktionieren
 die Vela-Browser-Erweiterung und selbst gebaute Apps auch ohne getvela.app weiter, und
-jeder Dienst ist Open Source und kann von anderen betrieben werden (das Relay braucht
-eine Code-Änderung, damit es keine Chain-Daten mehr von Velas Server liest). Die
+jeder Dienst ist Open Source und kann von anderen betrieben werden. Die
 [Anleitung zum Selbsthosten](/de/docs/self-hosting#if-getvela-app-disappears) listet
 die Wege und ihre Grenzen auf.
 

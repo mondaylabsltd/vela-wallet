@@ -1,7 +1,7 @@
 ---
 title: 셀프 호스팅 가이드
 description: "Vela가 대신 운영하는 모든 것, 각각의 역할, 그리고 릴레이, 공개 키 인덱스, 체인 데이터, 환율, 앱을 직접 운영하는 것으로 바꾸는 방법. 바꿀 수 없는 단 하나와, getvela.app 없이 지내는 방법도 다룹니다."
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -17,9 +17,7 @@ source: 24c423d10c89
 
 이 페이지는 이 구성 요소를 하나하나 짚으며, 각각이 없으면 무엇이 안 되는지, 어떻게 직접
 운영하는지 설명합니다. 바꿀 수 없는 단 하나, 즉 패스키가 속한 도메인과, getvela.app이
-사라졌을 때 할 일도 다룹니다. 한계부터 밝혀 둡니다. 현재 릴레이는 Vela의 서버에서 체인
-데이터를 읽기 때문에, Vela 인프라를 전혀 쓰지 않고 거래를 보내려면 릴레이 코드에서 주소 하나를
-바꿔야 합니다.
+사라졌을 때 할 일도 다룹니다.
 
 <Callout type="info" title="이 페이지가 필요한 사람">
 터미널, Docker나 Cloudflare Workers를 다룰 수 있고, 체인의 주소에 자금을 넣을 줄 알아야
@@ -141,6 +139,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # .env에 VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET을 채우고,
+# 체인 데이터를 직접 운영한다면 VELA_RELAY_CHAIN_DIRECTORY_URL도 넣고,
 # VELA_RELAY_IMAGE는 신뢰하는 릴리스 이미지로 설정 (docs/docker.md 참고)
 docker compose pull relay
 docker compose up -d --no-build
@@ -158,6 +157,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# 체인 데이터를 직접 운영한다면 wrangler.jsonc의 "vars"에 "VELA_RELAY_CHAIN_DIRECTORY_URL" 추가
 npx wrangler deploy
 ```
 
@@ -176,9 +176,10 @@ curl https://your-relay/v1/treasury/100   # Gnosis의 트레저리 주소와 가
   수수료를 계산합니다([네트워크와 수수료](/ko/docs/networks-and-fees) 참고).
 - 릴레이를 바꾸기 전에 추가한 사용자 지정 네트워크는 추가할 때 지정한 릴레이 주소를 그대로
   씁니다.
-- 릴레이는 체인별 정보와 스테이블코인 목록을 `ethereum-data.getvela.app`에서 읽습니다. 이
-  주소는 현재 릴레이 코드(`src/utils/rpc.rs`와 `vela-relay-cf/src/arms/market.rs`)에 고정되어
-  있어서, 바꾸려면 이 두 줄을 고치고 릴레이를 직접 빌드해야 합니다.
+- 릴레이는 체인별 정보와, 수수료로 받아 주는 스테이블코인 목록을 체인 디렉터리에서 읽습니다.
+  `VELA_RELAY_CHAIN_DIRECTORY_URL`을 [직접 운영하는 체인 데이터](#chain-data)로 설정하지 않으면
+  `ethereum-data.getvela.app`에서 읽습니다. 이 설정은 2026년 9월에 추가되었고, 그보다 오래된
+  릴레이 빌드는 항상 Vela의 사본을 읽습니다.
 
 ## 공개 키 인덱스 직접 운영하기
 
@@ -244,8 +245,9 @@ curl http://localhost:3000/api/health   # "service":"ethereum-data","status":"ok
 소스에서 빌드하는 방법과 Cloudflare에 배포하는 방법은 README에 있습니다. HTTPS로 서비스하고
 **체인 데이터** 입력란에 주소를 넣으세요.
 
-릴레이도 이 파일들의 Vela 전용 필드에 의존하며(`stables` 목록이 수수료를 낼 수 있는
-스테이블코인을 정합니다), 앞에서 말했듯 Vela가 운영하는 사본에서 읽습니다.
+릴레이도 이 파일들을 읽으며, 그중에는 Vela 전용 필드도 있습니다(`stables` 목록이 수수료를 낼
+수 있는 스테이블코인을 정합니다). `VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data`로
+릴레이가 내 사본을 읽게 하세요. 릴레이는 네트워크별 항목을 한 시간 동안 캐시합니다.
 
 ## 환율 직접 운영하기
 
@@ -293,7 +295,6 @@ Vela는 P-256 프리컴파일과, Vela가 확인하는 표준 컨트랙트를 �
 
 위의 것을 모두 바꿔도 다음은 남습니다.
 
-- **릴레이의 체인 디렉터리** — 릴레이 코드에 `ethereum-data.getvela.app`으로 고정되어 있습니다.
 - **보안 키 모델명을 알려 주는 인증자 디렉터리** — 표시에만 영향을 줍니다. 연결되지 않으면 앱이
   일반적인 이름을 보여 줍니다.
 - **getvela.app의 연결 파일** — 스토어 앱이 "이 기기" 패스키를 쓰려면 필요합니다. 휴대폰이나

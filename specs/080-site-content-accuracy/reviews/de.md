@@ -123,3 +123,26 @@ Counts: **High 22 · Medium 16 · Low 6** (items 1–22, 23–38, 39–44), all 
 ## Result
 
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into `de.json` and four docs. Terms
+unchanged from the table above: *Relay*, *Chain-Verzeichnis*, *Chain-Daten*,
+*bereitstellen*, *Passkey* (der). A running relay deployment is *vela-relay-Instanz*
+(*Bereitstellung* stays reserved for contract deployment).
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | „Der private Schlüssel deines Passkeys gelangt nie zu Vela.“ | – | first sentence unchanged, already "signing is done on your device" |
+| `home.hero.facts[2]` | „Was du siehst, signierst du: Vela dekodiert vor deiner Freigabe genau die Transaktion, die signiert wird.“ + new link | – | German has no settled native term for WYSIWYS (the literature quotes the English); the inverted form mirrors the fee callout „Was du siehst, zahlst du“ |
+| `home.hero.facts[3]` | 059 string restored; new link „Wie du deine Wallet weiter nutzt, wenn Vela verschwindet“ | – | **059 string kept**: „Auch wenn Vela offline geht, kommst du weiter an deine Wallet.“ matches en ("doesn't depend on Vela staying online") and zh (即使 Vela 停止服务…) and reads naturally; link echoes the whitepaper heading „Wenn Vela verschwindet“ |
+| `home.tradeoffs.items[0].body` | middle paragraph rewritten (one fee, to the relay, Vela's by default, formula + `#fee` link, relay keeps the rest) | – | both hrefs verbatim; closing paragraph left as it was (en only swapped a dash for ", and") |
+| `home.faq.items[6].a` | relay code-change clause replaced by the list of services you can run | – | |
+| `roadmap.upcoming[1].body` | relay clause dropped | – | |
+| docs `networks-and-fees` | `<span id="fee">`; "ten times" paragraph replaced; „**Wer sie bekommt.**“ added | – | bold on the old claim dropped, as in en |
+| docs `faq` | fee bullet (relay choice, `#fee` link); shutdown answer without the parenthesis | – | |
+| docs `whitepaper` | intro clause, fee bullet + new bullet on who gets the fee, „Wenn Vela verschwindet“ clause | – | |
+| docs `self-hosting` | intro limit removed; two code comments; „Gut zu wissen“ bullet; chain-data paragraph; relay line removed from „Was danach noch auf Vela zeigt“ | – | Docker comment's verb moved into the lead („in .env setzen: …“) so the added line stays grammatical |
+
+No High or Medium findings open.

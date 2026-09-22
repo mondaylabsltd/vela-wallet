@@ -1,7 +1,7 @@
 ---
 title: Anleitung zum Selbsthosten
 description: "Alles, was Vela für dich betreibt, was jedes Teil tut und wie du es durch dein eigenes ersetzt – das Relay, den Public-Key-Index, Chain-Daten, Wechselkurse und die Apps –, dazu das eine, was sich nicht ersetzen lässt, und wie du ohne getvela.app auskommst."
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -19,9 +19,7 @@ Chain-Daten, ein Wechselkurs-Feed und die Apps selbst.
 Diese Seite listet jedes dieser Teile auf, was ohne es nicht mehr geht und wie du dein
 eigenes betreibst. Sie behandelt auch das eine Teil, das du nicht ersetzen kannst – die
 Domain, zu der deine Passkeys gehören –, und was zu tun ist, wenn getvela.app
-verschwindet. Eine Einschränkung vorweg: Heute liest das Relay Chain-Daten von Velas
-Server; um ganz ohne Vela-Infrastruktur zu senden, musst du also eine Adresse im Code
-des Relays ändern.
+verschwindet.
 
 <Callout type="info" title="Für wen diese Seite ist">
 Du solltest mit einem Terminal, mit Docker oder Cloudflare Workers und mit dem
@@ -157,7 +155,8 @@ nicht implementieren.
 git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
-# in .env: VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET setzen
+# in .env setzen: VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET,
+# VELA_RELAY_CHAIN_DIRECTORY_URL, falls du eigene Chain-Daten betreibst,
 # und VELA_RELAY_IMAGE auf ein Release-Image, dem du vertraust (siehe docs/docker.md)
 docker compose pull relay
 docker compose up -d --no-build
@@ -175,6 +174,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# eigene Chain-Daten: "VELA_RELAY_CHAIN_DIRECTORY_URL" unter "vars" in wrangler.jsonc eintragen
 npx wrangler deploy
 ```
 
@@ -194,10 +194,11 @@ Trag dann `https://your-relay` in das Feld **Vela Relay** ein.
   [Netzwerke und Gebühren](/de/docs/networks-and-fees)).
 - Ein eigenes Netzwerk, das du vor dem Wechsel des Relays hinzugefügt hast, behält die
   Relay-Adresse, mit der es hinzugefügt wurde.
-- Das Relay liest die Details jeder Chain und die Stablecoin-Liste von
-  `ethereum-data.getvela.app`. Diese Adresse steht heute fest im Code des Relays
-  (`src/utils/rpc.rs` und `vela-relay-cf/src/arms/market.rs`); um sie zu ersetzen,
-  musst du diese beiden Zeilen ändern und das Relay selbst bauen.
+- Das Relay liest die Details jeder Chain und die Stablecoins, die es akzeptiert, aus
+  einem Chain-Verzeichnis: `ethereum-data.getvela.app`, sofern du
+  `VELA_RELAY_CHAIN_DIRECTORY_URL` nicht auf [dein eigenes](#chain-data) setzt. Die
+  Einstellung gibt es seit September 2026; ein älterer Relay-Build liest immer Velas
+  Kopie.
 
 ## Einen eigenen Public-Key-Index betreiben
 
@@ -269,9 +270,10 @@ Die README beschreibt auch den Bau aus dem Quellcode und die Bereitstellung auf
 Cloudflare. Liefere die Daten über HTTPS aus und trag die Adresse in das Feld
 **Chain-Daten-Index** ein.
 
-Das Relay hängt außerdem von Vela-spezifischen Feldern in diesen Dateien ab (die Liste
-`stables` entscheidet, welche Stablecoins Gebühren bezahlen können) und liest sie – wie
-oben erwähnt – aus Velas Kopie.
+Auch das Relay liest diese Dateien, darunter ein Vela-spezifisches Feld (die Liste
+`stables` entscheidet, welche Stablecoins Gebühren bezahlen können). Mit
+`VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data` stellst du es auf deine Kopie
+um; den Eintrag jedes Netzwerks speichert es eine Stunde lang zwischen.
 
 ## Eigene Wechselkurse betreiben
 
@@ -322,8 +324,6 @@ dort nur der erste Schlüssel signieren.
 
 Wenn du alles oben Genannte ersetzt, bleibt Folgendes:
 
-- **Das Chain-Verzeichnis des Relays** – im Code des Relays fest auf
-  `ethereum-data.getvela.app` eingestellt.
 - **Das Authentifikator-Verzeichnis**, das Modelle von Sicherheitsschlüsseln benennt –
   rein kosmetisch; die Apps weichen auf einen allgemeinen Namen aus.
 - **Die Zuordnungsdateien von getvela.app**, die die Store-Apps für Passkeys auf

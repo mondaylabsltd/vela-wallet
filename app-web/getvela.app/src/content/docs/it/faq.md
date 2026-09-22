@@ -1,7 +1,7 @@
 ---
 title: Domande frequenti
 description: "Risposte brevi su custodia, chiavi, recupero, reti, commissioni, cosa può vedere Vela, open source e cosa succede se Vela non c'è più."
-source: 0762e55bf54d
+source: 2d38e6a0b6d9
 ---
 
 # Domande frequenti
@@ -50,11 +50,11 @@ Vedi [reti e commissioni](/it/docs/networks-and-fees).
   gratuiti. Le app iOS e Android saranno un acquisto una tantum negli store; puoi
   anche compilare gratis qualsiasi app dal codice sorgente.
 - **Ogni transazione:** una commissione pagata dal tuo wallet al relay che la
-  invia. Copre il gas più il margine del relay ed è spesso dieci volte o più il
-  costo on-chain della transazione, con un minimo di circa 0,01 dollari. L'importo
-  esatto è nella schermata di conferma e fa parte di ciò che firmi. Non ci sono
-  depositi né abbonamenti.
-  [Come si calcola la commissione](/it/docs/networks-and-fees).
+  invia — quello di Vela, a meno che tu non indirizzi il wallet verso un altro relay
+  o ne gestisca uno tuo. Copre il gas più il margine del relay, con un minimo di
+  circa 0,01 dollari. L'importo esatto è nella schermata di conferma prima che tu
+  firmi e fa parte di ciò che firmi. Non ci sono depositi né abbonamenti.
+  [Come si calcola la commissione](/it/docs/networks-and-fees#fee).
 - **Nessun token.** Vela non ne ha e non ne prevede.
 
 ## Posso usare Vela con le dApp?
@@ -94,9 +94,7 @@ programma. Vedi [audit e problemi noti](/it/docs/security-audits).
 
 I tuoi fondi restano nel tuo Safe, on-chain. Per un wallet esistente, l'estensione
 Vela per il browser e le app che compili tu continuano a funzionare senza
-getvela.app, e ogni servizio è open source perché qualcun altro possa gestirlo (al
-relay serve una modifica al codice per smettere di leggere i dati delle chain dal
-server di Vela). La
+getvela.app, e ogni servizio è open source perché qualcun altro possa gestirlo. La
 [guida al self-hosting](/it/docs/self-hosting#if-getvela-app-disappears) elenca le
 strade e i loro limiti.
 

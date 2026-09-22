@@ -102,7 +102,7 @@
 		},
 		"hero": {
 			"headline": "Eine Ethereum-Wallet, die wirklich dir gehört",
-			"subtitle": "Signiert wird auf deinem Gerät. Dein Passkey erreicht Vela nie.",
+			"subtitle": "Signiert wird auf deinem Gerät. Der private Schlüssel deines Passkeys gelangt nie zu Vela.",
 			"ctaCreate": "Loslegen",
 			"ctaCode": "Code lesen",
 			"facts": [
@@ -115,12 +115,12 @@
 					"link": "Bis zu sieben Schlüssel, beim Anlegen festgelegt – Hardware-Schlüssel inklusive"
 				},
 				{
-					"term": "Was du auf dem Bildschirm siehst, ist nicht unbedingt das, was signiert wird.",
-					"link": "Wie Bybit 1,5 Mrd. $ verlor – und was Vela dagegen tut"
+					"term": "Was du siehst, signierst du: Vela dekodiert vor deiner Freigabe genau die Transaktion, die signiert wird.",
+					"link": "Wie Bybit 1,5 Mrd. $ verlor – und wie Vela dir zeigt, was du signierst"
 				},
 				{
-					"term": "Alles, was Vela für deine Wallet betreibt, ist Open Source, und du kannst es selbst betreiben.",
-					"link": "Was du selbst betreibst, was ohne getvela.app weiterläuft und was noch von uns abhängt"
+					"term": "Auch wenn Vela offline geht, kommst du weiter an deine Wallet.",
+					"link": "Wie du deine Wallet weiter nutzt, wenn Vela verschwindet"
 				}
 			]
 		},
@@ -144,7 +144,7 @@
 			"items": [
 				{
 					"title": "Für jede Transaktion fällt zusätzlich zum Gas eine Relay-Gebühr an",
-					"body": "Eine Vela-Transaktion prüft deine Passkey-Signatur on-chain und läuft über ERC-4337; sie verbraucht deshalb ein Mehrfaches des Gases einer einfachen Überweisung.\n\nDie Wallet reserviert mehr Gas, als die Transaktion braucht, und berechnet das Dreifache davon – zum höheren von zwei Gaspreisen: dem, den sie selbst abliest, und dem des Relays für deine Geschwindigkeit. Das ist oft das Zehnfache der echten On-Chain-Kosten oder mehr, bei deiner ersten Transaktion in einem Netzwerk noch mehr, mindestens aber 0,01 $. Der genaue Betrag wird dir vor dem Signieren angezeigt und kann sich danach nicht mehr ändern.\n\nDu kannst die Wallet auf ein anderes Relay umstellen oder <a href=\"/docs/self-hosting#relay\">ein eigenes betreiben</a> – die Gebühr geht dann an den, der es betreibt."
+					"body": "Eine Vela-Transaktion prüft deine Passkey-Signatur on-chain und läuft über ERC-4337; sie verbraucht deshalb ein Mehrfaches des Gases einer einfachen Überweisung.\n\nDu zahlst eine einzige Gebühr, und zwar an das Relay, das deine Transaktion einreicht – standardmäßig das von Vela. Sie beträgt das Dreifache des Gases, das die Wallet reserviert, bewertet zum Gaspreis für die Geschwindigkeit, die du wählst, mindestens aber 0,01 $ (<a href=\"/docs/networks-and-fees#fee\">so wird sie berechnet</a>); das Relay bezahlt daraus das Gas und behält den Rest. Der genaue Betrag wird dir vor dem Signieren angezeigt und kann sich danach nicht mehr ändern.\n\nDu kannst die Wallet auf ein anderes Relay umstellen oder <a href=\"/docs/self-hosting#relay\">ein eigenes betreiben</a> – die Gebühr geht dann an den, der es betreibt."
 				},
 				{
 					"title": "Jeder Schlüssel ist ein Weg in deine Wallet",
@@ -292,7 +292,7 @@
 				},
 				{
 					"q": "Was passiert, wenn Vela dichtmacht oder getvela.app offline geht?",
-					"a": "Dein Guthaben bleibt on-chain in deinem Safe. Jeder Dienst, den Vela betreibt, ist Open Source und kann von allen betrieben werden – nur das Relay braucht eine Code-Änderung, damit es keine Chain-Daten mehr von Velas Server liest.\n\nGeht getvela.app offline, signiert die Vela-Browser-Erweiterung weiter mit deinen vorhandenen Schlüsseln – dem Passkey dieses Geräts, einem Sicherheitsschlüssel oder einem per QR-Code verbundenen Handy –, und selbst gebaute Apps tun das auch, mit einem Handy oder einem Sicherheitsschlüssel."
+					"a": "Dein Guthaben bleibt on-chain in deinem Safe. Jeder Dienst, den Vela betreibt, ist Open Source, und du kannst jeden davon selbst betreiben – das Relay, den Public-Key-Index, die Chain-Daten und die Wechselkurse.\n\nGeht getvela.app offline, signiert die Vela-Browser-Erweiterung weiter mit deinen vorhandenen Schlüsseln – dem Passkey dieses Geräts, einem Sicherheitsschlüssel oder einem per QR-Code verbundenen Handy –, und selbst gebaute Apps tun das auch, mit einem Handy oder einem Sicherheitsschlüssel."
 				}
 			]
 		}
@@ -351,7 +351,7 @@
 			},
 			{
 				"title": "Alle Apps halten sich an deine eigenen Dienste",
-				"body": "Heute ignorieren manche Apps Teile von Einstellungen → Dienst-Endpunkte: die iPhone-App vollständig, die Web-App beim Erstellen einer Wallet und bei der Anmeldung, Android beim Nachschlagen von Namen. Alle sollen sich daran halten, und das Relay soll Chain-Daten von deinem eigenen Server lesen können."
+				"body": "Heute ignorieren manche Apps Teile von Einstellungen → Dienst-Endpunkte: die iPhone-App vollständig, die Web-App beim Erstellen einer Wallet und bei der Anmeldung, Android beim Nachschlagen von Namen. Alle sollen sich daran halten."
 			},
 			{
 				"title": "Die unabhängige Signaturseite, angebunden",
@@ -486,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "09e59832402d",
+		"home": "c775da953511",
 		"about": "44b20f016140",
-		"roadmap": "cc826c697f61",
+		"roadmap": "ec62c4af0a9f",
 		"getStarted": "f7262f86ca9e"
 	}
 }

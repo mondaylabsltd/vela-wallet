@@ -1,7 +1,7 @@
 ---
 title: Réseaux et frais
 description: "Les 24 réseaux intégrés à Vela, comment en ajouter un autre, comment les frais d'une transaction sont calculés exactement et à qui ils reviennent, et ce qui se passe quand un relais n'a plus de gas."
-source: 84328d162a3a
+source: fdc50dbbf13a
 ---
 
 <script>
@@ -67,6 +67,8 @@ transaction au nom d'une politique de sponsoring.
 
 ### Le montant des frais
 
+<span id="fee"></span>
+
 L'écran de confirmation affiche un seul montant, dans la monnaie des frais et dans
 votre devise d'affichage. Il est calculé ainsi :
 
@@ -82,13 +84,19 @@ votre devise d'affichage. Il est calculé ainsi :
 - **Frais = 3 × gas réservé × prix du gas**, avec un minimum d'environ 0,01 $. Sur
   Tempo, le multiplicateur est de 2 et les frais se paient en pathUSD.
 
-Comme la réserve est largement supérieure à ce que la transaction consommera et que
-le prix comporte une marge, **les frais représentent souvent dix fois ou plus le
-coût réel de la transaction on-chain**, et davantage encore pour la première
-transaction sur un réseau. Le relais paie le coût réel et garde le reste ; rien
-n'est remboursé. Sur les réseaux bon marché, cela se compte en centimes ; sur le
-mainnet Ethereum, cela peut représenter une vraie somme. Le montant exact figure
-sur l'écran de confirmation avant que vous signiez.
+La réserve est largement supérieure à ce que la transaction consommera et le prix
+comporte une marge : les frais dépassent donc ce que la transaction coûte on-chain —
+et plus encore pour votre première transaction sur un réseau, qui déploie aussi
+votre portefeuille. Le relais paie le coût réel et garde le reste ; rien n'est
+remboursé. Sur les réseaux bon marché, cela se compte en centimes ; sur le mainnet
+Ethereum, cela peut représenter une vraie somme. Inutile de deviner : le montant
+exact figure sur l'écran de confirmation avant que vous signiez.
+
+**Qui les reçoit.** Les frais reviennent à celui qui exploite le relais configuré
+dans le portefeuille — celui de Vela, sauf si vous en changez. N'importe quel
+déploiement de vela-relay convient, y compris
+[celui que vous faites tourner vous-même](/fr/docs/self-hosting#relay), et le
+portefeuille applique la même formule quel que soit le relais choisi.
 
 <Callout type="info" title="Ce que vous voyez est ce que vous payez">
 Le montant des frais et l'adresse qui les reçoit font partie de l'opération que

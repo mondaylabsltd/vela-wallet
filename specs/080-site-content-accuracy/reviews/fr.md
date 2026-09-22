@@ -125,3 +125,24 @@ naturally, match the wallet's *Guide d'auto-hébergement* and fit the sidebar.
 ## Result
 
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into fr. Each changed string checked on
+the five single-string axes; no High or Medium left open.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | « La signature se fait sur votre appareil. La clé privée de votre passkey n'est jamais transmise à Vela. » | — | *clé privée*, as `passkeys.md` already says |
+| `home.hero.facts[2]` | « Ce que vous voyez est ce que vous signez : Vela décode la transaction exacte avant que vous ne l'approuviez. » / « …et comment Vela vous montre ce que vous signez » | — | the usual French rendering of WYSIWYS; mirrors the existing callout « Ce que vous voyez est ce que vous payez » |
+| `home.hero.facts[3]` | term = 059 string, kept; link « Comment continuer à utiliser votre portefeuille si Vela disparaît » | — | 059 « Même si Vela cesse de fonctionner, vous gardez l'accès à votre portefeuille. » **kept**: same meaning as en ("doesn't depend on Vela staying online") and zh (即使 Vela 停止服务…), idiomatic French. The link reuses the whitepaper heading « Si Vela disparaît » |
+| `home.tradeoffs.items[0].body` | paragraph 2 rewritten (« Vous ne payez qu'un seul montant : les frais du relais… » — *frais* is plural, so "one fee" is carried as one amount; formula + `#fee` link; relay keeps the rest); paragraph 3 tail aligned | — | both hrefs identical to en; non-breaking space before `$` kept |
+| `home.faq.items[6].a` | code-change clause replaced by the four services you can run | — | second paragraph untouched |
+| `roadmap.upcoming[1].body` | chain-data clause removed | — | |
+| docs `networks-and-fees` | `<span id="fee">`; "ten times" paragraph replaced; **Qui les reçoit.** paragraph | — | |
+| docs `faq` | cost bullet (relay choice, `#fee` link); shutdown answer without the code-change parenthesis | — | |
+| docs `whitepaper` | intro clause dropped; Fees bullet + new "who gets the fee" bullet; « Si Vela disparaît » clause dropped | — | |
+| docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; « À savoir » bullet; chain-data paragraph; relay line removed from the final list | — | « Cette variable existe depuis septembre 2026 » rather than *réglage*, which the locale reserves for the app's Réglages |
+
+Nothing fixed beyond the brief.

@@ -1,7 +1,7 @@
 ---
 title: Câu hỏi thường gặp
 description: "Những câu trả lời ngắn về quyền lưu ký, khóa, khôi phục, mạng, phí, những gì Vela thấy được, mã nguồn mở, và chuyện gì xảy ra nếu Vela không còn nữa."
-source: 0762e55bf54d
+source: 2d38e6a0b6d9
 ---
 
 # Câu hỏi thường gặp
@@ -44,11 +44,11 @@ và token ERC-20. Địa chỉ giống nhau trên mọi mạng. Xem [mạng & ph
 - **Các ứng dụng:** ví web, tiện ích trình duyệt và ứng dụng máy tính đều miễn phí. Ứng dụng
   iOS và Android sẽ được bán theo hình thức mua một lần trên cửa hàng; bạn cũng có thể tự biên
   dịch bất kỳ ứng dụng nào từ mã nguồn, miễn phí.
-- **Mỗi giao dịch:** một khoản phí trả từ ví của bạn cho relay gửi giao dịch đó lên chuỗi. Phí
-  bao gồm gas cộng phần lãi của relay, và thường gấp mười lần chi phí trên chuỗi của giao dịch
-  trở lên, tối thiểu khoảng 0,01 USD. Số tiền chính xác nằm trên màn hình xác nhận và là một
-  phần của thứ bạn ký. Không có khoản đặt cọc và không có phí thuê bao.
-  [Cách tính phí](/vi/docs/networks-and-fees).
+- **Mỗi giao dịch:** một khoản phí trả từ ví của bạn cho relay gửi giao dịch đó lên chuỗi —
+  relay của Vela, trừ khi bạn trỏ ví sang một relay khác hoặc tự chạy relay của mình. Phí bao
+  gồm gas cộng phần lãi của relay, tối thiểu khoảng 0,01 USD. Số tiền chính xác nằm trên màn
+  hình xác nhận trước khi bạn ký và là một phần của thứ bạn ký. Không có khoản đặt cọc và
+  không có phí thuê bao. [Cách tính phí](/vi/docs/networks-and-fees#fee).
 - **Không có token.** Vela không có token nào và không có kế hoạch phát hành.
 
 ## Tôi dùng Vela với dApp được không?
@@ -84,9 +84,9 @@ Các hợp đồng giữ tiền của bạn — Safe cùng các mô-đun của n
 
 Tiền của bạn vẫn nằm trong Safe của bạn trên chuỗi. Với một ví đã có, tiện ích trình duyệt Vela
 và các ứng dụng bạn tự biên dịch vẫn tiếp tục hoạt động khi không có getvela.app, và mọi dịch vụ
-đều là mã nguồn mở để người khác chạy (riêng relay cần sửa mã để thôi đọc dữ liệu chuỗi từ máy
-chủ của Vela). [Hướng dẫn tự triển khai](/vi/docs/self-hosting#if-getvela-app-disappears) liệt
-kê các con đường và giới hạn của chúng.
+đều là mã nguồn mở để người khác chạy.
+[Hướng dẫn tự triển khai](/vi/docs/self-hosting#if-getvela-app-disappears) liệt kê các con
+đường và giới hạn của chúng.
 
 ## Tôi có câu hỏi không có ở đây.
 

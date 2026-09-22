@@ -135,3 +135,25 @@ pages it is one row.
 
 ## Result
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into `it.json` and four docs. Terms
+unchanged from the table above: *relay*, *archivio delle chain*, *dati delle chain*,
+*deployare*, *passkey* (f.). A running relay deployment is *istanza di vela-relay*.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+|---|---|---|---|
+| `home.hero.subtitle` | «La chiave privata della tua passkey non arriva mai a Vela.» | – | first sentence unchanged |
+| `home.hero.facts[2]` | «Quello che vedi è quello che firmi: Vela decodifica la transazione esatta prima che tu la approvi.» + new link | – | Italian has no settled native term for WYSIWYS; used the pattern Italian already uses for WYSIWYG («quello che vedi è quello che ottieni») |
+| `home.hero.facts[3]` | 059 string restored; new link «Come continuare a usare il tuo wallet se Vela sparisce» | – | **059 string kept**: «Anche se Vela smette di funzionare, continui ad accedere al tuo wallet.» is accurate against en and closest to zh (停止服务) and reads naturally; link echoes the whitepaper heading «Se Vela sparisce» |
+| `home.tradeoffs.items[0].body` | middle paragraph rewritten (one fee, to the relay, Vela's by default, formula + `#fee` link, relay keeps the rest) | – | both hrefs verbatim; closing paragraph left as it was |
+| `home.faq.items[6].a` | relay code-change clause replaced by the list of services you can run | – | |
+| `roadmap.upcoming[1].body` | relay clause dropped | – | |
+| docs `networks-and-fees` | `<span id="fee">`; "dieci volte" paragraph replaced; «**A chi va.**» added | – | |
+| docs `faq` | fee bullet (relay choice, `#fee` link); shutdown answer without the parenthesis | – | |
+| docs `whitepaper` | intro clause, fee bullet + new bullet on who gets the fee, «Se Vela sparisce» clause | – | |
+| docs `self-hosting` | intro limit removed; two code comments; «Da sapere» bullet; chain-data paragraph; relay line removed from «Cosa punta ancora a Vela» | – | |
+
+No High or Medium findings open.

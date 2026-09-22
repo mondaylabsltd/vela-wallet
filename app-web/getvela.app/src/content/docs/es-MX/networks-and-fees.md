@@ -1,7 +1,7 @@
 ---
 title: Redes y comisiones
 description: "Las 24 redes integradas en Vela, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas."
-source: 84328d162a3a
+source: fdc50dbbf13a
 ---
 
 <script>
@@ -66,6 +66,8 @@ transacción por una política de patrocinio.
 
 ### Cuánto es la comisión
 
+<span id="fee"></span>
+
 La pantalla de confirmación muestra un solo monto, en la moneda de la comisión y en
 tu moneda de visualización. Se calcula así:
 
@@ -81,12 +83,18 @@ tu moneda de visualización. Se calcula así:
 - **Comisión = 3 × gas reservado × precio del gas**, con un mínimo de alrededor de
   US$0.01. En Tempo el múltiplo es 2 y la comisión se paga en pathUSD.
 
-Como la reserva queda muy por encima de lo que la transacción va a usar y el precio
-incluye margen, **la comisión suele ser diez veces o más lo que la transacción
-cuesta de verdad on-chain**, y más en la primera transacción en una red. El relay
-paga el costo real y se queda con el resto; no se reembolsa nada. En redes baratas
-son centavos; en la mainnet de Ethereum puede ser una cantidad considerable. El monto
-exacto está en la pantalla de confirmación antes de que firmes.
+La reserva queda muy por encima de lo que la transacción va a usar y el precio
+incluye margen, así que la comisión es mayor que lo que la transacción cuesta
+on-chain, y más aún en tu primera transacción en una red, que además despliega tu
+wallet. El relay paga el costo real y se queda con el resto; no se reembolsa nada.
+En redes baratas son centavos; en la mainnet de Ethereum puede ser una cantidad
+considerable. Nunca tienes que adivinar: el monto exacto está en la pantalla de
+confirmación antes de que firmes.
+
+**Quién la recibe.** La comisión es para quien opera el relay que tiene configurado
+la wallet: el de Vela, a menos que lo cambies. Sirve cualquier despliegue de
+vela-relay, incluido [uno que operes tú](/es-MX/docs/self-hosting#relay), y la
+wallet usa la misma fórmula sin importar qué relay elijas.
 
 <Callout type="info" title="Lo que ves es lo que pagas">
 El monto de la comisión y la dirección a la que va forman parte de la operación que

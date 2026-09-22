@@ -125,3 +125,25 @@ stay unprefixed; all anchors present (`self-hosting`: 6, `install`: `dapps`, `cr
 ## Result
 
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the same-day en + zh revision (fee wording, configurable relay chain directory, hero subtitle,
+facts #3 and #4) into zh-TW. Terms unchanged from the table above: 中繼、密碼金鑰、鏈資料、鏈目錄、自架／架設、
+確認頁、簽署. Each changed string checked on the five axes; no open High or Medium.
+
+| String / section | Change | Severity of fixes beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | 簽署都在你的裝置上完成。密碼金鑰的私鑰絕不會交給 Vela。 | — | the claim is now about the private key, as in en |
+| `home.hero.facts[2]` | 所見即所簽：在你確認之前，Vela 會解碼出你實際要簽署的那筆交易。 / link: …以及 Vela 怎麼讓你看清楚要簽署的是什麼 | — | 所見即所簽 is the established Chinese term for "what you see is what you sign" |
+| `home.hero.facts[3]` | term = 059 string, **kept**: 即使 Vela 停止服務，你仍然能存取自己的錢包。 / link: 如果 Vela 不在了，要怎麼繼續使用你的錢包 | — | 059 term is accurate and natural (存取 is the standard Taiwan word for "access", as in Google zh-TW) |
+| `home.tradeoffs.items[0].body` | new fee paragraph (one fee, to the relay, Vela's by default; 3 × reserved gas at the chosen speed; $0.01 minimum; `#fee` link); "often ten times or more" removed | Low | last clause 手續費就歸架設它的人 → 營運它的一方: "runs" means operates, matching the networks-and-fees heading 中繼由誰營運 |
+| `home.faq.items[6].a` | code-change clause replaced by 每一項你都能自己架設——中繼、公鑰索引、鏈資料和匯率服務 | — | 匯率服務 (not bare 匯率) to match the self-hosting section name |
+| `roadmap.upcoming[1].body` | dropped 中繼也應該能從你自己的伺服器讀取鏈資料 | — | |
+| networks-and-fees.md | `<span id="fee"></span>` under 手續費是多少; ten-times paragraph rewritten (first send also deploys the wallet; 你不必用猜的); new **手續費歸誰。** paragraph linking `/zh-TW/docs/self-hosting#relay` | — | bold closes before a space, as elsewhere in this locale |
+| faq.md | cost bullet (Vela's relay by default, or another / your own; `#fee` link); shutdown answer loses the relay code-change parenthesis | — | |
+| whitepaper.md | intro clause removed; Fees bullet rewritten + new bullet on who gets the fee; 如果 Vela 消失了 clause removed | — | |
+| self-hosting.md | intro limit removed; two code comments (`VELA_RELAY_CHAIN_DIRECTORY_URL`); 你該知道的 bullet rewritten (default, variable, Sept 2026, older builds); chain-data paragraph (variable + one-hour cache 快取); relay line removed from 還有哪些指向 Vela | — | |
+
+Checks: JSON parses, `_fingerprints` untouched; `id="fee"` ×1; no 十倍 in networks-and-fees / faq / whitepaper;
+`rpc.rs` ×0; no unprefixed `](/docs` links.

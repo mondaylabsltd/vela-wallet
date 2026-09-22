@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
-source: d072d6710855
+source: 662b69510225
 ---
 
 <script>
@@ -28,10 +28,9 @@ Vela, với tư cách công ty, không bao giờ giữ khóa của bạn và kh�
 của bạn, nên tự mình nó **không thể chuyển, đóng băng hay chiếm đoạt tiền của bạn**. Nhưng
 Vela có viết và cung cấp phần mềm yêu cầu các khóa của bạn ký — đó là lý do mô hình mối đe
 dọa bên dưới quan trọng. Các ứng dụng, relay gửi giao dịch lên chuỗi, và các dịch vụ hỗ
-trợ đều là mã nguồn mở, và bạn có thể tự chạy bản sao của từng thứ; hiện nay relay vẫn đọc
-dữ liệu chuỗi từ máy chủ của Vela trừ khi bạn sửa mã của nó. Tóm lại, những gì bạn phải
-tin: các hợp đồng, các trình xác thực giữ khóa của bạn, mã của ứng dụng bạn dùng để ký, tên
-miền mà passkey của bạn thuộc về, và các dịch vụ mà bạn trỏ ứng dụng tới.
+trợ đều là mã nguồn mở, và bạn có thể tự chạy bản sao của từng thứ. Tóm lại, những gì bạn
+phải tin: các hợp đồng, các trình xác thực giữ khóa của bạn, mã của ứng dụng bạn dùng để ký,
+tên miền mà passkey của bạn thuộc về, và các dịch vụ mà bạn trỏ ứng dụng tới.
 
 ## Vì sao có Vela
 
@@ -135,9 +134,12 @@ sẽ quay lại bên dưới.
   là một phần của thứ bạn ký, nên bạn trả đúng số tiền màn hình xác nhận đã hiện.
 - Phí bằng **ba lần lượng gas ví dự trù cho thao tác** (các ước tính mô phỏng được nâng thêm
   một nửa, kèm mức tối thiểu), **tính theo mức cao hơn giữa giá gas ví tự đọc được và giá
-  relay báo cho tốc độ đã chọn**, tối thiểu khoảng 0,01 USD. Trên Tempo, hệ số là hai. Do phần
-  độn thêm và biên độ trong giá, phí thường gấp mười lần chi phí thực của thao tác trên chuỗi
-  trở lên, và còn cao hơn ở giao dịch đầu tiên trên một mạng; relay giữ phần chênh lệch.
+  relay báo cho tốc độ đã chọn**, tối thiểu khoảng 0,01 USD. Trên Tempo, hệ số là hai. Phần
+  độn thêm và biên độ trong giá khiến phí cao hơn chi phí thực của thao tác trên chuỗi, nhất
+  là ở giao dịch đầu tiên trên một mạng; relay giữ phần chênh lệch. Số tiền chính xác nằm
+  trên màn hình xác nhận trước khi bạn ký.
+- Phí được trả cho relay mà ví đang dùng: mặc định là relay của Vela, hoặc bất kỳ bản triển
+  khai vela-relay nào, kể cả bản do bạn tự chạy.
 - Phí được trả bằng coin của mạng hoặc bằng một stablecoin USD mà relay chấp nhận (pathUSD
   trên Tempo, mạng không có coin gốc). **Không có paymaster**: không ai tài trợ gas, và cũng
   không ai có thể lọc giao dịch qua một chính sách tài trợ.
@@ -255,9 +257,9 @@ Chi tiết: [khôi phục & đăng nhập](/vi/docs/recovery).
 ## Nếu Vela biến mất
 
 Tiền của bạn vẫn nằm trong Safe của bạn trên chuỗi. Các hợp đồng không phụ thuộc vào Vela, và
-mọi dịch vụ Vela vận hành đều là mã nguồn mở để người khác chạy — riêng relay cần sửa mã để
-thôi đọc dữ liệu chuỗi từ máy chủ của Vela. Thứ duy nhất không thể dời đi là bên phụ thuộc của
-passkey, `getvela.app`: một bản sao ví web trên tên miền khác sẽ tạo ra một ví khác. Với các ví
+mọi dịch vụ Vela vận hành đều là mã nguồn mở để người khác chạy. Thứ duy nhất không thể dời
+đi là bên phụ thuộc của passkey, `getvela.app`: một bản sao ví web trên tên miền khác sẽ tạo
+ra một ví khác. Với các ví
 đã có, tiện ích trình duyệt Vela (được phép dùng passkey của `getvela.app`) và các ứng dụng bạn
 tự biên dịch (với điện thoại hoặc khóa bảo mật) vẫn tiếp tục hoạt động khi không có
 getvela.app. [Hướng dẫn tự triển khai](/vi/docs/self-hosting#if-getvela-app-disappears) trình

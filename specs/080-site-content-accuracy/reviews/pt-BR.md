@@ -110,3 +110,24 @@ High/Medium fixed: 23 High, 10 Medium (findings 1–20, 26–38).
 ## Result
 
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into pt-BR. Each changed string checked
+on the five single-string axes; no High or Medium left open.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | “A assinatura é feita no seu aparelho. A chave privada da sua passkey nunca chega à Vela.” | — | *chave privada*, as `passkeys.md` and `create-wallet.md` already say |
+| `home.hero.facts[2]` | “O que você vê é o que você assina: a Vela decodifica a transação exata antes de você aprová-la.” / “…e como a Vela mostra o que você assina” | — | the Portuguese rendering of WYSIWYS; mirrors the existing callout “O que você vê é o que você paga” |
+| `home.hero.facts[3]` | term = 059 string, kept; link “Como continuar usando sua carteira se a Vela deixar de existir” | — | 059 “Se a Vela parar de funcionar, você continua com acesso à sua carteira.” **kept**: same meaning as en ("doesn't depend on Vela staying online") and zh (即使 Vela 停止服务…), natural Brazilian Portuguese. The link reuses the whitepaper heading “Se a Vela deixar de existir” |
+| `home.tradeoffs.items[0].body` | paragraph 2 rewritten (one fee, to the relay; Vela's unless changed; formula + `#fee` link; relay keeps the rest); paragraph 3 tail aligned | — | both hrefs identical to en |
+| `home.faq.items[6].a` | code-change clause replaced by the four services you can run | — | second paragraph untouched |
+| `roadmap.upcoming[1].body` | chain-data clause removed | — | |
+| docs `networks-and-fees` | `<span id="fee">`; "ten times" paragraph replaced; **Quem recebe.** paragraph | — | deployment = *implantação*, as the locale's *implantar* |
+| docs `faq` | cost bullet (relay choice, `#fee` link); shutdown answer without the code-change parenthesis | — | |
+| docs `whitepaper` | intro clause dropped; Fees bullet + new "who gets the fee" bullet; "Se a Vela deixar de existir" clause dropped | — | |
+| docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; "Saiba que" bullet; chain-data paragraph; relay line removed from the final list | — | *diretório de redes*, as the removed list line named it |
+
+Nothing fixed beyond the brief.

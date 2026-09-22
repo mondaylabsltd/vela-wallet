@@ -1,7 +1,7 @@
 ---
 title: Tanya jawab
 description: "Jawaban singkat tentang kustodi, kunci, pemulihan, jaringan, biaya, apa yang bisa dilihat Vela, open source, dan apa yang terjadi kalau Vela tidak ada lagi."
-source: 0762e55bf54d
+source: 2d38e6a0b6d9
 ---
 
 # Tanya jawab
@@ -46,11 +46,12 @@ persyaratannya. Koin native dan token ERC-20. Alamatnya sama di setiap jaringan.
 - **Aplikasinya:** dompet web, ekstensi browser, dan aplikasi desktop gratis. Aplikasi iOS
   dan Android akan dijual sebagai pembelian sekali bayar di toko aplikasi; Anda juga bisa
   mengompilasi aplikasi mana pun dari kode sumber secara gratis.
-- **Setiap transaksi:** biaya yang dibayar dari dompet Anda ke relay yang mengirimkannya.
-  Biaya ini mencakup gas plus margin relay dan sering sepuluh kali lipat atau lebih dari
-  biaya on-chain transaksinya, dengan minimum sekitar $0,01. Jumlah pastinya ada di layar
-  konfirmasi dan merupakan bagian dari yang Anda tandatangani. Tidak ada deposit dan tidak
-  ada langganan. [Cara biaya dihitung](/id/docs/networks-and-fees).
+- **Setiap transaksi:** biaya yang dibayar dari dompet Anda ke relay yang mengirimkannya
+  — relay Vela, kecuali Anda mengarahkan dompet ke relay lain atau menjalankan relay
+  sendiri. Biaya ini mencakup gas plus margin relay, dengan minimum sekitar $0,01. Jumlah
+  pastinya ada di layar konfirmasi sebelum Anda menandatangani dan merupakan bagian dari
+  yang Anda tandatangani. Tidak ada deposit dan tidak ada langganan.
+  [Cara biaya dihitung](/id/docs/networks-and-fees#fee).
 - **Tanpa token.** Vela tidak punya token dan tidak berencana membuatnya.
 
 ## Bisakah saya memakai Vela dengan dApp?
@@ -87,8 +88,7 @@ Kontrak tempat uang Anda disimpan — Safe beserta modul-modulnya, dan EntryPoin
 
 Dana Anda tetap berada di Safe Anda on-chain. Untuk dompet yang sudah ada, ekstensi
 browser Vela dan aplikasi yang Anda kompilasi sendiri tetap berfungsi tanpa getvela.app,
-dan setiap layanan open source sehingga bisa dijalankan pihak lain (kode relay perlu
-diubah agar tidak lagi membaca data chain dari server Vela).
+dan setiap layanan open source sehingga bisa dijalankan pihak lain.
 [Panduan hosting sendiri](/id/docs/self-hosting#if-getvela-app-disappears) mencantumkan
 jalur-jalurnya beserta batasannya.
 

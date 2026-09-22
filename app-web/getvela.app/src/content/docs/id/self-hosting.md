@@ -1,7 +1,7 @@
 ---
 title: Panduan hosting sendiri
 description: "Semua yang dijalankan Vela untuk Anda, fungsi masing-masing, dan cara menggantinya dengan milik Anda sendiri — relay, indeks kunci publik, data chain, kurs, dan aplikasinya — ditambah satu hal yang tidak bisa Anda ganti dan cara bertahan tanpa getvela.app."
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -18,9 +18,7 @@ baru menemukan dompet Anda, direktori data chain, sumber kurs, dan aplikasinya s
 Halaman ini mencantumkan setiap bagian itu, apa yang rusak tanpanya, dan cara menjalankan
 milik Anda sendiri. Halaman ini juga membahas satu bagian yang tidak bisa Anda ganti —
 domain tempat passkey Anda terikat — dan apa yang harus dilakukan kalau getvela.app
-hilang. Satu batasan sejak awal: saat ini relay membaca data chain dari server Vela, jadi
-mengirim transaksi tanpa infrastruktur Vela sama sekali berarti mengubah satu alamat di
-kode relay.
+hilang.
 
 <Callout type="info" title="Untuk siapa halaman ini">
 Anda sebaiknya terbiasa dengan terminal, Docker atau Cloudflare Workers, dan mengisi dana
@@ -151,6 +149,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # di .env: VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET,
+# VELA_RELAY_CHAIN_DIRECTORY_URL kalau Anda menjalankan data chain sendiri,
 # dan VELA_RELAY_IMAGE diisi dengan image rilis yang Anda percayai (lihat docs/docker.md)
 docker compose pull relay
 docker compose up -d --no-build
@@ -168,6 +167,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# data chain sendiri: tambahkan "VELA_RELAY_CHAIN_DIRECTORY_URL" di bawah "vars" di wrangler.jsonc
 npx wrangler deploy
 ```
 
@@ -186,10 +186,11 @@ Lalu isikan `https://your-relay` di kolom **Vela Relay**.
   sama, relay mana pun yang Anda pakai (lihat [jaringan & biaya](/id/docs/networks-and-fees)).
 - Jaringan kustom yang Anda tambahkan sebelum mengganti relay tetap memakai alamat relay
   yang tercatat saat jaringan itu ditambahkan.
-- Relay membaca detail tiap chain dan daftar stablecoin-nya dari
-  `ethereum-data.getvela.app`. Alamat itu saat ini tertanam di kode relay
-  (`src/utils/rpc.rs` dan `vela-relay-cf/src/arms/market.rs`); menggantinya berarti
-  mengubah dua baris itu dan mengompilasi relay sendiri.
+- Relay membaca detail tiap chain dan stablecoin yang diterimanya dari sebuah direktori
+  chain: `ethereum-data.getvela.app`, kecuali Anda mengisi
+  `VELA_RELAY_CHAIN_DIRECTORY_URL` dengan [milik Anda sendiri](#chain-data). Pengaturan
+  ini hadir pada September 2026; build relay yang lebih lama selalu membaca salinan
+  milik Vela.
 
 ## Jalankan indeks kunci publik Anda sendiri
 
@@ -260,9 +261,10 @@ curl http://localhost:3000/api/health   # "service":"ethereum-data","status":"ok
 README-nya juga menjelaskan cara build dari kode sumber dan deploy ke Cloudflare.
 Sajikan lewat HTTPS, lalu isikan alamatnya di kolom **Indeks data chain**.
 
-Relay juga bergantung pada kolom-kolom khusus Vela di file-file ini (daftar `stables`
-menentukan stablecoin mana yang bisa membayar biaya), dan — seperti disebut di atas —
-membacanya dari salinan milik Vela.
+Relay juga membaca file-file ini, termasuk satu kolom khusus Vela (daftar `stables`
+menentukan stablecoin mana yang bisa membayar biaya). Arahkan relay ke salinan Anda
+dengan `VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data`; relay menyimpan entri
+tiap jaringan di cache selama satu jam.
 
 ## Jalankan layanan kurs Anda sendiri
 
@@ -313,8 +315,6 @@ menandatangani di sana.
 
 Kalau Anda mengganti semua yang di atas, yang berikut ini masih tersisa:
 
-- **Direktori chain milik relay** — tertanam ke `ethereum-data.getvela.app` di kode
-  relay.
 - **Direktori autentikator** yang menamai model kunci keamanan — hanya kosmetik;
   aplikasinya akan menampilkan nama umum sebagai gantinya.
 - **File asosiasi getvela.app**, yang dibutuhkan aplikasi dari toko aplikasi untuk passkey

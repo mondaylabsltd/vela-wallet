@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
-source: d072d6710855
+source: 662b69510225
 ---
 
 <script>
@@ -31,8 +31,7 @@ Anda, jadi Vela **tidak bisa memindahkan, membekukan, atau menyita dana Anda** s
 sepihak. Namun Vela memang menulis dan menyajikan perangkat lunak yang meminta kunci Anda
 menandatangani — itulah sebabnya model ancaman di bawah ini penting. Aplikasinya, relay
 yang mengirim transaksi, dan layanan pendukungnya open source, dan Anda bisa menjalankan
-salinan sendiri dari masing-masing; saat ini relay masih membaca data chain dari server
-Vela kecuali Anda mengubah kodenya. Singkatnya, yang Anda percayai: kontraknya,
+salinan sendiri dari masing-masing. Singkatnya, yang Anda percayai: kontraknya,
 autentikator yang menyimpan kunci Anda, kode aplikasi yang Anda pakai untuk
 menandatangani, domain tempat passkey Anda terikat, dan layanan yang Anda hubungkan ke
 aplikasi.
@@ -145,10 +144,12 @@ bawah.
 - Biayanya **tiga kali gas yang dicadangkan dompet untuk operasi itu** (perkiraan hasil
   simulasi dinaikkan setengahnya, dengan batas minimum), **dengan harga gas yang lebih
   tinggi antara hasil baca dompet sendiri dan harga relay untuk kecepatan yang dipilih**,
-  dengan minimum sekitar $0,01. Di Tempo, pengalinya dua. Karena cadangan dan ruang lebih
-  pada harganya, biayanya sering sepuluh kali lipat atau lebih dari biaya on-chain operasi
-  yang sebenarnya, dan lebih besar lagi untuk transaksi pertama di suatu jaringan; relay
-  menyimpan selisihnya.
+  dengan minimum sekitar $0,01. Di Tempo, pengalinya dua. Cadangan dan ruang lebih pada
+  harganya membuat biaya itu berada di atas biaya on-chain operasi yang sebenarnya,
+  terlebih untuk transaksi pertama di suatu jaringan; relay menyimpan selisihnya. Jumlah
+  pastinya ada di layar konfirmasi sebelum Anda menandatangani.
+- Biaya itu masuk ke relay yang dipakai dompet: relay Vela secara bawaan, atau
+  deployment vela-relay mana pun, termasuk yang Anda jalankan sendiri.
 - Biaya dibayar dengan koin jaringan itu atau dengan stablecoin USD yang diterima relay
   (pathUSD di Tempo, yang tidak punya koin native). **Tidak ada paymaster**: tidak ada
   yang mensponsori gas, dan tidak ada yang bisa menyaring transaksi lewat kebijakan
@@ -277,8 +278,7 @@ Detailnya: [pemulihan & masuk](/id/docs/recovery).
 ## Kalau Vela menghilang
 
 Dana Anda tetap berada di Safe Anda on-chain. Kontraknya tidak bergantung pada Vela, dan
-setiap layanan yang dijalankan Vela adalah open source sehingga bisa dijalankan pihak lain
-— hanya saja kode relay perlu diubah agar tidak lagi membaca data chain dari server Vela.
+setiap layanan yang dijalankan Vela adalah open source sehingga bisa dijalankan pihak lain.
 Satu-satunya yang tidak bisa dipindahkan adalah relying party passkey itu, `getvela.app`:
 salinan dompet web di domain lain membuat dompet yang berbeda. Untuk dompet yang sudah
 ada, ekstensi browser Vela (yang bisa memakai passkey `getvela.app` berdasarkan izin) dan

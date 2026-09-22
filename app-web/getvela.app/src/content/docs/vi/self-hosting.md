@@ -1,7 +1,7 @@
 ---
 title: Hướng dẫn tự triển khai
 description: "Mọi thứ Vela vận hành cho bạn, mỗi thành phần làm gì, và cách thay nó bằng bản của riêng bạn — relay, chỉ mục khóa công khai, dữ liệu chuỗi, tỷ giá và các ứng dụng — cùng một thứ duy nhất bạn không thể thay, và cách sống khi không có getvela.app."
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -17,9 +17,7 @@ ví, một danh mục dữ liệu chuỗi, một nguồn tỷ giá, và chính c
 
 Trang này liệt kê từng thành phần đó, cái gì hỏng khi thiếu nó, và cách tự chạy bản của
 riêng bạn. Trang cũng nói về thứ duy nhất bạn không thể thay — tên miền mà passkey của bạn
-thuộc về — và cần làm gì nếu getvela.app biến mất. Nói trước một giới hạn: hiện nay relay
-đọc dữ liệu chuỗi từ máy chủ của Vela, nên muốn gửi giao dịch mà hoàn toàn không dùng hạ
-tầng nào của Vela thì phải sửa một địa chỉ trong mã của relay.
+thuộc về — và cần làm gì nếu getvela.app biến mất.
 
 <Callout type="info" title="Trang này dành cho ai">
 Bạn nên quen dùng terminal, Docker hoặc Cloudflare Workers, và biết nạp tiền cho một địa
@@ -147,6 +145,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # trong .env: VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET,
+# VELA_RELAY_CHAIN_DIRECTORY_URL nếu bạn tự chạy dữ liệu chuỗi,
 # và VELA_RELAY_IMAGE đặt thành một image phát hành bạn tin tưởng (xem docs/docker.md)
 docker compose pull relay
 docker compose up -d --no-build
@@ -164,6 +163,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# dữ liệu chuỗi của riêng bạn: thêm "VELA_RELAY_CHAIN_DIRECTORY_URL" vào "vars" trong wrangler.jsonc
 npx wrangler deploy
 ```
 
@@ -182,9 +182,10 @@ Sau đó nhập `https://your-relay` vào trường **Vela Relay**.
   relay nào (xem [mạng & phí](/vi/docs/networks-and-fees)).
 - Một mạng tùy chỉnh bạn đã thêm trước khi đổi relay sẽ giữ nguyên địa chỉ relay đã dùng
   khi thêm nó.
-- Relay đọc thông tin từng chuỗi và danh sách stablecoin từ `ethereum-data.getvela.app`.
-  Địa chỉ đó hiện được gắn cứng trong mã của relay (`src/utils/rpc.rs` và
-  `vela-relay-cf/src/arms/market.rs`); thay nó nghĩa là sửa hai dòng đó và tự biên dịch relay.
+- Relay đọc một danh mục chuỗi để biết thông tin từng chuỗi và những stablecoin nó chấp
+  nhận. Danh mục đó là `ethereum-data.getvela.app`, trừ khi bạn đặt
+  `VELA_RELAY_CHAIN_DIRECTORY_URL` trỏ tới [danh mục của riêng bạn](#chain-data). Thiết lập
+  này có từ tháng 9/2026; các phiên bản relay cũ hơn luôn đọc bản của Vela.
 
 ## Tự chạy chỉ mục khóa công khai
 
@@ -252,9 +253,10 @@ curl http://localhost:3000/api/health   # "service":"ethereum-data","status":"ok
 README của nó cũng hướng dẫn build từ mã nguồn và triển khai lên Cloudflare. Hãy phục vụ nó
 qua HTTPS và nhập địa chỉ vào trường **Chỉ mục dữ liệu chain**.
 
-Relay cũng phụ thuộc vào những trường riêng của Vela trong các tệp này (danh sách `stables`
-quyết định những stablecoin nào trả được phí), và — như đã nói ở trên — đọc chúng từ bản
-của Vela.
+Relay cũng đọc các tệp này, kể cả một trường riêng của Vela (danh sách `stables` quyết định
+những stablecoin nào trả được phí). Hãy trỏ nó tới bản của bạn bằng
+`VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data`; relay lưu dữ liệu của từng mạng vào
+bộ nhớ đệm trong một giờ.
 
 ## Tự chạy dịch vụ tỷ giá
 
@@ -304,8 +306,6 @@ trên chuỗi đó.
 
 Nếu bạn thay mọi thứ ở trên, vẫn còn lại:
 
-- **Danh mục chuỗi của relay** — gắn cứng vào `ethereum-data.getvela.app` trong mã của
-  relay.
 - **Danh mục trình xác thực** dùng để gọi tên mẫu khóa bảo mật — chỉ ảnh hưởng hiển thị;
   ứng dụng sẽ dùng một tên chung chung thay thế.
 - **Các tệp liên kết của getvela.app**, thứ mà ứng dụng từ cửa hàng cần để dùng passkey

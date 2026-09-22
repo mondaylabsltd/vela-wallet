@@ -102,7 +102,7 @@
 		},
 		"hero": {
 			"headline": "Dompet Ethereum yang benar-benar milik Anda",
-			"subtitle": "Penandatanganan dilakukan di perangkat Anda. Vela tidak pernah menerima passkey Anda.",
+			"subtitle": "Penandatanganan dilakukan di perangkat Anda. Kunci privat passkey Anda tidak pernah dikirim ke Vela.",
 			"ctaCreate": "Mulai",
 			"ctaCode": "Baca kodenya",
 			"facts": [
@@ -115,12 +115,12 @@
 					"link": "Sampai tujuh kunci, ditentukan saat pembuatan — termasuk kunci keamanan fisik"
 				},
 				{
-					"term": "Yang Anda lihat di layar belum tentu yang ditandatangani.",
-					"link": "Bagaimana Bybit kehilangan $1,5 miliar, dan apa yang Vela lakukan soal itu"
+					"term": "Yang Anda lihat adalah yang Anda tandatangani: sebelum Anda menyetujui, Vela mendekode transaksi persis seperti yang akan ditandatangani.",
+					"link": "Bagaimana Bybit kehilangan $1,5 miliar, dan bagaimana Vela menunjukkan apa yang Anda tandatangani"
 				},
 				{
-					"term": "Semua yang dijalankan Vela untuk dompet Anda adalah open source, dan bisa Anda jalankan sendiri.",
-					"link": "Apa yang perlu dijalankan, apa yang tetap berfungsi tanpa getvela.app, dan apa yang masih bergantung pada kami"
+					"term": "Kalau Vela berhenti beroperasi, Anda tetap bisa mengakses dompet Anda.",
+					"link": "Cara tetap memakai dompet Anda kalau Vela menghilang"
 				}
 			]
 		},
@@ -144,7 +144,7 @@
 			"items": [
 				{
 					"title": "Setiap transaksi dikenai biaya relay, di luar gas",
-					"body": "Transaksi Vela memverifikasi tanda tangan passkey Anda on-chain dan berjalan lewat ERC-4337, jadi gas yang dipakainya beberapa kali lipat transfer biasa.\n\nDompet mencadangkan gas lebih banyak daripada yang dibutuhkan transaksi, lalu menagih tiga kali jumlah itu, dengan harga gas yang lebih tinggi antara hasil baca dompet sendiri dan harga relay untuk kecepatan pilihan Anda — sering sepuluh kali lipat atau lebih dari biaya on-chain yang sebenarnya, lebih besar lagi pada pengiriman pertama Anda di suatu jaringan, dengan minimum $0,01. Jumlah pastinya ditampilkan sebelum Anda menandatangani dan tidak bisa berubah sesudahnya.\n\nAnda bisa mengarahkan dompet ke relay lain atau <a href=\"/docs/self-hosting#relay\">menjalankan relay sendiri</a> — biayanya lalu masuk ke siapa pun yang menjalankannya."
+					"body": "Transaksi Vela memverifikasi tanda tangan passkey Anda on-chain dan berjalan lewat ERC-4337, jadi gas yang dipakainya beberapa kali lipat transfer biasa.\n\nAnda membayar satu biaya saja, yaitu ke relay yang mengirimkan transaksi Anda — relay Vela, kecuali Anda menggantinya. Besarnya tiga kali gas yang dicadangkan dompet, dihitung dengan harga untuk kecepatan yang Anda pilih, dengan minimum $0,01 (<a href=\"/docs/networks-and-fees#fee\">cara menghitungnya</a>); relay membayar gas dari biaya itu dan menyimpan sisanya. Anda melihat jumlah pastinya sebelum menandatangani, dan jumlah itu tidak bisa berubah sesudahnya.\n\nAnda bisa mengarahkan dompet ke relay lain atau <a href=\"/docs/self-hosting#relay\">menjalankan relay sendiri</a>, dan biayanya lalu masuk ke siapa pun yang menjalankannya."
 				},
 				{
 					"title": "Setiap kunci adalah satu pintu masuk ke dompet Anda",
@@ -292,7 +292,7 @@
 				},
 				{
 					"q": "Apa yang terjadi kalau Vela tutup, atau getvela.app mati?",
-					"a": "Dana Anda tetap berada di Safe Anda on-chain. Setiap layanan yang dijalankan Vela adalah open source dan bisa dijalankan siapa pun — hanya saja kode relay perlu diubah agar tidak lagi membaca data chain dari server Vela.\n\nKalau getvela.app mati, ekstensi browser Vela tetap bisa menandatangani dengan kunci yang sudah Anda punya — passkey di perangkat ini, kunci keamanan, atau ponsel lewat kode QR — begitu pula aplikasi yang Anda kompilasi sendiri, dengan ponsel atau kunci keamanan."
+					"a": "Dana Anda tetap berada di Safe Anda on-chain. Setiap layanan yang dijalankan Vela adalah open source, dan masing-masing bisa Anda jalankan sendiri — relay, indeks kunci publik, data chain, dan kurs.\n\nKalau getvela.app mati, ekstensi browser Vela tetap bisa menandatangani dengan kunci yang sudah Anda punya — passkey di perangkat ini, kunci keamanan, atau ponsel lewat kode QR — begitu pula aplikasi yang Anda kompilasi sendiri, dengan ponsel atau kunci keamanan."
 				}
 			]
 		}
@@ -351,7 +351,7 @@
 			},
 			{
 				"title": "Semua aplikasi mengikuti layanan pilihan Anda",
-				"body": "Saat ini sebagian aplikasi mengabaikan sebagian isi Pengaturan → Endpoint Layanan — aplikasi iPhone sepenuhnya, aplikasi web saat membuat dompet atau masuk, dan Android saat mencari nama. Semuanya seharusnya mengikuti pengaturan itu, dan relay seharusnya bisa membaca data chain dari server Anda sendiri."
+				"body": "Saat ini sebagian aplikasi mengabaikan sebagian isi Pengaturan → Endpoint Layanan — aplikasi iPhone sepenuhnya, aplikasi web saat membuat dompet atau masuk, dan Android saat mencari nama. Semuanya seharusnya mengikuti pengaturan itu."
 			},
 			{
 				"title": "Halaman tanda tangan independen, tersambung",
@@ -486,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "09e59832402d",
+		"home": "c775da953511",
 		"about": "44b20f016140",
-		"roadmap": "cc826c697f61",
+		"roadmap": "ec62c4af0a9f",
 		"getStarted": "f7262f86ca9e"
 	}
 }

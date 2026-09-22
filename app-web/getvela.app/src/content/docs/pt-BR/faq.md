@@ -1,7 +1,7 @@
 ---
 title: Perguntas frequentes
 description: "Respostas curtas sobre custódia, chaves, recuperação, redes, taxas, o que a Vela consegue ver, código aberto e o que acontece se a Vela deixar de existir."
-source: 0762e55bf54d
+source: 2d38e6a0b6d9
 ---
 
 # Perguntas frequentes
@@ -47,11 +47,12 @@ redes. Veja [redes e taxas](/pt-BR/docs/networks-and-fees).
 - **Os apps:** a carteira web, a extensão de navegador e os apps de desktop são
   gratuitos. Os apps de iOS e Android vão ser uma compra única nas lojas; você também
   pode compilar qualquer app a partir do código-fonte, de graça.
-- **Cada transação:** uma taxa paga da sua carteira ao relay que a envia. Ela cobre o
-  gas mais a margem do relay e muitas vezes é dez vezes ou mais o custo on-chain da
-  transação, com mínimo de cerca de US$ 0,01. O valor exato aparece na tela de
-  confirmação e faz parte do que você assina. Não há depósito nem assinatura mensal.
-  [Como a taxa é calculada](/pt-BR/docs/networks-and-fees).
+- **Cada transação:** uma taxa paga da sua carteira ao relay que a envia — o da
+  Vela, a menos que você aponte a carteira para outro relay ou rode o seu. Ela cobre
+  o gas mais a margem do relay, com mínimo de cerca de US$ 0,01. O valor exato
+  aparece na tela de confirmação antes de você assinar e faz parte do que você
+  assina. Não há depósito nem assinatura mensal.
+  [Como a taxa é calculada](/pt-BR/docs/networks-and-fees#fee).
 - **Nenhum token.** A Vela não tem nem planeja ter.
 
 ## Dá para usar a Vela com dApps?
@@ -90,8 +91,7 @@ agendada. Veja [auditorias e problemas conhecidos](/pt-BR/docs/security-audits).
 Os seus fundos continuam no seu Safe, on-chain. Para uma carteira existente, a
 extensão da Vela para navegador e os apps que você mesmo compilar continuam
 funcionando sem o getvela.app, e todos os serviços são de código aberto, para que
-outra pessoa possa rodá-los (o relay precisa de uma mudança no código para deixar de
-ler dados de chain do servidor da Vela). O
+outra pessoa possa rodá-los. O
 [guia de auto-hospedagem](/pt-BR/docs/self-hosting#if-getvela-app-disappears) lista
 os caminhos e os seus limites.
 

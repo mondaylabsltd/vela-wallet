@@ -1,7 +1,7 @@
 ---
 title: Redes e taxas
 description: "As 24 redes integradas à Vela, como adicionar outra, exatamente como a taxa de uma transação é calculada e quem a recebe, e o que acontece quando um relay fica sem gas."
-source: 84328d162a3a
+source: fdc50dbbf13a
 ---
 
 <script>
@@ -67,6 +67,8 @@ patrocínio.
 
 ### Qual é a taxa
 
+<span id="fee"></span>
+
 A tela de confirmação mostra um único valor, na moeda da taxa e na sua moeda de
 exibição. Ele é calculado assim:
 
@@ -82,12 +84,17 @@ exibição. Ele é calculado assim:
 - **Taxa = 3 × gas reservado × preço do gas**, com mínimo de cerca de US$ 0,01. Na
   Tempo, o multiplicador é 2 e a taxa é paga em pathUSD.
 
-Como a reserva fica bem acima do que a transação vai usar e o preço tem folga,
-**a taxa muitas vezes é dez vezes ou mais o custo real da transação on-chain**, e
-ainda maior na primeira transação numa rede. O relay paga o custo real e fica com
-o restante; nada é devolvido. Em redes baratas, isso dá centavos; na mainnet do
-Ethereum, pode ser um valor considerável. O valor exato aparece na tela de
-confirmação antes de você assinar.
+A reserva fica bem acima do que a transação vai usar e o preço tem folga, então a
+taxa é maior do que o custo da transação on-chain — e maior ainda na sua primeira
+transação numa rede, que também implanta a sua carteira. O relay paga o custo real
+e fica com o restante; nada é devolvido. Em redes baratas, isso dá centavos; na
+mainnet do Ethereum, pode ser um valor considerável. Você nunca precisa adivinhar:
+o valor exato aparece na tela de confirmação antes de você assinar.
+
+**Quem recebe.** A taxa vai para quem opera o relay configurado na carteira — o da
+Vela, a menos que você o troque. Qualquer implantação do vela-relay serve, inclusive
+[uma que você mesmo rode](/pt-BR/docs/self-hosting#relay), e a carteira usa a mesma
+fórmula qualquer que seja o relay escolhido.
 
 <Callout type="info" title="O que você vê é o que você paga">
 O valor da taxa e o endereço para onde ela vai fazem parte da operação que você

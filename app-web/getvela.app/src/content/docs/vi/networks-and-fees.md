@@ -1,7 +1,7 @@
 ---
 title: Mạng & phí
 description: "24 mạng tích hợp sẵn trong Vela, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
-source: 84328d162a3a
+source: fdc50dbbf13a
 ---
 
 <script>
@@ -64,6 +64,8 @@ của bạn vì một chính sách tài trợ.
 
 ### Phí là bao nhiêu
 
+<span id="fee"></span>
+
 Màn hình xác nhận hiện một con số duy nhất, theo token trả phí và theo tiền tệ hiển
 thị của bạn. Nó được tính như sau:
 
@@ -78,11 +80,16 @@ thị của bạn. Nó được tính như sau:
   số là 2 và phí được trả bằng pathUSD.
 
 Vì lượng dự trù được độn cao hơn hẳn mức giao dịch sẽ dùng, và giá đã chừa sẵn biên độ,
-**phí thường gấp mười lần chi phí thực của giao dịch trên chuỗi trở lên**, và còn cao
-hơn ở giao dịch đầu tiên trên một mạng. Relay trả chi phí thực và giữ phần còn lại;
-không có khoản nào được hoàn lại. Trên các mạng rẻ, đây chỉ là vài xu; trên mainnet
-Ethereum, nó có thể là một khoản đáng kể. Số tiền chính xác nằm trên màn hình xác nhận
-trước khi bạn ký.
+nên phí cao hơn chi phí thực của giao dịch trên chuỗi — và còn cao hơn nữa ở giao dịch
+đầu tiên của bạn trên một mạng, vì giao dịch đó đồng thời triển khai ví của bạn. Relay
+trả chi phí thực và giữ phần còn lại; không có khoản nào được hoàn lại. Trên các mạng
+rẻ, đây chỉ là vài xu; trên mainnet Ethereum, nó có thể là một khoản đáng kể. Bạn không
+cần phải đoán: số tiền chính xác nằm trên màn hình xác nhận trước khi bạn ký.
+
+**Ai nhận phí.** Phí thuộc về người vận hành relay mà ví đang dùng — relay của Vela,
+trừ khi bạn đổi. Bản triển khai vela-relay nào cũng dùng được, kể cả
+[relay do bạn tự chạy](/vi/docs/self-hosting#relay), và ví áp dụng cùng một công thức
+dù bạn chọn relay nào.
 
 <Callout type="info" title="Thấy bao nhiêu, trả bấy nhiêu">
 Số tiền phí và địa chỉ nhận phí là một phần của thao tác bạn ký. Relay mà đổi một trong

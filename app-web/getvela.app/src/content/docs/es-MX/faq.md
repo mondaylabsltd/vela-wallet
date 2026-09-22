@@ -1,7 +1,7 @@
 ---
 title: Preguntas frecuentes
 description: "Respuestas cortas sobre custodia, llaves, recuperación, redes, comisiones, qué puede ver Vela, el código abierto y qué pasa si Vela desaparece."
-source: 0762e55bf54d
+source: 2d38e6a0b6d9
 ---
 
 # Preguntas frecuentes
@@ -48,10 +48,11 @@ redes. Consulta [redes y comisiones](/es-MX/docs/networks-and-fees).
   son gratis. Las apps de iOS y Android serán un pago único en las tiendas; también
   puedes compilar cualquier app desde el código fuente gratis.
 - **Cada transacción:** una comisión que se paga desde tu wallet al relay que la
-  envía. Cubre el gas más el margen del relay, y suele ser diez veces o más el costo
-  on-chain de la transacción, con un mínimo de alrededor de US$0.01. El monto exacto
-  aparece en la pantalla de confirmación y forma parte de lo que firmas. No hay
-  depósito ni suscripción. [Cómo se calcula la comisión](/es-MX/docs/networks-and-fees).
+  envía (el de Vela, a menos que apuntes la wallet a otro relay u operes el tuyo).
+  Cubre el gas más el margen del relay, con un mínimo de alrededor de US$0.01. El
+  monto exacto aparece en la pantalla de confirmación antes de que firmes y forma
+  parte de lo que firmas. No hay depósito ni suscripción.
+  [Cómo se calcula la comisión](/es-MX/docs/networks-and-fees#fee).
 - **Ningún token.** Vela no tiene uno ni planea tenerlo.
 
 ## ¿Puedo usar Vela con dApps?
@@ -90,9 +91,7 @@ Consulta [auditorías y problemas conocidos](/es-MX/docs/security-audits).
 
 Tus fondos se quedan en tu Safe, on-chain. Para una wallet existente, la extensión de
 Vela para el navegador y las apps que compiles tú siguen funcionando sin
-getvela.app, y cada servicio es de código abierto para que alguien más lo opere (el
-relay necesita un cambio en el código para dejar de leer datos de cadena del
-servidor de Vela). La
+getvela.app, y cada servicio es de código abierto para que alguien más lo opere. La
 [guía de autoalojamiento](/es-MX/docs/self-hosting#if-getvela-app-disappears)
 enumera los caminos y sus límites.
 

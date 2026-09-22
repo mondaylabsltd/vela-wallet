@@ -1,7 +1,7 @@
 ---
 title: 自架指南
 description: "Vela 替你執行的每一樣東西、各自的用途，以及怎麼換成你自己的——中繼、公鑰索引、鏈資料、匯率和各個應用程式；還有唯一無法取代的那一樣，以及沒有 getvela.app 時該怎麼辦。"
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -16,8 +16,7 @@ Vela 執行的，是讓錢包用起來方便的那套機制：替你送出交易
 
 這一頁把這些元件逐一列出：每一樣在做什麼、少了它會怎樣、怎麼換成你自己的。
 也會說明唯一無法取代的那一樣——你的密碼金鑰所屬的網域——以及 getvela.app
-不在了該怎麼辦。先說一個限制：目前中繼是從 Vela 的伺服器讀取鏈資料，所以要完全不靠
-Vela 的基礎建設發送交易，就得改掉中繼程式碼裡的一個位址。
+不在了該怎麼辦。
 
 <Callout type="info" title="這一頁寫給誰">
 你需要會用終端機、Docker 或 Cloudflare Workers，也會替鏈上的位址儲值。
@@ -130,6 +129,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # 在 .env 裡填入 VELA_RELAY_IGGY_URL、VELA_RELAY_REDIS_URL、OPERATOR_SECRET，
+# 如果你自己架設鏈資料，再填 VELA_RELAY_CHAIN_DIRECTORY_URL，
 # 並把 VELA_RELAY_IMAGE 設成你信任的發布映像檔（見 docs/docker.md）
 docker compose pull relay
 docker compose up -d --no-build
@@ -146,6 +146,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# 自己的鏈資料：在 wrangler.jsonc 的 "vars" 裡加上 "VELA_RELAY_CHAIN_DIRECTORY_URL"
 npx wrangler deploy
 ```
 
@@ -163,9 +164,9 @@ curl https://your-relay/v1/treasury/100   # 你在 Gnosis 上的金庫位址，�
 - 錢包支付的手續費會進到你的金庫。不論用哪個中繼，錢包計算手續費的方式都一樣
   （見[網路與費用](/zh-TW/docs/networks-and-fees)）。
 - 在更換中繼之前新增的自訂網路，會沿用新增時記下的中繼位址。
-- 中繼會從 `ethereum-data.getvela.app` 讀取每條鏈的資訊和穩定幣清單。這個位址目前
-  寫死在中繼的程式碼裡（`src/utils/rpc.rs` 和 `vela-relay-cf/src/arms/market.rs`）；要換掉它，
-  就得改這兩行，再自己建置中繼。
+- 中繼會從鏈目錄讀取每條鏈的資訊和它接受的穩定幣：預設是 `ethereum-data.getvela.app`，
+  把 `VELA_RELAY_CHAIN_DIRECTORY_URL` 設成[你自己的鏈資料](#chain-data)就能換掉。
+  這個設定是 2026 年 9 月加入的；更早的中繼版本一律讀取 Vela 的那一份。
 
 ## 架設你自己的公鑰索引
 
@@ -228,8 +229,9 @@ curl http://localhost:3000/api/health   # "service":"ethereum-data","status":"ok
 它的 README 也說明了怎麼從原始碼建置、部署到 Cloudflare。請用 HTTPS 對外提供服務，再把位址
 填進「鏈資料索引」欄位。
 
-中繼也依賴這些檔案裡 Vela 專屬的欄位（`stables` 清單決定哪些穩定幣能付手續費），而且——
-如上所述——讀的是 Vela 的那一份。
+中繼也會讀取這些檔案，包括一個 Vela 專屬的欄位（`stables` 清單決定哪些穩定幣能付手續費）。
+用 `VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data` 讓它改讀你的那一份；
+每條網路的資料，它會快取一小時。
 
 ## 架設你自己的匯率服務
 
@@ -275,7 +277,6 @@ Safe 的密碼金鑰簽署器工廠合約，而目前的檢查還不會看它—
 
 把上面的都換成你自己的之後，還會剩下這些：
 
-- **中繼的鏈目錄**——在中繼的程式碼裡寫死為 `ethereum-data.getvela.app`。
 - **顯示安全金鑰型號的驗證器目錄**——只影響顯示；應用程式會改顯示通用名稱。
 - **getvela.app 上的關聯檔案**——商店版應用程式使用「這台裝置」的密碼金鑰時需要它們。手機或
   安全金鑰用不到。

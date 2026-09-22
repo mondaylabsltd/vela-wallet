@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Wie Vela funktioniert und worauf du vertrauen musst – und worauf nicht –, um es zu nutzen: das Konto, die Schlüssel, die Gebühr, das Bedrohungsmodell, die Wiederherstellung und was passiert, wenn Vela verschwindet."
-source: d072d6710855
+source: 662b69510225
 ---
 
 <script>
@@ -31,9 +31,8 @@ dein Guthaben deshalb **nicht von sich aus bewegen, einfrieren oder beschlagnahm
 Die Software, die deine Schlüssel um eine Signatur bittet, schreibt und liefert Vela
 allerdings – deshalb ist das Bedrohungsmodell unten wichtig. Die Apps, das Relay, das
 Transaktionen einreicht, und die unterstützenden Dienste sind Open Source, und du
-kannst von jedem eine eigene Kopie betreiben; heute liest das Relay allerdings noch
-Chain-Daten von Velas Server, sofern du seinen Code nicht änderst. Worauf du vertraust,
-kurz gesagt: auf die Verträge, auf die Authentifikatoren, die deine Schlüssel halten,
+kannst von jedem eine eigene Kopie betreiben. Worauf du vertraust, kurz gesagt: auf
+die Verträge, auf die Authentifikatoren, die deine Schlüssel halten,
 auf den Code der App, mit der du signierst, auf die Domain, zu der deine Passkeys
 gehören, und auf die Dienste, auf die du die App einstellst.
 
@@ -155,10 +154,13 @@ Papier weiter unten zurückkommt.
   reserviert** (die simulierten Schätzungen um die Hälfte erhöht, mit Mindestwerten),
   **bewertet zum höheren Wert aus dem Gaspreis, den die Wallet selbst abliest, und dem
   Preis des Relays für die gewählte Geschwindigkeit**, mindestens etwa 0,01 US-Dollar.
-  Auf Tempo ist der Faktor zwei. Wegen des Puffers und des Spielraums im Preis ist die
-  Gebühr oft zehnmal so hoch wie die tatsächlichen On-Chain-Kosten der Operation oder
-  höher, bei der ersten Transaktion in einem Netzwerk noch mehr; die Differenz behält
-  das Relay.
+  Auf Tempo ist der Faktor zwei. Durch den Puffer und den Spielraum im Preis liegt die
+  Gebühr über den tatsächlichen On-Chain-Kosten der Operation, bei der ersten
+  Transaktion in einem Netzwerk noch deutlicher; die Differenz behält das Relay. Der
+  genaue Betrag steht vor dem Signieren auf dem Bestätigungsbildschirm.
+- Die Gebühr geht an das Relay, auf das die Wallet eingestellt ist: standardmäßig an
+  das von Vela, sonst an eine beliebige vela-relay-Instanz, auch an eine, die du selbst
+  betreibst.
 - Die Gebühr wird im Coin des Netzwerks oder in einem USD-Stablecoin bezahlt, den das
   Relay akzeptiert (pathUSD auf Tempo, das keinen nativen Coin hat). Es gibt **keinen
   Paymaster**: Niemand sponsert Gas, und niemand kann Transaktionen über eine
@@ -291,8 +293,7 @@ Details: [Wiederherstellung und Anmeldung](/de/docs/recovery).
 
 Dein Guthaben bleibt on-chain in deinem Safe. Die Verträge hängen nicht von Vela ab,
 und jeder Dienst, den Vela betreibt, ist Open Source und kann von anderen betrieben
-werden – nur das Relay braucht eine Code-Änderung, damit es keine Chain-Daten mehr von
-Velas Server liest. Das Einzige, was sich nicht verlegen lässt, ist die Relying Party
+werden. Das Einzige, was sich nicht verlegen lässt, ist die Relying Party
 der Passkeys, `getvela.app`: Eine Kopie der Web-Wallet auf einer anderen Domain erstellt
 eine andere Wallet. Für bestehende Wallets funktionieren die Vela-Browser-Erweiterung
 (die `getvela.app`-Passkeys mit einer Berechtigung nutzen kann) und selbst gebaute Apps

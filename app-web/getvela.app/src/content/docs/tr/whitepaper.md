@@ -1,7 +1,7 @@
 ---
 title: Teknik doküman
 description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
-source: d072d6710855
+source: 662b69510225
 ---
 
 <script>
@@ -32,8 +32,7 @@ yoktur; bu yüzden paranızı kendi başına **taşıyamaz, donduramaz ya da ona
 koyamaz**. Ama anahtarlarınızdan imza isteyen yazılımı Vela yazar ve sunar —
 aşağıdaki tehdit modelinin önemli olmasının nedeni de bu. Uygulamalar, işlemleri
 zincire gönderen relay ve destek servisleri açık kaynaktır ve her birinin kendi
-kopyasını çalıştırabilirsiniz; relay bugün, kodunu değiştirmediğiniz sürece zincir
-verisini hâlâ Vela'nın sunucusundan okuyor. Kısacası güvenmeniz gerekenler: sözleşmeler,
+kopyasını çalıştırabilirsiniz. Kısacası güvenmeniz gerekenler: sözleşmeler,
 anahtarlarınızı tutan kimlik doğrulayıcılar, imzalarken kullandığınız uygulamanın
 kodu, geçiş anahtarlarınızın ait olduğu alan adı ve uygulamayı yönlendirdiğiniz
 servisler.
@@ -146,9 +145,11 @@ ama bu aynı zamanda bu belgenin aşağıda yeniden ele aldığı bir bağımlı
   yarı yarıya artırılır ve alt sınırlar uygulanır); **cüzdanın kendi gas fiyatı
   okuması ile relay'in seçilen hız için verdiği fiyattan yüksek olanıyla
   fiyatlanır** ve asgari tutar yaklaşık 0,01 dolardır. Tempo'da çarpan ikidir. Hem
-  ayrılan miktardaki pay hem de fiyattaki pay yüzünden ücret çoğu zaman işlemin gerçek
-  zincir üstü maliyetinin on katı ya da daha fazlasıdır ve bir ağdaki ilk işlemde daha
-  da yüksektir; aradaki farkı relay tutar.
+  ayrılan miktardaki pay hem de fiyattaki pay yüzünden ücret, işlemin gerçek zincir
+  üstü maliyetinin üstündedir, bir ağdaki ilk işlemde ise daha da fazla; aradaki farkı
+  relay tutar. Kesin tutar, siz imzalamadan önce onay ekranındadır.
+- Ücret, cüzdanın ayarlı olduğu relay'e gider: varsayılan olarak Vela'nınkine ya da
+  kendi çalıştırdığınız dahil herhangi bir vela-relay dağıtımına.
 - Ücret ağın coiniyle ya da relay'in kabul ettiği bir USD stabilcoiniyle ödenir
   (yerel coini olmayan Tempo'da pathUSD). **Paymaster yoktur**: kimse gas
   sponsorluğu yapmaz ve kimse işlemleri bir sponsorluk politikasıyla süzemez.
@@ -275,9 +276,8 @@ Ayrıntılar: [kurtarma ve giriş](/tr/docs/recovery).
 ## Vela ortadan kalkarsa
 
 Paranız zincir üstünde, kendi Safe'inizde kalır. Sözleşmeler Vela'ya bağlı değildir ve
-Vela'nın çalıştırdığı her servis açık kaynaktır, başkaları da çalıştırabilir — yalnız
-relay'in zincir verisini Vela'nın sunucusundan okumayı bırakması için kodunda bir
-değişiklik gerekir. Taşınamayan tek şey, geçiş anahtarlarının bağlı olan tarafı olan
+Vela'nın çalıştırdığı her servis açık kaynaktır, başkaları da çalıştırabilir.
+Taşınamayan tek şey, geçiş anahtarlarının bağlı olan tarafı olan
 `getvela.app`'tir: web cüzdanının başka bir alan adındaki kopyası başka bir cüzdan
 oluşturur. Mevcut cüzdanlar için Vela tarayıcı uzantısı (izinle `getvela.app` geçiş
 anahtarlarını kullanabilir) ve kendi derlediğiniz uygulamalar (bir telefon ya da

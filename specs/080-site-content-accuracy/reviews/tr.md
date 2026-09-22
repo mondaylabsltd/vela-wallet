@@ -168,3 +168,25 @@ Low findings listed above are fixed too.
 ## Result
 
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22
+
+Carried the en + zh revision of the same day (fee wording, configurable relay chain
+directory, hero subtitle, facts #3 and #4) into `tr.json` and four docs. Terms
+unchanged from the table above: *relay*, *zincir dizini*, *zincir verisi*, *dağıtım*,
+*özel anahtar*, *çözmek* (decode), *geçiş anahtarı*.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.hero.subtitle` | "İmzalama cihazınızda yapılır. Geçiş anahtarınızın özel anahtarı hiçbir zaman Vela'ya gitmez." | – | first sentence *gerçekleşir* → *yapılır* to follow en ("happens" → "is done") and zh (发生 → 完成); the second now names the private key, not the passkey |
+| `home.hero.facts[2]` | "Ne görüyorsanız onu imzalarsınız: Vela, tam olarak imzalayacağınız işlemi siz onaylamadan önce çözer." + new link | – | follows the Turkish WYSIWYG pattern (*Ne görürsen onu alırsın*) and the fee callout "Ne görüyorsanız onu ödersiniz"; *çözer* is the docs' verb for decode |
+| `home.hero.facts[3]` | 059 string restored; new link "Vela ortadan kalkarsa cüzdanınızı kullanmaya nasıl devam edersiniz" | – | **059 string kept**: "Vela hizmeti durdursa bile cüzdanınıza yine de erişebilirsiniz." matches en and zh (即使 Vela 停止服务…) and reads naturally. Finding C3 above (High, "unqualified promise") is superseded by the founder's 2026-09-22 ruling. Link echoes the whitepaper heading *Vela ortadan kalkarsa* |
+| `home.tradeoffs.items[0].body` | middle paragraph rewritten (one fee, to the relay, Vela's by default, formula + `#fee` link, relay keeps the rest) | – | both hrefs verbatim and unprefixed; closing paragraph's dash became a semicolon, following en |
+| `home.faq.items[6].a` | relay code-change clause replaced by the list of services you can run | – | second paragraph untouched |
+| `roadmap.upcoming[1].body` | relay clause dropped | – | |
+| docs `networks-and-fees` | `<span id="fee">` under "Ücret nedir"; "on katı" paragraph replaced (bold dropped, as en); "**Ücret kime gider.**" added | – | |
+| docs `faq` | fee bullet (relay choice, `#fee` link); shutdown answer without the parenthesis | – | |
+| docs `whitepaper` | intro clause, fee bullet + new bullet on who gets the fee, "Vela ortadan kalkarsa" clause | – | |
+| docs `self-hosting` | intro limit removed; two code comments; "Bilmeniz gerekenler" bullet; chain-data paragraph; relay line removed from "hâlâ Vela'ya işaret edenler" | – | Docker comment gets a comma after `OPERATOR_SECRET` so the added item joins the list before *ve* |
+
+No High or Medium findings open.
