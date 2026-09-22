@@ -1,0 +1,46 @@
+{
+  "about": "Member-mode challenges as the live registry computed them (POST https://p256-index-v2.getvela.app/api/challenge, 2026-09-22), with the deployment its /api/health named. lib/ceremony.js must compute the same 32 bytes from the same inputs.",
+  "registry": "https://p256-index-v2.getvela.app",
+  "chainId": 100,
+  "domainRegistry": "0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf",
+  "cases": [
+    {
+      "request": {
+        "rpId": "getvela.app",
+        "groupPublicKey": "0451a7580833898ea1b183cbd7350a4099078c6ef1c1e18e970cd7683035f25e7d0110522712b0b5a7cff081685486984a94e6831edac46e7360fa9d834a7a81a1",
+        "publicKey": "045b36890dacbd7c9a96bb74a1ee28b3d2d75b72e09a20ef25cf8e6fd8a9f0350d0e14bed8d4682a34d83538bdff5b96e89a6666ec0db5745d02fa1210072df75a"
+      },
+      "answer": {
+        "binding": "0xc9004c0798baff2c01493b42588145802a90b9717cd59780004ce375b89716a1",
+        "challenge": "0xc416d9ad512ae174884ec84067d4f0b258d85cad609e9035b1080d2b04e3feae",
+        "challengeBase64url": "xBbZrVEq4XSITshAZ9TwsljYXK1gnpA1sQgNKwTj_q4"
+      }
+    },
+    {
+      "request": {
+        "rpId": "getvela.app",
+        "groupPublicKey": "0451a7580833898ea1b183cbd7350a4099078c6ef1c1e18e970cd7683035f25e7d0110522712b0b5a7cff081685486984a94e6831edac46e7360fa9d834a7a81a1",
+        "publicKey": "045b36890dacbd7c9a96bb74a1ee28b3d2d75b72e09a20ef25cf8e6fd8a9f0350d0e14bed8d4682a34d83538bdff5b96e89a6666ec0db5745d02fa1210072df75a",
+        "attestation": "01adadadadadadadadadadadadadadadad450000"
+      },
+      "answer": {
+        "binding": "0x345153b36c0419be03f2e36ac1e0886548211e9c2015bcdcf11de22c355785bf",
+        "challenge": "0x1d0a11bd51f71aadc0f423c2962da10f54878f0aac6cc2160368a8f34484f223",
+        "challengeBase64url": "HQoRvVH3Gq3A9CPCli2hD1SHjwqsbMIWA2io80SE8iM"
+      }
+    },
+    {
+      "request": {
+        "rpId": "localhost",
+        "groupPublicKey": "0451a7580833898ea1b183cbd7350a4099078c6ef1c1e18e970cd7683035f25e7d0110522712b0b5a7cff081685486984a94e6831edac46e7360fa9d834a7a81a1",
+        "publicKey": "045b36890dacbd7c9a96bb74a1ee28b3d2d75b72e09a20ef25cf8e6fd8a9f0350d0e14bed8d4682a34d83538bdff5b96e89a6666ec0db5745d02fa1210072df75a",
+        "attestation": "01adadadadadadadadadadadadadadadad450000"
+      },
+      "answer": {
+        "binding": "0x345153b36c0419be03f2e36ac1e0886548211e9c2015bcdcf11de22c355785bf",
+        "challenge": "0x78d431310c7c9ad6888b83956b19af65bd6bd490551bb66da0b093efe22ea268",
+        "challengeBase64url": "eNQxMQx8mtaIi4OVaxmvZb1r1JBVG7ZtoLCT7-Iuomg"
+      }
+    }
+  ]
+}

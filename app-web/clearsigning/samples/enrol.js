@@ -10,7 +10,10 @@
 
   window.__enrol = function () {
     status.textContent = '等待验证器…';
-    return ns.enrol.create().then(function (record) {
+    // The same create the signing page runs for a wallet's vela_createPasskey
+    // (lib/ceremony.js); it records the key on this device as it goes.
+    return ns.ceremony.create().then(function (answer) {
+      var record = ns.signer._stored() || { credentialId: answer.registration.credentialId, publicKey: null };
       status.textContent = '已创建：' + record.credentialId.slice(0, 12) + '…';
       window.__record = record;
       if (callback) {

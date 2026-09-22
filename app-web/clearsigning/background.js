@@ -56,8 +56,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message.vela === 'result' || message.vela === 'error') {
     if (entry) {
       try {
+        // A signing answer is `{result}` (071); a key ceremony's is its own
+        // fields (`{registration|assertion, origin}`, 075). Either way the
+        // requester gets the page's payload as the page shaped it.
         entry.port.postMessage(message.vela === 'result'
-          ? { vela: 'result', result: message.result }
+          ? Object.assign({ vela: 'result' }, message.payload || { result: message.result })
           : { vela: 'error', code: message.code });
       } catch (error) {
         // The requester closed its tab; nothing left to tell.

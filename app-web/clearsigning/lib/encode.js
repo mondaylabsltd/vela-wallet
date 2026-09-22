@@ -92,5 +92,10 @@ window.VelaCS = window.VelaCS || {};
     }).join('');
   }
 
-  ns.encode = { call: encodeCall, packMultiSend: packMultiSend, word: word };
+  /** abi.encode(...) of a parameter list — no selector, no outer offset. */
+  function encodeParams(types, values) {
+    return '0x' + encodeTuple(types, values);
+  }
+
+  ns.encode = { call: encodeCall, params: encodeParams, packMultiSend: packMultiSend, word: word };
 })(window.VelaCS);

@@ -175,6 +175,12 @@ window.VelaCS = window.VelaCS || {};
       if (h.statement) siwe.appendChild(el('div', 'siwe-statement', h.statement));
       return siwe;
     }
+    if (h.kind === 'ceremony') {
+      var box = el('div', 'hero-ceremony hero-ceremony-' + h.ceremony);
+      box.appendChild(el('span', 'ceremony-glyph', { create: '＋', signIn: '→', proof: '✓', memberProof: '⛓' }[h.ceremony] || '•'));
+      box.appendChild(el('span', 'ceremony-title', h.titleKey ? t(h.titleKey) : h.title));
+      return box;
+    }
     if (h.kind === 'code') {
       var code = el('div', 'hero-call');
       code.appendChild(el('code', 'call-name', h.titleKey ? t(h.titleKey) : h.title));
@@ -266,7 +272,7 @@ window.VelaCS = window.VelaCS || {};
       tech.params.forEach(function (param) {
         var row = el('div', 'row');
         row.appendChild(el('span', 'row-label mono', param.name));
-        row.appendChild(el('span', 'row-value mono', param.value));
+        row.appendChild(el('span', 'row-value mono', param.valueKey ? t(param.valueKey) : param.value));
         body.appendChild(row);
       });
     }
@@ -291,6 +297,15 @@ window.VelaCS = window.VelaCS || {};
         (view.digest.unwrapped ? ' · ' + t('ui.digestUnwrapped') : '');
       body.appendChild(el('div', 'tech-label', digestLabel));
       body.appendChild(el('pre', 'tech-raw', view.digest.hex));
+    }
+
+    // A ceremony's challenge: derived by this page (lib/ceremony.js), shown
+    // exactly as it will be signed.
+    if (view.challenge) {
+      body.appendChild(el('div', 'tech-label', t('ui.challenge')));
+      body.appendChild(el('pre', 'tech-raw challenge-text',
+        view.challenge.pending ? t('ui.challengePending') : view.challenge.text));
+      if (view.challenge.noteKey) body.appendChild(el('div', 'tech-note', t(view.challenge.noteKey)));
     }
 
     if (tech.raw) {
@@ -367,9 +382,82 @@ window.VelaCS = window.VelaCS || {};
     return name.length > 12 ? t('ui.confirm') : name;
   }
 
+  // The six digits both screens show on a cross-device channel. Drawn on
+  // every card of the session, so the person can compare them at any moment.
+  function pairingCode(code) {
+    var box = el('div', 'pairing-code');
+    box.appendChild(el('span', null, t('ui.comparisonCode')));
+    box.appendChild(el('b', null, code));
+    return box;
+  }
+
+  /**
+   * The calm screen between requests: who this page is talking to, and — on a
+   * cross-device channel — the code. `state` = { titleKey, noteKey, code,
+   * originKey | origin }. Nothing here can be confirmed; there is no slider.
+   */
+  function renderWaiting(state) {
+    var sheet = el('article', 'sheet sheet-waiting');
+    sheet.appendChild(el('div', 'grabber'));
+    var head = el('header', 'sheet-head');
+    head.appendChild(avatar('V', '#ff6a1a'));
+    var identity = el('div', 'sheet-identity');
+    identity.appendChild(el('div', 'dapp-name', t('tag.velaWallet')));
+    if (state.origin || state.originKey) {
+      identity.appendChild(el('div', 'dapp-origin', state.origin || t(state.originKey)));
+    }
+    head.appendChild(identity);
+    sheet.appendChild(head);
+    if (state.code) sheet.appendChild(pairingCode(state.code));
+    sheet.appendChild(el('div', 'waiting-title', t(state.titleKey)));
+    if (state.noteKey) sheet.appendChild(el('p', 'sentence waiting-note', t(state.noteKey, state.noteParams)));
+    return sheet;
+  }
+
+  function renderCeremony(view, options) {
+    var sheet = el('article', 'sheet sheet-ceremony risk-' + view.risk);
+    sheet.appendChild(el('div', 'grabber'));
+
+    var head = el('header', 'sheet-head');
+    head.appendChild(avatar(view.dapp.letter, view.dapp.tone));
+    var identity = el('div', 'sheet-identity');
+    identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
+    if (view.dapp.origin || view.dapp.originKey) {
+      identity.appendChild(el('div', 'dapp-origin', view.dapp.origin || t(view.dapp.originKey)));
+    }
+    head.appendChild(identity);
+    sheet.appendChild(head);
+
+    if (view.pairing) sheet.appendChild(pairingCode(view.pairing));
+
+    var label = el('div', 'intent-label tone-' + view.risk, t(view.intentKey));
+    if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
+    sheet.appendChild(label);
+
+    var h = hero(view);
+    if (h) sheet.appendChild(h);
+    if (view.sentence) sheet.appendChild(el('p', 'sentence', t(view.sentence)));
+
+    var visible = view.fields.filter(function (f) { return !f.detail; });
+    if (visible.length) {
+      var rows = el('div', 'rows');
+      visible.forEach(function (field) { rows.appendChild(fieldRow(field)); });
+      sheet.appendChild(rows);
+    }
+
+    view.warnings.forEach(function (warning) { sheet.appendChild(warningBanner(warning)); });
+
+    var tech = techPanel(view, options.techOpen);
+    if (tech) sheet.appendChild(tech);
+
+    sheet.appendChild(slider(view));
+    return sheet;
+  }
+
   /** Build the whole sheet. `options.techOpen` expands the fallback panel. */
   function render(view, options) {
     options = options || {};
+    if (view.kind === 'ceremony') return renderCeremony(view, options);
     var sheet = el('article', 'sheet risk-' + view.risk);
     sheet.appendChild(el('div', 'grabber'));
 
@@ -387,6 +475,7 @@ window.VelaCS = window.VelaCS || {};
     if (view.chainClaimed) chain.appendChild(el('span', 'tag', t('tag.claimed')));
     head.appendChild(chain);
     sheet.appendChild(head);
+    if (view.pairing) sheet.appendChild(pairingCode(view.pairing));
 
     var label = el('div', 'intent-label tone-' + view.risk, t(view.intentKey));
     if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
@@ -442,4 +531,5 @@ window.VelaCS = window.VelaCS || {};
   }
 
   ns.render = render;
+  ns.render.waiting = renderWaiting;
 })(window.VelaCS);

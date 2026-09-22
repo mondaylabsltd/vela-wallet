@@ -231,7 +231,8 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {
 
 for (const file of ['lib/i18n.js', 'lib/locales/en.js', 'lib/locales/zh.js', 'lib/keccak.js',
   'lib/identicon-features.js', 'lib/identicon.js',
-  'lib/abi.js', 'lib/logos.js', 'lib/registry.js', 'lib/safeop.js', 'lib/resolve.js', 'lib/transport/ble.js']) {
+  'lib/abi.js', 'lib/logos.js', 'lib/registry.js', 'lib/safeop.js', 'lib/resolve.js', 'lib/transport/secure.js',
+  'lib/transport/ble.js']) {
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }
 const ns = globalThis.VelaCS;
