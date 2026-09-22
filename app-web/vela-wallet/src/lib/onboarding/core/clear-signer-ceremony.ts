@@ -134,25 +134,7 @@ export async function runClearSignerCeremony(operation: CeremonyOperation): Prom
 		expected = bytesOfHex(challenge.challenge);
 	}
 
-	const { reply, signerOrigin } = await clearSignerSession.ceremony(
-		{ intent: request.intent, context: request.context },
-		signerUrl
-	);
-	if (reply.kind === 'refused') {
-		throw new ClearSignerRefusedError(reply.code, reply.detail);
-	}
-	const verdict: ClearSignerCeremonyVerdict = clearSignerVerifyCeremony(
-		operationJson,
-		reply.payload,
-		signerOrigin,
-		expected
-	);
-	if ('refused' in verdict) {
-		// The page answered, and the core would not take it. The person is told
-		// which way it failed, on the same sheet the wait was on.
-		clearSignerSession.noteRefusal(verdict.refused.code);
-		throw new ClearSignerRefusedError(verdict.refused.code, verdict.refused.detail);
-	}
+	const verdict = await judged(operationJson, request, signerUrl, expected);
 
 	const nowIso = new Date().toISOString();
 	if ('registration' in verdict) {
@@ -179,6 +161,103 @@ export async function runClearSignerCeremony(operation: CeremonyOperation): Prom
 			// A registration answered a ceremony that wanted an assertion.
 			throw new ClearSignerRefusedError('malformed', 'the page answered the wrong ceremony');
 	}
+}
+
+/**
+ * Put one built request on the flow's page and judge the answer with the core.
+ *
+ * Throws `ClearSignerRefusedError` for every way it can fail — a closed page,
+ * the page's own rules, or an answer the core will not take — because that is
+ * the shape every machine already reads as "nothing happened here".
+ */
+async function judged(
+	operationJson: string,
+	request: { intent: unknown; context: unknown },
+	signerUrl: string,
+	expected: Uint8Array | undefined
+): Promise<Exclude<ClearSignerCeremonyVerdict, { refused: unknown }>> {
+	const { reply, signerOrigin } = await clearSignerSession.ceremony(
+		{ intent: request.intent, context: request.context },
+		signerUrl
+	);
+	if (reply.kind === 'refused') {
+		throw new ClearSignerRefusedError(reply.code, reply.detail);
+	}
+	const verdict: ClearSignerCeremonyVerdict = clearSignerVerifyCeremony(
+		operationJson,
+		reply.payload,
+		signerOrigin,
+		expected
+	);
+	if ('refused' in verdict) {
+		// The page answered, and the core would not take it. The person is told
+		// which way it failed, on the same sheet the wait was on.
+		clearSignerSession.noteRefusal(verdict.refused.code);
+		throw new ClearSignerRefusedError(verdict.refused.code, verdict.refused.detail);
+	}
+	return verdict;
+}
+
+/**
+ * A live member proof during the recovery re-publish (075, core commit
+ * 629d5a53).
+ *
+ * A member with no replayable proof signs for real at publish time, and a key
+ * that lives behind a Clear Signer page can only sign THERE — never on
+ * whichever page Settings happens to name. The challenge is not fetched here:
+ * it is the one the registry already issued for this publish's whole set
+ * (GROUP mode binds the set, so a fresh member-mode challenge would be
+ * different bytes and the wrong thing to sign).
+ */
+export async function clearSignerMemberProof(member: {
+	credentialIdHex: string;
+	publicKeyHex: string;
+	attestationHex: string;
+	groupPublicKeyHex: string;
+	signerOrigin: string;
+	/** The registry's challenge for this member, as it answered it. */
+	challengeHex: string;
+	walletName?: string;
+}): Promise<{
+	authenticatorDataHex: string;
+	clientDataJSONHex: string;
+	signatureHex: string;
+}> {
+	const operation = {
+		type: 'sign_member_proof',
+		credential_id: member.credentialIdHex,
+		public_key_hex: member.publicKeyHex,
+		attestation_hex: member.attestationHex,
+		transports: '',
+		method: 'clear_signer',
+		group_public_key_hex: member.groupPublicKeyHex,
+		signer_origin: member.signerOrigin
+	};
+	const operationJson = JSON.stringify(operation);
+	const request = clearSignerCeremonyRequest(
+		operationJson,
+		crypto.randomUUID(),
+		member.walletName ?? flowWalletName,
+		Registry.registryUrl()
+	);
+	if (request === undefined) {
+		throw new ClearSignerRefusedError('malformed', 'not a ceremony: sign_member_proof');
+	}
+	const verdict = await judged(
+		operationJson,
+		request,
+		member.signerOrigin,
+		bytesOfHex(member.challengeHex)
+	);
+	if (!('assertion' in verdict)) {
+		throw new ClearSignerRefusedError('malformed', 'the page answered the wrong ceremony');
+	}
+	const assertion = verdict.assertion;
+	return {
+		authenticatorDataHex: assertion.authenticator_data_hex,
+		clientDataJSONHex: assertion.client_data_json_hex,
+		signatureHex: assertion.signature_der_hex
+	};
 }
 
 /** The flow ended (or was abandoned): let the page go. */

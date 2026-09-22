@@ -25,6 +25,7 @@ import { denyOffOrigin, stubJsonRpc, stubRelay, happyRelay } from './stub-chain'
 import {
 	answerWhere,
 	holdAuthenticator,
+	openMethodPicker,
 	passkey,
 	registryStub,
 	seedKv,
@@ -198,10 +199,9 @@ test('signing in again goes to the Clear Signer, on a browser that never created
 	);
 
 	await page.goto('/en');
-	await page.getByRole('button', { name: en('onboarding.welcome.alreadyHaveWallet') }).click();
 	// The sign-in sheet is the same chooser: four routes, the Clear Signer last.
+	await openMethodPicker(page, en('onboarding.welcome.alreadyHaveWallet'));
 	const methods = page.locator('button.method');
-	await expect(methods).toHaveCount(4);
 	const opened = context.waitForEvent('page', { timeout: 60_000 });
 	await methods.nth(3).click();
 	await answerWhere(page, 'this');

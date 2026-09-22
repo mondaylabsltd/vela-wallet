@@ -15,7 +15,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import { extname, join, normalize } from 'node:path';
 import { createContext, runInContext } from 'node:vm';
-import type { BrowserContext, Page, Route } from '@playwright/test';
+import { expect, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { en } from './live-helpers';
 
 export const PAGE_ROOT = join(import.meta.dirname, '..', '..', 'clearsigning');
@@ -310,6 +310,32 @@ export async function seedKv(page: Page, entries: Record<string, string>): Promi
 			for (const [key, value] of Object.entries(seeded)) tx.objectStore('kv').put(value, key);
 		};
 	}, entries);
+}
+
+/**
+ * Open a method chooser and wait for its four rows.
+ *
+ * The trigger TOGGLES the sheet, so this only presses it while no row is
+ * showing: a page whose scripts have not attached their handlers yet swallows
+ * the first press, and pressing blindly a second time would close what the
+ * first one opened.
+ */
+export async function openMethodPicker(page: Page, triggerName: string): Promise<void> {
+	const trigger = page.getByRole('button', { name: triggerName });
+	const methods = page.locator('button.method');
+	await expect
+		.poll(
+			async () => {
+				if ((await methods.count()) === 0) {
+					await trigger.click({ timeout: 10_000 }).catch(() => {
+						/* the next turn tries again */
+					});
+				}
+				return methods.count();
+			},
+			{ timeout: 45_000, intervals: [250, 500, 1000] }
+		)
+		.toBe(4);
 }
 
 /** "Where is your Clear Signer?" — the tap that also gives a popup its activation. */

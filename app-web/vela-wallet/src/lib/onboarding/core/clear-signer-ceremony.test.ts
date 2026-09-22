@@ -56,6 +56,7 @@ import { clearSignerSession } from '$lib/signing/core/clear-signer.svelte';
 import { buildMockRegistration } from '$lib/dev/passkey-fixture';
 import {
 	clearSignerCeremonyOf,
+	clearSignerMemberProof,
 	endCeremonyFlow,
 	rpIdOfSigner,
 	runClearSignerCeremony
@@ -276,6 +277,46 @@ describe('creating a key, and confirming its membership', () => {
 		expect(page.opened).toEqual(['http://localhost:8199/sign.html?ch=post']);
 		clearSignerSession.cancel();
 		await ran;
+	});
+});
+
+describe('the recovery re-publish', () => {
+	/**
+	 * A member with no replayable proof signs live at publish time. The
+	 * challenge is the one the registry issued for THIS publish's whole set, and
+	 * the page is the one the record names — Settings' page would find no key.
+	 */
+	it('signs a live member proof on the page the record names, over the registry’s own challenge', async () => {
+		const page = fakeBrowser({ origin: 'http://localhost:8199' });
+		clearSignerSession.host = page.host;
+		const challenge = new Uint8Array(32).fill(0x44);
+		const signed = clearSignerMemberProof({
+			credentialIdHex: KEY.credentialHex,
+			publicKeyHex: `04${'ab'.repeat(64)}`,
+			attestationHex: '',
+			groupPublicKeyHex: `04${'cd'.repeat(64)}`,
+			signerOrigin: 'http://localhost:8199',
+			challengeHex: `0x${Buffer.from(challenge).toString('hex')}`,
+			walletName: WALLET
+		}).catch((error: unknown) => error);
+		await vi.waitFor(() => expect(clearSignerSession.view.asking).toBe(true));
+		clearSignerSession.answerWhere('this_device');
+		await vi.waitFor(() => expect(page.opened).toHaveLength(1));
+		expect(page.opened).toEqual(['http://localhost:8199/sign.html?ch=post']);
+		page.say({ vela: 'ready', v: 1 });
+		await vi.waitFor(() => expect(page.intent()).toBeDefined());
+		expect(page.intent()?.intent).toMatchObject({ method: 'vela_memberProof' });
+		// The registry was NOT asked again: these bytes are the publish's own.
+		expect(registry.asked).toEqual([]);
+
+		page.say({
+			vela: 'result',
+			id: page.id(),
+			...assertionAnswer(challenge, { origin: 'http://localhost:8199' })
+		});
+		const assertion = (await signed) as { signatureHex: string; clientDataJSONHex: string };
+		expect(assertion.signatureHex).toMatch(/^30[0-9a-f]+$/);
+		expect(assertion.clientDataJSONHex.length).toBeGreaterThan(20);
 	});
 });
 

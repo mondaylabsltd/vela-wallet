@@ -13,6 +13,7 @@
  */
 
 import { buildGroupProof, buildMemberProof, groupPublicKeyFromSeed, toHex } from './wasm-client';
+import { clearSignerMemberProof } from './clear-signer-ceremony';
 import * as Registry from './registry';
 import * as Passkey from './passkey';
 import type { RegistryProof } from '../generated/RegistryProof';
@@ -87,7 +88,24 @@ export async function publish(args: PublishArgs): Promise<void> {
 			if (!derived) {
 				throw new Error(`registry challenge is missing member ${member.public_key_hex}`);
 			}
-			const assertion = await Passkey.sign(stripHex(derived.challenge), member.credential_id);
+			// Spec 075: a member that lives behind a Clear Signer page signs
+			// THERE. No platform sheet can see that key, so a live proof asked of
+			// the OS would find nothing — and the page it must be asked on is the
+			// one the record names, never whichever page Settings happens to hold.
+			const behindPage = member.signer_origin ?? '';
+			const assertion =
+				behindPage === ''
+					? await Passkey.sign(stripHex(derived.challenge), member.credential_id)
+					: await clearSignerMemberProof({
+							credentialIdHex: member.credential_id,
+							publicKeyHex: member.public_key_hex,
+							attestationHex: member.attestation_hex,
+							groupPublicKeyHex: groupPublicKey,
+							signerOrigin: behindPage,
+							// The challenge this publish's own set was issued, not a
+							// fresh member-mode one: GROUP mode binds the whole set.
+							challengeHex: derived.challenge
+						});
 			proof = buildMemberProof(
 				assertion.authenticatorDataHex,
 				assertion.clientDataJSONHex,
