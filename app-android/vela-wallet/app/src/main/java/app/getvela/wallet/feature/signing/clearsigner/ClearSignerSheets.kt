@@ -62,6 +62,10 @@ fun ClearSignerSheets(
         is ClearSignerChannel.State.Where -> ClearSignerWhereSheet(onWhere, onCancel)
         is ClearSignerChannel.State.Pairing -> ClearSignerPairSheet(state.link, onCancel)
         is ClearSignerChannel.State.Code -> ClearSignerCodeSheet(state.code, onConfirmCode, onCancel)
+        // Paired and confirmed: the request is with the other device now, and
+        // this screen has nothing to offer but the way out. Without this the
+        // app would look idle while somebody reads a card on their laptop.
+        is ClearSignerChannel.State.Paired -> ClearSignerPairedSheet(onCancel)
         else -> Unit
     }
 }
@@ -285,6 +289,49 @@ private fun QrBlock(payload: String) {
                     )
                 }
             }
+        }
+    }
+}
+
+/** Waiting on the other device, with nothing to do but wait or stop. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ClearSignerPairedSheet(onCancel: () -> Unit) {
+    val strings = LocalVelaStrings.current
+    val colors = VelaTheme.colors
+    ModalBottomSheet(
+        onDismissRequest = onCancel,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = colors.bgRaised,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VelaSizing.screenPaddingX)
+                .padding(bottom = VelaSpacing.xl3),
+            verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            Text(
+                text = strings.t("componentsUi.signing.clearSignerWaiting"),
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.bold,
+                fontSize = VelaTextSize.xl2,
+            )
+            // Not `clearSignerWaitingHint`: that one tells the person to look at
+            // the page that opened HERE, and this page is on their other device.
+            Text(
+                text = strings.t("componentsUi.signing.clearSignerPairWaiting"),
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                lineHeight = VelaLeading.normal * VelaTextSize.base,
+            )
+            VelaSecondaryButton(
+                strings.t("common.cancel"),
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

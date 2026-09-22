@@ -259,25 +259,35 @@ class ClearSignerChannel(
         val page = signerOrigin.ifEmpty { signerUrl() }
         val here = onThisDevice ?: askWhere() ?: return null
         onThisDevice = here
-        val built = if (here) {
-            ClearSignerLoopback(
-                base = page,
-                openPage = openPage,
-                timeoutMs = timeoutMs,
-                random = random,
-                onOpened = { url -> _state.value = State.Waiting(url) },
-            )
-        } else {
-            ClearSignerRelayWire(
-                relayUrl = relayUrl().ifEmpty { clearSignerDefaultRelay() },
-                signerUrl = page,
-                sockets = sockets,
-                appName = appName,
-                timeoutMs = timeoutMs,
-                random = random,
-                onLink = { link -> _state.value = State.Pairing(link) },
-                confirmCode = { code -> awaitCode(code) },
-            )
+        // A channel that cannot even be built — a port nothing will bind, a
+        // 2⁻³² secret that is not a P-256 scalar — is an unopened page, not an
+        // exception on its way through the signing paths.
+        val built = runCatching {
+            if (here) {
+                ClearSignerLoopback(
+                    base = page,
+                    openPage = openPage,
+                    timeoutMs = timeoutMs,
+                    random = random,
+                    onOpened = { url -> _state.value = State.Waiting(url) },
+                )
+            } else {
+                ClearSignerRelayWire(
+                    relayUrl = relayUrl().ifEmpty { clearSignerDefaultRelay() },
+                    signerUrl = page,
+                    sockets = sockets,
+                    appName = appName,
+                    timeoutMs = timeoutMs,
+                    random = random,
+                    onLink = { link -> _state.value = State.Pairing(link) },
+                    confirmCode = { code -> awaitCode(code) },
+                )
+            }
+        }.getOrElse { error ->
+            VelaLog.failure("clearsigner", "the channel could not be opened", error)
+            onThisDevice = null
+            _state.value = State.Idle
+            return null
         }
         wire = built
         return built
