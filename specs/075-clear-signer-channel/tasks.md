@@ -49,7 +49,59 @@
   one-request-per-visit). 500 → 518 tests, plus 5 Chrome e2e and a real-relay case.
 
 ## D — BLE
-- [ ] T040 Android peripheral · T041 iOS peripheral · T042 desktop (macOS) peripheral · T043 real-radio pass
+
+The framing is the core's (`clear_signer::ble`, commit `8da4384e`): three
+peripherals speak to one page, and three hand-written reassemblers would be
+three chances to disagree about a wrapped `msgId`, a frame that arrived twice,
+or a message that never finished. `tests/clear-signer/ble-frames.json` holds six
+cases that BOTH sides read — this crate, and `samples/ble-vectors-test.mjs` with
+the page's own code.
+
+- [x] T040 Android peripheral — `BluetoothGattServer`, the service advertised
+  with the device name in the scan response (a 128-bit uuid eats 18 of the 31
+  advertised bytes), notifications serialised on `onNotificationSent`. 663 → 678
+  tests. It does NOT rename the Bluetooth adapter: `setName()` renames the phone
+  for every app and every paired device.
+- [x] T041 iOS peripheral — `CBPeripheralManager`, the same service, the
+  foreground rule said on screen rather than left to be discovered (a
+  backgrounded iOS app loses its local name and drops into the advertisement's
+  overflow area). 758 → 781 tests. Two bugs its own tests found: a request
+  marked in flight *after* its frames went out (an answer that arrived instantly
+  was dropped), and a discarded `sweep` result (a lost frame left a spinner with
+  no clock behind it — this channel has no socket to die).
+- [ ] T042 desktop (macOS) peripheral — not started. Lower value than it looks:
+  the desktop already reaches the page over the loopback socket on the same
+  machine and over the relay across machines, so BLE only adds a third road to
+  the same place, and a peripheral role from Rust needs raw `objc2-core-bluetooth`.
+  Worth a ruling before anyone spends the day on it.
+- [ ] T043 real-radio pass — **nothing here has met an actual link.** No `adb`,
+  no hardware: a `BluetoothGattServer` only exists on a phone and a simulator
+  has no peripheral stack. Advertising, MTU negotiation, CCCD subscription and
+  Chrome's chooser are all unverified.
+
+### What the framing's first users found
+
+- **A notified frame has to fit the link whole** (`1bcb3766`). 244 is the page's
+  write size, and 244 + the six-byte header is a 250-byte ATT value that an
+  MTU-247 link cannot carry. A central gets away with it — the OS splits an
+  oversized write into a long write — but a peripheral's notify cannot be split:
+  `updateValue` truncates, and a truncated frame is a message that never
+  completes. iOS hit it; Android then found its own ladder had never taken a
+  step (`room = mtu - 3` was 244, the framer already sat at 244), so **every
+  multi-frame answer it sent would have been truncated on every modern phone**.
+  Since answers go out over notify, that is the direction carrying every
+  signature. Now `Framer::fit_to_mtu`, once, for all three.
+- **The peripheral's own units** (`555e53fc`). `CBCentral.maximumUpdateValueLength`
+  is the notification's capacity, not the MTU, and two of the three peripherals
+  are CoreBluetooth. `fit_to_value_len` is the door for that number; handing it
+  to an MTU-shaped door costs three bytes a frame and breaks nothing, so nothing
+  would ever find it.
+- **Copy that can be acted on** (`4b9c6d80`, `555e53fc`). The peripherals shipped
+  borrowing the dApp flow's "Bluetooth permission is needed", which never said
+  which device to pick out of the browser's list — the one thing the pairing step
+  cannot work without. Six sentences now, in fifteen locales, including one for a
+  device with no peripheral role at all, which was being told to switch Bluetooth
+  on.
 
 ## E — Device passes
 - [~] T050 SC-002 on the Android phone — run 2026-09-22 on the connected phone
