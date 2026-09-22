@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.ClearSignerCeremonyOutcome
 import uniffi.vela_core_uniffi.ClearSignerOutcome
 import uniffi.vela_core_uniffi.ClearSignerRefusal
@@ -282,12 +283,16 @@ class ClearSignerChannel(
         return built
     }
 
-    /** "Where is your Clear Signer?" — asked once per flow. */
+    /**
+     * "Where is your Clear Signer?" — asked once per flow, and under the same
+     * five-minute clock as everything else: a question left on screen must not
+     * hold the request open forever.
+     */
     private suspend fun askWhere(): Boolean? {
         val answer = CompletableDeferred<Boolean?>()
         whereAnswer = answer
         _state.value = State.Where
-        val here = answer.await()
+        val here = withTimeoutOrNull(timeoutMs) { answer.await() }
         whereAnswer = null
         if (here == null) _state.value = State.Idle
         return here
@@ -302,7 +307,7 @@ class ClearSignerChannel(
         val answer = CompletableDeferred<Boolean>()
         codeAnswer = answer
         _state.value = State.Code(code)
-        val confirmed = answer.await()
+        val confirmed = withTimeoutOrNull(timeoutMs) { answer.await() } ?: false
         codeAnswer = null
         if (confirmed) _state.value = State.Paired
         return confirmed

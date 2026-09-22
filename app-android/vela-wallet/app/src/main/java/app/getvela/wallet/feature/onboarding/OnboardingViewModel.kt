@@ -385,6 +385,10 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      * the finished machine.
      */
     fun beginSignIn(method: KeyMethod = KeyMethod.Platform) {
+        // Spec 075: a new attempt is a new flow. A previous one that ended in
+        // a failure the person read and dismissed may still hold a page open;
+        // this attempt opens its own.
+        container.clearSigner.endFlow()
         startLogin()
         signIn(method)
     }

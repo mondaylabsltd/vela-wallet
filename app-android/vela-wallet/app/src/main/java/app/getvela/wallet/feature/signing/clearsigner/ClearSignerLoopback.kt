@@ -193,7 +193,7 @@ class ClearSignerLoopback(
             socket.soTimeout = 0
             val input = socket.getInputStream()
             val buffer = ByteArray(16 * 1024)
-            while (true) {
+            while (!over) {
                 val read = input.read(buffer)
                 if (read < 0) break
                 val step = connection.feed(buffer.copyOf(read))
@@ -207,9 +207,9 @@ class ClearSignerLoopback(
                 }
                 if (step.close) break
             }
-        } catch (_: IOException) {
-            // The page went away mid-frame, or we closed it: `closed()` says
-            // which it means.
+        } catch (_: Exception) {
+            // The page went away mid-frame, or the flow ended under this loop
+            // and took the connection with it. `closed()` says which it means.
         } finally {
             // `closed()` is `Declined` for a page that HELD the request and went
             // away, and nothing for one that never proved itself. Either way a

@@ -360,9 +360,10 @@ fun VelaNavHost(
                             // pop and did nothing at all (device-found 2026-08-25).
                             OnboardingIntent.CreateWallet ->
                                 navController.push(VelaDestinations.CREATE)
-                            // Signing in offers the same three authenticators
+                            // Signing in offers the same four authenticators
                             // creating does — the picker opens, and the chosen
-                            // method runs the "who are you?" ceremony on that route.
+                            // method runs the "who are you?" ceremony on that
+                            // route, the Clear Signer's page included (075).
                             OnboardingIntent.RecoverWallet -> showSignInMethods = true
                         }
                     },

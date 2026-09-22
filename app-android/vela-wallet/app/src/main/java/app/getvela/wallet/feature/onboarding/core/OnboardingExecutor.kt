@@ -366,11 +366,32 @@ class OnboardingExecutor(
                         "registry challenge is missing member ${member.publicKeyHex}",
                         network = false,
                     )
-                val assertion = passkey.assert(
-                    challenge = uniffi.vela_core_uniffi.fromHex(stripHex(memberChallenge)),
-                    credentialIdHex = member.credentialIdHex,
-                    method = method,
-                )
+                val bytes = uniffi.vela_core_uniffi.fromHex(stripHex(memberChallenge))
+                // Spec 075: a wallet signed into through the Clear Signer proves
+                // its members there too — the key is behind that page and no
+                // provider on this device holds it. `registry_publish` carries
+                // no `signer_origin`, so this opens the person's own page.
+                val assertion = if (method == KeyMethod.ClearSigner) {
+                    assertionOf(
+                        asserted(
+                            onPage(
+                                JSONObject()
+                                    .put("type", "sign_member_proof")
+                                    .put("credential_id", member.credentialIdHex)
+                                    .put("public_key_hex", member.publicKeyHex)
+                                    .put("attestation_hex", member.attestationHex)
+                                    .put("group_public_key_hex", groupPublicKey),
+                                expectedMemberChallenge = bytes,
+                            ),
+                        ),
+                    )
+                } else {
+                    passkey.assert(
+                        challenge = bytes,
+                        credentialIdHex = member.credentialIdHex,
+                        method = method,
+                    )
+                }
                 ProvenMember(member, JSONObject(memberProof(assertion)))
             }
         }

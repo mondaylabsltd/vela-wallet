@@ -189,7 +189,7 @@ class ClearSignerRelayWire(
         }
         // Our own hello answers the page's, then both sides derive the same key
         // and the same six digits from the two nonces and the two keys.
-        opened.send(handshake.hello(appName))
+        opened.send(handshake.hello(appName.ifEmpty { null }))
         val live = runCatching { handshake.complete(peerHello, true) }.getOrElse { error ->
             VelaLog.failure("clearsigner.relay", "handshake refused", error)
             return ClearSignerAnswer.Unreachable(error.message ?: "the handshake failed")
