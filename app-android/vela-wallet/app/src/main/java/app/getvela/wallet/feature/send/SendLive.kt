@@ -221,7 +221,13 @@ object SendLive {
             unit = if (batch.unit == WireBatchUnit.Fiat) BatchUnit.Fiat else BatchUnit.Token,
             pasteValue = batch.raw_text,
             rateLabel = s.t(I18nKeys.Flows.BATCH_RATE_LABEL, mapOf("sym" to symbol)),
-            rateHint = s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to batch.fiat_code, "sym" to symbol)),
+            // A token-denominated sheet converts nothing (the web's `unitHint`): it
+            // says so instead of explaining a rate the core ignores in that mode.
+            rateHint = if (batch.unit == WireBatchUnit.Fiat) {
+                s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to batch.fiat_code, "sym" to symbol))
+            } else {
+                s.t(I18nKeys.Flows.BATCH_TOKEN_HINT, mapOf("sym" to symbol))
+            },
             rateValue = when (batch.rate_status) {
                 BatchRateStatus.Ok -> "${batch.rate_input} ${batch.fiat_code}"
                 BatchRateStatus.Loading -> s.t(I18nKeys.Flows.BATCH_RATE_LOADING)
@@ -241,7 +247,7 @@ object SendLive {
                         address = row.name ?: row.address,
                         // The core converted it; an unconvertible row carries no
                         // token amount, and the raw figure there would read as if it had.
-                        conversion = if (row.token_amount.isNotEmpty() && row.token_amount != "0") "${row.token_amount} $symbol" else "—",
+                        conversion = if (row.token_amount.isNotEmpty() && row.token_amount != "0") "${Formats.current.plain(row.token_amount)} $symbol" else "—",
                         note = when {
                             row.dup -> s.t(I18nKeys.Flows.BATCH_DUP)
                             !row.valid -> s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS)
@@ -879,6 +885,8 @@ object SendLive {
             mark = if (view.multi_select_mode) null else token?.let { WalletLive.mark(it.chain_id, it.symbol, it.token_address, it.logo_urls) },
             amount = "${Formats.current.plain(view.confirm_amount)} $symbol",
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
+            // The core's own verdict, resolved on this page only (single recipient).
+            recipientTag = if (!split && view.recipient_risk?.first_time == true) s.t(I18nKeys.Flows.FIRST_TIME_SEND) else null,
             facts = listOf(
                 FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress, ctx.fromName.ifBlank { null })),
                 // SD3b (spec 038 #D2): a split names its count here and every

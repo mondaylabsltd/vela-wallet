@@ -614,6 +614,7 @@ object I18nKeys {
         const val BATCH_RATE_RESET = "send.batchRateReset"
         const val BATCH_OVER_CAP = "send.batchOverCap"
         const val BATCH_OVER_BALANCE = "send.batchOverBalance"
+        const val BATCH_TOKEN_HINT = "send.batchTokenHint"
         const val BATCH_ADDS_TO_ROWS = "send.batchAddsToRows"
         const val BATCH_REPLACES_ROWS = "send.batchReplacesRows"
         const val BATCH_REPLACE_INSTEAD = "send.batchReplaceInstead"

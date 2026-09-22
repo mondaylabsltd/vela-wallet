@@ -1314,7 +1314,10 @@ fun BatchImportBody(
         }
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         HairlineDivider()
-        Row(
+        // The rate converts a FIAT sheet; in token units the core ignores it, so
+        // the row is not drawn at all (the web shows it only in fiat mode) —
+        // a rate beside "In XDAI" read as if it were being applied.
+        if (model.unit == BatchUnit.Fiat) Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = VelaSpacing.md),
@@ -1549,6 +1552,17 @@ fun SendConfirmBody(
                 if (index > 0) HairlineDivider()
                 FactRow(fact = fact)
             }
+        }
+        model.recipientTag?.let {
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            Text(
+                text = it,
+                color = colors.warningBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(horizontal = VelaSpacing.lg),
+            )
         }
         if (model.breakdown.isNotEmpty()) {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))

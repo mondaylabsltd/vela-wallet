@@ -135,6 +135,8 @@ data class SettingsActions(
     val onConfirmAddNetwork: () -> Unit = {},
     /** 恢复默认 on the service-endpoints page. */
     val onResetEndpoints: () -> Unit = {},
+    /** The endpoints page opened: probe every service (the web's `endpoints_opened`). */
+    val onEndpointsOpened: () -> Unit = {},
     // Spec 047 US1: the rows that do what they say.
     val onSegment: (group: String, id: String) -> Unit = { _, _ -> },
     val onTextScale: (Int) -> Unit = {},
@@ -194,7 +196,12 @@ fun SettingsRoute(
                 "networks" -> page = SettingsPage.Networks
                 "rpc-providers" -> page = SettingsPage.RpcProviders
                 "add-network" -> page = SettingsPage.AddNetwork
-                "endpoints" -> page = SettingsPage.Endpoints
+                "endpoints" -> {
+                    page = SettingsPage.Endpoints
+                    // Without this the pills had nothing to say: the probe wave
+                    // (`openEndpoints`) was defined and never called (device-found).
+                    actions.onEndpointsOpened()
+                }
                 "storage" -> page = SettingsPage.Storage
                 "about" -> page = SettingsPage.About
                 "language" -> overlay = SettingsOverlay.Language

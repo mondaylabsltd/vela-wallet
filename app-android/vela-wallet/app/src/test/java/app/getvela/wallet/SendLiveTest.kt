@@ -138,6 +138,21 @@ class SendLiveTest {
         assertNull(SendLive.confirm(drawn.model, view.copy(multi_select_mode = true), ctx()).mark)
     }
 
+    /**
+     * Device-found: the core resolves `first_time` only while the confirm page
+     * is up (`confirm_probes`), so the form's note never had it. The page that
+     * signs says it.
+     */
+    @Test
+    fun `the confirm page says it is the first time sending to this address`() {
+        val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val view = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee())
+        assertNull(SendLive.confirm(drawn.model, view, ctx()).recipientTag)
+        val first = view.copy(recipient_risk = SendRecipientRisk(first_time = true))
+        assertEquals(strings.t(I18nKeys.Flows.FIRST_TIME_SEND), SendLive.confirm(drawn.model, first, ctx()).recipientTag)
+        assertNull(SendLive.confirm(drawn.model, view.copy(recipient_risk = SendRecipientRisk(first_time = false)), ctx()).recipientTag)
+    }
+
     private fun feeOption(symbol: String, contract: String?, usdPrice: String?) = FeeOptionView(
         symbol = symbol, contract = contract, decimals = 18, balance = "1500000000000000000",
         recipient = recipient, usd_balance = "900", usd_price = usdPrice, amount = "91000000000000",
@@ -773,6 +788,18 @@ class SendLiveTest {
         val replaces = SendLive.batchImport(drawn.model, ready, typed, ctx(), replaces = true)
         assertEquals(strings.t(I18nKeys.Flows.BATCH_REPLACES_ROWS), replaces.merge)
         assertEquals(strings.t(I18nKeys.Flows.BATCH_ADD_INSTEAD), replaces.mergeAction)
+    }
+
+    /** Device-found: "In XDAI" still explained a USD rate the core ignores in token mode. */
+    @Test
+    fun `a token-denominated import says it converts nothing`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, show_batch_import = true)
+
+        val token = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Token, fiat_code = "USD"), view, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_TOKEN_HINT, mapOf("sym" to "XDAI")), token.rateHint)
+        val fiat = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Fiat, fiat_code = "USD"), view, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to "USD", "sym" to "XDAI")), fiat.rateHint)
     }
 
     // -- Spec 045 US4: the treasury pause's second exit ---------------------
