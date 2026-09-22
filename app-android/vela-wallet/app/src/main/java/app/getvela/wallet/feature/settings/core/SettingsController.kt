@@ -227,6 +227,12 @@ class SettingsController(
 
     fun resetSignerUrl() = signPrefHost.dispatch(SignPrefEvent.SignerUrlReset, SignPrefEvent.serializer())
 
+    /** Spec 075: the relay a cross-device pairing goes through. */
+    fun submitRelayUrl(text: String) =
+        signPrefHost.dispatch(SignPrefEvent.RelayUrlSubmitted(text), SignPrefEvent.serializer())
+
+    fun resetRelayUrl() = signPrefHost.dispatch(SignPrefEvent.RelayUrlReset, SignPrefEvent.serializer())
+
     /** The networks, endpoints and provider keys this device holds. */
     val networks: StateFlow<NetView> = networkHost.view
 

@@ -554,7 +554,15 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
         val out = org.json.JSONArray()
         for (index in 0 until keys.length()) {
             val key = keys.optJSONObject(index) ?: continue
-            out.put(org.json.JSONObject().put("credential_id", key.optString("credential_id")).put("transports", key.optString("transports")))
+            out.put(
+                org.json.JSONObject()
+                    .put("credential_id", key.optString("credential_id"))
+                    .put("transports", key.optString("transports"))
+                    // Spec 075: the Clear Signer page this key lives behind.
+                    // Dropping it would make `signRoute` route a key that only
+                    // one page can reach to the platform sheet instead.
+                    .put("signer_origin", key.optString("signer_origin")),
+            )
         }
         return out.toString()
     }

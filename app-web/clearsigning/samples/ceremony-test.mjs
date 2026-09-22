@@ -110,7 +110,15 @@ async function p256PublicHex() {
 
 const browser = await startBrowser({ cdp: CDP, tlsPort: TLS_PORT });
 const registry = await startRegistry({ ns });
-const relay = await startRelay();
+// VELA_RELAY_URL points the relay section at a relay that is already running
+// — the Rust host (`cargo run -p vela-relay-server`), its Docker image, or
+// the Worker under `wrangler dev` — instead of the Node mock. The checks that
+// read the mock's own tap are skipped then; everything else is the same run.
+const externalRelay = process.env.VELA_RELAY_URL;
+const relay = externalRelay
+  ? { url: externalRelay, tap: null, close: async () => {} }
+  : await startRelay();
+if (externalRelay) console.log(`relay: using ${externalRelay} (the mock's tap checks are skipped)`);
 
 try {
   // === B. the loopback WebSocket =============================================
@@ -378,12 +386,14 @@ try {
     const verified = await verify;
     check('relay: a second request in the same room', verified.t === 'result' && await verifies(verified.assertion, key));
 
-    const frames = relay.tap.filter((f) => f.room === room);
-    const clear = frames.filter((f) => !f.isBinary);
-    check('relay: the relay saw two hellos in the clear and nothing else',
-      clear.length === 2 && clear.every((f) => JSON.parse(f.data).t === 'hello'), `${clear.length} text / ${frames.length - clear.length} sealed`);
-    check('relay: no request or answer crossed it readable',
-      frames.filter((f) => f.isBinary).every((f) => !f.data.toString('latin1').includes('vela_') && !f.data.toString('latin1').includes('assertion')));
+    if (relay.tap) {
+      const frames = relay.tap.filter((f) => f.room === room);
+      const clear = frames.filter((f) => !f.isBinary);
+      check('relay: the relay saw two hellos in the clear and nothing else',
+        clear.length === 2 && clear.every((f) => JSON.parse(f.data).t === 'hello'), `${clear.length} text / ${frames.length - clear.length} sealed`);
+      check('relay: no request or answer crossed it readable',
+        frames.filter((f) => f.isBinary).every((f) => !f.data.toString('latin1').includes('vela_') && !f.data.toString('latin1').includes('assertion')));
+    }
 
     // The wallet drops out (a phone locking its screen) and comes back.
     await page.waitFor("window.__velaState.phase === 'waiting'");

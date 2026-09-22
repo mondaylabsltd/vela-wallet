@@ -71,25 +71,55 @@ class UserOpSpine(
     /** Spec 071: the Clear Signer, when this build can open one. */
     private val clearSigner: () -> ClearSigner? = { null },
 ) {
-    /** The credential a ceremony is pinned to, its transports and method. */
-    private suspend fun routeFor(account: String, first: WalletKeyRecord): Triple<String, String, KeyMethod> {
+    /**
+     * Where one ceremony goes: the credential it is pinned to, the transports
+     * the request carries, the method the shell routes by, and — for
+     * `clear_signer` — the page the key lives behind (spec 075; empty means
+     * the person's page from Settings).
+     */
+    data class Route(
+        val credentialId: String,
+        val transports: String,
+        val method: KeyMethod,
+        val signerOrigin: String = "",
+    )
+
+    /**
+     * The core's `signRoute`, for EVERY choice including `auto`.
+     *
+     * Spec 075 made `auto` a real question: a key minted or found through the
+     * Clear Signer lives behind one page, and `auto` must follow it there —
+     * asking Credential Manager for a credential no provider on this device
+     * holds would draw the system's "no passkeys" sheet over a wallet whose
+     * key is perfectly reachable, one page away. Before this, `auto` never
+     * consulted the core at all.
+     */
+    internal suspend fun routeFor(account: String, first: WalletKeyRecord): Route {
         val chosen = signMethod()
-        if (chosen != "auto") {
-            runCatching { route(accounts.keyRoutesJson(account), chosen)?.let(::JSONObject) }.getOrNull()?.let { picked ->
-                val method = KeyMethod.entries.firstOrNull { it.wire == picked.optString("method") }
-                if (method != null && picked.optString("credential_id").isNotEmpty()) {
-                    return Triple(picked.optString("credential_id"), picked.optString("transports"), method)
-                }
+        runCatching { route(accounts.keyRoutesJson(account), chosen)?.let(::JSONObject) }.getOrNull()?.let { picked ->
+            val method = KeyMethod.entries.firstOrNull { it.wire == picked.optString("method") }
+            if (method != null && picked.optString("credential_id").isNotEmpty()) {
+                return Route(
+                    credentialId = picked.optString("credential_id"),
+                    transports = picked.optString("transports"),
+                    method = method,
+                    signerOrigin = picked.optString("signer_origin"),
+                )
             }
         }
+        // The Clear Signer by name, for a wallet the core could route nothing
+        // for (no stored key routes yet): the person's own page.
+        if (chosen == CLEAR_SIGNER) {
+            return Route(first.credentialId, "", KeyMethod.ClearSigner)
+        }
         val (transports, method) = accounts.routingOf(account)
-        return Triple(first.credentialId, transports, method)
+        return Route(first.credentialId, transports, method)
     }
 
     /**
      * The one signature of an attempt: the person's passkey, routed as the
      * "Sign with" choice says — or, for `clear_signer`, the Clear Signer page
-     * with the request the core builds ([request] is only called then).
+     * the key lives behind ([request] is only called then).
      */
     private suspend fun ceremony(
         challenge: ByteArray,
@@ -99,16 +129,16 @@ class UserOpSpine(
         keys: List<WalletKeyRecord>,
         request: (ClearSignerLabels) -> String,
     ): Assertion = try {
-        if (signMethod() == CLEAR_SIGNER) {
+        val picked = routeFor(account, pinned)
+        if (picked.method == KeyMethod.ClearSigner) {
             val channel = clearSigner() ?: other("The Clear Signer cannot be opened here")
             val requestJson = runCatching { request(channel.describe(chainId, account)) }.getOrElse { error ->
                 if (error is Refused) throw error
                 other(error.message ?: "The Clear Signer's request could not be built")
             }
-            channel.sign(requestJson, challenge, keys)
+            channel.sign(requestJson, challenge, keys, picked.signerOrigin)
         } else {
-            val (credentialId, transports, method) = routeFor(account, pinned)
-            signer().sign(challenge, credentialId, transports, method)
+            signer().sign(challenge, picked.credentialId, picked.transports, picked.method)
         }
     } catch (failure: PasskeyFailure) {
         if (failure.kind == FailureKind.Cancelled) throw Refused(Failure.PasskeyCancelled)
@@ -127,8 +157,8 @@ class UserOpSpine(
 
     class Refused(val failure: Failure) : Exception()
 
-    private companion object {
-        /** `wallet_keys::SIGN_METHODS`' fourth value. */
+    internal companion object {
+        /** `wallet_keys::SIGN_METHODS`' fifth value. */
         const val CLEAR_SIGNER = "clear_signer"
     }
 
