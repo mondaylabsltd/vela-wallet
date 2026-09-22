@@ -1350,6 +1350,9 @@ pub struct Model {
     endpoint_gen: u64,
     override_gens: BTreeMap<u32, u64>,
     provider_gens: BTreeMap<NetProviderId, u64>,
+    /// Somebody opened Service Endpoints before the store answered, so the
+    /// probes are owed and will run the moment the real URLs land.
+    probe_when_loaded: bool,
 }
 
 fn next_gen(model: &mut Model) -> u64 {
@@ -2542,6 +2545,21 @@ pub fn clean_endpoint_value(value: &str) -> String {
 
 /// Probe all four endpoint fields — a fresh wave.
 fn endpoint_probe_wave(model: &mut Model) -> Command<NetEffect, Event> {
+    // Nothing is known about the person's endpoints until the store has
+    // answered, and probing before it does asks about the DEFAULTS. The
+    // stored values then land and replace the text while these verdicts stay,
+    // so the page shows a configured URL beside the default's health. Measured
+    // on an iPhone: `https://index.invalid` with a green "645 ms" next to it.
+    // `endpoint_blurred` and `reset_endpoints` have had this guard all along;
+    // this one did not, and iOS is the shell that opens the page in the same
+    // breath as the load.
+    if !model.loaded {
+        // Owed, not dropped: the page would otherwise sit with four blank
+        // badges forever, which is a smaller lie but still one.
+        model.probe_when_loaded = true;
+        return Command::done();
+    }
+    model.probe_when_loaded = false;
     model.endpoint_gen = next_gen(model);
     let mut ops = Vec::new();
     for &field in &ENDPOINT_FIELDS {
@@ -2884,6 +2902,11 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             model.endpoint_drafts = model.endpoints.clone();
             model.provider_keys = provider_keys;
             model.loaded = true;
+            if model.probe_when_loaded {
+                // The page is already on screen, waiting. Now we know what to
+                // ask about, so ask.
+                return endpoint_probe_wave(model);
+            }
             render()
         }
 

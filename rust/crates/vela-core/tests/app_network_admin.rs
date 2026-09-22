@@ -1447,6 +1447,54 @@ fn editing_a_field_reprobes_both_and_orphans_the_old_wave() {
 // Invariant ⑥ — HTTPS + identity + trim (service endpoints)
 // ===========================================================================
 
+/// Spec 081 follow-up, found on an iPhone: the page showed `https://index.invalid`
+/// with a green "645 ms" beside it. iOS opens Service Endpoints in the same
+/// breath as it opens Settings, so `EndpointsOpened` arrived before the store
+/// answered; the wave probed the DEFAULTS, the stored URLs then landed and
+/// replaced the text, and the default's verdict stayed sitting next to them.
+/// The probes are owed, not dropped — the page must end up saying something
+/// true about the URLs it is actually showing.
+#[test]
+fn a_page_opened_before_the_store_answers_probes_the_stored_urls() {
+    let mut sut = Sut::new();
+    assert_eq!(sut.dispatch(Event::Started), vec![Op::ReadStore]);
+
+    let ops = sut.dispatch(Event::EndpointsOpened);
+    assert!(
+        ops.is_empty(),
+        "nothing is known about this person's endpoints yet, so nothing is asked: {ops:?}"
+    );
+
+    let ops = sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![],
+        endpoints: NetStoredEndpoints {
+            passkey_index_url: Some("https://index.example".to_owned()),
+            ..NetStoredEndpoints::default()
+        },
+        provider_keys: NetProviderKeys::default(),
+    });
+    assert!(
+        ops.contains(&Op::FetchServiceHealth {
+            field: NetEndpointField::PasskeyIndex,
+            base_url: "https://index.example".to_owned(),
+        }),
+        "the owed probe asks about the configured index, not the default: {ops:?}"
+    );
+    assert!(
+        !ops.contains(&Op::FetchServiceHealth {
+            field: NetEndpointField::PasskeyIndex,
+            base_url: DEFAULT_PASSKEY_INDEX_URL.to_owned(),
+        }),
+        "and never about the default"
+    );
+    assert_eq!(ops.len(), 4, "all four fields, once each: {ops:?}");
+
+    // Owed once. A second load (a re-read after a write) does not re-probe.
+    let ops = sut.resolve(store_loaded(vec![], vec![]));
+    assert!(ops.is_empty(), "the debt was paid: {ops:?}");
+}
+
 #[test]
 fn opening_the_endpoint_editor_probes_all_four_fields() {
     let mut sut = started();
