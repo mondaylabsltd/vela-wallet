@@ -1,8 +1,19 @@
 <script lang="ts">
 	import '$lib/styles/tokens.css';
 	import { page } from '$app/state';
+	import { splitLocalePath } from '$lib/i18n/locales';
 
 	let { children } = $props();
+
+	// `<html lang>` is written once, by the server (hooks.server.ts). A
+	// client-side navigation to another locale — the language switcher is one —
+	// kept the previous page's lang, so a Chinese page reached from English
+	// rendered its headline without the CJK size rule and in a different
+	// fallback font until the reader reloaded. Follow the URL on every navigation.
+	const lang = $derived(splitLocalePath(page.url.pathname).locale);
+	$effect(() => {
+		document.documentElement.lang = lang;
+	});
 
 	// The chain-setup page keeps a funded deployer key in this browser's
 	// localStorage. A third-party script has no business on the same page as a
