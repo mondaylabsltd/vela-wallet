@@ -636,8 +636,40 @@ pub(crate) mod tests {
         });
     }
 
+    /// A state directory of its own, held for as long as the returned guard
+    /// is. `with_temp_state`'s shape for a test whose body is too long, or too
+    /// full of threads, to sit inside a closure — the Chrome e2e's.
+    pub(crate) struct StateDir {
+        dir: std::path::PathBuf,
+        _guard: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for StateDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    pub(crate) fn state_dir(name: &str) -> StateDir {
+        let Ok(_guard) = SERIAL.lock() else {
+            unreachable!("the test lock is poisoned");
+        };
+        let dir = std::env::temp_dir().join(format!("vela-storage-test-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        if fs::create_dir_all(&dir).is_err() {
+            unreachable!("could not create the temporary state directory");
+        }
+        // SAFETY: the lock above makes this the only thread touching the
+        // variable for as long as the guard is held.
+        unsafe { std::env::set_var("VELA_STATE_DIR", &dir) };
+        StateDir { dir, _guard }
+    }
+
+    /// The serial lock both forms share: one state directory at a time, in one
+    /// process, however many tests want one.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
     pub(crate) fn with_temp_state<T>(name: &str, body: impl FnOnce() -> T) -> T {
-        static SERIAL: Mutex<()> = Mutex::new(());
         let Ok(_guard) = SERIAL.lock() else {
             unreachable!("the test lock is poisoned");
         };

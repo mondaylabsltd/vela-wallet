@@ -1,22 +1,31 @@
 #!/usr/bin/env bash
 #
 # The Clear Signer, end to end, against the real page in a real browser
-# (spec 071, T031). A local check — never CI: it needs Chrome.
+# (specs 071 and 075). A local check — never CI: it needs Chrome.
 #
-# What runs: the desktop's own ceremony (`executor::clear_signer`) builds the
-# request with the core, listens on 127.0.0.1:0 and hands over the page URL;
-# headless Chrome opens that URL on `app-web/clearsigning` served from this
-# checkout at http://localhost:<port>/, a CDP virtual authenticator holds the
-# wallet's key under rpId `localhost`, the page's slide is confirmed through
-# its automation hook, and the wallet verifies what comes back on the
-# loopback against the digest it computed. Four cases: the wallet's own send
-# (SafeOp), a dApp's personal_sign (SafeMessage → EIP-1271), a tab closed
-# unsigned (declined), and an operation that is not the request (the page
-# refuses). See `src/executor/clear_signer_e2e.rs`.
+# What runs: the desktop's own attempt (`executor::clear_signer`) builds the
+# request with the core, listens on 127.0.0.1:0 and hands over the launch URL;
+# headless Chrome opens it on `app-web/clearsigning` served from this checkout
+# at http://localhost:<port>/; the page connects BACK over the loopback
+# WebSocket (spec 075 — the desktop's old URL fragment and HTTP callback are
+# gone) and stays connected, a CDP virtual authenticator plays the vault, the
+# page's slide is confirmed through its automation hook, and the wallet
+# verifies what comes back against the digest or the challenge form it
+# expected.
+#
+# Five cases:
+#   · the wallet's own send (SafeOp)
+#   · a dApp's personal_sign (SafeMessage → EIP-1271)
+#   · a tab closed unsigned (declined)
+#   · an operation that is not the request (the page refuses, at once)
+#   · a create AND the sign-in after it, on ONE page visit — the case the URL
+#     fragment could not carry, and the reason the desktop moved
+# See `src/executor/clear_signer_e2e.rs`.
 #
 # Needs Chrome for Testing — stable Chrome works too; this is the build the
-# page's own suites use (app-web/clearsigning/HANDOVER.md). Every port is
-# picked by the OS.
+# page's own suites use (app-web/clearsigning/HANDOVER.md). EVERY port is
+# picked by the OS — the page's server, Chrome's DevTools and the wallet's own
+# listener — so this can run beside other agents and other browsers.
 #
 # Usage: scripts/clear-signer-e2e.sh            (CHROME_BIN overrides the path)
 set -euo pipefail

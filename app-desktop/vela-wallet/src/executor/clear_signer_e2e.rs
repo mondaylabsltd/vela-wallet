@@ -1,16 +1,28 @@
-//! The Clear Signer against the REAL page in a real browser (spec 071, T031).
+//! The Clear Signer against the REAL page in a real browser (specs 071 and
+//! 075).
 //!
 //! Everything here is `#[ignore]`d: it needs Chrome, so it is a local check
 //! and never a CI one. Run it with `scripts/clear-signer-e2e.sh`, which finds
-//! Chrome for Testing and says what it needs.
+//! Chrome for Testing and says what it needs. Every port is picked by the OS —
+//! the page's server, Chrome's DevTools and the wallet's own listener — so
+//! several of these can run beside each other and beside anybody else's
+//! browser.
 //!
-//! What is real: the request the core builds (`Ask::request`), the URL
-//! (`url_launch`), the loopback listener, `app-web/clearsigning` itself —
-//! decoding, the operation-binding check, the digest it derives on its own,
-//! the WebAuthn ceremony (a CDP virtual authenticator holding a key the test
-//! owns) — the callback, and the wallet's verification against the digest
-//! IT computed. What is stood in: the person's slide (the page's automation
-//! hook) and `cx.open_url` (a CDP `Target` opened on the same URL).
+//! **Spec 075: the channel is the loopback WebSocket.** The wallet listens on
+//! `127.0.0.1:0`, hands the browser `sign.html?ch=ws#p=<port>&t=<token>`, and
+//! the page connects back and stays connected — so a create and the sign-in
+//! after it run on ONE page visit, which is the whole point of the move off
+//! the URL fragment.
+//!
+//! What is real: the request the core builds (`Ask::request`,
+//! `ceremony::request`), the launch URL (`ws_launch`), the wallet's listener
+//! and the core's own WebSocket framing (`ws::Connection`), the page itself —
+//! decoding, the operation-binding check, the digest and the challenges it
+//! derives on its own, the WebAuthn ceremony in a CDP virtual authenticator —
+//! and the wallet's verification of what comes back (`clear_signer::verify`,
+//! `ceremony::verify`). What is stood in: the person's slide (the page's
+//! automation hook), the person's answer to "where is your Clear Signer?", and
+//! `cx.open_url` (a CDP `Target` opened on the same URL).
 //!
 //! The page is served from this repository on `http://localhost:<port>/`, a
 //! secure context whose passkeys live under rpId `localhost`. The wallet
@@ -34,7 +46,11 @@ use vela_core::user_op::{
     build_multi_send_execute_call_data, calculate_safe_op_hash,
 };
 
-use crate::executor::clear_signer::tests::{page_of_channel, signing_key};
+use vela_core::app::KeyMethod;
+use vela_core::app::shell::ShellOperation;
+use vela_core::clear_signer::ceremony::Answer;
+
+use crate::executor::clear_signer::tests::{here, page_of_channel, signing_key};
 use crate::executor::clear_signer::{self, Ask, Channel, Refusal};
 use crate::executor::user_op::{self, Signer};
 
@@ -257,24 +273,35 @@ impl Tab {
         false
     }
 
-    /// A platform authenticator holding the wallet's key under `localhost`.
-    /// The page never creates a key, so it has to be there already — the
-    /// automated "this person enrolled last week".
-    fn add_passkey(&mut self, key: &p256::ecdsa::SigningKey, credential: &[u8]) {
+    /// An empty platform authenticator on this tab — what a create needs: a
+    /// vault that can mint a key, holding none yet.
+    ///
+    /// A CDP virtual authenticator belongs to the TARGET that added it, and
+    /// survives navigation inside that target. That is what lets one tab carry
+    /// a create and then a sign-in that finds the key the create just made.
+    fn add_authenticator(&mut self) -> Value {
         self.call("WebAuthn.enable", json!({}));
-        let authenticator = self.call(
+        self.call(
             "WebAuthn.addVirtualAuthenticator",
             json!({ "options": {
                 "protocol": "ctap2", "transport": "internal",
                 "hasResidentKey": true, "hasUserVerification": true,
                 "isUserVerified": true, "automaticPresenceSimulation": true,
             }}),
-        );
+        )["authenticatorId"]
+            .clone()
+    }
+
+    /// The same authenticator, already holding the wallet's key under
+    /// `localhost` — the automated "this person enrolled last week", for the
+    /// signing cases where the page never creates anything.
+    fn add_passkey(&mut self, key: &p256::ecdsa::SigningKey, credential: &[u8]) {
+        let authenticator = self.add_authenticator();
         let pkcs8 = key.to_pkcs8_der().unwrap_or_else(|e| unreachable!("{e}"));
         self.call(
             "WebAuthn.addCredential",
             json!({
-                "authenticatorId": authenticator["authenticatorId"],
+                "authenticatorId": authenticator,
                 "credential": {
                     "credentialId": base64(credential),
                     "isResidentCredential": true,
@@ -321,6 +348,18 @@ struct Rig {
     credential: Vec<u8>,
     keys: Vec<WalletKey>,
     channel: Arc<Channel>,
+    /// The person, answering "where is your Clear Signer?" with "on this
+    /// device" — the one question spec 075 added in front of every attempt.
+    /// Held rather than detached so it is joined when the rig goes.
+    place: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for Rig {
+    fn drop(&mut self) {
+        if let Some(answering) = self.place.take() {
+            let _ = answering.join();
+        }
+    }
 }
 
 impl Rig {
@@ -337,23 +376,35 @@ impl Rig {
             crate::executor::clear_signer::tests::wallet_key(&signing_key(9), &[0x99]),
             crate::executor::clear_signer::tests::wallet_key(&key, &credential),
         ];
+        let channel = Channel::new().0;
+        let place = Some(here(&channel));
         Some(Self {
             browser,
             page: format!("http://localhost:{}/", serve_page()),
             key,
             credential,
             keys,
-            channel: Channel::new().0,
+            channel,
+            place,
         })
     }
 
-    /// The page the ceremony asked the screen to open, opened, with the
-    /// wallet's key in the browser.
+    /// The launch URL the attempt asked the screen to open, opened — with the
+    /// wallet's key already in the browser.
     fn open_page(&self) -> Tab {
-        let url = page_of_channel(&self.channel);
+        let url = self.launch();
         let mut tab = self.browser.open(&url);
         tab.add_passkey(&self.key, &self.credential);
         tab
+    }
+
+    /// The launch URL, once the attempt has handed it over. It carries the
+    /// listener's port and its one-time token in the fragment, which the page
+    /// wipes from history the moment it reads it.
+    fn launch(&self) -> String {
+        let url = page_of_channel(&self.channel);
+        assert!(url.contains("sign.html?ch=ws#p="), "{url}");
+        url
     }
 
     /// Stops the ceremony if the driving side fails, so a failed assertion
@@ -362,7 +413,7 @@ impl Rig {
         Stop(&self.channel)
     }
 
-    /// Wait for the ceremony to stop waiting; a stuck one is cancelled so the
+    /// Wait for the attempt to stop waiting; a stuck one is cancelled so the
     /// test ends with a failure rather than five minutes later.
     fn settle(&self) {
         let deadline = Instant::now() + Duration::from_secs(30);
@@ -371,7 +422,7 @@ impl Rig {
         }
         if self.channel.waiting() {
             self.channel.cancel();
-            unreachable!("the page never answered the loopback");
+            unreachable!("the page never answered the socket");
         }
     }
 }
@@ -389,7 +440,8 @@ impl Drop for Stop<'_> {
 /// The page's own words for why it will not sign, for a failure message.
 fn why(tab: &mut Tab) -> String {
     tab.eval(
-        "[document.getElementById('status').textContent, \
+        "[location.href, JSON.stringify(window.__velaState || null), \
+          document.getElementById('status') ? document.getElementById('status').textContent : '', \
           ...[...document.querySelectorAll('.warning-text')].map(n => n.textContent)].join(' | ')",
     )
     .as_str()
@@ -539,8 +591,10 @@ fn a_tab_closed_unsigned_is_a_decline() {
 }
 
 /// The operation does not carry what the page was told it carries — a
-/// swapped recipient. The page refuses on its own rules, and when its tab
-/// closes the wallet hears "refused", not "closed".
+/// swapped recipient. The page refuses on its own rules, and on a session
+/// channel it says so AT ONCE (PROTOCOL.md §11) rather than waiting for its
+/// tab to close: the wallet hears "refused", not "closed", and the request is
+/// still there to be signed another way.
 #[test]
 #[ignore = "needs a real browser: scripts/clear-signer-e2e.sh"]
 fn an_operation_that_is_not_the_request_is_refused_by_the_page() {
@@ -562,12 +616,145 @@ fn an_operation_that_is_not_the_request_is_refused_by_the_page() {
             why(&mut tab)
         );
         assert_eq!(tab.eval("!!window.__slider"), json!(false));
-        rig.browser.close(&tab);
         rig.settle();
+        rig.browser.close(&tab);
         ceremony
             .join()
             .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
     });
     assert!(outcome.is_err());
     assert_eq!(rig.channel.ended(), Some(Refusal::Refused));
+}
+
+/// **A wallet created through the Clear Signer, on ONE page visit** (spec 075
+/// US1): the page mints the passkey the create machine asked for, and then —
+/// on the same socket, with the same tab and no second launch URL — answers
+/// the sign-in that finds it again.
+///
+/// This is the case the URL fragment could not carry, and it is the reason the
+/// desktop moved: two ceremonies, one page visit, one `bye`.
+///
+/// Both challenges are the PAGE's own. The create's is 32 random bytes it
+/// generated; the sign-in's is the `vela-signin-<ms>-<hex>` it derived from its
+/// own clock, which the core checks the form of before it accepts anything —
+/// so a "sign-in" cannot be a transaction hash in disguise.
+///
+/// The member proof that finishes a real create is NOT here: the page fetches
+/// its own challenge from a registry, which means standing one up
+/// (`app-web/clearsigning/samples/mock-registry.mjs`, Node). The verification
+/// of that answer is covered by
+/// `executor::clear_signer::tests::a_create_and_its_member_proof_share_one_page_visit`.
+#[test]
+#[ignore = "needs a real browser: scripts/clear-signer-e2e.sh"]
+fn the_page_creates_a_key_and_then_signs_in_with_it_on_one_visit() {
+    let Some(rig) = Rig::new() else { return };
+    // A create has no key yet, so it goes to the page SETTINGS names — the
+    // real read (`vela.clearSignerUrl`), pointed at this checkout's own copy
+    // of the page rather than at the official one.
+    let state = crate::executor::storage::tests::state_dir("clear-signer-e2e-create");
+    let _ = crate::executor::storage::write_value(
+        crate::executor::storage::KEY_CLEAR_SIGNER_URL,
+        Value::String(rig.page.clone()),
+    );
+    assert_eq!(
+        clear_signer::signer_url(),
+        rig.page,
+        "the create would have opened the official page"
+    );
+    let register = ShellOperation::RegisterPasskey {
+        name: "E2E wallet".to_owned(),
+        exclude_credential_ids: vec![],
+        method: KeyMethod::ClearSigner,
+    };
+    let sign_in = ShellOperation::AuthenticatePasskey {
+        method: KeyMethod::ClearSigner,
+    };
+    let registry = "https://p256-index-v2.getvela.app";
+
+    let (created, found) = std::thread::scope(|scope| {
+        let flow = scope.spawn(|| {
+            let created =
+                clear_signer::run_ceremony(&register, None, registry, &rig.channel, false)
+                    .unwrap_or_else(|| unreachable!("a create is a ceremony"));
+            let found = clear_signer::run_ceremony(&sign_in, None, registry, &rig.channel, true)
+                .unwrap_or_else(|| unreachable!("a sign-in is a ceremony"));
+            (created, found)
+        });
+        let _stop = rig.guard();
+
+        // An EMPTY vault: the page has to mint the key itself.
+        let url = rig.launch();
+        let mut tab = rig.browser.open(&url);
+        tab.add_authenticator();
+
+        assert!(
+            tab.wait_for(
+                "window.__velaState && window.__velaState.phase === 'card' \
+                 && window.__velaState.kind === 'create'"
+            ),
+            "the page did not offer to create a key: {}",
+            why(&mut tab)
+        );
+        tab.eval("window.__slider.__confirm()");
+
+        // The SAME tab and the SAME socket carry the next request: the page
+        // answered one and took a second without being reopened. Its own
+        // counters say so, and the wallet never asked for another page.
+        assert!(
+            tab.wait_for(
+                "window.__velaState.kind === 'signIn' && window.__velaState.received === 2                  && window.__velaState.answered === 1"
+            ),
+            "the sign-in card never came up on the same visit: {}",
+            why(&mut tab)
+        );
+        assert_eq!(
+            rig.channel.take_page(),
+            None,
+            "the wallet asked for a second page visit"
+        );
+        tab.eval("window.__slider.__confirm()");
+        rig.settle();
+
+        // The wallet said goodbye, so the page is on its done screen.
+        assert!(tab.wait_for("window.__velaState.phase === 'ended'"));
+        rig.browser.close(&tab);
+        flow.join()
+            .unwrap_or_else(|_| unreachable!("the flow panicked"))
+    });
+
+    let registration = match created.unwrap_or_else(|failure| unreachable!("create: {failure:?}")) {
+        Answer::Registration(registration) => registration,
+        Answer::Assertion(_) => unreachable!("a create returns a key"),
+    };
+    assert!(
+        !registration.credential_id.is_empty(),
+        "no credential came back"
+    );
+    // The key remembers the page it was made behind: from here on, `auto`
+    // routes its signatures there and nowhere else.
+    assert_eq!(
+        registration.signer_origin.as_deref(),
+        Some(rig.page.trim_end_matches('/')),
+        "the key did not record its page"
+    );
+    // The core had already parsed the attestation to a P-256 key before it
+    // accepted this answer at all (`ceremony::verify`); the key it extracted
+    // is what the wallet's address will be derived from.
+    let attestation = vela_core::primitives::from_hex(&registration.attestation_object_hex)
+        .unwrap_or_else(|e| unreachable!("the attestation is not hex: {e}"));
+    assert!(
+        vela_core::webauthn::extract_attestation_public_key(&attestation).is_ok(),
+        "the attestation is not a P-256 key"
+    );
+
+    let assertion = match found.unwrap_or_else(|failure| unreachable!("sign in: {failure:?}")) {
+        Answer::Assertion(assertion) => assertion,
+        Answer::Registration(_) => unreachable!("a sign-in returns a signature"),
+    };
+    assert_eq!(
+        assertion.credential_id, registration.credential_id,
+        "the sign-in found a different key than the create made"
+    );
+    assert_eq!(rig.channel.ended(), None);
+    drop(state);
 }
