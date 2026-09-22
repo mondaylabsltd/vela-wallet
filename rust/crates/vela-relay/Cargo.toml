@@ -1,0 +1,10 @@
+[package]
+name = "vela-relay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "The Clear Signer relay's room rules (vela-relay/1): room ids, roles, the room state machine, limits and close codes. No I/O, no dependencies — the native server and the Cloudflare Worker both run it."
+publish = false
+
+[lib]
+crate-type = ["lib"]

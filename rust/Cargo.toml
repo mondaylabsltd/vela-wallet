@@ -6,6 +6,9 @@ members = [
   "crates/vela-core-wasm",
   # Debug Android only: the parallel space's fixed keyset (spec 043, D2).
   "crates/vela-dev-fixtures-uniffi",
+  # The Clear Signer's cross-device relay (spec 075): the room rules, and the
+  # native host that runs them under Docker.
+  "crates/vela-relay",
 ]
 
 [workspace.package]
