@@ -57,7 +57,7 @@ use serde_json::Value;
 
 use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::shell::ShellOperation;
-use vela_core::app::{Assertion, FailureKind};
+use vela_core::app::{Assertion, FailureKind, RegistryPublishMember};
 use vela_core::clear_signer::{
     self, ClearSignerError, RequestInput, Verified, ceremony as core_ceremony, verify, ws,
 };
@@ -1028,24 +1028,28 @@ fn ceremony_on_flow(
 /// `expected_challenge` is the bytes THIS wallet was given for this member;
 /// the page fetches its own and the core refuses an answer over anything else.
 ///
-/// The page is the person's from Settings: the core's `RegistryPublish`
-/// carries no `signer_origin` per member, so there is nothing else to read.
+/// `signer_origin` is the member's OWN page, which the core now carries on
+/// every publish member. A key minted on somebody's own deployment is
+/// reachable nowhere else, so falling back to whichever page Settings names
+/// would refuse a re-publish that has no other way to run.
 pub fn member_proof(
-    credential_id: &str,
-    public_key_hex: &str,
-    attestation_hex: &str,
+    member: &RegistryPublishMember,
     group_public_key_hex: &str,
     expected_challenge: &[u8],
     registry: &str,
     channel: &Channel,
 ) -> Result<Assertion, PasskeyFailure> {
     let ceremony = core_ceremony::Ceremony::SignMemberProof {
-        credential_id: credential_id.to_owned(),
-        public_key_hex: public_key_hex.to_owned(),
-        attestation_hex: attestation_hex.to_owned(),
+        credential_id: member.credential_id.clone(),
+        public_key_hex: member.public_key_hex.clone(),
+        attestation_hex: member.attestation_hex.clone(),
         group_public_key_hex: group_public_key_hex.to_owned(),
     };
-    let page = signer_url();
+    let page = member
+        .signer_origin
+        .as_deref()
+        .filter(|origin| !origin.is_empty())
+        .map_or_else(signer_url, str::to_owned);
     let wallet_name = channel.wallet_name();
     // Not the last: a publish signs its members in a row, and the caller ends
     // the visit once they are all in.

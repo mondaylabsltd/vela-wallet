@@ -7108,21 +7108,7 @@ impl WalletPage {
         let Some(account) = money::active_account() else {
             return;
         };
-        let params = serde_json::json!([{
-            "from": account.address,
-            "to": call.to,
-            "value": "0x0",
-            "data": call.data,
-        }]);
-        let request = crate::wallet::signing_host::IncomingRequest {
-            id: format!("vela-ethereum-backup-{}", crate::executor::now_ms()),
-            method: "eth_sendTransaction".to_owned(),
-            params_json: params.to_string(),
-            origin: "https://getvela.app".to_owned(),
-            transport_id: crate::wallet::signing_host::WALLET_TRANSPORT.to_owned(),
-            chain_id: call.chain_id,
-            granted_address: None,
-        };
+        let request = backup_request(&account.address, &call);
         // After it closes, ask again: the row should say what is true now.
         self.backup_for = None;
         self.open_signing_request(&account, request, None, cx);
@@ -13156,6 +13142,35 @@ impl Render for WalletPage {
     }
 }
 
+/// The Ethereum key backup, as a request for the SHARED signing sheet.
+///
+/// A pure function so the sheet it goes to can be pinned by a test: the backup
+/// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
+/// means it gets the same "Sign with" row every other signature gets — the
+/// core's five routes, the Clear Signer among them (spec 075). A backup with a
+/// sheet of its own would be the one signature a person could not route.
+#[cfg(not(target_os = "linux"))]
+fn backup_request(
+    address: &str,
+    call: &vela_core::registry_backup::BackupCall,
+) -> crate::wallet::signing_host::IncomingRequest {
+    let params = serde_json::json!([{
+        "from": address,
+        "to": call.to,
+        "value": "0x0",
+        "data": call.data,
+    }]);
+    crate::wallet::signing_host::IncomingRequest {
+        id: format!("vela-ethereum-backup-{}", crate::executor::now_ms()),
+        method: "eth_sendTransaction".to_owned(),
+        params_json: params.to_string(),
+        origin: "https://getvela.app".to_owned(),
+        transport_id: crate::wallet::signing_host::WALLET_TRANSPORT.to_owned(),
+        chain_id: call.chain_id,
+        granted_address: None,
+    }
+}
+
 /// The host of a signer page address, for its badge — the address itself is
 /// already in the field under it.
 fn page_host(url: &str) -> String {
@@ -13169,6 +13184,45 @@ fn page_host(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **The Ethereum key backup gets the Clear Signer too** (spec 075: "创建/
+    /// 登录/转账/dapp签名/公钥备份 等" — the owner listed the backup with the rest).
+    ///
+    /// It gets it by being an ordinary request on the shared signing sheet
+    /// rather than a sheet of its own: the same `eth_sendTransaction` on the
+    /// wallet's own transport that a send is, so the same "Sign with" row with
+    /// the same five routes. If this ever grew its own sheet, the backup would
+    /// be the one signature a person could not route — and the backup is the
+    /// signature that matters most to a wallet living behind a signer page.
+    #[test]
+    fn the_key_backup_goes_to_the_shared_signing_sheet() {
+        let call = vela_core::registry_backup::BackupCall {
+            chain_id: 1,
+            to: "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
+            value: "0".to_owned(),
+            data: "0xabcdef".to_owned(),
+        };
+        let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let request = backup_request(address, &call);
+        assert_eq!(request.method, "eth_sendTransaction");
+        assert_eq!(
+            request.transport_id,
+            crate::wallet::signing_host::WALLET_TRANSPORT,
+            "the backup is the wallet's own request, not a site's"
+        );
+        assert_eq!(request.granted_address, None);
+        assert_eq!(request.chain_id, 1);
+        // The calls the sheet reads out of it are the backup's own.
+        let calls = vela_core::sign_message::is_message_method(&request.method);
+        assert!(!calls, "a backup is submitted, not signed as a message");
+        assert!(request.params_json.contains(&call.data));
+        assert!(request.params_json.contains(address));
+        // And the row it lands under offers every route the core knows.
+        assert!(
+            vela_core::wallet_keys::SIGN_METHODS.contains(&vela_core::clear_signer::METHOD),
+            "the shared sheet does not offer the Clear Signer"
+        );
+    }
 
     /// The save button is available exactly when the address is one.
     ///

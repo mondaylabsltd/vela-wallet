@@ -984,9 +984,7 @@ pub fn publish(
                 // agree, so what is passed here is what the wallet was given.
                 let assertion = if method == vela_core::app::KeyMethod::ClearSigner {
                     crate::executor::clear_signer::member_proof(
-                        &member.credential_id,
-                        &member.public_key_hex,
-                        &member.attestation_hex,
+                        member,
                         &group_public_key,
                         &challenge_bytes,
                         &registry_url(),

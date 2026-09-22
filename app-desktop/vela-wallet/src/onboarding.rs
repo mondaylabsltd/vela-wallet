@@ -504,6 +504,14 @@ impl OnboardingPage {
         let busy = !self.create.is_idle() || !self.login.is_idle();
         cx.notify();
         if !busy {
+            // Spec 075: nothing more will be asked of the Clear Signer, so the
+            // page visit a flow was holding open is over — the port goes and
+            // the page leaves its "waiting for the wallet" card. A plain
+            // sign-in ends here (a recovery's second proof does not, and is
+            // still pending while its consent prompt is on screen), and
+            // without this its tab would sit waiting out its own five
+            // minutes.
+            clear_signer.end_flow();
             // Only clears the flag. The task ends because this returns `false`.
             self.watching = false;
         }
