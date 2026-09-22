@@ -245,8 +245,13 @@ class ClearSignerChannel(
             if (answer !is ClearSignerAnswer.Signed && answer !is ClearSignerAnswer.Ceremonial) {
                 // A flow that did not answer has no session left to reuse.
                 endFlow()
-            } else if (_state.value is State.Code || _state.value is State.Pairing) {
-                _state.value = State.Paired
+            } else {
+                // Answered — for now. The page stays open for the flow's next
+                // request, but the wallet has nothing pending on it, so no sheet
+                // of ours may sit over whatever the flow shows next. (A refused
+                // ceremony lands here too: its own alert is what the person
+                // needs to read, not our waiting card.)
+                _state.value = State.Idle
             }
             answer
         }
