@@ -321,7 +321,8 @@ class AppContainer(private val app: Application) {
                     mismatch = i18nRuntime.t("componentsUi.signing.clearSignerMismatch"),
                     timeout = i18nRuntime.t("componentsUi.signing.clearSignerTimeout"),
                     relayDown = i18nRuntime.t("componentsUi.signing.clearSignerRelayDown"),
-                    bluetoothBlocked = i18nRuntime.t("connect.dapp.blePermBody"),
+                    bluetoothNeeded = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothNeeded"),
+                    bluetoothOff = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothOff"),
                 )
             },
             // Spec 075 T040: the phone advertises as a GATT peripheral for a

@@ -82,8 +82,13 @@ class ClearSignerChannel(
         val timeout: String,
         /** Spec 075: the relay could not be reached. */
         val relayDown: String = timeout,
-        /** Spec 075 T040: Bluetooth is off, refused, or this phone cannot advertise. */
-        val bluetoothBlocked: String = relayDown,
+        /**
+         * Spec 075 T040: the Bluetooth permission was refused, or this phone
+         * cannot advertise at all (`clearSignerBluetoothNeeded`).
+         */
+        val bluetoothNeeded: String = relayDown,
+        /** Spec 075 T040: the radio is off (`clearSignerBluetoothOff`). */
+        val bluetoothOff: String = bluetoothNeeded,
     )
 
     /** Where this flow's Clear Signer page is — asked once, on the first request. */
@@ -456,7 +461,7 @@ class ClearSignerChannel(
             when (readiness) {
                 BleReadiness.Ready -> return runCatching { host.peripheral() }.getOrElse { error ->
                     VelaLog.failure("clearsigner.ble", "the peripheral could not be built", error)
-                    blocked()
+                    blocked(readiness)
                 }
                 // The permissions are the one refusal worth a second ask: the
                 // person may have tapped Deny without reading, and there is
@@ -467,21 +472,27 @@ class ClearSignerChannel(
                     _state.value = State.BluetoothRefused
                     val again = withTimeoutOrNull(timeoutMs) { answer.await() } ?: false
                     bluetoothAnswer = null
-                    if (!again) return blocked()
+                    if (!again) return blocked(readiness)
                 }
                 // The adapter's own dialog was declined, or this phone cannot
                 // advertise at all. Neither is a question worth asking twice.
                 BleReadiness.AdapterOff, BleReadiness.Unsupported -> {
                     VelaLog.event("clearsigner.ble", "the radio is not usable", "why" to readiness.toString())
-                    return blocked()
+                    return blocked(readiness)
                 }
             }
         }
     }
 
-    /** No radio: say so where the flow's own screen will read it, and stop. */
-    private fun blocked(): BlePeripheral? {
-        unopenable = words().bluetoothBlocked
+    /**
+     * No radio: say WHICH way, where the flow's own screen will read it, and
+     * stop. A person who turned Bluetooth down and a person whose phone cannot
+     * advertise need different sentences, and neither of them is "the Clear
+     * Signer was closed".
+     */
+    private fun blocked(why: BleReadiness): BlePeripheral? {
+        val w = words()
+        unopenable = if (why == BleReadiness.AdapterOff) w.bluetoothOff else w.bluetoothNeeded
         notice.value = unopenable
         _state.value = State.Idle
         return null

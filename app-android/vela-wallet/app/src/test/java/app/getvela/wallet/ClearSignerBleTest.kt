@@ -21,6 +21,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -82,7 +83,18 @@ class ClearSignerBleTest {
         mismatch = "mismatch",
         timeout = "timeout",
         relayDown = "the relay is down",
-        bluetoothBlocked = "Bluetooth permission is needed.",
+        bluetoothNeeded = "Vela needs Bluetooth permission so the signing page can find this device.",
+        bluetoothOff = "Turn Bluetooth on to pair this way.",
+    )
+
+    /** Every key this route renders, in the order the person meets them. */
+    private val NEARBY_KEYS = listOf(
+        "componentsUi.signing.clearSignerNearby",
+        "componentsUi.signing.clearSignerNearbyHint",
+        "componentsUi.signing.clearSignerNearbyName",
+        "componentsUi.signing.clearSignerBluetoothNeeded",
+        "componentsUi.signing.clearSignerBluetoothOff",
+        "componentsUi.scanner.grantPermission",
     )
 
     private val repoRoot = File(
@@ -281,6 +293,39 @@ class ClearSignerBleTest {
         assertTrue("the radio was stopped", run.radio.awaitStop())
     }
 
+    // -- the copy this route cannot work without ------------------------------
+
+    /**
+     * Every sentence the Bluetooth route shows, through the real engine.
+     *
+     * `clearSignerNearbyName` is the one the flow cannot work without: it is
+     * the only place the person is told WHICH line in the browser's device
+     * list is their phone, and it carries `{{name}}`. A renamed variable would
+     * not fail to compile, would not fail to resolve, and would put
+     * "Pick {{name}} in the browser's device list" in front of somebody
+     * choosing what to trust with a signature.
+     */
+    @Test
+    fun `the Bluetooth route's own sentences resolve, and the device name lands in them`() {
+        val runtime = app.getvela.wallet.core.i18n.I18nRuntime { tag ->
+            File(repoRoot, "assets/i18n/$tag.json").readBytes()
+        }
+        for (language in listOf("en", "zh")) {
+            runtime.initialize(language)
+            for (key in NEARBY_KEYS) {
+                val value = runtime.t(key)
+                assertNotEquals("$language: $key echoes its own name", key, value)
+                assertTrue("$language: $key is empty", value.isNotBlank())
+            }
+            val named = runtime.t(
+                "componentsUi.signing.clearSignerNearbyName",
+                mapOf("name" to FakeRadio.NAME),
+            )
+            assertTrue("$language: the name is in the sentence — $named", named.contains(FakeRadio.NAME))
+            assertFalse("$language: nothing was left uninterpolated — $named", named.contains("{{"))
+        }
+    }
+
     // -- the route, and what happens when the radio says no -------------------
 
     @Test
@@ -314,8 +359,24 @@ class ClearSignerBleTest {
         val failure = withTimeout(6_000L) { asking.await() }.exceptionOrNull()
         assertTrue("$failure", failure is PasskeyFailure)
         // The sentence is about Bluetooth, not about a page nobody ever opened.
-        assertEquals(WORDS.bluetoothBlocked, channel.notice.value)
-        assertEquals(WORDS.bluetoothBlocked, (failure as PasskeyFailure).message)
+        assertEquals(WORDS.bluetoothNeeded, channel.notice.value)
+        assertEquals(WORDS.bluetoothNeeded, (failure as PasskeyFailure).message)
+    }
+
+    @Test
+    fun `a radio that is off is told as a radio that is off, not as a permission`() = runBlocking {
+        val channel = channel(host = FakeHost(BleReadiness.AdapterOff))
+        val asking = scope.async(Dispatchers.Default) {
+            runCatching { channel.sign("{}", ByteArray(32), emptyList()) }
+        }
+        withTimeout(4_000L) { channel.state.first { it is ClearSignerChannel.State.Where } }
+        channel.chooseWhere(ClearSignerChannel.Route.Nearby)
+        val failure = withTimeout(6_000L) { asking.await() }.exceptionOrNull()
+        // The system's own dialog was already declined, so there is no second
+        // card to show — but the sentence names the radio, not the permission
+        // the person was never asked for.
+        assertEquals(WORDS.bluetoothOff, channel.notice.value)
+        assertEquals(WORDS.bluetoothOff, (failure as PasskeyFailure).message)
     }
 
     @Test

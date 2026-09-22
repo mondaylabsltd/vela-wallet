@@ -91,6 +91,14 @@ fun ClearSignerSheets(
  * ([ClearSignerChannel.offersNearby]): a row that always ends in "this phone
  * cannot do that" is worse than no row.
  */
+/** One row of the where sheet: where it goes, what it says, what it looks like. */
+private class WhereRow(
+    val route: ClearSignerChannel.Route,
+    val label: String,
+    val hint: String?,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClearSignerWhereSheet(
@@ -121,32 +129,55 @@ fun ClearSignerWhereSheet(
                 modifier = Modifier.padding(bottom = VelaSpacing.md),
             )
             buildList {
-                add(Triple(ClearSignerChannel.Route.ThisDevice, "componentsUi.signing.clearSignerThisDevice", VelaIcons.Eye))
-                add(Triple(ClearSignerChannel.Route.OtherDevice, "componentsUi.signing.clearSignerOtherDevice", VelaIcons.ScanLine))
+                add(WhereRow(ClearSignerChannel.Route.ThisDevice, "componentsUi.signing.clearSignerThisDevice", null, VelaIcons.Eye))
+                add(WhereRow(ClearSignerChannel.Route.OtherDevice, "componentsUi.signing.clearSignerOtherDevice", null, VelaIcons.ScanLine))
                 if (nearby) {
-                    add(Triple(ClearSignerChannel.Route.Nearby, "connect.dapp.connectBleTitle", VelaIcons.Network))
+                    // The only row with a condition attached, so the only one
+                    // that carries a line saying what it costs: Vela has to
+                    // stay open, because the advert stops when it does not.
+                    add(
+                        WhereRow(
+                            ClearSignerChannel.Route.Nearby,
+                            "componentsUi.signing.clearSignerNearby",
+                            "componentsUi.signing.clearSignerNearbyHint",
+                            VelaIcons.Network,
+                        ),
+                    )
                 }
-            }.forEach { (route, key, icon) ->
+            }.forEach { row ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onPick(route) }
+                        .clickable { onPick(row.route) }
                         .padding(vertical = VelaSpacing.lg),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = strings.t(key),
-                        color = colors.fgBase,
-                        fontFamily = VelaFontFamily,
-                        fontWeight = VelaFontWeight.semibold,
-                        fontSize = VelaTextSize.lg,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = strings.t(row.label),
+                            color = colors.fgBase,
+                            fontFamily = VelaFontFamily,
+                            fontWeight = VelaFontWeight.semibold,
+                            fontSize = VelaTextSize.lg,
+                        )
+                        row.hint?.let { hint ->
+                            Text(
+                                text = strings.t(hint),
+                                color = colors.fgMuted,
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.sm,
+                                lineHeight = VelaLeading.normal * VelaTextSize.sm,
+                                modifier = Modifier.padding(top = VelaSpacing.xs),
+                            )
+                        }
+                    }
                     Icon(
-                        imageVector = icon,
+                        imageVector = row.icon,
                         contentDescription = null,
                         tint = colors.fgSubtle,
-                        modifier = Modifier.size(VelaIconSize.lg),
+                        modifier = Modifier
+                            .padding(start = VelaSpacing.md)
+                            .size(VelaIconSize.lg),
                     )
                 }
             }
@@ -341,12 +372,15 @@ fun ClearSignerNearbySheet(deviceName: String, onCancel: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
             Text(
-                text = strings.t("connect.dapp.connectBleTitle"),
+                text = strings.t("componentsUi.signing.clearSignerNearby"),
                 color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.bold,
                 fontSize = VelaTextSize.xl2,
             )
+            // The name twice over, the same way the code sheet shows the six
+            // digits: once big enough to match against a list at arm's length,
+            // once inside the sentence that says what to do with it.
             Text(
                 text = deviceName,
                 color = colors.fgBase,
@@ -355,11 +389,20 @@ fun ClearSignerNearbySheet(deviceName: String, onCancel: () -> Unit) {
                 fontSize = VelaTextSize.lg,
             )
             Text(
-                text = strings.t("componentsUi.signing.clearSignerPairWaiting"),
-                color = colors.fgMuted,
+                text = strings.t(
+                    "componentsUi.signing.clearSignerNearbyName",
+                    mapOf("name" to deviceName),
+                ),
+                color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
                 lineHeight = VelaLeading.normal * VelaTextSize.base,
+            )
+            Text(
+                text = strings.t("componentsUi.signing.clearSignerPairWaiting"),
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
             )
             VelaSecondaryButton(
                 strings.t("common.cancel"),
@@ -397,14 +440,17 @@ fun ClearSignerBluetoothSheet(onGrant: () -> Unit, onCancel: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
             Text(
-                text = strings.t("connect.dapp.blePermTitle"),
+                text = strings.t("componentsUi.signing.clearSignerNearby"),
                 color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.bold,
                 fontSize = VelaTextSize.xl2,
             )
             Text(
-                text = strings.t("connect.dapp.blePermBody"),
+                // Not "Bluetooth permission is needed" — the sentence says what
+                // the permission is FOR, which is the only part the person has
+                // any way to judge.
+                text = strings.t("componentsUi.signing.clearSignerBluetoothNeeded"),
                 color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
