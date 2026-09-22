@@ -9,9 +9,11 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const EXT = '/Volumes/data/production/vela-wallet-native/app-web/clearsigning';
+// This checkout's page, whichever worktree it is in.
+const EXT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CDP = 9399;
 const profile = mkdtempSync(join(tmpdir(), 'surface-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
