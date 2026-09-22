@@ -408,6 +408,10 @@ struct RootView: View {
                     notify?.askOnceIfNeeded()
                     trackerStore?.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
                 },
+                // The core's `haptic { kind }`: money left, or a refusal the
+                // person should feel. Unwired until 074, so an iPhone sent in
+                // silence where Android buzzed.
+                haptic: { kind in VelaHaptic(sendKind: kind).play() },
                 // The core's own exit. `Done` on a receipt, and `close` on any
                 // refusal that ends the attempt, both land here.
                 closed: { [weak flowNav] in flowNav?.close() },

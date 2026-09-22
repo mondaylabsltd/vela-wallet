@@ -30,6 +30,16 @@ import UIKit
 enum VelaHaptic {
     case press, detent, select, success, reject
 
+    /// A confirmation, not a jolt: a CTA is a tap, not a transaction.
+    private static let pressIntensity: CGFloat = 0.7
+
+    /// The send machine's `haptic { kind }` (spec 043), in this vocabulary:
+    /// money left is a success, a refusal is a reject. Android plays the same
+    /// two from `Haptics.success` / `Haptics.error`.
+    init(sendKind: String) {
+        self = sendKind == "error" ? .reject : .success
+    }
+
     /// Perform it. Silent on any platform refusal: a wallet that crashed
     /// because a phone would not buzz has its priorities wrong.
     func play() {
@@ -38,7 +48,7 @@ enum VelaHaptic {
         #endif
         switch self {
         case .press:
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: Self.pressIntensity)
         case .detent:
             UISelectionFeedbackGenerator().selectionChanged()
         case .select:

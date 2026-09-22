@@ -6,15 +6,12 @@
 //  mock C1, SPEC 动效 · 索引条 A–Z). The rail renders the FULL alphabet plus
 //  `#` regardless of which sections exist (research D4); a letter with no
 //  section jumps to the nearest existing one. Sliding fires one
-//  UISelectionFeedbackGenerator tick per crossed letter and shows a bubble
+//  `VelaHaptic.detent` per crossed letter and shows a bubble
 //  HUD near the finger (fade-in 120ms / fade-out 80ms). Reduced motion:
 //  direct jump, no bubble animation.
 //
 
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 /// Uppercase letter + hairline rule — the A–Z section header (C1).
 struct ContactLetterHeader: View {
@@ -118,9 +115,7 @@ struct AlphaIndexRail: View {
     }
 
     private func haptic() {
-        #if canImport(UIKit)
-        UISelectionFeedbackGenerator().selectionChanged()
-        #endif
+        VelaHaptic.detent.play()
     }
 }
 

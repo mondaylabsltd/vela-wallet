@@ -29,4 +29,10 @@ struct VelaHapticsTests {
         #expect(confirmed)
         #expect(past == [.detent])
     }
+
+    /// Spec 043's `haptic { kind }`: money left, or a refusal.
+    @Test func theSendMachinesTwoKindsAreSuccessAndReject() {
+        #expect(VelaHaptic(sendKind: "success") == .success)
+        #expect(VelaHaptic(sendKind: "error") == .reject)
+    }
 }
