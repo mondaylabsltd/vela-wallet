@@ -73,7 +73,7 @@ Being standard is not free:
   before anything exists on-chain, so you can receive at it immediately; your
   first outgoing transaction on each network pays to deploy the contract.
 - **Not every chain qualifies.** Passkey signatures are verified with the
-  **RIP-7212** precompile, and its address is part of every wallet's setup data, so
+  **EIP-7951 / RIP-7212** precompile, and its address is part of every wallet's setup data, so
   a network without it cannot run Vela at all.
 - **Safe's risk is now your risk.** Trusting a widely used contract is still
   trusting a contract. Vela has not added a second contract of its own for you

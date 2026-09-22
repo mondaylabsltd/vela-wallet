@@ -88,7 +88,7 @@ The reviews that cover these contracts at v0.2.1
 No contract-level vulnerability has been disclosed since release, and the
 passkey contracts are in scope of the Safe Foundation bounty.
 
-Passkey signatures are verified by the chain's **RIP-7212** precompile, with no
+Passkey signatures are verified by the chain's **EIP-7951 / RIP-7212** precompile, with no
 fallback verifier. Before enabling a network, the app checks the precompile with
 a real signature. Two caveats: the original RIP-7212 specification has edge-case
 flaws that [EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) fixes (they only

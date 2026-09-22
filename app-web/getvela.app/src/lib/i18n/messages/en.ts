@@ -468,7 +468,7 @@ export const en = {
 
 		networks: {
 			heading: '24 networks built in. Add your own',
-			body: 'Your wallet has the same address on every network. When you add another EVM chain, Vela checks that it has the RIP-7212 precompile and the Safe and ERC-4337 contracts it needs. If some contracts are missing, <a href="/chain-setup">chain setup</a> shows which, and deploys the ones anyone can deploy.',
+			body: 'Your wallet has the same address on every network. When you add another EVM chain, Vela checks that it has the EIP-7951 / RIP-7212 precompile and the Safe and ERC-4337 contracts it needs. If some contracts are missing, <a href="/chain-setup">chain setup</a> shows which, and deploys the ones anyone can deploy.',
 			link: 'Networks & fees, in detail'
 		},
 
@@ -797,8 +797,8 @@ export const en = {
 			},
 			blocked: {
 				title: 'Vela cannot run here',
-				body: 'This chain has no P-256 verifier at 0x100 (RIP-7212). That is not something anyone can deploy: the address is part of how every Vela address is derived, so a different verifier would mean different addresses on every chain, for everyone. Only the chain itself can add the precompile.',
-				link: 'What RIP-7212 is'
+				body: 'This chain has no P-256 verifier at 0x100 (EIP-7951 / RIP-7212). That is not something anyone can deploy: the address is part of how every Vela address is derived, so a different verifier would mean different addresses on every chain, for everyone. Only the chain itself can add the precompile.',
+				link: 'What the P-256 precompile is (EIP-7951)'
 			},
 			provisional:
 				'Some reads did not answer, so this verdict is provisional. Try another endpoint or check again.',
@@ -807,7 +807,7 @@ export const en = {
 		},
 		checklist: {
 			heading: 'What Vela needs',
-			p256: 'P-256 precompile (RIP-7212)',
+			p256: 'P-256 precompile (EIP-7951 / RIP-7212)',
 			p256What:
 				'Verifies passkey signatures. Native on this chain, or a contract at 0x100 — either works.',
 			present: 'Present',
@@ -896,7 +896,7 @@ export const en = {
 				},
 				{
 					q: 'Why can’t the P-256 precompile be deployed?',
-					a: 'The verifier’s address, 0x100, is written into the setup data every Vela address is derived from. Pointing at a verifier contract somewhere else would change every address on every chain, for everyone. So a chain either has RIP-7212 or Vela cannot run on it — and only the chain’s operators can change that.'
+					a: 'The verifier’s address, 0x100, is written into the setup data every Vela address is derived from. Pointing at a verifier contract somewhere else would change every address on every chain, for everyone. So a chain either has the P-256 precompile (EIP-7951 / RIP-7212) or Vela cannot run on it — and only the chain’s operators can change that.'
 				},
 				{
 					q: 'Is the gas I send refundable?',

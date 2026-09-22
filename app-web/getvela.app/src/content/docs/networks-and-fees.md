@@ -39,11 +39,12 @@ computed from your keys, not from the chain.
 You can add any EVM network under **Settings → Networks**, provided it has what
 a Vela wallet needs: eleven standard contracts (the ERC-4337 EntryPoint v0.7,
 the Safe v1.4.1 contracts, Safe's 4337 and passkey modules, MultiSend,
-Multicall3 and two deterministic deployers) and the **RIP-7212** precompile that
+Multicall3 and two deterministic deployers) and the **EIP-7951 / RIP-7212** precompile that
 verifies passkey signatures at address `0x100`. The wallet checks all of them,
 including a real signature check against the precompile, before it lets you
-add the network.
-
+add the network. The precompile has two names: EIP-7951 on Ethereum, live since
+the Fusaka upgrade (December 2025), and RIP-7212 on rollups. The interface is the
+same, and the wallet accepts either.
 The precompile is a hard requirement. Its address is part of how every Vela
 address is computed, so there is no fallback verifier and no way to deploy one
 later. If a chain has the precompile but is missing some of the contracts,

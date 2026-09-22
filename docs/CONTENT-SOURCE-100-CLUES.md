@@ -144,7 +144,7 @@ These come straight from the codebase and override intuition. Violating them pro
 
 **44. `clientDataFields` is extracted, not reconstructed.** The verifier contract templates the JSON, so Vela takes only the trailing fields after the challenge (e.g. `"origin":"https://getvela.app","crossOrigin":false`). Source: [safe-transaction.ts](../src/services/safe-transaction.ts):982-1007.
 
-**45. On-chain P-256 verification via the RIP-7212 precompile.** The WebAuthn signer is configured with `verifiers = 0x100`, selecting the RIP-7212 P-256 precompile. Adding any custom network requires this precompile to exist (validated two ways). Source: [safe-address.ts](../src/services/safe-address.ts):120, [network-checker.ts](../src/services/network-checker.ts):191-212. **Keywords:** RIP-7212, P-256 precompile, on-chain passkey verification.
+**45. On-chain P-256 verification via the EIP-7951 / RIP-7212 precompile** (EIP-7951 = Ethereum since Fusaka, Dec 2025, supersedes RIP-7212 with the same interface at `0x100`; rollups ship RIP-7212). The WebAuthn signer is configured with `verifiers = 0x100`, selecting the RIP-7212 P-256 precompile. Adding any custom network requires this precompile to exist (validated two ways). Source: [safe-address.ts](../src/services/safe-address.ts):120, [network-checker.ts](../src/services/network-checker.ts):191-212. **Keywords:** RIP-7212, P-256 precompile, on-chain passkey verification.
 
 **46. Hand-rolled crypto shared across iOS / Android / Web.** Bespoke Keccak-256 (0x01 padding, not SHA-3's 0x06) and a minimal CBOR parser extract the COSE P-256 key (`{1:2, 3:-7, -1:1, -2:x, -3:y}`) from the attestation — no native crypto dependency, identical address derivation on three platforms, locked by golden test vectors. Source: [eth-crypto.ts](../src/services/eth-crypto.ts):110-146, [attestation-parser.ts](../src/services/attestation-parser.ts):23-45.
 
@@ -297,7 +297,7 @@ Each cluster below is a writeable document. Pull facts only from the cited clues
 
 - **Taglines:** "An Ethereum wallet you actually own." (zh: "真正属于你的以太坊钱包") · "A wallet that does less — on purpose." · "We can't access your keys. Not 'we promise not to' — we architecturally can't." · "You're paying for convenience, not access." · "Don't trust us — verify."
 - **One-line ICP:** *"For people who want real self-custody without the footgun of seed-phrase management — if you can unlock your phone, you can use Vela safely."* (`docs/introduction.md`)
-- **High-value technical keyword set:** Safe smart account, ERC-4337 (EntryPoint v0.7), WebAuthn passkey, P-256 / RIP-7212, EIP-1271, ERC-7730 clear signing, EIP-5792 batch calls, counterfactual / CREATE2 address, EIP-7708.
+- **High-value technical keyword set:** Safe smart account, ERC-4337 (EntryPoint v0.7), WebAuthn passkey, P-256 / EIP-7951 / RIP-7212, EIP-1271, ERC-7730 clear signing, EIP-5792 batch calls, counterfactual / CREATE2 address, EIP-7708.
 
 ---
 

@@ -61,7 +61,7 @@ Vela App——网页版、浏览器扩展、桌面版（macOS/Windows/Linux）�
         ▼
 EVM 链
   EntryPoint v0.7 → 你的 Safe v1.4.1 → Safe 4337 模块
-  Safe 通行密钥模块借助 RIP-7212 预编译验证 P-256 签名
+  Safe 通行密钥模块借助 EIP-7951 / RIP-7212 预编译验证 P-256 签名
 ```
 
 配套服务全部开源：把新钱包登记到链上注册表并回答查询的**公钥索引**、**链数据**目录，以及
@@ -100,7 +100,7 @@ getvela.app 及其子域名上的页面，这让它们能防钓鱼；同时这�
 3. **签名**：认证器验证你之后，对操作哈希生成 WebAuthn 断言。
 4. **编码**成通行密钥模块所需的 Safe 签名格式。
 5. **提交**：把签好名的操作交给中继，由它调用 EntryPoint。
-6. **链上验证**：通行密钥模块先用 RIP-7212 预编译检查 P-256 签名，Safe 才执行任何操作。没有备用
+6. **链上验证**：通行密钥模块先用 EIP-7951 / RIP-7212 预编译检查 P-256 签名，Safe 才执行任何操作。没有备用
    验证器；不支持该预编译的网络无法添加。
 
 ### 手续费
@@ -130,7 +130,7 @@ getvela.app 及其子域名上的页面，这让它们能防钓鱼；同时这�
 Vela 内置 24 条网络——Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、
 Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、
 Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——并接受任何具备它所检查的 11 个
-合约和 RIP-7212 预编译的 EVM 网络。（第二到第七把钥匙还需要该网络上有 Safe 的通行密钥签名器工厂，
+合约和 EIP-7951 / RIP-7212 预编译的 EVM 网络。（第二到第七把钥匙还需要该网络上有 Safe 的通行密钥签名器工厂，
 目前的检查尚未覆盖它。）
 
 ## 安全模型
@@ -149,7 +149,7 @@ Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——并接受
 
 **你需要信任的**
 
-- **合约**：Safe、它的 4337 模块和通行密钥模块、EntryPoint v0.7，以及链上的 RIP-7212 预编译。
+- **合约**：Safe、它的 4337 模块和通行密钥模块、EntryPoint v0.7，以及链上的 EIP-7951 / RIP-7212 预编译。
 - **域名**：getvela.app 或其任何子域名上的页面，都可以请求你的钥匙签名。
 - 保存你钥匙的**认证器**，以及——对同步的通行密钥而言——其背后的 Apple、Google 或密码管理器账号。
 - **你用来签名的那个 App 的代码。**是它构造交易并告诉你交易做什么。被篡改的 App 可以给你看一样
@@ -202,7 +202,7 @@ Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——并接受
 是通行密钥的依赖方 `getvela.app`：把网页钱包放到别的域名上，得到的是另一个钱包。对于已有的钱包，
 Vela 浏览器扩展（经授权可以使用 `getvela.app` 的通行密钥）和你自己编译的 App（配合手机或安全
 密钥）不依赖 getvela.app 也能继续使用。[自托管指南](/zh/docs/self-hosting#if-getvela-app-disappears)
-逐一说明了每条路及其限制。在某条链上独立访问钱包，还要求那条链支持 RIP-7212。
+逐一说明了每条路及其限制。在某条链上独立访问钱包，还要求那条链支持 EIP-7951 / RIP-7212。
 
 ## 隐私
 
@@ -234,6 +234,6 @@ alpha 阶段的软件来对待。详见[审计与已知问题](/zh/docs/security
 - EIP-1271——合约签名验证
 - ERC-7730——清晰签名描述文件
 - EIP-5792——钱包批量调用（`wallet_sendCalls`）
-- RIP-7212 / EIP-7951——P-256 签名验证预编译
+- EIP-7951 / RIP-7212——P-256 签名验证预编译
 - WebAuthn / FIDO2——通行密钥
 - [Safe 智能账户 v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

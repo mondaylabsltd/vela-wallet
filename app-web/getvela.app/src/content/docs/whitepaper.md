@@ -76,7 +76,7 @@ Relay (vela-relay, self-hostable)
         ▼
 EVM chain
   EntryPoint v0.7 → your Safe v1.4.1 → Safe 4337 module
-  Safe passkey module verifies P-256 via the RIP-7212 precompile
+  Safe passkey module verifies P-256 via the EIP-7951 / RIP-7212 precompile
 ```
 
 Supporting services, all open source: a **public-key index** that registers new
@@ -127,7 +127,7 @@ makes them phishing-resistant; it is also a dependency this paper returns to bel
 4. **Encode** the assertion as the Safe signature the passkey module expects.
 5. **Submit** the signed operation to the relay, which calls the EntryPoint.
 6. **Verify on-chain**: the passkey module checks the P-256 signature with the
-   RIP-7212 precompile before the Safe executes anything. There is no fallback
+   EIP-7951 / RIP-7212 precompile before the Safe executes anything. There is no fallback
    verifier; a network without the precompile cannot be added.
 
 ### Fees
@@ -171,7 +171,7 @@ Vela has 24 built-in networks — Ethereum, BNB Chain, Polygon, Arbitrum,
 Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc,
 X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink,
 Plume and XRPL EVM — and accepts any EVM network that has the eleven contracts
-it checks for and the RIP-7212 precompile. (Keys two to seven also need Safe's
+it checks for and the EIP-7951 / RIP-7212 precompile. (Keys two to seven also need Safe's
 passkey signer factory on that network, which the check does not cover yet.)
 
 ## Security model
@@ -193,7 +193,7 @@ self-custody gives you is that Vela is not a second party who can.
 **What you trust**
 
 - The **contracts**: Safe, its 4337 and passkey modules, EntryPoint v0.7, and the
-  chain's RIP-7212 precompile.
+  chain's EIP-7951 / RIP-7212 precompile.
 - The **domain**: any page served from getvela.app or one of its subdomains can ask
   your keys for a signature.
 - The **authenticators** that hold your keys, and — for synced passkeys — the
@@ -273,7 +273,7 @@ extension (which can use `getvela.app` passkeys by permission) and apps you buil
 yourself (with a phone or security key) keep working without getvela.app. The
 [self-hosting guide](/docs/self-hosting#if-getvela-app-disappears) spells out
 each path and its limits. Independent access to a chain also requires that chain
-to support RIP-7212.
+to support EIP-7951 / RIP-7212.
 
 ## Privacy
 
@@ -316,6 +316,6 @@ Treat Vela as alpha software. Details:
 - EIP-1271 — Signature validation for contracts
 - ERC-7730 — Clear-signing descriptors
 - EIP-5792 — Wallet call batching (`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 — P-256 signature verification precompile
+- EIP-7951 / RIP-7212 — P-256 signature verification precompile
 - WebAuthn / FIDO2 — Passkeys
 - [Safe smart account v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

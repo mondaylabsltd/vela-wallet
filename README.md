@@ -9,7 +9,7 @@ and runs on your own machines.
 
 - Your account is an **unmodified Safe v1.4.1** on **ERC-4337** (EntryPoint
   v0.7), signed by **passkeys or FIDO2 security keys** and verified on-chain as
-  P-256 (RIP-7212). No seed phrase, no Vela contract in the funds path, no admin
+  P-256 by the precompile at `0x100` (EIP-7951; RIP-7212 on rollups). No seed phrase, no Vela contract in the funds path, no admin
   role for us.
 - **One Rust core, four native apps**: SwiftUI on iOS, Jetpack Compose on
   Android, SvelteKit on the web (and the browser extension), gpui on desktop.
@@ -41,7 +41,7 @@ and runs on your own machines.
   the MultiSend your key signs. You see the amount before signing; the relay
   can delay or refuse, not change it. No paymaster.
   [How the fee is set](https://getvela.app/docs/networks-and-fees#fee).
-- **Any EVM chain with RIP-7212.** [Chain setup](https://getvela.app/chain-setup)
+- **Any EVM chain with the P-256 precompile** (EIP-7951 / RIP-7212). [Chain setup](https://getvela.app/chain-setup)
   deploys the missing Safe and ERC-4337 contracts that anyone can deploy.
 - **Clear signing** from ERC-7730 descriptors, with an explicit blind-signing
   warning for anything that can't be decoded.
