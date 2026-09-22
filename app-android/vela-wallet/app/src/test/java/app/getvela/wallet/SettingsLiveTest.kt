@@ -538,6 +538,50 @@ class SettingsLiveTest {
         assertTrue(add.primary!!.isNotBlank())
     }
 
+    /**
+     * Spec 081 FR-009. A chain can be compatible AND unable to hold a wallet
+     * made from several passkeys. The pill stays green — a one-key wallet does
+     * work there — and the callout says the rest, because two crossed rows
+     * under a green "Compatible" explain nothing on their own.
+     */
+    @Test
+    fun aChainWithoutSafesPasskeyFactorySaysSoWhileStayingCompatible() {
+        val checked = NetWizardView(
+            phase = NetWizardPhase.Checked,
+            chain_info = chainInfo(42220, "Celo Mainnet"),
+            compat = NetCompatibility(
+                chain_id = 42220,
+                compatible = true,
+                multi_key_ready = false,
+                contracts = listOf(
+                    NetContractStatus("EntryPoint", "0xaa", deployed = true),
+                    NetContractStatus("Safe", "0xbb", deployed = true),
+                    NetContractStatus(
+                        "Safe Passkey Signer Factory",
+                        "0xcc",
+                        deployed = false,
+                        multi_key_only = true,
+                    ),
+                ),
+            ),
+            can_add = true,
+        )
+
+        val add = SettingsLive.withWizard(base(), wizardView(checked), strings).addNetwork
+        assertEquals(SettingsTone.Ok, add.candidate!!.badge!!.tone)
+        assertEquals(CalloutTone.Warning, add.callout!!.tone)
+        assertTrue(add.callout!!.text.isNotBlank())
+
+        // And a chain that has everything says nothing extra.
+        val whole = checked.copy(
+            compat = checked.compat!!.copy(
+                multi_key_ready = true,
+                contracts = checked.compat!!.contracts.map { it.copy(deployed = true) },
+            ),
+        )
+        assertNull(SettingsLive.withWizard(base(), wizardView(whole), strings).addNetwork.callout)
+    }
+
     /** An incompatible chain is named as such, and cannot be added. */
     @Test
     fun anIncompatibleChainIsNotOfferedForAdding() {

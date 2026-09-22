@@ -139,6 +139,16 @@ struct SettingsUrlField: View {
     @Environment(\.theme) private var theme
     let field: UrlFieldModel
 
+    /// Whether this box is the one being typed into.
+    ///
+    /// Spec 081: the doc on `onCommit` below has always said "on submit **or
+    /// on losing focus**", and only `.onSubmit` was wired — so a person who
+    /// typed an endpoint and tapped anywhere else had saved nothing, while the
+    /// health badge went on reporting the OLD host as online. Only the
+    /// keyboard's Done key committed. The core persists on `EndpointBlurred`;
+    /// `EndpointEdited` sets a draft and nothing more.
+    @FocusState private var focused: Bool
+
     /// The editable mode (spec 050).
     ///
     /// **`nil` is the drawn state and renders exactly as it always has** — a
@@ -203,6 +213,11 @@ struct SettingsUrlField: View {
                         .keyboardType(.URL)
                         .submitLabel(.done)
                         .onSubmit(onCommit)
+                        .focused($focused)
+                        .onChange(of: focused) { wasFocused, isFocused in
+                            // Losing focus IS the blur the core waits for.
+                            if wasFocused && !isFocused { onCommit() }
+                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Text(field.value.isEmpty ? (field.placeholder ?? "") : field.value)

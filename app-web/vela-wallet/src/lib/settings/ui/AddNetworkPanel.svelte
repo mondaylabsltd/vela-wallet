@@ -66,12 +66,18 @@
 			<CheckList title={panel.checksTitle} items={panel.checks} />
 		{/if}
 
-		{#if panel.customRpc !== undefined}
-			<UrlField field={panel.customRpc} oninput={(value) => oncustomrpc?.(value)} />
-		{/if}
-
+		<!--
+			Directly under the list, not under the RPC field below it: this
+			sentence explains the crossed rows, and a form field between the two
+			separated the explanation from the thing it explains (measured in
+			the live dialog, spec 081 FR-009). Desktop already put it here.
+		-->
 		{#if panel.callout !== undefined}
 			<Callout callout={panel.callout} />
+		{/if}
+
+		{#if panel.customRpc !== undefined}
+			<UrlField field={panel.customRpc} oninput={(value) => oncustomrpc?.(value)} />
 		{/if}
 
 		{#if panel.primary !== undefined}

@@ -143,7 +143,10 @@ describe('liveAddNetwork', () => {
 				compat: {
 					chain_id: 7777777,
 					compatible: true,
-					contracts: [{ name: 'EntryPoint v0.7', address: '0x1', deployed: true }],
+					multi_key_ready: true,
+					contracts: [
+						{ name: 'EntryPoint v0.7', address: '0x1', deployed: true, multi_key_only: false }
+					],
 					p256_available: true,
 					best_rpc_url: 'https://rpc.zora.energy',
 					best_rpc_latency_ms: 182,
@@ -158,6 +161,41 @@ describe('liveAddNetwork', () => {
 		expect(model.checks?.every((c) => c.ok)).toBe(true);
 	});
 
+	it('says so when a compatible chain cannot hold a wallet with several keys', () => {
+		// Spec 081 FR-009: the badge stays green — a one-key wallet does work
+		// here — and the callout carries what the two crossed rows mean.
+		const model = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'checked',
+				chain_info: info,
+				compat: {
+					chain_id: 7777777,
+					compatible: true,
+					multi_key_ready: false,
+					contracts: [
+						{ name: 'EntryPoint v0.7', address: '0x1', deployed: true, multi_key_only: false },
+						{
+							name: 'Safe Passkey Signer Factory',
+							address: '0x3',
+							deployed: false,
+							multi_key_only: true
+						}
+					],
+					p256_available: true,
+					best_rpc_url: 'https://rpc.zora.energy',
+					best_rpc_latency_ms: 182,
+					rpc_failure: null
+				},
+				can_add: true
+			},
+			m
+		);
+		expect(model.candidate?.badge.label).toBe(m.addNetwork.compatible);
+		expect(model.callout).toEqual({ tone: 'warning', text: m.addNetwork.singleKeyOnly });
+		expect(model.primary).toBe(m.addNetwork.addNetworkBtn);
+	});
+
 	it('an unanswered probe is worded unable-to-verify, NEVER incompatible (invariant ③)', () => {
 		const model = liveAddNetwork(
 			{
@@ -167,6 +205,7 @@ describe('liveAddNetwork', () => {
 				compat: {
 					chain_id: 7777777,
 					compatible: false,
+					multi_key_ready: false,
 					contracts: [],
 					p256_available: null,
 					best_rpc_url: null,
@@ -191,7 +230,8 @@ describe('liveAddNetwork', () => {
 				compat: {
 					chain_id: 7777777,
 					compatible: false,
-					contracts: [{ name: 'Safe L2', address: '0x2', deployed: false }],
+					multi_key_ready: false,
+					contracts: [{ name: 'Safe L2', address: '0x2', deployed: false, multi_key_only: false }],
 					p256_available: true,
 					best_rpc_url: 'https://rpc.zora.energy',
 					best_rpc_latency_ms: 90,

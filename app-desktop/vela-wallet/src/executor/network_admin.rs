@@ -266,8 +266,21 @@ fn decode_raw_chain_data(value: &Value) -> Option<NetRawChainData> {
 }
 
 /// The search index rows, skipping any without a usable chain id.
+///
+/// `/index/fuse-chains.json` answers `{"v","t","data":[…],"index":{}}`, not a
+/// bare array — which every other shell already knew (`chain-registry.ts`
+/// `json.data`, `NetworkProbes.kt` `optJSONArray("data")`,
+/// `NetworkAdminExecutor.swift`). Reading it as an array gave desktop an empty
+/// list for every query, so the add-network search returned nothing at all and
+/// the wizard was unreachable. Found while looking at FR-009's screen (spec
+/// 081); the bare-array form is still accepted, for a self-hosted directory
+/// that serves one.
 fn decode_search_index(value: &Value) -> Vec<NetChainIndexEntry> {
-    let Some(rows) = value.as_array() else {
+    let Some(rows) = value
+        .get("data")
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array())
+    else {
         return Vec::new();
     };
     rows.iter()
@@ -511,6 +524,11 @@ impl Machine for NetworkAdmin {
             }
             NetOperation::WriteServiceEndpoints { endpoints } => {
                 let _ = write_service_endpoints(endpoints);
+                // Spec 081 FR-002: the registry client holds the endpoint in a
+                // process-wide slot, so saving it to disk is only half the
+                // save. Without this line the new index took effect on the
+                // next launch — and the screen said it had been saved.
+                super::registry::set_registry_url(&endpoints.passkey_index_url);
                 Answer::Now(NetShellResult::Written)
             }
             NetOperation::WriteRpcProviders { keys } => {
@@ -694,6 +712,31 @@ mod tests {
     use super::*;
     use crate::core_host::CoreHost;
     use vela_core::app::network_admin::NetOverrideField;
+
+    /// The chain directory answers an OBJECT with the rows under `data`.
+    /// Reading it as a bare array gave every search zero results, and a search
+    /// box that always answers "nothing" looks like a chain nobody supports
+    /// rather than a decoder that never read the file (spec 081).
+    #[test]
+    fn the_search_index_is_read_the_way_the_directory_writes_it() {
+        let row = json!({
+            "chainId": 7_777_777,
+            "name": "Zora",
+            "shortName": "zora",
+            "nativeCurrencySymbol": "ETH",
+        });
+        let wrapped = json!({ "v": 1, "t": "chains", "data": [row.clone()], "index": {} });
+        let decoded = decode_search_index(&wrapped);
+        assert_eq!(decoded.len(), 1, "the directory's own shape must decode");
+        assert_eq!(decoded[0].chain_id, 7_777_777);
+        assert_eq!(decoded[0].name, "Zora");
+
+        // A self-hosted directory serving a bare array still works.
+        assert_eq!(decode_search_index(&json!([row])).len(), 1);
+        // And nothing else does, rather than panicking.
+        assert!(decode_search_index(&json!({ "data": "not rows" })).is_empty());
+        assert!(decode_search_index(&json!(null)).is_empty());
+    }
 
     fn network(chain_id: u32) -> NetCustomNetwork {
         NetCustomNetwork {

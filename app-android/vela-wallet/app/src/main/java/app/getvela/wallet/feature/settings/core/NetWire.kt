@@ -279,6 +279,8 @@ data class NetChainInfo(
 data class NetCompatibility(
     val chain_id: Long,
     val compatible: Boolean,
+    /** Spec 081: `compatible` is the one-key verdict; this one covers keys two to seven. */
+    val multi_key_ready: Boolean = false,
     val contracts: List<NetContractStatus> = emptyList(),
     val p256_available: Boolean? = null,
     val best_rpc_url: String? = null,
@@ -287,7 +289,13 @@ data class NetCompatibility(
 )
 
 @Serializable
-data class NetContractStatus(val name: String, val address: String, val deployed: Boolean)
+data class NetContractStatus(
+    val name: String,
+    val address: String,
+    val deployed: Boolean,
+    /** Only a wallet with more than one passkey needs this contract. */
+    val multi_key_only: Boolean = false,
+)
 
 @Serializable
 enum class NetRpcFailureKind {

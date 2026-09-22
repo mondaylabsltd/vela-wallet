@@ -285,7 +285,12 @@ pub fn compatibility_checks(s: &SettingsStrings, ok: bool) -> [(SharedString, bo
         (s.check_safe.clone(), ok),
         (s.check_signer.clone(), ok),
         (
-            SharedString::from(fill(&s.check_remaining, "count", "8")),
+            // Four, because that is what the live screen counts: the twelve
+            // the core checks, less EntryPoint, less the five whose names
+            // start with Safe, less the two only a multi-key wallet needs
+            // (spec 081 FR-009). A gallery that shows a number no real chain
+            // can produce teaches the wrong screen.
+            SharedString::from(fill(&s.check_remaining, "count", "4")),
             ok,
         ),
     ]

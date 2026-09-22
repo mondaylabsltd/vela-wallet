@@ -229,6 +229,11 @@ describe('desktop canon', () => {
 			// the phone's 高级 section gives it (after 服务端点, before 存储).
 			'fee-speed',
 			'storage',
+			// Spec 081 FR-016 — the report. It had no desktop entrance at all,
+			// so the only way to reach it was `/gallery`. Beside 关于, which is
+			// also where the LIVE phone screen moves it (the mock's own first
+			// block keeps it, because a gallery state is the mock).
+			'feedback',
 			'about'
 		]);
 	});

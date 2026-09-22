@@ -253,6 +253,17 @@ object SettingsLive {
                 checksTitle = compat?.let {
                     strings.t(I18nKeys.SettingsUi.ADD_COMPATIBILITY_CHECK)
                 },
+                // Spec 081 FR-009. Two of the contracts above only matter to a
+                // wallet holding more than one passkey. When those are the only
+                // ones missing the core still says "compatible" — truthfully —
+                // and this is the rest of that sentence. Without it the pill
+                // says Compatible while two rows carry a red cross.
+                callout = compat?.takeIf { it.compatible && !it.multi_key_ready }?.let {
+                    CalloutModel(
+                        tone = CalloutTone.Warning,
+                        text = strings.t(I18nKeys.SettingsUi.ADD_SINGLE_KEY_ONLY),
+                    )
+                },
                 // The person's own RPC for this chain, as the core holds it —
                 // so a keystroke round-trips (the ST1 base has no such field,
                 // and the compatible fixture's was a blank that never echoed).

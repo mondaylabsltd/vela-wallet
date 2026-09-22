@@ -80,6 +80,17 @@ pub struct SettingsStrings {
     pub erase_title: SharedString,
     pub erase_subtitle: SharedString,
     pub erase_confirm: SharedString,
+    /// The confirmation's own four lines (spec 081 FR-017). Until this feature
+    /// the desktop read only the title, the subtitle and the button — so the
+    /// one irreversible control on the screen had no sentence saying what it
+    /// destroys, and none saying what it does NOT: the passkey stays with the
+    /// person's passkey provider and is untouched by anything here.
+    pub erase_desc: SharedString,
+    pub erase_keeps: SharedString,
+    pub erase_loses: SharedString,
+    pub erase_cancel: SharedString,
+    /// The erase ran and something survived — said, never swallowed.
+    pub erase_failed: SharedString,
     // appearance panel
     pub language: SharedString,
     pub theme_title: SharedString,
@@ -127,6 +138,11 @@ pub struct SettingsStrings {
     pub check_safe: SharedString,
     pub check_signer: SharedString,
     pub check_remaining: String,
+    /// Spec 081 FR-009: the chain works, but only for a one-key wallet —
+    /// Safe's passkey signer factory is not deployed here. Shown beside a
+    /// "Compatible" badge, which without it reads as a contradiction of the
+    /// two crossed rows above.
+    pub single_key_only: SharedString,
     pub custom_rpc_title: SharedString,
     pub custom_rpc_placeholder: SharedString,
     pub best_rpc: String,
@@ -283,6 +299,11 @@ impl SettingsStrings {
             erase_title: s("settings.eraseDevice.title"),
             erase_subtitle: s("settings.eraseDevice.subtitle"),
             erase_confirm: s("settings.eraseDevice.confirm"),
+            erase_desc: s("settings.eraseDevice.desc"),
+            erase_keeps: s("settings.eraseDevice.keeps"),
+            erase_loses: s("settings.eraseDevice.loses"),
+            erase_cancel: s("settings.eraseDevice.cancel"),
+            erase_failed: s("settings.eraseDevice.failed"),
             language: s("language.title"),
             theme_title: s("settings.appearance.themeTitle"),
             theme_light: s("settings.appearance.themeLight"),
@@ -320,6 +341,7 @@ impl SettingsStrings {
             check_safe: s("settingsModals.addNetwork.checkSafe"),
             check_signer: s("settingsModals.addNetwork.checkSigner"),
             check_remaining: raw("settingsModals.addNetwork.checkRemaining"),
+            single_key_only: s("settingsModals.addNetwork.singleKeyOnly"),
             custom_rpc_title: s("settingsModals.addNetwork.customRpcTitle"),
             custom_rpc_placeholder: s("settingsModals.addNetwork.customRpcPlaceholder"),
             best_rpc: raw("settingsModals.addNetwork.bestRpc"),

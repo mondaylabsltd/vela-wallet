@@ -837,6 +837,9 @@ object I18nKeys {
         const val ADD_BEST_RPC = "settingsModals.addNetwork.bestRpc"
         const val ADD_BUTTON = "settingsModals.addNetwork.addNetworkBtn"
         const val ADD_INCOMPATIBLE_HINT = "settingsModals.addNetwork.incompatibleHint"
+
+        /** Spec 081 FR-009: compatible for one key, not for two to seven. */
+        const val ADD_SINGLE_KEY_ONLY = "settingsModals.addNetwork.singleKeyOnly"
         const val ADD_CHAIN_TOOL = "settingsModals.addNetwork.openChainSetupTool"
         const val ADD_RECHECK_WITH_RPC = "settingsModals.addNetwork.recheckWithRpc"
         const val ADD_TESTNET = "settingsModals.addNetwork.testnet"

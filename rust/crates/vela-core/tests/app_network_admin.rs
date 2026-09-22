@@ -24,7 +24,8 @@ use vela_core::app::network_admin::{
     rank_search, Event, NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody,
     NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId,
     NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceHealth, NetShellResult as Res,
-    NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS,
+    default_endpoint, NetServiceEndpoints, NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase,
+    NetworkAdmin, BUILTIN_CHAINS,
     DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
     DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE, REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
@@ -147,10 +148,10 @@ fn resolve_race(sut: &mut Sut) -> Vec<Op> {
     sut.resolve(probe(RPC_FAST, Some(NEW_CHAIN), 20.0))
 }
 
-/// Answer all 11 contract checks as deployed, then the P256 call as valid.
+/// Answer all 12 contract checks as deployed, then the P256 call as valid.
 /// Returns whatever the final resolution produced.
 fn resolve_contracts_ok(sut: &mut Sut, url: &str) -> Vec<Op> {
-    for (_, address) in REQUIRED_CONTRACTS {
+    for (_, address, _) in REQUIRED_CONTRACTS {
         assert!(sut.resolve(code_ok(url, address)).is_empty());
     }
     sut.resolve(Res::P256Call {
@@ -175,7 +176,7 @@ fn checked_compatible() -> Sut {
         ]
     );
     let ops = resolve_race(&mut sut);
-    assert_eq!(ops.len(), 12, "11 contract checks + the P256 call");
+    assert_eq!(ops.len(), 13, "12 contract checks + the P256 call");
     assert!(resolve_contracts_ok(&mut sut, RPC_FAST).is_empty());
     assert_eq!(sut.view().wizard.phase, NetWizardPhase::Checked);
     sut
@@ -535,7 +536,7 @@ fn the_contract_checks_run_against_the_race_winner() {
     let ops = resolve_race(&mut sut);
     let expected: Vec<Op> = REQUIRED_CONTRACTS
         .iter()
-        .map(|(_, address)| Op::RpcGetCode {
+        .map(|(_, address, _)| Op::RpcGetCode {
             url: RPC_FAST.to_owned(),
             address: (*address).to_owned(),
         })
@@ -555,7 +556,7 @@ fn a_chain_missing_any_required_contract_never_saves() {
     let mut sut = started();
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
-    for (i, (_, address)) in REQUIRED_CONTRACTS.iter().enumerate() {
+    for (i, (_, address, _)) in REQUIRED_CONTRACTS.iter().enumerate() {
         // "Safe L2" is missing.
         let code = if i == 4 { Some("0x") } else { Some("0x6080") };
         assert!(sut.resolve(code_result(RPC_FAST, address, code)).is_empty());
@@ -587,7 +588,7 @@ fn a_chain_without_the_p256_precompile_never_saves() {
     let mut sut = started();
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
-    for (_, address) in REQUIRED_CONTRACTS {
+    for (_, address, _) in REQUIRED_CONTRACTS {
         assert!(sut.resolve(code_ok(RPC_FAST, address)).is_empty());
     }
     // Strategy 1 fails → the machine falls back to getCode at the precompile.
@@ -622,7 +623,7 @@ fn p256_code_at_the_precompile_rescues_strategy_two() {
     let mut sut = started();
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
-    for (_, address) in REQUIRED_CONTRACTS {
+    for (_, address, _) in REQUIRED_CONTRACTS {
         sut.resolve(code_ok(RPC_FAST, address));
     }
     // A too-short call answer (zkSync-style) → fall back to getCode; code
@@ -637,6 +638,110 @@ fn p256_code_at_the_precompile_rescues_strategy_two() {
     let compat = sut.view().wizard.compat.expect("checked");
     assert!(compat.compatible);
     assert_eq!(compat.p256_available, Some(true));
+}
+
+/// Spec 081 FR-002. "Unset means the default" is one rule, in one place —
+/// because three shells had each written their own, and one of them cached the
+/// answer for the life of the process, so changing the public-key index in
+/// Settings changed nothing.
+#[test]
+fn a_blank_endpoint_resolves_to_its_default_whatever_the_blank_looks_like() {
+    for field in [
+        NetEndpointField::EthereumData,
+        NetEndpointField::PasskeyIndex,
+        NetEndpointField::BundlerService,
+        NetEndpointField::FiatRates,
+    ] {
+        let with = |value: &str| {
+            let mut e = NetServiceEndpoints::default();
+            let slot = match field {
+                NetEndpointField::EthereumData => &mut e.ethereum_data_url,
+                NetEndpointField::PasskeyIndex => &mut e.passkey_index_url,
+                NetEndpointField::BundlerService => &mut e.bundler_service_url,
+                NetEndpointField::FiatRates => &mut e.fiat_rates_url,
+            };
+            *slot = value.to_owned();
+            e
+        };
+
+        assert_eq!(
+            NetServiceEndpoints::default().effective(field),
+            default_endpoint(field)
+        );
+        for blank in ["", "   ", "\t"] {
+            assert_eq!(
+                with(blank).effective(field),
+                default_endpoint(field),
+                "a field holding {blank:?} is a field nobody set"
+            );
+        }
+        assert_eq!(with("https://mine.example").effective(field), "https://mine.example");
+    }
+}
+
+/// Spec 081 FR-009. A chain can have everything a one-key wallet needs and
+/// still be unable to hold a multi-key one: keys two to seven are signer
+/// contracts Safe's factory creates inside the setup, so without the factory
+/// and its singleton that wallet cannot be deployed at all. The old check
+/// called such a chain "compatible" with no qualification.
+#[test]
+fn a_chain_without_safes_signer_factory_is_single_key_only() {
+    let mut sut = started();
+    select_and_resolve(&mut sut, raw_chain());
+    resolve_race(&mut sut);
+    for (_, address, multi_key_only) in REQUIRED_CONTRACTS {
+        if multi_key_only {
+            assert!(sut.resolve(code_result(RPC_FAST, address, None)).is_empty());
+        } else {
+            assert!(sut.resolve(code_ok(RPC_FAST, address)).is_empty());
+        }
+    }
+    sut.resolve(Res::P256Call {
+        url: RPC_FAST.to_owned(),
+        result: Some(p256_one()),
+    });
+
+    let compat = sut.view().wizard.compat.expect("checked");
+    assert!(compat.compatible, "a one-key wallet works here");
+    assert!(
+        !compat.multi_key_ready,
+        "a wallet with two to seven keys does not"
+    );
+    let missing: Vec<_> = compat
+        .contracts
+        .iter()
+        .filter(|c| !c.deployed)
+        .map(|c| c.name.clone())
+        .collect();
+    assert_eq!(
+        missing,
+        vec![
+            "Safe Passkey Signer Factory".to_owned(),
+            "Safe Passkey Signer Singleton".to_owned()
+        ],
+        "and the screen can name exactly what is missing"
+    );
+}
+
+/// The handler Vela never uses is no longer required: a Vela account's
+/// fallback handler IS the 4337 module (`safe.rs` setup calldata), so
+/// demanding Safe's CompatibilityFallbackHandler turned away chains the
+/// wallet works on perfectly well.
+#[test]
+fn the_unused_fallback_handler_is_not_required() {
+    const COMPATIBILITY_FALLBACK_HANDLER: &str = "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99";
+    assert!(
+        !REQUIRED_CONTRACTS
+            .iter()
+            .any(|(_, address, _)| address.eq_ignore_ascii_case(COMPATIBILITY_FALLBACK_HANDLER)),
+        "the CompatibilityFallbackHandler is not part of a Vela wallet"
+    );
+    assert!(
+        REQUIRED_CONTRACTS
+            .iter()
+            .any(|(_, a, _)| a.eq_ignore_ascii_case(vela_core::safe::WEBAUTHN_SIGNER_FACTORY)),
+        "the signer factory is"
+    );
 }
 
 #[test]

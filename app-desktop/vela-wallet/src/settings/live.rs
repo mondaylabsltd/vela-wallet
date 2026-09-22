@@ -306,10 +306,13 @@ pub fn compat_checks(
     if compat.rpc_failure.is_some() {
         return None;
     }
+    // The multi-key pair is reported on its own line (`single_key_only`), not
+    // folded into these rows: a chain that is missing only those is a working
+    // chain for a one-key wallet, and a red "Safe contracts" row would say the
+    // opposite.
+    let core_contracts = || compat.contracts.iter().filter(|c| !c.multi_key_only);
     let deployed = |name: &str| {
-        compat
-            .contracts
-            .iter()
+        core_contracts()
             .find(|contract| contract.name.contains(name))
             .is_some_and(|contract| contract.deployed)
     };
@@ -326,19 +329,25 @@ pub fn compat_checks(
     if let Some(available) = compat.p256_available {
         rows.push((s.check_signer.clone(), available));
     }
-    let remaining = compat
-        .contracts
-        .iter()
-        .filter(|contract| !contract.name.contains("EntryPoint") && !contract.name.contains("Safe"))
-        .count();
+    let others = || {
+        core_contracts()
+            .filter(|c| !c.name.contains("EntryPoint") && !c.name.contains("Safe"))
+    };
+    // The multi-key pair gets its OWN row rather than being folded into the
+    // aggregates above — the callout beside the list says what it means, but a
+    // list in which nothing is crossed while a warning sits under it reads as
+    // a warning about nothing (measured on the live dialog, spec 081 FR-009).
+    // A product name, like EntryPoint's: translating it would make the row lie.
+    let multi_key: Vec<_> = compat.contracts.iter().filter(|c| c.multi_key_only).collect();
+    if !multi_key.is_empty() {
+        rows.push((
+            SharedString::from("Safe Passkey Signer"),
+            multi_key.iter().all(|contract| contract.deployed),
+        ));
+    }
+    let remaining = others().count();
     if remaining > 0 {
-        let ok = compat
-            .contracts
-            .iter()
-            .filter(|contract| {
-                !contract.name.contains("EntryPoint") && !contract.name.contains("Safe")
-            })
-            .all(|contract| contract.deployed);
+        let ok = others().all(|contract| contract.deployed);
         rows.push((
             SharedString::from(crate::wallet::fill(
                 &s.check_remaining,
@@ -761,11 +770,13 @@ mod endpoint_tests {
             name: name.to_owned(),
             address: "0xaaa".to_owned(),
             deployed,
+            multi_key_only: false,
         };
         let compat =
             |rpc_failure: Option<NetRpcFailureKind>, p256: Option<bool>| NetCompatibility {
                 chain_id: 7_777_777,
                 compatible: rpc_failure.is_none(),
+                multi_key_ready: rpc_failure.is_none(),
                 contracts: vec![
                     contract("EntryPoint v0.7", true),
                     contract("Safe v1.4.1", true),
@@ -799,6 +810,58 @@ mod endpoint_tests {
         let unprobed = compat_checks(&compat(None, None), &s)
             .unwrap_or_else(|| unreachable!("a reached verdict has rows"));
         assert!(!unprobed.iter().any(|(label, _)| *label == s.check_signer));
+    }
+
+    /// Spec 081 FR-009. The two passkey-signer contracts belong to a wallet
+    /// with more than one key. When they are the only thing missing, the rows
+    /// above must stay green — folding them into "Safe contracts" would tell
+    /// a one-key owner their chain is broken when it is not.
+    #[test]
+    fn the_multi_key_contracts_do_not_redden_the_rows_a_one_key_wallet_needs() {
+        use vela_core::app::network_admin::NetContractStatus;
+        let s = strings();
+        let contract = |name: &str, deployed: bool, multi_key_only: bool| NetContractStatus {
+            name: name.to_owned(),
+            address: "0xaaa".to_owned(),
+            deployed,
+            multi_key_only,
+        };
+        let compat = NetCompatibility {
+            chain_id: 7_777_777,
+            compatible: true,
+            multi_key_ready: false,
+            contracts: vec![
+                contract("EntryPoint v0.7", true, false),
+                contract("Safe L2", true, false),
+                contract("MultiSend", true, false),
+                contract("Safe Passkey Signer Factory", false, true),
+                contract("Safe Passkey Signer Singleton", false, true),
+            ],
+            p256_available: Some(true),
+            best_rpc_url: None,
+            best_rpc_latency_ms: None,
+            rpc_failure: None,
+        };
+
+        let rows = compat_checks(&compat, &s)
+            .unwrap_or_else(|| unreachable!("a reached verdict has rows"));
+        let multi_key_row = rows
+            .iter()
+            .find(|(label, _)| label.contains("Passkey"))
+            .unwrap_or_else(|| unreachable!("the multi-key pair has its own row"));
+        assert!(!multi_key_row.1, "and it is the one that is crossed");
+        assert!(
+            rows.iter()
+                .filter(|(label, _)| !label.contains("Passkey"))
+                .all(|(_, ok)| *ok),
+            "every row a one-key wallet depends on is satisfied: {rows:?}"
+        );
+        // And the count in the "N more" row counts only those contracts.
+        assert!(
+            rows.iter()
+                .any(|(label, _)| label.contains('1') && !label.contains('3')),
+            "one remaining contract, not three: {rows:?}"
+        );
     }
 
     /// A key's support line waits for the test to finish, and averages only

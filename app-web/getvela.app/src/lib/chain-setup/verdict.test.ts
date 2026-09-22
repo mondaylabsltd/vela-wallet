@@ -37,6 +37,22 @@ describe('the verdict', () => {
 		expect(p.steps.map((s) => s.contract.key)).toEqual(['entryPoint', 'multiSend']);
 	});
 
+	it('a chain that is only missing the passkey signer is one step from whole', () => {
+		// The gap this page used to have: it called such a chain ready, and a
+		// person with two keys deposited into an address that could never be
+		// deployed there. Now both contracts show as missing — and the plan
+		// still holds ONE step, because the factory's constructor deploys the
+		// singleton.
+		const p = plan(all(['safePasskeySignerFactory', 'safePasskeySignerSingleton']), 'precompile');
+		expect(p.verdict).toBe('needs-setup');
+		expect(p.missing.map((c) => c.contract.key)).toEqual([
+			'safePasskeySignerFactory',
+			'safePasskeySignerSingleton'
+		]);
+		expect(p.steps.map((s) => s.contract.key)).toEqual(['safePasskeySignerFactory']);
+		expect(p.runnable).toHaveLength(1);
+	});
+
 	it('does not call an unanswered read "missing" — the verdict stays provisional', () => {
 		const p = plan(all([], ['multiSend']), 'precompile');
 		expect(p.verdict).toBe('needs-setup');
