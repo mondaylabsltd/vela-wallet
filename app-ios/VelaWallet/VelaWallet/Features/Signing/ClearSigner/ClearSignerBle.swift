@@ -63,9 +63,9 @@
 //  from a central is split into a long write by the OS. A peripheral's notify
 //  cannot be split: `updateValue` truncates at the link's maximum, and a
 //  truncated frame is a message that never completes. So this end calls the
-//  core's `fitToMtu` the moment a central subscribes rather than trusting the
-//  default — `subscribed(maximumUpdateValueLength:)`, which is also where
-//  CoreBluetooth's units are converted to the ATT MTU the core asks for.
+//  core's `fitToValueLen` the moment a central subscribes rather than trusting
+//  the default — it takes `CBCentral.maximumUpdateValueLength` as it comes,
+//  which is why no byte counting happens anywhere in this file.
 //
 
 import CoreBluetooth
@@ -129,17 +129,20 @@ enum ClearSignerBleTrouble: Equatable {
     /// The service or the advertisement would not come up.
     case unavailable
 
-    /// What the card says. A person whose Bluetooth is merely switched off
-    /// must not be told they refused a permission — they would go looking for
-    /// a settings screen with nothing in it to change — so the two cases keep
-    /// their own sentence, and the permission one says WHY it is wanted rather
-    /// than only that it is missing.
+    /// What the card says. Three sentences for four states, and the splits
+    /// are the ones a person can act on: a refused permission says what the
+    /// permission is FOR, a radio that is merely switched off says to switch
+    /// it on, and a device with no peripheral role at all says so and names
+    /// the other two routes — telling THAT person to turn Bluetooth on would
+    /// send them to a settings screen that cannot help them.
     var titleKey: String { I18nKeys.ClearSigner.nearby }
 
     var bodyKey: String {
-        self == .notAuthorized
-            ? I18nKeys.ClearSigner.bluetoothNeeded
-            : I18nKeys.ClearSigner.bluetoothOff
+        switch self {
+        case .notAuthorized: I18nKeys.ClearSigner.bluetoothNeeded
+        case .poweredOff: I18nKeys.ClearSigner.bluetoothOff
+        case .unsupported, .unavailable: I18nKeys.ClearSigner.bluetoothUnsupported
+        }
     }
 }
 
@@ -416,14 +419,14 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
 
     /// A central subscribed to `p2c`, and the link's size is finally known.
     ///
-    /// CoreBluetooth reports the NOTIFICATION capacity — the ATT MTU less the
-    /// opcode and the handle — and the core's `fitToMtu` takes the MTU itself,
-    /// so the three bytes go back on here. This conversion is the whole reason
-    /// the method is named in CoreBluetooth's units: getting it wrong by three
-    /// makes `updateValue` truncate the last frame, and a truncated frame is a
-    /// message that never completes and is swept ten seconds later.
+    /// `fitToValueLen` takes exactly what CoreBluetooth reports — the bytes a
+    /// single notification may carry — so there is no arithmetic here at all.
+    /// There was, for one commit: `fitToMtu` wants the ATT MTU, which is this
+    /// number plus the opcode and the handle, and handing that door the
+    /// capacity instead would have cost three bytes on every frame and never
+    /// been noticed. The core owns both doors now.
     func subscribed(maximumUpdateValueLength: Int) {
-        _ = framer.fitToMtu(mtu: UInt32(clamping: maximumUpdateValueLength + 3))
+        _ = framer.fitToValueLen(valueLen: UInt32(clamping: maximumUpdateValueLength))
         pump()
     }
 

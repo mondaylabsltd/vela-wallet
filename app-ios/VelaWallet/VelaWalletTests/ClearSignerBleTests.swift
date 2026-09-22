@@ -360,11 +360,17 @@ struct ClearSignerBlePeripheralTests {
         _ = await pairing
     }
 
-    /// The chunk is sized to the link by the CORE's `fitToMtu`, and the three
-    /// bytes between CoreBluetooth's units and the core's are put back before
-    /// it is asked. A frame that did not fit would be TRUNCATED by the
-    /// controller rather than refused — a message that never completes and is
-    /// swept ten seconds later — so the off-by-three is the whole point.
+    /// The chunk is sized to the link by the CORE, through the door that takes
+    /// CoreBluetooth's own number: `fitToValueLen`. A frame that did not fit
+    /// would be TRUNCATED by the controller rather than refused — a message
+    /// that never completes and is swept ten seconds later — so nothing about
+    /// this may be approximate.
+    ///
+    /// The table also pins the two doors to each other. `fitToMtu` wants the
+    /// ATT MTU and `fitToValueLen` the notification capacity, which is three
+    /// bytes smaller; feeding one the other's number costs three bytes on
+    /// every frame and shows up nowhere. That is a comment in the core and an
+    /// assertion here.
     @Test func theChunkIsSizedToTheLinkByTheCore() async throws {
         let vector = try #require(BleVector.ble)
         // (what CoreBluetooth reports, the ATT MTU it implies, the chunk).
@@ -382,8 +388,11 @@ struct ClearSignerBlePeripheralTests {
             #expect(await conversation.advertise() == vector.code)
 
             let framer = ClearSignerFramer()
-            #expect(Int(framer.fitToMtu(mtu: UInt32(attMtu))) == expected,
-                    "the core does not size an MTU of \(attMtu) the way this expects")
+            #expect(Int(framer.fitToValueLen(valueLen: UInt32(capacity))) == expected,
+                    "the core does not size a notification of \(capacity) the way this expects")
+            #expect(framer.fitToValueLen(valueLen: UInt32(capacity))
+                        == ClearSignerFramer().fitToMtu(mtu: UInt32(attMtu)),
+                    "the two doors disagree at \(attMtu): one of them is three bytes out")
             // What we sent, re-cut at that chunk: identical frames mean the
             // peripheral asked the core the same question we just did.
             let ours = try #require(radio.messages().first).payload
@@ -693,9 +702,11 @@ struct ClearSignerBlePeripheralTests {
     }
 
     /// Bluetooth switched off, and a device with no peripheral role at all,
-    /// get their OWN sentence — never "you refused a permission", which would
-    /// send somebody to a settings screen with nothing in it to change.
-    @Test func theOtherWaysTheRadioCannotCarryASessionAreDistinct() async throws {
+    /// get their OWN sentence. Never "you refused a permission", which would
+    /// send somebody to a settings screen with nothing in it to change — and
+    /// never "turn Bluetooth on" for a device that has no peripheral role,
+    /// which is advice that cannot work however carefully it is followed.
+    @Test func theThreeWaysTheRadioCannotCarryASessionEachSayTheirOwnThing() async throws {
         let loc = Loc(overrideTag: "en", preferredLanguages: [])
         for (state, expected) in [
             (CBManagerState.poweredOff, ClearSignerBleTrouble.poweredOff),
@@ -704,11 +715,26 @@ struct ClearSignerBlePeripheralTests {
             let conversation = try #require(make(radio: StubBleRadio(state: state)))
             #expect(await conversation.advertise() == nil)
             #expect(conversation.trouble == expected)
-            let body = loc.t(expected.bodyKey)
-            #expect(body != expected.bodyKey, "\(expected) has no sentence behind it")
-            #expect(body != loc.t(ClearSignerBleTrouble.notAuthorized.bodyKey),
-                    "\(expected) borrowed the permission sentence, which is not true of it")
         }
+
+        // Three states, three sentences, no two of them the same.
+        let sentences = [
+            ClearSignerBleTrouble.notAuthorized,
+            .poweredOff,
+            .unsupported,
+        ].map { loc.t($0.bodyKey) }
+        #expect(Set(sentences).count == 3, "two of the three cards say the same thing")
+        for (trouble, sentence) in zip(
+            [ClearSignerBleTrouble.notAuthorized, .poweredOff, .unsupported], sentences
+        ) {
+            #expect(sentence != trouble.bodyKey, "\(trouble) has no sentence behind it")
+        }
+        // A device that cannot do this at all is told so, and pointed at the
+        // routes that still work, rather than at the Bluetooth switch.
+        #expect(!sentences[2].lowercased().contains("turn bluetooth on"))
+        #expect(ClearSignerBleTrouble.unavailable.bodyKey
+                    == ClearSignerBleTrouble.unsupported.bodyKey,
+                "an advert that would not come up is the same dead end to the person")
     }
 
     /// Every sentence this route puts on screen resolves — a missing key
@@ -724,6 +750,7 @@ struct ClearSignerBlePeripheralTests {
             I18nKeys.ClearSigner.nearbyHint,
             I18nKeys.ClearSigner.bluetoothNeeded,
             I18nKeys.ClearSigner.bluetoothOff,
+            I18nKeys.ClearSigner.bluetoothUnsupported,
         ] {
             #expect(loc.t(key) != key, "\(key) has no sentence behind it")
         }

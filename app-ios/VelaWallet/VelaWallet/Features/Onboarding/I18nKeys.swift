@@ -193,7 +193,11 @@ enum I18nKeys {
         /// Takes `name` — what the advert is carrying.
         static let nearbyName = "componentsUi.signing.clearSignerNearbyName"
         static let bluetoothNeeded = "componentsUi.signing.clearSignerBluetoothNeeded"
+        /// The radio is off — the one state where "turn it on" is useful.
         static let bluetoothOff = "componentsUi.signing.clearSignerBluetoothOff"
+        /// No peripheral role here, or it would not come up: names the other
+        /// two routes instead of advice that cannot work.
+        static let bluetoothUnsupported = "componentsUi.signing.clearSignerBluetoothUnsupported"
     }
 
     enum Settings {
@@ -236,6 +240,7 @@ enum I18nKeys {
         ClearSigner.copyLink, ClearSigner.code, ClearSigner.codeConfirm,
         ClearSigner.relayDown, ClearSigner.nearby, ClearSigner.nearbyHint,
         ClearSigner.nearbyName, ClearSigner.bluetoothNeeded, ClearSigner.bluetoothOff,
+        ClearSigner.bluetoothUnsupported,
         Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,
