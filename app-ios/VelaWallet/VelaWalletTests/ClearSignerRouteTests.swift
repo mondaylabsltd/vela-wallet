@@ -854,14 +854,21 @@ struct ClearSignerExecutorTests {
         #expect(answer["kind"] as? String == "not_supported")
     }
 
-    /// Every other route is untouched: a platform ceremony never reaches the
-    /// page, whatever is wired in.
-    @Test func anotherRouteNeverReachesThePage() async throws {
-        let port = ScriptedCeremonyPort { _ in .failed(kind: .other, message: "should not happen") }
+    /// Every other route is untouched — and this is checked on the DECISION
+    /// rather than by running the other route, because running it raises the
+    /// system passkey sheet and a unit test has nobody to answer it (this test
+    /// hung the whole suite when it was written the other way round).
+    @Test func anotherRouteNeverReachesThePage() throws {
         var operation = ClearSignerCeremonyFixture().registerOperation()
-        operation["method"] = "platform"
-        _ = await executor(port).perform(operation)
-        #expect(port.asked.isEmpty)
+        #expect(OnboardingExecutor.routesToTheClearSigner(operation))
+        for other in ["platform", "hybrid", "security_key", "", "something_else"] {
+            operation["method"] = other
+            #expect(!OnboardingExecutor.routesToTheClearSigner(operation),
+                    "\(other) would have opened a page")
+        }
+        operation.removeValue(forKey: "method")
+        #expect(!OnboardingExecutor.routesToTheClearSigner(operation),
+                "an operation with no method must route as it always did")
     }
 
     /// The re-publish's LIVE member proof (recovery's third signature) goes to

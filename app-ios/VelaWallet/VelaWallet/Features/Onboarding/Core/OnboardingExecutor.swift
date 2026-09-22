@@ -394,9 +394,7 @@ final class OnboardingExecutor {
     private func onTheClearSigner(
         _ operation: [String: Any], memberChallenge: Data? = nil
     ) async throws -> [String: Any]? {
-        guard KeyMethod(rawValue: operation["method"] as? String ?? "") == .clearSigner else {
-            return nil
-        }
+        guard Self.routesToTheClearSigner(operation) else { return nil }
         guard let clearSigner else {
             // Chosen where no page can be opened: fail closed rather than
             // silently signing with something else.
@@ -417,6 +415,15 @@ final class OnboardingExecutor {
         case .failed(let kind, let message):
             throw PasskeyFailure(kind: kind, message: message ?? "")
         }
+    }
+
+    /// Whether this operation's route is the Clear Signer — the ONE branch
+    /// this file makes for it, and the only one worth testing on its own: the
+    /// negative case must not be checked by RUNNING the other route, because
+    /// the other route raises the system passkey sheet and a unit test has
+    /// nobody to answer it.
+    static func routesToTheClearSigner(_ operation: [String: Any]) -> Bool {
+        KeyMethod(rawValue: operation["method"] as? String ?? "") == .clearSigner
     }
 
     /// A `sign_member_proof` for one publish member, in the wire shape
