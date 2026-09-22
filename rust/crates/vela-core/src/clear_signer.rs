@@ -35,6 +35,7 @@ use crate::types::ClientDataKind;
 use crate::user_op::{UserOperation, WalletKey};
 use crate::webauthn::{validate_client_data, webauthn_signing_hash};
 
+pub mod secure;
 pub mod ws;
 
 /// The official signer page (spec 071 [D]) — the host PROTOCOL.md names.
