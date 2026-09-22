@@ -49,6 +49,7 @@ use crate::outcome::{ActionId, Prompt, SHEET_PAD, SHEET_RADIUS, SHEET_W, outcome
 use crate::passkey_directory::{self, PasskeyDirectory};
 use crate::passkey_icons::PasskeyIconCache;
 use crate::session;
+use crate::signing::clear_signer as clear_signer_cards;
 use crate::theme::{
     self, CONTENT_PAD_X, CONTENT_PAD_Y, FLOW_COLUMN_W, FLOW_GAP_LG, FLOW_GAP_MD, GAP_HERO_CTA,
     GAP_HERO_SUB, GAP_WELCOME_CTA, Theme, ThemeMode,
@@ -466,6 +467,18 @@ impl OnboardingPage {
 
     /// One poll. Returns whether to keep polling.
     fn tick(&mut self, cx: &mut Context<Self>) -> bool {
+        // Spec 075: a Clear Signer attempt on this device asked for its page.
+        // `cx.open_url` is the only thing in that conversation the ceremony
+        // thread cannot do for itself.
+        let clear_signer = self.channel.clear_signer();
+        if let Some(url) = clear_signer.take_page() {
+            cx.open_url(&url);
+        }
+        // The name the page puts on its ceremony card — how a person
+        // recognises their own wallet on a screen the wallet does not draw.
+        // A sign-in has none to give, by definition.
+        let naming = self.create.view().name;
+        clear_signer.describe((!naming.trim().is_empty()).then_some(naming));
         if let Some(request) = self.channel.pending_pin() {
             if self
                 .pin
@@ -785,6 +798,67 @@ impl OnboardingPage {
             scrim(theme, "touch-scrim")
                 .child(hardware::touch_card(theme, &self.loc, &waiting, on_cancel)),
         )
+    }
+
+    /// Spec 075: the Clear Signer's own dialogs during a create or a sign-in —
+    /// where the signer is, the cross-device pairing and its code, the wait,
+    /// and how the last attempt ended.
+    ///
+    /// The same cards the signing sheet draws (`signing::clear_signer`), and
+    /// for the same reason the cable's dialogs are shared: a person creating a
+    /// wallet on a page and a person signing a send on one are looking at the
+    /// same moment.
+    fn clear_signer_prompt(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
+        let channel = self.channel.clear_signer();
+        if !(channel.asking_place() || channel.waiting() || channel.ended().is_some()) {
+            return None;
+        }
+        let card = if channel.asking_place() {
+            let answering = Arc::clone(&channel);
+            let cancel = Arc::clone(&channel);
+            clear_signer_cards::where_card(
+                theme,
+                &self.loc,
+                Arc::new(move |place, _window: &mut Window, _cx: &mut App| {
+                    answering.answer_place(Some(place));
+                }),
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| {
+                    cancel.answer_place(None);
+                },
+            )
+        } else if let Some(pairing) = channel.pairing() {
+            let (confirm, cancel) = (Arc::clone(&channel), Arc::clone(&channel));
+            let link = pairing.link.clone();
+            clear_signer_cards::pair_card(
+                theme,
+                &self.loc,
+                &pairing,
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
+                },
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| confirm.confirm_code(),
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| cancel.cancel(),
+            )
+        } else if channel.waiting() {
+            let (reopen, cancel) = (Arc::clone(&channel), Arc::clone(&channel));
+            clear_signer_cards::waiting_card(
+                theme,
+                &self.loc,
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| reopen.reopen(),
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| cancel.cancel(),
+            )
+        } else {
+            let refusal = channel.ended()?;
+            let forget = Arc::clone(&channel);
+            clear_signer_cards::ended_card(
+                theme,
+                &self.loc,
+                refusal,
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| forget.forget(),
+            )
+        };
+        let _ = cx;
+        Some(scrim(theme, "clear-signer-scrim").child(card))
     }
 
     /// The caBLE QR, while a hybrid ceremony waits for the phone to scan it. It
@@ -1278,6 +1352,10 @@ impl Render for OnboardingPage {
         }
         if let Some(dialog) = self.pin_dialog(&theme, window, cx) {
             root = root.child(dialog);
+        }
+        // Last, so it sits over the method picker it was opened from.
+        if let Some(prompt) = self.clear_signer_prompt(&theme, cx) {
+            root = root.child(prompt);
         }
 
         let draws_titlebar = owns_titlebar(window);

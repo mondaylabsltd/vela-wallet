@@ -917,13 +917,12 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
     row
 }
 
-/// The three ways to mint a founding key.
+/// The four ways to mint a founding key (spec 075 added the Clear Signer).
 ///
-/// **Two of them cannot run here, and both say so.** `Platform` needs a system
-/// passkey service, which no desktop in this app's reach provides; `Hybrid`
-/// needs the QR transport a later feature adds. Hiding them would leave a
-/// person wondering whether their laptop's fingerprint reader was supposed to
-/// work; showing them greyed with a reason answers that in one line.
+/// **One of them may not run here, and it says so.** `Platform` needs a system
+/// passkey service, which only Windows provides in this app's reach. Hiding it
+/// would leave a person wondering whether their laptop's fingerprint reader was
+/// supposed to work; showing it greyed with a reason answers that in one line.
 fn method_picker(host: &FlowHost<'_>) -> Div {
     let theme = host.theme;
     let loc = host.loc;
@@ -1014,6 +1013,16 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
             KeyMethod::Hybrid,
             "onboarding.create.methodHybridTitle",
             loc.t("onboarding.create.methodHybridBody"),
+            true,
+        ))
+        // Spec 075: the fourth route, and the only one that is OURS. Never
+        // greyed: a signer page is reachable from every desktop, on this
+        // machine's own browser over a loopback socket or on the phone in the
+        // person's hand over the relay — the ceremony asks which.
+        .child(entry(
+            KeyMethod::ClearSigner,
+            "componentsUi.signing.clearSignerTitle",
+            loc.t("componentsUi.signing.clearSignerBody"),
             true,
         ))
 }

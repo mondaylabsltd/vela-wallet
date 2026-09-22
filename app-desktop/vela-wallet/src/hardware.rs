@@ -146,11 +146,12 @@ pub fn touch_card(
     }
 }
 
-/// The three ways to sign in — this device, a phone by scan, a security key —
-/// the same set creating a wallet offers per key. A wallet that lives on a
-/// security key (or a phone) is reachable even where a platform passkey would be
-/// the silent default. `Platform` has no route on the desktop and shows as
-/// unavailable-with-a-reason, exactly as it does in the create picker.
+/// The four ways to sign in — this device, a phone by scan, a security key, the
+/// Clear Signer — the same set creating a wallet offers per key. A wallet that
+/// lives on a security key, a phone or a signer page is reachable even where a
+/// platform passkey would be the silent default. `Platform` has no route on the
+/// desktop and shows as unavailable-with-a-reason, exactly as it does in the
+/// create picker.
 /// The method rows' mark size — the web's `--icon-lg`.
 pub const METHOD_ICON_PX: u32 = 24;
 
@@ -241,6 +242,16 @@ pub fn signin_method_card(
                 "onboarding.create.securityKeyRequiredBody"
             },
             this_device,
+        ))
+        // Spec 075: a wallet whose key was created on a signer page can only
+        // be signed into through one, so this row has to be here — and it is
+        // reachable on every desktop (this machine's browser, or another
+        // device over the relay), which is why it is never greyed.
+        .child(entry(
+            KeyMethod::ClearSigner,
+            "componentsUi.signing.clearSignerTitle",
+            "componentsUi.signing.clearSignerBody",
+            true,
         ))
         .child(vela_button(
             "signin-methods-cancel",

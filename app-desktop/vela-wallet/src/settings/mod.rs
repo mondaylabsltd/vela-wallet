@@ -54,6 +54,13 @@ pub struct SettingsStrings {
     pub signer_page_foreign: SharedString,
     pub signer_page_reset: SharedString,
     pub signer_page_save: SharedString,
+    /// Spec 075: the relay row, beside the page row and shaped like it.
+    pub relay_title: SharedString,
+    pub relay_subtitle: SharedString,
+    pub relay_official: SharedString,
+    pub relay_invalid: SharedString,
+    pub relay_insecure: SharedString,
+    pub relay_reset: SharedString,
     pub nav_about: SharedString,
     // account panel
     /// "Total {{amount}}" — the second half of the summary. The count template
@@ -298,6 +305,12 @@ impl SettingsStrings {
             signer_page_foreign: s("settings.signing.pageForeign"),
             signer_page_reset: s("settings.signing.pageReset"),
             signer_page_save: s("settings.signing.pageSave"),
+            relay_title: s("settings.signing.relayTitle"),
+            relay_subtitle: s("settings.signing.relaySubtitle"),
+            relay_official: s("settings.signing.relayOfficial"),
+            relay_invalid: s("settings.signing.relayInvalid"),
+            relay_insecure: s("settings.signing.relayInsecure"),
+            relay_reset: s("settings.signing.relayReset"),
             nav_about: s("settings.about.title"),
             accounts_total: raw("settingsModals.account.total"),
             accounts_count: raw("home.switcherAccountCount"),
@@ -543,6 +556,12 @@ mod tests {
             (&s.signer_page_foreign, "settings.signing.pageForeign"),
             (&s.signer_page_reset, "settings.signing.pageReset"),
             (&s.signer_page_save, "settings.signing.pageSave"),
+            (&s.relay_title, "settings.signing.relayTitle"),
+            (&s.relay_subtitle, "settings.signing.relaySubtitle"),
+            (&s.relay_official, "settings.signing.relayOfficial"),
+            (&s.relay_invalid, "settings.signing.relayInvalid"),
+            (&s.relay_insecure, "settings.signing.relayInsecure"),
+            (&s.relay_reset, "settings.signing.relayReset"),
         ] {
             assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
             assert!(!value.is_empty(), "`{key}` resolved empty");
