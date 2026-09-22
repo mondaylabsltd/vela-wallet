@@ -13,7 +13,7 @@ use gpui::{
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{icon_img, identicon_avatar};
+use crate::wallet::components::{icon_img, person_avatar};
 
 use super::Tone;
 use super::fixtures::{Block, FeeModel, SigningModel};
@@ -961,7 +961,7 @@ pub fn signer_row(
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .child(identicon_avatar(identicons, seed, 18.))
+                .child(person_avatar(theme, identicons, seed, &name, 18.))
                 .child(
                     div()
                         .text_size(theme::text_row_sub())

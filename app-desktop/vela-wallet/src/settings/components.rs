@@ -343,6 +343,24 @@ pub fn segmented(
     items: &[(Option<Icon>, gpui::SharedString)],
     selected: usize,
 ) -> Div {
+    segmented_cells(theme, icons, items, selected, &mut |_, cell| {
+        cell.into_any_element()
+    })
+}
+
+/// The same control, with each cell handed to the caller before it is added.
+///
+/// The drawn version above takes no handler, which is how the Appearance panel
+/// ended up showing two controls that could not be moved. A caller with a
+/// `Context` wraps each cell in `.id().on_click(...)`; the gallery passes the
+/// identity function and gets exactly the picture it always had.
+pub fn segmented_cells(
+    theme: &Theme,
+    icons: &mut IconCache,
+    items: &[(Option<Icon>, gpui::SharedString)],
+    selected: usize,
+    wrap: &mut dyn FnMut(usize, Div) -> gpui::AnyElement,
+) -> Div {
     let mut row = div()
         .flex()
         .p(px(3.))
@@ -372,22 +390,36 @@ pub fn segmented(
         if let Some(icon) = *icon {
             cell = cell.child(icon_img(icons, icon, false, tint, 14.));
         }
-        row = row.child(
-            cell.child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(tint)
-                    .when(is_selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
-                    .child(label.clone()),
-            ),
+        let cell = cell.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(tint)
+                .when(is_selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
+                .child(label.clone()),
         );
+        row = row.child(wrap(i, cell));
     }
     row
 }
 
-/// A ——●—— A. The desktop mock draws seven stops with the thumb on the fourth;
-/// this is a picture of the control, not a live one (spec 023 is UI only).
+/// A ——●—— A, drawn only. The gallery still wants the picture; a real session
+/// uses [`text_scale_stops`] so the thumb can be moved.
 pub fn text_scale(theme: &Theme, steps: usize, index: usize) -> Div {
+    text_scale_stops(theme, steps, index, &mut |_, stop| stop.into_any_element())
+}
+
+/// The same control, with each stop handed to the caller first — the live
+/// panel wraps them in `.id().on_click(...)`.
+///
+/// The stop keeps a 20px-tall hit area whatever its dot is: a 4px target is
+/// not a target. The dots themselves stay the mock's two sizes, because the
+/// thumb has to read as the thumb at a glance.
+pub fn text_scale_stops(
+    theme: &Theme,
+    steps: usize,
+    index: usize,
+    wrap: &mut dyn FnMut(usize, Div) -> gpui::AnyElement,
+) -> Div {
     let mut track = div()
         .flex_1()
         .h(px(20.))
@@ -395,11 +427,19 @@ pub fn text_scale(theme: &Theme, steps: usize, index: usize) -> Div {
         .items_center()
         .justify_between();
     for i in 0..steps {
-        track = track.child(if i == index {
+        let dot = if i == index {
             div().size(px(16.)).rounded_full().bg(theme.fg_muted)
         } else {
             div().size(px(4.)).rounded_full().bg(theme.outline_strong)
-        });
+        };
+        let stop = div()
+            .h(px(20.))
+            .w(px(20.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(dot);
+        track = track.child(wrap(i, stop));
     }
     div()
         .w_full()

@@ -49,13 +49,15 @@ const WIZARD_SEARCH_FOCUS: usize = ENDPOINT_FOCUS_COUNT + 3;
 const WIZARD_RPC_FOCUS: usize = WIZARD_SEARCH_FOCUS + 1;
 /// Two handles per network card, past everything above.
 const OVERRIDE_FOCUS_BASE: usize = WIZARD_RPC_FOCUS + 1;
+use crate::executor::appearance_prefs;
 use crate::executor::format_prefs;
 use crate::executor::passkey::WindowHandle;
 use crate::hardware;
 use crate::settings::components::{
     CalloutTone, callout, chain_mark, check_list, danger_card, dropdown_menu, dropdown_menu_picks,
     dropdown_trigger, editable_url_field, form_row, key_value_row, network_row, rpc_banner,
-    segmented, settings_nav_row, status_pill, storage_bar, storage_group, text_scale, url_field,
+    segmented, segmented_cells, settings_nav_row, status_pill, storage_bar, storage_group,
+    text_scale, text_scale_stops, url_field,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -3153,9 +3155,11 @@ impl WalletPage {
             .flex()
             .items_center()
             .gap(px(14.))
-            .child(identicon_avatar(
+            .child(crate::wallet::components::person_avatar(
+                theme,
                 &mut self.identicons,
                 model.seed.as_ref(),
+                &model.name,
                 CONTACTS_HERO_AVATAR,
             ))
             .child(
@@ -5708,7 +5712,7 @@ impl WalletPage {
 
         let body = match self.settings_page {
             SettingsPage::Account => self.settings_account(theme, cx),
-            SettingsPage::Appearance => self.settings_appearance(theme),
+            SettingsPage::Appearance => self.settings_appearance(theme, cx),
             SettingsPage::Localization => self.settings_localization(theme, cx),
             SettingsPage::Networks => self.settings_networks(theme, window, cx),
             SettingsPage::RpcProviders => self.settings_providers(theme, window, cx),
@@ -5914,7 +5918,13 @@ impl WalletPage {
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
-                .child(identicon_avatar(&mut self.identicons, &address, 40.))
+                .child(crate::wallet::components::person_avatar(
+                    theme,
+                    &mut self.identicons,
+                    &address,
+                    &row.account.name,
+                    40.,
+                ))
                 .child(
                     div()
                         .flex_1()
@@ -6803,7 +6813,7 @@ impl WalletPage {
     }
 
     /// DST2 — language, text size, theme, avatar style.
-    fn settings_appearance(&mut self, theme: &Theme) -> Div {
+    fn settings_appearance(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         let language = s.language.clone();
         // The locale this window is ACTUALLY in. This line was the mock's
@@ -6839,41 +6849,76 @@ impl WalletPage {
         let language_control = dropdown_trigger(theme, &mut self.icons, language_value);
         let theme_control = segmented(theme, &mut self.icons, &themes, theme_index);
 
-        // Two of these four rows can only lie in a real session, so a real
-        // session does not draw them (found on the live German panel, 081
-        // follow-up).
+        // Both of these were drawn and not wired: `segmented` and `text_scale`
+        // took no handler at all ("spec 023 is UI only", in the component's own
+        // doc), so the size thumb sat on a stop that meant nothing and the
+        // avatar segment claimed a setting the desktop did not have. They are
+        // live now, on the web's own store keys and words, so one person's one
+        // choice reads the same on both clients.
         //
-        // `segmented` and `text_scale` take no handler — the whole panel is
-        // drawn, not wired ("spec 023 is UI only", `text_scale`'s own doc).
-        // Language and theme survive that, because both REPORT something true:
-        // the locale this window resolved, and the appearance it is actually
-        // in. The other two assert a choice that does not exist — the size
-        // thumb sits on stop four of seven for no reason, and the avatar
-        // segment claims "identicon" when the desktop has no avatar-style
-        // setting at all to be on either side of.
-        //
-        // They stay on the design surface, which is what they are: a drawing.
-        // Wiring them is a spec, not a line here — a live text scale means a
-        // multiplier through all 29 `theme::text_*` sizes, and every fixed
-        // `px` row height in this shell becomes a clipping risk that has to be
-        // seen at fifteen locales times seven stops before it ships.
+        // The design surface keeps the drawing — there is no session there to
+        // hold a preference, and the gallery's job is to show the control, not
+        // to own it.
         let design_surface = self.identity.is_none();
-        let mut col = div()
+        let scale_index = if design_surface {
+            appearance_prefs::TextScale::default().index()
+        } else {
+            appearance_prefs::text_scale().index()
+        };
+        let avatar_index = if design_surface {
+            appearance_prefs::AvatarStyle::default().index()
+        } else {
+            appearance_prefs::avatar_style().index()
+        };
+        let scale_control = if design_surface {
+            text_scale(theme, appearance_prefs::TEXT_SCALES.len(), scale_index)
+        } else {
+            text_scale_stops(
+                theme,
+                appearance_prefs::TEXT_SCALES.len(),
+                scale_index,
+                &mut |i, stop| {
+                    stop.id(ElementId::from(("text-scale-stop", i)))
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                            if let Some(scale) = appearance_prefs::TEXT_SCALES.get(i) {
+                                appearance_prefs::set_text_scale(*scale);
+                            }
+                            cx.notify();
+                        }))
+                        .into_any_element()
+                },
+            )
+        };
+        let avatar_control = if design_surface {
+            segmented(theme, &mut self.icons, &avatars, avatar_index)
+        } else {
+            segmented_cells(
+                theme,
+                &mut self.icons,
+                &avatars,
+                avatar_index,
+                &mut |i, cell| {
+                    cell.id(ElementId::from(("avatar-style", i)))
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                            if let Some(style) = appearance_prefs::AVATAR_STYLES.get(i) {
+                                appearance_prefs::set_avatar_style(*style);
+                            }
+                            cx.notify();
+                        }))
+                        .into_any_element()
+                },
+            )
+        };
+
+        div()
             .flex()
             .flex_col()
-            .child(form_row(theme, language, language_control));
-        if design_surface {
-            col = col.child(form_row(theme, scale_label, text_scale(theme, 7, 3)));
-        }
-        col = col.child(form_row(theme, theme_label, theme_control));
-        if design_surface {
-            col = col.child(form_row(
-                theme,
-                avatar_label,
-                segmented(theme, &mut self.icons, &avatars, 1),
-            ));
-        }
-        col
+            .child(form_row(theme, language, language_control))
+            .child(form_row(theme, scale_label, scale_control))
+            .child(form_row(theme, theme_label, theme_control))
+            .child(form_row(theme, avatar_label, avatar_control))
     }
 
     /// What the 货币 row shows — the core's committed currency for a real
