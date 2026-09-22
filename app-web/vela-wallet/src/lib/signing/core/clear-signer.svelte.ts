@@ -25,6 +25,7 @@ import { signPreference } from '$lib/settings/core/sign-pref.svelte';
 import {
 	openPostMessageChannel,
 	openRelayChannel,
+	signerPageUrl,
 	type ClearSignerChannel,
 	type ClearSignerHost,
 	type ClearSignerReply,
@@ -73,8 +74,8 @@ class ClearSignerSession {
 	#channel: ClearSignerChannel | null = null;
 	/** The page this channel reaches, for the core's verdicts. */
 	#origin = '';
-	/** Which page address the open channel was opened for. */
-	#url = '';
+	/** The page address the open channel was opened for (`…/sign.html?ch=…`). */
+	#page = '';
 	/** The person's answer to "where", pending. */
 	#asking: ((where: ClearSignerWhere | null) => void) | null = null;
 	/** The person pressed Cancel: they know, so no sentence follows. */
@@ -93,13 +94,19 @@ class ClearSignerSession {
 	 * their signer is — when there is none. `null` when they backed out.
 	 */
 	async #channelFor(signerUrl: string): Promise<ClearSignerChannel | null> {
-		if (this.#channel !== null && !this.#channel.ended && this.#url === signerUrl) {
+		// The PAGE address decides, not the string it was asked for: a flow
+		// names the same page two ways — Settings' `…/` and the origin the core
+		// stamped on the key — and a session that compared the raw text would
+		// close the page between a create and its member proof, and ask the
+		// person where their signer is all over again.
+		const page = signerPageUrl(signerUrl);
+		if (this.#channel !== null && !this.#channel.ended && this.#page === page) {
 			return this.#channel;
 		}
 		this.#closeChannel();
 		const where = await this.#askWhere();
 		if (where === null) return null;
-		this.#url = signerUrl;
+		this.#page = page;
 		this.#origin = originOf(signerUrl);
 		if (where === 'this_device') {
 			this.#channel = openPostMessageChannel({ signerUrl, host: this.host });
@@ -155,7 +162,7 @@ class ClearSignerSession {
 		this.#channel?.end();
 		this.#channel = null;
 		this.#relay = null;
-		this.#url = '';
+		this.#page = '';
 	}
 
 	/** Run one request on the flow's channel, opening one if needed. */

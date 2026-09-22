@@ -31,7 +31,7 @@ function drawn() {
 	const screen = render(AddMethodPicker, {
 		props: { open: true, strings, onPick: (method: KeyMethod) => picked.push(method) }
 	});
-	const buttons = [...screen.container.querySelectorAll('button.method')];
+	const buttons = [...screen.container.querySelectorAll<HTMLButtonElement>('button.method')];
 	return {
 		picked,
 		buttons,
