@@ -62,19 +62,19 @@
 	 */
 	const COMPARE_TONES = [
 		{ vela: '', metamask: '', base: '' }, // account type
+		{ vela: 'yes', metamask: '', base: 'warn' }, // full self-hosting
+		{ vela: 'yes', metamask: 'warn', base: 'warn' }, // source code
+		{ vela: 'yes', metamask: 'yes', base: 'warn' }, // custom networks
 		{ vela: 'yes', metamask: '', base: 'yes' }, // signing key
+		{ vela: 'warn', metamask: 'warn', base: 'yes' }, // adding a key later
+		{ vela: 'yes', metamask: '', base: 'yes' }, // losing one key
 		{ vela: 'warn', metamask: 'yes', base: '' }, // transaction gas
 		{ vela: 'warn', metamask: '', base: 'yes' }, // sponsored gas
-		{ vela: 'yes', metamask: 'yes', base: 'warn' }, // custom networks
-		{ vela: 'yes', metamask: '', base: 'yes' }, // losing one key
-		{ vela: 'warn', metamask: 'warn', base: 'yes' }, // adding a key later
 		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // batched transactions
 		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // decoded before signing
 		// The signing page exists but no app sends it requests yet (spec 080):
 		// an extra check you cannot use today is not a green cell.
 		{ vela: 'warn', metamask: 'yes', base: '' }, // an extra check
-		{ vela: 'yes', metamask: '', base: 'warn' }, // full self-hosting
-		{ vela: 'yes', metamask: 'warn', base: 'warn' }, // source code
 		{ vela: 'warn', metamask: 'yes', base: 'yes' } // maturity
 	] as const;
 
@@ -394,6 +394,14 @@
 					data-rybbit-prop-location="hero-code">{m.home.hero.ctaCode}</a
 				>
 			</div>
+			<!-- The path the buyer takes (founder, 2026-09-22): a quiet link, not a
+			     third button, so the choice above stays a choice between two. -->
+			<a
+				href={L('/docs/self-hosting')}
+				class="hero-selfhost"
+				data-rybbit-event="cta_click"
+				data-rybbit-prop-location="hero-selfhost">{m.home.hero.ctaSelfHost}</a
+			>
 		</div>
 
 		<!-- The wallet count, read live from the registry contract and set over a
@@ -773,6 +781,22 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 12px;
+	}
+	.hero-selfhost {
+		display: inline-block;
+		margin-top: 20px;
+		font-size: 0.95rem;
+		color: var(--text-secondary);
+		text-decoration: underline;
+		text-decoration-color: var(--border);
+		text-underline-offset: 4px;
+	}
+	.hero-selfhost::after {
+		content: ' →';
+	}
+	.hero-selfhost:hover {
+		color: var(--text);
+		text-decoration-color: currentColor;
 	}
 	.btn.btn-hero {
 		padding: 20px 44px;

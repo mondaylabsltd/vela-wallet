@@ -70,10 +70,10 @@ is listed on [create your wallet](/docs/create-wallet#what-is-public). The
 
 ## Is Vela open source?
 
-The wallet apps, the relay and the exchange-rate service are MIT-licensed on
-[GitHub](https://github.com/orgs/mondaylabsltd/repositories); the chain-data
-directory is MIT too. The public-key index is public but doesn't have a licence
-file yet. Each service can be run by you — see the
+Yes, all of it, under the MIT licence: the wallet apps and the core, the relay,
+the public-key index, the exchange-rate service and the chain-data directory, on
+[GitHub](https://github.com/orgs/mondaylabsltd/repositories). Each service can be
+run by you — see the
 [self-hosting guide](/docs/self-hosting).
 
 ## Is Vela audited?

@@ -56,8 +56,8 @@ Vela 读不到你的钥匙，自己也动不了你的资金。它的服务能看
 
 ## Vela 开源吗？
 
-钱包 App、中继和汇率服务都以 MIT 许可发布在 [GitHub](https://github.com/orgs/mondaylabsltd/repositories)
-上；链数据目录也是 MIT。公钥索引代码公开，但暂时还没有许可证文件。每一项服务你都可以自己运行——
+全部开源，都采用 MIT 许可：钱包 App 和核心、中继、公钥索引、汇率服务和链数据目录，代码都在
+[GitHub](https://github.com/orgs/mondaylabsltd/repositories) 上。每一项服务你都可以自己运行——
 见[自托管指南](/zh/docs/self-hosting)。
 
 ## Vela 经过审计吗？

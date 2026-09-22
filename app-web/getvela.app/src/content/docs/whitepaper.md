@@ -289,9 +289,8 @@ address. The website uses cookieless analytics. The
 
 ## Open source
 
-The wallet (all apps and the core), the relay and the exchange-rate service are
-MIT-licensed; the chain-data directory is MIT as well. The public-key index is
-public but does not yet carry a licence file. Code:
+Everything is MIT-licensed: the wallet (all apps and the core), the relay, the
+public-key index, the exchange-rate service and the chain-data directory. Code:
 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## No token

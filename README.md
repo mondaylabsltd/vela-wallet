@@ -209,7 +209,7 @@ The wallet uses four Vela-operated services by default. Each can be replaced in 
 | Service | Default | Repository | `/api/health` `service` |
 | --- | --- | --- | --- |
 | **Relay** (ERC-4337 bundler with in-band settlement) | `https://vela-relay-cf.getvela.app` (+ `/{chainId}`) | [mondaylabsltd/vela-relay](https://github.com/mondaylabsltd/vela-relay) (MIT) | `vela-relay` |
-| **Public-key index** (registers wallets in the on-chain registry, answers lookups) | `https://p256-index-v2.getvela.app` | [mondaylabsltd/p256-index](https://github.com/mondaylabsltd/p256-index) (no licence file yet) | `webauthn-p256-publickey-registry` |
+| **Public-key index** (registers wallets in the on-chain registry, answers lookups) | `https://p256-index-v2.getvela.app` | [mondaylabsltd/p256-index](https://github.com/mondaylabsltd/p256-index) (MIT) | `webauthn-p256-publickey-registry` |
 | **Chain data** (networks, tokens, logos, ERC-7730 descriptors) | `https://ethereum-data.getvela.app` | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data) (MIT) | `ethereum-data` |
 | **Exchange rates** (USD-based) | `https://vela-currency.getvela.app/v2/rates?base=USD` | [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency) (MIT) | checked by response shape |
 

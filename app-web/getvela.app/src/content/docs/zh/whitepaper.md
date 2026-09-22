@@ -214,8 +214,7 @@ Vela 浏览器扩展（经授权可以使用 `getvela.app` 的通行密钥）和
 
 ## 开源
 
-钱包（所有 App 和核心）、中继和汇率服务采用 MIT 许可；链数据目录同样是 MIT。公钥索引代码公开，
-但暂时还没有许可证文件。代码见 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories)。
+全部采用 MIT 许可：钱包（所有 App 和核心）、中继、公钥索引、汇率服务和链数据目录。代码见 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories)。
 
 ## 没有代币
 

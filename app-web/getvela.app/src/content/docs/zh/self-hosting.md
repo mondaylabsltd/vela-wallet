@@ -171,7 +171,7 @@ curl https://your-relay/v1/treasury/100   # 你在 Gnosis 上的金库地址，�
 
 <span id="index"></span>
 
-索引就是 [p256-index](https://github.com/mondaylabsltd/p256-index)（Rust）。创建钱包时，
+索引就是 [p256-index](https://github.com/mondaylabsltd/p256-index)（Rust，MIT 许可）。创建钱包时，
 它逐一检查每把钥匙的证明，然后把这组钥匙写进 Gnosis 上的**注册表合约**，并支付
 gas。请继续使用现有的注册表 `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`：它没有
 所有者，任何有余额的地址都能写入，而每个 Vela App 都会直接读取它。你另建的注册表，
@@ -205,8 +205,7 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 服务端监听的是普通 HTTP（默认端口 11256）；钱包只接受 `https://` 端点，所以要在前面加一个
-TLS 代理。截至本文撰写时，源码里的 Dockerfile 可能无法构建；用 Cargo 构建没有问题。这个仓库
-暂时还没有许可证文件。
+TLS 代理。截至本文撰写时，源码里的 Dockerfile 可能无法构建；用 Cargo 构建没有问题。
 
 **如果完全没有索引可用**，已有的钱包照样能用：登录时 App 会通过你的 RPC 节点直接读取
 Gnosis（然后是以太坊）上的注册表合约。只有一把钥匙的钱包，甚至可以不经过注册表，

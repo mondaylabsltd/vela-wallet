@@ -45,7 +45,7 @@ If, and only if, it earns your trust: the mobile app is there. The web version i
 
 Vela is alpha software, built in the open by a very small team. The Safe smart contracts it stands on are audited and battle-tested, securing billions. Vela's own integration around them has not undergone an independent third-party audit, and none is currently scheduled — a professional audit is a goal for when the project can fund one, not a commitment I can honestly make today.
 
-Everything is open source: the apps, the relay, the exchange-rate service and the chain data under MIT, and the public-key index in public but not yet licensed. You can read the code, build it yourself, and point the apps at your own servers — the relay included. If Vela the company disappears tomorrow, your funds sit in your Safe on-chain, controlled by your keys, and the self-hosting guide explains how to keep going without us. One limit it states plainly: your passkeys belong to getvela.app, so you keep signing through the browser extension or an app you build.
+Everything is open source under MIT: the apps, the relay, the public-key index, the exchange-rate service and the chain data. You can read the code, build it yourself, and point the apps at your own servers — the relay included. If Vela the company disappears tomorrow, your funds sit in your Safe on-chain, controlled by your keys, and the self-hosting guide explains how to keep going without us. One limit it states plainly: your passkeys belong to getvela.app, so you keep signing through the browser extension or an app you build.
 
 I would rather earn your $39.99 with that paragraph than with a security badge I have not paid for yet.
 
@@ -79,7 +79,7 @@ You pay once. You get a signing device you already carry, a business model with 
 | Safe 合约已审计;Vela 自身集成**未**审计且无排期;审计是"有钱后的目标非承诺" | whitepaper.md L230-239 |
 | 服务端只见公钥与经中继提交的交易 | privacy policy;claim ledger |
 | "If Vela disappears" 自续方案 | whitepaper.md L197 |
-| 许可证:App/中继/汇率/链数据 MIT,公钥索引暂无许可证;中继链目录可配置 | claim ledger C-lic-1、C-selfhost-2 |
+| 许可证:App/中继/公钥索引/汇率/链数据全部 MIT(p256-index#7);中继链目录可配置 | claim ledger C-lic-1、C-selfhost-2 |
 | "无限"级授权(≥2^200)须改成具体金额才能提交 | claim ledger C-approve-1 |
 | 最便宜硬件钱包 ~$50 起 | Trezor Safe 3 $59 / Nano S Plus ≈$44(pricing-analysis.md 已核实) |
 | Web 版、扩展、桌面版免费;网页版不连 dApp(扩展连) | 创始人定价决策;claim ledger C-dapp-1 |

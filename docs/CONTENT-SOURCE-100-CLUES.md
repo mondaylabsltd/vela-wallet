@@ -22,7 +22,8 @@ nnmpmpnpsp
 > - **Fees**: in-band payment to the relay = `3 × padded gas limits × max(wallet price, relay tier price)` (default tier *fast*), min ≈ $0.01. **Not** "≈2×", and no "split" shown — the confirm screen shows one amount. Say it this way: the exact fee is shown before you sign and can't change; it goes to the relay that submits the transaction (Vela's by default); you can switch to another vela-relay or run your own. Don't lead with a multiple of the on-chain cost. **There is no gas-account / activation deposit any more.**
 > - **dApps**: injected provider (extension; built-in browsers on desktop macOS/Windows, iOS, Android). **WalletPair was dropped**; there is no WalletConnect.
 > - **Self-hosting**: the passkey rpId `getvela.app` cannot be replaced; a web copy on another domain is a different wallet. Existing wallets survive via the extension or self-built apps (phone QR / security key). The relay's chain directory is `VELA_RELAY_CHAIN_DIRECTORY_URL` (vela-relay#12, September 2026). Guide: `/docs/self-hosting`.
-> - **Licences**: wallet, relay, currency, ethereum-data MIT; **p256-index has no licence file** — not "all four MIT".
+> - **Licences**: wallet, relay, p256-index (p256-index#7, 2026-09-22), currency, ethereum-data — all MIT.
+> - **Audience (founder, 2026-09-22)**: the paying customer is the technical user who self-hosts and compiles. Lead with running it yourself; don't write for newcomers.
 > - **The signing page** (`app-web/clearsigning`) is built but not published and not yet connected to any app.
 > - **Audit**: also say Vela's *own* code (apps, services, registry contract) is unaudited, none scheduled. The 4337 module has an acknowledged, unfixed Certora Medium (M-01).
 
@@ -63,7 +64,7 @@ These come straight from the codebase and override intuition. Violating them pro
 
 **10. Audit status (mandated phrasing).** Safe contracts are independently audited; **Vela's own integration has NOT had a third-party audit and none is scheduled** — "a goal for when the project can fund one, not a commitment with a date." Source: whitepaper.md, `docs/store-submission/privacy-and-review.md`. See guardrails above.
 
-**11. Fully open source and self-hostable.** App + all three backend services are **MIT-licensed and self-hostable** via Settings → Advanced → Service Endpoints. Source: whitepaper.md, [README.md](../README.md). This "self-hostable wallet" claim is uniquely defensible — competitors can't match it.
+**11. Fully open source and self-hostable.** App + all four backend services (relay, p256-index, chain data, exchange rates) are **MIT-licensed and self-hostable** via Settings → Advanced → Service Endpoints. Source: whitepaper.md, [README.md](../README.md). This "self-hostable wallet" claim is uniquely defensible — competitors can't match it.
 
 **12. Clear signing, not blind signing (ERC-7730).** Vela decodes both calldata *and* EIP-712 typed data into human-readable **Intent / Substance / Details**, color-coded by risk. Undecodable calls get an explicit blind-sign warning instead of a fake summary. Source: [src/services/clear-signing.ts](../src/services/clear-signing.ts), `docs/clear-signing.md`. **Keywords:** clear signing, no blind signing, ERC-7730, readable transactions.
 

@@ -30,6 +30,17 @@ export const sidebar: SidebarGroup[] = [
 		]
 	},
 	{
+		// The headline promises a wallet you own; this group is where that is
+		// proved step by step (spec 080). Second, right after getting started:
+		// the reader who buys Vela is the one who runs it (founder, 2026-09-22).
+		key: 'selfHost',
+		title: 'Run it yourself',
+		items: [
+			{ slug: 'self-hosting', title: 'Self-hosting guide' },
+			{ slug: 'clear-signing-self-host', title: 'Self-host the signing page' }
+		]
+	},
+	{
 		key: 'using',
 		title: 'Using Vela',
 		items: [
@@ -56,16 +67,6 @@ export const sidebar: SidebarGroup[] = [
 			{ slug: 'bybit-attack', title: 'The Bybit attack' },
 			{ slug: 'account-contract', title: 'The account contract' },
 			{ slug: 'security-audits', title: 'Audits & known issues' }
-		]
-	},
-	{
-		// The headline promises a wallet you own; this group is where that is
-		// proved step by step (spec 080).
-		key: 'selfHost',
-		title: 'Run it yourself',
-		items: [
-			{ slug: 'self-hosting', title: 'Self-hosting guide' },
-			{ slug: 'clear-signing-self-host', title: 'Self-host the signing page' }
 		]
 	},
 	{

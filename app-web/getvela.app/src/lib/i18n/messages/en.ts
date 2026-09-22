@@ -157,13 +157,13 @@ export const en = {
 		meta: {
 			title: 'Vela Wallet — An Ethereum wallet you actually own',
 			description:
-				'An open-source Ethereum wallet you can run without us. Sign with passkeys or security keys — no seed phrase. Your account is an unmodified Safe, and every service behind it is open source.',
+				'An open-source Ethereum wallet you can build and host yourself — the apps, the relay, the key index and chain data. An unmodified Safe, signed with passkeys or hardware security keys, no seed phrase.',
 			ogTitle: 'Vela Wallet — An Ethereum wallet you actually own',
 			ogDescription:
-				'Open-source Ethereum wallet on an unmodified Safe. Passkeys or security keys, no seed phrase, and open-source services you can run yourself.',
+				'Build it and run it yourself: an MIT-licensed Ethereum wallet on an unmodified Safe, with passkeys or security keys and every service open source.',
 			/** schema.org Organization description (FR-024). */
 			organization:
-				'An open-source, self-custodial Ethereum wallet built on an unmodified Safe, signed with passkeys or security keys, with no seed phrase.'
+				'An open-source, self-hostable Ethereum wallet built on an unmodified Safe, signed with passkeys or security keys, with no seed phrase.'
 		},
 
 		hero: {
@@ -189,6 +189,12 @@ export const en = {
 			subtitle: 'Signing is done on your device. Your passkey’s private key never goes to Vela.',
 			ctaCreate: 'Getting started',
 			ctaCode: 'Read the code',
+			/**
+			 * 2026-09-22 (founder): the buyer is the reader who self-hosts and
+			 * compiles, so the first screen names that path directly, under the two
+			 * buttons, as a link rather than a third button.
+			 */
+			ctaSelfHost: 'Or self-host the whole stack',
 			/**
 			 * Four hooks. Written for a reader who can check them, because that is
 			 * who lands here — and each one links to a page that exists to prove
@@ -291,7 +297,7 @@ export const en = {
 			heading: 'Why we built it',
 			p1: 'We used <a href="https://docs.cdp.coinbase.com/coinbase-wallet/overview" target="_blank" rel="noopener">Base Account</a> (now part of Coinbase Wallet) every day and liked it. Then we hit the walls: a recovery phrase created on a website you just have to trust, no custom networks, nothing you can host yourself, and a signing service whose code isn’t public — if it goes away, there is no published way for your passkey to reach your account.',
 			p2: 'Vela is the version we were willing to keep money in. We kept passkey signing, but made sure the wallet doesn’t depend on us.',
-			more: 'The long version — where are you supposed to keep twelve words?'
+			more: 'The long version — what we couldn’t accept in other wallets, and the trade-off we chose'
 		},
 
 		/**
@@ -341,6 +347,10 @@ export const en = {
 			 * The rows carry the comparison. If one of them is unclear, the fix is
 			 * that row — not a paragraph around it, which would also mean fifteen
 			 * translations to keep true as rows change.
+			 *
+			 * 2026-09-22 (founder): ordered for the reader who self-hosts —
+			 * self-hosting, source and custom networks first, after what the
+			 * account is.
 			 */
 			rows: [
 				{
@@ -350,10 +360,40 @@ export const en = {
 					base: 'Coinbase smart account'
 				},
 				{
+					feature: 'Full self-hosting',
+					vela: 'Apps and backend services, with gaps the self-hosting guide lists; passkeys stay tied to getvela.app',
+					metamask: 'Client and RPC are yours to choose or run',
+					base: 'Not available'
+				},
+				{
+					feature: 'Source code',
+					vela: '<a href="https://github.com/orgs/mondaylabsltd/repositories" target="_blank" rel="noopener">Apps and services public</a>, all MIT',
+					metamask: 'Public, under a licence that allows non-commercial use only',
+					base: 'Contracts and SDK open; the signing service is not'
+				},
+				{
+					feature: 'Custom networks',
+					vela: "Any EVM network that meets Vela's requirements; you can deploy most missing contracts yourself",
+					metamask: 'Custom EVM networks and RPCs',
+					base: 'A fixed list of networks'
+				},
+				{
 					feature: 'Signing key',
 					vela: 'Passkeys or security keys, up to seven',
 					metamask: 'The private key behind a seed phrase; hardware wallets supported',
 					base: 'Passkey or recovery phrase'
+				},
+				{
+					feature: 'Adding a key later',
+					vela: 'Not possible — keys are fixed at creation',
+					metamask: 'Not possible — one key per account',
+					base: 'Supported'
+				},
+				{
+					feature: 'Losing one key',
+					vela: 'Sign with another key you added or synced',
+					metamask: 'Restore from the seed phrase',
+					base: 'Sign with another key you added or synced'
 				},
 				{
 					feature: 'Transaction gas',
@@ -366,24 +406,6 @@ export const en = {
 					vela: 'Not offered',
 					metamask: 'On some networks',
 					base: 'Where the app sponsors it'
-				},
-				{
-					feature: 'Custom networks',
-					vela: "Any EVM network that meets Vela's requirements; you can deploy most missing contracts yourself",
-					metamask: 'Custom EVM networks and RPCs',
-					base: 'A fixed list of networks'
-				},
-				{
-					feature: 'Losing one key',
-					vela: 'Sign with another key you added or synced',
-					metamask: 'Restore from the seed phrase',
-					base: 'Sign with another key you added or synced'
-				},
-				{
-					feature: 'Adding a key later',
-					vela: 'Not possible — keys are fixed at creation',
-					metamask: 'Not possible — one key per account',
-					base: 'Supported'
 				},
 				{
 					feature: 'Batched transactions',
@@ -402,18 +424,6 @@ export const en = {
 					vela: 'An independent signing page, built but not yet connected to the apps',
 					metamask: 'Third-party risk alerts',
 					base: '\u2014'
-				},
-				{
-					feature: 'Full self-hosting',
-					vela: 'Apps and backend services, with gaps the self-hosting guide lists; passkeys stay tied to getvela.app',
-					metamask: 'Client and RPC are yours to choose or run',
-					base: 'Not available'
-				},
-				{
-					feature: 'Source code',
-					vela: '<a href="https://github.com/orgs/mondaylabsltd/repositories" target="_blank" rel="noopener">Apps and services public</a>; MIT except the index, whose licence is pending',
-					metamask: 'Public, under a licence that allows non-commercial use only',
-					base: 'Contracts and SDK open; the signing service is not'
 				},
 				{
 					feature: 'Maturity',
@@ -464,58 +474,49 @@ export const en = {
 
 		faq: {
 			/**
-			 * Seven questions, down from eleven on 2026-09-16, and reordered so the
-			 * section answers what is LEFT rather than repeating the page above it.
-			 * Four went because the page had already answered them: seed phrase /
-			 * extension / hardware wallet (the hero), which chains and tokens (the
-			 * networks section), what it costs (the first trade-off plus the pricing
-			 * cards), whether the code is audited (the third trade-off). A fifth —
-			 * "can I add a second key?" — dissolved into 1, 3 and 5, which is where a
-			 * reader actually needs the rule that the key set is fixed at creation.
-			 *
-			 * The order widens by scope: what I have to do (1), what I can do with it
-			 * (2), the three ways it goes wrong — the device (3), my own hand (4), the
-			 * platform account behind it (5) — and then the two questions about us:
-			 * the company that could misbehave (6), and the company that could
-			 * disappear (7).
+			 * Seven questions, reordered on 2026-09-22 for the reader who buys Vela:
+			 * the one who self-hosts and compiles (founder). What they ask first is
+			 * whether they can run it all (1), what survives without us (2), and
+			 * whether they can run their own relay (3); then keys (4), losing one
+			 * (5), dApps (6) and what Vela itself can do (7). The old "what do I
+			 * need", "lost phone", "deleted passkey" and "account compromised"
+			 * answers are folded into 4 and 5 with every rule they carried: keys
+			 * fixed at creation, a single unsynced key needs a second, a synced
+			 * passkey comes back, keys can't be removed.
 			 *
 			 * Two paragraphs per answer, blank-line separated as in `tradeoffs`, and
-			 * no links: each of these is a complete answer, not a doorway. Two stale
-			 * claims died with the old list — the dApp answer sent people to
-			 * WalletPair, which the wallet no longer supports at all, and the shutdown answer
-			 * pointed at a "recovery extension" deleted in spec 039. What replaces
-			 * them is what ships: the provider the apps and the extension inject, and
-			 * `app-web/clearsigning`, whose relying party is still getvela.app.
+			 * no links: each is a complete answer; the hero and facts link to the
+			 * guides.
 			 */
 			heading: 'FAQ',
 			items: [
 				{
-					q: 'What do I need to create a wallet?',
-					a: 'A phone or computer that supports passkeys, or hardware security keys \u2014 two, if you use only security keys. No seed phrase, email or starting balance.\n\nChoose all your keys, up to seven, when you create the wallet. You can\u2019t add more later.'
+					q: 'Can I run all of it myself?',
+					a: 'Yes, except the domain your passkeys belong to. The apps and every service behind them — the relay, the public-key index, chain data and exchange rates — are MIT-licensed and run on Docker or Cloudflare Workers, and the apps have settings to point at your own. The self-hosting guide walks through each one, including the gaps some apps still have.\n\nThe passkeys are bound to getvela.app, so a copy of the web wallet on your own domain is a different wallet. The browser extension and apps you build yourself still sign for your existing one.'
+				},
+				{
+					q: 'What if Vela shuts down or getvela.app goes offline?',
+					a: 'Your funds stay in your Safe on-chain. Every service Vela runs is open source, and you can run each one yourself \u2014 the relay, the public-key index, chain data and exchange rates.\n\nIf getvela.app goes offline, the Vela browser extension still signs with your existing keys \u2014 this device\u2019s passkey, a security key, or a phone by QR code \u2014 and so do apps you build yourself, with a phone or a security key.'
+				},
+				{
+					q: 'Can I run my own relay?',
+					a: 'Yes: vela-relay, in Rust, on Docker or Cloudflare Workers. Fund its treasury with each chain’s coin and put its address in the wallet. The fee you sign then goes to your own treasury, so across your wallet and your relay you pay roughly the real gas.\n\nIt has to be vela-relay: the wallet asks for its fee quote with a method generic ERC-4337 bundlers don’t implement.'
+				},
+				{
+					q: 'Which keys can I use?',
+					a: 'Passkeys — synced by iCloud Keychain, Google Password Manager or another password manager — another phone by QR code, and FIDO2 hardware security keys: one to seven, chosen when you create the wallet and fixed after that. Any one of them can sign (1-of-n). A single key that isn’t synced, such as one security key, needs a second.\n\nNo seed phrase, email or starting balance.'
+				},
+				{
+					q: 'What if I lose a key, or my Apple or Google account is compromised?',
+					a: 'A synced passkey comes back on your new device. An unsynced key that is lost is gone, so you sign with another key you added; if it was your only key, the wallet is lost.\n\nIf an account that syncs one of your passkeys is compromised, whoever controls it may be able to spend from your wallet — and keys can’t be removed. Move your funds to a new wallet made with keys that don’t depend on that account. Hardware security keys avoid that dependency from the start.'
 				},
 				{
 					q: 'Can I use Vela with dApps?',
 					a: 'Yes. dApps see Vela the way they see any browser wallet.\n\nThat works in the Vela browser extension and in the browser built into the desktop (macOS, Windows), iPhone and Android apps. The web wallet doesn\u2019t connect to dApps.'
 				},
 				{
-					q: 'What if I lose my phone?',
-					a: 'If your passkey is synced with iCloud Keychain or Google Password Manager, you can recover it on a new device and keep using the same wallet.\n\nIf it was not synced, you will need another key you added when creating the wallet.'
-				},
-				{
-					q: 'What if I delete my passkey?',
-					a: 'That key is permanently lost. If it was your only key, you will lose access to the wallet.'
-				},
-				{
-					q: 'What if my Apple or Google account is compromised?',
-					a: 'Whoever controls that account may be able to use a passkey synced through it and spend from your wallet — and a key can’t be removed. Move your funds to a new wallet made with keys that don’t depend on that account.\n\nTo avoid depending on Apple or Google from the start, create your wallet with hardware security keys.'
-				},
-				{
 					q: 'What can Vela do to my money, and what does it know about me?',
 					a: 'Vela holds no key and no role on your wallet, so it can\u2019t move or freeze your funds by itself. It does write the software that asks your keys to sign.\n\nThere\u2019s no email or account. Your public keys, the kind of authenticator behind each, your key labels, wallet name and address are public on-chain; Vela\u2019s services see your IP address and the transactions you send through them. Token issuers can still blocklist addresses.'
-				},
-				{
-					q: 'What if Vela shuts down or getvela.app goes offline?',
-					a: 'Your funds stay in your Safe on-chain. Every service Vela runs is open source, and you can run each one yourself \u2014 the relay, the public-key index, chain data and exchange rates.\n\nIf getvela.app goes offline, the Vela browser extension still signs with your existing keys \u2014 this device\u2019s passkey, a security key, or a phone by QR code \u2014 and so do apps you build yourself, with a phone or a security key.'
 				}
 			]
 		}
@@ -646,7 +647,7 @@ export const en = {
 				'Vela runs in your browser today, with a browser extension and desktop apps you can download now, and phone apps on the way. Pick the one you want.'
 		},
 		heading: 'Get Vela',
-		lede: 'One wallet and one address, wherever you open it. Start in your browser — nothing to install — or take the same wallet to your browser toolbar or your desktop, and soon your phone.',
+		lede: 'One wallet and one address, wherever you open it. Start in your browser — nothing to install — or take the same wallet to your browser toolbar or your desktop, and soon your phone. Every app also builds from source.',
 		recommended: 'Recommended',
 		availableNow: 'Available now',
 		comingSoon: 'Coming soon',

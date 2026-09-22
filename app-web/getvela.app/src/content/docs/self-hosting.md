@@ -192,7 +192,7 @@ Then put `https://your-relay` in the **Vela relay** field.
 
 <span id="index"></span>
 
-The index is [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust).
+The index is [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust, MIT).
 When a wallet is created, it checks every key's proof, then writes the group to
 the **registry contract** on Gnosis and pays the gas. Keep using the existing
 registry at `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`: it has no owner, any
@@ -231,8 +231,7 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 
 The server listens on plain HTTP (port 11256 by default); put a TLS proxy in
 front of it, since the wallet only accepts `https://` endpoints. The source
-Dockerfile may not build as of this writing; building with Cargo does. The
-repository has no licence file yet.
+Dockerfile may not build as of this writing; building with Cargo does.
 
 **If no index answers at all**, existing wallets still work: on sign-in the app
 reads the registry contract on Gnosis (then Ethereum) through your RPC nodes. A
