@@ -354,8 +354,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   device or another — the pairing sheet, its waiting line, the six-digit
 //   code and its confirmation, copy link, the relay unreachable) and +6
 //   `settings.signing.relay*` (the Settings row, as the page row). No new branch.
-if (PATHS.length !== 1733) fail(`expected 1733 paths (1644 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1644) fail(`expected 1644 leaf paths, got ${leafSet.size}`);
+// 1738 (spec 075, 2026-09-22): the Bluetooth route. +5
+//   `componentsUi.signing.clearSigner*` leaves — the third row in "where is
+//   your Clear Signer", what it means (and that the app must stay open), the
+//   NAME to look for in the browser's device list, and the two ways Bluetooth
+//   can be unavailable (permission refused, radio off). The peripherals
+//   shipped borrowing the dApp flow's "Bluetooth permission is needed", which
+//   never said which device to pick. No new branch.
+if (PATHS.length !== 1738) fail(`expected 1738 paths (1649 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1649) fail(`expected 1649 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
