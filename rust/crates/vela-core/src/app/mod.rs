@@ -61,6 +61,7 @@ pub mod network_admin;
 pub mod payment_request;
 pub mod receive_watch;
 pub mod rpc_pool;
+pub mod self_call_guard;
 pub mod send;
 pub mod session;
 pub mod shell;
