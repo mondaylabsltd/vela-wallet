@@ -284,7 +284,10 @@ class OkHttpTransport : RpcTransport {
         val request = Request.Builder()
             .url(url)
             .post(body)
-            .apply { if (xRpcUrl != null) header("X-Rpc-Url", xRpcUrl) }
+            // Spec 081 FR-007: the relay is never told which RPC endpoint this
+            // wallet prefers — that URL can carry a provider API key, and the
+            // relay reads `x-vela-rpc-url`, never this header.
+            .apply { @Suppress("UNUSED_EXPRESSION") xRpcUrl }
             .build()
 
         val call = VelaHttp.client.newBuilder()

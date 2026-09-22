@@ -413,7 +413,9 @@ async function requestSponsorship(
 			// header collapses the same (chain, safe, amount) request into one transfer.
 			'Idempotency-Key': `sponsor:${chainId}:${safeAddress.toLowerCase()}:0x${requiredWei.toString(16)}`
 		};
-		if (chainRpc) headers['X-Rpc-Url'] = chainRpc;
+		// Spec 081 FR-007: the wallet no longer names its preferred RPC endpoint to
+		// the relay. That URL can carry a provider API key, and the relay read a
+		// different header (`x-vela-rpc-url`) anyway, so nothing depended on it.
 
 		const res = await fetchWithTimeout(
 			url,
@@ -477,10 +479,11 @@ export async function fetchBundlerAccountInfo(
 		const baseUrl = await getActiveBundlerBaseUrl(chainId);
 		const url = `${baseUrl}/v1/account/${chainId}/${safeAddress.toLowerCase()}`;
 
-		// Pass chain RPC URL so the bundler can reach non-registry chains (e.g. 31337)
-		const chainRpc = await getChainRpcUrl(chainId);
+		// Spec 081 FR-007: the relay is not told which RPC endpoint this wallet
+		// prefers — that URL can carry a provider API key. (The claim this
+		// replaced, "so the bundler can reach non-registry chains", was already
+		// false: the relay reads `x-vela-rpc-url`, never this header.)
 		const headers: Record<string, string> = { Accept: 'application/json' };
-		if (chainRpc) headers['X-Rpc-Url'] = chainRpc;
 
 		const res = await fetchWithTimeout(url, { headers }, { timeoutMs: NET_TIMEOUTS.bundlerRest });
 		if (!res.ok) return null;

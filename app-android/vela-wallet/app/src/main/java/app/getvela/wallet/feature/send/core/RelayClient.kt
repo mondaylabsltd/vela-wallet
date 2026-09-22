@@ -532,7 +532,8 @@ class PoolRelayPort(
 
     override suspend fun restGet(url: String, xRpcUrl: String?): RestAnswer = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).get().header("accept", "application/json")
-            .apply { if (!xRpcUrl.isNullOrBlank()) header("X-Rpc-Url", xRpcUrl) }
+            // Spec 081 FR-007: see RpcPoolExecutor — the endpoint stays local.
+            .apply { @Suppress("UNUSED_EXPRESSION") xRpcUrl }
             .build()
         runCatching {
             http.newCall(request).execute().use { response ->
