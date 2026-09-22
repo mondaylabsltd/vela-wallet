@@ -855,15 +855,18 @@ window.VelaCS = window.VelaCS || {};
     return schemeOf(ctx.requester) === 'https:' && (host === 'getvela.app' || /\.getvela\.app$/.test(host));
   }
 
+  // Anything that could be the bytes to sign, anywhere the requester controls:
+  // the context, a second parameter, a non-object first one, or a field of it.
   function suppliedChallenge(intent, ctx) {
-    var params = intent.params || [];
+    if (ctx.challenge !== undefined || ctx.digest !== undefined) return true;
+    var params = Array.isArray(intent.params) ? intent.params : [];
     if (params.length > 1) return true;
     var first = params[0];
     if (first === undefined || first === null) return false;
     if (typeof first !== 'object' || Array.isArray(first)) return true;
     return ['challenge', 'digest', 'hash', 'message'].some(function (name) {
       return Object.prototype.hasOwnProperty.call(first, name);
-    }) || ctx.challenge !== undefined || ctx.digest !== undefined;
+    });
   }
 
   // A name a person gave their wallet: shown, because it is how they recognise
@@ -903,12 +906,12 @@ window.VelaCS = window.VelaCS || {};
   }
 
   function resolveCeremony(kind, intent, ctx, view) {
-    var p = (intent.params && intent.params[0]) || {};
+    var p = (Array.isArray(intent.params) && intent.params[0]) || {};
     if (typeof p !== 'object' || Array.isArray(p)) p = {};
     var wallet = displayName(ctx.walletName);
     var rpId = ctx.rpId || null;
     var fromWallet = walletRequester(ctx);
-    var bad = false;
+    var bad = intent.params !== undefined && !Array.isArray(intent.params);
 
     view.kind = 'ceremony';
     view.intentKey = 'intent.' + kind;

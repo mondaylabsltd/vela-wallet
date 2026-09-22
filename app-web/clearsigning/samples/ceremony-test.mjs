@@ -374,6 +374,26 @@ try {
     await page.ev('window.__slider.__confirm()', true);
     check('relay: and requests go through again', (await back).t === 'result');
 
+    // It drops out again, this time with a card on screen: that card can no
+    // longer be answered, and the next one after its return must still come.
+    await page.waitFor("window.__velaState.phase === 'waiting'");
+    wallet.send({ t: 'intent', id: 'rv3', intent: { method: 'vela_proof', params: [{ credentialId, purpose: 'verify' }], origin: '' }, context: {} });
+    await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.kind === 'proof'");
+    wallet.leave();
+    check('relay: a card whose wallet dropped out gives way to "waiting for it to come back", unconfirmable',
+      await page.waitFor("window.__velaState.phase === 'waiting' && !window.__slider && !document.querySelector('.slide')", 8000) &&
+      /dropped out/.test(await page.text()));
+    await sleep(200);
+    await wallet.connect();
+    await Promise.race([wallet.codeReady, sleep(10000)]);
+    const later = wallet.request('rv4', { method: 'vela_proof', params: [{ credentialId, purpose: 'verify' }], origin: '' }, {});
+    const shownAgain = await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.received === 5");
+    if (shownAgain) await page.ev('window.__slider.__confirm()', true);
+    const laterAnswer = shownAgain ? await later : null;
+    check('relay: after it returns, its next request is shown and answered (the lost one never is)',
+      !!laterAnswer && laterAnswer.id === 'rv4' && laterAnswer.t === 'result' &&
+      !wallet.received.some((m) => m.id === 'rv3'));
+
     await page.waitFor("window.__velaState.phase === 'waiting'");
     await wallet.send({ t: 'bye', reason: 'done' });
     check('relay: bye ends the session', await page.waitFor("window.__velaState.phase === 'ended' && window.__velaState.endReason === 'bye'"));

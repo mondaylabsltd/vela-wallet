@@ -22,6 +22,7 @@
   var session = null;
   var current = null;      // the request on screen, until answered
   var waitingState = null; // what the waiting card says between requests
+  var lastGone = false;    // the request on screen lost its wallet
 
   ns.i18n.setLocale(ns.i18n.detect(new URLSearchParams(location.search).get('lang')));
 
@@ -321,6 +322,7 @@
 
   function show(request) {
     current = request;
+    lastGone = false;
     window.__refused = false;
     window.__slider = null;
     state.received = session.received;
@@ -369,7 +371,12 @@
       slot.firstChild.classList.add('sheet-ended');
       return;
     }
-    // bye, or the channel closed. A refusal on screen keeps its reasons.
+    // bye, or the channel closed. A card whose wallet went away, or a
+    // refusal, keeps its reasons on screen.
+    if (lastGone) {
+      say('ui.walletGone');
+      return;
+    }
     if (window.__refused) {
       say('ui.sessionOver');
       return;
@@ -422,11 +429,15 @@
       onGone: function (request) {
         if (request !== current) return;
         current = null;
+        lastGone = true;
         var slider = slot.querySelector('.slide');
         if (slider) slider.classList.add('slide-off');
         window.__slider = null;
         say(session && session.channel === 'relay' && !session.ended ? 'ui.relayLeft' : 'ui.walletGone');
         phase('gone');
+        // The session may carry on (a relay wallet coming back); listen again.
+        // `lose()` runs before a session is marked ended, so wait a tick.
+        setTimeout(loop, 0);
       },
     })
     .then(function (opened) {
