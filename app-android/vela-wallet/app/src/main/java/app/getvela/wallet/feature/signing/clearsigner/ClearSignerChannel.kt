@@ -240,7 +240,16 @@ class ClearSignerChannel(
     private suspend fun put(ask: ClearSignerAsk, signerOrigin: String): ClearSignerAnswer =
         one.withLock {
             notice.value = null
-            val live = wire ?: open(signerOrigin) ?: return@withLock ClearSignerAnswer.Cancelled
+            val existing = wire
+            val live = existing ?: open(signerOrigin) ?: return@withLock ClearSignerAnswer.Cancelled
+            // A later request of the same flow raises no sheet of its own, so
+            // say here that the wallet is waiting again. The loopback names the
+            // page (its sheet offers "open it again"); a paired device does not
+            // — that screen is not ours to reopen.
+            if (existing != null) {
+                _state.value = (live as? ClearSignerLoopback)
+                    ?.let { State.Waiting(it.url) } ?: State.Paired
+            }
             val answer = live.ask(ask)
             if (answer !is ClearSignerAnswer.Signed && answer !is ClearSignerAnswer.Ceremonial) {
                 // A flow that did not answer has no session left to reuse.

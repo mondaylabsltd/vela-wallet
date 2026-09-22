@@ -79,13 +79,16 @@ class ClearSignerLoopback(
         if (over) return ClearSignerAnswer.Cancelled
         val done = CompletableDeferred<ClearSignerAnswer>()
         pending = done
+        // Every request of the flow is a request the person is being waited on
+        // for — including the second and third, which open no page but still
+        // need the way back to one they may have dismissed.
+        onOpened(url)
         val live = held
         if (live == null) {
             // The first request: listen, then send the person to the page.
             if (!opened) {
                 opened = true
                 scope.launch { accept(ask) }
-                onOpened(url)
                 if (!openPage(url)) {
                     end()
                     return ClearSignerAnswer.Cancelled
