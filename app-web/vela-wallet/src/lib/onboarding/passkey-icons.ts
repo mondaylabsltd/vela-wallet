@@ -9,6 +9,8 @@
  * mark, and a single colour would lose the slots.
  */
 
+import type { KeyMethod } from './generated/KeyMethod';
+
 export type PasskeyIconId = 'apple' | 'windows' | 'google' | 'chrome-mac' | 'fido2' | 'usb';
 
 export type PasskeyIconRole = 'ink' | 'muted' | 'paper';
@@ -165,7 +167,7 @@ export const PASSKEY_ICONS: Record<PasskeyIconId, PasskeyIcon> = {
  * mark from the founder's set.
  */
 export type MethodGlyph =
-	| { kind: 'lucide'; name: 'laptop' | 'smartphone' | 'scan-line' }
+	| { kind: 'lucide'; name: 'laptop' | 'smartphone' | 'scan-line' | 'eye' }
 	| { kind: 'mark'; id: PasskeyIconId };
 
 /** A coarse pointer (a finger) or a mobile UA means the device is a phone. */
@@ -176,11 +178,11 @@ export function isHandheld(
 	return coarse || /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
 }
 
-export function methodGlyph(
-	method: 'platform' | 'hybrid' | 'security_key',
-	handheld: boolean = isHandheld()
-): MethodGlyph {
+export function methodGlyph(method: KeyMethod, handheld: boolean = isHandheld()): MethodGlyph {
 	switch (method) {
+		// Spec 075: a page that shows what is signed — what you see is what you sign.
+		case 'clear_signer':
+			return { kind: 'lucide', name: 'eye' };
 		case 'platform':
 			return { kind: 'lucide', name: handheld ? 'smartphone' : 'laptop' };
 		case 'hybrid':
@@ -200,9 +202,6 @@ export function methodGlyph(
  * kept the scanner would be showing the person an action they already took, and
  * a row that kept the old fob was calling that phone a piece of hardware.
  */
-export function keyKindGlyph(
-	kind: 'platform' | 'hybrid' | 'security_key',
-	handheld: boolean = isHandheld()
-): MethodGlyph {
+export function keyKindGlyph(kind: KeyMethod, handheld: boolean = isHandheld()): MethodGlyph {
 	return kind === 'hybrid' ? { kind: 'lucide', name: 'smartphone' } : methodGlyph(kind, handheld);
 }

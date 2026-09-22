@@ -124,15 +124,17 @@ fn keys_of(keys_json: &str) -> Result<Vec<WalletKey>, JsValue> {
         .collect())
 }
 
-fn verdict(result: Result<Value, ClearSignerError>, digest: &[u8], keys: &[WalletKey]) -> Value {
-    let refused = |error: ClearSignerError| {
-        let detail = match &error {
-            ClearSignerError::Refused(code) => code.clone(),
-            ClearSignerError::Malformed(detail) => detail.clone(),
-            _ => String::new(),
-        };
-        json!({ "refused": { "code": error.code(), "detail": detail } })
+/// `{refused: {code, detail}}` — every channel's refusal, one shape.
+fn refused(error: ClearSignerError) -> Value {
+    let detail = match &error {
+        ClearSignerError::Refused(code) => code.clone(),
+        ClearSignerError::Malformed(detail) => detail.clone(),
+        _ => String::new(),
     };
+    json!({ "refused": { "code": error.code(), "detail": detail } })
+}
+
+fn verdict(result: Result<Value, ClearSignerError>, digest: &[u8], keys: &[WalletKey]) -> Value {
     match result.and_then(|result| clear_signer::verify(&result, digest, keys)) {
         Ok(verified) => json!({
             "accepted": {
@@ -209,3 +211,104 @@ impl ClearSignerWs {
             .unwrap_or_default()
     }
 }
+
+// ---------------------------------------------------------------------------
+// Spec 075: the Clear Signer as a passkey route, and across devices
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(js_class = ClearSignerWs)]
+impl ClearSignerWs {
+    /// The session's next request once the last one is answered (a test
+    /// harness drives the page with it; the web wallet itself cannot listen).
+    pub fn send(&mut self, id: &str, request_json: &str) -> Result<String, JsValue> {
+        let request: Value =
+            serde_json::from_str(request_json).map_err(|e| internal(format!("request: {e}")))?;
+        let step = self.inner.send(id, &request);
+        Ok(json!({ "write": step.write, "close": step.close }).to_string())
+    }
+
+    /// `bye`, then close.
+    pub fn end(&mut self) -> String {
+        let step = self.inner.end();
+        json!({ "write": step.write, "close": step.close }).to_string()
+    }
+}
+
+/// The page request for a machine operation's wire JSON with
+/// `method = clear_signer`, or `undefined` for anything else.
+#[wasm_bindgen(js_name = clearSignerCeremonyRequest)]
+pub fn clear_signer_ceremony_request(
+    operation_json: &str,
+    id: &str,
+    wallet_name: &str,
+    registry: &str,
+) -> Option<String> {
+    let ceremony = clear_signer::ceremony::Ceremony::from_json(operation_json)?;
+    Some(clear_signer::ceremony::request(&ceremony, id, wallet_name, registry).to_string())
+}
+
+/// A ceremony's answer judged: `{registration}` / `{assertion}` (the
+/// machine's own wire shapes, ready for `passkey_registered` /
+/// `passkey_authenticated` / `proof_signed`) or `{refused: {code, detail}}`.
+/// `expected_member_challenge` is the registry challenge the wallet fetched
+/// itself, for a member proof.
+#[wasm_bindgen(js_name = clearSignerVerifyCeremony)]
+pub fn clear_signer_verify_ceremony(
+    operation_json: &str,
+    answer_json: &str,
+    signer_origin: &str,
+    expected_member_challenge: Option<Vec<u8>>,
+) -> String {
+    use clear_signer::ceremony::{verify, Answer, Ceremony};
+    let judged = Ceremony::from_json(operation_json)
+        .ok_or_else(|| ClearSignerError::Malformed("not a Clear Signer ceremony".into()))
+        .and_then(|ceremony| {
+            let answer: Value = serde_json::from_str(answer_json)
+                .map_err(|e| ClearSignerError::Malformed(format!("answer: {e}")))?;
+            verify(
+                &ceremony,
+                &answer,
+                signer_origin,
+                expected_member_challenge.as_deref(),
+            )
+        });
+    match judged {
+        Ok(Answer::Registration(registration)) => json!({ "registration": registration }),
+        Ok(Answer::Assertion(assertion)) => json!({ "assertion": assertion }),
+        Err(error) => refused(error),
+    }
+    .to_string()
+}
+
+#[wasm_bindgen(js_name = clearSignerDefaultRelay)]
+pub fn clear_signer_default_relay() -> String {
+    clear_signer::DEFAULT_RELAY_URL.to_owned()
+}
+
+/// A relay address, normalised, or `undefined` when it cannot be used.
+#[wasm_bindgen(js_name = clearSignerRelayUrl)]
+pub fn clear_signer_relay_url(input: &str) -> Option<String> {
+    clear_signer::relay_url(input).ok()
+}
+
+/// A room id from 16 random bytes.
+#[wasm_bindgen(js_name = clearSignerRelayRoom)]
+pub fn clear_signer_relay_room(random: &[u8]) -> Option<String> {
+    let bytes: [u8; 16] = random.try_into().ok()?;
+    Some(clear_signer::relay_room(&bytes))
+}
+
+#[wasm_bindgen(js_name = clearSignerRelayRoomUrl)]
+pub fn clear_signer_relay_room_url(relay: &str, room: &str) -> String {
+    clear_signer::relay_room_url(relay, room, "requester")
+}
+
+#[wasm_bindgen(js_name = clearSignerRelayLink)]
+pub fn clear_signer_relay_link(signer_url: &str, relay: &str, room: &str, rk: &str) -> String {
+    clear_signer::relay_link(signer_url, relay, room, rk)
+}
+
+// The relay's end-to-end session is NOT exported here: the web wallet runs
+// it with the browser's own WebCrypto (ECDH, HKDF, AES-GCM), as the signer
+// page does, pinned by `vela-core/tests/clear-signer/secure-session.json`.
+// Linking the Rust session added ~120 KB to a module at its size ceiling.

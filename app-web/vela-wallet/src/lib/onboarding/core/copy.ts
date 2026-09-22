@@ -111,6 +111,11 @@ export function methodCopy(method: KeyMethod): { title: string; body: string } {
 				title: 'onboarding.create.methodSecurityKeyTitle',
 				body: 'onboarding.create.methodSecurityKeyBody'
 			};
+		case 'clear_signer':
+			return {
+				title: 'componentsUi.signing.clearSignerTitle',
+				body: 'componentsUi.signing.clearSignerBody'
+			};
 		default:
 			return unreachable(method);
 	}
@@ -143,6 +148,8 @@ export function providerLineFor(kind: KeyMethod): string {
 			return 'onboarding.create.methodHybridTitle';
 		case 'security_key':
 			return 'onboarding.create.providerSecurityKey';
+		case 'clear_signer':
+			return 'componentsUi.signing.clearSignerTitle';
 		default:
 			return unreachable(kind);
 	}

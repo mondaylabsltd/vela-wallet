@@ -181,8 +181,23 @@ pub fn clear_signer_ws_launch(base: String, port: u16, token: String) -> String 
 #[derive(uniffi::Object)]
 pub struct ClearSignerConnection {
     inner: Mutex<clear_signer::ws::Connection>,
-    digest: Vec<u8>,
-    keys: Vec<WalletKeyRecord>,
+    /// What the current request's answer is judged against (spec 075: a
+    /// session carries several requests, each with its own judge).
+    judge: Mutex<Judge>,
+    signer_origin: String,
+}
+
+enum Judge {
+    /// A signature over this digest by one of these keys (spec 071).
+    Digest {
+        digest: Vec<u8>,
+        keys: Vec<WalletKeyRecord>,
+    },
+    /// A passkey ceremony for this machine operation (spec 075).
+    Ceremony {
+        operation_json: String,
+        expected_member_challenge: Option<Vec<u8>>,
+    },
 }
 
 /// What to do after bytes arrived.
@@ -190,7 +205,10 @@ pub struct ClearSignerConnection {
 pub struct ClearSignerStep {
     pub write: Vec<u8>,
     pub close: bool,
+    /// A signing request's verdict (spec 071).
     pub outcome: Option<ClearSignerOutcome>,
+    /// Spec 075: a ceremony's verdict — `None` for a signing request.
+    pub ceremony: Option<ClearSignerCeremonyOutcome>,
 }
 
 #[uniffi::export]
@@ -216,23 +234,121 @@ impl ClearSignerConnection {
                 &id,
                 &request,
             )),
-            digest,
-            keys,
+            judge: Mutex::new(Judge::Digest { digest, keys }),
+            signer_origin: clear_signer::ws::origin_of(&signer_url),
+        }))
+    }
+
+    /// Spec 075: a session that opens with a passkey ceremony
+    /// (`clear_signer_ceremony_request`'s request for `operation_json`).
+    /// `expected_member_challenge` is the registry's challenge the wallet
+    /// fetched itself, for a member proof.
+    #[uniffi::constructor]
+    pub fn new_ceremony(
+        signer_url: String,
+        token: String,
+        id: String,
+        request_json: String,
+        operation_json: String,
+        expected_member_challenge: Option<Vec<u8>>,
+    ) -> Result<Arc<Self>, CoreError> {
+        let request = serde_json::from_str(&request_json)
+            .map_err(|e| CoreError::Internal(format!("request_json: {e}")))?;
+        Ok(Arc::new(Self {
+            inner: Mutex::new(clear_signer::ws::Connection::new(
+                &signer_url,
+                &token,
+                &id,
+                &request,
+            )),
+            judge: Mutex::new(Judge::Ceremony {
+                operation_json,
+                expected_member_challenge,
+            }),
+            signer_origin: clear_signer::ws::origin_of(&signer_url),
         }))
     }
 
     pub fn feed(&self, bytes: Vec<u8>) -> ClearSignerStep {
         let step = lock(&self.inner).feed(&bytes);
-        ClearSignerStep {
+        let mut out = ClearSignerStep {
             write: step.write,
             close: step.close,
-            outcome: step.outcome.map(|outcome| match outcome {
-                Ok(result) => judge(&result, &self.digest, &self.keys),
-                Err(error) => ClearSignerOutcome::Refused {
-                    refusal: error.into(),
-                },
-            }),
+            outcome: None,
+            ceremony: None,
+        };
+        if let Some(outcome) = step.outcome {
+            match &*lock(&self.judge) {
+                Judge::Digest { digest, keys } => {
+                    out.outcome = Some(match outcome {
+                        Ok(result) => judge(&result, digest, keys),
+                        Err(error) => ClearSignerOutcome::Refused {
+                            refusal: error.into(),
+                        },
+                    });
+                }
+                Judge::Ceremony {
+                    operation_json,
+                    expected_member_challenge,
+                } => {
+                    out.ceremony = Some(match outcome {
+                        Ok(answer) => ceremony_verdict(
+                            operation_json,
+                            &answer,
+                            &self.signer_origin,
+                            expected_member_challenge.as_deref(),
+                        ),
+                        Err(error) => ClearSignerCeremonyOutcome::Refused {
+                            refusal: error.into(),
+                        },
+                    });
+                }
+            }
         }
+        out
+    }
+
+    /// Spec 075: the session's next request, a signature — once the last one
+    /// has its answer (an empty step otherwise).
+    pub fn send_signature(
+        &self,
+        id: String,
+        request_json: String,
+        digest: Vec<u8>,
+        keys: Vec<WalletKeyRecord>,
+    ) -> Result<ClearSignerStep, CoreError> {
+        let request = serde_json::from_str(&request_json)
+            .map_err(|e| CoreError::Internal(format!("request_json: {e}")))?;
+        let step = lock(&self.inner).send(&id, &request);
+        if !step.write.is_empty() {
+            *lock(&self.judge) = Judge::Digest { digest, keys };
+        }
+        Ok(bare(step))
+    }
+
+    /// Spec 075: the session's next request, a ceremony.
+    pub fn send_ceremony(
+        &self,
+        id: String,
+        request_json: String,
+        operation_json: String,
+        expected_member_challenge: Option<Vec<u8>>,
+    ) -> Result<ClearSignerStep, CoreError> {
+        let request = serde_json::from_str(&request_json)
+            .map_err(|e| CoreError::Internal(format!("request_json: {e}")))?;
+        let step = lock(&self.inner).send(&id, &request);
+        if !step.write.is_empty() {
+            *lock(&self.judge) = Judge::Ceremony {
+                operation_json,
+                expected_member_challenge,
+            };
+        }
+        Ok(bare(step))
+    }
+
+    /// Spec 075: the flow is done — `bye`, then close.
+    pub fn end(&self) -> ClearSignerStep {
+        bare(lock(&self.inner).end())
     }
 
     /// The socket closed under the connection: `Declined` when a page that
@@ -240,6 +356,241 @@ impl ClearSignerConnection {
     pub fn closed(&self) -> Option<ClearSignerRefusal> {
         lock(&self.inner).closed().map(Into::into)
     }
+}
+
+fn bare(step: clear_signer::ws::Step) -> ClearSignerStep {
+    ClearSignerStep {
+        write: step.write,
+        close: step.close,
+        outcome: None,
+        ceremony: None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Spec 075: the Clear Signer as a passkey route
+// ---------------------------------------------------------------------------
+
+/// A ceremony's answer, judged: the machine's own `Registration` /
+/// `Assertion` as its wire JSON, ready to be reported in the shell result a
+/// platform ceremony would have produced.
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum ClearSignerCeremonyOutcome {
+    Registered { registration_json: String },
+    Asserted { assertion_json: String },
+    Refused { refusal: ClearSignerRefusal },
+}
+
+/// The page request for a machine operation (`RegisterPasskey`,
+/// `AuthenticatePasskey`, `SignProof`, `SignMemberProof` as their wire JSON)
+/// with `method = clear_signer`; `None` for anything else. `registry` is the
+/// registry service the page fetches a member challenge from.
+#[uniffi::export]
+pub fn clear_signer_ceremony_request(
+    operation_json: String,
+    id: String,
+    wallet_name: String,
+    registry: String,
+) -> Option<String> {
+    let ceremony = clear_signer::ceremony::Ceremony::from_json(&operation_json)?;
+    Some(clear_signer::ceremony::request(&ceremony, &id, &wallet_name, &registry).to_string())
+}
+
+/// Judge a ceremony's answer that arrived by another channel (the relay, BLE).
+#[uniffi::export]
+pub fn clear_signer_verify_ceremony(
+    operation_json: String,
+    answer_json: String,
+    signer_origin: String,
+    expected_member_challenge: Option<Vec<u8>>,
+) -> ClearSignerCeremonyOutcome {
+    match serde_json::from_str::<serde_json::Value>(&answer_json) {
+        Ok(answer) => ceremony_verdict(
+            &operation_json,
+            &answer,
+            &signer_origin,
+            expected_member_challenge.as_deref(),
+        ),
+        Err(error) => ClearSignerCeremonyOutcome::Refused {
+            refusal: ClearSignerRefusal::Malformed {
+                detail: error.to_string(),
+            },
+        },
+    }
+}
+
+fn ceremony_verdict(
+    operation_json: &str,
+    answer: &serde_json::Value,
+    signer_origin: &str,
+    expected: Option<&[u8]>,
+) -> ClearSignerCeremonyOutcome {
+    let Some(ceremony) = clear_signer::ceremony::Ceremony::from_json(operation_json) else {
+        return ClearSignerCeremonyOutcome::Refused {
+            refusal: ClearSignerRefusal::Malformed {
+                detail: "operation_json is not a Clear Signer ceremony".to_owned(),
+            },
+        };
+    };
+    use clear_signer::ceremony::Answer;
+    let json = |value: Result<String, serde_json::Error>| value.unwrap_or_default();
+    match clear_signer::ceremony::verify(&ceremony, answer, signer_origin, expected) {
+        Ok(Answer::Registration(registration)) => ClearSignerCeremonyOutcome::Registered {
+            registration_json: json(serde_json::to_string(&registration)),
+        },
+        Ok(Answer::Assertion(assertion)) => ClearSignerCeremonyOutcome::Asserted {
+            assertion_json: json(serde_json::to_string(&assertion)),
+        },
+        Err(error) => ClearSignerCeremonyOutcome::Refused {
+            refusal: error.into(),
+        },
+    }
+}
+
+/// The relay the wallet pairs through unless Settings name another.
+#[uniffi::export]
+pub fn clear_signer_default_relay() -> String {
+    clear_signer::DEFAULT_RELAY_URL.to_owned()
+}
+
+/// A relay address the person typed, normalised — `None` when it cannot be
+/// used (wss anywhere, ws only on loopback).
+#[uniffi::export]
+pub fn clear_signer_relay_url(input: String) -> Option<String> {
+    clear_signer::relay_url(&input).ok()
+}
+
+/// A room id from 16 random bytes the shell drew.
+#[uniffi::export]
+pub fn clear_signer_relay_room(random: Vec<u8>) -> Option<String> {
+    let bytes: [u8; 16] = random.try_into().ok()?;
+    Some(clear_signer::relay_room(&bytes))
+}
+
+/// The socket the wallet opens: `<relay>/v1/rooms/<room>?role=requester`.
+#[uniffi::export]
+pub fn clear_signer_relay_room_url(relay: String, room: String) -> String {
+    clear_signer::relay_room_url(&relay, &room, "requester")
+}
+
+/// The pairing link (QR + copy) for the page on another device.
+#[uniffi::export]
+pub fn clear_signer_relay_link(
+    signer_url: String,
+    relay: String,
+    room: String,
+    rk: String,
+) -> String {
+    clear_signer::relay_link(&signer_url, &relay, &room, &rk)
+}
+
+/// `rk`: the requester key's fingerprint the pairing link carries.
+#[uniffi::export]
+pub fn clear_signer_key_fingerprint(public_key: Vec<u8>) -> String {
+    clear_signer::secure::key_fingerprint(&public_key)
+}
+
+/// The wallet's side of the end-to-end session (relay and BLE), before the
+/// page's hello. The shell draws the 32 secret bytes and the 16-byte nonce.
+#[derive(uniffi::Object)]
+pub struct ClearSignerHandshake {
+    inner: Mutex<Option<clear_signer::secure::Handshake>>,
+    public_key: Vec<u8>,
+}
+
+#[uniffi::export]
+impl ClearSignerHandshake {
+    #[uniffi::constructor]
+    pub fn new(secret: Vec<u8>, nonce: Vec<u8>) -> Result<Arc<Self>, CoreError> {
+        let secret: [u8; 32] = secret
+            .try_into()
+            .map_err(|_| CoreError::Internal("secret must be 32 bytes".into()))?;
+        let nonce: [u8; 16] = nonce
+            .try_into()
+            .map_err(|_| CoreError::Internal("nonce must be 16 bytes".into()))?;
+        let handshake = clear_signer::secure::Handshake::new(
+            &secret,
+            nonce,
+            clear_signer::secure::Role::Requester,
+        )
+        .map_err(|e| CoreError::Internal(e.to_string()))?;
+        let public_key = handshake.public_key().to_vec();
+        Ok(Arc::new(Self {
+            inner: Mutex::new(Some(handshake)),
+            public_key,
+        }))
+    }
+
+    /// The 65-byte key — hash it into the pairing link's `rk`.
+    pub fn public_key(&self) -> Vec<u8> {
+        self.public_key.clone()
+    }
+
+    /// This side's hello text frame.
+    pub fn hello(&self, app: Option<String>) -> String {
+        lock(&self.inner)
+            .as_ref()
+            .map(|h| h.hello(app.as_deref()))
+            .unwrap_or_default()
+    }
+
+    /// Finish with the page's hello. `relay` picks the label (`vela-relay/1`,
+    /// else `vela-ble/1`). Once only.
+    pub fn complete(
+        &self,
+        peer_hello: String,
+        relay: bool,
+    ) -> Result<Arc<ClearSignerSession>, CoreError> {
+        let handshake = lock(&self.inner)
+            .take()
+            .ok_or_else(|| CoreError::Internal("the handshake is already complete".into()))?;
+        let label = if relay {
+            clear_signer::secure::Label::Relay
+        } else {
+            clear_signer::secure::Label::Ble
+        };
+        let session = handshake
+            .complete(&peer_hello, label, None)
+            .map_err(|e| CoreError::Internal(e.to_string()))?;
+        Ok(Arc::new(ClearSignerSession {
+            inner: Mutex::new(session),
+        }))
+    }
+}
+
+/// An established end-to-end session: the code to show, and sealing.
+#[derive(uniffi::Object)]
+pub struct ClearSignerSession {
+    inner: Mutex<clear_signer::secure::Session>,
+}
+
+#[uniffi::export]
+impl ClearSignerSession {
+    /// The six digits the wallet shows beside the page's.
+    pub fn code(&self) -> String {
+        lock(&self.inner).code().to_owned()
+    }
+
+    /// Seal the next outgoing message. `msg_id` is BLE's frame message id;
+    /// `None` on the relay (the AAD binds the counter).
+    pub fn seal(&self, plaintext: Vec<u8>, msg_id: Option<u8>) -> Vec<u8> {
+        lock(&self.inner).seal(&plaintext, tail(msg_id))
+    }
+
+    /// Open the page's next message; a replay, a reflection or a tampered
+    /// frame is refused.
+    pub fn open(&self, sealed: Vec<u8>, msg_id: Option<u8>) -> Result<Vec<u8>, CoreError> {
+        lock(&self.inner)
+            .open(&sealed, tail(msg_id))
+            .map_err(|e| CoreError::Internal(e.to_string()))
+    }
+}
+
+fn tail(msg_id: Option<u8>) -> clear_signer::secure::Tail {
+    msg_id.map_or(
+        clear_signer::secure::Tail::Counter,
+        clear_signer::secure::Tail::MsgId,
+    )
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

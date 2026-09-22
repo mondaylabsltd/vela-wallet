@@ -11,4 +11,11 @@ export type Registration = { credential_id: string, attestation_object_hex: stri
  * or empty) and the `getTransports()` list joined with commas
  * (e.g. "hybrid,internal", or empty). Stored on the entry for display.
  */
-authenticator_attachment: string, transports: string, };
+authenticator_attachment: string, transports: string, 
+/**
+ * Spec 075: the Clear Signer page's origin when the key was minted
+ * through it — where the key lives from now on. `None` for every other
+ * route. The shell reports it only after `verify_registration` checked
+ * the answer came from that origin.
+ */
+signer_origin?: string | null, };

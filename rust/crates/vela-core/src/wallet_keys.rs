@@ -48,6 +48,10 @@ pub struct DeviceKey {
     pub name: String,
     #[serde(default)]
     pub transports: String,
+    /// Spec 075: the Clear Signer page this key lives behind (the account
+    /// record's `signer_origin`), or empty.
+    #[serde(default)]
+    pub signer_origin: Option<String>,
 }
 
 /// Where the rows came from.
@@ -369,8 +373,12 @@ pub const SIGN_METHODS: [&str; 5] = ["auto", "platform", "hybrid", "security_key
 pub struct SignRoute {
     pub credential_id: String,
     pub transports: String,
-    /// `platform` | `hybrid` | `security_key`.
+    /// `platform` | `hybrid` | `security_key` | `clear_signer`.
     pub method: String,
+    /// Spec 075: for `clear_signer`, the page the key lives behind — empty
+    /// means the person's Clear Signer page from Settings.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub signer_origin: String,
 }
 
 /// The person chose HOW to sign this one request (founder, 2026-09-19: creating
@@ -388,22 +396,61 @@ pub struct SignRoute {
 /// transports make it reachable.
 #[must_use]
 pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
+    let usable = |key: &&DeviceKey| !key.credential_id.is_empty();
+    // Spec 075: a key minted or found through the Clear Signer lives behind
+    // its page. `auto` follows the wallet's pinned key there; the Clear
+    // Signer by name prefers such a key.
+    let behind_page =
+        |key: &&DeviceKey| key.signer_origin.as_deref().is_some_and(|o| !o.is_empty());
+    let clear_route = |key: &DeviceKey| SignRoute {
+        credential_id: key.credential_id.clone(),
+        transports: String::new(),
+        method: "clear_signer".to_owned(),
+        signer_origin: key.signer_origin.clone().unwrap_or_default(),
+    };
+    match method {
+        "auto" => {
+            let pinned = device.iter().find(usable)?;
+            return behind_page(&pinned).then(|| clear_route(pinned));
+        }
+        "clear_signer" => {
+            let pinned = device
+                .iter()
+                .filter(usable)
+                .find(behind_page)
+                .or_else(|| device.iter().find(usable))?;
+            return Some(clear_route(pinned));
+        }
+        _ => {}
+    }
     let transports = match method {
         "platform" => "internal",
         "hybrid" => "hybrid,internal",
         "security_key" => "usb,nfc,ble",
         _ => return None,
     };
-    let usable = |key: &&DeviceKey| !key.credential_id.is_empty();
-    let pinned = device
+    // A platform sheet reaches a Clear Signer key only when the page was the
+    // wallet's own (`*.getvela.app` passkeys are the app's passkeys). A key
+    // behind anybody else's page is reachable nowhere else — route it there.
+    let reachable = |key: &&DeviceKey| {
+        key.signer_origin.as_deref().is_none_or(|origin| {
+            origin.is_empty() || crate::clear_signer::uses_wallet_passkeys(origin)
+        })
+    };
+    let Some(pinned) = device
         .iter()
         .filter(usable)
+        .filter(reachable)
         .find(|key| method_of("", &key.transports) == method)
-        .or_else(|| device.iter().find(usable))?;
+        .or_else(|| device.iter().filter(usable).find(reachable))
+    else {
+        return device.iter().find(usable).map(clear_route);
+    };
     Some(SignRoute {
         credential_id: pinned.credential_id.clone(),
         transports: transports.to_owned(),
         method: method.to_owned(),
+        signer_origin: String::new(),
     })
 }
 
@@ -451,6 +498,7 @@ mod tests {
                 .to_owned(),
             name: "Parallel Multi".to_owned(),
             transports: "internal".to_owned(),
+            signer_origin: None,
         }]
     }
 
@@ -637,6 +685,78 @@ mod tests {
         assert_eq!(
             (route.credential_id.as_str(), route.transports.as_str()),
             ("apple", "hybrid,internal")
+        );
+    }
+
+    fn behind(credential_id: &str, origin: &str) -> DeviceKey {
+        DeviceKey {
+            credential_id: credential_id.to_owned(),
+            signer_origin: Some(origin.to_owned()),
+            ..DeviceKey::default()
+        }
+    }
+
+    /// Spec 075: a key that lives behind a Clear Signer page is signed
+    /// there — by `auto`, and by the Clear Signer chosen by name.
+    #[test]
+    fn a_clear_signer_key_routes_to_its_page() {
+        let keys = [
+            behind("cs", "https://sign.getvela.app"),
+            held("apple", "internal"),
+        ];
+        let auto = sign_route(&keys, "auto").unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (
+                auto.method.as_str(),
+                auto.credential_id.as_str(),
+                auto.signer_origin.as_str()
+            ),
+            ("clear_signer", "cs", "https://sign.getvela.app")
+        );
+        // The Clear Signer by name prefers the key behind a page, wherever it stands.
+        let flipped = [
+            held("apple", "internal"),
+            behind("cs", "https://me.example"),
+        ];
+        let named = sign_route(&flipped, "clear_signer").unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (named.credential_id.as_str(), named.signer_origin.as_str()),
+            ("cs", "https://me.example")
+        );
+        // …and with none, pins the first key for the Settings page to reach.
+        let plain = [held("apple", "internal")];
+        let named = sign_route(&plain, "clear_signer").unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (named.method.as_str(), named.signer_origin.as_str()),
+            ("clear_signer", "")
+        );
+    }
+
+    /// A key behind somebody else's page cannot be reached by a platform
+    /// sheet: the choice is answered by the page it lives behind. A key made
+    /// on the official page is a `getvela.app` passkey and stays reachable.
+    #[test]
+    fn a_self_hosted_key_is_reachable_only_through_its_page() {
+        let only = [behind("mine", "https://me.example")];
+        let route = sign_route(&only, "platform").unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (route.method.as_str(), route.signer_origin.as_str()),
+            ("clear_signer", "https://me.example")
+        );
+        let mixed = [
+            behind("mine", "https://me.example"),
+            held("yubikey", "usb,nfc"),
+        ];
+        let route = sign_route(&mixed, "platform").unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (route.method.as_str(), route.credential_id.as_str()),
+            ("platform", "yubikey")
+        );
+        let official = [behind("cs", "https://sign.getvela.app")];
+        let route = sign_route(&official, "platform").unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (route.method.as_str(), route.credential_id.as_str()),
+            ("platform", "cs")
         );
     }
 

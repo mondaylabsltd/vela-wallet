@@ -41,7 +41,12 @@ transports: string,
  * different credential. Defaults to the platform authenticator, the
  * value a shell that never sets it would expect.
  */
-method: KeyMethod, purpose: ProofPurpose, } | { "type": "generate_group_key" } | { "type": "sign_member_proof", credential_id: string, 
+method: KeyMethod, purpose: ProofPurpose, 
+/**
+ * Spec 075: with `method = clear_signer`, the page the key lives
+ * behind (the sign-in's own). `None` on every other route.
+ */
+signer_origin?: string | null, } | { "type": "generate_group_key" } | { "type": "sign_member_proof", credential_id: string, 
 /**
  * Uncompressed P-256 point, `04‖x‖y` hex.
  */
@@ -78,7 +83,13 @@ transports: string,
  * from — which is why both fields ride along and neither replaces the
  * other.
  */
-method: KeyMethod, group_public_key_hex: string, } | { "type": "lookup_legacy_name", credential_id: string, } | { "type": "authenticate_passkey", method: KeyMethod, } | { "type": "load_accounts" } | { "type": "save_account", account: Account, } | { "type": "save_pending_upload", record: PendingUpload, } | { "type": "remove_pending_upload", credential_id: string, } | { "type": "registry_publish", metadata_hex: string, members: Array<RegistryPublishMember>, group_seed_hex: string, group_public_key_hex: string, 
+method: KeyMethod, group_public_key_hex: string, 
+/**
+ * Spec 075: with `method = clear_signer`, the page the key was just
+ * minted behind — the membership is confirmed there. `None` on every
+ * other route.
+ */
+signer_origin?: string | null, } | { "type": "lookup_legacy_name", credential_id: string, } | { "type": "authenticate_passkey", method: KeyMethod, } | { "type": "load_accounts" } | { "type": "save_account", account: Account, } | { "type": "save_pending_upload", record: PendingUpload, } | { "type": "remove_pending_upload", credential_id: string, } | { "type": "registry_publish", metadata_hex: string, members: Array<RegistryPublishMember>, group_seed_hex: string, group_public_key_hex: string, 
 /**
  * Which authenticator route a member with no replayable proof must sign
  * its live possession proof over. It matters only on desktop, and only

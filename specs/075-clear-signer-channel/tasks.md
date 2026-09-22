@@ -5,7 +5,7 @@
 - [ ] T002 Key records: `signer_origin`; `auto` routing follows the key; refusal for a foreign-origin key on another route
 - [ ] T003 `clear_signer` ceremony requests (create / signIn / proof / memberProof) + `verify_registration` / `verify_ceremony` + tests (each refusal)
 - [ ] T004 `ws::Connection`: several requests per session; `bye`; idle timeout
-- [ ] T005 `secure_session` (P-256 ECDH, HKDF, AES-GCM; labels `vela-relay/1`, `vela-ble/1`) + `tests/vectors/secure-session.json`
+- [ ] T005 `secure_session` (P-256 ECDH, HKDF, AES-GCM; labels `vela-relay/1`, `vela-ble/1`) + `tests/clear-signer/secure-session.json`
 - [ ] T006 UniFFI + wasm exports; wasm size gate
 
 ## B — Page (agent)

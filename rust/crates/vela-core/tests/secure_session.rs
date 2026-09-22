@@ -1,6 +1,6 @@
 //! Spec 075: the relay/BLE session, pinned for BOTH implementations — this
 //! crate's `clear_signer::secure` and the page's `lib/transport/secure.js`
-//! read the same `tests/vectors/secure-session.json`.
+//! read the same `tests/clear-signer/secure-session.json`.
 //!
 //! Regenerate with `VELA_WRITE_VECTORS=1 cargo test -p vela-core --test secure_session`;
 //! the page's sample test then must still pass unchanged.
@@ -10,7 +10,7 @@ use vela_core::clear_signer::secure::{key_fingerprint, Handshake, Label, Role, T
 
 const PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/vectors/secure-session.json"
+    "/tests/clear-signer/secure-session.json"
 );
 
 fn hex(bytes: &[u8]) -> String {

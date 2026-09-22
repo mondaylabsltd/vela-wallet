@@ -299,10 +299,19 @@ export class ClearSignerWs {
      */
     closed(): string;
     /**
+     * `bye`, then close.
+     */
+    end(): string;
+    /**
      * `{write: number[], close, outcome?}` — `outcome` as [`clear_signer_verify`].
      */
     feed(bytes: Uint8Array): string;
     constructor(signer_url: string, token: string, id: string, request_json: string, digest: Uint8Array, keys_json: string);
+    /**
+     * The session's next request once the last one is answered (a test
+     * harness drives the page with it; the web wallet itself cannot listen).
+     */
+    send(id: string, request_json: string): string;
 }
 
 /**
@@ -685,7 +694,29 @@ export function checksumAddress(address_hex: string): string;
  */
 export function chooseNativePrice(dex?: number | null, chainlink_local?: number | null, chainlink_eth?: number | null): NativePriceChoice;
 
+/**
+ * The page request for a machine operation's wire JSON with
+ * `method = clear_signer`, or `undefined` for anything else.
+ */
+export function clearSignerCeremonyRequest(operation_json: string, id: string, wallet_name: string, registry: string): string | undefined;
+
+export function clearSignerDefaultRelay(): string;
+
 export function clearSignerDefaultUrl(): string;
+
+export function clearSignerRelayLink(signer_url: string, relay: string, room: string, rk: string): string;
+
+/**
+ * A room id from 16 random bytes.
+ */
+export function clearSignerRelayRoom(random: Uint8Array): string | undefined;
+
+export function clearSignerRelayRoomUrl(relay: string, room: string): string;
+
+/**
+ * A relay address, normalised, or `undefined` when it cannot be used.
+ */
+export function clearSignerRelayUrl(input: string): string | undefined;
 
 /**
  * `{method, params, origin, chainId, chainName?, nativeSymbol?, account,
@@ -710,6 +741,15 @@ export function clearSignerUsesWalletPasskeys(url: string): boolean;
  * detail}}`.
  */
 export function clearSignerVerify(result_json: string, digest: Uint8Array, keys_json: string): string;
+
+/**
+ * A ceremony's answer judged: `{registration}` / `{assertion}` (the
+ * machine's own wire shapes, ready for `passkey_registered` /
+ * `passkey_authenticated` / `proof_signed`) or `{refused: {code, detail}}`.
+ * `expected_member_challenge` is the registry challenge the wallet fetched
+ * itself, for a member proof.
+ */
+export function clearSignerVerifyCeremony(operation_json: string, answer_json: string, signer_origin: string, expected_member_challenge?: Uint8Array | null): string;
 
 export function computeSafeAddress(x: Uint8Array, y: Uint8Array): SafeAddressInfo;
 
@@ -1113,14 +1153,23 @@ export interface InitOutput {
     readonly canonicalizeSignature: (a: number, b: number) => [number, number, number, number];
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+    readonly clearSignerCeremonyRequest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly clearSignerDefaultRelay: () => [number, number];
     readonly clearSignerDefaultUrl: () => [number, number];
+    readonly clearSignerRelayLink: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly clearSignerRelayRoom: (a: number, b: number) => [number, number];
+    readonly clearSignerRelayRoomUrl: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly clearSignerRelayUrl: (a: number, b: number) => [number, number];
     readonly clearSignerRequest: (a: number, b: number) => [number, number, number, number];
     readonly clearSignerUrl: (a: number, b: number) => [number, number, number, number];
     readonly clearSignerUsesWalletPasskeys: (a: number, b: number) => number;
     readonly clearSignerVerify: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly clearSignerVerifyCeremony: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly clearsignerws_closed: (a: number) => [number, number];
+    readonly clearsignerws_end: (a: number) => [number, number];
     readonly clearsignerws_feed: (a: number, b: number, c: number) => [number, number];
     readonly clearsignerws_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
+    readonly clearsignerws_send: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly clearsigningcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

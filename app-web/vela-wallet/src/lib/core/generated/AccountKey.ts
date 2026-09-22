@@ -21,4 +21,10 @@ name: string,
  * reported nothing — a `get()` then falls back to letting the platform
  * guess, which is what this field exists to stop.
  */
-transports: string, };
+transports: string, 
+/**
+ * Spec 075: the Clear Signer page this key lives behind (its origin, and
+ * so its rpId). A key with one is signed through that page — `auto`
+ * routes there — and never through a platform sheet that cannot see it.
+ */
+signer_origin?: string | null, };

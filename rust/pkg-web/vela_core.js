@@ -497,6 +497,22 @@ export class ClearSignerWs {
         }
     }
     /**
+     * `bye`, then close.
+     * @returns {string}
+     */
+    end() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.clearsignerws_end(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * `{write: number[], close, outcome?}` — `outcome` as [`clear_signer_verify`].
      * @param {Uint8Array} bytes
      * @returns {string}
@@ -543,6 +559,35 @@ export class ClearSignerWs {
         this.__wbg_ptr = ret[0];
         ClearSignerWsFinalization.register(this, this.__wbg_ptr, this);
         return this;
+    }
+    /**
+     * The session's next request once the last one is answered (a test
+     * harness drives the page with it; the web wallet itself cannot listen).
+     * @param {string} id
+     * @param {string} request_json
+     * @returns {string}
+     */
+    send(id, request_json) {
+        let deferred4_0;
+        let deferred4_1;
+        try {
+            const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ptr1 = passStringToWasm0(request_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len1 = WASM_VECTOR_LEN;
+            const ret = wasm.clearsignerws_send(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+            var ptr3 = ret[0];
+            var len3 = ret[1];
+            if (ret[3]) {
+                ptr3 = 0; len3 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred4_0 = ptr3;
+            deferred4_1 = len3;
+            return getStringFromWasm0(ptr3, len3);
+        } finally {
+            wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        }
     }
 }
 if (Symbol.dispose) ClearSignerWs.prototype[Symbol.dispose] = ClearSignerWs.prototype.free;
@@ -3073,6 +3118,49 @@ export function chooseNativePrice(dex, chainlink_local, chainlink_eth) {
 }
 
 /**
+ * The page request for a machine operation's wire JSON with
+ * `method = clear_signer`, or `undefined` for anything else.
+ * @param {string} operation_json
+ * @param {string} id
+ * @param {string} wallet_name
+ * @param {string} registry
+ * @returns {string | undefined}
+ */
+export function clearSignerCeremonyRequest(operation_json, id, wallet_name, registry) {
+    const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(wallet_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(registry, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.clearSignerCeremonyRequest(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+    let v5;
+    if (ret[0] !== 0) {
+        v5 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v5;
+}
+
+/**
+ * @returns {string}
+ */
+export function clearSignerDefaultRelay() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.clearSignerDefaultRelay();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * @returns {string}
  */
 export function clearSignerDefaultUrl() {
@@ -3086,6 +3174,90 @@ export function clearSignerDefaultUrl() {
     } finally {
         wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
+}
+
+/**
+ * @param {string} signer_url
+ * @param {string} relay
+ * @param {string} room
+ * @param {string} rk
+ * @returns {string}
+ */
+export function clearSignerRelayLink(signer_url, relay, room, rk) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(signer_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(relay, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(room, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(rk, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.clearSignerRelayLink(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * A room id from 16 random bytes.
+ * @param {Uint8Array} random
+ * @returns {string | undefined}
+ */
+export function clearSignerRelayRoom(random) {
+    const ptr0 = passArray8ToWasm0(random, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.clearSignerRelayRoom(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * @param {string} relay
+ * @param {string} room
+ * @returns {string}
+ */
+export function clearSignerRelayRoomUrl(relay, room) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(relay, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(room, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.clearSignerRelayRoomUrl(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * A relay address, normalised, or `undefined` when it cannot be used.
+ * @param {string} input
+ * @returns {string | undefined}
+ */
+export function clearSignerRelayUrl(input) {
+    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.clearSignerRelayUrl(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
 }
 
 /**
@@ -3185,6 +3357,39 @@ export function clearSignerVerify(result_json, digest, keys_json) {
         deferred5_0 = ptr4;
         deferred5_1 = len4;
         return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * A ceremony's answer judged: `{registration}` / `{assertion}` (the
+ * machine's own wire shapes, ready for `passkey_registered` /
+ * `passkey_authenticated` / `proof_signed`) or `{refused: {code, detail}}`.
+ * `expected_member_challenge` is the registry challenge the wallet fetched
+ * itself, for a member proof.
+ * @param {string} operation_json
+ * @param {string} answer_json
+ * @param {string} signer_origin
+ * @param {Uint8Array | null} [expected_member_challenge]
+ * @returns {string}
+ */
+export function clearSignerVerifyCeremony(operation_json, answer_json, signer_origin, expected_member_challenge) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(answer_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(signer_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(expected_member_challenge) ? 0 : passArray8ToWasm0(expected_member_challenge, wasm.__wbindgen_malloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.clearSignerVerifyCeremony(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }

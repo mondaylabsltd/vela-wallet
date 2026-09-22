@@ -158,6 +158,9 @@ pub struct Draft {
     /// registration, one `get()` per key, interleaved. `None` until signed
     /// (or after a cancelled confirmation).
     pub proof: Option<RegistryProof>,
+    /// Spec 075: the Clear Signer page the key was minted behind, if any —
+    /// where its membership confirmation must be signed too.
+    pub signer_origin: Option<String>,
 }
 
 /// One derived founding key, canonical founding order.
@@ -178,6 +181,8 @@ pub struct PreparedKey {
     pub transports: String,
     /// The creation-time membership proof.
     pub proof: Option<RegistryProof>,
+    /// Spec 075: the Clear Signer page the key was minted behind, if any.
+    pub signer_origin: Option<String>,
 }
 
 /// Derived from the drafts, not yet persisted anywhere. `keys[0]` is the
@@ -211,6 +216,7 @@ impl Prepared {
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.clone(),
                     transports: key.transports.clone(),
+                    signer_origin: key.signer_origin.clone(),
                 })
                 .collect(),
         }
@@ -727,6 +733,7 @@ fn begin_sign_member(model: &mut Model, index: usize) -> Command<Effect, Event> 
             // return to the same authenticator.
             method: draft.method,
             group_public_key_hex,
+            signer_origin: draft.signer_origin,
         },
     )
 }
@@ -774,6 +781,7 @@ fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
             authenticator_attachment: draft.authenticator_attachment,
             transports: crate::passkey::allowlist_transports(&draft.transports),
             proof: draft.proof,
+            signer_origin: draft.signer_origin,
         })
         .collect();
 
@@ -806,6 +814,7 @@ fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
             attestation_object_hex: key.attestation_object_hex.clone(),
             authenticator_attachment: key.authenticator_attachment.clone(),
             transports: key.transports.clone(),
+            signer_origin: key.signer_origin.clone(),
         })
         .collect();
     model.prepared = Some(Prepared {
@@ -983,6 +992,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 public_key_hex,
                 attestation_hex,
                 proof: None,
+                signer_origin: registration.signer_origin,
             });
             // Interleaved: the key confirms its group membership right here,
             // while this authenticator is still "in hand" — the member

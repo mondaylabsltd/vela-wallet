@@ -23,6 +23,12 @@
 //! A connection that never proved itself (another page on the device found
 //! the port, an old tab reconnected with a spent token) is closed and has no
 //! outcome; the shell keeps listening until one connection has one.
+//!
+//! Spec 075: a conversation may hold several requests. After an answer the
+//! connection waits, open, for the shell's next [`Connection::send`] (a
+//! create's member proof, a recovery's second signature) or its
+//! [`Connection::end`] (`{t:"bye"}`, then close). A page that closes between
+//! requests ends the session without an outcome.
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
@@ -85,6 +91,14 @@ pub fn parse_message(text: &str) -> Message {
                 id: text_of("id"),
                 result: result.clone(),
             },
+            // Spec 075: a ceremony's answer carries `registration` or
+            // `assertion` beside `id`; the verifier reads the whole message.
+            _ if message.contains_key("registration") || message.contains_key("assertion") => {
+                Message::Result {
+                    id: text_of("id"),
+                    result: Value::Object(message.clone()),
+                }
+            }
             _ => Message::Ignored,
         },
         Some("error") => Message::Error {
@@ -112,6 +126,8 @@ enum Phase {
     Handshake,
     Hello,
     Answer,
+    /// Spec 075: answered; open for the shell's next request or its end.
+    Idle,
     Done,
 }
 
@@ -220,6 +236,34 @@ impl Connection {
         (phase == Phase::Answer).then_some(ClearSignerError::Declined)
     }
 
+    /// Spec 075: the next request of the same session, once the last one has
+    /// its answer. Nothing to write in any other phase — a shell that sends
+    /// early, or after the end, is told so by an empty step.
+    pub fn send(&mut self, id: &str, request: &Value) -> Step {
+        let mut step = Step::default();
+        if self.phase == Phase::Idle {
+            self.id = id.to_owned();
+            step.write
+                .extend(encode(0x1, intent_message(id, request).as_bytes()));
+            self.phase = Phase::Answer;
+        }
+        step
+    }
+
+    /// Spec 075: the session is over — `{t:"bye"}`, then close. The page
+    /// leaves its waiting screen for its done screen.
+    pub fn end(&mut self) -> Step {
+        let mut step = Step::default();
+        if self.phase != Phase::Done && self.phase != Phase::Handshake {
+            let bye = json!({ "v": 1, "t": "bye", "reason": "done" }).to_string();
+            step.write.extend(encode(0x1, bye.as_bytes()));
+        }
+        step.write.extend(close_frame(1000));
+        step.close = true;
+        self.phase = Phase::Done;
+        step
+    }
+
     fn message(&mut self, text: &str, step: &mut Step) {
         match (self.phase, parse_message(text)) {
             (Phase::Hello, Message::Hello { token }) => {
@@ -230,22 +274,18 @@ impl Connection {
                     self.fail(step, 1008);
                 }
             }
+            // An answer leaves the session open for the next request (spec
+            // 075); the shell ends it when the flow is done.
             (Phase::Answer, Message::Result { id, result }) if id == self.id => {
                 step.outcome = Some(Ok(result));
-                self.finish(step);
+                self.phase = Phase::Idle;
             }
             (Phase::Answer, Message::Error { id, error }) if id == self.id => {
                 step.outcome = Some(Err(error));
-                self.finish(step);
+                self.phase = Phase::Idle;
             }
             _ => {}
         }
-    }
-
-    fn finish(&mut self, step: &mut Step) {
-        step.write.extend(close_frame(1000));
-        step.close = true;
-        self.phase = Phase::Done;
     }
 
     /// A protocol fault. An accepted page that breaks the protocol ends the

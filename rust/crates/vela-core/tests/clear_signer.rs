@@ -398,16 +398,65 @@ fn a_page_that_proves_itself_gets_the_intent_and_its_answer_is_the_outcome() {
     bytes.extend(client_frame(0x0, true, &answer[10..]));
     let done = c.feed(&bytes);
     assert_eq!(done.outcome, Some(Ok(json!({ "credentialId": "AQ" }))));
-    assert!(done.close);
+    // Spec 075: the session stays open for the shell's next request.
+    assert!(!done.close);
     assert_eq!(
         done.write[0], 0x8a,
         "the ping was answered with a pong first"
     );
+    let end = c.end();
+    let bye: Value = serde_json::from_str(&server_texts(&end.write)[0]).unwrap();
+    assert_eq!(bye["t"], "bye");
+    assert!(end.close);
     assert_eq!(
         c.closed(),
         None,
         "an answered conversation has nothing more to say"
     );
+}
+
+/// Spec 075: one page visit carries a create and its member proof (or a
+/// recovery's two signatures) — the shell sends the next request on the same
+/// connection once the last one is answered.
+#[test]
+fn a_session_carries_the_next_request_on_the_same_connection() {
+    let mut c = connection();
+    c.feed(&upgrade("https://sign.getvela.app"));
+    c.feed(&text(r#"{"v":1,"t":"hello","token":"tok"}"#));
+    // Too early: the first request has no answer yet.
+    let early = c.send("r2", &json!({ "intent": { "method": "vela_proof" } }));
+    assert!(early.write.is_empty());
+
+    let created = c.feed(&text(
+        r#"{"v":1,"t":"result","id":"r1","registration":{"credentialId":"AQ"}}"#,
+    ));
+    let Some(Ok(answer)) = created.outcome else {
+        panic!("{created:?}")
+    };
+    assert_eq!(
+        answer["registration"]["credentialId"], "AQ",
+        "a ceremony's answer reaches the verifier whole"
+    );
+
+    let next = c.send(
+        "r2",
+        &json!({ "intent": { "method": "vela_memberProof" }, "context": {} }),
+    );
+    let sent: Value = serde_json::from_str(&server_texts(&next.write)[0]).unwrap();
+    assert_eq!(
+        (sent["t"].as_str(), sent["id"].as_str()),
+        (Some("intent"), Some("r2"))
+    );
+    // The old id is spent.
+    let stale = c.feed(&text(r#"{"v":1,"t":"result","id":"r1","assertion":{}}"#));
+    assert!(stale.outcome.is_none());
+    let proved = c.feed(&text(
+        r#"{"v":1,"t":"result","id":"r2","assertion":{"credentialId":"AQ"}}"#,
+    ));
+    assert!(matches!(proved.outcome, Some(Ok(_))));
+
+    // The page closing between requests ends the session with no outcome.
+    assert_eq!(c.closed(), None);
 }
 
 #[test]
@@ -571,4 +620,60 @@ fn the_wallets_own_send_is_sent_as_its_calls_with_the_fee_leg_after_them() {
     assert_eq!(batch["calls"][0]["value"], "0x38d7ea4c68000");
     assert_eq!(batch["calls"][0]["data"], "0x");
     assert_eq!(built["context"]["operation"]["feeLegIndex"], 1);
+}
+
+/// Spec 075: the relay the wallet pairs through — wss anywhere, ws only on the
+/// device's own loopback (a relay under test), nothing a page could not reach.
+#[test]
+fn a_relay_address_is_wss_or_a_loopback_socket() {
+    use vela_core::clear_signer::{relay_url, SignerUrlError, DEFAULT_RELAY_URL};
+    assert_eq!(
+        relay_url(DEFAULT_RELAY_URL),
+        Ok("wss://relay.getvela.app".to_owned())
+    );
+    assert_eq!(
+        relay_url("relay.example.org/"),
+        Ok("wss://relay.example.org".to_owned())
+    );
+    assert_eq!(
+        relay_url("ws://127.0.0.1:8787"),
+        Ok("ws://127.0.0.1:8787".to_owned())
+    );
+    assert_eq!(
+        relay_url("ws://192.168.1.4:8787"),
+        Err(SignerUrlError::Insecure)
+    );
+    assert_eq!(
+        relay_url("https://relay.example.org"),
+        Err(SignerUrlError::Invalid)
+    );
+    assert_eq!(
+        relay_url("wss://relay.example.org/?room=x"),
+        Err(SignerUrlError::Invalid)
+    );
+    assert_eq!(relay_url(""), Err(SignerUrlError::Invalid));
+}
+
+#[test]
+fn a_pairing_link_names_the_relay_the_room_and_the_wallets_key() {
+    use vela_core::clear_signer::{relay_link, relay_room, relay_room_url};
+    let room = relay_room(&[0xfb; 16]);
+    assert_eq!(room.len(), 22);
+    assert!(room
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
+    assert_eq!(
+        relay_room_url("wss://relay.getvela.app/", &room, "requester"),
+        format!("wss://relay.getvela.app/v1/rooms/{room}?role=requester")
+    );
+    let link = relay_link(
+        "https://sign.getvela.app/",
+        "wss://relay.getvela.app",
+        &room,
+        "AbC-_d",
+    );
+    assert_eq!(
+        link,
+        format!("https://sign.getvela.app/sign.html?ch=relay#relay=wss%3A%2F%2Frelay.getvela.app&room={room}&rk=AbC-_d&v=1")
+    );
 }

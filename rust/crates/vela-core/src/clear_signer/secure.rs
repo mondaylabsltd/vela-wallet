@@ -4,7 +4,7 @@
 //!
 //! P-256 ECDH → HKDF-SHA256 → AES-256-GCM, and a six-digit code both screens
 //! show — the one place a stand-in on the path is caught. Byte-identical to the
-//! page's `lib/transport/secure.js`; `tests/vectors/secure-session.json` pins
+//! page's `lib/transport/secure.js`; `tests/clear-signer/secure-session.json` pins
 //! both sides.
 //!
 //! The core holds no randomness: the shell hands in the 32 secret bytes and the

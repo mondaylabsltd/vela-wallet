@@ -74,12 +74,14 @@ fn multi(id: &str, name: &str, address: &str) -> Account {
                 public_key_hex: support::expected_public_key_hex(),
                 name: name.to_owned(),
                 transports: "internal".to_owned(),
+                signer_origin: None,
             },
             AccountKey {
                 credential_id: format!("{id}-second"),
                 public_key_hex: SECOND_KEY_HEX.to_owned(),
                 name: "Key 2".to_owned(),
                 transports: "usb,nfc".to_owned(),
+                signer_origin: None,
             },
         ],
         ..support::account(id, name, address)
@@ -761,6 +763,7 @@ fn an_expo_era_record_restores_the_session() {
             public_key_hex: "04ab".to_owned(),
             name: "Ann".to_owned(),
             transports: String::new(),
+            signer_origin: None,
         }],
     };
     let json = serde_json::to_string(&Res::AccountsLoaded {

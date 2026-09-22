@@ -91,7 +91,7 @@ The relay and BLE share one session implementation:
 - the page's `lib/transport/secure.js`.
 
 The label (`vela-relay/1`, `vela-ble/1`) is a parameter. Shared vectors in
-`rust/crates/vela-core/tests/vectors/secure-session.json` pin both sides.
+`rust/crates/vela-core/tests/clear-signer/secure-session.json` pin both sides.
 
 ## 3. Words
 Reuse:
