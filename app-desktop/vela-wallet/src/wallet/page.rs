@@ -7881,6 +7881,23 @@ impl WalletPage {
                 )),
         );
 
+        // The body scrolls, the header does not — the same shape `hardware.rs`
+        // gives the wallet picker, and for the same reason.
+        //
+        // The card had no height cap and nothing to scroll: its height was
+        // whatever its content was. At the window's 1280x800 minimum the
+        // add-network verdict already reached within a few points of both
+        // window edges in English, and German — one of fifteen locales, at the
+        // smallest of six text scales — was tighter still. One more checklist
+        // row, one step up in text scale, or a longer language and the CTA sits
+        // below the window with no way to reach it.
+        //
+        // Measured off the window rather than a constant, because the constant
+        // would be wrong on every other window size: the card keeps 48px of
+        // breathing room top and bottom, and the header, the two 28px paddings
+        // and the 20px gap come off before the body gets what is left.
+        let chrome = 28. + 32. + 20. + 28.;
+        let body_max = (f32::from(window.viewport_size().height) - 96. - chrome).max(200.);
         let card = div()
             .w(px(SETTINGS_DIALOG_W))
             .flex()
@@ -7892,7 +7909,15 @@ impl WalletPage {
             .border_1()
             .border_color(theme.border_card)
             .child(header)
-            .child(body);
+            .child(
+                div()
+                    .id("settings-dialog-body")
+                    .w_full()
+                    .max_h(px(body_max))
+                    .min_h(px(0.))
+                    .overflow_y_scroll()
+                    .child(body),
+            );
 
         Some(
             div()
@@ -8092,6 +8117,60 @@ impl WalletPage {
                             crate::settings::components::CalloutTone::Warning,
                             self.settings.single_key_only.clone(),
                         ));
+                    }
+                    // Spec 081: an INCOMPATIBLE verdict needs somewhere to go.
+                    // The web has offered both of these since it was wired;
+                    // desktop drew the red rows, then the custom-RPC field,
+                    // and then nothing — so a person could type the RPC that
+                    // would have changed the answer and have no way to ask
+                    // again. The re-check keeps what they typed, for the same
+                    // reason the retry below does.
+                    if !compat.compatible {
+                        let chain_id = compat.chain_id;
+                        col = col.child(
+                            div()
+                                .id("wizard-recheck-rpc")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .h(px(CONTACTS_BUTTON_H))
+                                .rounded(px(12.))
+                                .cursor_pointer()
+                                .border_1()
+                                .border_color(theme.outline_strong)
+                                .text_size(theme::text_row_title())
+                                .text_color(theme.fg_base)
+                                .child(self.settings.recheck_with_rpc.clone())
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    resident::resident::<NetworkAdmin>(cx).update(
+                                        cx,
+                                        |resident, cx| {
+                                            resident.dispatch(
+                                                NetEvent::ChainSelected {
+                                                    chain_id,
+                                                    keep_custom_rpc: true,
+                                                },
+                                                cx,
+                                            );
+                                        },
+                                    );
+                                    cx.notify();
+                                })),
+                        );
+                        col = col.child(
+                            div()
+                                .id("wizard-chain-setup-tool")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .cursor_pointer()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.info_base)
+                                .child(self.settings.open_chain_setup_tool.clone())
+                                .on_click(|_, _, cx| {
+                                    cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL);
+                                }),
+                        );
                     }
                 }
                 // The probe could not reach a verdict. A retry, never a

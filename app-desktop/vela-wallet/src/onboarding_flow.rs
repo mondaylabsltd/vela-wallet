@@ -57,6 +57,9 @@ pub const TERMS_URL: &str = "https://getvela.app/terms";
 /// was plain text: an arrow that went nowhere, on the one screen whose whole
 /// subject is running these services yourself.
 pub const SELF_HOSTING_URL: &str = "https://getvela.app/docs/self-hosting";
+/// Where a chain that the wallet refuses can be made ready: the page deploys
+/// everything anyone can deploy, and says who has to do the rest.
+pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";
 
 // ---------------------------------------------------------------------------
 // Screen selection — the whole of the create UI's logic
