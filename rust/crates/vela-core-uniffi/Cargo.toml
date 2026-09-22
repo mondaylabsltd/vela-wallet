@@ -9,10 +9,6 @@ description = "uniffi shell over vela-core: Kotlin (Android) + Swift (iOS) bindi
 name = "vela_core_uniffi"
 crate-type = ["cdylib", "staticlib", "lib"]
 
-[[bin]]
-name = "uniffi-bindgen"
-path = "uniffi-bindgen.rs"
-
 [dependencies]
 # identicon-raster: Android/iOS have no SVG renderer, so they consume the
 # identicon as PNG bytes rasterized by the same crate that generates the SVG
@@ -24,7 +20,27 @@ path = "uniffi-bindgen.rs"
 # WebAssembly and therefore could not run the wasm bridge. app-ios and
 # app-android are not Hermes; see the note in `vela-core/Cargo.toml`.
 vela-core = { workspace = true, features = ["identicon-raster", "crux"] }
-uniffi = { workspace = true, features = ["cli"] }
+# NO `cli` feature, and no `uniffi-bindgen` binary: this crate IS the shipped
+# iOS static library and the shipped Android `.so`, and `uniffi/cli` put the
+# whole bindings GENERATOR inside it — uniffi_bindgen, uniffi_udl, weedle, nom,
+# clap, goblin, cargo_metadata, rustix, tempfile, askama, toml. Measured on
+# aarch64-apple-ios: libvela_core_uniffi.a went 169,581,752 -> 122,825,640
+# bytes and 554 -> 516 objects when the feature came off (spec 081 FR-014).
+#
+# Be precise about what that did and did not buy, because the FR-014 research
+# got it wrong: the linked .app is unchanged — `nm -u` over the archived device
+# binary is byte-identical before and after, because ld was already
+# dead-stripping the unreachable generator. The app's `_stat`/`_fstat`/`_lstat`
+# imports (Apple's FileTimestamp) come from Rust's own `std` codegen unit, not
+# from the generator, and they survive this. What the split buys is real but
+# narrower: 46 MB of build-time-only code and eleven crates' worth of supply
+# chain stop being *inside* the artifact a wallet ships, where only a linker
+# optimisation was keeping them out of users' hands.
+#
+# The generator now lives in the build-time-only `vela-uniffi-bindgen` crate.
+# Bindings are generated from the BUILT library (`generate --library …`), so
+# the recipe is the same command with a different `-p`.
+uniffi = { workspace = true }
 # The FIDO:/ payload as a module matrix the onboarding screens draw — the SAME
 # encoder the desktop uses (hardware.rs), so every platform renders the same
 # code for the same payload. Android/iOS get it through `cable_qr_matrix`

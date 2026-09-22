@@ -96,6 +96,13 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      # Provenance (spec 081, FR-012), for the same reason and in the same shape
+      # as release.yml: `id-token` mints the short-lived identity that signs the
+      # attestation, `attestations` records it against this repository. It lives
+      # in the publishing job only — the `package` job above also runs on pull
+      # requests, where there is nothing to attest.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -107,6 +114,13 @@ jobs:
           sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-clearsigning"
           mv "$RUNNER_TEMP/SHA256SUMS-clearsigning" SHA256SUMS-clearsigning
           cat SHA256SUMS-clearsigning
+      # Where the zip came from, not merely what it hashes to:
+      #     gh attestation verify vela-clearsigning-<version>.zip \
+      #       --repo mondaylabsltd/vela-wallet
+      - name: Provenance for the package
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'artifacts/*'
       - name: Upload
         env:
           GH_TOKEN: ${{ github.token }}

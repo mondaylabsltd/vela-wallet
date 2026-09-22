@@ -6,6 +6,18 @@ members = [
   "crates/vela-core-wasm",
   # Debug Android only: the parallel space's fixed keyset (spec 043, D2).
   "crates/vela-dev-fixtures-uniffi",
+  # Build-time only: the uniffi generator, so that no SHIPPED crate enables
+  # `uniffi/cli` (spec 081 FR-014). Excluded from `default-members` because
+  # cargo unifies features across one invocation: a bare `cargo build` here
+  # would otherwise fold `cli` — and `uniffi_bindgen` — back into the library
+  # that goes to the App Store.
+  "crates/vela-uniffi-bindgen",
+]
+default-members = [
+  "crates/vela-core",
+  "crates/vela-core-uniffi",
+  "crates/vela-core-wasm",
+  "crates/vela-dev-fixtures-uniffi",
 ]
 
 [workspace.package]

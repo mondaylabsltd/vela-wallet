@@ -1,0 +1,31 @@
+[package]
+name = "vela-uniffi-bindgen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Build-time only: the uniffi bindings generator, kept OUT of every shipped library (spec 081 FR-014)."
+publish = false
+
+# One generator for every uniffi library in this workspace. `uniffi-bindgen
+# generate --library <path>` reads the metadata out of the BUILT library, so
+# this binary needs no dependency on `vela-core-uniffi` or
+# `vela-dev-fixtures-uniffi` — which is exactly the point: the generator and the
+# shipped library no longer share a dependency graph.
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/main.rs"
+
+[dependencies]
+# `cli` is what drags in `uniffi_bindgen` (+ uniffi_udl, weedle, nom, clap,
+# goblin, cargo_metadata, rustix, tempfile, askama, toml …). Enabling it on a
+# LIBRARY crate put the whole generator inside the shipped iOS static library:
+# 46 MB of it, kept out of the .app only by the linker's dead-stripping. It
+# belongs here, on a binary that nothing links.
+#
+# NEVER enable `uniffi/cli` on `vela-core-uniffi` or `vela-dev-fixtures-uniffi`
+# again, and NEVER build the shipped library with a bare workspace-wide
+# `cargo build`: cargo unifies features across the packages of one invocation,
+# so a workspace build would fold `cli` back into the library. Every shipping
+# recipe passes `-p vela-core-uniffi`. The `nm -u` gate in
+# .github/workflows/ios-package.yml is the backstop.
+uniffi = { workspace = true, features = ["cli"] }

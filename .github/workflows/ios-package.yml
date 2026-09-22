@@ -129,6 +129,59 @@ jobs:
           [ "$stamped" = "$(git rev-parse --short=7 HEAD)" ] || {
             echo "::error::the archive says commit '$stamped', not $(git rev-parse --short=7 HEAD)"; exit 1; }
           test -d "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app"
+      # App Review rejects a binary that calls a required-reason API its privacy
+      # manifest does not declare, and this manifest is a plain file inside a
+      # folder-synchronised group: nothing in project.pbxproj names it, so
+      # nothing in project.pbxproj would notice it going missing. Three
+      # assertions, made on the ARCHIVE — the artifact that is actually
+      # submitted (spec 081 FR-014):
+      #
+      #   1. the manifest reached the bundle ROOT, which is where Apple looks;
+      #   2. it parses;
+      #   3. what the binary IMPORTS is a subset of what the manifest DECLARES.
+      #
+      # (3) is the one that earns its keep, and it is what settled FR-014: the
+      # app imports stat/fstat/lstat — Apple's FileTimestamp API — out of
+      # Rust's own `std`, which a static archive links whole, and NOT out of
+      # the uniffi generator the research blamed. A dependency can add a
+      # required-reason category without anyone writing a line of Swift, and
+      # only the binary shows it.
+      - name: Privacy manifest is present, valid, and matches the binary
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app"
+          MANIFEST="$APP/PrivacyInfo.xcprivacy"
+          test -f "$MANIFEST" || {
+            echo "::error::PrivacyInfo.xcprivacy is not at the app bundle root. It ships from app-ios/VelaWallet/VelaWallet/, a PBXFileSystemSynchronizedRootGroup owned by the VelaWallet target — check the file is still there and the group is still synchronised."
+            exit 1; }
+          plutil -lint "$MANIFEST"
+          # Flipping this to true means App Tracking Transparency, a prompt, and
+          # a privacy policy that no longer matches getvela.app/privacy.
+          tracking=$(plutil -extract NSPrivacyTracking raw -o - "$MANIFEST")
+          [ "$tracking" = "false" ] || { echo "::error::NSPrivacyTracking is '$tracking', not false"; exit 1; }
+          plutil -extract NSPrivacyTrackingDomains raw -o - "$MANIFEST" >/dev/null
+
+          nm -u "$APP/VelaWallet" | sed 's/^[[:space:]]*//' | sort -u > "$RUNNER_TEMP/ios-imports.txt"
+          declared=$(plutil -convert json -o - "$MANIFEST")
+          rc=0
+          # $1 = Apple's category, $2 = an ERE matched against WHOLE symbol names.
+          require() {
+            hits=$(grep -Ex -- "$2" "$RUNNER_TEMP/ios-imports.txt" | tr '\n' ' ') || true
+            [ -n "$hits" ] || return 0
+            case "$declared" in
+              *"NSPrivacyAccessedAPICategory$1"*)
+                echo "ok: $1 declared — imported: $hits" ;;
+              *)
+                echo "::error::the binary imports $hits — Apple's $1 required-reason API — but PrivacyInfo.xcprivacy does not declare NSPrivacyAccessedAPICategory$1. Either stop importing it (find out what pulled it in; a build-time-only dependency linked into a shipped crate is the usual cause) or declare it with the reason that is actually true."
+                rc=1 ;;
+            esac
+          }
+          require FileTimestamp '_(f|l)?stat(64)?(\$INODE64)?|_fstatat(64)?|_f?getattrlist|_getattrlistat|_getattrlistbulk|_NSFileCreationDate|_NSFileModificationDate|_NSURLContentModificationDateKey|_NSURLCreationDateKey'
+          require DiskSpace '_f?statfs(64)?|_NSFileSystemFreeSize|_NSFileSystemSize|_NSURLVolumeAvailableCapacity(ForImportantUsage|ForOpportunisticUsage)?Key|_NSURLVolumeTotalCapacityKey'
+          require SystemBootTime '_mach_absolute_time|_mach_continuous_time'
+          require UserDefaults '_OBJC_CLASS_\$_NSUserDefaults|_CFPreferences(CopyAppValue|SetAppValue|CopyValue|SetValue|AppSynchronize)'
+          require ActiveKeyboards '_OBJC_CLASS_\$_UITextInputMode'
+          exit $rc
       - name: Package
         working-directory: app-ios/VelaWallet
         run: |

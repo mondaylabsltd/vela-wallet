@@ -19,13 +19,16 @@
 #   publish  one tag, one Release: desktop (Windows, Linux; macOS only if this
 #            run signed it — by ruling it does not) and the extension. Phone
 #            packages stay workflow artifacts (spec 063): the stores are their
-#            channel
+#            channel. Every file it attaches is also ATTESTED here, the one
+#            place they all exist together (spec 081)
 #   released fast-forwards the `released` branch to the commit. Cloudflare
 #            deploys the web wallet from that branch, so the web wallet is the
 #            same commit as everything else
 #
 # Then, by hand, on the founder's Mac (spec 063 §3a):
 #     ./scripts/release-macos-local.sh vX.Y.Z --upload
+# and afterwards, once the images are on the Release, run macos-attest.yml for
+# the tag so the .dmg files carry provenance like everything else.
 name: Release
 
 on:
@@ -146,6 +149,15 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      # Provenance (spec 081, FR-012). This job is the ONE place every attached
+      # file exists together, so it is where they are attested. `id-token` mints
+      # the short-lived Sigstore identity that signs the attestation;
+      # `attestations` records it against this repository. Deliberately NOT in
+      # the packaging workflows: a reusable workflow cannot exceed its caller's
+      # permissions, and those workflows also run on pull requests, where an
+      # attestation would claim a release that is not one.
+      id-token: write
+      attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.gate.outputs.tag }}
@@ -198,6 +210,17 @@ jobs:
           sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS"
           mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
           cat SHA256SUMS
+      # A checksum says two files are the same file. It cannot say WHERE the
+      # file came from — the list itself is just text on the same page. This
+      # signs, for every file about to be attached (the checksum list included),
+      # the commit and the workflow run that produced it, so anyone can ask:
+      #     gh attestation verify <file> --repo mondaylabsltd/vela-wallet
+      # The macOS images are not here (they are signed and attached by hand on
+      # the founder's Mac); macos-attest.yml attests them afterwards.
+      - name: Provenance for everything this run attaches
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'packages/*'
       - name: Notes
         run: |
           {
