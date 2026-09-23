@@ -1070,6 +1070,13 @@ fn send_pick(
         .child(
             div()
                 .flex()
+                // The pill wraps below the chips rather than sitting on top of
+                // them. At third-column width the chip strip and the pill do
+                // not both fit once the chain dots load, and the pill is
+                // `flex_none`: 其他 was drawn half under 全部网络. Wrapping is
+                // the only one of the three outcomes (clip, overlap, wrap)
+                // that loses no word.
+                .flex_wrap()
                 .items_center()
                 .justify_between()
                 .gap(px(8.))

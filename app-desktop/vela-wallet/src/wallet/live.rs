@@ -51,6 +51,18 @@ impl Money {
         }
     }
 
+    /// The code money is actually DRAWN in, which is not always the code that
+    /// was picked: with no rate there is nothing to convert with, so the figure
+    /// — and anything labelling it — is dollars.
+    #[must_use]
+    pub fn code(&self) -> &str {
+        if self.rate.is_some() {
+            self.code.as_str()
+        } else {
+            "USD"
+        }
+    }
+
     /// A USD figure, in this currency — or in USD when it cannot be converted.
     #[must_use]
     pub fn text(&self, usd: f64, locale: &str) -> String {
@@ -111,6 +123,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     if view.hidden {
         return BalanceModel {
             label: s.total_balance.clone(),
+            currency: SharedString::from(money.code().to_owned()),
             state: BalanceState::Hidden,
             integer: SharedString::from(BALANCE_MASK),
             decimals: None,
@@ -122,6 +135,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     let Some(usd) = view.display_total_usd.or(view.cached_total_usd) else {
         return BalanceModel {
             label: s.total_balance.clone(),
+            currency: SharedString::from(money.code().to_owned()),
             state: BalanceState::Loading,
             // Not "$0". The core withholds the number until it has one, and the
             // shell must not fill the gap with a figure that reads as an answer.
@@ -135,6 +149,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     let (integer, decimals) = split_fiat(usd, locale, money);
     BalanceModel {
         label: s.total_balance.clone(),
+        currency: SharedString::from(money.code().to_owned()),
         // A zero is "live" only once EVERY chain has answered: a partial zero
         // (some chain unreachable), or a cached one, is an unknown wallet,
         // not a listening one.
@@ -630,6 +645,50 @@ mod tests {
             Money::default().text(1.5, "en-US"),
             Money::new("USD", Some(1.0)).text(1.5, "en-US"),
             "the default IS dollars"
+        );
+    }
+
+    /// The hero's label names the code its figure is actually drawn in.
+    ///
+    /// It used to write `· USD` verbatim, so a wallet converted to ZAR read
+    /// `总余额 · USD` over `ZAR 157.34` — the one line on the screen whose
+    /// whole job is to say which money this is.
+    #[test]
+    fn the_hero_labels_the_currency_it_is_actually_drawn_in() {
+        let priced = balance(
+            &view(Some(100.0)),
+            &strings(),
+            "en-US",
+            &Money::new("ZAR", Some(16.0)),
+        );
+        assert_eq!(priced.currency, "ZAR");
+        assert!(
+            priced.integer.contains("ZAR") || priced.integer.contains('R'),
+            "and the figure agrees: {}",
+            priced.integer
+        );
+
+        // No rate: the figure falls back to dollars, so the label does too —
+        // the two must never disagree about which money is on screen.
+        let unpriced = balance(
+            &view(Some(100.0)),
+            &strings(),
+            "en-US",
+            &Money::new("ZAR", None),
+        );
+        assert_eq!(unpriced.currency, "USD");
+        assert!(unpriced.integer.contains('$'), "{}", unpriced.integer);
+
+        // Even with nothing to draw, the label is still about a currency.
+        assert_eq!(
+            balance(
+                &view(None),
+                &strings(),
+                "en-US",
+                &Money::new("EUR", Some(0.9))
+            )
+            .currency,
+            "EUR"
         );
     }
 

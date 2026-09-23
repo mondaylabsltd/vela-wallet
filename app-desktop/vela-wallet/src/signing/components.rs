@@ -796,6 +796,7 @@ pub fn fee(
             value,
             selector,
             warning,
+            tappable,
         } => {
             // Said under the row, in the error colour: why the slide is shut.
             let warning = warning.clone().map(|text| {
@@ -831,14 +832,22 @@ pub fn fee(
                                     .text_color(theme.fg_base)
                                     .child(value.clone()),
                             )
-                            .child(icon_img(
-                                icons,
-                                Icon::ChevronRight,
-                                false,
-                                theme.fg_muted,
-                                12.,
-                            )),
+                            // One coin and a quote in hand: there is nothing
+                            // to choose and nothing to ask again, so this is
+                            // the fee STATED — no chevron, and no listener
+                            // under it. A control that cannot act is not
+                            // drawn as one (spec 081, dead controls).
+                            .when(*tappable, |el| {
+                                el.child(icon_img(
+                                    icons,
+                                    Icon::ChevronRight,
+                                    false,
+                                    theme.fg_muted,
+                                    12.,
+                                ))
+                            }),
                     );
+                let on_row = if *tappable { on_row } else { None };
                 return Some(
                     div()
                         .flex()

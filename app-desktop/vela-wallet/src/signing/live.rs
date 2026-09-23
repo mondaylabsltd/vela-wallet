@@ -991,6 +991,10 @@ pub fn fee_model(
     // is shut for the same reason.
     FeeModel::OnChain {
         label: s.fee_label.clone(),
+        // What the handler already knows (`signing_host::fee_tapped`): a
+        // failed quote can be asked again, more than one coin can be chosen
+        // between — and one coin with a quote in hand is neither.
+        tappable: fee.failed.is_some() || fee.options.len() > 1,
         value: if another_tier {
             s.fee_estimating.clone()
         } else {
@@ -1971,6 +1975,44 @@ mod fee_tests {
         fee.options = options;
         fee.confirm_fee_ready = ready;
         fee
+    }
+
+    /// Spec 081's dead-control rule, on the row that prices the request.
+    ///
+    /// The handler has always refused to act on one coin with a quote
+    /// (`signing_host::fee_tapped`); the drawing kept offering. The chevron
+    /// now says what the handler does — and a failed quote keeps it, because
+    /// that press asks again.
+    #[test]
+    fn the_fee_row_is_a_control_only_where_pressing_it_would_do_something() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let tappable = |fee: &FeeView| match fee_model(&clear, fee, 1, false, &s, "en", None) {
+            FeeModel::OnChain { tappable, .. } => tappable,
+            _ => unreachable!("a transaction has a fee row"),
+        };
+
+        let one_coin = quoted(vec![option("ETH", None, false, true)], true);
+        assert!(!tappable(&one_coin), "one coin, quoted: nothing to choose");
+
+        let two_coins = quoted(
+            vec![
+                option("ETH", None, false, true),
+                option(
+                    "USDT",
+                    Some("0xdac17f958d2ee523a2206206994597c13d831ec7"),
+                    false,
+                    false,
+                ),
+            ],
+            true,
+        );
+        assert!(tappable(&two_coins), "two coins: the list can open");
+
+        let mut failed = quoted(vec![option("ETH", None, false, true)], false);
+        failed.failed = Some(vela_core::app::fee_policy::FeeFailure::QuoteUnavailable);
+        assert!(tappable(&failed), "a failed quote can be asked again");
     }
 
     /// The coin list opens in the sheet with every coin the relay takes —

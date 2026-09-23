@@ -45,6 +45,11 @@ pub struct ExploreStrings {
     pub start_page: SharedString,
     pub close_tab: SharedString,
     pub add_to_favorites: SharedString,
+    /// What the corpus calls the place a URL is typed. The desktop's
+    /// add-a-favourite dialog takes one, and nothing else, so its field says
+    /// this rather than the search box's "搜索 dApp，或输入网址" — an offer to
+    /// search that this dialog cannot honour.
+    pub address_bar: SharedString,
     pub refresh: SharedString,
     pub back: SharedString,
     pub forward: SharedString,
@@ -99,6 +104,7 @@ impl ExploreStrings {
             start_page: s("explore.startPage"),
             close_tab: s("explore.closeTab"),
             add_to_favorites: s("explore.addToFavorites"),
+            address_bar: s("explore.addressBar"),
             refresh: s("explore.refresh"),
             back: s("explore.back"),
             forward: s("explore.forward"),

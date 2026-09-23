@@ -1126,10 +1126,12 @@ impl WalletPage {
             ExploreAsk::NewGroup { .. } => e.new_group.clone(),
             ExploreAsk::NewFavorite => e.add_to_favorites.clone(),
         };
-        // The favourite's field takes an address, so it says so — the address
-        // bar's own placeholder, rather than a second phrasing of it.
+        // The favourite's field takes a URL and nothing else — this dialog
+        // searches nothing — so it is named the way the corpus names the place
+        // a URL is typed (`explore.addressBar`). It used to promise
+        // "搜索 dApp，或输入网址": half of that offer did not exist.
         let placeholder = match form.ask {
-            ExploreAsk::NewFavorite => e.search_placeholder.clone(),
+            ExploreAsk::NewFavorite => e.address_bar.clone(),
             _ => SharedString::from(""),
         };
         // A name that is only spaces is not a name — the core refuses it, and
@@ -1147,8 +1149,12 @@ impl WalletPage {
         };
         let hover_accent = theme.accent_hover;
         let focus = self.explore_form_focus.clone();
+        // No label: the card's heading is already this field's name, and
+        // repeating it verbatim in small caps under itself ("添加到收藏" over
+        // "添加到收藏") says the same thing twice. `name_field`'s own rule,
+        // the one the create screen has followed since spec 019.
         let strings = crate::ui::NameFieldStrings {
-            label: title.clone(),
+            label: SharedString::from(""),
             placeholder,
             helper: SharedString::from(""),
             too_long_hint: SharedString::from(""),
@@ -1669,6 +1675,46 @@ impl WalletPage {
             .bg(theme.bg_raised)
             .border_1()
             .border_color(theme.border_card)
+            // Tab, between the two fields this form has. Nothing in this shell
+            // bound it, so a person who typed a name and pressed Tab — the
+            // reflex every other form on their machine has taught them —
+            // stayed in the name field and typed the address into it. Handled
+            // here rather than in `text_field`, because "what is next" is a
+            // property of the form, not of a well: `tab_index` would have to
+            // be assigned across the whole window to mean anything.
+            .on_key_down({
+                let name = name_focus.clone();
+                let address = address_focus.clone();
+                let editing = form.editing;
+                move |event: &gpui::KeyDownEvent, window, cx| {
+                    let ks = &event.keystroke;
+                    if ks.key != "tab"
+                        || ks.modifiers.platform
+                        || ks.modifiers.control
+                        || ks.modifiers.alt
+                    {
+                        return;
+                    }
+                    // An edited contact's address is fixed and not a field, so
+                    // there is nowhere for Tab to go.
+                    if editing {
+                        return;
+                    }
+                    // Two fields, so Tab is a toggle: pressing it twice is
+                    // where you started, and there is no separate backward
+                    // move to bind. ⇧Tab is the same toggle when it arrives —
+                    // which on this gpui it does not: a keystroke with no
+                    // `key_char` (⇧Tab has none) goes to the input context
+                    // first and is swallowed there, so the app never sees it
+                    // (`gpui_macos/window.rs::handle_key_event`).
+                    if name.is_focused(window) {
+                        address.focus(window, cx);
+                    } else {
+                        name.focus(window, cx);
+                    }
+                    cx.stop_propagation();
+                }
+            })
             .child(
                 div()
                     .text_size(theme::text_panel_title())
@@ -8142,6 +8188,39 @@ impl WalletPage {
 
     fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
+        // Measured ONCE per draw and shared by the bar, the rows and the
+        // clear dialogs: two measurements of the same document, taken a
+        // moment apart, would let the bar disagree with the rows under it.
+        let measured = self
+            .identity
+            .is_some()
+            .then(crate::executor::device_storage::measure);
+        // The three-colour bar. It was `STORAGE_SEGMENTS` — the fixture's
+        // 50/30/20 — on every machine, which is the class of defect this
+        // whole panel was fixed for: a picture of a measurement. iOS and
+        // Android have divided it by `bytes(of:)` since spec 047.
+        let segments = match measured.as_ref() {
+            Some(report) => {
+                use crate::executor::device_storage::Group;
+                #[allow(clippy::cast_precision_loss)]
+                let share = |group: Group| report.bytes_of(group) as f32;
+                let total = share(Group::User) + share(Group::Cache) + share(Group::Sessions);
+                // Nothing stored yet: the fixture's proportions are a drawing,
+                // not a claim about an empty wallet, so the bar keeps them
+                // rather than dividing by zero.
+                if total <= 0.0 {
+                    settings_fixtures::STORAGE_SEGMENTS.to_vec()
+                } else {
+                    let colours = settings_fixtures::STORAGE_SEGMENTS;
+                    vec![
+                        (share(Group::User) / total, colours[0].1),
+                        (share(Group::Cache) / total, colours[1].1),
+                        (share(Group::Sessions) / total, colours[2].1),
+                    ]
+                }
+            }
+            None => settings_fixtures::STORAGE_SEGMENTS.to_vec(),
+        };
         // Live since 031. The panel told everybody 2.4 MB / 216 records, and a
         // person deciding whether to clear a cache deserves their own number.
         let (amount, unit, records) = if self.identity.is_some() {
@@ -8190,15 +8269,11 @@ impl WalletPage {
                             .child(summary),
                     ),
             )
-            .child(storage_bar(theme, &settings_fixtures::STORAGE_SEGMENTS));
-        let live = self.identity.is_some();
-        let groups = if live {
-            settings_live::storage_groups(
-                &self.settings,
-                &crate::executor::device_storage::measure(),
-            )
-        } else {
-            settings_fixtures::storage_groups(&self.settings)
+            .child(storage_bar(theme, &segments));
+        let live = measured.is_some();
+        let groups = match measured.as_ref() {
+            Some(report) => settings_live::storage_groups(&self.settings, report),
+            None => settings_fixtures::storage_groups(&self.settings),
         };
         let page = cx.entity();
         let on_clear: Option<Rc<dyn Fn(&'static str, &mut Window, &mut gpui::App)>> =
@@ -11466,13 +11541,22 @@ impl WalletPage {
                     } else {
                         Vec::new()
                     };
-                    // A live send names the coin in its title; the mock's is USDT.
+                    // A live send names the coin in its title; the mock's is
+                    // USDT. With no coin named, the title is the plain action
+                    // word — NOT the mock's, which is a token this person may
+                    // not hold. `selected_token` is null for a reachable
+                    // reason: a hand-off from the address book opens the form
+                    // on the recipient before the token list answers (the
+                    // core's deliberate optimism), and that fetch took ~17s on
+                    // a cold start here — seventeen seconds of "发送 USDT" on a
+                    // wallet holding ETH and xDAI. The web's rule, same
+                    // reason (`flows/live-send.ts`).
                     let title = match (&send, panel) {
                         (Some(_), FlowPanel::Dsd2 | FlowPanel::Dsd2b) => self
                             .send_views(cx)
                             .and_then(|(view, _)| view.selected_token)
                             .map_or_else(
-                                || flow_fixtures::panel_title(panel, &self.flow_strings),
+                                || self.flow_strings.send_action.clone(),
                                 |token| {
                                     SharedString::from(crate::wallet::fill(
                                         &self.flow_strings.send_title,
