@@ -556,6 +556,99 @@ fn active_pair() -> Sut {
     )
 }
 
+/// One wallet leaves, the others stay — the half a person could not reach.
+///
+/// Signing out took every row, so a device holding six could sign out of all
+/// six or none (owner, 2026-09-23: 「有时候不想退出所有，只想退出单个」).
+/// Removing a row is not deleting a wallet: the passkey still opens it, and
+/// the row comes back on the next sign-in with everything keyed to its
+/// address — the same reason the wide half is safe.
+#[test]
+fn one_account_can_leave_without_taking_the_others() {
+    // Two wallets, the SECOND active: removing the first must not leave the
+    // index pointing past its row.
+    let mut sut = restored(
+        vec![legacy("c1", "Ann", ADDR_A), legacy("c2", "Bo", ADDR_B)],
+        1,
+    );
+    let ops = sut.dispatch(Event::RemoveAccount { index: 0 });
+    assert_eq!(
+        ops,
+        vec![
+            Op::RemoveAccount {
+                address: ADDR_A.to_owned()
+            },
+            Op::SaveActiveIndex { index: 0 },
+        ],
+        "the row goes by ADDRESS, and the active one follows it down"
+    );
+    let view = sut.view();
+    assert!(view.has_wallet, "the other wallet is still signed in");
+    assert_eq!(view.accounts.len(), 1);
+    assert_eq!(view.address, ADDR_B, "and it is the one that was active");
+    assert_eq!(view.allowed_route, SessionRoute::Wallet);
+}
+
+/// Removing the ACTIVE row puts another wallet in front of the person — and
+/// drops the extension's snapshot, which mirrors the active account and would
+/// otherwise keep answering as a wallet this device just put away.
+#[test]
+fn removing_the_active_wallet_lands_on_another_and_clears_the_mirror() {
+    let mut sut = active_pair();
+    let ops = sut.dispatch(Event::RemoveAccount { index: 0 });
+    assert_eq!(
+        ops,
+        vec![
+            Op::RemoveAccount {
+                address: ADDR_A.to_owned()
+            },
+            Op::SaveActiveIndex { index: 0 },
+            Op::ClearExtensionCache,
+        ]
+    );
+    let view = sut.view();
+    assert_eq!(view.address, ADDR_B);
+    assert_eq!(view.active_index, 0);
+}
+
+/// The LAST row leaving is being signed out, reached the same way — there is
+/// one definition of "this device is not signed in", and a wallet-less
+/// `Active` phase is what invariant ① forbids.
+#[test]
+fn removing_the_last_wallet_is_signing_out() {
+    let mut sut = restored(vec![legacy("c1", "Ann", ADDR_A)], 0);
+    let ops = sut.dispatch(Event::RemoveAccount { index: 0 });
+    assert_eq!(ops, vec![Op::ClearSignedInWallet, Op::ClearExtensionCache]);
+    let view = sut.view();
+    assert!(!view.has_wallet);
+    assert_eq!(view.address, "");
+    assert_eq!(view.allowed_route, SessionRoute::Onboarding);
+}
+
+/// A row the list does not have is the whole action's no-op — as a switch is.
+/// A balance-sorted display that reordered under a slow write must not be able
+/// to remove a stranger.
+#[test]
+fn removing_a_row_that_is_not_there_does_nothing() {
+    let mut sut = active_pair();
+    assert!(sut.dispatch(Event::RemoveAccount { index: 7 }).is_empty());
+    assert_eq!(sut.view().accounts.len(), 2);
+}
+
+/// The sign-out dialog knows how many wallets it is about to take, so the copy
+/// can say so instead of implying one.
+#[test]
+fn the_sign_out_dialog_counts_the_wallets_it_takes() {
+    let mut sut = active_pair();
+    sut.dispatch(Event::SignOut);
+    sut.resolve(Res::PendingUploads { has_pending: false });
+    assert_eq!(
+        sut.view().sign_out.map(|s| s.account_count),
+        Some(2),
+        "six wallets and one wallet cannot read the same"
+    );
+}
+
 /// Invariant ⑤ — signing out with un-synced pending uploads warns; and LOGOUT
 /// ends the sign-in on disk too (open question 2, decided in spec 017): the
 /// confirm emits both clears alongside the in-memory wipe.

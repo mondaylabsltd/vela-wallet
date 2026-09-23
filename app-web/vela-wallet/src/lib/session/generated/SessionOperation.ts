@@ -5,4 +5,4 @@ import type { Account } from "./Account";
  * What this machine asks the platform to do. Sentences, not I/O — the shell
  * owns AsyncStorage, its keys, and every failure mode.
  */
-export type SessionOperation = { "type": "load_accounts" } | { "type": "load_active_index" } | { "type": "save_account", account: Account, } | { "type": "save_active_index", index: number, } | { "type": "check_pending_uploads" } | { "type": "clear_signed_in_wallet" } | { "type": "clear_extension_cache" };
+export type SessionOperation = { "type": "load_accounts" } | { "type": "load_active_index" } | { "type": "save_account", account: Account, } | { "type": "save_active_index", index: number, } | { "type": "check_pending_uploads" } | { "type": "clear_signed_in_wallet" } | { "type": "remove_account", address: string, } | { "type": "clear_extension_cache" };

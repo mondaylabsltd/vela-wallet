@@ -4,4 +4,4 @@ import type { Account } from "./Account";
 /**
  * What the shell observed.
  */
-export type SessionShellResult = { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "accounts_unavailable" } | { "type": "active_index_loaded", index: number, } | { "type": "account_saved" } | { "type": "active_index_saved" } | { "type": "pending_uploads", has_pending: boolean, } | { "type": "pending_uploads_unavailable" } | { "type": "signed_in_wallet_cleared" } | { "type": "extension_cache_cleared" };
+export type SessionShellResult = { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "accounts_unavailable" } | { "type": "active_index_loaded", index: number, } | { "type": "account_saved" } | { "type": "account_removed" } | { "type": "active_index_saved" } | { "type": "pending_uploads", has_pending: boolean, } | { "type": "pending_uploads_unavailable" } | { "type": "signed_in_wallet_cleared" } | { "type": "extension_cache_cleared" };
