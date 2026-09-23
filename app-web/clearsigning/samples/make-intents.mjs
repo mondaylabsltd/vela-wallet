@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 globalThis.window = globalThis;
 
-for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js', 'lib/registry.js', 'samples/scenarios-source.js']) {
+for (const file of ['src/lib/keccak.js', 'src/lib/abi.js', 'src/lib/encode.js', 'src/lib/registry.js', 'samples/scenarios-source.js']) {
   // eslint-disable-next-line no-eval
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }

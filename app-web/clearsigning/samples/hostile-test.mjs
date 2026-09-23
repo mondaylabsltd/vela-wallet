@@ -37,7 +37,7 @@ const CDP = 9398;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 globalThis.window = globalThis;
-for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js']) {
+for (const file of ['src/lib/keccak.js', 'src/lib/abi.js', 'src/lib/encode.js']) {
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }
 const lib = globalThis.VelaCS;
@@ -127,7 +127,7 @@ try {
   for (let i = 0; i < 80; i++) {
     try { await (await fetch(`http://127.0.0.1:${CDP}/json/version`)).json(); break; } catch { await sleep(250); }
   }
-  const url = 'https://getvela.app/gallery.html?lang=zh&src=samples/hostile-intents.json';
+  const url = 'https://getvela.app/demo/gallery.html?lang=zh&src=/samples/hostile-intents.json';
   const tab = await (await fetch(
     `http://127.0.0.1:${CDP}/json/new?${encodeURIComponent(url)}`, { method: 'PUT' },
   )).json();
@@ -207,10 +207,10 @@ const COUNT_WEBAUTHN = `(() => {
   c.create = (o) => { window.__webauthnCalls++; return create(o); };
 })();`;
 
-const SIGNER = 'https://getvela.app/sign.html';
+const SIGNER = 'https://getvela.app/src/sign.html';
 const SAFE_OP_HASH = '0x' + 'a1'.repeat(32); // stands for any 32 bytes a Safe would accept
 const ns075 = globalThis.VelaCS;
-for (const file of ['lib/signer.js', 'lib/ceremony.js']) {
+for (const file of ['src/lib/signer.js', 'src/lib/ceremony.js']) {
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }
 Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });

@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  var SIGNER = 'https://getvela.app/sign.html?ch=post&lang=en';
+  var SIGNER = 'https://getvela.app/src/sign.html?ch=post&lang=en';
   var out = document.getElementById('out');
 
   function buildIntent() {

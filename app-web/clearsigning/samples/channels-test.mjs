@@ -28,7 +28,7 @@ const b64url = (s) => Buffer.from(s).toString('base64url');
 // The page's own encoders, so the fixtures below are built the same way the
 // wallet would build them.
 globalThis.window = globalThis;
-for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js']) {
+for (const file of ['src/lib/keccak.js', 'src/lib/abi.js', 'src/lib/encode.js']) {
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }
 const lib = globalThis.VelaCS;
@@ -191,7 +191,7 @@ try {
   // === 1. URL fragment in, loopback callback out ============================
   {
     const payload = JSON.stringify({ intent: login.intent, context: login.context });
-    const url = 'https://getvela.app/sign.html?ch=url&lang=en#i=' + b64url(payload) +
+    const url = 'https://getvela.app/src/sign.html?ch=url&lang=en#i=' + b64url(payload) +
       '&cb=' + b64url(`http://127.0.0.1:${LOOPBACK_PORT}/vela`) + '&t=tok-123';
     const page = await Page.open(url);
     await page.addAuthenticator();
@@ -255,7 +255,7 @@ try {
   // === 3. a transaction must be refused, not signed =========================
   {
     const payload = JSON.stringify({ intent: transfer.intent, context: transfer.context });
-    const page = await Page.open('https://getvela.app/sign.html?ch=url&lang=en#i=' + b64url(payload));
+    const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' + b64url(payload));
     await page.addAuthenticator();
     await sleep(1200);
     const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
@@ -293,7 +293,7 @@ try {
     };
 
     const payload = JSON.stringify({ intent, context });
-    const page = await Page.open('https://getvela.app/sign.html?ch=url&lang=en#i=' + b64url(payload) +
+    const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' + b64url(payload) +
       '&cb=' + b64url(`http://127.0.0.1:${LOOPBACK_PORT}/vela`) + '&t=tx-1');
     await page.addAuthenticator();
     await sleep(1200);
@@ -343,7 +343,7 @@ try {
       method: 'eth_sendTransaction', origin: 'https://app.uniswap.org',
       params: [{ to: USDC, value: '0x0', data: asked }],
     };
-    const page = await Page.open('https://getvela.app/sign.html?ch=url&lang=en#i=' +
+    const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' +
       b64url(JSON.stringify({ intent, context })));
     await sleep(1400);
 
@@ -390,7 +390,7 @@ try {
       method: 'wallet_sendCalls', origin: 'https://app.uniswap.org',
       params: [{ version: '1.0', chainId: '0x1', from: SAFE, calls: [{ to: USDC, value: '0x0', data: asked }] }],
     };
-    const page = await Page.open('https://getvela.app/sign.html?ch=url&lang=en#i=' +
+    const page = await Page.open('https://getvela.app/src/sign.html?ch=url&lang=en#i=' +
       b64url(JSON.stringify({ intent, context })));
     await sleep(1400);
     const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");

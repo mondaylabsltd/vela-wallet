@@ -25,7 +25,7 @@ function check(name, pass, detail) {
 
 globalThis.window = globalThis;
 Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
-for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js', 'lib/digest.js', 'lib/safeop.js']) {
+for (const file of ['src/lib/keccak.js', 'src/lib/abi.js', 'src/lib/encode.js', 'src/lib/digest.js', 'src/lib/safeop.js']) {
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }
 const ours = globalThis.VelaCS;

@@ -28,7 +28,8 @@
 // leak from.
 //
 // This does NOT replace `sign.html`. The folder stays hand-written and
-// zero-build — `sign.html` and `lib/*.js` are what a person reads and edits —
+// zero-build — `src/sign.html` and `src/lib/*.js` are what a person reads and
+// edits —
 // and this produces the artefact that is PUBLISHED.
 //
 // **`dist/` is the deployment, and it is in git** (owner, 2026-09-23). It holds
@@ -79,7 +80,10 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
-const SOURCE = join(ROOT, 'sign.html');
+/// The signing page's source. `src/` is the boundary: what is in it is what
+/// the artefact is made of, and nothing else in this folder is.
+const SRC = join(ROOT, 'src');
+const SOURCE = join(SRC, 'sign.html');
 const DIST = join(ROOT, 'dist');
 const INDEX = join(DIST, 'index.json');
 const pageAt = (hash) => join(DIST, 'b', hash, 'sign.html');
@@ -97,7 +101,7 @@ function partsOf(html) {
 }
 
 function read(relative) {
-	const path = join(ROOT, relative);
+	const path = join(SRC, relative);
 	if (!existsSync(path)) throw new Error(`sign.html names ${relative}, which is not there`);
 	// LF only, and no trailing-newline surprises: the bytes must not depend on
 	// whoever last edited the file on which platform.

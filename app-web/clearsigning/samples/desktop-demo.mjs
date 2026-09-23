@@ -43,7 +43,7 @@ const hex = (b) => '0x' + Buffer.from(b).toString('hex');
 
 globalThis.window = globalThis;
 Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
-for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js']) {
+for (const file of ['src/lib/keccak.js', 'src/lib/abi.js', 'src/lib/encode.js']) {
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }
 const lib = globalThis.VelaCS;
@@ -221,7 +221,7 @@ console.log('  钥匙     :', key.credentialId.slice(0, 16) + '… (' + key.sour
 request.context.allowCredentials = [key.credentialId];
 
 const payload = JSON.stringify({ intent: request.intent, context: request.context });
-const signUrl = `http://localhost:${PAGE_PORT}/sign.html?ch=url&lang=zh` +
+const signUrl = `http://localhost:${PAGE_PORT}/src/sign.html?ch=url&lang=zh` +
   `#i=${b64url(payload)}&cb=${b64url(`http://127.0.0.1:${CALLBACK_PORT}/vela`)}&t=${token}`;
 
 console.log('');

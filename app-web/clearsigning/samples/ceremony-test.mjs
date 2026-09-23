@@ -25,12 +25,12 @@ import { startRegistry } from './mock-registry.mjs';
 
 const CDP = 9392;
 const TLS_PORT = 8446;
-const SIGNER = 'https://getvela.app/sign.html';
+const SIGNER = 'https://getvela.app/src/sign.html';
 const WALLET = 'Test Wallet';
 const check = makeChecks();
 
-const ns = loadPageLibs(['lib/keccak.js', 'lib/abi.js', 'lib/encode.js', 'lib/signer.js',
-  'lib/ceremony.js']);
+const ns = loadPageLibs(['src/lib/keccak.js', 'src/lib/abi.js', 'src/lib/encode.js', 'src/lib/signer.js',
+  'src/lib/ceremony.js']);
 
 // vela-core, compiled: what the wallet itself does with a registration and
 // with two recovery assertions.

@@ -11,7 +11,7 @@ const root = join(here, '..');
 const repo = join(root, '..', '..');
 
 globalThis.window = globalThis;
-for (const file of ['lib/identicon-features.js', 'lib/identicon.js']) {
+for (const file of ['src/lib/identicon-features.js', 'src/lib/identicon.js']) {
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }
 const ours = globalThis.VelaCS.identicon;

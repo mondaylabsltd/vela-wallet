@@ -192,14 +192,24 @@ published as ONE file whose every executable byte is covered by one hash.
 
 ## Files
 
-| File | Role |
+The folder has a boundary now, and it is structural rather than a convention:
+**`src/` is what the artefact is made of, `dist/` is what is deployed, and
+nothing else in here is served.** Before there was a build step, the whole
+folder was published as it stood; now "which files are served" is no longer
+"all of them", and a layout that still implied otherwise would invite someone
+to deploy the root — a multi-file page whose hash nobody verified.
+
+| Path | Role |
 | --- | --- |
+| `src/` | The signing page: `sign.html`, `sign.js`, `sheet.css`, `lib/`. This, and only this, is what the artefact contains. |
 | `dist/` | **What is deployed** — an index and every published version at `b/<sha256>/sign.html`. In git, so a published path cannot vanish by accident. Built by `bun samples/build-single.mjs`. |
-| `index.html` | The demo / self-check page |
-| `sign.html` | The signing page the wallets open |
-| `app.css`, `sheet.css` | Styles, light + dark via `prefers-color-scheme` |
-| `app.js`, `sign.js`, `lib/` | Behaviour |
-| `icons/` | Favicons |
+| `demo/` | The self-check page (`index.html`), the fixture board (`gallery.html`) and the icons. Development surfaces; not published with the signer. |
+| `samples/` | Harnesses — Node/Bun only, for the maintainer. |
+
+`src/sign.html` names no subresource but its own scripts and stylesheet: it
+carries no favicon, because the artefact carries none, and a source page that
+referenced something the shipped page does not would be a difference between
+what is tested and what is sent.
 
 `icons/icon.svg` is a copy of the canonical mark at `docs/design/icon/app-icon.svg`.
 Regenerate the PNGs after changing it:

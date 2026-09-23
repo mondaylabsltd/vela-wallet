@@ -5,7 +5,7 @@
   'use strict';
 
   var params = new URLSearchParams(location.search);
-  var source = params.get('src') || 'samples/intents.json';
+  var source = params.get('src') || '../samples/intents.json';
   var grid = document.getElementById('grid');
   var cases = [];
 

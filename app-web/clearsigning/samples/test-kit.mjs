@@ -47,7 +47,35 @@ export function makeChecks() {
  * browser process, so the page must really be on getvela.app), plus Chrome.
  * `hosts` are the names mapped to the TLS server besides getvela.app.
  */
+/**
+ * Every child this harness spawned, so an abnormal exit still takes them with
+ * it.
+ *
+ * A run that throws used to leave its browser holding the debugging port, and
+ * the NEXT run would then fail to open a tab — a failure with nothing to do
+ * with the code under test, in a different place each time. Measured, twice.
+ */
+const spawned = new Set();
+let reaperInstalled = false;
+
+function reapOnExit() {
+  if (reaperInstalled) return;
+  reaperInstalled = true;
+  const reap = () => {
+    for (const child of spawned) {
+      try { child.kill(); } catch { /* already gone */ }
+    }
+    spawned.clear();
+  };
+  process.on('exit', reap);
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => { reap(); process.exit(1); });
+  }
+  process.on('uncaughtException', (error) => { reap(); throw error; });
+}
+
 export async function startBrowser({ cdp, tlsPort = 8443, hosts = [] }) {
+  reapOnExit();
   const SB = process.env.SB;
   if (!SB || !process.env.CHROME_BIN) throw new Error('set CHROME_BIN and SB (see HANDOVER.md)');
   const tls = spawn('python3', [join(SB, 'tls-serve.py'), root, String(tlsPort), join(SB, 'cert.pem'), join(SB, 'key.pem')], { stdio: 'ignore' });
@@ -59,6 +87,8 @@ export async function startBrowser({ cdp, tlsPort = 8443, hosts = [] }) {
     '--ignore-certificate-errors', '--no-proxy-server',
     '--no-first-run', '--no-default-browser-check', 'about:blank',
   ], { stdio: 'ignore' });
+  spawned.add(chrome);
+  spawned.add(tls);
   for (let i = 0; i < 80; i++) {
     try { await (await fetch(`http://127.0.0.1:${cdp}/json/version`)).json(); break; } catch { await sleep(250); }
   }
@@ -66,6 +96,8 @@ export async function startBrowser({ cdp, tlsPort = 8443, hosts = [] }) {
   return {
     cdp,
     kill() {
+      spawned.delete(chrome);
+      spawned.delete(tls);
       chrome.kill();
       tls.kill();
       try { rmSync(profile, { recursive: true, force: true }); } catch { /* ignore */ }

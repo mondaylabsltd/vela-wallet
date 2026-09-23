@@ -7,7 +7,7 @@
   'use strict';
 
   var params = new URLSearchParams(location.search);
-  var SIGNER = params.get('signer') || 'https://getvela.app/sign.html?ch=post&lang=en';
+  var SIGNER = params.get('signer') || 'https://getvela.app/src/sign.html?ch=post&lang=en';
   var signerOrigin = new URL(SIGNER).origin;
   var out = document.getElementById('out');
   var child = null;
