@@ -300,7 +300,7 @@ export function hasPasskeyOverride(): boolean {
  * registered as `internal` is never offered over a QR code unless the request
  * also says `hybrid`.
  *
- * `clear_signer` (spec 071) is not a place a passkey is: the request goes to a
+ * `trusted_signer` (spec 071) is not a place a passkey is: the request goes to a
  * separate page that shows it and runs the ceremony itself
  * (`$lib/signing/sign-challenge.ts` routes on it). Here it adds nothing.
  *
@@ -310,7 +310,7 @@ export function hasPasskeyOverride(): boolean {
  * `sign-challenge.ts`, explicitly; the ceremonies that are not a request at
  * all (creating a wallet, proving a new key) never inherit it.
  */
-export type SignMethod = 'auto' | 'platform' | 'hybrid' | 'security_key' | 'clear_signer';
+export type SignMethod = 'auto' | 'platform' | 'hybrid' | 'security_key' | 'trusted_signer';
 let signMethod: SignMethod | null = null;
 export function setSignMethod(method: SignMethod | null): void {
 	signMethod = method;
@@ -321,7 +321,7 @@ export function getSignMethod(): SignMethod | null {
 }
 
 const METHOD_ROUTING: Record<
-	Exclude<SignMethod, 'auto' | 'clear_signer'>,
+	Exclude<SignMethod, 'auto' | 'trusted_signer'>,
 	{ hint: string; transports: AuthenticatorTransport[] }
 > = {
 	platform: { hint: 'client-device', transports: ['internal'] },
@@ -333,7 +333,7 @@ type Routing = (typeof METHOD_ROUTING)[keyof typeof METHOD_ROUTING];
 
 /** Where a method points the browser; `null` = wherever it would look on its own. */
 function routing(method: SignMethod | null): Routing | null {
-	return method === null || method === 'auto' || method === 'clear_signer'
+	return method === null || method === 'auto' || method === 'trusted_signer'
 		? null
 		: METHOD_ROUTING[method];
 }

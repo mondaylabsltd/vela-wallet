@@ -60,7 +60,7 @@ struct PublishMember {
     /// The proof collected AT CREATION. Absent on the login re-publish, whose
     /// executor signs the member live.
     let proof: [String: Any]?
-    /// Spec 075: the Clear Signer page this member lives behind, when it does.
+    /// Spec 075: the Trusted Signer page this member lives behind, when it does.
     /// The core fills it (from the account's key on a re-publish, from the
     /// draft on a create) so a live signature reaches the page HOLDING the key
     /// rather than whichever page Settings names. Empty for every other route.
@@ -125,7 +125,7 @@ actor RegistryClient {
         self.resolver = resolver
     }
 
-    /// The service in force. Spec 075: the Clear Signer page fetches its own
+    /// The service in force. Spec 075: the Trusted Signer page fetches its own
     /// member challenge, and it must ask the registry THIS wallet is using —
     /// otherwise the two challenges cannot be equal and the proof is refused.
     func base() -> String { baseURL }

@@ -253,7 +253,7 @@
 		});
 	});
 
-	// WHERE the signing passkey is — or whether the Clear Signer signs (spec
+	// WHERE the signing passkey is — or whether the Trusted Signer signs (spec
 	// 071) — this request's, and only this request's. Every request starts at
 	// Settings' default (`sign_pref`); a pick here lies over it for this request
 	// alone and never reaches the preference. The passkey module reads it at the

@@ -771,7 +771,7 @@ function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
 /**
  * The default "Sign with" (spec 071): the four this shell offers, in the
  * core's order, named as the signing sheet names them. The core's fifth, the
- * Clear Signer, is not one of them — the web wallet has none. The subtitle is load-bearing, as the
+ * Trusted Signer, is not one of them — the web wallet has none. The subtitle is load-bearing, as the
  * speed sheet's is: this is where every signature STARTS, and a single one
  * can still be signed another way.
  */

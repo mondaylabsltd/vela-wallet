@@ -1,4 +1,4 @@
-//! Rules of the stored "Sign with" default and the Clear Signer page (spec
+//! Rules of the stored "Sign with" default and the Trusted Signer page (spec
 //! 071), one test per rule. The machine's job is refusing to invent a
 //! preference, and refusing to store a page a browser could not sign on.
 
@@ -10,7 +10,7 @@ use support::DomainDriver;
 use vela_core::app::sign_pref::{
     Event, SignPref, SignPrefOperation as Op, SignPrefShellResult as Res,
 };
-use vela_core::clear_signer::DEFAULT_SIGNER_URL;
+use vela_core::trusted_signer::DEFAULT_SIGNER_URL;
 
 type Sut = DomainDriver<SignPref>;
 
@@ -35,7 +35,13 @@ fn nothing_stored_is_auto_and_the_official_page() {
     assert!(!view.method_committed);
     assert_eq!(
         view.offered,
-        ["auto", "platform", "hybrid", "security_key", "clear_signer"]
+        [
+            "auto",
+            "platform",
+            "hybrid",
+            "security_key",
+            "trusted_signer"
+        ]
     );
     assert_eq!(view.signer_url, DEFAULT_SIGNER_URL);
     assert!(view.signer_url_is_default);
@@ -45,8 +51,8 @@ fn nothing_stored_is_auto_and_the_official_page() {
 
 #[test]
 fn a_stored_method_and_page_are_read_back() {
-    let view = loaded(Some("clear_signer"), Some("https://sign.example/cs/")).view();
-    assert_eq!(view.method, "clear_signer");
+    let view = loaded(Some("trusted_signer"), Some("https://sign.example/cs/")).view();
+    assert_eq!(view.method, "trusted_signer");
     assert!(view.method_committed);
     assert_eq!(view.signer_url, "https://sign.example/cs/");
     assert!(!view.signer_url_is_default);

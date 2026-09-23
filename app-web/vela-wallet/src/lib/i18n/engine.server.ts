@@ -378,9 +378,9 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 				platform: k('onboarding.create.methodPlatformTitle'),
 				hybrid: k('onboarding.create.methodHybridTitle'),
 				security_key: k('onboarding.create.methodSecurityKeyTitle'),
-				clear_signer: k('componentsUi.signing.clearSignerTitle')
+				trusted_signer: k('componentsUi.signing.trustedSignerTitle')
 			},
-			clearSignerBody: k('componentsUi.signing.clearSignerBody'),
+			trustedSignerBody: k('componentsUi.signing.trustedSignerBody'),
 			pageTitle: k('settings.signing.pageTitle'),
 			pageSubtitle: k('settings.signing.pageSubtitle'),
 			pageOfficial: k('settings.signing.pageOfficial'),

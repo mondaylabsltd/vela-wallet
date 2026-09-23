@@ -3,7 +3,7 @@
 **Feature Branch**: `071-clear-signer`
 **Created**: 2026-09-22
 **Status**: Core + page done; shells in progress
-**Input**: Owner, 2026-09-22 — "帮我把 app-web/clearsigning 整明白，desktop ios android 甚至是 web 版本都应该能和这个零依赖的签名模块连接，现在签名方式有三种选项（这台设备/手机或平板/USB 安全密钥），我觉得需要新增一种新的，名字叫什么我没想好，它应对的是一种可信运行环境，所签即所见的效果，连接到这个签名器的通道有一些，比如蓝牙（BLE GATT），比如 websocket（主要用在一个 ios app 或 android app 选择这种签名方式时，为了方便可以和本机上的一个网页通信，这个网页可以是 vela 官方部署，也可以用户自己部署的一个零依赖的 clearsigning），比如 URL 片段 + 回环回调。"
+**Input**: Owner, 2026-09-22 — "帮我把 app-web/trusted-signer 整明白，desktop ios android 甚至是 web 版本都应该能和这个零依赖的签名模块连接，现在签名方式有三种选项（这台设备/手机或平板/USB 安全密钥），我觉得需要新增一种新的，名字叫什么我没想好，它应对的是一种可信运行环境，所签即所见的效果，连接到这个签名器的通道有一些，比如蓝牙（BLE GATT），比如 websocket（主要用在一个 ios app 或 android app 选择这种签名方式时，为了方便可以和本机上的一个网页通信，这个网页可以是 vela 官方部署，也可以用户自己部署的一个零依赖的 clearsigning），比如 URL 片段 + 回环回调。"
 
 Owner decisions **[R]**; decisions made here **[D]**.
 
@@ -130,12 +130,12 @@ core (framing, handshake, encryption, replay), shell peripheral on Android first
   TCP socket and nothing more. Over UniFFI it is `ClearSignerConnection`, which
   also verifies, so its outcome is already the verdict.
 - **FR-003b** `app::sign_pref` machine: the default "Sign with" and the signer
-  page (`vela.signMethod`, `vela.clearSignerUrl`), validated by the core.
+  page (`vela.signMethod`, `vela.trustedSignerUrl`), validated by the core.
 - **FR-004** BLE session (P3): frame split/join, ECDH P-256 + HKDF + AES-GCM,
   comparison code, monotonic `n` — PROTOCOL.md §2–4, byte-compatible with
   `lib/transport/ble.js`.
 
-### The page (`app-web/clearsigning`)
+### The page (`app-web/trusted-signer`)
 
 - **FR-005** A `ws` channel in `lib/intake.js`: `?ch=ws#p=<port>&t=<token>`,
   connects `ws://127.0.0.1:<port>`, says hello with the token, receives one

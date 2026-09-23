@@ -48,7 +48,7 @@ pub struct DeviceKey {
     pub name: String,
     #[serde(default)]
     pub transports: String,
-    /// Spec 075: the Clear Signer page this key lives behind (the account
+    /// Spec 075: the Trusted Signer page this key lives behind (the account
     /// record's `signer_origin`), or empty.
     #[serde(default)]
     pub signer_origin: Option<String>,
@@ -87,9 +87,9 @@ pub struct WalletKeyRow {
     pub aaguid: String,
     /// "Apple Passwords", "1Password" … empty when the catalog cannot name it.
     pub provider_name: String,
-    /// `platform` | `hybrid` | `security_key` | `clear_signer`.
+    /// `platform` | `hybrid` | `security_key` | `trusted_signer`.
     pub method: String,
-    /// Spec 075: the Clear Signer page this key lives behind, when it does —
+    /// Spec 075: the Trusted Signer page this key lives behind, when it does —
     /// so a row can name the page rather than the device on the far side of
     /// it. Known from the account record; the registry does not store it, so a
     /// row the device could not match stays `None`.
@@ -134,7 +134,7 @@ fn method_of(attachment: &str, transports: &str) -> &'static str {
 }
 
 /// The same question for a ROW, where one thing outranks the report: a key that
-/// lives behind a Clear Signer page (spec 075).
+/// lives behind a Trusted Signer page (spec 075).
 ///
 /// A page runs the ceremony in a browser, so it reports `platform` — the
 /// attachment describes the authenticator on the page's side, which this wallet
@@ -144,7 +144,7 @@ fn method_of(attachment: &str, transports: &str) -> &'static str {
 /// built-in one. Where a key lives is the page.
 fn row_method(attachment: &str, transports: &str, signer_origin: Option<&str>) -> &'static str {
     if signer_origin.is_some_and(|origin| !origin.is_empty()) {
-        return "clear_signer";
+        return "trusted_signer";
     }
     method_of(attachment, transports)
 }
@@ -401,9 +401,15 @@ pub fn step(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> Ke
 
 /// Every "Sign with" value, in the order every shell lists them: `auto` (do
 /// what the wallet always did), the three places a passkey can be, and the
-/// Clear Signer (spec 071) — a separate page that checks the request and runs
+/// Trusted Signer (spec 071) — a separate page that checks the request and runs
 /// the ceremony itself, which [`sign_route`] does not route.
-pub const SIGN_METHODS: [&str; 5] = ["auto", "platform", "hybrid", "security_key", "clear_signer"];
+pub const SIGN_METHODS: [&str; 5] = [
+    "auto",
+    "platform",
+    "hybrid",
+    "security_key",
+    "trusted_signer",
+];
 
 /// Where one signing ceremony goes: the credential it is pinned to, the
 /// transports the request carries, and the method the shell routes by.
@@ -411,10 +417,10 @@ pub const SIGN_METHODS: [&str; 5] = ["auto", "platform", "hybrid", "security_key
 pub struct SignRoute {
     pub credential_id: String,
     pub transports: String,
-    /// `platform` | `hybrid` | `security_key` | `clear_signer`.
+    /// `platform` | `hybrid` | `security_key` | `trusted_signer`.
     pub method: String,
-    /// Spec 075: for `clear_signer`, the page the key lives behind — empty
-    /// means the person's Clear Signer page from Settings.
+    /// Spec 075: for `trusted_signer`, the page the key lives behind — empty
+    /// means the person's Trusted Signer page from Settings.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub signer_origin: String,
 }
@@ -435,7 +441,7 @@ pub struct SignRoute {
 #[must_use]
 pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
     let usable = |key: &&DeviceKey| !key.credential_id.is_empty();
-    // Spec 075: a key minted or found through the Clear Signer lives behind
+    // Spec 075: a key minted or found through the Trusted Signer lives behind
     // its page. `auto` follows the wallet's pinned key there; the Clear
     // Signer by name prefers such a key.
     let behind_page =
@@ -443,7 +449,7 @@ pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
     let clear_route = |key: &DeviceKey| SignRoute {
         credential_id: key.credential_id.clone(),
         transports: String::new(),
-        method: "clear_signer".to_owned(),
+        method: "trusted_signer".to_owned(),
         signer_origin: key.signer_origin.clone().unwrap_or_default(),
     };
     match method {
@@ -451,7 +457,7 @@ pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
             let pinned = device.iter().find(usable)?;
             return behind_page(&pinned).then(|| clear_route(pinned));
         }
-        "clear_signer" => {
+        "trusted_signer" => {
             let pinned = device
                 .iter()
                 .filter(usable)
@@ -467,12 +473,12 @@ pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
         "security_key" => "usb,nfc,ble",
         _ => return None,
     };
-    // A platform sheet reaches a Clear Signer key only when the page was the
+    // A platform sheet reaches a Trusted Signer key only when the page was the
     // wallet's own (`*.getvela.app` passkeys are the app's passkeys). A key
     // behind anybody else's page is reachable nowhere else — route it there.
     let reachable = |key: &&DeviceKey| {
         key.signer_origin.as_deref().is_none_or(|origin| {
-            origin.is_empty() || crate::clear_signer::uses_wallet_passkeys(origin)
+            origin.is_empty() || crate::trusted_signer::uses_wallet_passkeys(origin)
         })
     };
     let Some(pinned) = device
@@ -734,10 +740,10 @@ mod tests {
         }
     }
 
-    /// Spec 075: a key that lives behind a Clear Signer page is signed
-    /// there — by `auto`, and by the Clear Signer chosen by name.
+    /// Spec 075: a key that lives behind a Trusted Signer page is signed
+    /// there — by `auto`, and by the Trusted Signer chosen by name.
     #[test]
-    fn a_clear_signer_key_routes_to_its_page() {
+    fn a_trusted_signer_key_routes_to_its_page() {
         let keys = [
             behind("cs", "https://sign.getvela.app"),
             held("apple", "internal"),
@@ -749,24 +755,24 @@ mod tests {
                 auto.credential_id.as_str(),
                 auto.signer_origin.as_str()
             ),
-            ("clear_signer", "cs", "https://sign.getvela.app")
+            ("trusted_signer", "cs", "https://sign.getvela.app")
         );
-        // The Clear Signer by name prefers the key behind a page, wherever it stands.
+        // The Trusted Signer by name prefers the key behind a page, wherever it stands.
         let flipped = [
             held("apple", "internal"),
             behind("cs", "https://me.example"),
         ];
-        let named = sign_route(&flipped, "clear_signer").unwrap_or_else(|| unreachable!());
+        let named = sign_route(&flipped, "trusted_signer").unwrap_or_else(|| unreachable!());
         assert_eq!(
             (named.credential_id.as_str(), named.signer_origin.as_str()),
             ("cs", "https://me.example")
         );
         // …and with none, pins the first key for the Settings page to reach.
         let plain = [held("apple", "internal")];
-        let named = sign_route(&plain, "clear_signer").unwrap_or_else(|| unreachable!());
+        let named = sign_route(&plain, "trusted_signer").unwrap_or_else(|| unreachable!());
         assert_eq!(
             (named.method.as_str(), named.signer_origin.as_str()),
-            ("clear_signer", "")
+            ("trusted_signer", "")
         );
     }
 
@@ -779,7 +785,7 @@ mod tests {
         let route = sign_route(&only, "platform").unwrap_or_else(|| unreachable!());
         assert_eq!(
             (route.method.as_str(), route.signer_origin.as_str()),
-            ("clear_signer", "https://me.example")
+            ("trusted_signer", "https://me.example")
         );
         let mixed = [
             behind("mine", "https://me.example"),
@@ -870,13 +876,13 @@ mod tests {
         assert_eq!(row_method("platform", "internal", Some("")), "platform");
         assert_eq!(
             row_method("platform", "internal", Some("http://localhost:8140")),
-            "clear_signer"
+            "trusted_signer"
         );
         // Even a report that would otherwise read as a fob: the page is how
         // this wallet reaches it.
         assert_eq!(
             row_method("cross-platform", "usb", Some("https://sign.getvela.app")),
-            "clear_signer"
+            "trusted_signer"
         );
 
         let rows = device_rows(&[
@@ -885,7 +891,7 @@ mod tests {
         ]);
         assert_eq!(
             (rows[0].method.as_str(), rows[0].signer_origin.as_deref()),
-            ("clear_signer", Some("https://sign.getvela.app"))
+            ("trusted_signer", Some("https://sign.getvela.app"))
         );
         assert_eq!(
             (rows[1].method.as_str(), rows[1].signer_origin.as_deref()),

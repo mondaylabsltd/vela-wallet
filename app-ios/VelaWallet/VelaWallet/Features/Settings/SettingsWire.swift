@@ -304,14 +304,14 @@ struct NetViewWire: Decodable, Equatable {
 // MARK: - sign_pref (spec 071)
 
 /// `sign_pref`'s view (spec 071): the "Sign with" every signing sheet starts
-/// at, and the Clear Signer page. Every judgement in it is the core's.
+/// at, and the Trusted Signer page. Every judgement in it is the core's.
 struct SignPrefViewWire: Decodable, Equatable {
     /// Always an offered name; `auto` when nothing was chosen.
     let method: String
     let methodCommitted: Bool
     /// Every "Sign with" value, in the order a picker lists them.
     let offered: [String]
-    /// The page the Clear Signer opens. Always usable.
+    /// The page the Trusted Signer opens. Always usable.
     let signerUrl: String
     let signerUrlIsDefault: Bool
     /// `invalid` | `insecure` — the last address typed was refused and
@@ -339,7 +339,7 @@ struct SignPrefViewWire: Decodable, Equatable {
         method = try values.decodeIfPresent(String.self, forKey: .method) ?? "auto"
         methodCommitted = try values.decodeIfPresent(Bool.self, forKey: .methodCommitted) ?? false
         offered = try values.decodeIfPresent([String].self, forKey: .offered) ?? []
-        signerUrl = try values.decodeIfPresent(String.self, forKey: .signerUrl) ?? clearSignerDefaultUrl()
+        signerUrl = try values.decodeIfPresent(String.self, forKey: .signerUrl) ?? trustedSignerDefaultUrl()
         signerUrlIsDefault = try values.decodeIfPresent(Bool.self, forKey: .signerUrlIsDefault) ?? true
         signerUrlError = try values.decodeIfPresent(String.self, forKey: .signerUrlError)
         signerUsesWalletPasskeys =

@@ -213,7 +213,7 @@ class SettingsController(
         onFault = { error -> VelaLog.failure("settings.signPref.fault", "core fault", error) },
     )
 
-    /** The default "Sign with" and the Clear Signer page — Settings shows them, every signature starts at them. */
+    /** The default "Sign with" and the Trusted Signer page — Settings shows them, every signature starts at them. */
     val signPref: StateFlow<SignPrefView> = signPrefHost.view
 
     fun refreshSignPref() = signPrefHost.dispatch(SignPrefEvent.Refresh, SignPrefEvent.serializer())

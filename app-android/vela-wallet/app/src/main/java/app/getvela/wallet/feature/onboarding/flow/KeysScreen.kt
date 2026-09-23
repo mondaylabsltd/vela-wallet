@@ -288,7 +288,7 @@ private fun KeyRow(
                     imageVector = when (key.kind) {
                         KeyMethod.SecurityKey -> VelaIcons.Link2
                         // Spec 075: a page you read — the web's lucide `eye`.
-                        KeyMethod.ClearSigner -> VelaIcons.Eye
+                        KeyMethod.TrustedSigner -> VelaIcons.Eye
                         else -> VelaIcons.Wallet
                     },
                     contentDescription = null,
@@ -380,7 +380,7 @@ private fun KeyBadge(synced: Boolean) {
  * than merely recorded.
  *
  * All four routes are live: platform (this device), scan (mint the key on a
- * phone over caBLE), a security key, and — spec 075 — the Clear Signer, a page
+ * phone over caBLE), a security key, and — spec 075 — the Trusted Signer, a page
  * the person reads which runs the ceremony itself. The list IS `KeyMethod`, so
  * a route the core gains appears here without a second list to keep in step.
  *

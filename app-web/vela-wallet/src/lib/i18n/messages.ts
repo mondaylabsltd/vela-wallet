@@ -148,9 +148,9 @@ const FLOW_KEYS_SCREEN_KEYS = [
 	'onboarding.create.methodBlockedSigner',
 	'onboarding.create.methodSecurityKeyTitle',
 	'onboarding.create.methodSecurityKeyBody',
-	// Spec 075: the Clear Signer, the fourth route beside the three above.
-	'componentsUi.signing.clearSignerTitle',
-	'componentsUi.signing.clearSignerBody'
+	// Spec 075: the Trusted Signer, the fourth route beside the three above.
+	'componentsUi.signing.trustedSignerTitle',
+	'componentsUi.signing.trustedSignerBody'
 ] as const;
 
 /** The progress, retry and done screens (spec 019). */

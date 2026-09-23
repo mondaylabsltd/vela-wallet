@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
  * `app-web/vela-wallet/src/lib/core/generated/SignPref*.ts`.
  *
  * How this device signs by default: the "Sign with" every signing sheet
- * starts at, and which Clear Signer page it opens. A pick on a signing sheet
+ * starts at, and which Trusted Signer page it opens. A pick on a signing sheet
  * is one request's and never comes here.
  */
 
@@ -20,8 +20,8 @@ data class SignPrefView(
     val method: String = "auto",
     val method_committed: Boolean = false,
     /** Every "Sign with" value, in the order a picker lists them. */
-    val offered: List<String> = listOf("auto", "platform", "hybrid", "security_key", "clear_signer"),
-    /** The page the Clear Signer opens — always usable. */
+    val offered: List<String> = listOf("auto", "platform", "hybrid", "security_key", "trusted_signer"),
+    /** The page the Trusted Signer opens — always usable. */
     val signer_url: String = "https://sign.getvela.app/",
     val signer_url_is_default: Boolean = true,
     /** `invalid` | `insecure`: the last address typed was refused, nothing stored. */
@@ -52,7 +52,7 @@ sealed class SignPrefEvent {
 
 @Serializable
 sealed class SignPrefOperation {
-    /** Read `vela.signMethod` and `vela.clearSignerUrl`, raw. */
+    /** Read `vela.signMethod` and `vela.trustedSignerUrl`, raw. */
     @Serializable
     @SerialName("read_stored")
     data object ReadStored : SignPrefOperation()

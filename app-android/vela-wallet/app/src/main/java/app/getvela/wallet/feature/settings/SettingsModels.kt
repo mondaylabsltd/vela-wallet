@@ -46,10 +46,10 @@ enum class SettingsOverlay {
     /** The default transaction speed (spec 069): three speeds, each with what it buys. */
     FeeSpeed,
 
-    /** Spec 071: the default "Sign with" — the three places a passkey is, and the Clear Signer. */
+    /** Spec 071: the default "Sign with" — the three places a passkey is, and the Trusted Signer. */
     SignWith,
 
-    /** Spec 071: which Clear Signer page the wallet opens. */
+    /** Spec 071: which Trusted Signer page the wallet opens. */
     SignerPage,
 
 
@@ -172,7 +172,7 @@ data class SelectSheetModel(
 )
 
 /**
- * Spec 071: the Clear Signer page's sheet — the address, why an address typed
+ * Spec 071: the Trusted Signer page's sheet — the address, why an address typed
  * was refused, and whether the page can use this wallet's passkeys.
  */
 @Immutable
@@ -548,7 +548,7 @@ data class SettingsScreenModel(
     val currencySheet: SelectSheetModel,
     /** Spec 069: the default transaction speed's sheet. */
     val feeSpeedSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
-    /** Spec 071: the default "Sign with" sheet, and the Clear Signer page's. */
+    /** Spec 071: the default "Sign with" sheet, and the Trusted Signer page's. */
     val signWithSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
     val signerPage: SignerPageModel = SignerPageModel(),
     val numberSheet: SelectSheetModel,

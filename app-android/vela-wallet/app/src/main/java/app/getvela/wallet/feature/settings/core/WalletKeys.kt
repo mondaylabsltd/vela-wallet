@@ -37,7 +37,7 @@ class WalletKeys(
 
     /** One key as the account record holds it, in founding order. */
     /**
-     * Spec 075: [signerOrigin] is the Clear Signer page this key lives behind,
+     * Spec 075: [signerOrigin] is the Trusted Signer page this key lives behind,
      * empty when it lives on an authenticator this device can reach itself.
      * Without it the core cannot tell a key minted on a page from the built-in
      * passkey — a page runs the ceremony in a browser and so reports
@@ -58,7 +58,7 @@ class WalletKeys(
         val publicKeyHex: String,
         /** base64url, as the registry explorer prints it; empty from the device. */
         val credentialId: String = "",
-        /** Spec 075: the Clear Signer page this key lives behind; empty when none. */
+        /** Spec 075: the Trusted Signer page this key lives behind; empty when none. */
         val signerOrigin: String = "",
         /** The registry's 20-byte attestation summary, `0x`-hex; empty from the device. */
         val attestationHex: String = "",

@@ -1,5 +1,5 @@
 //! What a site's message request asks the account to sign — the ONE hash
-//! every shell and the Clear Signer's page (`lib/digest.js`) derive before the
+//! every shell and the Trusted Signer's page (`lib/digest.js`) derive before the
 //! Safe's own `SafeMessage` wrap (`user_op::compute_safe_message_hash`).
 //!
 //! Three shells each carried a copy of this, and two had drifted: they read

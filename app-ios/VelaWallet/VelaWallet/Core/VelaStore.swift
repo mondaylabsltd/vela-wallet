@@ -77,13 +77,13 @@ struct VelaStore {
         // survive sign-out.
         /// The "Sign with" every signing sheet starts at.
         static let signMethod = "vela.signMethod"
-        /// The Clear Signer page; absent is the official one.
-        static let clearSignerUrl = "vela.clearSignerUrl"
+        /// The Trusted Signer page; absent is the official one.
+        static let trustedSignerUrl = "vela.trustedSignerUrl"
         /// Spec 075's cross-device pairing service, RETIRED with the channel
         /// itself on 2026-09-23. Both spellings it ever had are read only to
         /// hand them to the core's `prefsMigrations`, which REMOVES them.
-        static let retiredClearSignerTunnel = "vela.clearSignerTunnel"
-        static let retiredClearSignerRelay = "vela.clearSignerRelay"
+        static let retiredTrustedSignerTunnel = "vela.clearSignerTunnel"
+        static let retiredTrustedSignerRelay = "vela.clearSignerRelay"
 
         // Owned by the read path (spec 051).
         /// `address → { usd, at }`, 24-hour TTL. The last total the wallet

@@ -1,5 +1,5 @@
 //! How this device signs by default (spec 071): the stored "Sign with" and
-//! the Clear Signer's page — read raw, written as chosen.
+//! the Trusted Signer's page — read raw, written as chosen.
 //!
 //! `fee_tier_pref`'s shape against the same store, so there is one way a
 //! committed preference reaches disk here. Both values go back to the core
@@ -40,7 +40,7 @@ impl Machine for SignPref {
             // failed, which is why this cannot surface an error.
             SignPrefOperation::ReadStored => Answer::Now(SignPrefShellResult::Stored {
                 method: stored(storage::KEY_SIGN_METHOD),
-                signer_url: stored(storage::KEY_CLEAR_SIGNER_URL),
+                signer_url: stored(storage::KEY_TRUSTED_SIGNER_URL),
             }),
             // Best effort, both: the committed choice stays on screen either
             // way, and the next launch simply reads the old value.
@@ -52,12 +52,12 @@ impl Machine for SignPref {
             SignPrefOperation::WriteSignerUrl { url } => {
                 let _ = match url {
                     Some(url) => storage::write_value(
-                        storage::KEY_CLEAR_SIGNER_URL,
+                        storage::KEY_TRUSTED_SIGNER_URL,
                         Value::String(url.clone()),
                     ),
                     // The official page is the absence of a choice, so a
                     // later default can move without rewriting anybody's.
-                    None => storage::remove_value(storage::KEY_CLEAR_SIGNER_URL),
+                    None => storage::remove_value(storage::KEY_TRUSTED_SIGNER_URL),
                 };
                 Answer::Now(SignPrefShellResult::Written)
             }
@@ -71,7 +71,7 @@ mod tests {
     use crate::core_host::CoreHost;
     use crate::executor::storage::tests::with_temp_state;
     use vela_core::app::sign_pref::SignPrefView;
-    use vela_core::clear_signer::DEFAULT_SIGNER_URL;
+    use vela_core::trusted_signer::DEFAULT_SIGNER_URL;
 
     fn drive(host: &mut CoreHost<SignPref>, event: Event) -> SignPrefView {
         let mut pending = host.dispatch(event);
@@ -113,7 +113,7 @@ mod tests {
             drive(
                 &mut host,
                 Event::MethodChosen {
-                    method: "clear_signer".to_owned(),
+                    method: "trusted_signer".to_owned(),
                 },
             );
             let view = drive(
@@ -125,10 +125,10 @@ mod tests {
             assert_eq!(view.signer_url, "https://localhost:8140/");
             assert_eq!(
                 storage::read_value(storage::KEY_SIGN_METHOD).ok().flatten(),
-                Some(Value::String("clear_signer".to_owned()))
+                Some(Value::String("trusted_signer".to_owned()))
             );
             assert_eq!(
-                storage::read_value(storage::KEY_CLEAR_SIGNER_URL)
+                storage::read_value(storage::KEY_TRUSTED_SIGNER_URL)
                     .ok()
                     .flatten(),
                 Some(Value::String("https://localhost:8140/".to_owned()))
@@ -136,7 +136,7 @@ mod tests {
 
             let mut next = CoreHost::<SignPref>::new();
             let view = drive(&mut next, Event::Refresh);
-            assert_eq!(view.method, "clear_signer");
+            assert_eq!(view.method, "trusted_signer");
             assert!(view.method_committed);
             assert_eq!(view.signer_url, "https://localhost:8140/");
             assert!(!view.signer_url_is_default);
@@ -162,7 +162,7 @@ mod tests {
             assert_eq!(view.signer_url_error.as_deref(), Some("insecure"));
             assert_eq!(view.signer_url, DEFAULT_SIGNER_URL);
             assert!(matches!(
-                storage::read_value(storage::KEY_CLEAR_SIGNER_URL),
+                storage::read_value(storage::KEY_TRUSTED_SIGNER_URL),
                 Ok(None)
             ));
 
@@ -173,7 +173,7 @@ mod tests {
                 },
             );
             assert!(
-                storage::read_value(storage::KEY_CLEAR_SIGNER_URL)
+                storage::read_value(storage::KEY_TRUSTED_SIGNER_URL)
                     .ok()
                     .flatten()
                     .is_some()
@@ -182,7 +182,7 @@ mod tests {
             assert!(view.signer_url_is_default);
             assert_eq!(view.signer_url_error, None);
             assert!(matches!(
-                storage::read_value(storage::KEY_CLEAR_SIGNER_URL),
+                storage::read_value(storage::KEY_TRUSTED_SIGNER_URL),
                 Ok(None)
             ));
         });

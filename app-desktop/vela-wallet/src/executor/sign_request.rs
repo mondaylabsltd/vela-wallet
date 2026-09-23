@@ -39,8 +39,8 @@ use vela_core::app::sign_request::{
 use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
 
-use crate::executor::clear_signer::{self, Ask};
 use crate::executor::passkey::{self, Ceremony};
+use crate::executor::trusted_signer::{self, Ask};
 use crate::executor::user_op::Signer;
 use crate::executor::{now_ms, relay, storage, user_op};
 
@@ -84,14 +84,14 @@ pub struct SignContext {
     /// core the ceremony started rather than guessing from elapsed time.
     pub signing_started: Arc<AtomicBool>,
     /// Who asked, as the transport says — `None` for the wallet's own
-    /// requests, which the Clear Signer's page is told as the wallet's own
+    /// requests, which the Trusted Signer's page is told as the wallet's own
     /// send rather than as a site's.
     pub site: Option<String>,
-    /// The account's name, for the Clear Signer's page.
+    /// The account's name, for the Trusted Signer's page.
     pub account_name: Option<String>,
-    /// The Clear Signer (spec 071): whether THIS request goes to it, and its
+    /// The Trusted Signer (spec 071): whether THIS request goes to it, and its
     /// waiting sheet. Shared like `route_override`, and for the same reason.
-    pub clear_signer: Arc<clear_signer::Channel>,
+    pub trusted_signer: Arc<trusted_signer::Channel>,
 }
 
 impl SignContext {
@@ -111,7 +111,7 @@ impl SignContext {
     }
 
     /// "Sign with": `auto` clears the choice; a place a passkey is asks the
-    /// core which key that pins (`wallet_keys::sign_route`); the Clear Signer
+    /// core which key that pins (`wallet_keys::sign_route`); the Trusted Signer
     /// routes the request to `page`. An answer of "none" — an unknown method,
     /// a wallet with no usable credential — leaves the stored route in force
     /// rather than guessing.
@@ -122,17 +122,17 @@ impl SignContext {
             Some(Route::Passkey(credential, key_method)) => (Some((credential, key_method)), None),
             // Spec 075: the page the KEY lives behind when it has one, and the
             // person's page from Settings when it does not.
-            Some(Route::ClearSigner(page)) => (None, Some(page)),
+            Some(Route::TrustedSigner(page)) => (None, Some(page)),
             None => (None, None),
         };
         *self
             .route_override
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = pinned;
-        self.clear_signer.choose(page);
+        self.trusted_signer.choose(page);
     }
 
-    /// This request as the Clear Signer's page is told it (contract §1): a
+    /// This request as the Trusted Signer's page is told it (contract §1): a
     /// site's own method, params and origin — the FINAL params, invariant ⑨
     /// — or, for the wallet's own transaction, just its calls. A message is
     /// always its own method: there are no calls to tell it by.
@@ -165,7 +165,7 @@ impl SignContext {
             signing_started: send.signing_started,
             site: None,
             account_name: send.account_name,
-            clear_signer: send.clear_signer,
+            trusted_signer: send.trusted_signer,
         }
     }
 }
@@ -313,12 +313,12 @@ fn sign_and_submit(
         passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
     };
     let ask = ctx.ask(method, params_json);
-    let page = ctx.clear_signer.chosen();
+    let page = ctx.trusted_signer.chosen();
     let signer = match &page {
-        Some(page) => Signer::ClearSigner {
+        Some(page) => Signer::TrustedSigner {
             ask: &ask,
             page,
-            channel: &ctx.clear_signer,
+            channel: &ctx.trusted_signer,
         },
         None => Signer::Passkey(&mut sign),
     };
@@ -370,12 +370,12 @@ fn sign_message(
         passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
     };
     let ask = ctx.ask(method, params_json);
-    let page = ctx.clear_signer.chosen();
+    let page = ctx.trusted_signer.chosen();
     let signer = match &page {
-        Some(page) => Signer::ClearSigner {
+        Some(page) => Signer::TrustedSigner {
             ask: &ask,
             page,
-            channel: &ctx.clear_signer,
+            channel: &ctx.trusted_signer,
         },
         None => Signer::Passkey(&mut sign),
     };
@@ -391,7 +391,7 @@ fn is_message(method: &str) -> bool {
 }
 
 /// What the site asked to sign, before the Safe's wrap — the core's one rule
-/// (`vela_core::sign_message`), which the Clear Signer's page shares.
+/// (`vela_core::sign_message`), which the Trusted Signer's page shares.
 pub fn message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
     vela_core::sign_message::original_hash(method, params_json)
 }
@@ -752,25 +752,25 @@ mod tests {
         ctx
     }
 
-    /// "Sign with" on the sheet (spec 071): the Clear Signer routes THIS
+    /// "Sign with" on the sheet (spec 071): the Trusted Signer routes THIS
     /// request to the page and pins no key; a place a passkey is does the
     /// opposite; `auto` clears both.
     #[test]
     fn the_sheets_choice_routes_this_request() {
         let ctx = context(Some("https://app.uniswap.org"));
-        ctx.choose_method("clear_signer", "https://sign.getvela.app/");
+        ctx.choose_method("trusted_signer", "https://sign.getvela.app/");
         assert_eq!(
-            ctx.clear_signer.chosen().as_deref(),
+            ctx.trusted_signer.chosen().as_deref(),
             Some("https://sign.getvela.app/")
         );
         assert_eq!(ctx.route(), (Some("cred0".to_owned()), KeyMethod::Platform));
 
         ctx.choose_method("hybrid", "https://sign.getvela.app/");
-        assert_eq!(ctx.clear_signer.chosen(), None);
+        assert_eq!(ctx.trusted_signer.chosen(), None);
         assert_eq!(ctx.route().1, KeyMethod::Hybrid);
 
         ctx.choose_method("auto", "https://sign.getvela.app/");
-        assert_eq!(ctx.clear_signer.chosen(), None);
+        assert_eq!(ctx.trusted_signer.chosen(), None);
         assert_eq!(ctx.route().1, KeyMethod::Platform);
     }
 

@@ -46,7 +46,7 @@ describe('the passkey routes, as before', () => {
 		expect(signRoute(keys, 'auto')).toBeNull();
 		expect(signRoute(keys, 'telepathy')).toBeNull();
 		expect(signRoute([held('', 'internal')], 'platform')).toBeNull();
-		expect(signRoute([], 'clear_signer')).toBeNull();
+		expect(signRoute([], 'trusted_signer')).toBeNull();
 	});
 });
 
@@ -59,25 +59,25 @@ describe('a key that lives behind a page', () => {
 		expect(route).toEqual({
 			credentialId: 'cs',
 			transports: '',
-			method: 'clear_signer',
+			method: 'trusted_signer',
 			signerOrigin: 'https://sign.getvela.app'
 		});
 	});
 
-	it('is preferred when the Clear Signer is chosen by name, wherever it stands', () => {
+	it('is preferred when the Trusted Signer is chosen by name, wherever it stands', () => {
 		expect(
-			signRoute([held('apple', 'internal'), behind('cs', 'https://me.example')], 'clear_signer')
+			signRoute([held('apple', 'internal'), behind('cs', 'https://me.example')], 'trusted_signer')
 		).toMatchObject({ credentialId: 'cs', signerOrigin: 'https://me.example' });
 		// With none, the first key is pinned for the Settings page to reach.
-		expect(signRoute([held('apple', 'internal')], 'clear_signer')).toMatchObject({
-			method: 'clear_signer',
+		expect(signRoute([held('apple', 'internal')], 'trusted_signer')).toMatchObject({
+			method: 'trusted_signer',
 			signerOrigin: ''
 		});
 	});
 
 	it('is reachable only through its page when the page is not ours', () => {
 		expect(signRoute([behind('mine', 'https://me.example')], 'platform')).toMatchObject({
-			method: 'clear_signer',
+			method: 'trusted_signer',
 			signerOrigin: 'https://me.example'
 		});
 		// With another key that a platform sheet CAN reach, that one is pinned.

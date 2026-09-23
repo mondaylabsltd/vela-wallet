@@ -295,7 +295,7 @@ fn main() {
         }
     });
 
-    // Spec 076: the Clear Signer's answer comes back as a navigation to
+    // Spec 076: the Trusted Signer's answer comes back as a navigation to
     // `velawallet://sign-result`, because the published page carries
     // `default-src 'none'` in its hashed bytes and cannot open a socket at all.
     //
@@ -315,21 +315,21 @@ fn main() {
     // such gap: the Apple Event goes to the running app. Written down rather
     // than left to be discovered.
     for argument in std::env::args().skip(1) {
-        if argument.starts_with(vela_core::clear_signer::CALLBACK_URL) {
-            executor::clear_signer::deliver_callback(&argument);
+        if argument.starts_with(vela_core::trusted_signer::CALLBACK_URL) {
+            executor::trusted_signer::deliver_callback(&argument);
         }
     }
 
     app.on_open_urls(|urls| {
         for url in urls {
-            executor::clear_signer::deliver_callback(&url);
+            executor::trusted_signer::deliver_callback(&url);
         }
     });
 
     // Spec 076: find out which published version of the signer page this build
     // accepts, before anybody presses Sign. Off the launch path on purpose —
     // see `prime_in_background`.
-    executor::clear_signer::prime_in_background();
+    executor::trusted_signer::prime_in_background();
 
     app.run(|cx: &mut App| {
         // Storage is read before the first window opens, so the route guard has

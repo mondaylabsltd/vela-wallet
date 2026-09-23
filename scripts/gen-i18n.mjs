@@ -341,7 +341,7 @@ for (let i = 1; i < PATHS.length; i++) {
 //   needed was already in the corpus (`connect.browser.loadFailed`, `.retry`,
 //   `.a11yInsecure`, `explore.disconnect`). No new branch.
 // 1713 (spec 071, 2026-09-22): the Clear Signer — the fourth "Sign with".
-//   +10 flat `componentsUi.signing.clearSigner*` leaves (its name, the promise
+//   +10 flat `componentsUi.signing.trustedSigner*` leaves (its name, the promise
 //   under it, waiting + the Local Network Access hint, closed / refused /
 //   mismatch / timeout, reopen, the desktop tab's "signed, close me") and the
 //   `settings.signing` branch with 10 leaves (the default "Sign with" row, the
@@ -350,27 +350,27 @@ for (let i = 1; i < PATHS.length; i++) {
 //   resetting the service endpoints is destructive (FR-010) and asks first on
 //   every shell; the corpus had the button and no question. No new branch.
 // 1733 (spec 075, 2026-09-22): the Clear Signer across devices. +10
-//   `componentsUi.signing.clearSigner*` leaves (where the signer is — this
+//   `componentsUi.signing.trustedSigner*` leaves (where the signer is — this
 //   device or another — the pairing sheet, its waiting line, the six-digit
 //   code and its confirmation, copy link, the tunnel unreachable) and +6
 //   `settings.signing.tunnel*` (the Settings row, as the page row). No new
 //   branch. (The service was called the relay until 2026-09-23, when the owner
 //   renamed it the tunnel — passkeys' own word for the same thing. The six keys
-//   and `clearSignerTunnelDown` were renamed with it; the BUNDLER keeps `relay`
+//   and `trustedSignerTunnelDown` were renamed with it; the BUNDLER keeps `relay`
 //   in `componentsUi.gas.relayerFee`, `componentsUi.treasuryBootstrap.*` and
 //   `settingsModals.endpoints.bundler*`.)
 // 1738 (spec 075, 2026-09-22): the Bluetooth route. +5
-//   `componentsUi.signing.clearSigner*` leaves — the third row in "where is
+//   `componentsUi.signing.trustedSigner*` leaves — the third row in "where is
 //   your Clear Signer", what it means (and that the app must stay open), the
 //   NAME to look for in the browser's device list, and the two ways Bluetooth
 //   can be unavailable (permission refused, radio off). The peripherals
 //   shipped borrowing the dApp flow's "Bluetooth permission is needed", which
 //   never said which device to pick. No new branch.
-// 1739 (spec 075, 2026-09-22): +1 `clearSignerBluetoothUnsupported`. A device
+// 1739 (spec 075, 2026-09-22): +1 `trustedSignerBluetoothUnsupported`. A device
 //   with no peripheral role at all was being told to switch Bluetooth on,
 //   which cannot help it (iOS, T041: `unsupported` and `unavailable` had
 //   nowhere else to go).
-// 1740 (spec 075, 2026-09-22): +1 `clearSignerNearbyLost`. A pairing that
+// 1740 (spec 075, 2026-09-22): +1 `trustedSignerNearbyLost`. A pairing that
 //   worked and then dropped was borrowing "this device cannot pair this way",
 //   which is false and sends the person looking for the wrong problem (found
 //   on the radio, T043).

@@ -181,7 +181,7 @@ export function isHandheld(
 export function methodGlyph(method: KeyMethod, handheld: boolean = isHandheld()): MethodGlyph {
 	switch (method) {
 		// Spec 075: a page that shows what is signed — what you see is what you sign.
-		case 'clear_signer':
+		case 'trusted_signer':
 			return { kind: 'lucide', name: 'eye' };
 		case 'platform':
 			return { kind: 'lucide', name: handheld ? 'smartphone' : 'laptop' };

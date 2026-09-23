@@ -116,7 +116,7 @@ export type SettingsPageId =
 	/** Spec 068 — the stored default transaction speed (desktop page; on the
 	 *  phone the same preference is a row that opens a sheet). */
 	| 'fee-speed'
-	/** Spec 071 — the default "Sign with" and the Clear Signer's page (desktop
+	/** Spec 071 — the default "Sign with" and the Trusted Signer's page (desktop
 	 *  page; on the phone, two rows beside the speed, each opening a sheet). */
 	| 'signing'
 	| 'about';
@@ -137,7 +137,7 @@ export type SettingsOverlayId =
 	| 'time-format'
 	/** Spec 068: the stored default transaction speed. */
 	| 'fee-speed'
-	/** Spec 071: the default "Sign with", and the Clear Signer's page. */
+	/** Spec 071: the default "Sign with", and the Trusted Signer's page. */
 	| 'sign-with'
 	| 'signer-page'
 	/** Spec 075: the tunnel a cross-device pairing goes through. */
@@ -715,7 +715,7 @@ export interface WalletKeyRowModel {
 	 * Spec 075: the holder line already SETTLED — drawn as it stands, and the
 	 * AAGUID catalog is not asked.
 	 *
-	 * Set for a key behind a Clear Signer page. The vault on the page's far side
+	 * Set for a key behind a Trusted Signer page. The vault on the page's far side
 	 * is the one thing this wallet cannot reach, so letting the catalog name it
 	 * ("Apple Passwords", "Built-in passkey") points the person away from where
 	 * the key is — which is the page. The device pass of 2026-09-22 found

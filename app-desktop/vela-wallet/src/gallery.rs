@@ -62,11 +62,11 @@ enum Fixture {
     Touch(TouchRequest),
     Pin(PinRequest),
     Pick(Vec<CredentialChoice>),
-    /// Spec 075's Clear Signer dialogs, here for the same reason as the
+    /// Spec 075's Trusted Signer dialogs, here for the same reason as the
     /// cable's: each needs a browser and a socket in a particular state, so
     /// they are among the screens a reviewer is least able to reach on
     /// purpose. A `Refusal` is how an attempt ended.
-    ClearSignerEnded(crate::executor::clear_signer::Refusal),
+    TrustedSignerEnded(crate::executor::trusted_signer::Refusal),
 }
 
 struct Entry {
@@ -102,7 +102,7 @@ fn base_view() -> CreateView {
             KeyMethod::Platform,
             KeyMethod::Hybrid,
             KeyMethod::SecurityKey,
-            KeyMethod::ClearSigner,
+            KeyMethod::TrustedSigner,
         ],
         add_blocked: None,
     }
@@ -237,11 +237,16 @@ fn entries() -> Vec<Entry> {
         let mut view = base_view();
         view.stage = CreateStage::AddKeys;
         view.can_go_back = true;
-        view.keys = vec![key("Everyday wallet", KeyMethod::ClearSigner, true, false)];
+        view.keys = vec![key(
+            "Everyday wallet",
+            KeyMethod::TrustedSigner,
+            true,
+            false,
+        )];
         view.needs_second_key = true;
         view.key_relying_party = Some("sign.example.com".to_owned());
         view.key_signer_origin = Some("https://sign.example.com".to_owned());
-        view.add_methods = vec![KeyMethod::ClearSigner];
+        view.add_methods = vec![KeyMethod::TrustedSigner];
         view.add_blocked = Some(vela_core::app::create_wallet::AddBlocked {
             relying_party: "sign.example.com".to_owned(),
             page: None,
@@ -415,19 +420,19 @@ fn entries() -> Vec<Entry> {
     // The failure sheet, one row per outcome the catalog names. The two that
     // carry a detail string are driven through the refinement rather than
     // around it, so this list is also a check on it.
-    // Spec 075: the Clear Signer's own dialogs, in their own group — they are
+    // Spec 075: the Trusted Signer's own dialogs, in their own group — they are
     // not the cable's, and a reviewer looking for "the page route" should find
     // them together.
     let mut signer = |code: &'static str, fixture: Fixture| {
         out.push(Entry {
-            group: "Clear Signer",
+            group: "Trusted Signer",
             code,
             fixture,
         });
     };
     signer(
         "ended · nothing came back in time",
-        Fixture::ClearSignerEnded(crate::executor::clear_signer::Refusal::TimedOut),
+        Fixture::TrustedSignerEnded(crate::executor::trusted_signer::Refusal::TimedOut),
     );
     let mut sheet = |code: &'static str, kind: PromptKind, confirmable: bool| {
         out.push(Entry {
@@ -739,8 +744,8 @@ impl GalleryView {
                 crate::hardware::pick_card(theme, &self.loc, choices, |_, _, _| {}, |_, _, _| {})
             }
             // Spec 075: bare, like the cable's — the gallery IS the backdrop.
-            Fixture::ClearSignerEnded(refusal) => {
-                crate::signing::clear_signer::ended_card(theme, &self.loc, *refusal, |_, _, _| {})
+            Fixture::TrustedSignerEnded(refusal) => {
+                crate::signing::trusted_signer::ended_card(theme, &self.loc, *refusal, |_, _, _| {})
             }
             Fixture::Sheet { kind, confirmable } => {
                 let mut prompt = Prompt::new(kind.clone(), *confirmable, 0);

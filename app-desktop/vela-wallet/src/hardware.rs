@@ -33,7 +33,7 @@ use crate::theme::{self, FLOW_GAP_LG, FLOW_GAP_MD, FLOW_GAP_SM, TOUCH_DISC, Them
 use crate::ui::{ButtonVariant, NameFieldStrings, text_field, vela_button, vela_button_opts};
 
 /// The dialog card every ceremony prompt sits on — shared with the Clear
-/// Signer's two (`signing::clear_signer`), so a person waiting on a page and
+/// Signer's two (`signing::trusted_signer`), so a person waiting on a page and
 /// a person waiting on a key see one kind of card.
 pub(crate) fn card(theme: &Theme) -> Div {
     div()
@@ -147,7 +147,7 @@ pub fn touch_card(
 }
 
 /// The four ways to sign in — this device, a phone by scan, a security key, the
-/// Clear Signer — the same set creating a wallet offers per key. A wallet that
+/// Trusted Signer — the same set creating a wallet offers per key. A wallet that
 /// lives on a security key, a phone or a signer page is reachable even where a
 /// platform passkey would be the silent default. `Platform` has no route on the
 /// desktop and shows as unavailable-with-a-reason, exactly as it does in the
@@ -156,12 +156,12 @@ pub fn touch_card(
 pub const METHOD_ICON_PX: u32 = 24;
 
 /// The four passkey routes the CREATE chooser offers, in its order: the key on
-/// the desk, this device, a phone by scan, and the Clear Signer (spec 075).
+/// the desk, this device, a phone by scan, and the Trusted Signer (spec 075).
 pub const CREATE_ROUTES: [KeyMethod; 4] = [
     KeyMethod::SecurityKey,
     KeyMethod::Platform,
     KeyMethod::Hybrid,
-    KeyMethod::ClearSigner,
+    KeyMethod::TrustedSigner,
 ];
 
 /// The same four on the SIGN-IN chooser, in its own order — a wallet reached
@@ -171,7 +171,7 @@ pub const SIGNIN_ROUTES: [KeyMethod; 4] = [
     KeyMethod::SecurityKey,
     KeyMethod::Hybrid,
     KeyMethod::Platform,
-    KeyMethod::ClearSigner,
+    KeyMethod::TrustedSigner,
 ];
 
 /// A route's title and its line, as both choosers say them.
@@ -194,9 +194,9 @@ pub const fn method_words(method: KeyMethod) -> (&'static str, &'static str) {
             "onboarding.create.methodHybridTitle",
             "onboarding.create.methodHybridBody",
         ),
-        KeyMethod::ClearSigner => (
-            "componentsUi.signing.clearSignerTitle",
-            "componentsUi.signing.clearSignerBody",
+        KeyMethod::TrustedSigner => (
+            "componentsUi.signing.trustedSignerTitle",
+            "componentsUi.signing.trustedSignerBody",
         ),
     }
 }
@@ -286,7 +286,7 @@ pub fn signin_method_card(
         }
     };
 
-    // Spec 075: four rows, the Clear Signer among them — a wallet whose key
+    // Spec 075: four rows, the Trusted Signer among them — a wallet whose key
     // was created on a signer page can only be signed into through one.
     let mut sheet = card(theme).child(title(theme, loc.t("onboarding.login.header")));
     for method in SIGNIN_ROUTES {
@@ -607,7 +607,7 @@ mod tests {
 
     /// **Five routes where there were four** (spec 075 SC-001, the owner's
     /// count): both choosers offer every passkey route the core knows —
-    /// "这台设备 / 手机或平板 / USB 安全密钥" and the Clear Signer — each exactly
+    /// "这台设备 / 手机或平板 / USB 安全密钥" and the Trusted Signer — each exactly
     /// once, and neither screen can grow or lose one without the other.
     #[test]
     fn both_choosers_offer_every_route_exactly_once() {
@@ -616,7 +616,7 @@ mod tests {
                 KeyMethod::Platform,
                 KeyMethod::Hybrid,
                 KeyMethod::SecurityKey,
-                KeyMethod::ClearSigner,
+                KeyMethod::TrustedSigner,
             ] {
                 let offered = routes.iter().filter(|row| **row == method).count();
                 assert_eq!(offered, 1, "{screen} offers {method:?} {offered} times");
@@ -651,16 +651,16 @@ mod tests {
         );
         marks.dedup();
         assert_eq!(marks.len(), CREATE_ROUTES.len(), "two routes share a mark");
-        // The Clear Signer's glyph says what that route claims: a page you
+        // The Trusted Signer's glyph says what that route claims: a page you
         // READ. Not a lock and not a key.
         assert_eq!(
-            PasskeyIcon::for_method(KeyMethod::ClearSigner),
+            PasskeyIcon::for_method(KeyMethod::TrustedSigner),
             PasskeyIcon::Eye
         );
     }
 
     /// Only "this device" can be unavailable, and it is the only row whose
-    /// line changes when it is. A greyed Clear Signer row would be a wallet
+    /// line changes when it is. A greyed Trusted Signer row would be a wallet
     /// telling somebody their own page is out of reach — it never is.
     #[test]
     fn only_this_device_can_be_out_of_reach() {

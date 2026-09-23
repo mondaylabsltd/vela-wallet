@@ -60,8 +60,8 @@
     "signing": {
       "title": "Ký bằng",
       "subtitle": "Mọi chữ ký bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể chọn cách khác cho từng lần ký.",
-      "pageTitle": "Trang Clear Signer",
-      "pageSubtitle": "Trang mà Clear Signer mở: trang chính thức, hoặc bản sao trang không phụ thuộc do bạn tự triển khai.",
+      "pageTitle": "Trang Trusted Signer",
+      "pageSubtitle": "Trang mà Trusted Signer mở: trang chính thức, hoặc bản sao trang không phụ thuộc do bạn tự triển khai.",
       "pageOfficial": "Chính thức",
       "pageInvalid": "Đây không phải là địa chỉ web.",
       "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",

@@ -120,7 +120,7 @@ test('sign-in stays on Welcome — it has no steps to show', async ({ page }) =>
  * so a security key or a phone is reachable without the browser's own sheet
  * deciding.
  *
- * Spec 075 made it FOUR: the Clear Signer is a passkey route of its own, and
+ * Spec 075 made it FOUR: the Trusted Signer is a passkey route of its own, and
  * the owner's ruling is that it stands wherever the three stand.
  */
 for (const [width, height] of [

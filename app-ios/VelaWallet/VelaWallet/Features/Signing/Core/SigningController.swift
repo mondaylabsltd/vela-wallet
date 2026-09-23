@@ -94,7 +94,7 @@ final class SigningController {
     private(set) var closed = false
 
     /// "Sign with": WHERE the passkey that signs this request is — or the
-    /// Clear Signer (spec 071), which is where the request is CHECKED. Each
+    /// Trusted Signer (spec 071), which is where the request is CHECKED. Each
     /// request starts at the stored default (`sign_pref`), and this controller
     /// lives for one request, so a pick cannot outlive the question it was
     /// made for. `auto` is the wallet's stored route.
@@ -110,15 +110,15 @@ final class SigningController {
         }
         if offeredSignMethods().contains(id) {
             signMethod = id
-            clearSignerNotice = nil
+            trustedSignerNotice = nil
         }
         signWithOpen = false
     }
 
-    /// How the last Clear Signer ceremony for this request ended without a
+    /// How the last Trusted Signer ceremony for this request ended without a
     /// signature. The core heard a cancelled ceremony and kept the request
     /// open; this is the sentence that says why, until the next slide.
-    private(set) var clearSignerNotice: ClearSignerNotice?
+    private(set) var trustedSignerNotice: TrustedSignerNotice?
 
     /// The fee row's coin list (the web's `feeOpen`). Which coins pay, what
     /// each costs and which cannot are the fee machine's; the pick is a quote
@@ -275,7 +275,7 @@ final class SigningController {
                 else { return "" }
                 return request.origin
             },
-            clearSignerEnded: { [weak self] notice in self?.clearSignerNotice = notice }
+            trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
         )
     }
 
@@ -289,7 +289,7 @@ final class SigningController {
         fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
         let preferred = preferredSignMethod()
         signMethod = offeredSignMethods().contains(preferred) ? preferred : "auto"
-        clearSignerNotice = nil
+        trustedSignerNotice = nil
 
         // The world first. A machine told nothing refuses a request that names
         // a chain, and the refusal is indistinguishable from a broken network.
@@ -427,7 +427,7 @@ final class SigningController {
 
     /// The slide fired.
     func approve() {
-        clearSignerNotice = nil
+        trustedSignerNotice = nil
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
             fee: fee, clear: clear, guard: guardView
         )])

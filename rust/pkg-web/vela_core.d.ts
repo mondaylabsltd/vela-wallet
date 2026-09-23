@@ -557,7 +557,7 @@ export class SessionCore {
 
 /**
  * r#" How this device signs by default (spec 071): the "Sign with" every"#
- * r" signing sheet starts at, and which Clear Signer page it opens.
+ * r" signing sheet starts at, and which Trusted Signer page it opens.
  */
 export class SignPrefCore {
     free(): void;
@@ -666,40 +666,6 @@ export function checksumAddress(address_hex: string): string;
  * The source ladder and its sanity band — `choose_native_price`.
  */
 export function chooseNativePrice(dex?: number | null, chainlink_local?: number | null, chainlink_eth?: number | null): NativePriceChoice;
-
-/**
- * The relying party a key minted behind `signerOrigin` belongs to, or `null`
- * for a key this wallet's own authenticators made (spec 075).
- *
- * A key made on a Clear Signer page is signed under THAT page's domain, so a
- * challenge fetched under the wallet's own would never match the answer —
- * 「清晰签名器的回复与这笔请求不符」, which is how both phones found this.
- */
-export function clearSignerRegistryRpId(signer_origin?: string | null): string | undefined;
-
-/**
- * The ONE relying party a unit is filed under, or an error naming the parties
- * found when its members do not agree (ruling, 2026-09-23).
- *
- * The registry stores a single `rpId` per unit and every member proves under
- * its own, so a mixed set is refused here rather than written and never
- * provable.
- * `member_origins_json` is a JSON array of each member's signer origin, with
- * `null` for a key the wallet's own authenticators made — wasm-bindgen has no
- * `Vec<Option<String>>`, and the phones pass the same shape.
- */
-export function clearSignerUnitRpId(member_origins_json: string, wallet_rp_id: string): string;
-
-/**
- * Whether a page at `url` can use this wallet's passkeys (they are
- * `getvela.app` keys).
- *
- * The web wallet cannot OPEN a Clear Signer page, but it still has to decide
- * whether a key that lives behind one is reachable by a platform sheet: a key
- * minted on `*.getvela.app` is this app's passkey, and a key minted on
- * anybody else's page is reachable nowhere but there.
- */
-export function clearSignerUsesWalletPasskeys(url: string): boolean;
 
 export function computeSafeAddress(x: Uint8Array, y: Uint8Array): SafeAddressInfo;
 
@@ -1031,6 +997,40 @@ export function toHex(data: Uint8Array, prefixed: boolean): string;
 export function toQuantity(value: string): string;
 
 /**
+ * The relying party a key minted behind `signerOrigin` belongs to, or `null`
+ * for a key this wallet's own authenticators made (spec 075).
+ *
+ * A key made on a Trusted Signer page is signed under THAT page's domain, so a
+ * challenge fetched under the wallet's own would never match the answer —
+ * 「可信签名器的回复与这笔请求不符」, which is how both phones found this.
+ */
+export function trustedSignerRegistryRpId(signer_origin?: string | null): string | undefined;
+
+/**
+ * The ONE relying party a unit is filed under, or an error naming the parties
+ * found when its members do not agree (ruling, 2026-09-23).
+ *
+ * The registry stores a single `rpId` per unit and every member proves under
+ * its own, so a mixed set is refused here rather than written and never
+ * provable.
+ * `member_origins_json` is a JSON array of each member's signer origin, with
+ * `null` for a key the wallet's own authenticators made — wasm-bindgen has no
+ * `Vec<Option<String>>`, and the phones pass the same shape.
+ */
+export function trustedSignerUnitRpId(member_origins_json: string, wallet_rp_id: string): string;
+
+/**
+ * Whether a page at `url` can use this wallet's passkeys (they are
+ * `getvela.app` keys).
+ *
+ * The web wallet cannot OPEN a Trusted Signer page, but it still has to decide
+ * whether a key that lives behind one is reachable by a platform sheet: a key
+ * minted on `*.getvela.app` is this app's passkey, and a key minted on
+ * anybody else's page is reachable nowhere but there.
+ */
+export function trustedSignerUsesWalletPasskeys(url: string): boolean;
+
+/**
  * Spec 077: how long a submitted operation usually takes to land on a chain,
  * in seconds — `0` where Vela ships no estimate for it.
  *
@@ -1128,9 +1128,6 @@ export interface InitOutput {
     readonly canonicalizeSignature: (a: number, b: number) => [number, number, number, number];
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
-    readonly clearSignerRegistryRpId: (a: number, b: number) => [number, number];
-    readonly clearSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly clearSignerUsesWalletPasskeys: (a: number, b: number) => number;
     readonly clearsigningcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1295,6 +1292,9 @@ export interface InitOutput {
     readonly tokentrustcore_new: () => number;
     readonly tokentrustcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly tokentrustcore_view: (a: number) => [number, number, number, number];
+    readonly trustedSignerRegistryRpId: (a: number, b: number) => [number, number];
+    readonly trustedSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly trustedSignerUsesWalletPasskeys: (a: number, b: number) => number;
     readonly txtrackercore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly txtrackercore_new: () => number;
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

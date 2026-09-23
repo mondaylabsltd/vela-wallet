@@ -17,7 +17,7 @@ kendalikan.
 
 ## Apa itu
 
-Satu folder — `app-web/clearsigning` di repositori — yang sekaligus halaman web dan
+Satu folder — `app-web/trusted-signer` di repositori — yang sekaligus halaman web dan
 ekstensi Chrome. HTML, CSS, dan JavaScript murni: tanpa framework, tanpa bundler,
 tanpa langkah build, tanpa dependensi, dan tanpa permintaan jaringan sendiri.
 
@@ -43,7 +43,7 @@ kunci Anda yang sekarang bisa menandatangani di dalamnya, sementara kodenya adal
 folder yang Anda muat dan Anda periksa sendiri.
 
 1. Buka `chrome://extensions` dan nyalakan **Mode pengembang**.
-2. **Muat yang belum dipaket**, lalu pilih folder `app-web/clearsigning`.
+2. **Muat yang belum dipaket**, lalu pilih folder `app-web/trusted-signer`.
 3. Ikon di bilah alat membuka halamannya di sebuah tab.
 
 **Sebagai halaman di domain Anda sendiri, atau di localhost.** Saat disajikan lewat
@@ -55,7 +55,7 @@ dompet yang kuncinya dibuat di domain Anda sendiri. Ia bukan cara untuk menandat
 bagi dompet `getvela.app` yang sudah ada.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

@@ -39,10 +39,10 @@ final class SendExecutor {
         /// The pending row is on disk: the feed re-reads, so the home shows it
         /// at submit (FR-006).
         var recordsPersisted: () -> Void = {}
-        /// The Clear Signer ended without a signature (spec 071). The core
+        /// The Trusted Signer ended without a signature (spec 071). The core
         /// hears a cancelled ceremony — back to confirm, nothing sent — and
-        /// the screen says which of the Clear Signer's sentences applies.
-        var clearSignerEnded: (ClearSignerNotice) -> Void = { _ in }
+        /// the screen says which of the Trusted Signer's sentences applies.
+        var trustedSignerEnded: (TrustedSignerNotice) -> Void = { _ in }
     }
 
     private let store: VelaStore
@@ -323,7 +323,7 @@ final class SendExecutor {
                 "now_ms": Date().timeIntervalSince1970 * 1000,
             ])
         } catch let refused as UserOpSpine.Refused {
-            if case .clearSigner(let notice) = refused.failure { ports.clearSignerEnded(notice) }
+            if case .trustedSigner(let notice) = refused.failure { ports.trustedSignerEnded(notice) }
             return CoreJSON.string([
                 "type": "submit_failed", "failure": Self.failureWire(refused.failure),
             ])
@@ -426,8 +426,8 @@ final class SendExecutor {
         case .passkeyCancelled: return ["type": "passkey_cancelled"]
         // Nothing was signed and the send may be signed another way: the
         // core's cancelled ceremony, which keeps the confirmation on screen.
-        // The words are the screen's (`clearSignerEnded`).
-        case .clearSigner: return ["type": "passkey_cancelled"]
+        // The words are the screen's (`trustedSignerEnded`).
+        case .trustedSigner: return ["type": "passkey_cancelled"]
         case .relayerUnavailable: return ["type": "relayer_unavailable"]
         case .bundlerUnderfunded: return ["type": "bundler_underfunded"]
         case .other(let message):
@@ -499,7 +499,7 @@ struct SendAccountPort: UserOpSpine.AccountPort {
                 "credential_id": key["credential_id"] as? String ?? key["credentialId"] as? String ?? "",
                 "transports": key["transports"] as? String ?? "",
             ]
-            // Spec 075: a key minted or found through the Clear Signer lives
+            // Spec 075: a key minted or found through the Trusted Signer lives
             // behind that page, and `sign_route` will not find its way back
             // there without this. Dropping it here would silently send the
             // ceremony to a platform sheet that cannot see the key.

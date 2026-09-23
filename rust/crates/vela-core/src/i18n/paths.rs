@@ -4,7 +4,7 @@
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
 //! 1722 paths = 1633 leaf + 89 branch. Repeated per locale these key bytes
-//! would cost 680445 bytes; interned once they cost 46972.
+//! would cost 680745 bytes; interned once they cost 46992.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
@@ -407,16 +407,6 @@ pub(crate) static PATHS: [&str; 1722] = [
     "componentsUi.signing.blindDecodeWarning",
     "componentsUi.signing.blindTypedWarning",
     "componentsUi.signing.byteSize",
-    "componentsUi.signing.clearSignerBody",
-    "componentsUi.signing.clearSignerClosed",
-    "componentsUi.signing.clearSignerDoneTab",
-    "componentsUi.signing.clearSignerMismatch",
-    "componentsUi.signing.clearSignerRefused",
-    "componentsUi.signing.clearSignerReopen",
-    "componentsUi.signing.clearSignerTimeout",
-    "componentsUi.signing.clearSignerTitle",
-    "componentsUi.signing.clearSignerWaiting",
-    "componentsUi.signing.clearSignerWaitingHint",
     "componentsUi.signing.close",
     "componentsUi.signing.confirmDeposit",
     "componentsUi.signing.confirmIntentLabel",
@@ -545,6 +535,16 @@ pub(crate) static PATHS: [&str; 1722] = [
     "componentsUi.signing.techRawUnits",
     "componentsUi.signing.techUnknownFn",
     "componentsUi.signing.tokenToContractWarning",
+    "componentsUi.signing.trustedSignerBody",
+    "componentsUi.signing.trustedSignerClosed",
+    "componentsUi.signing.trustedSignerDoneTab",
+    "componentsUi.signing.trustedSignerMismatch",
+    "componentsUi.signing.trustedSignerRefused",
+    "componentsUi.signing.trustedSignerReopen",
+    "componentsUi.signing.trustedSignerTimeout",
+    "componentsUi.signing.trustedSignerTitle",
+    "componentsUi.signing.trustedSignerWaiting",
+    "componentsUi.signing.trustedSignerWaitingHint",
     "componentsUi.signing.typeLabel",
     "componentsUi.signing.typedDataIntent",
     "componentsUi.signing.typedDomain",

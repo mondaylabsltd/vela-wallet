@@ -110,7 +110,7 @@ pub struct Registration {
     pub authenticator_attachment: String,
     #[serde(default)]
     pub transports: String,
-    /// Spec 075: the Clear Signer page's origin when the key was minted
+    /// Spec 075: the Trusted Signer page's origin when the key was minted
     /// through it — where the key lives from now on. `None` for every other
     /// route. The shell reports it only after `verify_registration` checked
     /// the answer came from that origin.
@@ -134,7 +134,7 @@ pub struct Assertion {
     /// key can still record it. Store-only display; never signed.
     #[serde(default)]
     pub authenticator_attachment: String,
-    /// Spec 075: the Clear Signer page's origin when the ceremony ran there
+    /// Spec 075: the Trusted Signer page's origin when the ceremony ran there
     /// (a sign-in found the key behind that page). `None` for every other
     /// route.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -159,7 +159,7 @@ pub struct AccountKey {
     /// guess, which is what this field exists to stop.
     #[serde(default)]
     pub transports: String,
-    /// Spec 075: the Clear Signer page this key lives behind (its origin, and
+    /// Spec 075: the Trusted Signer page this key lives behind (its origin, and
     /// so its rpId). A key with one is signed through that page — `auto`
     /// routes there — and never through a platform sheet that cannot see it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -444,7 +444,7 @@ pub struct RegistryPublishMember {
     /// on the login re-publish, whose executor signs the member live.
     #[serde(default)]
     pub proof: Option<crate::registry_proof::RegistryProof>,
-    /// Spec 075: the Clear Signer page this member lives behind, when it does.
+    /// Spec 075: the Trusted Signer page this member lives behind, when it does.
     /// The re-publish signs a member with no replayable proof LIVE, and that
     /// signature has to reach the page holding the key — not whichever page
     /// Settings names (Android, 075 phase C, found this missing).
@@ -492,12 +492,12 @@ pub enum KeyMethod {
     Hybrid,
     /// A removable authenticator — a USB/NFC security key.
     SecurityKey,
-    /// Spec 075: the Clear Signer — our own route to a passkey. A page that
+    /// Spec 075: the Trusted Signer — our own route to a passkey. A page that
     /// shows what is being signed runs the ceremony (on this device over a
     /// loopback socket or `postMessage`, on another over the tunnel or BLE)
     /// and the answer comes back to be verified here. A peer of the three
     /// above, offered wherever they are.
-    ClearSigner,
+    TrustedSigner,
 }
 
 /// How a ceremony failed. The **shell** reports the raw platform error; the

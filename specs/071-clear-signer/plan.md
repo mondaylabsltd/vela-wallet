@@ -44,7 +44,7 @@ rust/crates/vela-core/src/clear_signer.rs, clear_signer/ws.rs, app/sign_pref.rs
 rust/crates/vela-core/tests/{clear_signer,app_sign_pref}.rs
 rust/crates/vela-core-uniffi/src/{clear_signer_bridge,onboarding_bridge,lib}.rs
 rust/crates/vela-core-wasm/src/{clear_signer,wallet_state,lib}.rs
-app-web/clearsigning/{lib/intake.js,lib/digest.js,sign.js,lib/locales/*,samples/*}
+app-web/trusted-signer/{lib/intake.js,lib/digest.js,sign.js,lib/locales/*,samples/*}
 app-android/…/feature/signing/clearsigner/*, send/core/UserOpSpine.kt, settings
 app-ios/…/Features/Signing/ClearSigner/*, Core/UserOpSpine.swift, settings
 app-desktop/vela-wallet/src/executor/clear_signer.rs, user_op.rs, settings

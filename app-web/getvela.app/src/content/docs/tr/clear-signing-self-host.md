@@ -15,7 +15,7 @@ ise sizin denetlediğiniz başka bir yerde olur.
 
 ## Nedir
 
-Tek bir klasör — depodaki `app-web/clearsigning` — ve bu klasör hem bir web sayfası
+Tek bir klasör — depodaki `app-web/trusted-signer` — ve bu klasör hem bir web sayfası
 hem bir Chrome uzantısı. Saf HTML, CSS ve JavaScript: framework yok, bundler yok,
 derleme adımı yok, bağımlılık yok ve kendi başına hiçbir ağ isteği yok.
 
@@ -39,7 +39,7 @@ mevcut anahtarlarınız onda imzalayabilir, çalışan kod ise yüklediğiniz ve
 incelediğiniz klasördür.
 
 1. `chrome://extensions` adresini açıp **Geliştirici modu**'nu açın.
-2. **Paketlenmemiş öğe yükle** deyip `app-web/clearsigning` klasörünü seçin.
+2. **Paketlenmemiş öğe yükle** deyip `app-web/trusted-signer` klasörünü seçin.
 3. Araç çubuğundaki simge sayfayı bir sekmede açar.
 
 **Kendi alan adınızda ya da localhost'ta bir sayfa olarak.** HTTP(S) üzerinden
@@ -50,7 +50,7 @@ alan adınızda oluşturulmuş bir cüzdan için imzalamanın doğru yolu yapar.
 `getvela.app` cüzdanı için imzalamanın yolu değildir.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

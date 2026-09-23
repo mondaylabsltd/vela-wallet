@@ -21,10 +21,10 @@ import app.getvela.wallet.feature.send.core.SendReceiptOutcome
 import app.getvela.wallet.feature.send.core.TrackStatus
 import app.getvela.wallet.feature.wallet.core.TrackerWorker
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
-import app.getvela.wallet.feature.send.core.ClearSignerLabels
+import app.getvela.wallet.feature.send.core.TrustedSignerLabels
 import app.getvela.wallet.feature.send.core.UserOpSigner
-import app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel
-import app.getvela.wallet.feature.signing.clearsigner.ClearSignerTab
+import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel
+import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerTab
 import app.getvela.wallet.feature.send.core.SendHapticKind
 import app.getvela.wallet.feature.send.core.SendController
 import app.getvela.wallet.feature.browser.core.BrowserController
@@ -325,25 +325,25 @@ class AppContainer(private val app: Application) {
     @Volatile
     var passkeySigner: UserOpSigner? = null
 
-    /** Spec 071: the Clear Signer's tab, attached by the activity in onCreate. */
+    /** Spec 071: the Trusted Signer's tab, attached by the activity in onCreate. */
     @Volatile
-    var clearSignerTab: ClearSignerTab? = null
+    var trustedSignerTab: TrustedSignerTab? = null
 
     /**
      * Spec 071: the fourth "Sign with" — one channel per process, one ceremony
      * at a time. The page is `sign_pref`'s; the words are the corpus'.
      */
-    val clearSigner: ClearSignerChannel by lazy {
-        ClearSignerChannel(
+    val trustedSigner: TrustedSignerChannel by lazy {
+        TrustedSignerChannel(
             signerUrl = { settings.signPref.value.signer_url },
-            openPage = { url -> clearSignerTab?.open(url) ?: false },
-            bringBack = { clearSignerTab?.bringBack() },
+            openPage = { url -> trustedSignerTab?.open(url) ?: false },
+            bringBack = { trustedSignerTab?.bringBack() },
             words = {
-                ClearSignerChannel.Words(
-                    closed = i18nRuntime.t("componentsUi.signing.clearSignerClosed"),
-                    refused = i18nRuntime.t("componentsUi.signing.clearSignerRefused"),
-                    mismatch = i18nRuntime.t("componentsUi.signing.clearSignerMismatch"),
-                    timeout = i18nRuntime.t("componentsUi.signing.clearSignerTimeout"),
+                TrustedSignerChannel.Words(
+                    closed = i18nRuntime.t("componentsUi.signing.trustedSignerClosed"),
+                    refused = i18nRuntime.t("componentsUi.signing.trustedSignerRefused"),
+                    mismatch = i18nRuntime.t("componentsUi.signing.trustedSignerMismatch"),
+                    timeout = i18nRuntime.t("componentsUi.signing.trustedSignerTimeout"),
                 )
             },
             // Read by a person on the signer page, beside "the name and mark
@@ -355,7 +355,7 @@ class AppContainer(private val app: Application) {
             appIcon = { appMark() },
             labels = { chainId, account ->
                 val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
-                ClearSignerLabels(
+                TrustedSignerLabels(
                     chainName = network?.display_name,
                     nativeSymbol = network?.native_symbol,
                     accountName = session.view.value.accounts
@@ -407,7 +407,7 @@ class AppContainer(private val app: Application) {
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
             signMethod = { settings.signPref.value.method },
-            clearSigner = { clearSigner },
+            trustedSigner = { trustedSigner },
         ).also { controller ->
             // Spec 069: the stored default speed, read now and followed after —
             // Settings changing it reaches a send already open.
@@ -547,7 +547,7 @@ class AppContainer(private val app: Application) {
      */
     suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> {
         val port = StoreAccountPort(AccountStore(app))
-        // Spec 075: a key minted on a Clear Signer page lives behind it, and
+        // Spec 075: a key minted on a Trusted Signer page lives behind it, and
         // only the record knows that — the registry does not store it.
         val pages = port.pagesOf(address)
         return port.keysOf(address).mapIndexed { index, key ->
@@ -596,7 +596,7 @@ class AppContainer(private val app: Application) {
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
                 defaultMethod = { settings.signPref.value.method },
-                clearSigner = { clearSigner },
+                trustedSigner = { trustedSigner },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
                 measureCall = { chainId, from, to, valueHex, data ->

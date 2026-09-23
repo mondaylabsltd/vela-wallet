@@ -91,7 +91,7 @@
 
 	    - caBLE "sign in with your phone" (spec 019): the BLE SCAN that finds
 	      the phone that scanned our QR, and the CTAP 2.3 L2CAP channel to it;
-	    - the Clear Signer's nearby channel (spec 075 T041): this phone
+	    - the Trusted Signer's nearby channel (spec 075 T041): this phone
 	      ADVERTISING as a GATT peripheral so the signing page open on a
 	      computer in the room can connect to it (PROTOCOL.md §1).
 
@@ -100,7 +100,7 @@
 	  be asking to advertise under cover of a different explanation.
 	-->
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Vela uses Bluetooth to reach a nearby device you sign with — the phone that scans the code on screen, or a computer running the Clear Signer in the same room.</string>
+	<string>Vela uses Bluetooth to reach a nearby device you sign with — the phone that scans the code on screen, or a computer running the Trusted Signer in the same room.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

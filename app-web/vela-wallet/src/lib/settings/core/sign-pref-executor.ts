@@ -7,7 +7,7 @@
  * way a committed preference reaches disk in this shell.
  *
  * Both keys live under the `vela.` prefix and **survive sign-out**: how a
- * person signs, and which Clear Signer page they trust, belong to them and
+ * person signs, and which Trusted Signer page they trust, belong to them and
  * the device rather than to one account. Neither is listed in
  * `device-storage.ts` — a preference is not a cache.
  *
@@ -27,8 +27,8 @@ export type SignPrefEffect = { id: number; operation: SignPrefOperation };
 
 /** The default "Sign with". */
 export const SIGN_METHOD_KEY = 'vela.signMethod';
-/** The Clear Signer page a person chose; absent = the official one. */
-export const CLEAR_SIGNER_URL_KEY = 'vela.clearSignerUrl';
+/** The Trusted Signer page a person chose; absent = the official one. */
+export const TRUSTED_SIGNER_URL_KEY = 'vela.trustedSignerUrl';
 
 export async function executeSignPrefOperation(
 	effect: SignPrefEffect
@@ -38,7 +38,7 @@ export async function executeSignPrefOperation(
 		case 'read_stored': {
 			const [method, signerUrl] = await Promise.all([
 				getItem(SIGN_METHOD_KEY),
-				getItem(CLEAR_SIGNER_URL_KEY)
+				getItem(TRUSTED_SIGNER_URL_KEY)
 			]);
 			return { type: 'stored', method: method ?? null, signer_url: signerUrl ?? null };
 		}
@@ -46,8 +46,8 @@ export async function executeSignPrefOperation(
 			await setItem(SIGN_METHOD_KEY, operation.method);
 			return { type: 'written' };
 		case 'write_signer_url':
-			if (operation.url === null) await removeItem(CLEAR_SIGNER_URL_KEY);
-			else await setItem(CLEAR_SIGNER_URL_KEY, operation.url);
+			if (operation.url === null) await removeItem(TRUSTED_SIGNER_URL_KEY);
+			else await setItem(TRUSTED_SIGNER_URL_KEY, operation.url);
 			return { type: 'written' };
 		default: {
 			const never: never = operation;

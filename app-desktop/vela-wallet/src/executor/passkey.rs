@@ -243,11 +243,11 @@ pub struct Ceremony {
     /// Has the person dismissed that QR? Polled by the scan, which is the one
     /// open-ended wait a hybrid ceremony has.
     pub cancelled: CancelProbe,
-    /// Spec 075: the Clear Signer's own channel to the screen — where the
+    /// Spec 075: the Trusted Signer's own channel to the screen — where the
     /// page is, the page to open, the pairing code to confirm, and how the
-    /// last attempt ended. A ceremony with `method = clear_signer` runs
+    /// last attempt ended. A ceremony with `method = trusted_signer` runs
     /// there instead of on any authenticator this machine can reach.
-    pub clear_signer: Arc<crate::executor::clear_signer::Channel>,
+    pub trusted_signer: Arc<crate::executor::trusted_signer::Channel>,
     /// The app window the Windows dialog parents itself to.
     ///
     /// Read on exactly one platform, because it is the only one where the
@@ -1202,7 +1202,7 @@ mod tests {
             pick: Arc::new(|_| None),
             qr: Arc::new(|_| {}),
             cancelled: Arc::new(|| false),
-            clear_signer: crate::executor::clear_signer::Channel::new().0,
+            trusted_signer: crate::executor::trusted_signer::Channel::new().0,
             window: 0,
         };
         // The card is up — the phone had announced a touch.
@@ -1402,7 +1402,7 @@ mod hardware_tests {
             }),
             qr: Arc::new(|_| {}),
             cancelled: Arc::new(|| false),
-            clear_signer: crate::executor::clear_signer::Channel::new().0,
+            trusted_signer: crate::executor::trusted_signer::Channel::new().0,
             pin: Arc::new(|request| {
                 let pin = std::env::var("VELA_TEST_PIN").ok();
                 eprintln!(
@@ -1503,7 +1503,7 @@ mod hardware_tests {
             }),
             qr: Arc::new(|_| {}),
             cancelled: Arc::new(|| false),
-            clear_signer: crate::executor::clear_signer::Channel::new().0,
+            trusted_signer: crate::executor::trusted_signer::Channel::new().0,
             pin: Arc::new(|_| std::env::var("VELA_TEST_PIN").ok()),
             pick: Arc::new(|_| Some(0)),
             window: 0,

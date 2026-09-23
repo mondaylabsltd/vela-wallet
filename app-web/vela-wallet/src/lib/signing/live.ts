@@ -548,7 +548,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 /**
  * "Sign with" on the sheet (spec 071): every method the `sign_pref` core
  * offers, in its order, named as the create flow and Settings name them; the
- * Clear Signer with its one line. The request starts at Settings' default
+ * Trusted Signer with its one line. The request starts at Settings' default
  * and shows this request's own pick once there is one — the pick never goes
  * back to the preference (contract §6). A name this build has no words for
  * is not drawn, and is never in force: the default falls back to `auto`.
@@ -561,8 +561,8 @@ export function signWithModel(input: {
 	m: SigningMessages;
 }): { method: SignMethod; row: NonNullable<SigningModel['signWith']> } {
 	const { m } = input;
-	// Partial on purpose: the core offers `clear_signer` to every shell, and
-	// this one has no words for it because it has no Clear Signer at all
+	// Partial on purpose: the core offers `trusted_signer` to every shell, and
+	// this one has no words for it because it has no Trusted Signer at all
 	// (owner, 2026-09-23). A name with no title here is simply not drawn —
 	// which is the same rule an older build's unknown name already met.
 	const titles: Partial<Record<SignMethod, string>> = {

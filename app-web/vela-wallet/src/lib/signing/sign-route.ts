@@ -2,9 +2,9 @@
  * WHERE one signature goes — the web's mirror of `wallet_keys::sign_route`
  * (spec 075 contract §1.2).
  *
- * A key minted or found through the Clear Signer lives BEHIND that page, the
+ * A key minted or found through the Trusted Signer lives BEHIND that page, the
  * way a security key's key lives in one device. `auto` must follow it there;
- * "Clear Signer" by name prefers such a key; and a platform/hybrid/security-key
+ * "Trusted Signer" by name prefers such a key; and a platform/hybrid/security-key
  * route must not be aimed at a key only a self-hosted page can reach — that
  * ceremony would find nothing, and the person would be told their own key does
  * not exist.
@@ -18,14 +18,14 @@
  * deleted, not maintained.
  */
 
-import { clearSignerUsesWalletPasskeys } from '$lib/core/kernels';
+import { trustedSignerUsesWalletPasskeys } from '$lib/core/kernels';
 import type { SignMethod } from '$lib/onboarding/core/passkey';
 
 /** A founding key as the account record holds it. */
 export interface DeviceKey {
 	credential_id: string;
 	transports: string;
-	/** Spec 075: the Clear Signer page this key lives behind, if any. */
+	/** Spec 075: the Trusted Signer page this key lives behind, if any. */
 	signer_origin?: string | null;
 }
 
@@ -34,12 +34,12 @@ export interface SignRoute {
 	credentialId: string;
 	transports: string;
 	method: Exclude<SignMethod, 'auto'>;
-	/** For `clear_signer`: the page. Empty means the person's page from Settings. */
+	/** For `trusted_signer`: the page. Empty means the person's page from Settings. */
 	signerOrigin: string;
 }
 
 /** `passkey::reported_method_name` — what a key's own transports say it is. */
-function reportedMethod(transports: string): Exclude<SignMethod, 'auto' | 'clear_signer'> {
+function reportedMethod(transports: string): Exclude<SignMethod, 'auto' | 'trusted_signer'> {
 	const has = (hint: string) => transports.split(',').some((part) => part.trim() === hint);
 	if (has('usb') || has('nfc') || has('ble')) return 'security_key';
 	if (has('hybrid') && !has('internal')) return 'hybrid';
@@ -48,7 +48,7 @@ function reportedMethod(transports: string): Exclude<SignMethod, 'auto' | 'clear
 	return 'platform';
 }
 
-const ROUTED_TRANSPORTS: Record<Exclude<SignMethod, 'auto' | 'clear_signer'>, string> = {
+const ROUTED_TRANSPORTS: Record<Exclude<SignMethod, 'auto' | 'trusted_signer'>, string> = {
 	platform: 'internal',
 	hybrid: 'hybrid,internal',
 	security_key: 'usb,nfc,ble'
@@ -66,7 +66,7 @@ export function signRoute(keys: readonly DeviceKey[], method: string): SignRoute
 	const clearRoute = (key: DeviceKey): SignRoute => ({
 		credentialId: key.credential_id,
 		transports: '',
-		method: 'clear_signer',
+		method: 'trusted_signer',
 		signerOrigin: key.signer_origin ?? ''
 	});
 
@@ -77,16 +77,16 @@ export function signRoute(keys: readonly DeviceKey[], method: string): SignRoute
 		const pinned = usable[0];
 		return behindPage(pinned) ? clearRoute(pinned) : null;
 	}
-	if (method === 'clear_signer') {
+	if (method === 'trusted_signer') {
 		return clearRoute(usable.find(behindPage) ?? usable[0]);
 	}
 	if (method !== 'platform' && method !== 'hybrid' && method !== 'security_key') return null;
 
-	// A platform sheet reaches a Clear Signer key only when the page was the
+	// A platform sheet reaches a Trusted Signer key only when the page was the
 	// wallet's own (`*.getvela.app` passkeys are this app's passkeys). A key
 	// behind anybody else's page is reachable nowhere else — route it there.
 	const reachable = (key: DeviceKey) =>
-		!behindPage(key) || clearSignerUsesWalletPasskeys(key.signer_origin as string);
+		!behindPage(key) || trustedSignerUsesWalletPasskeys(key.signer_origin as string);
 	const candidates = usable.filter(reachable);
 	const pinned =
 		candidates.find((key) => reportedMethod(key.transports) === method) ?? candidates[0];

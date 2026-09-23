@@ -60,8 +60,8 @@
     "signing": {
       "title": "Şununla imzala",
       "subtitle": "Vela'da başlattığınız her imza buradan başlar. Tek bir imza için yine de başka bir yol seçebilirsiniz.",
-      "pageTitle": "Clear Signer sayfası",
-      "pageSubtitle": "Clear Signer'ın açtığı sayfa: resmi sayfa ya da bağımlılıksız sayfanın kendi kopyanız.",
+      "pageTitle": "Trusted Signer sayfası",
+      "pageSubtitle": "Trusted Signer'ın açtığı sayfa: resmi sayfa ya da bağımlılıksız sayfanın kendi kopyanız.",
       "pageOfficial": "Resmi",
       "pageInvalid": "Bu bir web adresi değil.",
       "pageInsecure": "https bir sayfa ya da bu cihazın kendi loopback adresindeki bir sayfa kullanın — tarayıcı başka hiçbir yerde imzalamaz.",

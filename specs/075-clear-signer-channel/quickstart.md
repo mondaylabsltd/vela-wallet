@@ -18,7 +18,7 @@ An independent WebCrypto reading of them (the page's own crypto, not this crate'
 node <scratch>/check-secure.mjs rust/crates/vela-core/tests/clear-signer/secure-session.json
 ```
 
-## The page (zero-dependency, `app-web/clearsigning`)
+## The page (zero-dependency, `app-web/trusted-signer`)
 
 ```sh
 export CHROME_BIN="…/Google Chrome for Testing"     # HANDOVER.md
@@ -34,7 +34,7 @@ node samples/channels-test.mjs && node samples/safeop-test.mjs
 The page on the phone's own loopback is a secure context, so WebAuthn runs there:
 
 ```sh
-cd app-web/clearsigning && python3 -m http.server 8140 &
+cd app-web/trusted-signer && python3 -m http.server 8140 &
 adb reverse tcp:8140 tcp:8140
 ```
 

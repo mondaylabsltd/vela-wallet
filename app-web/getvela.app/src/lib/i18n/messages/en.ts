@@ -453,7 +453,7 @@ export const en = {
 			 * WalletPair, which the wallet no longer supports at all, and the shutdown answer
 			 * pointed at a "recovery extension" deleted in spec 039. What replaces
 			 * them is what ships: the provider the apps and the extension inject, and
-			 * `app-web/clearsigning`, whose relying party is still getvela.app.
+			 * `app-web/trusted-signer`, whose relying party is still getvela.app.
 			 */
 			heading: 'FAQ',
 			items: [

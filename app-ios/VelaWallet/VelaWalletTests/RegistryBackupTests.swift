@@ -185,7 +185,7 @@ struct RegistryBackupTests {
         }
     }
 
-    /// Spec 075: a key minted on a Clear Signer page lives BEHIND that page,
+    /// Spec 075: a key minted on a Trusted Signer page lives BEHIND that page,
     /// and the keys list has to say so.
     ///
     /// The page runs its ceremony in a browser, so the authenticator reports
@@ -226,18 +226,18 @@ struct RegistryBackupTests {
         // record alone — the only place a page is ever known.
         let rows = await WalletKeys(ethCall: { _, _, _ in nil })
             .read(address: "", device: device).rows
-        #expect(rows.map(\.key.method) == [.clearSigner, .platform])
+        #expect(rows.map(\.key.method) == [.trustedSigner, .platform])
         #expect(rows.map(\.signerOrigin) == [page, ""])
 
         let drawn = SettingsLive.withWalletKeys(
             WalletKeys.Result(source: .device, rows: rows), backup: nil, on: base, loc: loc
         ).keys?.rows ?? []
-        #expect(drawn.map(\.holder) == ["Clear Signer", "Built-in passkey"])
+        #expect(drawn.map(\.holder) == ["Trusted Signer", "Built-in passkey"])
         // The caption says the route; only the detail says WHICH page.
         #expect(drawn.first?.details.contains(
-            KeyDetailModel(label: "Clear Signer", value: page, mono: false, copy: false)
+            KeyDetailModel(label: "Trusted Signer", value: page, mono: false, copy: false)
         ) == true)
-        #expect(drawn.last?.details.contains { $0.label == "Clear Signer" } == false,
+        #expect(drawn.last?.details.contains { $0.label == "Trusted Signer" } == false,
                 "a key behind no page must not grow an empty page line")
     }
 

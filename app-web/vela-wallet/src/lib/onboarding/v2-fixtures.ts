@@ -76,7 +76,7 @@ function view(over: Partial<CreateView> = {}): CreateView {
 		needs_second_key: false,
 		// An empty set has committed to no relying party, so every route is
 		// still open and there is nothing to explain (spec 075).
-		add_methods: ['platform', 'hybrid', 'security_key', 'clear_signer'],
+		add_methods: ['platform', 'hybrid', 'security_key', 'trusted_signer'],
 		add_blocked: null,
 		...over
 	};
@@ -206,8 +206,8 @@ export const CREATE_FIXTURES: CreateFixture[] = [
 			// not this device's and the row must not claim one.
 			keys: [
 				key({
-					method: 'clear_signer',
-					kind: 'clear_signer',
+					method: 'trusted_signer',
+					kind: 'trusted_signer',
 					synced: false,
 					aaguid: '',
 					provider_name: ''
@@ -215,7 +215,7 @@ export const CREATE_FIXTURES: CreateFixture[] = [
 			],
 			can_add_key: true,
 			needs_second_key: true,
-			add_methods: ['clear_signer'],
+			add_methods: ['trusted_signer'],
 			add_blocked: { relying_party: 'sign.example.com', page: null, page_relying_party: null }
 		})
 	},

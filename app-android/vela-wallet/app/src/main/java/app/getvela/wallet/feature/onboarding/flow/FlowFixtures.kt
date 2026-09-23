@@ -173,9 +173,9 @@ object FlowFixtures {
             "keys · a page's own set",
             base().copy(
                 stage = CreateStage.AddKeys,
-                keys = listOf(key("Everyday wallet", method = KeyMethod.ClearSigner, synced = false)),
+                keys = listOf(key("Everyday wallet", method = KeyMethod.TrustedSigner, synced = false)),
                 needsSecondKey = true,
-                addMethods = listOf(KeyMethod.ClearSigner),
+                addMethods = listOf(KeyMethod.TrustedSigner),
                 addBlocked = AddBlocked(relyingParty = "sign.example.com", page = null, pageRelyingParty = null),
             ),
         )

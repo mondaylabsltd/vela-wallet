@@ -271,11 +271,11 @@ struct UsbConnectingSheet: View {
         case .hybrid: loc.t(I18nKeys.Flow.touchRemoteTitle)
         case .securityKey: loc.t(I18nKeys.Create.methodSecurityKeyTitle)
         case .platform: loc.t(I18nKeys.Create.methodPlatformTitle)
-        // Spec 075. In practice the Clear Signer never reaches this hold —
+        // Spec 075. In practice the Trusted Signer never reaches this hold —
         // it puts up its OWN sheet the moment it is chosen, and that sheet
         // asks where the signer is. Named anyway rather than defaulted, so
         // the compiler keeps telling us about a fifth route.
-        case .clearSigner: loc.t(I18nKeys.ClearSigner.title)
+        case .trustedSigner: loc.t(I18nKeys.TrustedSigner.title)
         }
     }
 
@@ -285,7 +285,7 @@ struct UsbConnectingSheet: View {
         case .hybrid: loc.t(I18nKeys.Flow.touchRemoteBody)
         case .securityKey: loc.t(I18nKeys.Create.methodSecurityKeyBody)
         case .platform: loc.t(I18nKeys.Create.methodPlatformBody)
-        case .clearSigner: loc.t(I18nKeys.ClearSigner.body)
+        case .trustedSigner: loc.t(I18nKeys.TrustedSigner.body)
         }
     }
 

@@ -84,7 +84,7 @@ object SettingsLive {
 
     /**
      * How this device signs by default (spec 071): the "Sign with" row and its
-     * sheet, the Clear Signer page row and its sheet — all from the `sign_pref`
+     * sheet, the Trusted Signer page row and its sheet — all from the `sign_pref`
      * core, so the row, the sheet and every signing sheet say the same thing.
      */
     fun withSignPref(model: SettingsScreenModel, view: SignPrefView, s: VelaStrings): SettingsScreenModel {
@@ -93,7 +93,7 @@ object SettingsLive {
             "platform" to s.t("onboarding.create.methodPlatformTitle"),
             "hybrid" to s.t("onboarding.create.methodHybridTitle"),
             "security_key" to s.t("onboarding.create.methodSecurityKeyTitle"),
-            "clear_signer" to s.t("componentsUi.signing.clearSignerTitle"),
+            "trusted_signer" to s.t("componentsUi.signing.trustedSignerTitle"),
         )
         val sheet = SelectSheetModel(
             title = s.t("settings.signing.title"),
@@ -103,7 +103,7 @@ object SettingsLive {
                 SelectRowModel(
                     id = id,
                     label = title,
-                    detail = if (id == "clear_signer") s.t("componentsUi.signing.clearSignerBody") else null,
+                    detail = if (id == "trusted_signer") s.t("componentsUi.signing.trustedSignerBody") else null,
                     selected = id == view.method,
                 )
             },
@@ -935,8 +935,8 @@ object SettingsLive {
                             app.getvela.wallet.feature.onboarding.core.KeyMethod.Platform -> k.KEYS_PROVIDER_PLATFORM
                             // Spec 075: the page holds it, so the page is what
                             // the line names — no vault this device can see.
-                            app.getvela.wallet.feature.onboarding.core.KeyMethod.ClearSigner ->
-                                "componentsUi.signing.clearSignerTitle"
+                            app.getvela.wallet.feature.onboarding.core.KeyMethod.TrustedSigner ->
+                                "componentsUi.signing.trustedSignerTitle"
                         },
                     )
                 },
@@ -951,9 +951,9 @@ object SettingsLive {
                     KeyDetailModel(strings.t(k.KEYS_CREDENTIAL), row.credentialId, mono = true, copy = true),
                     KeyDetailModel("AAGUID", row.key.aaguid, mono = true, copy = false),
                     // Spec 075: WHICH page, when the key lives behind one —
-                    // the holder line above says it is the Clear Signer, and a
+                    // the holder line above says it is the Trusted Signer, and a
                     // person running their own deployment needs to see which.
-                    KeyDetailModel(strings.t("componentsUi.signing.clearSignerTitle"), row.signerOrigin, mono = false, copy = true),
+                    KeyDetailModel(strings.t("componentsUi.signing.trustedSignerTitle"), row.signerOrigin, mono = false, copy = true),
                     KeyDetailModel(strings.t(k.KEYS_TRANSPORT), listOf(row.key.authenticatorAttachment, row.key.transports).filter { it.isNotEmpty() }.joinToString(" · "), mono = false, copy = false),
                     KeyDetailModel(strings.t(k.KEYS_ATTESTATION), row.attestationHex, mono = true, copy = false),
                 ).filter { it.value.isNotEmpty() },

@@ -6,7 +6,7 @@ import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.format.Formats
-import app.getvela.wallet.feature.send.core.ClearSigner
+import app.getvela.wallet.feature.send.core.TrustedSigner
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeCall
 import app.getvela.wallet.feature.send.core.FeeSpeedView
@@ -86,9 +86,9 @@ class SigningController(
     private val numberPreset: () -> String = { "comma_dot" },
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
-    /** Spec 071: the "Sign with" this sheet starts at (Settings' default), and the Clear Signer. */
+    /** Spec 071: the "Sign with" this sheet starts at (Settings' default), and the Trusted Signer. */
     defaultMethod: () -> String = { "auto" },
-    clearSigner: () -> ClearSigner? = { null },
+    trustedSigner: () -> TrustedSigner? = { null },
 ) {
     /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
     private val signers = listOf(wallet)
@@ -138,7 +138,7 @@ class SigningController(
     val sim: StateFlow<SimOutcome?> = _sim
 
     private val signExecutor = SignExecutor(
-        spine = UserOpSpine(relay, accounts, signer, measureCall, signMethod = { signMethod.value }, clearSigner = clearSigner),
+        spine = UserOpSpine(relay, accounts, signer, measureCall, signMethod = { signMethod.value }, trustedSigner = trustedSigner),
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
@@ -384,7 +384,7 @@ class SigningController(
          * `wallet_keys::SIGN_METHODS` — every value the picker may set. Pinned
          * to the core's own list (`SignPrefView.offered`) by a JVM test.
          */
-        val SIGN_METHODS = listOf("auto", "platform", "hybrid", "security_key", "clear_signer")
+        val SIGN_METHODS = listOf("auto", "platform", "hybrid", "security_key", "trusted_signer")
 
         /** What the confirm slides into: the fee as quoted, the guard's rewrite, the intent (the desktop's `approve_opts`). */
         fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView): SignApproveOpts = SignApproveOpts(

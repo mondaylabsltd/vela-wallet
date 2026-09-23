@@ -11,7 +11,7 @@ export type AddBlocked = {
  */
 relying_party: string, 
 /**
- * The Clear Signer page Settings names, when it is the thing that does
+ * The Trusted Signer page Settings names, when it is the thing that does
  * not fit — a key minted there would belong to `page_relying_party`.
  */
 page?: string | null, 

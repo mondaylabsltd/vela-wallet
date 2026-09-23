@@ -25,13 +25,13 @@
 //  operation the relay must reject is a prompt wasted — and on this platform it
 //  is also a Face ID sheet somebody has to dismiss for nothing.
 //
-//  ## The Clear Signer is a ceremony, not a second path (spec 071)
+//  ## The Trusted Signer is a ceremony, not a second path (spec 071)
 //
 //  When the person chose it, the SAME digest the passkey would have signed
 //  goes to a separate page with the request it covers — the core builds what
-//  the page receives (`clearSignerRequest`) and verifies what comes back —
+//  the page receives (`trustedSignerRequest`) and verifies what comes back —
 //  and an accepted answer continues exactly where an assertion does:
-//  `userOpSign`, `eip1271Signature`. Every other ending is a `clearSigner`
+//  `userOpSign`, `eip1271Signature`. Every other ending is a `trustedSigner`
 //  failure the sheet puts into words, and nothing is submitted.
 //
 //  ## Why `signMessage` lives here and 052 never calls it
@@ -49,7 +49,7 @@ import VelaCore
 extension UserOpSpine.AccountPort {
     /// Nothing known: the ceremony routes as it always did.
     func keyRoutesJson(of address: String) async -> String { "[]" }
-    /// Nothing known: the Clear Signer's page shows the address alone.
+    /// Nothing known: the Trusted Signer's page shows the address alone.
     func name(of address: String) async -> String? { nil }
 }
 
@@ -63,9 +63,9 @@ extension UserOpSpine.AccountPort {
 struct SignRouteWire: Decodable, Equatable {
     let credentialId: String
     let transports: String
-    /// `platform` | `hybrid` | `security_key` | `clear_signer`.
+    /// `platform` | `hybrid` | `security_key` | `trusted_signer`.
     let method: String
-    /// Spec 075: the page a Clear Signer key lives behind. Empty means the
+    /// Spec 075: the page a Trusted Signer key lives behind. Empty means the
     /// person's page from Settings.
     let signerOrigin: String
 
@@ -111,11 +111,11 @@ final class UserOpSpine {
         /// Every founding key's credential id and stored transports, as JSON for
         /// the core's `signRoute` — `[{credential_id, transports}]`.
         func keyRoutesJson(of address: String) async -> String
-        /// The account's own name, for the Clear Signer's page.
+        /// The account's own name, for the Trusted Signer's page.
         func name(of address: String) async -> String?
     }
 
-    /// What a site asked for, as the Clear Signer's page is told it (spec
+    /// What a site asked for, as the Trusted Signer's page is told it (spec
     /// 071): its own method and params, and the origin the browser observed.
     /// `nil` is the wallet's own send, which the core describes from its calls
     /// and the page draws as the wallet itself.
@@ -125,15 +125,15 @@ final class UserOpSpine {
         let origin: String
     }
 
-    /// The Clear Signer's "Sign with" name — not a place a passkey is, so
+    /// The Trusted Signer's "Sign with" name — not a place a passkey is, so
     /// `signRoute` never routes it; the ceremony branches here instead.
-    static let clearSignerMethod = "clear_signer"
+    static let trustedSignerMethod = "trusted_signer"
 
     enum Failure: Equatable {
         case passkeyCancelled
-        /// The Clear Signer ended without an answer the wallet accepts.
+        /// The Trusted Signer ended without an answer the wallet accepts.
         /// Nothing was signed; the sheet says which of its sentences applies.
-        case clearSigner(ClearSignerNotice)
+        case trustedSigner(TrustedSignerNotice)
         case relayerUnavailable
         case bundlerUnderfunded
         case other(String?)
@@ -224,8 +224,8 @@ final class UserOpSpine {
                 // A message carries no calls and no operation: the page reads
                 // the site's own params.
                 guard let asked else { return nil }
-                return try clearSignerRequest(
-                    input: Self.clearSignerInput(
+                return try trustedSignerRequest(
+                    input: Self.trustedSignerInput(
                         asked: asked, chainId: chainId, account: account,
                         accountName: accountName, keys: keys, calls: []
                     ),
@@ -375,8 +375,8 @@ final class UserOpSpine {
             buildRequest: { accountName in
                 // The ASSEMBLED operation — the one the digest covers — and
                 // the calls before its fee leg, which the core appends last.
-                try clearSignerRequest(
-                    input: Self.clearSignerInput(
+                try trustedSignerRequest(
+                    input: Self.trustedSignerInput(
                         asked: asked, chainId: chainId, account: account,
                         accountName: accountName, keys: keys, calls: calls
                     ),
@@ -444,12 +444,12 @@ final class UserOpSpine {
     /// key that pins, and how it is reached, is the core's.
     var signMethod: () -> String = { "auto" }
 
-    /// The Clear Signer (spec 071). `nil` where there is no screen to open a
+    /// The Trusted Signer (spec 071). `nil` where there is no screen to open a
     /// page on — choosing it there is refused before anything is signed.
-    var clearSigner: ClearSignerPort?
+    var trustedSigner: TrustedSignerPort?
 
     /// One signature over `challenge`: the passkey the person chose, or the
-    /// Clear Signer's answer, which the core has already verified over this
+    /// Trusted Signer's answer, which the core has already verified over this
     /// very digest by one of `keys`. `buildRequest` makes what the page
     /// receives, given the account's name, and runs only when it is asked.
     private func ceremony(
@@ -461,21 +461,21 @@ final class UserOpSpine {
     ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
         // The route is the CORE's, for `auto` as much as for a name the
         // person picked (spec 075): a key minted behind a signer page is
-        // reachable nowhere else, so `auto` answers `clear_signer` for it and
+        // reachable nowhere else, so `auto` answers `trusted_signer` for it and
         // says which page. The person's own pick reaches the same place.
         let route = await route(account: account)
-        guard signMethod() == Self.clearSignerMethod || route?.method == Self.clearSignerMethod else {
+        guard signMethod() == Self.trustedSignerMethod || route?.method == Self.trustedSignerMethod else {
             let assertion = try await assert(account: account, pinned: pinned, route: route, challenge: challenge)
             return (Self.webAuthn(assertion), assertion.credentialIdHex)
         }
-        guard let clearSigner else {
-            throw other("The Clear Signer cannot be opened here.")
+        guard let trustedSigner else {
+            throw other("The Trusted Signer cannot be opened here.")
         }
         let accountName = await accounts.name(of: account)
         guard let request = try? buildRequest(accountName) else {
-            throw other("The Clear Signer's request could not be built.")
+            throw other("The Trusted Signer's request could not be built.")
         }
-        let ending = await clearSigner.sign(
+        let ending = await trustedSigner.sign(
             requestJson: request, digest: challenge, keys: keys,
             // Empty means the page from Settings; a key behind somebody's own
             // page names it, and that is the one that opens.
@@ -485,29 +485,29 @@ final class UserOpSpine {
         case .outcome(.accepted(let credentialIdHex, let assertion)):
             return (assertion, credentialIdHex)
         case .outcome(.refused(let refusal)):
-            throw Refused(failure: .clearSigner(ClearSignerNotice(refusal)))
+            throw Refused(failure: .trustedSigner(TrustedSignerNotice(refusal)))
         case .ceremony:
             // A signature was asked for; a ceremony verdict is a shell bug.
-            throw other("The Clear Signer answered the wrong kind of request.")
+            throw other("The Trusted Signer answered the wrong kind of request.")
         case .timedOut:
-            throw Refused(failure: .clearSigner(.timeout))
+            throw Refused(failure: .trustedSigner(.timeout))
         case .unavailable:
-            throw other("The Clear Signer could not be opened.")
+            throw other("The Trusted Signer could not be opened.")
         }
     }
 
     /// What the page is told: a site's request as it asked, or — `asked`
     /// absent — the wallet's own send, which the core builds from `calls`.
-    static func clearSignerInput(
+    static func trustedSignerInput(
         asked: Asked?,
         chainId: Int,
         account: String,
         accountName: String?,
         keys: [WalletKeyRecord],
         calls: [UserOpCall]
-    ) -> ClearSignerInput {
+    ) -> TrustedSignerInput {
         let chain = ChainCatalog.meta(chainId)
-        return ClearSignerInput(
+        return TrustedSignerInput(
             method: asked?.method ?? "",
             paramsJson: asked?.paramsJson ?? "",
             origin: asked?.origin ?? "",
@@ -522,11 +522,11 @@ final class UserOpSpine {
     }
 
     /// `wallet_keys::sign_route` for the "Sign with" in force: the credential
-    /// a ceremony is pinned to, how it is reached, and — for a Clear Signer
+    /// a ceremony is pinned to, how it is reached, and — for a Trusted Signer
     /// key — the page it lives behind. `nil` is "do what you always did".
     ///
     /// Asked for `auto` too since spec 075: a key created or found through
-    /// the Clear Signer routes itself back there, which is the whole of
+    /// the Trusted Signer routes itself back there, which is the whole of
     /// "a key that lives behind a page signs through it".
     private func route(account: String) async -> SignRouteWire? {
         guard let json = signRoute(
@@ -543,7 +543,7 @@ final class UserOpSpine {
     ) async throws -> Assertion {
         let routing: (credentialId: String, transports: String, method: KeyMethod)
         if let route, !route.credentialId.isEmpty,
-           let method = KeyMethod(rawValue: route.method), method != .clearSigner {
+           let method = KeyMethod(rawValue: route.method), method != .trustedSigner {
             routing = (route.credentialId, route.transports, method)
         } else {
             let stored = await accounts.routing(of: account)

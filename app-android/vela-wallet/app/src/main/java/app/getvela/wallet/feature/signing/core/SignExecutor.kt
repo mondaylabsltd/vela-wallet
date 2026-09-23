@@ -2,7 +2,7 @@ package app.getvela.wallet.feature.signing.core
 
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.send.core.SendExecutor
-import app.getvela.wallet.feature.send.core.ClearSignerIntent
+import app.getvela.wallet.feature.send.core.TrustedSignerIntent
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.withTimeoutOrNull
@@ -40,7 +40,7 @@ class SignExecutor(
     /** How long the final answer waits for the receipt (the desktop's `await_receipt`); then the op hash answers. */
     private val receiptWaitMs: Long = 120_000L,
     private val receiptPollMs: Long = 3_000L,
-    /** The asking site's origin — what the Clear Signer names as the requester (spec 071). */
+    /** The asking site's origin — what the Trusted Signer names as the requester (spec 071). */
     private val origin: () -> String = { "" },
 ) {
     /** User-op hashes whose pending record has been written — the response never precedes the record. */
@@ -168,7 +168,7 @@ class SignExecutor(
                 gasFeeToken = op.gas_fee_token,
                 quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
                 signingStarted = { ports.signingStarted() },
-                intent = ClearSignerIntent(op.method, op.params_json, origin()),
+                intent = TrustedSignerIntent(op.method, op.params_json, origin()),
             )
             ports.opSubmitted(op.id, hash)
             // §4: the durable record precedes anything the dApp could poll —
@@ -199,7 +199,7 @@ class SignExecutor(
                 spine.signMessage(
                     op.chain_id, op.address, original,
                     signingStarted = { ports.signingStarted() },
-                    intent = ClearSignerIntent(op.method, op.params_json, origin()),
+                    intent = TrustedSignerIntent(op.method, op.params_json, origin()),
                 ),
             )
         } catch (refused: UserOpSpine.Refused) {
@@ -239,7 +239,7 @@ class SignExecutor(
         /**
          * What the site asked to sign, before the Safe's wrap — the core's one
          * rule (`sign_message::original_hash`), which the desktop and the
-         * Clear Signer's page share. It used to be copied here, reading typed
+         * Trusted Signer's page share. It used to be copied here, reading typed
          * data from `params[1]` even for `eth_signTypedData`, which carries it
          * first.
          */

@@ -150,6 +150,6 @@ fun FeeTierPrefCore.asBridge(): CoreBridge =
 fun FeeSpeedCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
-// Spec 071: the default "Sign with" and the Clear Signer page.
+// Spec 071: the default "Sign with" and the Trusted Signer page.
 fun SignPrefCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)

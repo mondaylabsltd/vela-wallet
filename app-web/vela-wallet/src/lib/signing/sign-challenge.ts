@@ -1,17 +1,17 @@
 /**
  * The one place a challenge gets signed: by a passkey, or — when this
- * request's "Sign with" is the Clear Signer — on the Clear Signer's page
+ * request's "Sign with" is the Trusted Signer — on the Trusted Signer's page
  * (spec 071).
  *
  * Every signing path (the dApp sheet's transactions and messages, the
  * wallet's own send, the key backup) used to call `signWithAny` with the
  * digest it computed. They call this instead and continue exactly as before:
  * whichever way it was signed, what comes back is an `Assertion` over THAT
- * digest, by one of the account's keys. For the Clear Signer the core built
+ * digest, by one of the account's keys. For the Trusted Signer the core built
  * the page's request and judged its answer; nothing here decides either.
  */
 
-import { toHex, type ClearSignerKey } from '$lib/core/kernels';
+import { toHex, type TrustedSignerKey } from '$lib/core/kernels';
 import {
 	cancelSign,
 	getSignMethod,
@@ -27,8 +27,8 @@ import { signRoute, type DeviceKey } from './sign-route';
 export interface ChallengeSigner {
 	/** The Safe the signature is for. */
 	account: string;
-	/** Its founding keys: the Clear Signer's answer must be by one of them. */
-	keys: ClearSignerKey[];
+	/** Its founding keys: the Trusted Signer's answer must be by one of them. */
+	keys: TrustedSignerKey[];
 	/** The passkey ceremony's allow-list, exactly as each path built it before. */
 	credentials: { id: string; transports?: string }[];
 	/**
@@ -42,7 +42,7 @@ export interface ChallengeSigner {
  * Sign `challenge` the way this request's "Sign with" says.
  *
  * It used to take the ASSEMBLED operation the digest covers, for the clear
- * signer to show on its own page. Spec 075 cut the clear signer, and with it
+ * signer to show on its own page. Spec 075 cut the Trusted Signer, and with it
  * the only reader: what is signed here is the challenge, and nothing else.
  */
 export async function signChallenge(
@@ -58,11 +58,11 @@ export async function signChallenge(
 		(record) => record.address.toLowerCase() === signer.account.toLowerCase()
 	);
 	// Spec 075: WHERE the key lives has the last word. A key minted or found
-	// through a Clear Signer page can only be signed THERE — and the web wallet
-	// has no Clear Signer (owner, 2026-09-23), so it says so instead of asking
+	// through a Trusted Signer page can only be signed THERE — and the web wallet
+	// has no Trusted Signer (owner, 2026-09-23), so it says so instead of asking
 	// a platform sheet for a key no authenticator on this device holds.
 	const route = signRoute(deviceKeysOf(account, signer), method);
-	if (route?.method === 'clear_signer') {
+	if (route?.method === 'trusted_signer') {
 		throw new Error(
 			`this key lives behind ${route.signerOrigin}, which only the Vela app can open`
 		);

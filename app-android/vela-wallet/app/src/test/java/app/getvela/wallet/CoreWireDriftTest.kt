@@ -771,7 +771,7 @@ class CoreWireDriftTest {
         assertStringUnion<FeeAssetKind>("FeeAssetKind")
     }
 
-    /** Spec 071: the default "Sign with" and the Clear Signer page. */
+    /** Spec 071: the default "Sign with" and the Trusted Signer page. */
     @Test
     fun signPreferenceMatchesTheGeneratedMirrors() {
         assertFieldsExist<app.getvela.wallet.feature.settings.core.SignPrefView>("SignPrefView")

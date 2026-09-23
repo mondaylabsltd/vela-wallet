@@ -24,7 +24,7 @@
  * - **The passkey ceremony.** `SubmitUserOp` is one sentence to the core; here it
  *   is the `signFn` closure `sendNative`/`sendERC20`/`sendBatchCalls` invoke,
  *   including the identity-provider compatibility check. When Settings' "Sign
- *   with" is the Clear Signer (spec 071) the same closure takes the send to its
+ *   with" is the Trusted Signer (spec 071) the same closure takes the send to its
  *   page instead: no site asked, so the request names none and the send's own
  *   calls are its intent.
  * - **`prefetchForSend` cache warming** is the shell's (the core says so); it

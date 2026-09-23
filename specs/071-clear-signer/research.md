@@ -2,7 +2,7 @@
 
 ## R1 — What the page is for (and what it is not)
 
-`app-web/clearsigning` is a zero-dependency page that takes a signing intent,
+`app-web/trusted-signer` is a zero-dependency page that takes a signing intent,
 decodes it from the operation's own bytes (`lib/resolve.js`, `lib/safeop.js`),
 derives the digest itself (`lib/digest.js`), refuses what it cannot derive, and
 only then runs the passkey ceremony (`lib/signer.js`). The trust split: the app
@@ -94,7 +94,7 @@ page and the phones are tested against the same code.
 
 `app::sign_pref` (shape of `fee_tier_pref`): the default "Sign with" every
 signing sheet starts at, and the signer page. Keys `vela.signMethod`,
-`vela.clearSignerUrl` (`vela.` prefix survives sign-out). The core validates the
+`vela.trustedSignerUrl` (`vela.` prefix survives sign-out). The core validates the
 page address (https anywhere, http only on loopback), treats an unknown stored
 value as unset without rewriting it, and publishes whether the page can use the
 wallet's passkeys.

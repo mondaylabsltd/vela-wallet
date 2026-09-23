@@ -250,7 +250,7 @@ export interface SigningModel {
 		label: string;
 		value: string;
 		open: boolean;
-		/** `detail`: a second line saying what a choice is — the Clear Signer's (spec 071). */
+		/** `detail`: a second line saying what a choice is — the Trusted Signer's (spec 071). */
 		options: { id: string; title: string; detail?: string; selected: boolean }[];
 	};
 	/**

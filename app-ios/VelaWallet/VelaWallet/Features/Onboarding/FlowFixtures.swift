@@ -165,9 +165,9 @@ enum FlowFixtures {
         ))
         flow("keys · a page's own set", base(
             stage: .addKeys,
-            keys: [key("Everyday wallet", method: .clearSigner, synced: false)],
+            keys: [key("Everyday wallet", method: .trustedSigner, synced: false)],
             needsSecondKey: true,
-            addMethods: [.clearSigner],
+            addMethods: [.trustedSigner],
             addBlocked: AddBlocked(relyingParty: "sign.example.com", page: nil, pageRelyingParty: nil)
         ))
         flow("keys · unconfirmed row", base(

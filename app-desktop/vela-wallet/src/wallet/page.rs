@@ -66,10 +66,10 @@ use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, l
 use crate::settings::live as settings_live;
 use crate::settings::model::NetworkRowModel;
 use crate::signing::SigningStrings;
-use crate::signing::clear_signer as signing_clear_signer;
 use crate::signing::components as signing_components;
 use crate::signing::fixtures as signing_fixtures;
 use crate::signing::live as signing_live;
+use crate::signing::trusted_signer as signing_trusted_signer;
 use crate::theme::{
     self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_HEADER_H, CONTACTS_HERO_AVATAR,
     CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W, GALLERY_BAR_H, SETTINGS_DIALOG_W,
@@ -571,7 +571,7 @@ pub struct WalletPage {
     crash: Option<crate::outcome::Prompt>,
     /// One per editable settings field, made on first use.
     endpoint_focuses: Vec<gpui::FocusHandle>,
-    /// The Clear Signer page as typed (spec 071), until it is saved — `None`
+    /// The Trusted Signer page as typed (spec 071), until it is saved — `None`
     /// shows the page `sign_pref` holds. The core validates it on Save, not
     /// per keystroke: half an address is not an error yet.
     signer_page_draft: Option<String>,
@@ -4135,12 +4135,12 @@ impl WalletPage {
         })
     }
 
-    /// The Clear Signer's four dialogs (specs 071 and 075), over whichever flow
+    /// The Trusted Signer's four dialogs (specs 071 and 075), over whichever flow
     /// started the attempt — the signing column or the send: where the signer
     /// is, the cross-device pairing, the wait, and its last word. The buttons
     /// speak to the attempt through its channel; the host redraws when the
     /// channel answers.
-    fn clear_signer_prompt(
+    fn trusted_signer_prompt(
         &mut self,
         theme: &Theme,
         cx: &mut Context<Self>,
@@ -4148,17 +4148,17 @@ impl WalletPage {
         let mut channels = Vec::new();
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
-            channels.push(host.read(cx).clear_signer());
+            channels.push(host.read(cx).trusted_signer());
         }
         if let Some(host) = self.send_host.as_ref() {
-            channels.push(host.read(cx).clear_signer());
+            channels.push(host.read(cx).trusted_signer());
         }
         let channel = channels
             .into_iter()
             .find(|channel| channel.waiting() || channel.ended().is_some())?;
         let card = if channel.waiting() {
             let (reopen, cancel) = (Arc::clone(&channel), channel);
-            signing_clear_signer::waiting_card(
+            signing_trusted_signer::waiting_card(
                 theme,
                 &self.loc,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| reopen.reopen(),
@@ -4166,7 +4166,7 @@ impl WalletPage {
             )
         } else {
             let refusal = channel.ended()?;
-            signing_clear_signer::ended_card(
+            signing_trusted_signer::ended_card(
                 theme,
                 &self.loc,
                 refusal,
@@ -4175,7 +4175,7 @@ impl WalletPage {
         };
         Some(
             div()
-                .id("clear-signer-scrim")
+                .id("trusted-signer-scrim")
                 .absolute()
                 .inset_0()
                 .flex()
@@ -6877,7 +6877,7 @@ impl WalletPage {
         // Spec 075: the fourth place a key can live, in the "Sign with"
         // sheet's own words — the caption for a key behind a page, and the
         // label on the line naming which page.
-        let clear_signer = clear_signer_words(s);
+        let trusted_signer = trusted_signer_words(s);
         let user_verified = s.keys_user_verified.clone();
         let labels = (
             s.keys_public_key.clone(),
@@ -6952,7 +6952,7 @@ impl WalletPage {
                     } else {
                         key.name.clone()
                     };
-                    let holder = key_holder(key, &lines, &clear_signer);
+                    let holder = key_holder(key, &lines, &trusted_signer);
                     let body = key.public_key_hex.trim_start_matches("04");
                     let fingerprint = (body.len() >= 8)
                         .then(|| format!("{}…{}", &body[..4], &body[body.len() - 4..]));
@@ -7062,7 +7062,7 @@ impl WalletPage {
                     // below — so no ordinary row grows a line.
                     let signer_page = key_page(key);
                     let details: Vec<(gpui::SharedString, String, bool, bool)> = [
-                        (clear_signer.clone(), signer_page.clone(), false, true),
+                        (trusted_signer.clone(), signer_page.clone(), false, true),
                         (
                             labels.0.clone(),
                             if key.public_key_hex.is_empty() {
@@ -8313,7 +8313,7 @@ impl WalletPage {
 
     /// How this device signs by default (spec 071): the five ways in the
     /// core's order, the stored one ticked — choosing commits and persists at
-    /// once (`sign_pref`) — and the Clear Signer's page under them. Every
+    /// once (`sign_pref`) — and the Trusted Signer's page under them. Every
     /// signing sheet STARTS at the choice; none writes back to it.
     fn settings_signing(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
@@ -8336,8 +8336,8 @@ impl WalletPage {
                     |(_, title)| title.clone(),
                 );
             // The one choice that is not a place a passkey is says what it is.
-            let line =
-                (method == vela_core::clear_signer::METHOD).then(|| s.clear_signer_body.clone());
+            let line = (method == vela_core::trusted_signer::METHOD)
+                .then(|| s.trusted_signer_body.clone());
             let selected = *method == view.method;
             let chosen = method.clone();
             list = list.child(
@@ -8430,7 +8430,7 @@ impl WalletPage {
                 theme,
                 Some(title),
                 &typed,
-                SharedString::from(vela_core::clear_signer::DEFAULT_SIGNER_URL),
+                SharedString::from(vela_core::trusted_signer::DEFAULT_SIGNER_URL),
                 Some(&badge),
                 Some(subtitle),
                 refused.is_some().then_some(Tone::Error),
@@ -11483,7 +11483,7 @@ impl WalletPage {
 
     /// "Sign with · Automatic ⌄" — WHERE the passkey that signs this request
     /// is (founder, 2026-09-19: creating and signing in let a person choose;
-    /// signing took the first key's stored route), or the Clear Signer's page
+    /// signing took the first key's stored route), or the Trusted Signer's page
     /// (spec 071). Per request — the host lives for one, and starts at the
     /// default Settings keeps. Which key the choice pins is the core's
     /// (`sign_route`). Opens in place: a dialog over the signing column is a
@@ -11567,12 +11567,12 @@ impl WalletPage {
                 );
                 // The one choice that is not a place a passkey is says what
                 // it is — the create flow's lines only describe making a key.
-                if id == vela_core::clear_signer::METHOD {
+                if id == vela_core::trusted_signer::METHOD {
                     words = words.child(
                         div()
                             .text_size(theme::text_label())
                             .text_color(theme.fg_subtle)
-                            .child(self.signing.clear_signer_body.clone()),
+                            .child(self.signing.trusted_signer_body.clone()),
                     );
                 }
                 let mut option = div()
@@ -12965,7 +12965,7 @@ impl Render for WalletPage {
         let scan = self.scan_overlay(&theme, window, cx);
         let toast = self.receipt_toast(&theme, window, cx);
         let send_prompt = self.send_prompts(&theme, window, cx);
-        let clear_signer_prompt = self.clear_signer_prompt(&theme, cx);
+        let trusted_signer_prompt = self.trusted_signer_prompt(&theme, cx);
         let menu = self.menu_overlay(&theme, cx);
         let sign_out = self.sign_out_dialog(&theme, cx);
         let network_remove = self.network_remove_dialog(&theme, cx);
@@ -12995,8 +12995,8 @@ impl Render for WalletPage {
         if let Some(prompt) = send_prompt {
             root = root.child(prompt);
         }
-        // The Clear Signer's, over the flow that is waiting on its page.
-        if let Some(prompt) = clear_signer_prompt {
+        // The Trusted Signer's, over the flow that is waiting on its page.
+        if let Some(prompt) = trusted_signer_prompt {
             root = root.child(prompt);
         }
         if let Some(menu) = menu {
@@ -13130,7 +13130,7 @@ impl Render for WalletPage {
 /// A pure function so the sheet it goes to can be pinned by a test: the backup
 /// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
 /// means it gets the same "Sign with" row every other signature gets — the
-/// core's five routes, the Clear Signer among them (spec 075). A backup with a
+/// core's five routes, the Trusted Signer among them (spec 075). A backup with a
 /// sheet of its own would be the one signature a person could not route.
 #[cfg(not(target_os = "linux"))]
 fn backup_request(
@@ -13164,17 +13164,17 @@ fn page_host(url: &str) -> String {
         .to_owned()
 }
 
-/// The Clear Signer's caption, taken out of the list the "Sign with" sheet and
+/// The Trusted Signer's caption, taken out of the list the "Sign with" sheet and
 /// the Settings page both draw from.
 ///
 /// Not a key of its own: the corpus's paths are pinned, and one way of signing
 /// named twice is the drift spec 075 was raised over. The core always offers
 /// the route (`wallet_keys::SIGN_METHODS`), which
 /// `settings::tests::the_sign_with_words_resolve` pins, so the search finds it.
-fn clear_signer_words(s: &SettingsStrings) -> SharedString {
+fn trusted_signer_words(s: &SettingsStrings) -> SharedString {
     s.sign_with_options
         .iter()
-        .find(|(method, _)| *method == vela_core::clear_signer::METHOD)
+        .find(|(method, _)| *method == vela_core::trusted_signer::METHOD)
         .map(|(_, words)| words.clone())
         .unwrap_or_default()
 }
@@ -13184,22 +13184,22 @@ fn clear_signer_words(s: &SettingsStrings) -> SharedString {
 /// `lines` is the fallback trio in the core's method order — built-in passkey,
 /// phone or tablet, security key — used when no catalog can name the vault.
 ///
-/// Spec 075: a key minted on a Clear Signer page ran its ceremony in a browser,
+/// Spec 075: a key minted on a Trusted Signer page ran its ceremony in a browser,
 /// so the authenticator reports `platform` and the AAGUID catalog names
 /// whatever vault answered on the page's own side. Both of those describe the
 /// side of the page this wallet cannot reach, and the Android device pass of
 /// 2026-09-22 found the result: a key made on the page, captioned as this
 /// machine's built-in passkey — the opposite of where the key is. So the page
 /// outranks both the report and the vault's name. The core decides it
-/// (`WalletKeyRow::method` is `clear_signer` exactly when the row carries a
+/// (`WalletKeyRow::method` is `trusted_signer` exactly when the row carries a
 /// `signer_origin`); this only says it.
 fn key_holder(
     key: &vela_core::wallet_keys::WalletKeyRow,
     lines: &(SharedString, SharedString, SharedString),
-    clear_signer: &SharedString,
+    trusted_signer: &SharedString,
 ) -> SharedString {
-    if key.method == vela_core::clear_signer::METHOD {
-        return clear_signer.clone();
+    if key.method == vela_core::trusted_signer::METHOD {
+        return trusted_signer.clone();
     }
     if !key.provider_name.is_empty() {
         return SharedString::from(key.provider_name.clone());
@@ -13214,7 +13214,7 @@ fn key_holder(
 /// Which page a key lives behind, for its details; empty when it lives behind
 /// none.
 ///
-/// "A Clear Signer" is no answer to "where is my key" for a person who has used
+/// "A Trusted Signer" is no answer to "where is my key" for a person who has used
 /// two of them, so the row that says the route names the deployment as well.
 fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
     key.signer_origin
@@ -13227,7 +13227,7 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 mod tests {
     use super::*;
 
-    /// **A key minted on a Clear Signer page is captioned as the page, and says
+    /// **A key minted on a Trusted Signer page is captioned as the page, and says
     /// which page** (spec 075, the Android device pass of 2026-09-22).
     ///
     /// The pass found such a key drawn as the phone's built-in passkey, because
@@ -13239,7 +13239,7 @@ mod tests {
     /// reads. And the caption is the "Sign with" sheet's own words, so the keys
     /// list and the picker never name one route two ways.
     #[test]
-    fn a_key_behind_a_page_is_captioned_as_the_clear_signer() {
+    fn a_key_behind_a_page_is_captioned_as_the_trusted_signer() {
         let loc = Loc::from_env();
         let s = SettingsStrings::resolve(&loc);
         let lines = (
@@ -13247,17 +13247,17 @@ mod tests {
             s.keys_provider_generic.clone(),
             s.keys_provider_security_key.clone(),
         );
-        let clear_signer = super::clear_signer_words(&s);
+        let trusted_signer = super::trusted_signer_words(&s);
         assert!(
-            !clear_signer.is_empty(),
-            "the Clear Signer's caption went missing from the sheet's list"
+            !trusted_signer.is_empty(),
+            "the Trusted Signer's caption went missing from the sheet's list"
         );
         assert_eq!(
-            Some(clear_signer.clone()),
+            Some(trusted_signer.clone()),
             SigningStrings::resolve(&loc)
                 .sign_with_options
                 .iter()
-                .find(|(method, _)| *method == vela_core::clear_signer::METHOD)
+                .find(|(method, _)| *method == vela_core::trusted_signer::METHOD)
                 .map(|(_, words)| words.clone()),
             "the keys list and the sheet disagree about what this route is called"
         );
@@ -13290,13 +13290,13 @@ mod tests {
         assert_eq!(rows.len(), 2);
 
         // The key behind the page: captioned as the route, naming the page.
-        assert_eq!(rows[0].method, vela_core::clear_signer::METHOD);
+        assert_eq!(rows[0].method, vela_core::trusted_signer::METHOD);
         assert_eq!(
-            super::key_holder(&rows[0], &lines, &clear_signer),
-            clear_signer
+            super::key_holder(&rows[0], &lines, &trusted_signer),
+            trusted_signer
         );
         assert_ne!(
-            super::key_holder(&rows[0], &lines, &clear_signer),
+            super::key_holder(&rows[0], &lines, &trusted_signer),
             lines.0,
             "the page's key is drawn as this device's built-in passkey"
         );
@@ -13309,25 +13309,28 @@ mod tests {
             ..rows[0].clone()
         };
         assert_eq!(
-            super::key_holder(&named, &lines, &clear_signer),
-            clear_signer
+            super::key_holder(&named, &lines, &trusted_signer),
+            trusted_signer
         );
 
         // And an ordinary key is untouched: the USB key still reads as one, and
         // its details grow no page line.
-        assert_eq!(super::key_holder(&rows[1], &lines, &clear_signer), lines.2);
+        assert_eq!(
+            super::key_holder(&rows[1], &lines, &trusted_signer),
+            lines.2
+        );
         assert!(super::key_page(&rows[1]).is_empty());
         let vaulted = vela_core::wallet_keys::WalletKeyRow {
             provider_name: "1Password".to_owned(),
             ..rows[1].clone()
         };
         assert_eq!(
-            super::key_holder(&vaulted, &lines, &clear_signer).as_ref(),
+            super::key_holder(&vaulted, &lines, &trusted_signer).as_ref(),
             "1Password"
         );
     }
 
-    /// **The Ethereum key backup gets the Clear Signer too** (spec 075: "创建/
+    /// **The Ethereum key backup gets the Trusted Signer too** (spec 075: "创建/
     /// 登录/转账/dapp签名/公钥备份 等" — the owner listed the backup with the rest).
     ///
     /// It gets it by being an ordinary request on the shared signing sheet
@@ -13361,8 +13364,8 @@ mod tests {
         assert!(request.params_json.contains(address));
         // And the row it lands under offers every route the core knows.
         assert!(
-            vela_core::wallet_keys::SIGN_METHODS.contains(&vela_core::clear_signer::METHOD),
-            "the shared sheet does not offer the Clear Signer"
+            vela_core::wallet_keys::SIGN_METHODS.contains(&vela_core::trusted_signer::METHOD),
+            "the shared sheet does not offer the Trusted Signer"
         );
     }
 
@@ -13451,7 +13454,7 @@ mod tests {
         assert_eq!(codes, crate::settings::fixtures::DESKTOP_STATES);
     }
 
-    /// The Clear Signer page's badge names where the page is; the address
+    /// The Trusted Signer page's badge names where the page is; the address
     /// itself is in the field under it.
     #[test]
     fn a_signer_page_badge_is_its_host() {

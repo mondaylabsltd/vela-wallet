@@ -17,7 +17,7 @@ contrôlez.
 
 ## Ce que c'est
 
-Un dossier — `app-web/clearsigning` dans le dépôt — qui est à la fois une page web
+Un dossier — `app-web/trusted-signer` dans le dépôt — qui est à la fois une page web
 et une extension Chrome. Du HTML, du CSS et du JavaScript purs : pas de framework,
 pas de bundler, pas d'étape de build, pas de dépendances, et aucune requête réseau
 de son propre chef.
@@ -45,7 +45,7 @@ est le dossier que vous avez chargé et inspecté.
 
 1. Ouvrez `chrome://extensions` et activez le **mode développeur**.
 2. **Charger l'extension non empaquetée**, puis choisissez le dossier
-   `app-web/clearsigning`.
+   `app-web/trusted-signer`.
 3. L'icône de la barre d'outils ouvre la page dans un onglet.
 
 **En page sur votre propre domaine, ou sur localhost.** Servie en HTTP(S), la
@@ -57,7 +57,7 @@ de faire tourner le flux bureau, et de signer pour un portefeuille dont la clé 
 portefeuille `getvela.app` existant.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

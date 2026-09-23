@@ -565,7 +565,7 @@ export function withLiveFeeSpeedDesktop(
 }
 
 /**
- * The default "Sign with" and the Clear Signer's page, live (spec 071).
+ * The default "Sign with" and the Trusted Signer's page, live (spec 071).
  *
  * The rows are the core's: `offered` in its order (a method this build has
  * no words for is not drawn), `method` ticked — always an offered name, the
@@ -1462,11 +1462,11 @@ function keyDetails(key: WalletKeys['keys'][number], m: SettingsMessages) {
 	return [
 		// Spec 075: WHICH page, for a key that lives behind one. First, because
 		// it answers the question the rest of this list assumes — where the key
-		// is — and labelled with the Clear Signer's own title, the same words the
+		// is — and labelled with the Trusted Signer's own title, the same words the
 		// caption above it and the "Sign with" chooser use. Absent when the key
 		// lives behind no page, and then the row is exactly what it always was.
 		{
-			label: m.signing.methods.clear_signer,
+			label: m.signing.methods.trusted_signer,
 			value: key.signer_origin ?? '',
 			mono: false,
 			copy: false
@@ -1509,13 +1509,13 @@ export function walletKeysModel(
 	 * are shared with the create flow.
 	 *
 	 * Spec 075 adds a fourth answer that is not about a device at all: a key
-	 * behind a Clear Signer page lives behind the PAGE, and it is named with the
+	 * behind a Trusted Signer page lives behind the PAGE, and it is named with the
 	 * signing sheet's own title for that route, so Settings and the "Sign with"
 	 * chooser cannot call the same thing two names.
 	 */
 	const fallbackFor = (method: string) =>
-		method === 'clear_signer'
-			? m.signing.methods.clear_signer
+		method === 'trusted_signer'
+			? m.signing.methods.trusted_signer
 			: method === 'security_key'
 				? m.keys.providerSecurityKey
 				: method === 'hybrid'
@@ -1529,7 +1529,7 @@ export function walletKeysModel(
 		// is the one thing this wallet cannot reach. Naming that vault points
 		// away from where the key is (the device pass of 2026-09-22 found such a
 		// key drawn as the phone's built-in passkey).
-		holder: key.method === 'clear_signer' ? fallbackFor(key.method) : undefined,
+		holder: key.method === 'trusted_signer' ? fallbackFor(key.method) : undefined,
 		fingerprint: keyFingerprint(key.public_key_hex),
 		pills: [
 			...(key.user_verified === true

@@ -43,7 +43,7 @@ bridge_class!(
 
 bridge_class!(
     /// How this device signs by default (spec 071): the "Sign with" every
-    /// signing sheet starts at, and which Clear Signer page it opens.
+    /// signing sheet starts at, and which Trusted Signer page it opens.
     SignPrefCore,
     vela_core::app::sign_pref::SignPref
 );

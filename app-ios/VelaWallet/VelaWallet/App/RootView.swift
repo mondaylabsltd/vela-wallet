@@ -310,20 +310,20 @@ struct RootView: View {
         let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
         _settings = State(initialValue: settingsStore)
         // How a signature is made where no signing sheet asks (Send): the
-        // stored "Sign with" — and the Clear Signer, on the page Settings
+        // stored "Sign with" — and the Trusted Signer, on the page Settings
         // names (spec 071).
         spine.signMethod = { [settingsStore] in settingsStore.signPref?.method ?? "auto" }
-        // ONE Clear Signer for the whole app (spec 075). It is a passkey
+        // ONE Trusted Signer for the whole app (spec 075). It is a passkey
         // route now, not only a way to sign: onboarding's ceremonies and the
         // money path's signatures go through the same object, which is what
         // keeps "one page, one session, one sheet" true — two instances would
         // be two sheets racing to present over each other.
-        let clearSigner = ClearSigner(
+        let trustedSigner = TrustedSigner(
             loc: loc,
             signerUrl: { [settingsStore] in settingsStore.signPref?.signerUrl }
         )
-        spine.clearSigner = clearSigner
-        onboarding.clearSigner = clearSigner
+        spine.trustedSigner = trustedSigner
+        onboarding.trustedSigner = trustedSigner
         // Spec 075: the founding-key picker needs the page's DOMAIN, not the
         // page — a key minted there belongs to it, and a wallet's keys all
         // belong to one relying party.
@@ -715,6 +715,11 @@ struct RootView: View {
     /// showed an error for a link it does not handle would be an app that can
     /// be made to say things by anybody with a URL.
     private func openLink(_ url: URL) {
+        // Spec 076: the Trusted Signer's answer. It is an EVENT for a request
+        // that is already waiting — no route change, no state change — and a
+        // callback nothing is waiting for is dropped here in silence. Every
+        // other URL is routed exactly as before.
+        if TrustedSignerCallbacks.deliver(url) { return }
         switch PayLink.parse(url.absoluteString) {
         case .pay:
             guard let event = PayLink.parse(url.absoluteString)?.linkOpened else { return }
@@ -2143,10 +2148,10 @@ struct RootView: View {
                     view, from: (session.view.address, session.view.activeName),
                     display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed
                 )
-                // The Clear Signer's ending (spec 071): the core heard a
+                // The Trusted Signer's ending (spec 071): the core heard a
                 // cancelled ceremony and kept the confirmation up; this says
                 // why nothing was sent. The core's own notice goes first.
-                if live.notice == nil, let notice = send.clearSignerNotice {
+                if live.notice == nil, let notice = send.trustedSignerNotice {
                     live.notice = loc.t(notice.key)
                 }
                 model.base = .sendConfirm(live)
@@ -2392,7 +2397,7 @@ struct RootView: View {
             signWithOpen: live.signWithOpen,
             feeOpen: live.feeOpen,
             signMethods: live.offeredSignMethods(),
-            clearSignerNotice: live.clearSignerNotice,
+            trustedSignerNotice: live.trustedSignerNotice,
             parallelSpace: parallelSpace
         )
         return SigningLive.model(

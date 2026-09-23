@@ -57,7 +57,7 @@ final class SettingsStore {
     /// Settings shows it and every send starts at it.
     private(set) var feeTier: FeeTierPrefViewWire?
 
-    /// How this device signs by default, and which Clear Signer page it opens
+    /// How this device signs by default, and which Trusted Signer page it opens
     /// (spec 071) — app-wide like the speed: every signing sheet starts at it.
     /// Seeded with the machine's own first view, so a sheet raised before the
     /// stored values land still lists what the core offers.
@@ -148,7 +148,7 @@ final class SettingsStore {
         signPrefCore.dispatch(CoreJSON.string(["type": "method_chosen", "method": method]))
     }
 
-    /// The Clear Signer page, as typed. The core validates, and stores
+    /// The Trusted Signer page, as typed. The core validates, and stores
     /// nothing it refuses.
     func submitSignerUrl(_ text: String) {
         signPrefCore.dispatch(CoreJSON.string(["type": "signer_url_submitted", "text": text]))

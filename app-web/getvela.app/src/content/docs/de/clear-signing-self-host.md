@@ -17,7 +17,7 @@ kontrollierst.
 
 ## Was sie ist
 
-Ein Ordner — `app-web/clearsigning` im Repository — der zugleich Webseite und
+Ein Ordner — `app-web/trusted-signer` im Repository — der zugleich Webseite und
 Chrome-Erweiterung ist. Reines HTML, CSS und JavaScript: kein Framework, kein
 Bundler, kein Build-Schritt, keine Abhängigkeiten und keine eigenen
 Netzwerkanfragen.
@@ -44,7 +44,7 @@ Deine bestehenden Schlüssel können also darin signieren, während der Code der
 Ordner ist, den du geladen und geprüft hast.
 
 1. Öffne `chrome://extensions` und schalte den **Entwicklermodus** ein.
-2. **Entpackte Erweiterung laden**, und wähle den Ordner `app-web/clearsigning`.
+2. **Entpackte Erweiterung laden**, und wähle den Ordner `app-web/trusted-signer`.
 3. Das Symbol in der Symbolleiste öffnet die Seite in einem Tab.
 
 **Als Seite auf deiner eigenen Domain oder auf localhost.** Über HTTP(S)
@@ -56,7 +56,7 @@ signieren, deren Schlüssel auf deiner eigenen Domain entstand. Es ist kein Weg,
 für eine bestehende `getvela.app`-Wallet zu signieren.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

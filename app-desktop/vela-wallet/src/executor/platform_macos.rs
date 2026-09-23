@@ -146,7 +146,7 @@ pub fn register(
             client_data_json_hex: primitives::to_hex(&client_data_json, false),
             authenticator_attachment: ATTACHMENT_PLATFORM.to_owned(),
             transports: TRANSPORTS_PLATFORM.to_owned(),
-            // Spec 075: the platform vault, not a Clear Signer page.
+            // Spec 075: the platform vault, not a Trusted Signer page.
             signer_origin: None,
         }),
         Outcome::Asserted { .. } => Err(PasskeyFailure::other(
@@ -181,7 +181,7 @@ pub fn assert(challenge: &[u8], credential_id: Option<&str>) -> Result<Assertion
                 .filter(|bytes| !bytes.is_empty())
                 .map(|bytes| primitives::to_hex(&bytes, false)),
             authenticator_attachment: ATTACHMENT_PLATFORM.to_owned(),
-            // Spec 075: the platform vault, not a Clear Signer page.
+            // Spec 075: the platform vault, not a Trusted Signer page.
             signer_origin: None,
         }),
         Outcome::Registered { .. } => Err(PasskeyFailure::other(

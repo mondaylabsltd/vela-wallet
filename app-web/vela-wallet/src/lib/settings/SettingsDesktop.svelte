@@ -312,7 +312,7 @@
 				{/each}
 			{:else if page === 'signing'}
 				<!-- Spec 071. The default "Sign with" is the desktop's usual
-				     dropdown row; the Clear Signer's page under it is the phone
+				     dropdown row; the Trusted Signer's page under it is the phone
 				     sheet's own body, so both layouts say the same about it. -->
 				{#each model.signing.rows as row (row.id)}
 					<FormRow label={row.label}>

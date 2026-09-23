@@ -420,7 +420,7 @@ private struct KeyRow: View {
 /// A route the core has ruled out is rendered present-and-explained rather than
 /// hidden: an absent row would read as "this wallet cannot do that", while a
 /// dimmed row with a sentence under the list says what this wallet's keys
-/// belong to — and, when the configured Clear Signer page is what does not fit,
+/// belong to — and, when the configured Trusted Signer page is what does not fit,
 /// which page to change (spec 075).
 private struct AddMethodPicker: View {
     @Environment(\.theme) private var theme

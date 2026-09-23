@@ -184,9 +184,9 @@ struct GroupChallenge {
 /// set does — which is what makes the interleaved create→confirm flow work.
 ///
 /// `rp_id` is the MEMBER's relying party, not this app's (spec 075): a key
-/// minted on a Clear Signer page is signed under that page's domain, so a
+/// minted on a Trusted Signer page is signed under that page's domain, so a
 /// challenge fetched under `getvela.app` could never match the answer — the
-/// phones read that as 「清晰签名器的回复与这笔请求不符」.
+/// phones read that as 「可信签名器的回复与这笔请求不符」.
 pub fn member_challenge(
     rp_id: &str,
     group_public_key_hex: &str,
@@ -940,7 +940,7 @@ pub fn publish(
     // stores a single `rpId` per unit and every member's proof carries
     // `sha256(rpId)` from its OWN authenticator, so a set spread across sites
     // could never be proved. Refused here rather than written and unprovable.
-    let unit_rp = vela_core::clear_signer::registry_unit_rp_id(
+    let unit_rp = vela_core::trusted_signer::registry_unit_rp_id(
         &members
             .iter()
             .map(|member| member.signer_origin.clone())
@@ -978,8 +978,8 @@ pub fn publish(
     // on a wallet that had given up two frames ago. Collected into a result
     // first, so the goodbye is not on the happy path alone.
     let proven = prove_members(members, &challenge, &group_public_key, method, ceremony);
-    if method == vela_core::app::KeyMethod::ClearSigner {
-        ceremony.clear_signer.end_flow();
+    if method == vela_core::app::KeyMethod::TrustedSigner {
+        ceremony.trusted_signer.end_flow();
     }
     let proven = proven?;
 
@@ -1053,17 +1053,17 @@ fn prove_members(
                 // its possession proof over caBLE (a fresh QR), a USB one on the
                 // key in the port. Hardcoding SecurityKey here was why a caBLE
                 // recovery silently entered the wallet unpublished.
-                // Spec 075: a wallet signed in through the Clear Signer
+                // Spec 075: a wallet signed in through the Trusted Signer
                 // re-publishes through it too. The page fetches this same
                 // member challenge itself and will not sign unless the two
                 // agree, so what is passed here is what the wallet was given.
-                let assertion = if method == vela_core::app::KeyMethod::ClearSigner {
-                    crate::executor::clear_signer::member_proof(
+                let assertion = if method == vela_core::app::KeyMethod::TrustedSigner {
+                    crate::executor::trusted_signer::member_proof(
                         member,
                         group_public_key,
                         &challenge_bytes,
                         &registry_url(),
-                        &ceremony.clear_signer,
+                        &ceremony.trusted_signer,
                     )
                 } else {
                     passkey::assert(

@@ -14,7 +14,7 @@ method_committed: boolean,
  */
 offered: Array<string>, 
 /**
- * The Clear Signer page the wallet opens. Always usable.
+ * The Trusted Signer page the wallet opens. Always usable.
  */
 signer_url: string, 
 /**

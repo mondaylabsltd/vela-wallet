@@ -67,7 +67,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingD
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Registry]
-; Spec 076: the Clear Signer's answer comes back as a navigation to
+; Spec 076: the Trusted Signer's answer comes back as a navigation to
 ; `velawallet://sign-result`, because the published signing page carries
 ; `default-src 'none'` in its hashed bytes and cannot open a socket at all.
 ; Windows routes a scheme by these keys; without them the browser reports the

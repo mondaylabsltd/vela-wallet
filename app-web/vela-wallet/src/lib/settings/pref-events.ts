@@ -35,7 +35,7 @@ export type SettingsPrefEvent =
 	 * request and never rewrites the default.
 	 */
 	| { kind: 'sign-with'; id: string }
-	/** The Clear Signer's page, as typed and saved — the `sign_pref` core validates it. */
+	/** The Trusted Signer's page, as typed and saved — the `sign_pref` core validates it. */
 	| { kind: 'signer-page'; text: string }
 	/** Back to the official page. */
 	| { kind: 'signer-page-reset' }

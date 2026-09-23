@@ -177,9 +177,9 @@ final class OnboardingModel {
     /// store exists (it names the page and the relay); `nil` in previews and
     /// the gallery, where choosing it fails closed rather than silently
     /// signing with something else.
-    var clearSigner: ClearSignerCeremonyPort?
+    var trustedSigner: TrustedSignerCeremonyPort?
 
-    /// The Clear Signer page Settings names, attached by the host (spec 075).
+    /// The Trusted Signer page Settings names, attached by the host (spec 075).
     ///
     /// A key minted on that page belongs to ITS domain, and a wallet's keys all
     /// belong to one relying party — so which page is configured decides
@@ -235,7 +235,7 @@ final class OnboardingModel {
                 // The core is the authority on the name — a `StartOver` clears
                 // it, and the field has to follow.
                 if decoded.name != self.name { self.name = decoded.name }
-                self.endClearSignerFlow(ifIdle: decoded.busy)
+                self.endTrustedSignerFlow(ifIdle: decoded.busy)
             },
             onFault: { [weak self] error in self?.fault = error.localizedDescription }
         )
@@ -265,8 +265,8 @@ final class OnboardingModel {
     /// abandoned. Re-entering starts a fresh core — which finds any real draft
     /// in storage.
     func disposeCreate() {
-        // The Clear Signer's page goes with the flow it was opened for.
-        clearSigner?.endFlow()
+        // The Trusted Signer's page goes with the flow it was opened for.
+        trustedSigner?.endFlow()
         create?.dispose()
         create = nil
         createView = nil
@@ -303,7 +303,7 @@ final class OnboardingModel {
                     } else if self.sawBusySinceConnect {
                         self.signInConnecting = false
                     }
-                    self.endClearSignerFlow(ifIdle: decoded.busy)
+                    self.endTrustedSignerFlow(ifIdle: decoded.busy)
                 },
                 onFault: { [weak self] error in self?.fault = error.localizedDescription }
             )
@@ -340,21 +340,21 @@ final class OnboardingModel {
     private func executor() -> OnboardingExecutor {
         OnboardingExecutor(
             passkey: passkey, registry: registry, store: store, deps: self,
-            clearSigner: clearSigner,
+            trustedSigner: trustedSigner,
             // The page's card says whose wallet this is. Sign-in has no name
             // yet — the page then shows the request alone.
             walletName: { [weak self] in self?.createView?.name ?? "" }
         )
     }
 
-    /// The Clear Signer's session lasts a FLOW, not a ceremony (contract
+    /// The Trusted Signer's session lasts a FLOW, not a ceremony (contract
     /// §1.5): create is a key and then its member proof, a recovery is two
     /// proofs, and the page is opened once for the pair. The machine going
     /// quiet is what says the flow is over — at which point the page is told
     /// `bye` and leaves its waiting screen.
-    private func endClearSignerFlow(ifIdle busy: Bool) {
+    private func endTrustedSignerFlow(ifIdle busy: Bool) {
         guard !busy else { return }
-        clearSigner?.endFlow()
+        trustedSigner?.endFlow()
     }
 
     private static func event(_ type: String, _ fields: [String: Any] = [:]) -> String {
@@ -373,7 +373,7 @@ extension OnboardingModel: OnboardingExecutorDeps {
 
     func complete(mode: [String: Any]) async {
         // The flow is over however it got here — the page is told so.
-        clearSigner?.endFlow()
+        trustedSigner?.endFlow()
         // Straight through to the session machine, untouched. The onboarding
         // core is finished; whether there is a wallet to route to is the session
         // machine's ruling, not this model's.

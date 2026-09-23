@@ -300,7 +300,7 @@
 					feeTierPreference.choose(event.id);
 				}
 				return;
-			// Spec 071: how every signature starts, and the Clear Signer's page.
+			// Spec 071: how every signature starts, and the Trusted Signer's page.
 			// The core refuses a method it does not offer and an address it would
 			// not open (saying why in its view); nothing is judged here.
 			case 'sign-with':

@@ -264,7 +264,7 @@ class MainActivity : ComponentActivity() {
             cameraPermissionAnswer = null
         }
         (application as VelaWalletApplication).container.documents = app.getvela.wallet.feature.documents.ActivityDocumentPorts(this)
-        (application as VelaWalletApplication).container.clearSignerTab = app.getvela.wallet.feature.signing.clearsigner.ClearSignerTab(this)
+        (application as VelaWalletApplication).container.trustedSignerTab = app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerTab(this)
         bluetoothPermissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
         ) { grants ->

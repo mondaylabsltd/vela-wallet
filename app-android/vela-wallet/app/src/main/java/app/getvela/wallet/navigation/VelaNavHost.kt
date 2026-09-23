@@ -112,7 +112,7 @@ import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionRoute
 import app.getvela.wallet.feature.onboarding.flow.CableQrSheet
-import app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel
+import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel
 import app.getvela.wallet.feature.onboarding.flow.CreateFlowScreen
 import app.getvela.wallet.feature.onboarding.flow.EndpointSheet
 import app.getvela.wallet.feature.onboarding.flow.FlowSheet
@@ -362,7 +362,7 @@ fun VelaNavHost(
                             // Signing in offers the same four authenticators
                             // creating does — the picker opens, and the chosen
                             // method runs the "who are you?" ceremony on that
-                            // route, the Clear Signer's page included (075).
+                            // route, the Trusted Signer's page included (075).
                             OnboardingIntent.RecoverWallet -> showSignInMethods = true
                         }
                     },
@@ -602,11 +602,11 @@ fun VelaNavHost(
                 // Spec 044: a page asked for a signature — the sheet over whatever is
                 // showing, read from the four machines; dismissing is the refusal.
                 val signingController by application.container.signing.collectAsStateWithLifecycle()
-                // Spec 071: the Clear Signer's page, open for whichever signature asked.
-                val clearSigner = application.container.clearSigner
-                val clearSignerState by clearSigner.state.collectAsStateWithLifecycle()
-                val clearSignerNotice by clearSigner.notice.collectAsStateWithLifecycle()
-                val clearSignerWaiting = clearSignerState is app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel.State.Waiting
+                // Spec 071: the Trusted Signer's page, open for whichever signature asked.
+                val trustedSigner = application.container.trustedSigner
+                val trustedSignerState by trustedSigner.state.collectAsStateWithLifecycle()
+                val trustedSignerNotice by trustedSigner.notice.collectAsStateWithLifecycle()
+                val trustedSignerWaiting = trustedSignerState is app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel.State.Waiting
                 signingController?.let { controller ->
                     val signView by controller.sign.collectAsStateWithLifecycle()
                     val clearView by controller.clear.collectAsStateWithLifecycle()
@@ -632,8 +632,8 @@ fun VelaNavHost(
                         signMethod = signMethod,
                         signWithOpen = signWithOpen,
                         feeOpen = feeOpen,
-                        clearSignerWaiting = clearSignerWaiting,
-                        clearSignerNotice = clearSignerNotice,
+                        trustedSignerWaiting = trustedSignerWaiting,
+                        trustedSignerNotice = trustedSignerNotice,
                     )
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
@@ -660,8 +660,8 @@ fun VelaNavHost(
                                 onFeePick = { id -> controller.pickFee(id.takeUnless { it == app.getvela.wallet.feature.signing.SigningLive.NATIVE_FEE_ID }) },
                                 onToggleSpeed = { controller.toggleSpeed() },
                                 onPickSpeed = { id -> FeeTier.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let(controller::pickSpeed) },
-                                onClearSignerReopen = clearSigner::reopen,
-                                onClearSignerCancel = clearSigner::cancel,
+                                onTrustedSignerReopen = trustedSigner::reopen,
+                                onTrustedSignerCancel = trustedSigner::cancel,
                             )
                         }
                     }
@@ -669,8 +669,8 @@ fun VelaNavHost(
                 // …and no sheet to say why nothing was signed: the sentence
                 // goes up as a toast (the dApp sheet shows it in place).
                 val toastContext = LocalContext.current
-                LaunchedEffect(clearSignerNotice) {
-                    val notice = clearSignerNotice
+                LaunchedEffect(trustedSignerNotice) {
+                    val notice = trustedSignerNotice
                     if (notice != null && application.container.signing.value == null) {
                         android.widget.Toast.makeText(toastContext, notice, android.widget.Toast.LENGTH_LONG).show()
                     }
@@ -1640,7 +1640,7 @@ fun VelaNavHost(
                 val networks by settings.networks.collectAsStateWithLifecycle()
                 // Spec 069: the default transaction speed.
                 val feeTier by settings.feeTier.collectAsStateWithLifecycle()
-                // Spec 071: the default "Sign with" and the Clear Signer page.
+                // Spec 071: the default "Sign with" and the Trusted Signer page.
                 val signPref by settings.signPref.collectAsStateWithLifecycle()
                 // Spec 047 US1: the rows read the device — preferences, the pool,
                 // the session, the store's own keys, the relay's treasury.
@@ -2001,27 +2001,27 @@ fun VelaNavHost(
     onboarding.cableQr?.let { payload ->
         CableQrSheet(payload = payload)
     }
-    // Spec 071/075: every Clear Signer sheet, hosted OUTSIDE the NavHost for
+    // Spec 071/075: every Trusted Signer sheet, hosted OUTSIDE the NavHost for
     // the same reason the flow sheet is — a create, a sign-in, a send and a
     // dApp request can each raise one, and the route under it moves while the
     // page is open. The dApp sheet draws the waiting card itself, so the
     // standalone one is only for a request no signing sheet is showing.
     run {
-        val clearSignerHost = application.container.clearSigner
-        val clearSignerSheet by clearSignerHost.state.collectAsStateWithLifecycle()
+        val trustedSignerHost = application.container.trustedSigner
+        val trustedSignerSheet by trustedSignerHost.state.collectAsStateWithLifecycle()
         val signingUp by application.container.signing.collectAsStateWithLifecycle()
         val csStrings = LocalVelaStrings.current
-        if (clearSignerSheet is ClearSignerChannel.State.Waiting && signingUp == null) {
-            app.getvela.wallet.feature.signing.SigningLive.clearSignerWait(
+        if (trustedSignerSheet is TrustedSignerChannel.State.Waiting && signingUp == null) {
+            app.getvela.wallet.feature.signing.SigningLive.trustedSignerWait(
                 app.getvela.wallet.feature.signing.SigningLive.Context(
                     strings = csStrings, chainName = "", chainDot = androidx.compose.ui.graphics.Color.Unspecified,
-                    nativeSymbol = "", walletName = "", walletAddress = "", clearSignerWaiting = true,
+                    nativeSymbol = "", walletName = "", walletAddress = "", trustedSignerWaiting = true,
                 ),
             )?.let { waitModel ->
-                app.getvela.wallet.feature.signing.ClearSignerWaitingSheet(
+                app.getvela.wallet.feature.signing.TrustedSignerWaitingSheet(
                     model = waitModel,
-                    onReopen = clearSignerHost::reopen,
-                    onCancel = clearSignerHost::cancel,
+                    onReopen = trustedSignerHost::reopen,
+                    onCancel = trustedSignerHost::cancel,
                 )
             }
         }

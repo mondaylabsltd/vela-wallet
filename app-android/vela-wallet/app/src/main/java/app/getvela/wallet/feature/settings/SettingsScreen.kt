@@ -162,7 +162,7 @@ data class SettingsActions(
     /** The RPC fix sheet's URL being typed, and its Save & Retry / Done. */
     val onRpcFixField: (String) -> Unit = {},
     val onRpcFixPrimary: () -> Unit = {},
-    /** Spec 071: the Clear Signer page, as typed, and back to the official one. */
+    /** Spec 071: the Trusted Signer page, as typed, and back to the official one. */
     val onSignerUrlSave: (String) -> Unit = {},
     val onSignerUrlReset: () -> Unit = {},
     /** Spec 072: a page came on screen — the providers and endpoints pages ask the core to load and test. */
@@ -1551,7 +1551,7 @@ private fun FeedbackSheetBody(model: FeedbackModel, onSend: (String) -> Unit = {
 }
 
 /**
- * Spec 071: the Clear Signer page. The address is checked by the core, not
+ * Spec 071: the Trusted Signer page. The address is checked by the core, not
  * here: a refused one leaves the old page in force and says why under the
  * field; an accepted one closes the sheet.
  */

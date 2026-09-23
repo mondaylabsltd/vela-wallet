@@ -99,9 +99,9 @@
 
 	<ul class="keys">
 		{#each keys as key, index (index)}
-			<!-- A Clear Signer key names its page, not the vault beyond it (075). -->
+			<!-- A Trusted Signer key names its page, not the vault beyond it (075). -->
 			{@const holder =
-				key.kind === 'clear_signer'
+				key.kind === 'trusted_signer'
 					? undefined
 					: providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
 			{@const where = holder ?? strings(providerLineFor(key.kind))}

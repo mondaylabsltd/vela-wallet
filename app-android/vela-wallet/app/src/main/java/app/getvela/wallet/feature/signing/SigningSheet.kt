@@ -23,7 +23,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
-import app.getvela.wallet.feature.signing.components.ClearSignerWaiting
+import app.getvela.wallet.feature.signing.components.TrustedSignerWaiting
 import app.getvela.wallet.feature.signing.components.SignWithRow
 import app.getvela.wallet.feature.signing.components.SigningAmount
 import app.getvela.wallet.feature.signing.components.SigningBalances
@@ -66,9 +66,9 @@ fun SigningSheet(
     /** Spec 069: the speed control under the fee. */
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
-    /** Spec 071: the Clear Signer's waiting card. */
-    onClearSignerReopen: () -> Unit = {},
-    onClearSignerCancel: () -> Unit = {},
+    /** Spec 071: the Trusted Signer's waiting card. */
+    onTrustedSignerReopen: () -> Unit = {},
+    onTrustedSignerCancel: () -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -86,8 +86,8 @@ fun SigningSheet(
             onFeePick = onFeePick,
             onToggleSpeed = onToggleSpeed,
             onPickSpeed = onPickSpeed,
-            onClearSignerReopen = onClearSignerReopen,
-            onClearSignerCancel = onClearSignerCancel,
+            onTrustedSignerReopen = onTrustedSignerReopen,
+            onTrustedSignerCancel = onTrustedSignerCancel,
         )
     }
 }
@@ -107,8 +107,8 @@ fun SigningSheetContent(
     onFeePick: (String) -> Unit = {},
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
-    onClearSignerReopen: () -> Unit = {},
-    onClearSignerCancel: () -> Unit = {},
+    onTrustedSignerReopen: () -> Unit = {},
+    onTrustedSignerCancel: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -182,10 +182,10 @@ fun SigningSheetContent(
         )
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
         model.signWith?.let { SignWithRow(it, onSignWith) }
-        model.clearSignerNotice?.let { SigningWarning(SigningTone.Caution, it) }
-        val waiting = model.clearSignerWait
+        model.trustedSignerNotice?.let { SigningWarning(SigningTone.Caution, it) }
+        val waiting = model.trustedSignerWait
         if (waiting != null) {
-            ClearSignerWaiting(waiting, onReopen = onClearSignerReopen, onCancel = onClearSignerCancel)
+            TrustedSignerWaiting(waiting, onReopen = onTrustedSignerReopen, onCancel = onTrustedSignerCancel)
         } else {
             SlideToConfirm(
                 hint = model.confirmHint,
@@ -198,19 +198,19 @@ fun SigningSheetContent(
 }
 
 /**
- * Spec 071: the Clear Signer's waiting card on its own, for a signature no
+ * Spec 071: the Trusted Signer's waiting card on its own, for a signature no
  * signing sheet is showing (a send the person started). Swiping it away is
  * the same as Cancel.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClearSignerWaitingSheet(model: ClearSignerWaitModel, onReopen: () -> Unit, onCancel: () -> Unit) {
+fun TrustedSignerWaitingSheet(model: TrustedSignerWaitModel, onReopen: () -> Unit, onCancel: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onCancel,
         containerColor = VelaTheme.colors.bgRaised,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        ClearSignerWaiting(
+        TrustedSignerWaiting(
             model,
             onReopen = onReopen,
             onCancel = onCancel,

@@ -328,12 +328,12 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         )
         createDriver = driver
         driver.dispatch(event("start"))
-        // Spec 075: WHICH Clear Signer page Settings names decides whether that
+        // Spec 075: WHICH Trusted Signer page Settings names decides whether that
         // route can mint a key this set would accept — a key made on a page
         // belongs to that page's domain, and a wallet's keys all belong to one.
         // The core cannot read the store, so the shell tells it.
         viewModelScope.launch {
-            val page = VelaStore(getApplication()).read(KeyValueStore.Keys.CLEAR_SIGNER_URL).orEmpty()
+            val page = VelaStore(getApplication()).read(KeyValueStore.Keys.TRUSTED_SIGNER_URL).orEmpty()
             send(driver, JSONObject().put("type", "signer_page_changed").put("url", page))
         }
     }
@@ -410,7 +410,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         // Spec 075: a new attempt is a new flow. A previous one that ended in
         // a failure the person read and dismissed may still hold a page open;
         // this attempt opens its own.
-        container.clearSigner.endFlow()
+        container.trustedSigner.endFlow()
         startLogin()
         signIn(method)
     }
@@ -458,13 +458,13 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         // Spec 075: one page visit per flow — and the flow is over, however it
         // ended. A session left open would hold a socket and a tab the person
         // has walked away from.
-        container.clearSigner.endFlow()
+        container.trustedSigner.endFlow()
     }
 
     fun disposeLogin() {
         loginDriver?.dispose()
         loginDriver = null
-        container.clearSigner.endFlow()
+        container.trustedSigner.endFlow()
     }
 
     fun consumeFinished() {
@@ -473,12 +473,12 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
 
     /**
      * The ViewModel is going: whatever was mid-flight is cancelled with
-     * `viewModelScope`, and a Clear Signer page left open would keep a bound
+     * `viewModelScope`, and a Trusted Signer page left open would keep a bound
      * loopback socket and a Custom Tab in front of an app that is no longer
      * asking it for anything (spec 075).
      */
     override fun onCleared() {
-        container.clearSigner.endFlow()
+        container.trustedSigner.endFlow()
         super.onCleared()
     }
 
@@ -520,17 +520,17 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 }
 
                 /**
-                 * Spec 075: what the Clear Signer's card says the key is for.
+                 * Spec 075: what the Trusted Signer's card says the key is for.
                  * The create machine holds the name the person typed; a
                  * sign-in has none yet, which is the honest answer.
                  */
                 override fun walletName(): String = createView?.name.orEmpty()
             },
-            // Spec 075: a `clear_signer` ceremony runs on the page, not on the
+            // Spec 075: a `trusted_signer` ceremony runs on the page, not on the
             // platform's sheet. The channel throws a PasskeyFailure for every
             // refusal, which the executor's failure contract already answers.
-            clearSigner = { requestJson, operationJson, expected, signerOrigin ->
-                container.clearSigner.ceremony(requestJson, operationJson, expected, signerOrigin)
+            trustedSigner = { requestJson, operationJson, expected, signerOrigin ->
+                container.trustedSigner.ceremony(requestJson, operationJson, expected, signerOrigin)
             },
         )
     }

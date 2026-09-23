@@ -14,7 +14,7 @@ Vela 在你批准每一笔交易之前都会先解码，这份解码是实打实
 
 ## 它是什么
 
-一个文件夹——仓库里的 `app-web/clearsigning`——它既是一个网页，也是一个 Chrome 扩展。
+一个文件夹——仓库里的 `app-web/trusted-signer`——它既是一个网页，也是一个 Chrome 扩展。
 纯 HTML、CSS 和 JavaScript：没有框架，没有打包器，没有构建步骤，没有依赖，
 也不会自己发任何网络请求。
 
@@ -35,7 +35,7 @@ Vela 在你批准每一笔交易之前都会先解码，这份解码是实打实
 正是你加载并检查过的那个文件夹。
 
 1. 打开 `chrome://extensions`，开启**开发者模式**。
-2. 点**加载已解压的扩展程序**，选择 `app-web/clearsigning` 文件夹。
+2. 点**加载已解压的扩展程序**，选择 `app-web/trusted-signer` 文件夹。
 3. 工具栏上的图标会在新标签页里打开这个页面。
 
 **作为你自己域名上、或者 localhost 上的一个页面。** 通过 HTTP(S) 提供服务时，
@@ -45,7 +45,7 @@ Vela 在你批准每一笔交易之前都会先解码，这份解码是实打实
 替已有的 `getvela.app` 钱包签名的办法。
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

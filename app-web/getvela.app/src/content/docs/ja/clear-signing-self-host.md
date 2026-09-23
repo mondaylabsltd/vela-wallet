@@ -15,7 +15,7 @@ Vela は承認前にすべての取引をデコードしますし、その作業
 
 ## それが何か
 
-リポジトリの `app-web/clearsigning` というひとつのフォルダで、ウェブページでもあり
+リポジトリの `app-web/trusted-signer` というひとつのフォルダで、ウェブページでもあり
 Chrome 拡張でもあります。素の HTML・CSS・JavaScript のみ。フレームワークなし、
 バンドラーなし、ビルド手順なし、依存関係なし、自分からのネットワーク通信もなし。
 
@@ -37,7 +37,7 @@ Chrome 拡張でもあります。素の HTML・CSS・JavaScript のみ。フレ
 動いているコードはあなたが読み込んで確かめたフォルダそのものです。
 
 1. `chrome://extensions` を開き、**デベロッパーモード**を有効にします。
-2. **パッケージ化されていない拡張機能を読み込む**で `app-web/clearsigning`
+2. **パッケージ化されていない拡張機能を読み込む**で `app-web/trusted-signer`
    フォルダを選びます。
 3. ツールバーのアイコンから、タブでページが開きます。
 
@@ -49,7 +49,7 @@ Chrome 拡張でもあります。素の HTML・CSS・JavaScript のみ。フレ
 ウォレットのために署名する方法ではありません。
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

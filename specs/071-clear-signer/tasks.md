@@ -5,7 +5,7 @@
 - [x] T001 `clear_signer::request` / `verify` / `url_launch` / `parse_callback` / `callback_query` — tests
 - [x] T002 `clear_signer::ws::Connection` (RFC 6455 server side, Origin pin, token, one intent, one answer) — tests byte for byte
 - [x] T003 `signer_url` validation, `uses_wallet_passkeys`, `own_send_params`, `user_op_from_json`, error codes
-- [x] T004 `app::sign_pref` machine (`vela.signMethod`, `vela.clearSignerUrl`) — 8 tests
+- [x] T004 `app::sign_pref` machine (`vela.signMethod`, `vela.trustedSignerUrl`) — 8 tests
 - [x] T005 UniFFI: `ClearSignerConnection`, `clearSignerRequest` (calls → fee leg, empty method → own send), `clearSignerVerify`, `clearSignerWsLaunch`, `clearSignerDefaultUrl`, `SignPrefCore`
 - [x] T006 wasm: `clearSignerRequest/Verify/Url/UsesWalletPasskeys/DefaultUrl`, `ClearSignerWs`, `SignPrefCore`; TS types regenerated
 - [x] T007 i18n: 10 `componentsUi.signing.clearSigner*` leaves + `settings.signing` (10) in 15 locales; pin 1713; vectors

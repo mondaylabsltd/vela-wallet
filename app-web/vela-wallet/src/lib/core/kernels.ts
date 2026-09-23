@@ -609,12 +609,12 @@ export function attestSafeMessageHash(
 }
 
 // ---------------------------------------------------------------------------
-// The Clear Signer (spec 071) — what its page receives, and the verdict on
+// The Trusted Signer (spec 071) — what its page receives, and the verdict on
 // what it answers. The web builds and judges nothing itself.
 // ---------------------------------------------------------------------------
 
 /** One leg of an operation as the request takes it: `value` in base units, decimal. */
-export interface ClearSignerCall {
+export interface TrustedSignerCall {
 	to: string;
 	value: string;
 	data: string;
@@ -627,7 +627,7 @@ export interface ClearSignerCall {
  * operation in the page's field names, for a transaction only; `calls` are
  * its legs before the fee leg.
  */
-export interface ClearSignerInput {
+export interface TrustedSignerInput {
 	method: string;
 	params: unknown;
 	origin: string;
@@ -638,23 +638,23 @@ export interface ClearSignerInput {
 	accountName?: string;
 	credentialIdsHex: string[];
 	userOp?: Record<string, string>;
-	calls?: ClearSignerCall[];
+	calls?: TrustedSignerCall[];
 }
 
 /** The page's `{intent, context}`, as the core built it. */
-export interface ClearSignerRequest {
+export interface TrustedSignerRequest {
 	intent: unknown;
 	context: unknown;
 }
 
 /** One of the account's keys, as the verdict checks the answer against them. */
-export interface ClearSignerKey {
+export interface TrustedSignerKey {
 	credentialId: string;
 	publicKeyHex: string;
 }
 
 /** The core's verdict: hex fields with `0x`, the credential id bare. */
-export type ClearSignerVerdict =
+export type TrustedSignerVerdict =
 	| {
 			accepted: {
 				credentialIdHex: string;
@@ -666,8 +666,8 @@ export type ClearSignerVerdict =
 	| { refused: { code: string; detail: string } };
 
 /** Whether a page at `url` can use this wallet's passkeys (they are `getvela.app` keys). */
-export function clearSignerUsesWalletPasskeys(url: string): boolean {
-	return wasm.clearSignerUsesWalletPasskeys(url);
+export function trustedSignerUsesWalletPasskeys(url: string): boolean {
+	return wasm.trustedSignerUsesWalletPasskeys(url);
 }
 
 /**
@@ -676,10 +676,10 @@ export function clearSignerUsesWalletPasskeys(url: string): boolean {
  *
  * A key made on a page is signed under THAT page's domain, so a challenge
  * fetched under the wallet's own could never match the answer — which is what
- * 「清晰签名器的回复与这笔请求不符」 means, and how both phones found it.
+ * 「可信签名器的回复与这笔请求不符」 means, and how both phones found it.
  */
-export function clearSignerRegistryRpId(signerOrigin: string | null): string | null {
-	return wasm.clearSignerRegistryRpId(signerOrigin ?? undefined) ?? null;
+export function trustedSignerRegistryRpId(signerOrigin: string | null): string | null {
+	return wasm.trustedSignerRegistryRpId(signerOrigin ?? undefined) ?? null;
 }
 
 /**
@@ -687,8 +687,8 @@ export function clearSignerRegistryRpId(signerOrigin: string | null): string | n
  * naming the parties found when its members do not agree — refused here rather
  * than written on chain and never provable.
  */
-export function clearSignerUnitRpId(memberOrigins: (string | null)[], walletRpId: string): string {
-	return translated(() => wasm.clearSignerUnitRpId(JSON.stringify(memberOrigins), walletRpId));
+export function trustedSignerUnitRpId(memberOrigins: (string | null)[], walletRpId: string): string {
+	return translated(() => wasm.trustedSignerUnitRpId(JSON.stringify(memberOrigins), walletRpId));
 }
 
 // ---------------------------------------------------------------------------

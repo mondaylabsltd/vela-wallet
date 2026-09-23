@@ -128,7 +128,7 @@ export function normaliseAccount(record: unknown): Account | null {
 					// Where the credential lives; the old client never recorded it.
 					transports: str(k.transports) ?? ''
 				};
-				// Spec 075: the Clear Signer page a key lives behind. It is the
+				// Spec 075: the Trusted Signer page a key lives behind. It is the
 				// ONLY way that key can ever be reached, so normalising a record
 				// must carry it through — dropping it here would make the key
 				// unsignable and the wallet unopenable, silently. Absent stays

@@ -71,7 +71,7 @@ fun progressFor(status: StatusKey?): ProgressPosition? = when (status) {
 /**
  * A method's title and caption in the add-key picker.
  *
- * Spec 075: the Clear Signer is the fourth, from the signing corpus rather than
+ * Spec 075: the Trusted Signer is the fourth, from the signing corpus rather than
  * the create corpus — it is the same option the signing sheet and Settings
  * offer, so it must read the same in all three places.
  */
@@ -82,12 +82,12 @@ fun methodCopy(method: KeyMethod): Pair<String, String> = when (method) {
         I18nKeys.Create.METHOD_HYBRID_TITLE to I18nKeys.Create.METHOD_HYBRID_BODY
     KeyMethod.SecurityKey ->
         I18nKeys.Create.METHOD_SECURITY_KEY_TITLE to I18nKeys.Create.METHOD_SECURITY_KEY_BODY
-    KeyMethod.ClearSigner -> CLEAR_SIGNER_TITLE to CLEAR_SIGNER_BODY
+    KeyMethod.TrustedSigner -> TRUSTED_SIGNER_TITLE to TRUSTED_SIGNER_BODY
 }
 
-/** The Clear Signer's own words (`componentsUi.signing.*`), one spelling. */
-const val CLEAR_SIGNER_TITLE = "componentsUi.signing.clearSignerTitle"
-const val CLEAR_SIGNER_BODY = "componentsUi.signing.clearSignerBody"
+/** The Trusted Signer's own words (`componentsUi.signing.*`), one spelling. */
+const val TRUSTED_SIGNER_TITLE = "componentsUi.signing.trustedSignerTitle"
+const val TRUSTED_SIGNER_BODY = "componentsUi.signing.trustedSignerBody"
 
 /**
  * The provider line under a key's name.
@@ -106,7 +106,7 @@ fun providerLineFor(method: KeyMethod): String = when (method) {
     KeyMethod.SecurityKey -> I18nKeys.Create.PROVIDER_SECURITY_KEY
     // The page is what holds it — the row says so rather than naming a vault
     // this device cannot see.
-    KeyMethod.ClearSigner -> CLEAR_SIGNER_TITLE
+    KeyMethod.TrustedSigner -> TRUSTED_SIGNER_TITLE
 }
 
 /**

@@ -3,7 +3,7 @@
 ## The page's own suites (≈2 min)
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 export CHROME_BIN=…/Google Chrome for Testing   # HANDOVER.md
 export SB=<dir with tls-serve.py, cert.pem, key.pem>   # HANDOVER.md
 node samples/safeop-test.mjs && node samples/identicon-test.mjs && \
@@ -19,7 +19,7 @@ Rust) against the shipped page in headless Chrome with a virtual passkey.
 The page on the phone's own loopback (a secure context, so WebAuthn runs):
 
 ```sh
-cd app-web/clearsigning && python3 -m http.server 8140 &
+cd app-web/trusted-signer && python3 -m http.server 8140 &
 adb reverse tcp:8140 tcp:8140
 ```
 

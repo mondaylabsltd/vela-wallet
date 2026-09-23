@@ -19,7 +19,7 @@
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <!-- gpui renders through Metal and expects a real backing-scale factor;
          without this the window is rendered at 1x and upscaled. -->
-    <!-- Spec 076: the Clear Signer's answer comes back as a navigation to
+    <!-- Spec 076: the Trusted Signer's answer comes back as a navigation to
          `velawallet://sign-result`, because the published signing page carries
          `default-src 'none'` in its hashed bytes and cannot open a socket at
          all. macOS hands a URL only to a BUNDLE that declares the scheme, so

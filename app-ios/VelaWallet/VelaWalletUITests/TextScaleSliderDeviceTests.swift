@@ -78,7 +78,7 @@ final class TextScaleSliderDeviceTests: XCTestCase {
     /// The owner moved the slider and reported that nothing changed, then that
     /// it changed everywhere BUT here (2026-09-23). It was not a refresh: no
     /// screen in Settings ever applied the size, and neither did onboarding or
-    /// the Clear Signer's sheets — 228 of the app's 494 text sites drew at a
+    /// the Trusted Signer's sheets — 228 of the app's 494 text sites drew at a
     /// fixed size. `typeRole` now takes the size from the environment, which
     /// the root states once, so the only way to opt OUT is to have done the
     /// arithmetic yourself.

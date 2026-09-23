@@ -72,9 +72,9 @@ interface KeyValueStore {
         /** The default transaction speed (spec 068; Android's since 069). Survives sign-out. */
         const val FEE_TIER = "vela.feeTier"
 
-        /** The default "Sign with" and the Clear Signer page (spec 071). Survive sign-out. */
+        /** The default "Sign with" and the Trusted Signer page (spec 071). Survive sign-out. */
         const val SIGN_METHOD = "vela.signMethod"
-        const val CLEAR_SIGNER_URL = "vela.clearSignerUrl"
+        const val TRUSTED_SIGNER_URL = "vela.trustedSignerUrl"
 
         /**
          * Spec 075's cross-device pairing service, RETIRED with the channel

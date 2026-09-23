@@ -22,7 +22,6 @@ pub mod app;
 /// advert decrypt, tunnel-server domain decode. The radio and the socket
 /// belong to a platform shell. See `specs/019-onboarding-live-wiring/`.
 pub mod cable;
-pub mod clear_signer;
 /// A CTAP2 client with no I/O in it: framing, commands, COSE, PIN/UV. The
 /// transport belongs to a platform shell; what is identical on every one of
 /// them lives here. See `specs/019-onboarding-live-wiring/research.md` D4.
@@ -55,6 +54,7 @@ pub mod registry_resolve;
 pub mod safe;
 pub mod sign_message;
 pub mod storage_catalog;
+pub mod trusted_signer;
 pub mod types;
 /// The Safe ERC-4337 user operation — calldata, initCode, the SafeOp hash,
 /// the WebAuthn signature envelope, the v0.7 wire shape. Pure assembly; the

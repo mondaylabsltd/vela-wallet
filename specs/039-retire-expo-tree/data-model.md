@@ -132,7 +132,7 @@ deletion (file itself deleted).
 Files with zero hits that the spec named as "untouched" are confirmed:
 `ROADMAP.md`, `docs/test-plan.md`, `docs/PARALLEL-SPACE.md`,
 `agent-rules/AI-CODING-RULES.md`, `LAUNCH_AUDIT.md`, `SECURITY-AUDIT.md`,
-`app-web/vela-wallet/{CLAUDE,README}.md`, `app-web/clearsigning/HANDOVER.md`.
+`app-web/vela-wallet/{CLAUDE,README}.md`, `app-web/trusted-signer/HANDOVER.md`.
 
 ## 4. Owed table (recorded, not built)
 

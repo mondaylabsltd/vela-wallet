@@ -40,12 +40,12 @@ pub struct SettingsStrings {
     pub fee_speed_title: SharedString,
     pub fee_speed_subtitle: SharedString,
     /// "Sign with" (spec 071): the nav row is the page's title; the sentence
-    /// under it; the choices in the core's order with the Clear Signer's
-    /// line; and the Clear Signer page's section.
+    /// under it; the choices in the core's order with the Trusted Signer's
+    /// line; and the Trusted Signer page's section.
     pub nav_signing: SharedString,
     pub signing_subtitle: SharedString,
     pub sign_with_options: Vec<(&'static str, SharedString)>,
-    pub clear_signer_body: SharedString,
+    pub trusted_signer_body: SharedString,
     pub signer_page_title: SharedString,
     pub signer_page_subtitle: SharedString,
     pub signer_page_official: SharedString,
@@ -289,7 +289,7 @@ impl SettingsStrings {
                 .iter()
                 .map(|method| (*method, s(crate::signing::sign_method_key(method))))
                 .collect(),
-            clear_signer_body: s("componentsUi.signing.clearSignerBody"),
+            trusted_signer_body: s("componentsUi.signing.trustedSignerBody"),
             signer_page_title: s("settings.signing.pageTitle"),
             signer_page_subtitle: s("settings.signing.pageSubtitle"),
             signer_page_official: s("settings.signing.pageOfficial"),
@@ -534,7 +534,10 @@ mod tests {
         for (value, key) in [
             (&s.nav_signing, "settings.signing.title"),
             (&s.signing_subtitle, "settings.signing.subtitle"),
-            (&s.clear_signer_body, "componentsUi.signing.clearSignerBody"),
+            (
+                &s.trusted_signer_body,
+                "componentsUi.signing.trustedSignerBody",
+            ),
             (&s.signer_page_title, "settings.signing.pageTitle"),
             (&s.signer_page_subtitle, "settings.signing.pageSubtitle"),
             (&s.signer_page_official, "settings.signing.pageOfficial"),

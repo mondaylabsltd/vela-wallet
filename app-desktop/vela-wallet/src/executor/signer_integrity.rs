@@ -1,6 +1,6 @@
-//! Is the Clear Signer's page the page it is supposed to be? (spec 076 phase C)
+//! Is the Trusted Signer's page the page it is supposed to be? (spec 076 phase C)
 //!
-//! The core decides; this fetches. `vela_core::clear_signer::integrity` holds
+//! The core decides; this fetches. `vela_core::trusted_signer::integrity` holds
 //! the whole of the judgement — which hashes this build accepts, that the
 //! person's deny-list outranks everything, that a check which cannot complete
 //! is a check that failed — and every shell asks it the same question. What is
@@ -24,13 +24,13 @@
 //! [`BUILD_ALLOWED`] ships empty until the page is published under
 //! `/b/<sha256>/`, and an empty set opens nothing. So [`check`] is written to
 //! be CALLED and LOGGED, not to gate the open: turning it into a gate before
-//! there is a published page would brick a Clear Signer that works today. The
+//! there is a published page would brick a Trusted Signer that works today. The
 //! gate is one `if` away, and belongs in the commit that fills the set.
 
 use std::time::Duration;
 
 use serde_json::Value;
-use vela_core::clear_signer::integrity::{
+use vela_core::trusted_signer::integrity::{
     self, BUILD_ALLOWED, CheckFailure, NoVersion, Page, Verdict,
 };
 
@@ -46,7 +46,7 @@ pub const KEY_SIGNER_VERSION: &str = "vela.signerPage.version";
 
 /// Where the endpoint lists what it still publishes (FR-002).
 ///
-/// The deployment IS `app-web/clearsigning/dist/`: an index at its root and
+/// The deployment IS `app-web/trusted-signer/dist/`: an index at its root and
 /// every published version under `b/<sha256>/sign.html`. Copying that directory
 /// is the whole of publishing.
 const INDEX_PATH: &str = "index.json";
@@ -218,7 +218,7 @@ fn verdict_for(
 ///
 /// Falls back to the address as typed when no version is known for it — a
 /// deployment that serves a single page, or one whose index has not been read
-/// yet. With `ENFORCE` off, refusing to open at all would brick a Clear Signer
+/// yet. With `ENFORCE` off, refusing to open at all would brick a Trusted Signer
 /// that works.
 ///
 /// **No network here.** This is called on the path that opens the page, and a
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn this_build_records_but_does_not_refuse_yet() {
-        // The guard that keeps phase C from bricking a working Clear Signer:
+        // The guard that keeps phase C from bricking a working Trusted Signer:
         // the page is not published at the official address yet.
         assert!(
             !can_enforce(),
@@ -386,7 +386,7 @@ mod tests {
     /// Run with a `dist/` served somewhere reachable:
     ///
     /// ```sh
-    /// (cd app-web/clearsigning/dist && python3 -m http.server 8920)
+    /// (cd app-web/trusted-signer/dist && python3 -m http.server 8920)
     /// SIGNER_DIST=http://127.0.0.1:8920/ cargo test signer_integrity -- --ignored --nocapture
     /// ```
     ///

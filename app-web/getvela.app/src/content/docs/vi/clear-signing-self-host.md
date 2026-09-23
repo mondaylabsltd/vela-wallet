@@ -15,7 +15,7 @@ chữ ký diễn ra ở nơi bạn kiểm soát.
 
 ## Nó là gì
 
-Một thư mục duy nhất — `app-web/clearsigning` trong kho mã — vừa là một trang web vừa
+Một thư mục duy nhất — `app-web/trusted-signer` trong kho mã — vừa là một trang web vừa
 là một tiện ích Chrome. HTML, CSS và JavaScript thuần: không framework, không bundler,
 không bước build, không phụ thuộc, và không tự phát yêu cầu mạng nào.
 
@@ -38,7 +38,7 @@ của tiện ích luôn là `getvela.app` bất kể thư mục đến từ đâ
 ký được trong đó, còn mã chạy là thư mục bạn đã nạp và đã xem.
 
 1. Mở `chrome://extensions` và bật **Chế độ nhà phát triển**.
-2. **Tải tiện ích đã giải nén**, rồi chọn thư mục `app-web/clearsigning`.
+2. **Tải tiện ích đã giải nén**, rồi chọn thư mục `app-web/trusted-signer`.
 3. Biểu tượng trên thanh công cụ mở trang trong một tab.
 
 **Dạng một trang trên tên miền của bạn, hoặc trên localhost.** Khi phục vụ qua
@@ -49,7 +49,7 @@ ví mà khóa được tạo trên chính tên miền của bạn. Nó không ph
 `getvela.app` đã có.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

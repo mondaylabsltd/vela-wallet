@@ -60,8 +60,8 @@
     "signing": {
       "title": "簽署方式",
       "subtitle": "你喺 Vela 發起嘅每次簽署都由呢度開始。單次簽署時仍然可以另揀方式。",
-      "pageTitle": "清晰簽署器頁面",
-      "pageSubtitle": "清晰簽署器開啟嘅頁面：官方頁面，或者你自己部署嘅零依賴簽署頁。",
+      "pageTitle": "可信簽署器頁面",
+      "pageSubtitle": "可信簽署器開啟嘅頁面：官方頁面，或者你自己部署嘅零依賴簽署頁。",
       "pageOfficial": "官方",
       "pageInvalid": "呢個唔係網址。",
       "pageInsecure": "請用 https 頁面，或者呢部機本機回環位址上嘅頁面——瀏覽器唔會喺其他地方簽署。",

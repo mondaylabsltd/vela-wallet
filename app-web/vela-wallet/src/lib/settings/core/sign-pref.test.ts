@@ -3,8 +3,8 @@
  * core: which key it reads and writes, and how the row and its sheet read
  * what the core decided.
  *
- * The Clear Signer's own rows are NOT here: the web wallet has no Clear
- * Signer (owner, 2026-09-23), so the core's `clear_signer` is never drawn and
+ * The Trusted Signer's own rows are NOT here: the web wallet has no Trusted
+ * Signer (owner, 2026-09-23), so the core's `trusted_signer` is never drawn and
  * never in force, which is the one thing this file still asserts about it.
  */
 import '$lib/i18n/wasm-init.server';
@@ -28,7 +28,7 @@ import { buildDesktopState, buildMobileState } from '../fixtures';
 import { withLiveSigning, withLiveSigningDesktop } from '../live';
 import { signPreference } from './sign-pref.svelte';
 import {
-	CLEAR_SIGNER_URL_KEY,
+	TRUSTED_SIGNER_URL_KEY,
 	SIGN_METHOD_KEY,
 	signPrefOperationFailure
 } from './sign-pref-executor';
@@ -42,7 +42,7 @@ const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 describe('the store', () => {
 	it('keys under the `vela.` prefix that survives sign-out', () => {
 		expect(SIGN_METHOD_KEY).toBe('vela.signMethod');
-		expect(CLEAR_SIGNER_URL_KEY).toBe('vela.clearSignerUrl');
+		expect(TRUSTED_SIGNER_URL_KEY).toBe('vela.trustedSignerUrl');
 	});
 
 	it('an unreadable preference is "never chose": auto, and nothing stored', () => {
@@ -86,7 +86,7 @@ describe('the row and its sheet', () => {
 		method: 'auto',
 		method_committed: false,
 		// The core offers five to every shell; this one draws four.
-		offered: ['auto', 'platform', 'hybrid', 'security_key', 'clear_signer'],
+		offered: ['auto', 'platform', 'hybrid', 'security_key', 'trusted_signer'],
 		signer_url: 'https://sign.getvela.app/',
 		signer_url_is_default: true,
 		signer_url_error: null,
@@ -110,7 +110,7 @@ describe('the row and its sheet', () => {
 		expect(model.signWithSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual(['hybrid']);
 	});
 
-	it('the Clear Signer is never drawn, whatever the core offers', () => {
+	it('the Trusted Signer is never drawn, whatever the core offers', () => {
 		const model = home();
 		expect(model.signWithSheet.rows.map((r) => r.id)).toEqual([
 			'auto',
@@ -120,10 +120,18 @@ describe('the row and its sheet', () => {
 		]);
 	});
 
-	it('the Clear Signer page and the tunnel have no rows here at all', () => {
-		const rows = home().sections.flatMap((section) => section.rows.map((row) => row.id));
-		expect(rows).not.toContain('clear-signer-page');
-		expect(rows).not.toContain('clear-signer-tunnel');
+	it('the Trusted Signer page and the tunnel have no rows here at all', () => {
+		// By SHAPE, not by the two ids those rows once had. They were called
+		// `clear-signer-page` and `clear-signer-tunnel`, and asserting on those
+		// spellings after the rename is a test that passes because it can no
+		// longer fail — the row could come back under any name.
+		const rows = home().sections.flatMap((section) => section.rows);
+		// …and a model that drew nothing at all would satisfy any "not there".
+		expect(rows.length).toBeGreaterThan(0);
+		const aboutTheSigner = rows.filter(
+			(row) => row.id !== 'sign-with' && /signer|tunnel/i.test(`${row.id} ${row.title ?? ''}`)
+		);
+		expect(aboutTheSigner.map((row) => row.id)).toEqual([]);
 	});
 
 	it('the desktop reads the same rows', () => {

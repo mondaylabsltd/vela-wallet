@@ -16,7 +16,7 @@ e a conferência e a assinatura acontecem em outro, que você controla.
 
 ## O que ela é
 
-Uma pasta — `app-web/clearsigning` no repositório — que é ao mesmo tempo página web
+Uma pasta — `app-web/trusted-signer` no repositório — que é ao mesmo tempo página web
 e extensão do Chrome. HTML, CSS e JavaScript puros: sem framework, sem bundler, sem
 etapa de build, sem dependências e sem requisições de rede próprias.
 
@@ -40,7 +40,7 @@ então suas chaves atuais conseguem assinar ali, enquanto o código é a pasta q
 carregou e inspecionou.
 
 1. Abra `chrome://extensions` e ligue o **Modo do desenvolvedor**.
-2. **Carregar sem compactação** e escolha a pasta `app-web/clearsigning`.
+2. **Carregar sem compactação** e escolha a pasta `app-web/trusted-signer`.
 3. O ícone na barra abre a página em uma aba.
 
 **Como página no seu próprio domínio, ou em localhost.** Servida por HTTP(S), a
@@ -51,7 +51,7 @@ desktop e assinar por uma carteira cuja chave foi criada no seu próprio domíni
 é um jeito de assinar por uma carteira `getvela.app` existente.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

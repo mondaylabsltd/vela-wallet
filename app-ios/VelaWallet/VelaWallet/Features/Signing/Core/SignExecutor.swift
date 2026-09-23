@@ -57,13 +57,13 @@ final class SignExecutor {
         var switchAccount: (_ index: Int) async -> Bool = { _ in false }
         /// The chain's native symbol, for the record row.
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
-        /// Who asked, as the Clear Signer's page is told it (spec 071): the
+        /// Who asked, as the Trusted Signer's page is told it (spec 071): the
         /// origin the browser observed, empty for the wallet's own request.
         var origin: () -> String = { "" }
-        /// The Clear Signer ended without a signature. The core hears a
+        /// The Trusted Signer ended without a signature. The core hears a
         /// cancelled ceremony — the request stays open and may be signed
         /// another way — and the sheet says which sentence applies.
-        var clearSignerEnded: (ClearSignerNotice) -> Void = { _ in }
+        var trustedSignerEnded: (TrustedSignerNotice) -> Void = { _ in }
     }
 
     private let spine: UserOpSpine
@@ -240,8 +240,8 @@ final class SignExecutor {
             switch refused.failure {
             case .passkeyCancelled:
                 return ["type": "passkey_cancelled"]
-            case .clearSigner(let notice):
-                ports.clearSignerEnded(notice)
+            case .trustedSigner(let notice):
+                ports.trustedSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
             case .bundlerUnderfunded:
                 return [
@@ -278,8 +278,8 @@ final class SignExecutor {
             return ["type": "succeeded", "result": signature]
         } catch let refused as UserOpSpine.Refused {
             if case .passkeyCancelled = refused.failure { return ["type": "passkey_cancelled"] }
-            if case .clearSigner(let notice) = refused.failure {
-                ports.clearSignerEnded(notice)
+            if case .trustedSigner(let notice) = refused.failure {
+                ports.trustedSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
             }
             if case .other(let message) = refused.failure {
@@ -335,7 +335,7 @@ final class SignExecutor {
     /// typed data is its EIP-712 digest, computed by the core.
     /// What the site asked to sign, before the Safe's wrap — the core's one
     /// rule (`sign_message::original_hash`), shared with Android, the desktop
-    /// and the Clear Signer's page. The copy that lived here read typed data
+    /// and the Trusted Signer's page. The copy that lived here read typed data
     /// from `params[1]` even for `eth_signTypedData`, which carries it first.
     static func messageHash(method: String, paramsJson: String) -> Data? {
         signMessageHash(method: method, paramsJson: paramsJson)

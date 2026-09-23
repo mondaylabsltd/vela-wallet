@@ -171,12 +171,12 @@ describe('walletKeysModel', () => {
 	 * registry stores none) and then to draw the page rather than the vault
 	 * beyond it.
 	 */
-	describe('a key behind a Clear Signer page', () => {
+	describe('a key behind a Trusted Signer page', () => {
 		const PAGE = 'https://sign.getvela.app';
 		/** What the row builder sees once the shell has passed the origin in. */
 		const behind = key({
 			name: 'On the page',
-			method: 'clear_signer',
+			method: 'trusted_signer',
 			signer_origin: PAGE,
 			// The page's own authenticator answered, and the catalog can name it:
 			// this is exactly the row that used to read "Apple Passwords".
@@ -221,7 +221,7 @@ describe('walletKeysModel', () => {
 			]);
 		});
 
-		it('is captioned the Clear Signer, and says WHICH page', () => {
+		it('is captioned the Trusted Signer, and says WHICH page', () => {
 			const model = walletKeysModel(
 				{ source: 'registry', chainId: 100, keys: [behind] },
 				'backed_up',
@@ -230,16 +230,16 @@ describe('walletKeysModel', () => {
 			const row = model.rows[0];
 			// The signing sheet's own words for the route, so Settings and the
 			// "Sign with" chooser cannot name the same thing twice.
-			expect(row.holder).toBe('Clear Signer');
-			expect(row.holder).toBe(m.signing.methods.clear_signer);
+			expect(row.holder).toBe('Trusted Signer');
+			expect(row.holder).toBe(m.signing.methods.trusted_signer);
 			// …and it is the LAST word: the catalog knows this AAGUID, and its
 			// answer names the authenticator on the page's far side.
 			expect(row.holder).not.toBe(behind.provider_name);
 			// The mark reads the same field the caption does (issue 207).
-			expect(row.key.kind).toBe('clear_signer');
+			expect(row.key.kind).toBe('trusted_signer');
 			// Which page, labelled with the route's own title, above the key itself.
 			expect(row.details.map((detail) => [detail.label, detail.value])).toEqual([
-				['Clear Signer', PAGE],
+				['Trusted Signer', PAGE],
 				['Public key', '0x04' + 'ab'.repeat(64)],
 				['Credential', 'aa_bgDzJkhFmY'],
 				['AAGUID', behind.aaguid],
@@ -252,7 +252,7 @@ describe('walletKeysModel', () => {
 			expect(plain.rows.map((row) => row.holder)).toEqual([undefined, undefined, undefined]);
 			// No page line anywhere, absent or empty-string alike.
 			for (const row of plain.rows)
-				expect(row.details.map((detail) => detail.label)).not.toContain('Clear Signer');
+				expect(row.details.map((detail) => detail.label)).not.toContain('Trusted Signer');
 			const empty = walletKeysModel(
 				{ source: 'device', chainId: null, keys: [key({ synced: null, signer_origin: '' })] },
 				'unavailable',
@@ -267,7 +267,7 @@ describe('walletKeysModel', () => {
 
 		it('every locale names the route', () => {
 			for (const locale of SUPPORTED_LOCALES)
-				expect(resolveSettingsMessages(locale).signing.methods.clear_signer, locale).not.toBe('');
+				expect(resolveSettingsMessages(locale).signing.methods.trusted_signer, locale).not.toBe('');
 		});
 	});
 });

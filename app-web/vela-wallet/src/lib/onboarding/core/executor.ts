@@ -19,7 +19,7 @@ import { RegistryError } from './registry';
 import * as Storage from './storage';
 import { StorageError } from './storage';
 import { publish } from './publish';
-import { clearSignerRegistryRpId, clearSignerUnitRpId } from '$lib/core/kernels';
+import { trustedSignerRegistryRpId, trustedSignerUnitRpId } from '$lib/core/kernels';
 import { groupPublicKeyFromSeed, toHex } from './wasm-client';
 
 import type { Assertion as AssertionWire } from '../generated/Assertion';
@@ -104,13 +104,13 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				// exists before the rest of the set does), sign against exactly
 				// this credential, assemble the proof in the core. The publish
 				// later replays it without another prompt.
-				// Spec 075: a key minted on a Clear Signer page belongs to THAT
+				// Spec 075: a key minted on a Trusted Signer page belongs to THAT
 				// page's domain and is signed under it, so a challenge fetched
 				// under the wallet's own would never match the answer — which
-				// both phones read as 「清晰签名器的回复与这笔请求不符」.
+				// both phones read as 「可信签名器的回复与这笔请求不符」.
 				const challenge = await Registry.memberChallenge({
 					rpId:
-						clearSignerRegistryRpId(operation.signer_origin ?? null) ??
+						trustedSignerRegistryRpId(operation.signer_origin ?? null) ??
 						Passkey.relyingPartyId(),
 					groupPublicKey: operation.group_public_key_hex,
 					publicKey: operation.public_key_hex,
@@ -165,7 +165,7 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 					// the contract stores a single `rpId` per unit and every
 					// member proves under its own, so a mixed set is refused
 					// here rather than written and never provable.
-					rpId: clearSignerUnitRpId(
+					rpId: trustedSignerUnitRpId(
 						operation.members.map((member) => member.signer_origin ?? null),
 						Passkey.relyingPartyId()
 					),

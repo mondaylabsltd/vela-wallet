@@ -42,8 +42,8 @@ use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
 use vela_core::wallet_keys::DeviceKey;
 
-use crate::executor::clear_signer::{self, Ask};
 use crate::executor::passkey::{self, Ceremony};
+use crate::executor::trusted_signer::{self, Ask};
 use crate::executor::user_op::{self, QuotedFee, Signer};
 use crate::executor::{abi, balances, identity, pool, relay, storage};
 
@@ -79,13 +79,13 @@ pub struct SendContext {
     /// Every founding key's credential id and stored transports — what the
     /// core's `sign_route` reads to pin the key of a chosen kind.
     pub device_keys: Vec<DeviceKey>,
-    /// The account's name: the Clear Signer's page points the person at a
+    /// The account's name: the Trusted Signer's page points the person at a
     /// passkey with it.
     pub account_name: Option<String>,
-    /// The Clear Signer (spec 071): whether this send goes to it, and its
+    /// The Trusted Signer (spec 071): whether this send goes to it, and its
     /// waiting sheet. The host swaps in the channel it listens to; the one
     /// made here routes nothing.
-    pub clear_signer: Arc<clear_signer::Channel>,
+    pub trusted_signer: Arc<trusted_signer::Channel>,
 }
 
 /// Where a "Sign with" actually goes — the core's `sign_route`, in this
@@ -94,8 +94,8 @@ pub struct SendContext {
 pub enum Route {
     /// A ceremony this machine runs, pinned to one credential.
     Passkey(String, KeyMethod),
-    /// Spec 075: the Clear Signer, at this page.
-    ClearSigner(String),
+    /// Spec 075: the Trusted Signer, at this page.
+    TrustedSigner(String),
 }
 
 /// Which key a "Sign with" pins, and how it is reached. `None` means "do what
@@ -103,7 +103,7 @@ pub enum Route {
 /// this build does not know, a wallet with no usable credential.
 ///
 /// **The route decides, not the name that was pressed.** `sign_route` answers
-/// `clear_signer` for choices that are not it — `auto` follows a key minted
+/// `trusted_signer` for choices that are not it — `auto` follows a key minted
 /// behind a page, and a platform choice for a key only a self-hosted page can
 /// reach is sent there rather than to a sheet that cannot see it — and the
 /// page is then the KEY's own `signer_origin`, not the one in Settings. A
@@ -116,11 +116,13 @@ pub fn sign_route_of(device: &[DeviceKey], method: &str, settings_page: &str) ->
         "platform" => Route::Passkey(route.credential_id, KeyMethod::Platform),
         "hybrid" => Route::Passkey(route.credential_id, KeyMethod::Hybrid),
         "security_key" => Route::Passkey(route.credential_id, KeyMethod::SecurityKey),
-        vela_core::clear_signer::METHOD => Route::ClearSigner(if route.signer_origin.is_empty() {
-            settings_page.to_owned()
-        } else {
-            route.signer_origin
-        }),
+        vela_core::trusted_signer::METHOD => {
+            Route::TrustedSigner(if route.signer_origin.is_empty() {
+                settings_page.to_owned()
+            } else {
+                route.signer_origin
+            })
+        }
         _ => return None,
     })
 }
@@ -170,24 +172,24 @@ impl SendContext {
                 })
                 .collect(),
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
-            clear_signer: clear_signer::Channel::new().0,
+            trusted_signer: trusted_signer::Channel::new().0,
         }
     }
 
     /// The default "Sign with" from Settings (spec 071 — "every signature you
     /// start in Vela begins here"). The send has no picker of its own, so the
     /// default IS its choice: a place a passkey is re-pins the key the core
-    /// picks for it, the Clear Signer routes the send to `page`, and `auto`
+    /// picks for it, the Trusted Signer routes the send to `page`, and `auto`
     /// keeps the route derived from the first key.
     pub fn sign_with(&mut self, method: &str, page: &str) {
         match sign_route_of(&self.device_keys, method, page) {
             Some(Route::Passkey(credential, key_method)) => {
                 self.pinned_credential = Some(credential);
                 self.key_method = key_method;
-                self.clear_signer.choose(None);
+                self.trusted_signer.choose(None);
             }
-            Some(Route::ClearSigner(page)) => self.clear_signer.choose(Some(page)),
-            None => self.clear_signer.choose(None),
+            Some(Route::TrustedSigner(page)) => self.trusted_signer.choose(Some(page)),
+            None => self.trusted_signer.choose(None),
         }
     }
 }
@@ -508,12 +510,12 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                 // The person's own send: no site asked, so the page is told
                 // the operation's calls (contract §1).
                 let ask = Ask::own(ctx.account_name.clone());
-                let page = ctx.clear_signer.chosen();
+                let page = ctx.trusted_signer.chosen();
                 let signer = match &page {
-                    Some(page) => Signer::ClearSigner {
+                    Some(page) => Signer::TrustedSigner {
                         ask: &ask,
                         page,
-                        channel: &ctx.clear_signer,
+                        channel: &ctx.trusted_signer,
                     },
                     None => Signer::Passkey(&mut sign),
                 };
@@ -642,7 +644,7 @@ mod tests {
     }
 
     /// The default "Sign with" is the send's own (spec 071): a place a
-    /// passkey is re-pins the key of that kind, the Clear Signer routes the
+    /// passkey is re-pins the key of that kind, the Trusted Signer routes the
     /// send to the page Settings names, and `auto` changes nothing.
     #[test]
     fn the_default_sign_with_routes_the_send() {
@@ -650,15 +652,15 @@ mod tests {
         ctx.sign_with("auto", "https://sign.getvela.app/");
         assert_eq!(ctx.key_method, KeyMethod::Platform);
         assert_eq!(ctx.pinned_credential.as_deref(), Some("cred0"));
-        assert_eq!(ctx.clear_signer.chosen(), None);
+        assert_eq!(ctx.trusted_signer.chosen(), None);
 
         ctx.sign_with("security_key", "https://sign.getvela.app/");
         assert_eq!(ctx.key_method, KeyMethod::SecurityKey);
-        assert_eq!(ctx.clear_signer.chosen(), None);
+        assert_eq!(ctx.trusted_signer.chosen(), None);
 
-        ctx.sign_with("clear_signer", "http://localhost:8140/");
+        ctx.sign_with("trusted_signer", "http://localhost:8140/");
         assert_eq!(
-            ctx.clear_signer.chosen().as_deref(),
+            ctx.trusted_signer.chosen().as_deref(),
             Some("http://localhost:8140/")
         );
         assert_eq!(ctx.account_name.as_deref(), Some("Wallet"));
@@ -668,7 +670,7 @@ mod tests {
     /// name that was pressed.**
     ///
     /// All five choices over a wallet whose only key was minted on somebody
-    /// else's signer page: `auto` follows the key there; the Clear Signer by
+    /// else's signer page: `auto` follows the key there; the Trusted Signer by
     /// name does too; and a place a passkey is — a platform sheet, a phone, a
     /// key on the desk — is ALSO sent there, because a key behind a
     /// self-hosted page is reachable nowhere else, the way a security key's
@@ -679,10 +681,16 @@ mod tests {
         let mut hosted = account("internal", 1);
         hosted.keys[0].signer_origin = Some("https://sign.example.test".to_owned());
         let mut ctx = SendContext::new(&hosted, ceremony());
-        for chosen in ["auto", "clear_signer", "platform", "hybrid", "security_key"] {
+        for chosen in [
+            "auto",
+            "trusted_signer",
+            "platform",
+            "hybrid",
+            "security_key",
+        ] {
             ctx.sign_with(chosen, "https://sign.getvela.app/");
             assert_eq!(
-                ctx.clear_signer.chosen().as_deref(),
+                ctx.trusted_signer.chosen().as_deref(),
                 Some("https://sign.example.test"),
                 "`{chosen}` did not follow the key to its page"
             );
@@ -701,12 +709,12 @@ mod tests {
 
         ctx.sign_with("auto", "https://sign.getvela.app/");
         assert_eq!(
-            ctx.clear_signer.chosen().as_deref(),
+            ctx.trusted_signer.chosen().as_deref(),
             Some("https://sign.example.test")
         );
 
         ctx.sign_with("platform", "https://sign.getvela.app/");
-        assert_eq!(ctx.clear_signer.chosen(), None);
+        assert_eq!(ctx.trusted_signer.chosen(), None);
         assert_eq!(ctx.pinned_credential.as_deref(), Some("cred1"));
         assert_eq!(ctx.key_method, KeyMethod::Platform);
     }
@@ -723,20 +731,20 @@ mod tests {
 
         ctx.sign_with("auto", "https://sign.getvela.app/");
         assert_eq!(
-            ctx.clear_signer.chosen().as_deref(),
+            ctx.trusted_signer.chosen().as_deref(),
             Some("https://sign.getvela.app")
         );
 
         ctx.sign_with("security_key", "https://sign.getvela.app/");
-        assert_eq!(ctx.clear_signer.chosen(), None, "the key is reachable");
+        assert_eq!(ctx.trusted_signer.chosen(), None, "the key is reachable");
         assert_eq!(ctx.key_method, KeyMethod::SecurityKey);
     }
 
     /// And a wallet with no page anywhere in it behaves exactly as it did
-    /// before 075: `auto` changes nothing, the Clear Signer by name goes to
+    /// before 075: `auto` changes nothing, the Trusted Signer by name goes to
     /// the page Settings holds.
     #[test]
-    fn an_ordinary_wallet_is_unchanged_and_the_clear_signer_uses_settings() {
+    fn an_ordinary_wallet_is_unchanged_and_the_trusted_signer_uses_settings() {
         let device: Vec<DeviceKey> = SendContext::new(&account("internal", 2), ceremony())
             .device_keys
             .clone();
@@ -745,8 +753,8 @@ mod tests {
             None
         );
         assert_eq!(
-            sign_route_of(&device, "clear_signer", "http://localhost:8140/"),
-            Some(Route::ClearSigner("http://localhost:8140/".to_owned()))
+            sign_route_of(&device, "trusted_signer", "http://localhost:8140/"),
+            Some(Route::TrustedSigner("http://localhost:8140/".to_owned()))
         );
         assert_eq!(
             sign_route_of(&device, "platform", "https://sign.getvela.app/"),

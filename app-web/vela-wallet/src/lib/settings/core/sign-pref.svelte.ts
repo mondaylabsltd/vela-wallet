@@ -4,7 +4,7 @@
  * App-resident for the reason `fee-tier.svelte.ts` is: more than one surface
  * reads this preference. Settings chooses it; every signing sheet starts a
  * request at its `method`; a send with no sheet signs the way it says; and
- * the Clear Signer opens the page it names. Readers with their own copies of
+ * the Trusted Signer opens the page it names. Readers with their own copies of
  * a preference are how they come to disagree about it.
  *
  * What it is NOT: the signing sheet's "Sign with" row. A pick there changes
@@ -32,7 +32,7 @@ import {
 const INITIAL: SignPrefView = {
 	method: 'auto',
 	method_committed: false,
-	offered: ['auto', 'platform', 'hybrid', 'security_key', 'clear_signer'],
+	offered: ['auto', 'platform', 'hybrid', 'security_key', 'trusted_signer'],
 	signer_url: 'https://sign.getvela.app/',
 	signer_url_is_default: true,
 	signer_url_error: null,
@@ -108,7 +108,7 @@ class SignPreference {
 		this.#loop?.dispatch({ type: 'method_chosen', method });
 	}
 
-	/** Settings: the Clear Signer page, as typed. The core validates it. */
+	/** Settings: the Trusted Signer page, as typed. The core validates it. */
 	submitSignerUrl(text: string): void {
 		this.#loop?.dispatch({ type: 'signer_url_submitted', text });
 	}

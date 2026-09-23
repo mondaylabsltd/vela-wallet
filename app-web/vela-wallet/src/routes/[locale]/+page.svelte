@@ -286,7 +286,7 @@
 	</Sheet>
 {/if}
 
-<!-- Spec 075: signing in can run on the Clear Signer's page — here is where
+<!-- Spec 075: signing in can run on the Trusted Signer's page — here is where
      the person is asked where it is, and where they compare the code. -->
 
 {#if pending}

@@ -97,12 +97,12 @@ describe('normaliseAccount', () => {
 	});
 
 	/**
-	 * Spec 075: a key minted on a Clear Signer page can be reached ONLY through
+	 * Spec 075: a key minted on a Trusted Signer page can be reached ONLY through
 	 * that page. A rewrite that dropped the origin would leave a wallet whose
 	 * key cannot be found anywhere — no error, just a signature that never
 	 * happens — so the field survives every normalisation.
 	 */
-	it('carries the Clear Signer page a key lives behind through a rewrite', () => {
+	it('carries the Trusted Signer page a key lives behind through a rewrite', () => {
 		const behind = normaliseAccount({
 			...EXPO_WITH_KEYS,
 			keys: [

@@ -60,8 +60,8 @@
     "signing": {
       "title": "Assinar com",
       "subtitle": "Toda assinatura que você inicia no Vela começa aqui. Ainda dá para escolher outro jeito em uma só.",
-      "pageTitle": "Página do Clear Signer",
-      "pageSubtitle": "A página que o Clear Signer abre: a oficial ou a sua própria cópia da página sem dependências.",
+      "pageTitle": "Página do Trusted Signer",
+      "pageSubtitle": "A página que o Trusted Signer abre: a oficial ou a sua própria cópia da página sem dependências.",
       "pageOfficial": "Oficial",
       "pageInvalid": "Isso não é um endereço da web.",
       "pageInsecure": "Use uma página https ou uma no loopback deste aparelho — o navegador não assina em nenhum outro lugar.",

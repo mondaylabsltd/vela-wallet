@@ -21,7 +21,7 @@ authenticator ("这台设备"), a nearby device ("手机或平板") and a securi
 Wherever those three are offered, it is offered too: **create, sign in, sign (a send, a
 dApp request), and the key backup**.
 
-Two recorded rulings in `app-web/clearsigning/HANDOVER.md` / `PROTOCOL.md` are superseded by
+Two recorded rulings in `app-web/trusted-signer/HANDOVER.md` / `PROTOCOL.md` are superseded by
 the owner and are rewritten there:
 
 - "签名页永远不创建 passkey" (the signing page never creates a passkey) → it creates one when

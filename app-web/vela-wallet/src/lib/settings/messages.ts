@@ -88,9 +88,9 @@ export interface SettingsMessages {
 		slowHint: string;
 	};
 	/**
-	 * Spec 071: the default "Sign with" and the Clear Signer's page, beside
+	 * Spec 071: the default "Sign with" and the Trusted Signer's page, beside
 	 * the speed. The method names are the signing sheet's own (the create
-	 * flow's for where a passkey is, `common.automatic`, the Clear Signer's
+	 * flow's for where a passkey is, `common.automatic`, the Trusted Signer's
 	 * title) — one set of words, so Settings and the sheet cannot call the
 	 * same choice two different things.
 	 */
@@ -102,10 +102,10 @@ export interface SettingsMessages {
 			platform: string;
 			hybrid: string;
 			security_key: string;
-			clear_signer: string;
+			trusted_signer: string;
 		};
-		/** The Clear Signer's one line, under its name. */
-		clearSignerBody: string;
+		/** The Trusted Signer's one line, under its name. */
+		trustedSignerBody: string;
 		pageTitle: string;
 		pageSubtitle: string;
 		pageOfficial: string;
@@ -469,8 +469,8 @@ export const SETTINGS_KEYS = [
 	'onboarding.create.methodPlatformTitle',
 	'onboarding.create.methodHybridTitle',
 	'onboarding.create.methodSecurityKeyTitle',
-	'componentsUi.signing.clearSignerTitle',
-	'componentsUi.signing.clearSignerBody',
+	'componentsUi.signing.trustedSignerTitle',
+	'componentsUi.signing.trustedSignerBody',
 	'settings.signing.pageTitle',
 	'settings.signing.pageSubtitle',
 	'settings.signing.pageOfficial',

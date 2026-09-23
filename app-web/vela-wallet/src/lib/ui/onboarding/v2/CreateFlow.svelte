@@ -63,7 +63,7 @@
 					onError: (error) => (fatal = error instanceof Error ? error.message : String(error))
 				});
 				session.start({ type: 'start' });
-				// Spec 075: a key minted on the Clear Signer page belongs to THAT
+				// Spec 075: a key minted on the Trusted Signer page belongs to THAT
 				// page's domain, and a wallet's keys all belong to one relying
 				// party — so which page Settings names decides whether the route
 				// can add to this set. The core cannot read the setting.

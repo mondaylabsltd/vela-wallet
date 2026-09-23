@@ -31,7 +31,7 @@ pub enum SettingsPage {
     /// The default transaction speed (spec 069) — between the endpoints and
     /// the storage, as the web's desktop layout places it.
     FeeSpeed,
-    /// How this device signs by default, and the Clear Signer's page (spec
+    /// How this device signs by default, and the Trusted Signer's page (spec
     /// 071) — beside the speed, where every shell puts the two.
     Signing,
     Storage,

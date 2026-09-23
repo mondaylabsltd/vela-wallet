@@ -34,12 +34,12 @@ export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced' | 'kind' | 'sy
 	/** The authenticator verified the person at registration; `null` = nobody can vouch. */
 	user_verified: boolean | null;
 	/**
-	 * Spec 075: the Clear Signer page this key lives behind, when it does —
+	 * Spec 075: the Trusted Signer page this key lives behind, when it does —
 	 * omitted by the core when it does not (`skip_serializing_if`). The core
 	 * knows it only because [`deviceKeys`] passes it in from the account record:
 	 * the registry stores no origin.
 	 *
-	 * A row with one has `method === 'clear_signer'`, which OUTRANKS the
+	 * A row with one has `method === 'trusted_signer'`, which OUTRANKS the
 	 * authenticator's report: a page runs its ceremony in a browser, so it
 	 * always answers `platform`, and that names the one side of the page this
 	 * wallet cannot reach.
@@ -71,7 +71,7 @@ interface KeysDone {
  *
  * `signer_origin` travels with each key (spec 075): the walk cannot learn it
  * anywhere else — the registry contract stores no origin — so a key behind a
- * Clear Signer page is drawn as a passkey on some device unless this list says
+ * Trusted Signer page is drawn as a passkey on some device unless this list says
  * otherwise. A legacy record predates the field and has none.
  */
 export function deviceKeys(account: Pick<Account, 'name' | 'public_key_hex' | 'keys'>) {

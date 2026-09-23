@@ -32,14 +32,14 @@ import app.getvela.wallet.feature.onboarding.core.KeyMethod
 
 /**
  * The four ways to sign in — this device, a nearby device by scan, a hardware
- * security key, and the Clear Signer — the SAME set creating a wallet offers
+ * security key, and the Trusted Signer — the SAME set creating a wallet offers
  * per key. A wallet that lives on a security key is reachable even when a
  * platform passkey is also present, which the plain system route would use
  * silently.
  *
  * The scan (`Hybrid`) is "sign in with your phone" over caBLE (spec 019): this
  * device shows a QR, the phone that holds the passkey scans it, and the ceremony
- * runs over the BLE/tunnel channel that phone opens. The Clear Signer (spec 075)
+ * runs over the BLE/tunnel channel that phone opens. The Trusted Signer (spec 075)
  * is a page that asks the person to pick their key and returns an assertion over
  * a challenge it derived itself. The rows are the same shape as the create
  * picker's, deliberately.
@@ -75,7 +75,7 @@ fun SignInMethodSheet(
             )
             KeyMethod.entries.forEach { method ->
                 // All four routes are live: platform (this device), scan (a
-                // phone over caBLE), a security key, and the Clear Signer.
+                // phone over caBLE), a security key, and the Trusted Signer.
                 val available = true
                 val (titleKey, bodyKey) = signInMethodCopy(method)
                 Row(
@@ -120,7 +120,7 @@ fun SignInMethodSheet(
 
 /**
  * The create picker's copy, reused: the same four methods, the same words —
- * including the Clear Signer (spec 075), which is a passkey route like the
+ * including the Trusted Signer (spec 075), which is a passkey route like the
  * other three and is offered wherever they are.
  */
 internal fun signInMethodCopy(method: KeyMethod): Pair<String, String> = methodCopy(method)

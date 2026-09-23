@@ -612,7 +612,7 @@ fn the_chosen_add_method_reaches_the_shell_and_the_key_row() {
     assert_eq!(keys[1].kind, KeyMethod::Platform, "the row says what it IS");
 }
 
-/// Spec 075: a key minted on the Clear Signer page LIVES behind that page, and
+/// Spec 075: a key minted on the Trusted Signer page LIVES behind that page, and
 /// the row has to say so.
 ///
 /// The page runs the ceremony in a browser, so the authenticator's report is
@@ -625,7 +625,7 @@ fn a_key_minted_on_the_page_is_drawn_as_living_there() {
 
     sut.dispatch(Event::AddKey {
         name: "Page".to_owned(),
-        method: KeyMethod::ClearSigner,
+        method: KeyMethod::TrustedSigner,
     });
     let mut registration = support::second_registration(CRED2);
     registration.signer_origin = Some("https://sign.getvela.app".to_owned());
@@ -640,12 +640,12 @@ fn a_key_minted_on_the_page_is_drawn_as_living_there() {
     let keys = sut.view().keys;
     assert_eq!(
         keys[1].method,
-        KeyMethod::ClearSigner,
+        KeyMethod::TrustedSigner,
         "the choice routes the ceremony"
     );
     assert_eq!(
         keys[1].kind,
-        KeyMethod::ClearSigner,
+        KeyMethod::TrustedSigner,
         "and the row says where the key lives — the page, not this device"
     );
 }
@@ -663,7 +663,7 @@ fn the_first_key_decides_where_the_rest_may_come_from() {
     let mut sut = registered("Ann");
     sut.dispatch(Event::AddKey {
         name: "Page".to_owned(),
-        method: KeyMethod::ClearSigner,
+        method: KeyMethod::TrustedSigner,
     });
     let mut registration = support::registration("credential-2");
     registration.signer_origin = Some("http://localhost:8140".to_owned());
@@ -689,7 +689,7 @@ fn the_first_key_decides_where_the_rest_may_come_from() {
     own.resolve(group_key_generated());
     own.dispatch(Event::AddKey {
         name: String::new(),
-        method: KeyMethod::ClearSigner,
+        method: KeyMethod::TrustedSigner,
     });
     let mut first = support::registration(CRED);
     first.signer_origin = Some("http://localhost:8140".to_owned());
@@ -714,7 +714,7 @@ fn the_first_key_decides_where_the_rest_may_come_from() {
     );
     assert_eq!(
         view.add_methods,
-        vec![KeyMethod::ClearSigner],
+        vec![KeyMethod::TrustedSigner],
         "only the page that minted the first key can mint another of its domain"
     );
     let blocked = view.add_blocked.expect("the other three are off, and why");
@@ -753,7 +753,7 @@ fn the_first_key_decides_where_the_rest_may_come_from() {
 }
 
 /// Spec 075, the owner's report of 2026-09-23: a `getvela.app` set plus a
-/// signer page on somebody else's domain must not offer the Clear Signer.
+/// signer page on somebody else's domain must not offer the Trusted Signer.
 ///
 /// This was the shipped gap. The rule read "a set of `getvela.app` keys takes
 /// every route", which is true of the OFFICIAL page and false of the page
@@ -789,7 +789,7 @@ fn a_signer_page_on_another_domain_is_off_for_a_getvela_set() {
 
     // The official page is a getvela.app page, so it coexists with the three.
     sut.dispatch(Event::SignerPageChanged {
-        url: vela_core::clear_signer::DEFAULT_SIGNER_URL.to_owned(),
+        url: vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned(),
     });
     let view = sut.view();
     assert_eq!(view.add_methods.len(), 4, "all four mint for getvela.app");

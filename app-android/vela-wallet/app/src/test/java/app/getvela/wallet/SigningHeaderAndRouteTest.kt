@@ -72,7 +72,7 @@ class SigningHeaderAndRouteTest {
     fun `sign with - the create flow's words, the choice marked, auto by default`() {
         val auto = model("https://app.uniswap.org", "tab-1", ctx()).signWith!!
         assertEquals("Sign with" to "Automatic", auto.label to auto.value)
-        assertEquals(listOf("Automatic", "This device", "Phone or tablet", "USB security key", "Clear Signer"), auto.options.map { it.title })
+        assertEquals(listOf("Automatic", "This device", "Phone or tablet", "USB security key", "Trusted Signer"), auto.options.map { it.title })
         assertEquals(listOf("auto"), auto.options.filter { it.selected }.map { it.id })
         assertFalse(auto.open)
         // Spec 071: the fourth way says what it promises; the other three need no line.
@@ -85,8 +85,8 @@ class SigningHeaderAndRouteTest {
         assertEquals("USB security key", key.value)
         assertTrue(key.open)
 
-        val clear = model("https://app.uniswap.org", "tab-1", ctx("clear_signer")).signWith!!
-        assertEquals("Clear Signer", clear.value)
+        val clear = model("https://app.uniswap.org", "tab-1", ctx("trusted_signer")).signWith!!
+        assertEquals("Trusted Signer", clear.value)
     }
 
     @Test

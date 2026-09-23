@@ -190,7 +190,7 @@ enum SettingsFixtures {
                                      icon: .clock, subtitle: loc.t("settings.advanced.feeSpeedSubtitle"),
                                      value: loc.t("send.gasTier.fast")),
                     // Spec 071: how this device signs by default, and which
-                    // Clear Signer page it opens — beside the speed, as every
+                    // Trusted Signer page it opens — beside the speed, as every
                     // client places them.
                     SettingsRowModel(id: signWithRow, title: loc.t("settings.signing.title"),
                                      icon: .lock, value: loc.t("common.automatic")),
@@ -536,7 +536,7 @@ enum SettingsFixtures {
     static let signerPageRow = "signer-page"
 
     /// The default "Sign with" sheet: every value the core offers, in its
-    /// order and in the signing sheet's own words — the Clear Signer with the
+    /// order and in the signing sheet's own words — the Trusted Signer with the
     /// line on what it does.
     static func signWithSheet(_ loc: Loc, offered: [String], selected: String) -> SelectSheetModel {
         SelectSheetModel(

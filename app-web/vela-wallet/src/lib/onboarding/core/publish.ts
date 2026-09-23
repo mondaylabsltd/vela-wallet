@@ -87,8 +87,8 @@ export async function publish(args: PublishArgs): Promise<void> {
 			if (!derived) {
 				throw new Error(`registry challenge is missing member ${member.public_key_hex}`);
 			}
-			// Spec 075: a member that lives behind a Clear Signer page signs
-			// THERE, and the web wallet has no Clear Signer (owner, 2026-09-23).
+			// Spec 075: a member that lives behind a Trusted Signer page signs
+			// THERE, and the web wallet has no Trusted Signer (owner, 2026-09-23).
 			// No platform sheet can see that key — asking the OS would find
 			// nothing, and signing with the wallet's own rpId would produce an
 			// assertion the registry can never verify. So it stops here, named.

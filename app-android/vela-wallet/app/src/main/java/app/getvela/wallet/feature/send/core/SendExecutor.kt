@@ -68,7 +68,7 @@ class SendExecutor(
     private val identity: suspend (String) -> SendRecipientIdentity? = { null },
     /** Spec 071: how a send is signed — the stored default; there is no per-send picker. */
     private val signMethod: () -> String = { "auto" },
-    private val clearSigner: () -> ClearSigner? = { null },
+    private val trustedSigner: () -> TrustedSigner? = { null },
 ) {
 
     /** The account store, as the send path reads it. */
@@ -262,7 +262,7 @@ class SendExecutor(
     private val spine = UserOpSpine(relay, accounts, signer, measureCall = { chainId, from, to, valueHex, data ->
         (pool.call(chainId, "eth_estimateGas", listOf(JSONObject().put("from", from).put("to", to).put("value", valueHex).put("data", data))) as? RpcResult.Body)
             ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")?.takeIf { it.startsWith("0x") }
-    }, signMethod = signMethod, clearSigner = clearSigner)
+    }, signMethod = signMethod, trustedSigner = trustedSigner)
 
     /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
     private suspend fun submitInner(op: SendOperation.SubmitUserOp): String = try {

@@ -13,7 +13,7 @@ export type Assertion = { credential_id: string, signature_der_hex: string, auth
  */
 authenticator_attachment: string, 
 /**
- * Spec 075: the Clear Signer page's origin when the ceremony ran there
+ * Spec 075: the Trusted Signer page's origin when the ceremony ran there
  * (a sign-in found the key behind that page). `None` for every other
  * route.
  */

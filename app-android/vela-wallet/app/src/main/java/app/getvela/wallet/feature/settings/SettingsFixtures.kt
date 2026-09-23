@@ -688,7 +688,7 @@ object SettingsFixtures {
     /** The Settings row id of the default speed (spec 069). */
     const val FEE_SPEED_ROW = "fee-speed"
 
-    /** The Settings rows of the default "Sign with" and the Clear Signer page (spec 071). */
+    /** The Settings rows of the default "Sign with" and the Trusted Signer page (spec 071). */
     const val SIGN_WITH_ROW = "sign-with"
     const val SIGNER_PAGE_ROW = "signer-page"
 

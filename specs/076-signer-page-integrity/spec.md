@@ -122,7 +122,7 @@ version directly.
 **The deployment is a directory, and it is in git** (owner, 2026-09-23):
 
 ```
-app-web/clearsigning/dist/
+app-web/trusted-signer/dist/
   index.json                 what is published
   b/<sha256>/sign.html       a version, for ever
 ```

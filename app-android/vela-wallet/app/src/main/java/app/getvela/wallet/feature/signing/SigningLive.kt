@@ -56,10 +56,10 @@ object SigningLive {
         val signWithOpen: Boolean = false,
         /** Whether the fee row's coin list is open (issue #262). */
         val feeOpen: Boolean = false,
-        /** Spec 071: the Clear Signer's page is open for this request. */
-        val clearSignerWaiting: Boolean = false,
-        /** Spec 071: why the last Clear Signer attempt did not sign. */
-        val clearSignerNotice: String? = null,
+        /** Spec 071: the Trusted Signer's page is open for this request. */
+        val trustedSignerWaiting: Boolean = false,
+        /** Spec 071: why the last Trusted Signer attempt did not sign. */
+        val trustedSignerNotice: String? = null,
     )
 
     /** The transport of a request the WALLET made of itself (`VelaWalletApplication`). */
@@ -78,7 +78,7 @@ object SigningLive {
 
     /**
      * The "Sign with" row: the create flow's own words for where a passkey is,
-     * and the Clear Signer (spec 071) — a separate page that checks and signs.
+     * and the Trusted Signer (spec 071) — a separate page that checks and signs.
      */
     fun signWith(ctx: Context): SignWithModel {
         val s = ctx.strings
@@ -87,26 +87,26 @@ object SigningLive {
             "platform" to s.t("onboarding.create.methodPlatformTitle"),
             "hybrid" to s.t("onboarding.create.methodHybridTitle"),
             "security_key" to s.t("onboarding.create.methodSecurityKeyTitle"),
-            "clear_signer" to s.s("clearSignerTitle"),
+            "trusted_signer" to s.s("trustedSignerTitle"),
         )
         return SignWithModel(
             label = s.t("componentsUi.signing.signWith"),
             value = titles[ctx.signMethod] ?: titles.getValue("auto"),
             open = ctx.signWithOpen,
             options = titles.map { (id, title) ->
-                SignWithOption(id, title, id == ctx.signMethod, line = if (id == "clear_signer") s.s("clearSignerBody") else null)
+                SignWithOption(id, title, id == ctx.signMethod, line = if (id == "trusted_signer") s.s("trustedSignerBody") else null)
             },
         )
     }
 
-    /** Spec 071: the waiting card, while the Clear Signer's page is open. */
-    fun clearSignerWait(ctx: Context): ClearSignerWaitModel? {
-        if (!ctx.clearSignerWaiting) return null
+    /** Spec 071: the waiting card, while the Trusted Signer's page is open. */
+    fun trustedSignerWait(ctx: Context): TrustedSignerWaitModel? {
+        if (!ctx.trustedSignerWaiting) return null
         val s = ctx.strings
-        return ClearSignerWaitModel(
-            title = s.s("clearSignerWaiting"),
-            hint = s.s("clearSignerWaitingHint"),
-            reopen = s.s("clearSignerReopen"),
+        return TrustedSignerWaitModel(
+            title = s.s("trustedSignerWaiting"),
+            hint = s.s("trustedSignerWaitingHint"),
+            reopen = s.s("trustedSignerReopen"),
             cancel = s.t("common.cancel"),
         )
     }
@@ -171,8 +171,8 @@ object SigningLive {
             networkDot = ctx.chainDot,
             networkLogoUrl = app.getvela.wallet.core.marks.Marks.chainLogoUrl(ctx.chainId),
             signWith = signWith(ctx),
-            clearSignerWait = clearSignerWait(ctx),
-            clearSignerNotice = ctx.clearSignerNotice,
+            trustedSignerWait = trustedSignerWait(ctx),
+            trustedSignerNotice = ctx.trustedSignerNotice,
             blocks = blocks,
             tech = fallback.tech.copy(
                 title = fallback.tech.title,

@@ -13,7 +13,7 @@ export type Registration = { credential_id: string, attestation_object_hex: stri
  */
 authenticator_attachment: string, transports: string, 
 /**
- * Spec 075: the Clear Signer page's origin when the key was minted
+ * Spec 075: the Trusted Signer page's origin when the key was minted
  * through it — where the key lives from now on. `None` for every other
  * route. The shell reports it only after `verify_registration` checked
  * the answer came from that origin.

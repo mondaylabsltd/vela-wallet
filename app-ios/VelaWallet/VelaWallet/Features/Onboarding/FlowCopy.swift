@@ -70,7 +70,7 @@ func progressFor(_ status: StatusKey?) -> ProgressPosition? {
 
 /// A method's title and caption in the add-key picker.
 ///
-/// The Clear Signer's two lines come from `componentsUi.signing.*` rather
+/// The Trusted Signer's two lines come from `componentsUi.signing.*` rather
 /// than from `onboarding.create.*`: they are the SAME two sentences the
 /// signing sheet's "Sign with" shows, and the route is one thing whether a
 /// person meets it while creating a wallet or while spending from it (spec
@@ -80,7 +80,7 @@ func methodCopy(_ method: KeyMethod) -> (title: String, body: String) {
     case .platform: (I18nKeys.Create.methodPlatformTitle, I18nKeys.Create.methodPlatformBody)
     case .hybrid: (I18nKeys.Create.methodHybridTitle, I18nKeys.Create.methodHybridBody)
     case .securityKey: (I18nKeys.Create.methodSecurityKeyTitle, I18nKeys.Create.methodSecurityKeyBody)
-    case .clearSigner: (I18nKeys.ClearSigner.title, I18nKeys.ClearSigner.body)
+    case .trustedSigner: (I18nKeys.TrustedSigner.title, I18nKeys.TrustedSigner.body)
     }
 }
 
@@ -96,9 +96,9 @@ func providerLineFor(_ kind: KeyMethod) -> String {
     case .platform: I18nKeys.Create.methodPlatformTitle
     case .hybrid: I18nKeys.Create.methodHybridTitle
     case .securityKey: I18nKeys.Create.providerSecurityKey
-    // The row says where the key lives, and a Clear Signer key lives behind
+    // The row says where the key lives, and a Trusted Signer key lives behind
     // a page — which is what its own title says.
-    case .clearSigner: I18nKeys.ClearSigner.title
+    case .trustedSigner: I18nKeys.TrustedSigner.title
     }
 }
 

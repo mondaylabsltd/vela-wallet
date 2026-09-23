@@ -5,8 +5,8 @@
  * and the sign-in sheet on Welcome — so what it offers is what every one of
  * them offers.
  *
- * On the WEB that is three routes. 075 made the Clear Signer a fourth, and on
- * 2026-09-23 the owner took it off this shell entirely ("web 就不支持清晰签名器
+ * On the WEB that is three routes. 075 made the Trusted Signer a fourth, and on
+ * 2026-09-23 the owner took it off this shell entirely ("web 就不支持可信签名器
  * 好了"): a browser cannot open the page, so a key minted there would be one
  * this wallet could never sign with again. The core still offers it — the
  * native shells have it — so the filter here is the thing under test.
@@ -66,12 +66,12 @@ describe('the key-method chooser', () => {
 		]);
 	});
 
-	it('never draws the Clear Signer, even when the core offers it', () => {
+	it('never draws the Trusted Signer, even when the core offers it', () => {
 		const view = drawn({
-			allowed: ['platform', 'hybrid', 'security_key', 'clear_signer'],
+			allowed: ['platform', 'hybrid', 'security_key', 'trusted_signer'],
 			blocked: null as unknown as AddBlocked
 		});
-		expect(view.names).not.toContain(strings('componentsUi.signing.clearSignerTitle'));
+		expect(view.names).not.toContain(strings('componentsUi.signing.trustedSignerTitle'));
 		expect(view.buttons).toHaveLength(3);
 	});
 

@@ -42,7 +42,7 @@ struct SettingsSheet: View {
     /// network's bin, "reset to defaults" — and its "yes".
     var pendingConfirm: ConfirmSheetModel?
     var onConfirmPending: (() -> Void)?
-    /// The Clear Signer page's Save (spec 071): `true` when the core took the
+    /// The Trusted Signer page's Save (spec 071): `true` when the core took the
     /// address, which is what closes the sheet. Absent in the gallery.
     var onSaveSignerUrl: ((String) -> Bool)?
     var onResetSignerUrl: (() -> Void)?
@@ -267,7 +267,7 @@ private struct SelectSheetBody: View {
     }
 }
 
-/// The Clear Signer page (spec 071): the address, Save, and the way back to
+/// The Trusted Signer page (spec 071): the address, Save, and the way back to
 /// the official page. What is under the field is the core's to say — a refused
 /// address, and that a page off `getvela.app` cannot use this wallet's
 /// passkeys.

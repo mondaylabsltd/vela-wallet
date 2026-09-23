@@ -24,7 +24,7 @@
 //!
 //! ## Who signs
 //!
-//! A passkey over the SafeOp hash — or the Clear Signer (spec 071), which is
+//! A passkey over the SafeOp hash — or the Trusted Signer (spec 071), which is
 //! handed the ASSEMBLED operation as well: its page derives the same hash
 //! from the operation's own bytes and refuses what it cannot derive, and the
 //! answer is accepted only as a signature over the hash computed HERE.
@@ -52,8 +52,8 @@ use vela_core::user_op::{
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
-use crate::executor::clear_signer::{self, Ask, Channel};
 use crate::executor::passkey::PasskeyFailure;
+use crate::executor::trusted_signer::{self, Ask, Channel};
 use crate::executor::{chain, pool, relay};
 
 /// `TEMPO_VERIFICATION_GAS_UNDEPLOYED` (`tempo.ts:89`) — the one Tempo
@@ -112,9 +112,9 @@ pub type SignFn<'a> = &'a mut dyn FnMut(&[u8]) -> Result<Assertion, PasskeyFailu
 pub enum Signer<'a> {
     /// A passkey, over the digest alone.
     Passkey(SignFn<'a>),
-    /// The Clear Signer: the request as the page is told it, the page, and
+    /// The Trusted Signer: the request as the page is told it, the page, and
     /// the screen's channel to its waiting sheet.
-    ClearSigner {
+    TrustedSigner {
         ask: &'a Ask,
         page: &'a str,
         channel: &'a Channel,
@@ -122,7 +122,7 @@ pub enum Signer<'a> {
 }
 
 impl Signer<'_> {
-    /// One signature over `digest`. `operation` is what the Clear Signer
+    /// One signature over `digest`. `operation` is what the Trusted Signer
     /// shows and derives the digest from — the assembled operation and the
     /// calls before its fee leg; `None` for a message.
     fn sign(
@@ -135,9 +135,9 @@ impl Signer<'_> {
     ) -> Result<Assertion, SubmitFailure> {
         match self {
             Self::Passkey(sign) => sign(digest),
-            Self::ClearSigner { ask, page, channel } => {
+            Self::TrustedSigner { ask, page, channel } => {
                 let request = ask.request(chain_id, safe, keys, operation);
-                clear_signer::sign(&request, page, digest, keys, channel)
+                trusted_signer::sign(&request, page, digest, keys, channel)
             }
         }
         .map_err(|failure| match failure.kind {
@@ -1043,14 +1043,14 @@ mod tests {
         assert!(envelope(&foreign, &keys).is_err());
     }
 
-    /// The Clear Signer's answer goes into the envelope exactly as a
+    /// The Trusted Signer's answer goes into the envelope exactly as a
     /// passkey's does (spec 071). The page is handed the ASSEMBLED operation
     /// with the fee leg after the person's calls, the answer is accepted only
     /// over the digest computed here, and the contract signature names the
     /// verifier of the key that actually signed.
     #[test]
-    fn the_clear_signers_answer_becomes_the_same_envelope() {
-        use crate::executor::clear_signer::tests::{
+    fn the_trusted_signers_answer_becomes_the_same_envelope() {
+        use crate::executor::trusted_signer::tests::{
             answers_once, page_result, refuses_once, signing_key, wallet_key,
         };
         let credential = [0x11_u8, 0x22, 0x33];
@@ -1084,7 +1084,7 @@ mod tests {
             page_result(&signing_key(7), &credential, &signed_over)
         });
         let signed = {
-            let mut signer = Signer::ClearSigner {
+            let mut signer = Signer::TrustedSigner {
                 ask: &ask,
                 page: "https://sign.getvela.app/",
                 channel: &channel,
@@ -1109,7 +1109,7 @@ mod tests {
         // dismissed passkey sheet — and the sheet has its sentence.
         let declining = refuses_once(&channel, "user_rejected");
         let declined = {
-            let mut signer = Signer::ClearSigner {
+            let mut signer = Signer::TrustedSigner {
                 ask: &ask,
                 page: "https://sign.getvela.app/",
                 channel: &channel,
@@ -1120,17 +1120,17 @@ mod tests {
         assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
         assert_eq!(
             channel.ended(),
-            Some(crate::executor::clear_signer::Refusal::Closed)
+            Some(crate::executor::trusted_signer::Refusal::Closed)
         );
     }
 
-    /// A message through the Clear Signer (spec 071): the page is told the
+    /// A message through the Trusted Signer (spec 071): the page is told the
     /// site's own request and no operation, the answer is accepted only over
     /// the Safe's `SafeMessage` hash of the original computed here, and it
     /// comes back as the EIP-1271 envelope a passkey's would.
     #[test]
-    fn a_message_through_the_clear_signer_is_the_same_1271_signature() {
-        use crate::executor::clear_signer::tests::{
+    fn a_message_through_the_trusted_signer_is_the_same_1271_signature() {
+        use crate::executor::trusted_signer::tests::{
             answers_once, page_result, signing_key, wallet_key,
         };
         const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
@@ -1159,7 +1159,7 @@ mod tests {
             SAFE,
             &original,
             &keys,
-            Signer::ClearSigner {
+            Signer::TrustedSigner {
                 ask: &ask,
                 page: "https://sign.getvela.app/",
                 channel: &channel,

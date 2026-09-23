@@ -46,7 +46,7 @@ enum SettingsOverlay: Equatable, Identifiable {
     case feeSpeed
     /// The default "Sign with" (spec 071): every method the core offers.
     case signWith
-    /// The Clear Signer page (spec 071): an address, saved or refused.
+    /// The Trusted Signer page (spec 071): an address, saved or refused.
     case signerPage
     /// A custom network's bin, asked before it happens (spec 072 FR-010): the
     /// tap used to be a drawing of a bin, and the other shells removed on it.
@@ -187,7 +187,7 @@ struct AccountsSheetModel {
     var removeCancel: String = ""
 }
 
-/// The Clear Signer page's sheet (spec 071): the address in force, what the
+/// The Trusted Signer page's sheet (spec 071): the address in force, what the
 /// core said about the last one typed, and — whenever it is not a
 /// `getvela.app` page — that this wallet's passkeys will not sign there.
 struct SignerPageModel {
@@ -545,7 +545,7 @@ struct SettingsScreenModel {
     var currencySheet: SelectSheetModel
     /// Spec 069: the default transaction speed's sheet.
     var feeSpeedSheet = SelectSheetModel(title: "", rows: [])
-    /// Spec 071: the default "Sign with" and the Clear Signer page.
+    /// Spec 071: the default "Sign with" and the Trusted Signer page.
     var signWithSheet = SelectSheetModel(title: "", rows: [])
     var signerPage: SignerPageModel?
     var numberSheet: SelectSheetModel

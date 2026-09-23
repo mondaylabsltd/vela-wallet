@@ -16,7 +16,7 @@ place, and the check and the signature happen somewhere you control.
 
 ## What it is
 
-One folder — `app-web/clearsigning` in the repository — that is both a web page
+One folder — `app-web/trusted-signer` in the repository — that is both a web page
 and a Chrome extension. Pure HTML, CSS and JavaScript: no framework, no
 bundler, no build step, no dependencies, and no network requests of its own.
 
@@ -40,7 +40,7 @@ from, so your existing keys can sign in it, while the code is the folder you
 loaded and inspected.
 
 1. Open `chrome://extensions` and turn on **Developer mode**.
-2. **Load unpacked**, and pick the `app-web/clearsigning` folder.
+2. **Load unpacked**, and pick the `app-web/trusted-signer` folder.
 3. The toolbar icon opens the page in a tab.
 
 **As a page on your own domain, or on localhost.** Served over HTTP(S), the
@@ -51,7 +51,7 @@ and to sign for a wallet whose key was created on your own domain. It is not a
 way to sign for an existing `getvela.app` wallet.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

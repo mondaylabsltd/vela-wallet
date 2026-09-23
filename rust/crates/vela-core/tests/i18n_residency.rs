@@ -26,7 +26,7 @@ const CORPUS_BYTES: usize = 990_499;
 ///
 /// It was doubled to 270,690 on the owner's word that morning, because three
 /// sentences for "remove one wallet from this device" had gone over it. Later
-/// the same day the Clear Signer's two cross-device channels were cut and 23
+/// the same day the Trusted Signer's two cross-device channels were cut and 23
 /// strings went with them, which put `ja` + `en` back at 128,800 — under the
 /// original figure. A budget at twice the measurement would not fire until the
 /// corpus DOUBLED, which is not a warning, so it goes back to where it warns.

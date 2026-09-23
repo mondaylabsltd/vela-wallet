@@ -49,9 +49,10 @@ pub const KEY_FEE_TIER: &str = "vela.feeTier";
 /// The default "Sign with" (spec 071): `auto` or a method name, judged by the
 /// core's `sign_pref`, never here.
 pub const KEY_SIGN_METHOD: &str = "vela.signMethod";
-/// The Clear Signer's page, when the person chose one; absent is the
+/// The Trusted Signer's page, when the person chose one; absent is the
 /// official page.
-pub const KEY_CLEAR_SIGNER_URL: &str = "vela.clearSignerUrl";
+/// The Trusted Signer page a person named in Settings.
+pub const KEY_TRUSTED_SIGNER_URL: &str = "vela.trustedSignerUrl";
 
 /// The storage failed in a way the core answers with `storage_failed`, never a
 /// crash: a read-only home directory, a full disk, a file another process holds.
@@ -806,7 +807,7 @@ pub(crate) mod tests {
             );
             assert_eq!(
                 route,
-                Some(crate::executor::send::Route::ClearSigner(
+                Some(crate::executor::send::Route::TrustedSigner(
                     "https://sign.example.test".to_owned()
                 ))
             );

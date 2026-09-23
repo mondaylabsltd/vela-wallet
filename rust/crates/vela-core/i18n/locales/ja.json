@@ -60,8 +60,8 @@
     "signing": {
       "title": "署名方法",
       "subtitle": "Vela で始めるすべての署名はここから始まります。1 回ごとに別の方法を選ぶこともできます。",
-      "pageTitle": "Clear Signer のページ",
-      "pageSubtitle": "Clear Signer が開くページ:公式ページ、またはご自身でデプロイした依存関係ゼロの署名ページ。",
+      "pageTitle": "Trusted Signer のページ",
+      "pageSubtitle": "Trusted Signer が開くページ:公式ページ、またはご自身でデプロイした依存関係ゼロの署名ページ。",
       "pageOfficial": "公式",
       "pageInvalid": "Web アドレスではありません。",
       "pageInsecure": "https のページ、またはこの端末のループバック上のページを使ってください。ブラウザはそれ以外の場所では署名しません。",

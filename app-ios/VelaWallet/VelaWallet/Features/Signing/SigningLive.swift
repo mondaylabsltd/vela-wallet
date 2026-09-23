@@ -40,8 +40,8 @@ enum SigningLive {
         var feeOpen = false
         /// Every "Sign with" the core offers, in its order (`SignPrefView.offered`).
         var signMethods = ["auto"]
-        /// How the Clear Signer last ended for this request without signing.
-        var clearSignerNotice: ClearSignerNotice?
+        /// How the Trusted Signer last ended for this request without signing.
+        var trustedSignerNotice: TrustedSignerNotice?
         /// The parallel space is active: its built-in key signs every request,
         /// so no passkey sheet will follow the slide (Debug builds only).
         var parallelSpace = false
@@ -78,7 +78,7 @@ enum SigningLive {
     }
 
     /// The "Sign with" row: the create flow's own words for where a passkey
-    /// is, and the Clear Signer with its one line — for every value the core
+    /// is, and the Trusted Signer with its one line — for every value the core
     /// offers, in its order. A name this build has no words for is not drawn.
     static func signWith(context: Context) -> SignWithModel {
         let loc = context.loc
@@ -117,20 +117,20 @@ enum SigningLive {
         case "platform": loc.t("onboarding.create.methodPlatformTitle")
         case "hybrid": loc.t("onboarding.create.methodHybridTitle")
         case "security_key": loc.t("onboarding.create.methodSecurityKeyTitle")
-        case UserOpSpine.clearSignerMethod: loc.t("componentsUi.signing.clearSignerTitle")
+        case UserOpSpine.trustedSignerMethod: loc.t("componentsUi.signing.trustedSignerTitle")
         default: nil
         }
     }
 
-    /// The line under a value: only the Clear Signer needs one — the other
+    /// The line under a value: only the Trusted Signer needs one — the other
     /// four say where a key is, and this one says what it does instead.
     static func signMethodDetail(_ id: String, loc: Loc) -> String? {
-        id == UserOpSpine.clearSignerMethod ? loc.t("componentsUi.signing.clearSignerBody") : nil
+        id == UserOpSpine.trustedSignerMethod ? loc.t("componentsUi.signing.trustedSignerBody") : nil
     }
 
-    /// The Clear Signer's ending, when it left the request unsigned. Closed is
+    /// The Trusted Signer's ending, when it left the request unsigned. Closed is
     /// a person's own decision, told calmly; a refusal or a mismatch is not.
-    static func clearSignerBlocks(_ notice: ClearSignerNotice?, loc: Loc) -> [SigningBlock] {
+    static func trustedSignerBlocks(_ notice: TrustedSignerNotice?, loc: Loc) -> [SigningBlock] {
         guard let notice else { return [] }
         return [.warning(tone: notice == .closed ? .caution : .danger, text: loc.t(notice.key))]
     }
@@ -168,7 +168,7 @@ enum SigningLive {
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
         let blocks = statusBlocks(sign: sign, loc: loc)
-            + clearSignerBlocks(context.clearSignerNotice, loc: loc)
+            + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
             + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
                           dataBytes: dataBytes, context: context)
             // Only a TRANSACTION has balances to change. A message moves

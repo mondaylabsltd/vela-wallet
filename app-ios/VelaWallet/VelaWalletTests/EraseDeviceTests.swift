@@ -39,7 +39,7 @@ struct EraseDeviceTests {
         store.writeString("vela.chain.https://app.uniswap.org", "100")
         store.writeString("recipient_id:0xabc", #"{"name":"alice"}"#)
         store.writeString("vela.receiveWarned.0x1", "1")
-        store.writeString(VelaStore.Key.signMethod, "clear_signer")
+        store.writeString(VelaStore.Key.signMethod, "trusted_signer")
         store.writeString(VelaStore.Key.feeTier, "slow")
         store.writeString("vela.balanceHidden", "true")
         store.writeString("vela.some-key-added-next-year", "x")

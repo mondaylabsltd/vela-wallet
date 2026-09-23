@@ -32,14 +32,14 @@ can_add_key: boolean,
  */
 key_relying_party?: string | null, 
 /**
- * The page that relying party lives on, when it is a Clear Signer page —
+ * The page that relying party lives on, when it is a Trusted Signer page —
  * so a shell can say WHICH page the remaining keys must be minted on.
  */
 key_signer_origin?: string | null, 
 /**
  * Which methods may still mint a key for this set. Every method while the
  * set is empty; afterwards only those that would mint for the relying
- * party it committed to — which for the Clear Signer depends on the page
+ * party it committed to — which for the Trusted Signer depends on the page
  * Settings names, not on the route.
  */
 add_methods: Array<KeyMethod>, 

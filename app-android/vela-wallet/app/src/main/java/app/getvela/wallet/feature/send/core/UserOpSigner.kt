@@ -52,14 +52,14 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
  * The fourth "Sign with" (spec 071): a separate page decodes the request from
  * the operation's own bytes, derives the digest itself and runs the ceremony.
  *
- * [requestJson] is the core's `clearSignerRequest`, [digest] the challenge the
+ * [requestJson] is the core's `trustedSignerRequest`, [digest] the challenge the
  * passkey path would sign, [keys] the account's. The answer comes back already
  * judged by the core (this digest, one of these keys, a verified user), so the
  * caller packs it exactly as a passkey's. A person who closes the page gets a
  * [app.getvela.wallet.feature.onboarding.core.PasskeyFailure] of kind
  * `Cancelled`; every other refusal is one carrying the sentence to show.
  */
-interface ClearSigner {
+interface TrustedSigner {
     /**
      * [signerOrigin] is spec 075: a key minted or found through the Clear
      * Signer lives behind ONE page, and that is the page to open — empty means
@@ -77,14 +77,14 @@ interface ClearSigner {
      * (the page prefers its own for chains it knows) and the account's name,
      * which points the person at a passkey.
      */
-    fun describe(chainId: Int, account: String): ClearSignerLabels = ClearSignerLabels()
+    fun describe(chainId: Int, account: String): TrustedSignerLabels = TrustedSignerLabels()
 }
 
-data class ClearSignerLabels(val chainName: String? = null, val nativeSymbol: String? = null, val accountName: String? = null)
+data class TrustedSignerLabels(val chainName: String? = null, val nativeSymbol: String? = null, val accountName: String? = null)
 
 /**
- * What a site asked for, as the Clear Signer shows it: the request's own
+ * What a site asked for, as the Trusted Signer shows it: the request's own
  * method and params, and the site's origin. The wallet's own send has none —
  * the core builds `wallet_sendCalls` from its calls.
  */
-data class ClearSignerIntent(val method: String, val paramsJson: String, val origin: String)
+data class TrustedSignerIntent(val method: String, val paramsJson: String, val origin: String)

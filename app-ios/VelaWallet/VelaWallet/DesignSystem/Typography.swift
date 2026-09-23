@@ -34,7 +34,7 @@ struct TypeRole {
     /// `typeRole` applies the size itself, from the environment, so a screen
     /// that never heard of 设置 → 字号 grows with it too — which is how 228 of
     /// the app's 494 text sites came to ignore the setting entirely (settings,
-    /// onboarding and the Clear Signer's sheets among them; found 2026-09-23).
+    /// onboarding and the Trusted Signer's sheets among them; found 2026-09-23).
     /// A role that went through [`scaled`] says so here, and is left alone.
     var pinned: Bool = false
 

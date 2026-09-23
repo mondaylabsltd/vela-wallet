@@ -10,12 +10,12 @@ uniffi::setup_scaffolding!();
 
 // The Crux state machines (spec 019-onboarding-live-wiring), exported with the
 // same JSON surface the web gets from `vela-core-wasm`.
-mod clear_signer_bridge;
 mod ctap_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
 mod onboarding_bridge;
 mod settings_bridge;
+mod trusted_signer_bridge;
 
 pub use onboarding_bridge::{CreateWalletCore, LoginCore, SessionCore};
 
@@ -305,7 +305,7 @@ pub fn decode_calldata(sig: String, calldata: Vec<u8>) -> Result<AbiValue, CoreE
 /// Safe's `SafeMessage` wrap: EIP-191 for `personal_sign` / `eth_sign`, the
 /// EIP-712 digest for typed data, picked where each method carries it.
 /// `None` when there is nothing to sign. One rule for every shell and the
-/// Clear Signer's page.
+/// Trusted Signer's page.
 #[uniffi::export]
 pub fn sign_message_hash(method: String, params_json: String) -> Option<Vec<u8>> {
     vela_core::sign_message::original_hash(&method, &params_json)

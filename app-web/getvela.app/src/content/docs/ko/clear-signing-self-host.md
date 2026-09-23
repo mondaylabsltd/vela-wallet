@@ -15,7 +15,7 @@ Vela는 승인 전에 모든 거래를 해독하고, 그 작업은 진짜입니�
 
 ## 그것이 무엇인가
 
-저장소의 `app-web/clearsigning`이라는 폴더 하나이며, 웹 페이지이자 Chrome 확장입니다.
+저장소의 `app-web/trusted-signer`이라는 폴더 하나이며, 웹 페이지이자 Chrome 확장입니다.
 순수한 HTML·CSS·자바스크립트뿐, 프레임워크도 번들러도 빌드 단계도 의존성도 없고,
 자체 네트워크 요청도 없습니다.
 
@@ -37,7 +37,7 @@ relying party는 `getvela.app`이므로 기존 키로 서명할 수 있고, 실�
 불러와 확인한 그 폴더입니다.
 
 1. `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
-2. **압축해제된 확장 프로그램을 로드**로 `app-web/clearsigning` 폴더를 고릅니다.
+2. **압축해제된 확장 프로그램을 로드**로 `app-web/trusted-signer` 폴더를 고릅니다.
 3. 툴바 아이콘을 누르면 탭에서 페이지가 열립니다.
 
 **내 도메인이나 localhost의 페이지로.** HTTP(S)로 서비스하면 페이지의 relying
@@ -47,7 +47,7 @@ party는 그 호스트명이 됩니다. 즉 *그 호스트명* 아래 등록된 
 기존 `getvela.app` 지갑을 위해 서명하는 방법은 아닙니다.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

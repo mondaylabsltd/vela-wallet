@@ -397,18 +397,18 @@ enum SettingsLive {
             case .securityKey: k.keysProviderSecurityKey
             case .hybrid: k.keysProviderGeneric
             case .platform: k.keysProviderPlatform
-            // Spec 075: the core now says `clear_signer` for a key that lives
-            // behind a Clear Signer page, and where a key lives is the page.
+            // Spec 075: the core now says `trusted_signer` for a key that lives
+            // behind a Trusted Signer page, and where a key lives is the page.
             // The same sentence the "Sign with" chooser offers the route under,
             // so a person meets one thing whether creating, spending or looking.
-            case .clearSigner: I18nKeys.ClearSigner.title
+            case .trustedSigner: I18nKeys.TrustedSigner.title
             }
             // The vault's name outranks the generic line — EXCEPT behind a page.
-            // A Clear Signer key's AAGUID is the authenticator on the page's far
+            // A Trusted Signer key's AAGUID is the authenticator on the page's far
             // side, which this wallet can reach no other way: naming that vault
             // points past the page exactly as "this device" did (found by the
             // Android device pass, 2026-09-22).
-            let holder = row.key.method == .clearSigner || row.key.providerName.isEmpty
+            let holder = row.key.method == .trustedSigner || row.key.providerName.isEmpty
                 ? loc.t(line) : row.key.providerName
             return WalletKeyRowModel(
                 id: index,
@@ -435,7 +435,7 @@ enum SettingsLive {
                     // this says the place. Dropped by the filter below for every
                     // key that lives behind no page.
                     KeyDetailModel(
-                        label: loc.t(I18nKeys.ClearSigner.title), value: row.signerOrigin,
+                        label: loc.t(I18nKeys.TrustedSigner.title), value: row.signerOrigin,
                         mono: false, copy: false
                     ),
                     KeyDetailModel(label: loc.t(k.keysAttestation), value: row.attestationHex, mono: true, copy: false),
@@ -578,7 +578,7 @@ enum SettingsLive {
     }
 
     /// How this device signs (spec 071): the two rows' values, the "Sign with"
-    /// sheet's tick and the Clear Signer page's sheet — every verdict in them
+    /// sheet's tick and the Trusted Signer page's sheet — every verdict in them
     /// the `sign_pref` core's, so a row cannot say one thing while a signing
     /// sheet starts at another.
     static func withSignPref(
@@ -615,7 +615,7 @@ enum SettingsLive {
             subtitle: loc.t("settings.signing.pageSubtitle"),
             field: UrlFieldModel(
                 id: "signer-url", label: "", value: view.signerUrl,
-                placeholder: clearSignerDefaultUrl(), tone: error == nil ? nil : .error
+                placeholder: trustedSignerDefaultUrl(), tone: error == nil ? nil : .error
             ),
             error: error,
             foreign: view.signerUsesWalletPasskeys ? nil : loc.t("settings.signing.pageForeign"),

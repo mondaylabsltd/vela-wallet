@@ -909,13 +909,13 @@ fun SignWithRow(model: SignWithModel, onSelect: (String?) -> Unit, modifier: Mod
 }
 
 /**
- * The Clear Signer's page is open (spec 071): what to do there, a way back to
+ * The Trusted Signer's page is open (spec 071): what to do there, a way back to
  * it (a tab closed by mistake), and a way out. It stands where the slide was —
  * the signature is being made on the page, not here.
  */
 @Composable
-fun ClearSignerWaiting(
-    model: app.getvela.wallet.feature.signing.ClearSignerWaitModel,
+fun TrustedSignerWaiting(
+    model: app.getvela.wallet.feature.signing.TrustedSignerWaitModel,
     onReopen: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,

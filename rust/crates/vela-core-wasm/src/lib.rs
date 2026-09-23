@@ -19,12 +19,12 @@ use wasm_bindgen::prelude::*;
 /// function exports below — pure kernels the app calls — these are stateful
 /// cores the web shell drives with events and effect results.
 mod bridge;
-/// Only the REGISTRY's relying party: the web wallet offers no Clear Signer
-/// (owner, 2026-09-23), but it can publish a unit whose keys were minted on
-/// one.
-mod clear_signer;
 mod onboarding;
 mod settings;
+/// Only the REGISTRY's relying party: the web wallet offers no Trusted Signer
+/// (owner, 2026-09-23), but it can publish a unit whose keys were minted on
+/// one.
+mod trusted_signer;
 mod wallet_state;
 
 // ---------------------------------------------------------------------------

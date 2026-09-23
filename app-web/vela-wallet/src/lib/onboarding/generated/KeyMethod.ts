@@ -15,4 +15,4 @@
  * method as present-and-explained rather than absent — which is what the
  * design draws.
  */
-export type KeyMethod = "platform" | "hybrid" | "security_key" | "clear_signer";
+export type KeyMethod = "platform" | "hybrid" | "security_key" | "trusted_signer";

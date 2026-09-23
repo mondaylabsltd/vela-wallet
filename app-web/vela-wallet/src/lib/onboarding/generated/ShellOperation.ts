@@ -43,7 +43,7 @@ transports: string,
  */
 method: KeyMethod, purpose: ProofPurpose, 
 /**
- * Spec 075: with `method = clear_signer`, the page the key lives
+ * Spec 075: with `method = trusted_signer`, the page the key lives
  * behind (the sign-in's own). `None` on every other route.
  */
 signer_origin?: string | null, } | { "type": "generate_group_key" } | { "type": "sign_member_proof", credential_id: string, 
@@ -85,7 +85,7 @@ transports: string,
  */
 method: KeyMethod, group_public_key_hex: string, 
 /**
- * Spec 075: with `method = clear_signer`, the page the key was just
+ * Spec 075: with `method = trusted_signer`, the page the key was just
  * minted behind — the membership is confirmed there. `None` on every
  * other route.
  */

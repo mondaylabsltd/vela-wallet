@@ -74,11 +74,11 @@ enum class KeyMethod(val wire: String) {
     SecurityKey("security_key"),
 
     /**
-     * Spec 075: the Clear Signer — a page the person reads, which runs the
+     * Spec 075: the Trusted Signer — a page the person reads, which runs the
      * WebAuthn ceremony itself. A passkey route of our own, beside the three
      * the platform offers, and offered wherever they are.
      */
-    ClearSigner("clear_signer"),
+    TrustedSigner("trusted_signer"),
     ;
 
     companion object {
@@ -117,7 +117,7 @@ data class CreateKeyRow(
     val method: KeyMethod,
     /**
      * WHERE this key lives, as the core settled it (spec 075): the route the
-     * person chose is [method], but a key minted on a Clear Signer page lives
+     * person chose is [method], but a key minted on a Trusted Signer page lives
      * behind that page whatever the browser's authenticator reported about
      * itself. Defaults to [method] for a core that predates the field.
      */
@@ -130,7 +130,7 @@ data class CreateKeyRow(
  * A wallet's keys all belong to ONE relying party, because the registry files
  * a unit under one `rpId`. Once the first key is minted, the routes that would
  * mint for a different party are off — and the row says so, naming both sides,
- * because the person can fix it: the Clear Signer page is a setting.
+ * because the person can fix it: the Trusted Signer page is a setting.
  */
 data class AddBlocked(
     val relyingParty: String,

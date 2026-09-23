@@ -45,10 +45,10 @@ use vela_core::app::sign_request::{
 
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
-use crate::executor::clear_signer;
 use crate::executor::now_ms;
 use crate::executor::passkey::WindowHandle;
 use crate::executor::sign_request::{self as sign_executor, SignAnswer, SignContext};
+use crate::executor::trusted_signer;
 use crate::resident::{Answer, Machine, Sink};
 
 use super::speed_control::{self, SpeedControl, SpeedHost};
@@ -178,15 +178,15 @@ impl SigningHost {
         self.sign_with_open = false;
     }
 
-    /// The Clear Signer's waiting sheet and its last word (spec 071).
-    pub fn clear_signer(&self) -> Arc<clear_signer::Channel> {
-        Arc::clone(&self.ctx.clear_signer)
+    /// The Trusted Signer's waiting sheet and its last word (spec 071).
+    pub fn trusted_signer(&self) -> Arc<trusted_signer::Channel> {
+        Arc::clone(&self.ctx.trusted_signer)
     }
 
-    /// Something on the Clear Signer's channel changed: hand the browser the
+    /// Something on the Trusted Signer's channel changed: hand the browser the
     /// page if a ceremony asked for it, and redraw.
-    fn clear_signer_changed(&mut self, cx: &mut Context<Self>) {
-        if let Some(url) = self.ctx.clear_signer.take_page() {
+    fn trusted_signer_changed(&mut self, cx: &mut Context<Self>) {
+        if let Some(url) = self.ctx.trusted_signer.take_page() {
             cx.open_url(&url);
         }
         cx.notify();
@@ -200,11 +200,11 @@ impl SigningHost {
     ) -> Self {
         let channel = CeremonyChannel::new();
         let mut ctx = SignContext::new(account, channel.ceremony(window_handle));
-        // A site's request is told to the Clear Signer as the site's; the
+        // A site's request is told to the Trusted Signer as the site's; the
         // wallet's own (the key backup) as the wallet's own send.
         ctx.site = (request.transport_id != WALLET_TRANSPORT).then(|| request.origin.clone());
-        let (clear_signer, changed) = clear_signer::Channel::new();
-        ctx.clear_signer = clear_signer;
+        let (trusted_signer, changed) = trusted_signer::Channel::new();
+        ctx.trusted_signer = trusted_signer;
         let sign = CoreHost::<SignRequest>::new();
         let clear = CoreHost::<ClearSigning>::new();
         let guard = CoreHost::<ApprovalGuard>::new();
@@ -251,13 +251,13 @@ impl SigningHost {
             .view()
             .method;
         host.sign_with(Some(&method), cx);
-        // The Clear Signer's channel speaks up whenever a ceremony waits,
+        // The Trusted Signer's channel speaks up whenever a ceremony waits,
         // ends, or wants the page opened. The stream ends with the host.
         cx.spawn(async move |host, cx| {
             let mut changed = changed;
             while changed.next().await.is_some() {
                 if host
-                    .update(cx, |host, cx| host.clear_signer_changed(cx))
+                    .update(cx, |host, cx| host.trusted_signer_changed(cx))
                     .is_err()
                 {
                     break;
@@ -718,10 +718,10 @@ impl SigningHost {
 }
 
 impl Drop for SigningHost {
-    /// The column is gone: a Clear Signer still waiting stops now rather
+    /// The column is gone: a Trusted Signer still waiting stops now rather
     /// than holding a port for five minutes nobody can see.
     fn drop(&mut self) {
-        self.ctx.clear_signer.close();
+        self.ctx.trusted_signer.close();
     }
 }
 

@@ -11,7 +11,7 @@
 	 * Opens in place, like the fee selector: a sheet over the signing sheet is a
 	 * modal under a modal.
 	 *
-	 * The Clear Signer (spec 071) is the one choice that is not a place a
+	 * The Trusted Signer (spec 071) is the one choice that is not a place a
 	 * passkey is, so it carries a line saying what it does instead.
 	 */
 	import Icon from '$lib/wallet/ui/Icon.svelte';

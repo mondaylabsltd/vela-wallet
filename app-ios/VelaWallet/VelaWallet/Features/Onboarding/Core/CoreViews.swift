@@ -51,7 +51,7 @@ enum SubmitLabel: String, Decodable, CaseIterable {
 /// ceremony follows the choice; the row's provider line shows the report.
 ///
 /// Spec 075 adds a FOURTH, and it is a peer of the other three rather than a
-/// special case: the Clear Signer is our own passkey route — a page that shows
+/// special case: the Trusted Signer is our own passkey route — a page that shows
 /// what is being signed and runs the ceremony itself — offered wherever "this
 /// device", "a nearby device" and "a security key" are. `allCases` is what the
 /// create and sign-in choosers list, so it is also what makes it appear on
@@ -60,7 +60,7 @@ enum KeyMethod: String, Decodable, CaseIterable {
     case platform
     case hybrid
     case securityKey = "security_key"
-    case clearSigner = "clear_signer"
+    case trustedSigner = "trusted_signer"
 }
 
 /// `SessionRoute` — where the app is allowed to be.
@@ -104,7 +104,7 @@ struct CreateKeyRow: Decodable, Equatable, Identifiable {
 /// A wallet's keys all belong to ONE relying party, because the registry files
 /// a unit under one `rpId`. Once the first key is minted, a route that would
 /// mint for a different party cannot add to the set — and the row says so,
-/// naming both sides, because the Clear Signer's page is a setting the person
+/// naming both sides, because the Trusted Signer's page is a setting the person
 /// can change.
 struct AddBlocked: Decodable, Equatable {
     let relyingParty: String

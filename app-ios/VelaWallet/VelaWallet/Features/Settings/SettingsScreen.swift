@@ -70,7 +70,7 @@ struct SettingsScreen: View {
     /// "Back up keys to Ethereum" was tapped (spec 062). The host decides
     /// whether there is anything to send.
     var onEthereumBackup: (() -> Void)?
-    /// The Clear Signer page's Save and reset (spec 071). Save answers whether
+    /// The Trusted Signer page's Save and reset (spec 071). Save answers whether
     /// the core took the address.
     var onSaveSignerUrl: ((String) -> Bool)?
     var onResetSignerUrl: (() -> Void)?

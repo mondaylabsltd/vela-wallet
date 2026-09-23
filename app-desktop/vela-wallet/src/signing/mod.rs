@@ -6,10 +6,10 @@
 //! what "a swap" is, which is what makes the six-rung ERC-7730 degradation
 //! ladder structural rather than a fork per case.
 
-pub mod clear_signer;
 pub mod components;
 pub mod fixtures;
 pub mod live;
+pub mod trusted_signer;
 
 use gpui::SharedString;
 
@@ -41,7 +41,7 @@ pub struct SigningStrings {
     /// Signer's name with the line under it (spec 071).
     pub sign_with: SharedString,
     pub sign_with_options: Vec<(&'static str, SharedString)>,
-    pub clear_signer_body: SharedString,
+    pub trusted_signer_body: SharedString,
     /// The wallet's own key backup, in the person's language.
     pub backup_intent: SharedString,
     pub backup_labels: [SharedString; 3],
@@ -225,7 +225,7 @@ impl SigningStrings {
                 .iter()
                 .map(|method| (*method, loc.t(sign_method_key(method))))
                 .collect(),
-            clear_signer_body: s("clearSignerBody"),
+            trusted_signer_body: s("trustedSignerBody"),
             backup_intent: loc.t("settingsModals.backup.intent"),
             backup_labels: [
                 loc.t("settingsModals.backup.registeredAs"),
@@ -403,7 +403,7 @@ pub fn sign_method_key(method: &str) -> &'static str {
         "platform" => "onboarding.create.methodPlatformTitle",
         "hybrid" => "onboarding.create.methodHybridTitle",
         "security_key" => "onboarding.create.methodSecurityKeyTitle",
-        "clear_signer" => "componentsUi.signing.clearSignerTitle",
+        "trusted_signer" => "componentsUi.signing.trustedSignerTitle",
         _ => "common.automatic",
     }
 }
@@ -429,8 +429,8 @@ mod tests {
             assert_ne!(title.as_ref(), sign_method_key(id), "`{id}` echoed its key");
         }
         assert_ne!(
-            s.clear_signer_body.as_ref(),
-            "componentsUi.signing.clearSignerBody"
+            s.trusted_signer_body.as_ref(),
+            "componentsUi.signing.trustedSignerBody"
         );
     }
 

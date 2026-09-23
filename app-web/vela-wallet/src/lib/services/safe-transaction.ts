@@ -123,7 +123,7 @@ interface GasEstimate {
 
 /**
  * The operation a SafeOp digest covers, as its signer may need to see it —
- * the Clear Signer's page decodes and re-derives it (spec 071): the ASSEMBLED
+ * the Trusted Signer's page decodes and re-derives it (spec 071): the ASSEMBLED
  * op in the page's field names (bytes `0x` hex, gas figures decimal), and the
  * legs before the fee leg, values in base units (decimal).
  */

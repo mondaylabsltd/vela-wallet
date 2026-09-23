@@ -154,9 +154,9 @@ fn provider_line(key: &CreateKeyRow) -> &'static str {
         KeyMethod::Platform => "onboarding.create.methodPlatformTitle",
         KeyMethod::Hybrid => "onboarding.create.methodHybridTitle",
         KeyMethod::SecurityKey => "onboarding.create.providerSecurityKey",
-        // Spec 075: a key the Clear Signer minted lives behind its page, and
+        // Spec 075: a key the Trusted Signer minted lives behind its page, and
         // the row says so in the picker's own words.
-        KeyMethod::ClearSigner => "componentsUi.signing.clearSignerTitle",
+        KeyMethod::TrustedSigner => "componentsUi.signing.trustedSignerTitle",
     }
 }
 
@@ -917,7 +917,7 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
     row
 }
 
-/// The four ways to mint a founding key (spec 075 added the Clear Signer).
+/// The four ways to mint a founding key (spec 075 added the Trusted Signer).
 ///
 /// **One of them may not run here, and it says so.** `Platform` needs a system
 /// passkey service, which only Windows provides in this app's reach. Hiding it

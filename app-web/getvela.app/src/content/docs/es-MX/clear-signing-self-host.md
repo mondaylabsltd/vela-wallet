@@ -15,7 +15,7 @@ y la revisión y la firma ocurren en otro que tú controlas.
 
 ## Qué es
 
-Una carpeta —`app-web/clearsigning` en el repositorio— que es a la vez página web y
+Una carpeta —`app-web/trusted-signer` en el repositorio— que es a la vez página web y
 extensión de Chrome. Puro HTML, CSS y JavaScript: sin framework, sin bundler, sin
 paso de compilación, sin dependencias y sin peticiones de red propias.
 
@@ -39,7 +39,7 @@ carpeta, así que tus llaves actuales pueden firmar ahí, mientras que el códig
 carpeta que cargaste e inspeccionaste.
 
 1. Abre `chrome://extensions` y activa el **modo de desarrollador**.
-2. **Cargar extensión sin empaquetar** y elige la carpeta `app-web/clearsigning`.
+2. **Cargar extensión sin empaquetar** y elige la carpeta `app-web/trusted-signer`.
 3. El ícono de la barra abre la página en una pestaña.
 
 **Como página en tu propio dominio, o en localhost.** Servida por HTTP(S), la
@@ -50,7 +50,7 @@ flujo de escritorio y de firmar por una wallet cuya llave se creó en tu propio
 dominio. No es una forma de firmar por una wallet de `getvela.app` ya existente.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

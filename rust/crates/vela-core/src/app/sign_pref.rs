@@ -9,10 +9,10 @@
 //! ```
 //!
 //! Two preferences that belong together: the "Sign with" a signing sheet
-//! starts at (`auto`, a place a passkey is, or the Clear Signer), and which
-//! Clear Signer page the wallet opens. Shaped on [`super::fee_tier_pref`],
+//! starts at (`auto`, a place a passkey is, or the Trusted Signer), and which
+//! Trusted Signer page the wallet opens. Shaped on [`super::fee_tier_pref`],
 //! this codebase's committed-preference machine, for the same reasons: the
-//! shell owns the keys (`vela.signMethod` and `vela.clearSignerUrl`, under the
+//! shell owns the keys (`vela.signMethod` and `vela.trustedSignerUrl`, under the
 //! `vela.` prefix that survives sign-out — how a person signs belongs to them
 //! and the device, not to one account) and the words; the core decides what
 //! may be stored and what shows when nothing can be.
@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
-use crate::clear_signer::{self, SignerUrlError};
+use crate::trusted_signer::{self, SignerUrlError};
 use crate::wallet_keys::SIGN_METHODS;
 
 /// The factory default: do what the wallet always did.
@@ -53,7 +53,7 @@ pub fn parse_method(raw: &str) -> Option<&'static str> {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignPrefOperation"))]
 pub enum SignPrefOperation {
-    /// Read `vela.signMethod` and `vela.clearSignerUrl`, raw.
+    /// Read `vela.signMethod` and `vela.trustedSignerUrl`, raw.
     ReadStored,
     /// Persist the default method (best effort).
     WriteMethod { method: String },
@@ -91,7 +91,7 @@ pub enum Event {
     /// Settings: the default "Sign with". A name this build does not offer is
     /// ignored.
     MethodChosen { method: String },
-    /// Settings: the Clear Signer page, as typed.
+    /// Settings: the Trusted Signer page, as typed.
     SignerUrlSubmitted { text: String },
     /// Settings: back to the official page.
     SignerUrlReset,
@@ -134,7 +134,7 @@ pub struct SignPrefView {
     pub method_committed: bool,
     /// Every "Sign with" value, in the order a picker lists them.
     pub offered: Vec<String>,
-    /// The Clear Signer page the wallet opens. Always usable.
+    /// The Trusted Signer page the wallet opens. Always usable.
     pub signer_url: String,
     /// `true` ⇒ the official page (nothing chosen, or the choice was reset).
     pub signer_url_is_default: bool,
@@ -180,7 +180,7 @@ impl App for SignPref {
                     },
                 )
             }
-            Event::SignerUrlSubmitted { text } => match clear_signer::signer_url(&text) {
+            Event::SignerUrlSubmitted { text } => match trusted_signer::signer_url(&text) {
                 Ok(url) => {
                     model.attempt += 1;
                     model.phase = Phase::Idle;
@@ -188,7 +188,7 @@ impl App for SignPref {
                     // Typing the official page back in is a reset, not a pin:
                     // the default may move, and this person did not choose a
                     // copy of it.
-                    let chosen = (url != clear_signer::DEFAULT_SIGNER_URL).then_some(url);
+                    let chosen = (url != trusted_signer::DEFAULT_SIGNER_URL).then_some(url);
                     model.signer_url.clone_from(&chosen);
                     shell(model, SignPrefOperation::WriteSignerUrl { url: chosen })
                 }
@@ -218,8 +218,8 @@ impl App for SignPref {
                         // would refuse to store.
                         model.signer_url = signer_url
                             .as_deref()
-                            .and_then(|raw| clear_signer::signer_url(raw).ok())
-                            .filter(|url| url != clear_signer::DEFAULT_SIGNER_URL);
+                            .and_then(|raw| trusted_signer::signer_url(raw).ok())
+                            .filter(|url| url != trusted_signer::DEFAULT_SIGNER_URL);
                         render()
                     }
                     _ => Command::done(),
@@ -232,7 +232,7 @@ impl App for SignPref {
         let signer_url = model
             .signer_url
             .clone()
-            .unwrap_or_else(|| clear_signer::DEFAULT_SIGNER_URL.to_owned());
+            .unwrap_or_else(|| trusted_signer::DEFAULT_SIGNER_URL.to_owned());
         let error_name = |error: SignerUrlError| {
             match error {
                 SignerUrlError::Invalid => "invalid",
@@ -244,7 +244,7 @@ impl App for SignPref {
             method: model.method.unwrap_or(FACTORY_METHOD).to_owned(),
             method_committed: model.method.is_some(),
             offered: SIGN_METHODS.iter().map(|m| (*m).to_owned()).collect(),
-            signer_uses_wallet_passkeys: clear_signer::uses_wallet_passkeys(&signer_url),
+            signer_uses_wallet_passkeys: trusted_signer::uses_wallet_passkeys(&signer_url),
             signer_url_is_default: model.signer_url.is_none(),
             signer_url,
             signer_url_error: model.url_error.map(error_name),

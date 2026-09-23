@@ -144,7 +144,7 @@ struct FlowFixturesTests {
             #expect(loc.t(copy.title) != copy.title, "\(copy.title) has no zh translation")
             #expect(loc.t(copy.body) != copy.body, "\(copy.body) has no zh translation")
         }
-        #expect(methodCopy(.clearSigner).title == "componentsUi.signing.clearSignerTitle")
+        #expect(methodCopy(.trustedSigner).title == "componentsUi.signing.trustedSignerTitle")
     }
 
     /// Issue #207: a key row's badge claims only what somebody verified, and

@@ -121,8 +121,8 @@ final class Preferences {
             VelaStore.Key.retiredAvatarStyle, VelaStore.Key.textScale, VelaStore.Key.legacyFormats,
             // Spec 075's pairing service, retired 2026-09-23: the core
             // REMOVES both spellings, so the migration has to see them.
-            VelaStore.Key.retiredClearSignerTunnel,
-            VelaStore.Key.retiredClearSignerRelay,
+            VelaStore.Key.retiredTrustedSignerTunnel,
+            VelaStore.Key.retiredTrustedSignerRelay,
         ]
         return keys.reduce(into: [:]) { entries, key in
             if let raw = store.rawValue(key) { entries[key] = raw }

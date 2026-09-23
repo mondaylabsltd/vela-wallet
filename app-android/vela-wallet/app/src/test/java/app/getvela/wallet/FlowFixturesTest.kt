@@ -147,7 +147,7 @@ class FlowFixturesTest {
     /**
      * Every semantic variant the core emits has copy. Exhaustive by enum.
      *
-     * The Clear Signer's words live in the SIGNING corpus, not the create one
+     * The Trusted Signer's words live in the SIGNING corpus, not the create one
      * (spec 075): it is the same option the signing sheet and Settings offer,
      * and one route reading two ways in three places is how a person stops
      * believing they are the same thing.
@@ -159,7 +159,7 @@ class FlowFixturesTest {
             assertTrue(submitLabelToI18n(it).startsWith("onboarding."))
         }
         KeyMethod.entries.forEach { method ->
-            val home = if (method == KeyMethod.ClearSigner) "componentsUi.signing." else "onboarding."
+            val home = if (method == KeyMethod.TrustedSigner) "componentsUi.signing." else "onboarding."
             assertTrue(providerLineFor(method).startsWith(home))
             val (title, body) = methodCopy(method)
             assertTrue("$method title", title.startsWith(home))
@@ -177,10 +177,10 @@ class FlowFixturesTest {
     @Test
     fun everyChooserOffersTheFourRoutes() {
         assertEquals(
-            listOf("platform", "hybrid", "security_key", "clear_signer"),
+            listOf("platform", "hybrid", "security_key", "trusted_signer"),
             KeyMethod.entries.map { it.wire },
         )
-        assertEquals(KeyMethod.ClearSigner, KeyMethod.of("clear_signer"))
+        assertEquals(KeyMethod.TrustedSigner, KeyMethod.of("trusted_signer"))
         // The sign-in sheet reuses the create picker's words, method for method.
         KeyMethod.entries.forEach { method ->
             assertEquals(

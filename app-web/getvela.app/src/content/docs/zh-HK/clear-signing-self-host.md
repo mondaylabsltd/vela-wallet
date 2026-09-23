@@ -15,7 +15,7 @@ Vela 喺你批准每一筆交易之前都會先解碼，呢份解碼係實打實
 
 ## 佢係乜
 
-一個資料夾——儲存庫裡面嘅 `app-web/clearsigning`——佢既係一個網頁，亦係一個
+一個資料夾——儲存庫裡面嘅 `app-web/trusted-signer`——佢既係一個網頁，亦係一個
 Chrome 擴充功能。純 HTML、CSS 同 JavaScript：冇框架，冇打包工具，冇建置步驟，
 冇依賴，亦唔會自己發任何網絡請求。
 
@@ -36,7 +36,7 @@ Chrome 擴充功能。純 HTML、CSS 同 JavaScript：冇框架，冇打包工�
 正正係你載入並檢查過嗰個資料夾。
 
 1. 打開 `chrome://extensions`，開啟**開發人員模式**。
-2. 撳**載入解封裝項目**，揀 `app-web/clearsigning` 資料夾。
+2. 撳**載入解封裝項目**，揀 `app-web/trusted-signer` 資料夾。
 3. 工具列上面嘅圖示會喺新分頁打開呢個頁面。
 
 **做你自己網域上面、或者 localhost 上面嘅一個頁面。** 用 HTTP(S) 提供服務嗰陣，
@@ -46,7 +46,7 @@ Chrome 擴充功能。純 HTML、CSS 同 JavaScript：冇框架，冇打包工�
 `getvela.app` 錢包簽名嘅方法。
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

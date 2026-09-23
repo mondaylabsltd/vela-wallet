@@ -671,7 +671,7 @@ class SettingsLiveTest {
 
     /**
      * Spec 071/075: how this device signs by default — five routes in the
-     * picker (auto and the four places a passkey can be), the Clear Signer
+     * picker (auto and the four places a passkey can be), the Trusted Signer
      * page row, and the tunnel row beside it.
      */
     @Test
@@ -680,12 +680,12 @@ class SettingsLiveTest {
         val model = SettingsLive.withSignPref(base(), view, strings)
 
         assertEquals(
-            listOf("auto", "platform", "hybrid", "security_key", "clear_signer"),
+            listOf("auto", "platform", "hybrid", "security_key", "trusted_signer"),
             model.signWithSheet.rows.map { it.id },
         )
-        val clear = model.signWithSheet.rows.single { it.id == "clear_signer" }
-        assertEquals(strings.t("componentsUi.signing.clearSignerTitle"), clear.label)
-        assertEquals(strings.t("componentsUi.signing.clearSignerBody"), clear.detail)
+        val clear = model.signWithSheet.rows.single { it.id == "trusted_signer" }
+        assertEquals(strings.t("componentsUi.signing.trustedSignerTitle"), clear.label)
+        assertEquals(strings.t("componentsUi.signing.trustedSignerBody"), clear.detail)
 
         fun rowValue(id: String) = model.sections.flatMap { it.rows }.single { it.id == id }.value
         assertEquals(strings.t("settings.signing.pageOfficial"), rowValue(SettingsFixtures.SIGNER_PAGE_ROW))

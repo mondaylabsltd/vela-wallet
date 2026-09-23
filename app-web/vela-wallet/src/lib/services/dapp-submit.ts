@@ -5,7 +5,7 @@
  * it never used React). Web deltas: the kernels import replaces the vela-core
  * facade (static — the Expo dynamic imports were a bundle-splitting hedge),
  * the passkey call goes through `signChallenge` (every founding credential in
- * the allow-list, or the Clear Signer when that is the request's "Sign with",
+ * the allow-list, or the Trusted Signer when that is the request's "Sign with",
  * spec 071), the stored account comes from onboarding storage, and the
  * public-key-index fallback for an UNKNOWN account is gone: a web session is
  * always a stored account, so a missing one is an error, not a lookup.
@@ -82,7 +82,7 @@ export interface DAppRequest {
 /**
  * Who signs for `safeAddress` and what was asked — the question
  * {@link signChallenge} answers. The request's own method, (final) params and
- * origin are what the Clear Signer's page is shown (spec 071); the passkey
+ * origin are what the Trusted Signer's page is shown (spec 071); the passkey
  * ceremony reads only `credentials`, exactly as it always did.
  */
 function challengeSigner(

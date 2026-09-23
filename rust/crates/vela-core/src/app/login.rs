@@ -762,7 +762,7 @@ fn reconstruct_account(
             } else {
                 String::new()
             },
-            // Spec 075: the key that answered through the Clear Signer lives
+            // Spec 075: the key that answered through the Trusted Signer lives
             // behind that page. The others are unknown here, as their
             // transports are.
             signer_origin: if member.credential_id == assertion.credential_id {

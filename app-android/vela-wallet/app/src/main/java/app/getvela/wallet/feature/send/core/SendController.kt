@@ -60,9 +60,9 @@ class SendController(
     /** Spec 069: the stored default speed, and the resolved number preset its gas bids are written in. */
     private val preferredTier: () -> FeeTier = { FeeTier.Fast },
     private val numberPreset: () -> String = { "comma_dot" },
-    /** Spec 071: the stored default "Sign with" — a send has no picker of its own — and the Clear Signer. */
+    /** Spec 071: the stored default "Sign with" — a send has no picker of its own — and the Trusted Signer. */
     signMethod: () -> String = { "auto" },
-    clearSigner: () -> ClearSigner? = { null },
+    trustedSigner: () -> TrustedSigner? = { null },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -152,7 +152,7 @@ class SendController(
         },
         ports = ports,        identity = identity,
         signMethod = signMethod,
-        clearSigner = clearSigner,
+        trustedSigner = trustedSigner,
     )
 
     private val sendHost = CoreHost(
@@ -538,7 +538,7 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
     }
 
     /**
-     * Spec 075: the Clear Signer page each key lives behind, by public key
+     * Spec 075: the Trusted Signer page each key lives behind, by public key
      * (lowercase, `0x`-less). The keys view needs it to say where a key lives;
      * [keysOf] speaks the core's `WalletKeyRecord`, which has no room for it.
      */
@@ -576,7 +576,7 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
                 org.json.JSONObject()
                     .put("credential_id", key.optString("credential_id"))
                     .put("transports", key.optString("transports"))
-                    // Spec 075: the Clear Signer page this key lives behind.
+                    // Spec 075: the Trusted Signer page this key lives behind.
                     // Dropping it would make `signRoute` route a key that only
                     // one page can reach to the platform sheet instead.
                     .put("signer_origin", key.optString("signer_origin")),

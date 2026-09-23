@@ -74,14 +74,14 @@ fn blocked_reason(drafts: &[Draft], signer_page: &str) -> Option<AddBlocked> {
     if methods_for(drafts, signer_page).len() == 4 {
         return None;
     }
-    let page_rp = crate::clear_signer::registry_rp_id(Some(signer_page))
+    let page_rp = crate::trusted_signer::registry_rp_id(Some(signer_page))
         .unwrap_or_else(|| "getvela.app".to_owned());
     let page_differs = page_rp != committed;
     Some(AddBlocked {
         relying_party: committed,
         page: page_differs.then(|| {
             if signer_page.trim().is_empty() {
-                crate::clear_signer::DEFAULT_SIGNER_URL.to_owned()
+                crate::trusted_signer::DEFAULT_SIGNER_URL.to_owned()
             } else {
                 signer_page.to_owned()
             }
@@ -98,7 +98,7 @@ fn blocked_reason(drafts: &[Draft], signer_page: &str) -> Option<AddBlocked> {
 pub struct AddBlocked {
     /// The relying party every key in this wallet belongs to.
     pub relying_party: String,
-    /// The Clear Signer page Settings names, when it is the thing that does
+    /// The Trusted Signer page Settings names, when it is the thing that does
     /// not fit — a key minted there would belong to `page_relying_party`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<String>,
@@ -110,14 +110,14 @@ pub struct AddBlocked {
 /// The relying party this key set has committed to, or `None` while it is
 /// empty (ruling, 2026-09-23).
 ///
-/// A key minted on a Clear Signer page belongs to that page's domain; every
+/// A key minted on a Trusted Signer page belongs to that page's domain; every
 /// other route mints a key of the wallet's own relying party, and so does the
 /// official page. The first key decides, because the registry stores ONE
 /// `rpId` per unit and a member can only ever prove membership under its own.
 fn committed_relying_party(drafts: &[Draft]) -> Option<String> {
     let first = drafts.first()?;
     Some(
-        crate::clear_signer::registry_rp_id(first.signer_origin.as_deref())
+        crate::trusted_signer::registry_rp_id(first.signer_origin.as_deref())
             .unwrap_or_else(|| "getvela.app".to_owned()),
     )
 }
@@ -125,7 +125,7 @@ fn committed_relying_party(drafts: &[Draft]) -> Option<String> {
 /// Which methods may still mint a key for this set.
 ///
 /// Everything, until the set belongs to somebody's own deployment — then only
-/// the Clear Signer, because that page is the only thing that can mint another
+/// the Trusted Signer, because that page is the only thing that can mint another
 /// key of that domain. Offering the rest would let a person mint a key that
 /// can never join this wallet's unit, which is only discovered at the publish.
 fn methods_for(drafts: &[Draft], signer_page: &str) -> Vec<KeyMethod> {
@@ -134,11 +134,11 @@ fn methods_for(drafts: &[Draft], signer_page: &str) -> Vec<KeyMethod> {
         KeyMethod::Hybrid,
         KeyMethod::SecurityKey,
     ];
-    // Where the Clear Signer would mint: the page Settings names. The official
+    // Where the Trusted Signer would mint: the page Settings names. The official
     // one is a `getvela.app` page, so a key from it joins a set of the app's
     // own keys; somebody's own deployment mints for its own domain, and that
     // key can only ever join a set of ITS keys.
-    let page_rp = crate::clear_signer::registry_rp_id(Some(signer_page))
+    let page_rp = crate::trusted_signer::registry_rp_id(Some(signer_page))
         .unwrap_or_else(|| "getvela.app".to_owned());
     let mut allowed: Vec<KeyMethod> = Vec::new();
     match committed_relying_party(drafts) {
@@ -146,7 +146,7 @@ fn methods_for(drafts: &[Draft], signer_page: &str) -> Vec<KeyMethod> {
         // picks is what the rest must match.
         None => {
             allowed.extend(OWN);
-            allowed.push(KeyMethod::ClearSigner);
+            allowed.push(KeyMethod::TrustedSigner);
         }
         Some(committed) => {
             if committed == "getvela.app" {
@@ -154,11 +154,11 @@ fn methods_for(drafts: &[Draft], signer_page: &str) -> Vec<KeyMethod> {
             }
             // …and the page only when it would mint for the same party. This
             // is the case the owner hit on 2026-09-23: a set of `getvela.app`
-            // keys, a signer page on `localhost`, and the Clear Signer still
+            // keys, a signer page on `localhost`, and the Trusted Signer still
             // offered — so a key was minted that nothing would accept, and the
             // wallet only said so at the publish.
             if page_rp == committed {
-                allowed.push(KeyMethod::ClearSigner);
+                allowed.push(KeyMethod::TrustedSigner);
             }
         }
     }
@@ -191,7 +191,7 @@ pub enum Event {
         #[serde(default)]
         method: KeyMethod,
     },
-    /// The Clear Signer page Settings names, so this machine can tell whether
+    /// The Trusted Signer page Settings names, so this machine can tell whether
     /// that route would mint a key this set can accept. Sent on entry and
     /// whenever the preference changes; empty means the official page.
     SignerPageChanged {
@@ -261,7 +261,7 @@ pub struct Draft {
     /// registration, one `get()` per key, interleaved. `None` until signed
     /// (or after a cancelled confirmation).
     pub proof: Option<RegistryProof>,
-    /// Spec 075: the Clear Signer page the key was minted behind, if any —
+    /// Spec 075: the Trusted Signer page the key was minted behind, if any —
     /// where its membership confirmation must be signed too.
     pub signer_origin: Option<String>,
 }
@@ -284,7 +284,7 @@ pub struct PreparedKey {
     pub transports: String,
     /// The creation-time membership proof.
     pub proof: Option<RegistryProof>,
-    /// Spec 075: the Clear Signer page the key was minted behind, if any.
+    /// Spec 075: the Trusted Signer page the key was minted behind, if any.
     pub signer_origin: Option<String>,
 }
 
@@ -384,7 +384,7 @@ impl Stage {
 pub struct Model {
     name: String,
     acks: [bool; ACK_COUNT],
-    /// The Clear Signer page Settings names — empty means the official one.
+    /// The Trusted Signer page Settings names — empty means the official one.
     /// It decides whether that route can mint a key THIS set accepts, which
     /// depends on the page's domain rather than on the route (spec 075).
     signer_page: String,
@@ -520,13 +520,13 @@ pub struct CreateView {
     /// the rest must come from. `None` before there is a key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_relying_party: Option<String>,
-    /// The page that relying party lives on, when it is a Clear Signer page —
+    /// The page that relying party lives on, when it is a Trusted Signer page —
     /// so a shell can say WHICH page the remaining keys must be minted on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_signer_origin: Option<String>,
     /// Which methods may still mint a key for this set. Every method while the
     /// set is empty; afterwards only those that would mint for the relying
-    /// party it committed to — which for the Clear Signer depends on the page
+    /// party it committed to — which for the Trusted Signer depends on the page
     /// Settings names, not on the route.
     pub add_methods: Vec<KeyMethod>,
     /// Why the others are not offered, when some are missing. A sentence a
@@ -691,7 +691,7 @@ impl App for CreateWallet {
                             .as_deref()
                             .is_some_and(|origin| !origin.is_empty())
                         {
-                            KeyMethod::ClearSigner
+                            KeyMethod::TrustedSigner
                         } else {
                             crate::passkey::reported_method(
                                 &draft.authenticator_attachment,

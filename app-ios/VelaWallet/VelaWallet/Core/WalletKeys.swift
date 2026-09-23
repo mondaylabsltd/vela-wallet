@@ -32,7 +32,7 @@ final class WalletKeys {
         let publicKeyHex: String
         let name: String
         let transports: String
-        /// Spec 075: the Clear Signer page this key lives behind; empty when it
+        /// Spec 075: the Trusted Signer page this key lives behind; empty when it
         /// lives behind none. The core needs it to caption the row at all — a
         /// page runs its ceremony in a browser, so the authenticator reports
         /// `platform`, and a row that believed the report said "this device"
@@ -54,9 +54,9 @@ final class WalletKeys {
         var attestationHex = ""
         /// The authenticator verified the person at registration; `nil` = nobody can vouch.
         var userVerified: Bool?
-        /// Spec 075: the Clear Signer page this key lives behind, as the core
+        /// Spec 075: the Trusted Signer page this key lives behind, as the core
         /// returned it; empty when the row is not behind one (the field is
-        /// absent on the wire then). The row's method already says `clearSigner`
+        /// absent on the wire then). The row's method already says `trustedSigner`
         /// in that case — this says WHICH page.
         var signerOrigin = ""
     }
@@ -86,7 +86,7 @@ final class WalletKeys {
     /// label, so only key 0 — whose name IS the wallet's — arrives named; the
     /// registry's metadata names the rest.
     ///
-    /// Each key's Clear Signer page comes along (spec 075). It is read through
+    /// Each key's Trusted Signer page comes along (spec 075). It is read through
     /// `keyRoutesJson`, which already lifts `signer_origin` off the same record
     /// for the signing route: one reader of the record means the row and the
     /// ceremony cannot disagree about where a key lives.
@@ -104,7 +104,7 @@ final class WalletKeys {
         }
     }
 
-    /// Each founding key's Clear Signer page, by credential id; a key behind no
+    /// Each founding key's Trusted Signer page, by credential id; a key behind no
     /// page is simply absent. Keyed rather than positional — the route list and
     /// the key list come off one record but not through one filter, and a
     /// mismatch by one would hand a key somebody else's page.
@@ -189,7 +189,7 @@ final class WalletKeys {
                 credentialId: text("credential_id"),
                 attestationHex: text("attestation_hex"),
                 userVerified: (key["user_verified"] as? NSNumber)?.boolValue,
-                // Absent on the wire for every row but a Clear Signer's.
+                // Absent on the wire for every row but a Trusted Signer's.
                 signerOrigin: text("signer_origin")
             )
         }

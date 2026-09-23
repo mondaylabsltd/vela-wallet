@@ -104,7 +104,7 @@ pub enum ShellOperation {
         #[serde(default)]
         method: KeyMethod,
         purpose: ProofPurpose,
-        /// Spec 075: with `method = clear_signer`, the page the key lives
+        /// Spec 075: with `method = trusted_signer`, the page the key lives
         /// behind (the sign-in's own). `None` on every other route.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         signer_origin: Option<String>,
@@ -152,7 +152,7 @@ pub enum ShellOperation {
         #[serde(default)]
         method: KeyMethod,
         group_public_key_hex: String,
-        /// Spec 075: with `method = clear_signer`, the page the key was just
+        /// Spec 075: with `method = trusted_signer`, the page the key was just
         /// minted behind — the membership is confirmed there. `None` on every
         /// other route.
         #[serde(default, skip_serializing_if = "Option::is_none")]

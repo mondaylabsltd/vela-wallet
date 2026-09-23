@@ -206,7 +206,7 @@ struct SignWithModel: Equatable {
         let id: String
         let title: String
         let selected: Bool
-        /// A line under the title — the Clear Signer's "what you see is what
+        /// A line under the title — the Trusted Signer's "what you see is what
         /// you sign".
         var detail: String? = nil
     }

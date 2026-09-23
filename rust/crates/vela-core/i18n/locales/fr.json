@@ -60,8 +60,8 @@
     "signing": {
       "title": "Signer avec",
       "subtitle": "Chaque signature que vous lancez dans Vela commence ici. Vous pouvez toujours choisir une autre méthode pour une seule.",
-      "pageTitle": "Page du Clear Signer",
-      "pageSubtitle": "La page qu'ouvre le Clear Signer : la page officielle, ou votre propre copie de la page sans dépendances.",
+      "pageTitle": "Page du Trusted Signer",
+      "pageSubtitle": "La page qu'ouvre le Trusted Signer : la page officielle, ou votre propre copie de la page sans dépendances.",
       "pageOfficial": "Officielle",
       "pageInvalid": "Ce n'est pas une adresse web.",
       "pageInsecure": "Utilisez une page https, ou une page sur la boucle locale de cet appareil — un navigateur ne signera nulle part ailleurs.",

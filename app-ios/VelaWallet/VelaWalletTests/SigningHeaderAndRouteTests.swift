@@ -31,13 +31,13 @@ struct SigningHeaderAndRouteTests {
             loc: loc, chainName: "Ethereum", chainDot: .red, nativeSymbol: "ETH",
             walletName: "Mine", walletAddress: "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         )
-        // Every value the core offers (spec 071 added the Clear Signer).
+        // Every value the core offers (spec 071 added the Trusted Signer).
         context.signMethods = SignPrefViewWire.initial?.offered ?? []
         let auto = SigningLive.signWith(context: context)
         #expect(auto.label == "Sign with")
         #expect(auto.value == "Automatic")
         #expect(auto.options.map(\.title)
-                == ["Automatic", "This device", "Phone or tablet", "USB security key", "Clear Signer"])
+                == ["Automatic", "This device", "Phone or tablet", "USB security key", "Trusted Signer"])
         #expect(auto.options.filter(\.selected).map(\.id) == ["auto"])
         #expect(!auto.open)
 

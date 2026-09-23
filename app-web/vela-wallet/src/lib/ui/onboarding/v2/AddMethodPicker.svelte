@@ -13,7 +13,7 @@
 	 * and must honour the choice, which is why it travels through the core
 	 * rather than being decided here.
 	 *
-	 * The fourth is not a place a passkey is: the Clear Signer (spec 075) is a
+	 * The fourth is not a place a passkey is: the Trusted Signer (spec 075) is a
 	 * passkey route of our own — a page that shows what it is about to do and
 	 * runs the ceremony there, on this device or on another one. The executor
 	 * sends it to the page instead of the browser's sheet.
@@ -22,7 +22,7 @@
 	 * belongs to the same relying party — the registry files a unit under one
 	 * `rpId` — so a route that would mint for a different one cannot add to
 	 * THIS set. Such a row stays, disabled, with `blocked`'s sentence under the
-	 * list: a row that vanished could not say that the Clear Signer's page is a
+	 * list: a row that vanished could not say that the Trusted Signer's page is a
 	 * setting the person can change.
 	 */
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
@@ -45,19 +45,19 @@
 	const METHODS: KeyMethod[] = ['platform', 'hybrid', 'security_key'];
 
 	/**
-	 * The core offers `clear_signer` to every shell; this one cannot open a
-	 * Clear Signer page at all (owner, 2026-09-23), so it is never drawn here.
+	 * The core offers `trusted_signer` to every shell; this one cannot open a
+	 * Trusted Signer page at all (owner, 2026-09-23), so it is never drawn here.
 	 *
 	 * Filtered rather than trusted-not-to-appear: `allowed` comes from the
 	 * core, and a wallet whose only key was minted on a page could otherwise be
 	 * created from a browser that can never sign with it again.
 	 */
 	const offered: KeyMethod[] = $derived(
-		(allowed ?? METHODS).filter((m) => m !== 'clear_signer')
+		(allowed ?? METHODS).filter((m) => m !== 'trusted_signer')
 	);
 
 	/**
-	 * What this wallet's keys belong to, and — when the configured Clear Signer
+	 * What this wallet's keys belong to, and — when the configured Trusted Signer
 	 * page is the thing that does not fit — which page it is and what a key
 	 * from it would belong to instead.
 	 *

@@ -166,40 +166,40 @@ enum I18nKeys {
         static let notDiscoverableBody = "onboarding.common.notDiscoverableBody"
     }
 
-    /// Spec 075: the Clear Signer, where the onboarding surface meets it.
+    /// Spec 075: the Trusted Signer, where the onboarding surface meets it.
     ///
     /// These live under `componentsUi.signing.*` rather than under
     /// `onboarding.create.*` because they are the SAME sentences the signing
     /// sheet's "Sign with" row shows — one route, one pair of words, whether
     /// a person meets it while creating a wallet or while spending from it.
-    enum ClearSigner {
-        static let title = "componentsUi.signing.clearSignerTitle"
-        static let body = "componentsUi.signing.clearSignerBody"
-        static let whereIsIt = "componentsUi.signing.clearSignerWhere"
-        static let thisDevice = "componentsUi.signing.clearSignerThisDevice"
-        static let otherDevice = "componentsUi.signing.clearSignerOtherDevice"
-        static let pair = "componentsUi.signing.clearSignerPair"
-        static let pairHint = "componentsUi.signing.clearSignerPairHint"
-        static let pairWaiting = "componentsUi.signing.clearSignerPairWaiting"
-        static let copyLink = "componentsUi.signing.clearSignerCopyLink"
-        static let code = "componentsUi.signing.clearSignerCode"
-        static let codeConfirm = "componentsUi.signing.clearSignerCodeConfirm"
-        static let tunnelDown = "componentsUi.signing.clearSignerTunnelDown"
+    enum TrustedSigner {
+        static let title = "componentsUi.signing.trustedSignerTitle"
+        static let body = "componentsUi.signing.trustedSignerBody"
+        static let whereIsIt = "componentsUi.signing.trustedSignerWhere"
+        static let thisDevice = "componentsUi.signing.trustedSignerThisDevice"
+        static let otherDevice = "componentsUi.signing.trustedSignerOtherDevice"
+        static let pair = "componentsUi.signing.trustedSignerPair"
+        static let pairHint = "componentsUi.signing.trustedSignerPairHint"
+        static let pairWaiting = "componentsUi.signing.trustedSignerPairWaiting"
+        static let copyLink = "componentsUi.signing.trustedSignerCopyLink"
+        static let code = "componentsUi.signing.trustedSignerCode"
+        static let codeConfirm = "componentsUi.signing.trustedSignerCodeConfirm"
+        static let tunnelDown = "componentsUi.signing.trustedSignerTunnelDown"
 
         /// Spec 075 T041, the nearby route. `nearbyHint` carries the
         /// foreground rule (PROTOCOL.md §1) rather than having a line of its
         /// own: it is one fact, and it has to be read before the route is
         /// chosen, not after the page has failed to find the phone.
-        static let nearby = "componentsUi.signing.clearSignerNearby"
-        static let nearbyHint = "componentsUi.signing.clearSignerNearbyHint"
+        static let nearby = "componentsUi.signing.trustedSignerNearby"
+        static let nearbyHint = "componentsUi.signing.trustedSignerNearbyHint"
         /// Takes `name` — what the advert is carrying.
-        static let nearbyName = "componentsUi.signing.clearSignerNearbyName"
-        static let bluetoothNeeded = "componentsUi.signing.clearSignerBluetoothNeeded"
+        static let nearbyName = "componentsUi.signing.trustedSignerNearbyName"
+        static let bluetoothNeeded = "componentsUi.signing.trustedSignerBluetoothNeeded"
         /// The radio is off — the one state where "turn it on" is useful.
-        static let bluetoothOff = "componentsUi.signing.clearSignerBluetoothOff"
+        static let bluetoothOff = "componentsUi.signing.trustedSignerBluetoothOff"
         /// No peripheral role here, or it would not come up: names the other
         /// two routes instead of advice that cannot work.
-        static let bluetoothUnsupported = "componentsUi.signing.clearSignerBluetoothUnsupported"
+        static let bluetoothUnsupported = "componentsUi.signing.trustedSignerBluetoothUnsupported"
     }
 
     enum Settings {
@@ -237,13 +237,13 @@ enum I18nKeys {
         Create.methodSecurityKeyTitle, Create.methodSecurityKeyBody,
         Create.methodBlockedHint, Create.methodBlockedSigner,
         Create.providerPlatform, Create.providerGeneric, Create.providerSecurityKey,
-        ClearSigner.title, ClearSigner.body, ClearSigner.whereIsIt,
-        ClearSigner.thisDevice, ClearSigner.otherDevice,
-        ClearSigner.pair, ClearSigner.pairHint, ClearSigner.pairWaiting,
-        ClearSigner.copyLink, ClearSigner.code, ClearSigner.codeConfirm,
-        ClearSigner.tunnelDown, ClearSigner.nearby, ClearSigner.nearbyHint,
-        ClearSigner.nearbyName, ClearSigner.bluetoothNeeded, ClearSigner.bluetoothOff,
-        ClearSigner.bluetoothUnsupported,
+        TrustedSigner.title, TrustedSigner.body, TrustedSigner.whereIsIt,
+        TrustedSigner.thisDevice, TrustedSigner.otherDevice,
+        TrustedSigner.pair, TrustedSigner.pairHint, TrustedSigner.pairWaiting,
+        TrustedSigner.copyLink, TrustedSigner.code, TrustedSigner.codeConfirm,
+        TrustedSigner.tunnelDown, TrustedSigner.nearby, TrustedSigner.nearbyHint,
+        TrustedSigner.nearbyName, TrustedSigner.bluetoothNeeded, TrustedSigner.bluetoothOff,
+        TrustedSigner.bluetoothUnsupported,
         Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,

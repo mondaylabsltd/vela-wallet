@@ -49,7 +49,7 @@ use crate::outcome::{ActionId, Prompt, SHEET_PAD, SHEET_RADIUS, SHEET_W, outcome
 use crate::passkey_directory::{self, PasskeyDirectory};
 use crate::passkey_icons::PasskeyIconCache;
 use crate::session;
-use crate::signing::clear_signer as clear_signer_cards;
+use crate::signing::trusted_signer as trusted_signer_cards;
 use crate::theme::{
     self, CONTENT_PAD_X, CONTENT_PAD_Y, FLOW_COLUMN_W, FLOW_GAP_LG, FLOW_GAP_MD, GAP_HERO_CTA,
     GAP_HERO_SUB, GAP_WELCOME_CTA, Theme, ThemeMode,
@@ -170,7 +170,7 @@ pub struct OnboardingPage {
 /// The screen going away ends everything it was waiting on.
 ///
 /// The ceremony channel's `close` releases a PIN wait and stops a caBLE scan;
-/// spec 075 added a third thing to it — a Clear Signer page visit, which holds
+/// spec 075 added a third thing to it — a Trusted Signer page visit, which holds
 /// a bound loopback port (or a relay room) and leaves a browser tab saying
 /// "waiting for the wallet" in front of an app that is no longer asking for
 /// anything.
@@ -312,14 +312,14 @@ impl OnboardingPage {
             .create
             .dispatch(vela_core::app::create_wallet::Event::Start);
         self.pump_create(pending, cx);
-        // Spec 075: which Clear Signer page Settings names decides whether that
+        // Spec 075: which Trusted Signer page Settings names decides whether that
         // route can mint a key THIS set accepts — a key made on a page belongs
         // to that page's domain, and a wallet's keys all belong to one relying
         // party. The core cannot read the store.
         let pending =
             self.create
                 .dispatch(vela_core::app::create_wallet::Event::SignerPageChanged {
-                    url: crate::executor::clear_signer::signer_url(),
+                    url: crate::executor::trusted_signer::signer_url(),
                 });
         self.pump_create(pending, cx);
         cx.notify();
@@ -495,18 +495,18 @@ impl OnboardingPage {
 
     /// One poll. Returns whether to keep polling.
     fn tick(&mut self, cx: &mut Context<Self>) -> bool {
-        // Spec 075: a Clear Signer attempt on this device asked for its page.
+        // Spec 075: a Trusted Signer attempt on this device asked for its page.
         // `cx.open_url` is the only thing in that conversation the ceremony
         // thread cannot do for itself.
-        let clear_signer = self.channel.clear_signer();
-        if let Some(url) = clear_signer.take_page() {
+        let trusted_signer = self.channel.trusted_signer();
+        if let Some(url) = trusted_signer.take_page() {
             cx.open_url(&url);
         }
         // The name the page puts on its ceremony card — how a person
         // recognises their own wallet on a screen the wallet does not draw.
         // A sign-in has none to give, by definition.
         let naming = self.create.view().name;
-        clear_signer.describe((!naming.trim().is_empty()).then_some(naming));
+        trusted_signer.describe((!naming.trim().is_empty()).then_some(naming));
         if let Some(request) = self.channel.pending_pin() {
             if self
                 .pin
@@ -532,14 +532,14 @@ impl OnboardingPage {
         let busy = !self.create.is_idle() || !self.login.is_idle();
         cx.notify();
         if !busy {
-            // Spec 075: nothing more will be asked of the Clear Signer, so the
+            // Spec 075: nothing more will be asked of the Trusted Signer, so the
             // page visit a flow was holding open is over — the port goes and
             // the page leaves its "waiting for the wallet" card. A plain
             // sign-in ends here (a recovery's second proof does not, and is
             // still pending while its consent prompt is on screen), and
             // without this its tab would sit waiting out its own five
             // minutes.
-            clear_signer.end_flow();
+            trusted_signer.end_flow();
             // Only clears the flag. The task ends because this returns `false`.
             self.watching = false;
         }
@@ -836,22 +836,26 @@ impl OnboardingPage {
         )
     }
 
-    /// Spec 075: the Clear Signer's own dialogs during a create or a sign-in —
+    /// Spec 075: the Trusted Signer's own dialogs during a create or a sign-in —
     /// where the signer is, the cross-device pairing and its code, the wait,
     /// and how the last attempt ended.
     ///
-    /// The same cards the signing sheet draws (`signing::clear_signer`), and
+    /// The same cards the signing sheet draws (`signing::trusted_signer`), and
     /// for the same reason the cable's dialogs are shared: a person creating a
     /// wallet on a page and a person signing a send on one are looking at the
     /// same moment.
-    fn clear_signer_prompt(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
-        let channel = self.channel.clear_signer();
+    fn trusted_signer_prompt(
+        &self,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Option<Stateful<Div>> {
+        let channel = self.channel.trusted_signer();
         if !(channel.waiting() || channel.ended().is_some()) {
             return None;
         }
         let card = if channel.waiting() {
             let (reopen, cancel) = (Arc::clone(&channel), Arc::clone(&channel));
-            clear_signer_cards::waiting_card(
+            trusted_signer_cards::waiting_card(
                 theme,
                 &self.loc,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| reopen.reopen(),
@@ -860,7 +864,7 @@ impl OnboardingPage {
         } else {
             let refusal = channel.ended()?;
             let forget = Arc::clone(&channel);
-            clear_signer_cards::ended_card(
+            trusted_signer_cards::ended_card(
                 theme,
                 &self.loc,
                 refusal,
@@ -868,7 +872,7 @@ impl OnboardingPage {
             )
         };
         let _ = cx;
-        Some(scrim(theme, "clear-signer-scrim").child(card))
+        Some(scrim(theme, "trusted-signer-scrim").child(card))
     }
 
     /// The caBLE QR, while a hybrid ceremony waits for the phone to scan it. It
@@ -1364,7 +1368,7 @@ impl Render for OnboardingPage {
             root = root.child(dialog);
         }
         // Last, so it sits over the method picker it was opened from.
-        if let Some(prompt) = self.clear_signer_prompt(&theme, cx) {
+        if let Some(prompt) = self.trusted_signer_prompt(&theme, cx) {
             root = root.child(prompt);
         }
 

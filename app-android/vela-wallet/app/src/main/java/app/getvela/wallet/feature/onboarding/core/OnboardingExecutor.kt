@@ -9,8 +9,8 @@ import java.util.TimeZone
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
-import uniffi.vela_core_uniffi.ClearSignerCeremonyOutcome
-import uniffi.vela_core_uniffi.clearSignerCeremonyRequest
+import uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
+import uniffi.vela_core_uniffi.trustedSignerCeremonyRequest
 import uniffi.vela_core_uniffi.registryBuildGroupProof
 import uniffi.vela_core_uniffi.registryBuildMemberProof
 import uniffi.vela_core_uniffi.registryGroupPublicKeyFromSeed
@@ -51,13 +51,13 @@ class OnboardingExecutor(
     private val store: AccountStore,
     private val deps: Deps,
     /**
-     * Spec 075: the Clear Signer, when this surface can open one. A ceremony
-     * whose `method` is `clear_signer` runs THERE instead of on the platform's
+     * Spec 075: the Trusted Signer, when this surface can open one. A ceremony
+     * whose `method` is `trusted_signer` runs THERE instead of on the platform's
      * sheet — the page derives the challenge, shows what is being signed, and
      * runs the WebAuthn ceremony itself. `null` on surfaces with no way to
      * open a page (previews, the gallery).
      */
-    private val clearSigner: ClearSignerCeremonies? = null,
+    private val trustedSigner: TrustedSignerCeremonies? = null,
 ) {
     /** The two operations whose outside world is the user interface itself. */
     interface Deps {
@@ -72,7 +72,7 @@ class OnboardingExecutor(
         suspend fun complete(mode: JSONObject)
 
         /**
-         * Spec 075: the wallet's name, as the Clear Signer page shows it
+         * Spec 075: the wallet's name, as the Trusted Signer page shows it
          * ("create a key for 〈name〉"). Empty when the flow has none yet.
          */
         fun walletName(): String = ""
@@ -125,10 +125,10 @@ class OnboardingExecutor(
 
             "register_passkey" -> {
                 val method = KeyMethod.of(operation.optString("method", KeyMethod.Platform.wire))
-                // Spec 075: the Clear Signer mints the key on its own page and
+                // Spec 075: the Trusted Signer mints the key on its own page and
                 // the core hands back the machine's own `Registration` — which
                 // carries `signer_origin`, so the key remembers where it lives.
-                val wire = if (method == KeyMethod.ClearSigner) {
+                val wire = if (method == KeyMethod.TrustedSigner) {
                     registered(onPage(operation))
                 } else {
                     val registration = passkey.register(
@@ -153,9 +153,9 @@ class OnboardingExecutor(
                 val wire = operation.optString("method")
                 // The route the person signed in with. Recovery's second
                 // signature over caBLE goes back to the same phone; one made
-                // on a Clear Signer page goes back to that page.
+                // on a Trusted Signer page goes back to that page.
                 val method = if (wire.isEmpty()) KeyMethod.Platform else KeyMethod.of(wire)
-                val proof = if (method == KeyMethod.ClearSigner) {
+                val proof = if (method == KeyMethod.TrustedSigner) {
                     asserted(onPage(operation))
                 } else {
                     passkey.assert(
@@ -189,15 +189,15 @@ class OnboardingExecutor(
                 // exactly this credential, assemble the proof in the core. The
                 // publish later replays it without another prompt.
                 // The rpId is the KEY's, not this app's. A key minted on a
-                // Clear Signer page belongs to that page's domain — a browser
+                // Trusted Signer page belongs to that page's domain — a browser
                 // lets a page mint passkeys for nothing else — so asking the
                 // registry under `getvela.app` for a key that lives on
                 // `localhost` returns a challenge the page could not have
                 // derived, and the wallet then refuses its own key's proof
-                // ("the Clear Signer's answer does not match this request").
+                // ("the Trusted Signer's answer does not match this request").
                 // Found on the phone 2026-09-22 and again over BLE the next
                 // day; the rule is the core's so no shell reads it differently.
-                val keyRpId = uniffi.vela_core_uniffi.clearSignerRegistryRpId(
+                val keyRpId = uniffi.vela_core_uniffi.trustedSignerRegistryRpId(
                     operation.optString("signer_origin").ifEmpty { null },
                 ) ?: passkey.relyingPartyId
                 val challenge = registry.memberChallenge(
@@ -209,11 +209,11 @@ class OnboardingExecutor(
                 val memberWire = operation.optString("method")
                 // The route that minted this key confirms it — a key created
                 // on the phone over caBLE is confirmed on that phone, one
-                // created on a Clear Signer page on that page.
+                // created on a Trusted Signer page on that page.
                 val memberMethod =
                     if (memberWire.isEmpty()) KeyMethod.Platform else KeyMethod.of(memberWire)
                 val bytes = uniffi.vela_core_uniffi.fromHex(stripHex(challenge))
-                val assertion = if (memberMethod == KeyMethod.ClearSigner) {
+                val assertion = if (memberMethod == KeyMethod.TrustedSigner) {
                     // The page fetches its own challenge from the registry for
                     // the inputs it displays; the core refuses the answer
                     // unless it equals the one the WALLET fetched here.
@@ -241,7 +241,7 @@ class OnboardingExecutor(
                 // Spec 075: the page asks the person to pick their key and
                 // signs a challenge IT derived (`vela-signin-…`), so a sign-in
                 // can never be a transaction hash in disguise.
-                val proof = if (method == KeyMethod.ClearSigner) {
+                val proof = if (method == KeyMethod.TrustedSigner) {
                     asserted(onPage(operation))
                 } else {
                     passkey.assert(passkey.random(CHALLENGE_BYTES), null, method = method).toWire()
@@ -367,7 +367,7 @@ class OnboardingExecutor(
         // across sites could never be proved. The core decides it, and refuses
         // a mixed set here rather than writing a unit nobody can prove.
         val unitRpId = try {
-            uniffi.vela_core_uniffi.clearSignerUnitRpId(
+            uniffi.vela_core_uniffi.trustedSignerUnitRpId(
                 members.map { it.signerOrigin.ifEmpty { null } },
                 passkey.relyingPartyId,
             )
@@ -395,14 +395,14 @@ class OnboardingExecutor(
                         network = false,
                     )
                 val bytes = uniffi.vela_core_uniffi.fromHex(stripHex(memberChallenge))
-                // Spec 075: a wallet signed into through the Clear Signer proves
+                // Spec 075: a wallet signed into through the Trusted Signer proves
                 // its members there too — the key is behind that page and no
                 // provider on this device holds it. `RegistryPublishMember`
                 // carries no `signer_origin`, so the page comes from the stored
                 // key record instead; an unknown key falls back to the person's
                 // own page, which is right for a `getvela.app` key and the only
                 // guess available for anything else.
-                val assertion = if (method == KeyMethod.ClearSigner) {
+                val assertion = if (method == KeyMethod.TrustedSigner) {
                     assertionOf(
                         asserted(
                             onPage(
@@ -452,20 +452,20 @@ class OnboardingExecutor(
         registry.awaitTask(id)
     }
 
-    // -- spec 075: the Clear Signer as a passkey route -----------------------
+    // -- spec 075: the Trusted Signer as a passkey route -----------------------
 
     /**
-     * Run this operation's ceremony on the Clear Signer instead of on the
+     * Run this operation's ceremony on the Trusted Signer instead of on the
      * platform's sheet.
      *
-     * The request is the CORE's (`clearSignerCeremonyRequest` over the
+     * The request is the CORE's (`trustedSignerCeremonyRequest` over the
      * operation's own wire JSON), so nothing here decides what the page is
      * asked or how a challenge is derived; the answer comes back already
      * judged. [expectedMemberChallenge] is the registry challenge this
      * executor fetched, which a member proof's answer must match exactly.
      */
     /**
-     * The Clear Signer page a stored key lives behind, or empty.
+     * The Trusted Signer page a stored key lives behind, or empty.
      *
      * A lookup of a fact this device wrote down, not a decision: the create and
      * sign-in machines stamped `signer_origin` on the key record, and the one
@@ -489,21 +489,21 @@ class OnboardingExecutor(
     private suspend fun onPage(
         operation: JSONObject,
         expectedMemberChallenge: ByteArray? = null,
-    ): ClearSignerCeremonyOutcome {
-        val signer = clearSigner ?: throw PasskeyFailure(
+    ): TrustedSignerCeremonyOutcome {
+        val signer = trustedSigner ?: throw PasskeyFailure(
             FailureKind.NotSupported,
-            "The Clear Signer cannot be opened here",
+            "The Trusted Signer cannot be opened here",
         )
         val operationJson = operation.toString()
         val id = toHex(passkey.random(CEREMONY_ID_BYTES), false)
-        val request = clearSignerCeremonyRequest(
+        val request = trustedSignerCeremonyRequest(
             operationJson,
             id,
             deps.walletName(),
             registry.baseUrl,
         ) ?: throw PasskeyFailure(
             FailureKind.Other,
-            "This step cannot run on the Clear Signer",
+            "This step cannot run on the Trusted Signer",
         )
         return signer.run(
             requestJson = request,
@@ -520,14 +520,14 @@ class OnboardingExecutor(
      * channel throws the [PasskeyFailure] the executor's failure contract
      * already answers every ceremony's failure in.
      */
-    private fun registered(outcome: ClearSignerCeremonyOutcome): JSONObject = when (outcome) {
-        is ClearSignerCeremonyOutcome.Registered -> wire(outcome.registrationJson)
-        else -> throw PasskeyFailure(FailureKind.Other, "The Clear Signer did not create a key")
+    private fun registered(outcome: TrustedSignerCeremonyOutcome): JSONObject = when (outcome) {
+        is TrustedSignerCeremonyOutcome.Registered -> wire(outcome.registrationJson)
+        else -> throw PasskeyFailure(FailureKind.Other, "The Trusted Signer did not create a key")
     }
 
-    private fun asserted(outcome: ClearSignerCeremonyOutcome): JSONObject = when (outcome) {
-        is ClearSignerCeremonyOutcome.Asserted -> wire(outcome.assertionJson)
-        else -> throw PasskeyFailure(FailureKind.Other, "The Clear Signer did not sign")
+    private fun asserted(outcome: TrustedSignerCeremonyOutcome): JSONObject = when (outcome) {
+        is TrustedSignerCeremonyOutcome.Asserted -> wire(outcome.assertionJson)
+        else -> throw PasskeyFailure(FailureKind.Other, "The Trusted Signer did not sign")
     }
 
     /**
@@ -537,7 +537,7 @@ class OnboardingExecutor(
      * `JSONException` nobody on this path catches.
      */
     private fun wire(json: String): JSONObject = runCatching { JSONObject(json) }.getOrElse {
-        throw PasskeyFailure(FailureKind.Other, "The Clear Signer's answer could not be read")
+        throw PasskeyFailure(FailureKind.Other, "The Trusted Signer's answer could not be read")
     }
 
     /** The machine's `Assertion` wire, back as the shell's own value. */
@@ -713,7 +713,7 @@ private fun JSONArray?.strings(): List<String> =
     if (this == null) emptyList() else (0 until length()).map { optString(it) }
 
 /**
- * Spec 075: the Clear Signer, as onboarding sees it — one passkey ceremony on
+ * Spec 075: the Trusted Signer, as onboarding sees it — one passkey ceremony on
  * a page, and its verdict.
  *
  * A port rather than the channel itself, so the onboarding executor keeps
@@ -722,11 +722,11 @@ private fun JSONArray?.strings(): List<String> =
  * already classifies every ceremony's failure in: a closed page is
  * `Cancelled`, anything else carries the sentence to show.
  */
-fun interface ClearSignerCeremonies {
+fun interface TrustedSignerCeremonies {
     suspend fun run(
         requestJson: String,
         operationJson: String,
         expectedMemberChallenge: ByteArray?,
         signerOrigin: String,
-    ): uniffi.vela_core_uniffi.ClearSignerCeremonyOutcome
+    ): uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
 }

@@ -25,7 +25,7 @@ authenticator_attachment: string, transports: string,
  */
 proof: RegistryProof | null, 
 /**
- * Spec 075: the Clear Signer page this member lives behind, when it does.
+ * Spec 075: the Trusted Signer page this member lives behind, when it does.
  * The re-publish signs a member with no replayable proof LIVE, and that
  * signature has to reach the page holding the key — not whichever page
  * Settings names (Android, 075 phase C, found this missing).
