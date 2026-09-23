@@ -3177,6 +3177,28 @@ export function clearSignerDefaultUrl() {
 }
 
 /**
+ * The relying party a key minted behind `signerOrigin` belongs to, or `null`
+ * for a key this wallet's own authenticators made (spec 075).
+ *
+ * A key made on a Clear Signer page is signed under THAT page's domain, so a
+ * challenge fetched under the wallet's own would never match the answer —
+ * 「清晰签名器的回复与这笔请求不符」, which is how both phones found this.
+ * @param {string | null} [signer_origin]
+ * @returns {string | undefined}
+ */
+export function clearSignerRegistryRpId(signer_origin) {
+    var ptr0 = isLikeNone(signer_origin) ? 0 : passStringToWasm0(signer_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len0 = WASM_VECTOR_LEN;
+    const ret = wasm.clearSignerRegistryRpId(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * @param {string} signer_url
  * @param {string} relay
  * @param {string} room
@@ -3287,6 +3309,43 @@ export function clearSignerRequest(input_json) {
         return getStringFromWasm0(ptr2, len2);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The ONE relying party a unit is filed under, or an error naming the parties
+ * found when its members do not agree (ruling, 2026-09-23).
+ *
+ * The registry stores a single `rpId` per unit and every member proves under
+ * its own, so a mixed set is refused here rather than written and never
+ * provable.
+ * `member_origins_json` is a JSON array of each member's signer origin, with
+ * `null` for a key the wallet's own authenticators made — wasm-bindgen has no
+ * `Vec<Option<String>>`, and the phones pass the same shape.
+ * @param {string} member_origins_json
+ * @param {string} wallet_rp_id
+ * @returns {string}
+ */
+export function clearSignerUnitRpId(member_origins_json, wallet_rp_id) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(member_origins_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(wallet_rp_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.clearSignerUnitRpId(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 

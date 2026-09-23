@@ -704,6 +704,16 @@ export function clearSignerDefaultRelay(): string;
 
 export function clearSignerDefaultUrl(): string;
 
+/**
+ * The relying party a key minted behind `signerOrigin` belongs to, or `null`
+ * for a key this wallet's own authenticators made (spec 075).
+ *
+ * A key made on a Clear Signer page is signed under THAT page's domain, so a
+ * challenge fetched under the wallet's own would never match the answer —
+ * 「清晰签名器的回复与这笔请求不符」, which is how both phones found this.
+ */
+export function clearSignerRegistryRpId(signer_origin?: string | null): string | undefined;
+
 export function clearSignerRelayLink(signer_url: string, relay: string, room: string, rk: string): string;
 
 /**
@@ -726,6 +736,19 @@ export function clearSignerRelayUrl(input: string): string | undefined;
  * and an empty `method` — the wallet's own send — makes them the intent.
  */
 export function clearSignerRequest(input_json: string): string;
+
+/**
+ * The ONE relying party a unit is filed under, or an error naming the parties
+ * found when its members do not agree (ruling, 2026-09-23).
+ *
+ * The registry stores a single `rpId` per unit and every member proves under
+ * its own, so a mixed set is refused here rather than written and never
+ * provable.
+ * `member_origins_json` is a JSON array of each member's signer origin, with
+ * `null` for a key the wallet's own authenticators made — wasm-bindgen has no
+ * `Vec<Option<String>>`, and the phones pass the same shape.
+ */
+export function clearSignerUnitRpId(member_origins_json: string, wallet_rp_id: string): string;
 
 /**
  * The address normalised, or throws `"invalid"` / `"insecure"`.
@@ -1156,11 +1179,13 @@ export interface InitOutput {
     readonly clearSignerCeremonyRequest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly clearSignerDefaultRelay: () => [number, number];
     readonly clearSignerDefaultUrl: () => [number, number];
+    readonly clearSignerRegistryRpId: (a: number, b: number) => [number, number];
     readonly clearSignerRelayLink: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly clearSignerRelayRoom: (a: number, b: number) => [number, number];
     readonly clearSignerRelayRoomUrl: (a: number, b: number, c: number, d: number) => [number, number];
     readonly clearSignerRelayUrl: (a: number, b: number) => [number, number];
     readonly clearSignerRequest: (a: number, b: number) => [number, number, number, number];
+    readonly clearSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly clearSignerUrl: (a: number, b: number) => [number, number, number, number];
     readonly clearSignerUsesWalletPasskeys: (a: number, b: number) => number;
     readonly clearSignerVerify: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];

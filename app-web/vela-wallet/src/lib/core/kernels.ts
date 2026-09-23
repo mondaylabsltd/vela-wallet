@@ -694,6 +694,30 @@ export function clearSignerUsesWalletPasskeys(url: string): boolean {
 	return wasm.clearSignerUsesWalletPasskeys(url);
 }
 
+/**
+ * The relying party a key minted behind `signerOrigin` belongs to, `null` for
+ * a key this wallet's own authenticators made (spec 075).
+ *
+ * A key made on a page is signed under THAT page's domain, so a challenge
+ * fetched under the wallet's own could never match the answer — which is what
+ * 「清晰签名器的回复与这笔请求不符」 means, and how both phones found it.
+ */
+export function clearSignerRegistryRpId(signerOrigin: string | null): string | null {
+	return wasm.clearSignerRegistryRpId(signerOrigin ?? undefined) ?? null;
+}
+
+/**
+ * The ONE relying party a unit is filed under (ruling, 2026-09-23), or a throw
+ * naming the parties found when its members do not agree — refused here rather
+ * than written on chain and never provable.
+ */
+export function clearSignerUnitRpId(
+	memberOrigins: (string | null)[],
+	walletRpId: string
+): string {
+	return translated(() => wasm.clearSignerUnitRpId(JSON.stringify(memberOrigins), walletRpId));
+}
+
 // ---------------------------------------------------------------------------
 // The Clear Signer across devices (spec 075, contracts/relay.md) — the room,
 // its address and the pairing link are the core's; the session inside the room

@@ -194,14 +194,21 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             method,
             group_public_key_hex,
             // Spec 075: as on `SignProof` — the page the key was minted
-            // behind, read by `clear_signer::run_ceremony`.
-            signer_origin: _,
+            // behind, read by `clear_signer::run_ceremony`, and the relying
+            // party this member's challenge must be fetched under.
+            signer_origin,
         } => {
+            let member_rp = vela_core::clear_signer::registry_rp_id(signer_origin.as_deref())
+                .unwrap_or_else(|| passkey::RELYING_PARTY.to_owned());
             // Mixed failure modes: the challenge fetch and the ceremony can each
             // fail, and the core branches differently on the two. Classify by
             // what actually failed rather than by which operation it was.
-            match registry::member_challenge(group_public_key_hex, public_key_hex, attestation_hex)
-            {
+            match registry::member_challenge(
+                &member_rp,
+                group_public_key_hex,
+                public_key_hex,
+                attestation_hex,
+            ) {
                 Err(error) => index_failed(error),
                 Ok(challenge) => match primitives::from_hex(&challenge) {
                     Err(error) => ShellResult::IndexFailed {

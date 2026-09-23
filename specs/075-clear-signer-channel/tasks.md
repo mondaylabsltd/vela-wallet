@@ -81,10 +81,24 @@ the page's own code.
   machine and over the relay across machines, so BLE only adds a third road to
   the same place, and a peripheral role from Rust needs raw `objc2-core-bluetooth`.
   Worth a ruling before anyone spends the day on it.
-- [ ] T043 real-radio pass — **nothing here has met an actual link.** No `adb`,
-  no hardware: a `BluetoothGattServer` only exists on a phone and a simulator
-  has no peripheral stack. Advertising, MTU negotiation, CCCD subscription and
-  Chrome's chooser are all unverified.
+- [x] T043 real-radio pass — **Android, 2026-09-22**: advertise → Chrome's
+  chooser → GATT connect → MTU 517 → handshake → matching six digits →
+  request → answer → `verdict` → `core.result passkey_registered`. Five
+  defects fell out of it, below.
+  **iOS, 2026-09-23** (iPhone 11, iOS 26.5.2, page at `http://localhost:8140`
+  in Chrome on the Mac): the phone advertised, Chrome's chooser found it —
+  under the system's own name for the phone, not our `Vela · <name>` local
+  name, which is worth knowing for anyone driving the chooser — connect,
+  handshake and the six digits (`079298`) matched what the phone showed, and
+  the create request crossed and drew its card. The run then ended with the
+  member proof unanswered (`received: 1, answered: 0, endReason: bye`) because
+  the harness's deadline passed between the two cards, not because anything on
+  the link failed. The last leg — both cards confirmed in one session, the
+  answer back on the phone — is still to run.
+  Two stand-ins, as on Android: CDP answers the native device chooser, and the
+  page's authenticator is `softauth.js` (a real passkey there would want a
+  finger on the Mac). The radio, the MTU, the CCCD subscription, the frames,
+  the handshake and the digits are all real.
 
 ### What the framing's first users found
 

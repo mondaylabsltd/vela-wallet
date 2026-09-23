@@ -182,7 +182,13 @@ struct GroupChallenge {
 /// MEMBER-mode challenge: one founding passkey confirming AT CREATION. It binds
 /// only (groupPublicKey, own attestation), so it exists before the rest of the
 /// set does — which is what makes the interleaved create→confirm flow work.
+///
+/// `rp_id` is the MEMBER's relying party, not this app's (spec 075): a key
+/// minted on a Clear Signer page is signed under that page's domain, so a
+/// challenge fetched under `getvela.app` could never match the answer — the
+/// phones read that as 「清晰签名器的回复与这笔请求不符」.
 pub fn member_challenge(
+    rp_id: &str,
     group_public_key_hex: &str,
     public_key_hex: &str,
     attestation_hex: &str,
@@ -190,7 +196,7 @@ pub fn member_challenge(
     let value: ChallengeValue = post_json(
         "/api/challenge",
         json!({
-            "rpId": RELYING_PARTY,
+            "rpId": rp_id,
             "groupPublicKey": group_public_key_hex,
             "publicKey": public_key_hex,
             "attestation": attestation_hex,
@@ -930,10 +936,25 @@ pub fn publish(
         (seed_hex.to_owned(), group_public_key_hex.to_owned())
     };
 
+    // One relying party for the whole unit (ruling, 2026-09-23). The contract
+    // stores a single `rpId` per unit and every member's proof carries
+    // `sha256(rpId)` from its OWN authenticator, so a set spread across sites
+    // could never be proved. Refused here rather than written and unprovable.
+    let unit_rp = vela_core::clear_signer::registry_unit_rp_id(
+        &members
+            .iter()
+            .map(|member| member.signer_origin.clone())
+            .collect::<Vec<_>>(),
+        RELYING_PARTY,
+    )
+    .map_err(|found| {
+        RegistryError::answered(format!("these keys belong to different sites: {}", found.join(", ")))
+    })?;
+
     let challenge: GroupChallenge = post_json(
         "/api/challenge",
         json!({
-            "rpId": RELYING_PARTY,
+            "rpId": unit_rp,
             "metadata": metadata_hex,
             "groupPublicKey": group_public_key,
             "members": members
@@ -962,7 +983,7 @@ pub fn publish(
     // The group key silently closes over the content hash.
     let group = build_group_proof(
         &seed_hex,
-        RELYING_PARTY,
+        &unit_rp,
         strip_hex(&challenge.group_challenge.challenge),
     )
     .map_err(|error| RegistryError::answered(format!("group proof: {error}")))?;
@@ -970,7 +991,7 @@ pub fn publish(
     let accepted: Accepted = post_json(
         "/api/register",
         json!({
-            "rpId": RELYING_PARTY,
+            "rpId": unit_rp,
             "metadata": metadata_hex,
             "groupPublicKey": group_public_key,
             "groupProof": group.proof,
