@@ -178,6 +178,28 @@ try {
 	for (const [how, said] of Object.entries(tried)) {
 		check(`${how}: the page's own API says it did not go`, said !== 'REACHED', said);
 	}
+	// Spec 076 + the custom-scheme return path: is a NAVIGATION to a custom
+	// scheme governed by this CSP? `connect-src` covers fetch/XHR/beacon/ws;
+	// navigation is a different thing, and the answer decides whether the
+	// signature can come back that way at all. Measured, not assumed.
+	const scheme = await ev(
+		`(() => { try { location.href = 'vela-probe://sign-result?t=1'; return 'allowed'; }
+		  catch (e) { return 'threw ' + e.name; } })()`
+	);
+	await sleep(800);
+	const schemeViolation = violations.some((text) => /vela-probe/.test(text));
+	check(
+		'a navigation to a custom scheme is not refused by the CSP',
+		!schemeViolation,
+		schemeViolation ? violations.find((t) => /vela-probe/.test(t)) : `assignment ${scheme}`
+	);
+	// And the page is still the page: an unhandled scheme must not navigate it
+	// away, or the signing card would vanish under the person.
+	check(
+		'the page survives the attempt',
+		(await ev('typeof window.VelaCS === "object"')) === true
+	);
+
 	// The one that settles it.
 	const escaped = asked.filter((url) => url !== '/sign.html');
 	check(

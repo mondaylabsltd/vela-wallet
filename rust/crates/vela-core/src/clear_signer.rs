@@ -45,6 +45,40 @@ pub mod ws;
 /// A person may point Settings at their own deployment.
 pub const DEFAULT_SIGNER_URL: &str = "https://sign.getvela.app/";
 
+/// Where the page sends a signature back to (spec 076, owner 2026-09-23:
+/// 「我们在 android ios desktop(win linux mac) 都使用 custom schema」).
+///
+/// `velawallet://` is already registered by both phones (`CFBundleURLSchemes`,
+/// the Android intent filter) for `pay` and `open`; this is a third shape on
+/// the same door, so nothing new has to be claimed.
+///
+/// **Why a scheme and not the loopback callback it replaces.** Two measured
+/// reasons, not a preference:
+///
+/// - the published page carries `default-src` `none` INSIDE its hashed bytes,
+///   and a `WebSocket` from inside it cannot reach anything — measured, the
+///   server saw no byte. A NAVIGATION is not governed by that CSP, also
+///   measured: the page assigns `location.href` to a custom scheme with no
+///   violation, and survives when nothing handles it.
+/// - a phone app is suspended the moment the browser tab covers it, so it
+///   cannot catch a navigation to `127.0.0.1`. The OS can still hand it a
+///   scheme.
+///
+/// **What it does NOT give.** A custom scheme is not exclusive: any app may
+/// register `velawallet://`, and which one wins is a collision on Android and
+/// undefined on iOS. So this is a TRANSPORT and never an authorisation:
+///
+/// - integrity survives interception — [`verify`] accepts only a `webauthn.get`
+///   over exactly the digest this wallet computed, by a credential it holds, so
+///   a forged callback cannot be accepted;
+/// - what interception costs is availability (the wallet waits) and
+///   confidentiality (the interceptor learns the assertion and could front-run
+///   submitting the person's own operation). Worth saying out loud rather than
+///   implying the scheme is a boundary.
+///
+/// The one-time token travels with it and is checked by [`parse_callback`].
+pub const CALLBACK_URL: &str = "velawallet://sign-result";
+
 /// The "Sign with" value that routes a request to the Clear Signer, next to
 /// `platform` | `hybrid` | `security_key` (`wallet_keys::SIGN_METHODS`).
 pub const METHOD: &str = "clear_signer";
@@ -643,6 +677,38 @@ fn unpercent(text: &str) -> String {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+
+    /// The custom-scheme callback goes out in the launch URL and comes back
+    /// through `parse_callback` — one round trip, so the two halves cannot
+    /// drift apart while each looks fine on its own.
+    #[test]
+    fn a_custom_scheme_callback_survives_the_round_trip() {
+        let request = json!({ "intent": { "kind": "sign" } });
+        let launch = url_launch("https://sign.getvela.app/", &request, CALLBACK_URL, "tok-1");
+        // The callback rides in the FRAGMENT, base64url, never in a query: a
+        // query is sent to the server and logged there, and the whole point is
+        // that the server never sees what is being signed.
+        assert!(launch.contains("#i="), "{launch}");
+        assert!(
+            !launch.contains("?i="),
+            "the payload must not be in the query"
+        );
+        let encoded = URL_SAFE_NO_PAD.encode(CALLBACK_URL.as_bytes());
+        assert!(launch.contains(&format!("cb={encoded}")), "{launch}");
+
+        // What the OS hands the app back, as the page would build it.
+        let answer = json!({ "signature": "0x30" });
+        let payload = URL_SAFE_NO_PAD.encode(answer.to_string().as_bytes());
+        let query = format!("t=tok-1&result={payload}");
+        assert_eq!(parse_callback(&query, "tok-1").ok(), Some(answer));
+
+        // Another app that registered the same scheme cannot replay it: the
+        // token is this attempt's.
+        assert!(matches!(
+            parse_callback(&query, "tok-2"),
+            Err(ClearSignerError::WrongToken)
+        ));
+    }
     use super::*;
 
     /// The rpId the registry must be asked for a key that lives behind a page:
