@@ -596,6 +596,16 @@ struct RootView: View {
             #endif
         }
         .themed(scheme)
+        // 设置 → 字号, for the whole tree (spec 056 FR-011).
+        //
+        // Every screen used to have to opt in, and most never did: 228 of the
+        // app's 494 text sites — all of Settings, all of onboarding, the Clear
+        // Signer's sheets — drew at a fixed size whatever was chosen. Now the
+        // root states it once, `typeRole` reads it, and a screen with its own
+        // scale still overrides it for its subtree. Taken from the preference
+        // rather than `UiScale.factor` so the dependency is the observation,
+        // not the order two statements ran in.
+        .environment(\.walletTextScale, preferences.textScale.factor)
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }

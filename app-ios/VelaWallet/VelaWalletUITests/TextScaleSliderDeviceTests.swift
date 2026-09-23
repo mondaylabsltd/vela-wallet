@@ -72,6 +72,52 @@ final class TextScaleSliderDeviceTests: XCTestCase {
         app.terminate()
     }
 
+    /// The page a person is ON while they choose — which is the page they
+    /// judge the choice by.
+    ///
+    /// The owner moved the slider and reported that nothing changed, then that
+    /// it changed everywhere BUT here (2026-09-23). It was not a refresh: no
+    /// screen in Settings ever applied the size, and neither did onboarding or
+    /// the Clear Signer's sheets — 228 of the app's 494 text sites drew at a
+    /// fixed size. `typeRole` now takes the size from the environment, which
+    /// the root states once, so the only way to opt OUT is to have done the
+    /// arithmetic yourself.
+    func testTheSettingsPageGrowsWhileYouChoose() {
+        let app = launch()
+        openSettings(in: app)
+        let slider = self.slider(in: app)
+
+        // A label that is on the page with the slider, whatever the scroll.
+        let heading = app.staticTexts["外观"].firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: 8), "Settings has no 外观 heading")
+
+        drag(slider, from: 0.9, to: 0.02)
+        XCTAssertEqual(slider.value as? String, "1", "a drag to the small end did not reach the smallest size")
+        let small = heading.frame.height
+        attach(app.screenshot(), named: "settings-at-smallest")
+
+        drag(slider, from: 0.1, to: 0.98)
+        XCTAssertEqual(slider.value as? String, "6", "a drag to the large end did not reach the largest size")
+        let large = heading.frame.height
+        attach(app.screenshot(), named: "settings-at-largest")
+
+        // Measured, on the simulator: 43.3 → 53.3 with the fix, and 47.0 →
+        // 47.0 without it. A frame grows by less than the 1.65× between 0.82
+        // and 1.35 — the label's box is type plus fixed leading, and Dynamic
+        // Type compresses the top of its own curve — so the threshold is set
+        // where a page that did not move cannot pass, not at the font ratio.
+        XCTAssertGreaterThan(
+            large, small * 1.15,
+            "Settings' own text did not grow with the size (\(small) → \(large))"
+        )
+
+        // Put it back: 标准 is the third stop.
+        tap(stop: 2, of: slider)
+        settle(1)
+        XCTAssertEqual(slider.value as? String, "3", "the size was not put back")
+        app.terminate()
+    }
+
     // MARK: - Plumbing
 
     private func launch() -> XCUIApplication {
