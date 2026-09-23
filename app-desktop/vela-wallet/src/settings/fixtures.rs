@@ -397,6 +397,9 @@ pub const STORAGE_RECORDS: u32 = 216;
 pub const STORAGE_SEGMENTS: [(f32, u32); 3] = [(0.5, 0x5a7cf6), (0.3, 0x3da872), (0.2, 0x85827a)];
 
 pub struct StorageItem {
+    /// The row's id, shared with the other three shells
+    /// (`executor::device_storage::ITEMS`). What 清除 acts on.
+    pub id: &'static str,
     pub label: SharedString,
     pub meta: SharedString,
     /// 清除 for most rows; 断开全部 for the dApp sessions one.
@@ -422,12 +425,14 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             action: None,
             items: vec![
                 StorageItem {
+                    id: "transactions",
                     label: s.item_transactions.clone(),
                     meta: SharedString::from(format!("{} · 1.0 MB", records(200))),
                     action: s.storage_clear.clone(),
                     destructive: true,
                 },
                 StorageItem {
+                    id: "contacts",
                     label: s.item_contacts.clone(),
                     meta: SharedString::from(format!(
                         "{} · 42 KB",
@@ -437,6 +442,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
                     destructive: true,
                 },
                 StorageItem {
+                    id: "custom",
                     label: s.item_custom.clone(),
                     meta: SharedString::from(format!(
                         "{} · 12 KB",
@@ -446,6 +452,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
                     destructive: true,
                 },
                 StorageItem {
+                    id: "browsing",
                     label: s.item_browsing.clone(),
                     meta: SharedString::from(format!("{} · 58 KB", records(31))),
                     action: s.storage_clear.clone(),
@@ -458,18 +465,21 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             action: Some(s.storage_clear_all.clone()),
             items: vec![
                 StorageItem {
+                    id: "balances",
                     label: s.item_balances.clone(),
                     meta: SharedString::from("0.6 MB"),
                     action: s.storage_clear.clone(),
                     destructive: false,
                 },
                 StorageItem {
+                    id: "rates",
                     label: s.item_rates.clone(),
                     meta: SharedString::from("96 KB"),
                     action: s.storage_clear.clone(),
                     destructive: false,
                 },
                 StorageItem {
+                    id: "scan",
                     label: s.item_scan.clone(),
                     meta: SharedString::from("31 KB"),
                     action: s.storage_clear.clone(),
@@ -481,6 +491,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             label: s.storage_connections.clone(),
             action: None,
             items: vec![StorageItem {
+                id: "dapps",
                 label: s.item_dapps.clone(),
                 meta: SharedString::from(fill(&s.count_sites, "count", "4")),
                 action: s.storage_disconnect_all.clone(),

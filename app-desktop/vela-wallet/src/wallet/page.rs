@@ -49,6 +49,8 @@ const WIZARD_SEARCH_FOCUS: usize = ENDPOINT_FOCUS_COUNT + 3;
 const WIZARD_RPC_FOCUS: usize = WIZARD_SEARCH_FOCUS + 1;
 /// Two handles per network card, past everything above.
 const OVERRIDE_FOCUS_BASE: usize = WIZARD_RPC_FOCUS + 1;
+use std::rc::Rc;
+
 use crate::executor::appearance_prefs;
 use crate::executor::display_currency;
 use crate::executor::format_prefs;
@@ -177,6 +179,10 @@ enum SettingsDialog {
     /// Spec 081 FR-017 — 抹除此设备, asked before it happens. The phone draws
     /// this as a bottom sheet; a wide layout has none, so it is a dialog.
     EraseDevice,
+    /// One storage row's 清除, asked before it happens — the founder's ruling
+    /// of 2026-09-15, after "联系人与分组 · 清除" took a whole address book on
+    /// one tap. `None` is 清除全部缓存, which asks the same way.
+    ClearStorage(Option<&'static str>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -430,6 +436,10 @@ pub struct WalletPage {
     browsing: bool,
     /// Which CS scenario the third column holds when `PanelId::Signing`.
     signing_state: &'static str,
+    /// The signing sheet's "view raw data" disclosure. Per sheet: a new
+    /// request opens closed, because the last one's decision is not this
+    /// one's.
+    signing_advanced_open: bool,
     section: Section,
     /// Which settings panel the second-level nav is showing (spec 023).
     settings_page: SettingsPage,
@@ -949,6 +959,7 @@ impl WalletPage {
             signing,
             browsing: false,
             signing_state: "cs12",
+            signing_advanced_open: false,
             settings_page: SettingsPage::Account,
             settings_dialog: None,
             erase_failed: None,
@@ -2930,7 +2941,14 @@ impl WalletPage {
             return fixtures::assets_default(&self.strings);
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-        wallet_live::asset_rows(&view, &self.strings, &self.locale, self.chain_filter)
+        let money = self.money(cx);
+        wallet_live::asset_rows(
+            &view,
+            &self.strings,
+            &self.locale,
+            self.chain_filter,
+            &money,
+        )
     }
 
     /// The home's network list: the chains this person actually holds on.
@@ -2985,7 +3003,8 @@ impl WalletPage {
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
         let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
-        wallet_live::asset_detail(&view, &feed, index, &self.strings, &self.locale)
+        let money = self.money(cx);
+        wallet_live::asset_detail(&view, &feed, index, &self.strings, &self.locale, &money)
             // The holding is gone — a refresh re-ordered the list under an open
             // panel. The mock is NOT a substitute: it would silently swap which
             // asset somebody is looking at, and the next thing they do on this
@@ -3015,7 +3034,8 @@ impl WalletPage {
             return fixtures::balance_default(&self.strings);
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-        wallet_live::balance(&view, &self.strings, &self.locale)
+        let money = self.money(cx);
+        wallet_live::balance(&view, &self.strings, &self.locale, &money)
     }
 
     /// The group rail: the person's own groups, or the mocks'.
@@ -6061,7 +6081,7 @@ impl WalletPage {
             SettingsPage::RpcProviders => self.settings_providers(theme, window, cx),
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
-            SettingsPage::Storage => self.settings_storage(theme),
+            SettingsPage::Storage => self.settings_storage(theme, cx),
             SettingsPage::About => self.settings_about(theme, cx),
         };
 
@@ -7277,6 +7297,18 @@ impl WalletPage {
     /// settings` and the gallery are design surfaces with no session behind
     /// them, and a fixture screen quietly reading live state is how a gallery
     /// stops being reviewable.
+    /// The currency this screen's money is drawn in.
+    ///
+    /// Signed out there is no committed pair and nothing to convert, so it is
+    /// USD — the same thing every fixture board shows.
+    fn money(&self, cx: &mut Context<Self>) -> wallet_live::Money {
+        if self.identity.is_none() {
+            return wallet_live::Money::default();
+        }
+        let view = resident::resident::<DisplayCurrency>(cx).read(cx).view();
+        wallet_live::Money::new(&view.code, view.rate)
+    }
+
     fn currency_value(&self, cx: &mut Context<Self>) -> gpui::SharedString {
         if self.identity.is_none() {
             return gpui::SharedString::from("USD · $1,234.56");
@@ -8108,7 +8140,7 @@ impl WalletPage {
         div().flex().flex_col().max_w(px(560.)).child(list)
     }
 
-    fn settings_storage(&mut self, theme: &Theme) -> Div {
+    fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         // Live since 031. The panel told everybody 2.4 MB / 216 records, and a
         // person deciding whether to clear a cache deserves their own number.
@@ -8159,20 +8191,89 @@ impl WalletPage {
                     ),
             )
             .child(storage_bar(theme, &settings_fixtures::STORAGE_SEGMENTS));
-        for group in settings_fixtures::storage_groups(&self.settings) {
+        let live = self.identity.is_some();
+        let groups = if live {
+            settings_live::storage_groups(
+                &self.settings,
+                &crate::executor::device_storage::measure(),
+            )
+        } else {
+            settings_fixtures::storage_groups(&self.settings)
+        };
+        let page = cx.entity();
+        let on_clear: Option<Rc<dyn Fn(&'static str, &mut Window, &mut gpui::App)>> =
+            live.then(|| {
+                let page = page.clone();
+                Rc::new(
+                    move |id: &'static str, _: &mut Window, cx: &mut gpui::App| {
+                        page.update(cx, |this, cx| {
+                            this.settings_dialog = Some(SettingsDialog::ClearStorage(Some(id)));
+                            cx.notify();
+                        });
+                    },
+                ) as Rc<dyn Fn(&'static str, &mut Window, &mut gpui::App)>
+            });
+        for group in groups {
             let action = group.action.clone();
-            col = col.child(storage_group(theme, &group));
+            col = col.child(storage_group(theme, &group, on_clear.clone()));
             if let Some(action) = action {
+                let hover = theme.info_base.opacity(0.7);
                 col = col.child(
                     div()
+                        .id("storage-clear-all")
                         .pt(px(16.))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.info_base)
+                        .when(live, |el| {
+                            el.cursor_pointer()
+                                .hover(move |el| el.text_color(hover))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.settings_dialog = Some(SettingsDialog::ClearStorage(None));
+                                    cx.notify();
+                                }))
+                        })
                         .child(action),
                 );
             }
         }
         col
+    }
+
+    /// What one 清除 is about, in the row's own words.
+    ///
+    /// Nothing new is written for it: the title is the row's label, the body is
+    /// its GROUP's label — which is where the consequence is spelled out — and
+    /// the confirm word is the row's own action. iOS composes the same sheet
+    /// the same way.
+    fn clear_storage_target(
+        &self,
+        id: Option<&'static str>,
+    ) -> (SharedString, SharedString, SharedString, bool) {
+        let groups = settings_fixtures::storage_groups(&self.settings);
+        let Some(id) = id else {
+            return (
+                self.settings.storage_clear_all.clone(),
+                self.settings.storage_caches.clone(),
+                self.settings.storage_clear_all.clone(),
+                false,
+            );
+        };
+        for group in &groups {
+            if let Some(item) = group.items.iter().find(|item| item.id == id) {
+                return (
+                    item.label.clone(),
+                    group.label.clone(),
+                    item.action.clone(),
+                    item.destructive,
+                );
+            }
+        }
+        (
+            self.settings.storage_clear.clone(),
+            SharedString::from(""),
+            self.settings.storage_clear.clone(),
+            true,
+        )
     }
 
     /// DST8 — the build, the technical inventory, the three links.
@@ -8318,6 +8419,10 @@ impl WalletPage {
             ),
             SettingsDialog::FixRpc => (s.rpc_fix_title.clone(), None),
             SettingsDialog::EraseDevice => (s.erase_title.clone(), Some(s.erase_subtitle.clone())),
+            SettingsDialog::ClearStorage(id) => {
+                let (title, body, _, _) = self.clear_storage_target(id);
+                (title, Some(body))
+            }
         };
 
         let body = match kind {
@@ -8332,6 +8437,7 @@ impl WalletPage {
                 _ => self.settings_fix_rpc_body(theme),
             },
             SettingsDialog::EraseDevice => self.settings_erase_body(theme, cx),
+            SettingsDialog::ClearStorage(id) => self.settings_clear_storage_body(theme, id, cx),
         };
 
         let mut header = div()
@@ -9128,6 +9234,92 @@ impl WalletPage {
     /// back at the same address — what IS lost, and only then the two buttons.
     /// The red one is not the default focus and is not first on the pointer's
     /// path out of the dialog.
+    /// One 清除, asked before it happens.
+    ///
+    /// The question is already on the page — the row's label, the group's
+    /// sentence about what that group means, the row's own action word — so no
+    /// new sentence is written for it. Same composition as iOS's sheet.
+    fn settings_clear_storage_body(
+        &mut self,
+        theme: &Theme,
+        id: Option<&'static str>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let (_, _, confirm, destructive) = self.clear_storage_target(id);
+        let cancel = self.settings.erase_cancel.clone();
+        // How much goes, measured now rather than when the page was drawn.
+        let report = crate::executor::device_storage::measure();
+        let gone = match id {
+            Some(id) => report.item(id).map_or(0, |item| item.bytes),
+            None => report.bytes_of(crate::executor::device_storage::Group::Cache),
+        };
+        // How much this frees, and nothing else: the title already names the
+        // row and the subtitle already says what the group is.
+        let detail = gpui::SharedString::from(settings_live::human_size_public(gone));
+        let tone = if destructive {
+            theme.error_base
+        } else {
+            theme.accent
+        };
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(detail),
+            )
+            .child(
+                div()
+                    .id("settings-clear-storage-confirm")
+                    .h(px(CONTACTS_BUTTON_H))
+                    .rounded(px(12.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .bg(tone)
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_inverse)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        match id {
+                            Some(id) => {
+                                crate::executor::device_storage::clear(id);
+                            }
+                            None => {
+                                crate::executor::device_storage::clear_caches();
+                            }
+                        }
+                        this.settings_dialog = None;
+                        cx.notify();
+                    }))
+                    .child(confirm),
+            )
+            .child(
+                div()
+                    .id("settings-clear-storage-cancel")
+                    .h(px(CONTACTS_BUTTON_H))
+                    .rounded(px(12.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .border_1()
+                    .border_color(theme.outline_strong)
+                    .text_size(theme::text_row_title())
+                    .text_color(theme.fg_base)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.settings_dialog = None;
+                        cx.notify();
+                    }))
+                    .child(cancel),
+            )
+    }
+
     fn settings_erase_body(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         let desc = s.erase_desc.clone();
@@ -10059,6 +10251,9 @@ impl WalletPage {
         if host.read(cx).closed {
             return;
         }
+        // A new request opens closed: the last one's decision to look at the
+        // bytes is not this one's.
+        self.signing_advanced_open = false;
         self.signing_host = Some(host);
         self.panel = PanelId::Signing;
         cx.notify();
@@ -10574,6 +10769,45 @@ impl WalletPage {
     }
 
     /// DE4 / DCS1–8's third column — the signing request itself.
+    /// The request, as text. Empty when there is no live request — the drawn
+    /// boards have no payload of their own, and inventing one would put bytes
+    /// on screen that nobody is being asked to sign.
+    fn signing_raw_rows(&self, cx: &mut Context<Self>) -> Vec<(SharedString, SharedString)> {
+        let Some(host) = self.signing_host.as_ref() else {
+            return Vec::new();
+        };
+        let host = host.read(cx);
+        let (method, params) = host.raw.clone();
+        let mut rows = vec![(
+            self.signing.tech_function.clone(),
+            SharedString::from(method.clone()),
+        )];
+        match crate::executor::sign_request::calls_of(&method, &params) {
+            // A transaction: each leg's destination and its calldata, which is
+            // what a person compares against the summary above.
+            Some(calls) => {
+                for (i, call) in calls.iter().enumerate() {
+                    let label = if calls.len() > 1 {
+                        SharedString::from(format!("{} {}", self.signing.label_interacting, i + 1))
+                    } else {
+                        self.signing.label_interacting.clone()
+                    };
+                    rows.push((label, SharedString::from(call.to.clone())));
+                    rows.push((
+                        self.signing.tech_raw_data.clone(),
+                        SharedString::from(call.data.clone()),
+                    ));
+                }
+            }
+            // A message or typed data: the payload itself.
+            None => rows.push((
+                self.signing.tech_raw_data.clone(),
+                SharedString::from(params),
+            )),
+        }
+        rows
+    }
+
     fn signing_body(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         // The live sheet when a request is open, the mock otherwise — the same
         // fork every other surface takes, and what keeps the 33 drawn
@@ -10888,31 +11122,69 @@ impl WalletPage {
             }
         }
 
-        column = column
-            .child(row_divider(theme))
-            // The disclosure, collapsed — the universal fallback renderer's
-            // entrance. Its five layers live in the phone shells today; the
-            // desktop mocks (DCS1–8) draw only this row.
-            .child(
-                div()
-                    .py(px(10.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(icon_img(
-                        &mut self.icons,
-                        Icon::ChevronRight,
-                        false,
-                        theme.fg_muted,
-                        12.,
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_muted)
-                            .child(self.signing.advanced_toggle.clone()),
-                    ),
-            );
+        // The disclosure. It was a chevron and a sentence with no listener —
+        // the only route from the decoded summary to what is actually being
+        // signed, and it did not go there. What it opens is the REQUEST, not a
+        // second decoding of it: the method, and for a transaction each call's
+        // destination and calldata; for a message or typed data, the payload.
+        // A person checking a summary against the bytes needs the bytes.
+        let open = self.signing_advanced_open;
+        let raw_rows = self.signing_raw_rows(cx);
+        column = column.child(row_divider(theme)).child(
+            div()
+                .id("signing-advanced")
+                .py(px(10.))
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .when(!raw_rows.is_empty(), |el| {
+                    el.cursor_pointer().on_click(cx.listener(|this, _, _, cx| {
+                        this.signing_advanced_open = !this.signing_advanced_open;
+                        cx.notify();
+                    }))
+                })
+                .child(icon_img(
+                    &mut self.icons,
+                    if open {
+                        Icon::ChevronDown
+                    } else {
+                        Icon::ChevronRight
+                    },
+                    false,
+                    theme.fg_muted,
+                    12.,
+                ))
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(self.signing.advanced_toggle.clone()),
+                ),
+        );
+        if open {
+            for (label, value) in raw_rows {
+                column = column.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .pb(px(10.))
+                        .child(
+                            div()
+                                .text_size(theme::text_label())
+                                .text_color(theme.fg_subtle)
+                                .child(label),
+                        )
+                        .child(
+                            div()
+                                .font_family(theme::font_mono())
+                                .text_size(theme::text_label())
+                                .text_color(theme.fg_base)
+                                .child(value),
+                        ),
+                );
+            }
+        }
         let (on_fee, on_fee_pick) = self.fee_actions(cx);
         if let Some(fee) =
             signing_components::fee(theme, &mut self.icons, &model.fee, on_fee, on_fee_pick)

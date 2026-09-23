@@ -853,7 +853,15 @@ pub fn storage_bar(theme: &Theme, segments: &[(f32, u32)]) -> Div {
 /// One storage group. The group label carries the consequence — "清除后无法
 /// 找回" against "清除后自动重建" — which is why the same word 清除 is red in
 /// the first group and plain in the second.
-pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
+/// `on_clear` is what a row's 清除 DOES. Absent — the gallery, and a signed-out
+/// page with nothing measured — the word stays a label and the row keeps no
+/// pointer: eight rows each ending in a red 清除 that did nothing was this
+/// page until 2026-09-23.
+pub fn storage_group(
+    theme: &Theme,
+    group: &StorageGroup,
+    on_clear: Option<Rc<dyn Fn(&'static str, &mut gpui::Window, &mut gpui::App)>>,
+) -> Div {
     let mut col = div().flex().flex_col().pt(px(16.)).child(
         div()
             .pb(px(4.))
@@ -895,8 +903,18 @@ pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
                         )
                         .child(
                             div()
+                                .id(ElementId::from(SharedString::from(format!(
+                                    "storage-clear-{}",
+                                    item.id
+                                ))))
                                 .text_size(theme::text_row_sub())
                                 .text_color(action_tint)
+                                .when_some(on_clear.clone(), |el, act| {
+                                    let id = item.id;
+                                    el.cursor_pointer()
+                                        .hover(move |el| el.opacity(0.7))
+                                        .on_click(move |_, window, cx| act(id, window, cx))
+                                })
                                 .child(item.action.clone()),
                         ),
                 )

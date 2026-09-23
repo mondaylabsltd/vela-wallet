@@ -17,6 +17,57 @@ use crate::wallet::fixtures::{
     BalanceState, ChainRowModel, Fiat, StatusKind,
 };
 
+/// The currency every fiat figure on these screens is drawn in.
+///
+/// Until 2026-09-23 the desktop drew money in `"USD"`/`"$"` verbatim, so a
+/// person who picked ZAR saw ZAR on one settings row and dollars everywhere
+/// else. The rule here is the web's (`wallet/live.ts::moneyParts`), and its
+/// point is the case it refuses: **a code with no rate is drawn as USD, not as
+/// that code at rate 1.** A rate of 1 is a claim — "1 USD = 1 CNY" — and the
+/// core answers `rate: None` rather than 1 for exactly this reason.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Money {
+    code: String,
+    rate: Option<f64>,
+}
+
+impl Default for Money {
+    /// What a signed-out screen and every fixture board draw in.
+    fn default() -> Self {
+        Self {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+        }
+    }
+}
+
+impl Money {
+    /// The committed pair, straight from `display_currency`.
+    #[must_use]
+    pub fn new(code: &str, rate: Option<f64>) -> Self {
+        Self {
+            code: code.to_owned(),
+            rate,
+        }
+    }
+
+    /// A USD figure, in this currency — or in USD when it cannot be converted.
+    #[must_use]
+    pub fn text(&self, usd: f64, locale: &str) -> String {
+        let (code, amount) = match self.rate {
+            Some(rate) => (self.code.as_str(), usd * rate),
+            None => ("USD", usd),
+        };
+        format_fiat(
+            amount,
+            code,
+            crate::settings::live::symbol_for(code),
+            locale,
+            crate::executor::format_prefs::fiat_options(),
+        )
+    }
+}
+
 /// The balance hero.
 ///
 /// Four states, and the two that look like edge cases are the ones the core
@@ -30,7 +81,7 @@ use crate::wallet::fixtures::{
 ///   ②). A wallet that shows zero while it is still counting has told the person
 ///   their money is gone.
 #[must_use]
-pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceModel {
+pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Money) -> BalanceModel {
     // The last-known total paints first while the core withholds the live
     // one; live replaces it (max(live, cached) is the core's rule — this only
     // chooses what to show meanwhile). The web's `liveBalance`.
@@ -81,7 +132,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceMo
         };
     };
 
-    let (integer, decimals) = split_fiat(usd, locale);
+    let (integer, decimals) = split_fiat(usd, locale, money);
     BalanceModel {
         label: s.total_balance.clone(),
         // A zero is "live" only once EVERY chain has answered: a partial zero
@@ -109,14 +160,8 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceMo
 /// language's "subordinated symbols" rule — so the split is a render concern and
 /// belongs here rather than in a formatter. Splitting on the LAST `.` is what
 /// keeps a locale whose group separator is `.` from being cut in half.
-fn split_fiat(usd: f64, locale: &str) -> (SharedString, Option<SharedString>) {
-    let formatted = format_fiat(
-        usd,
-        "USD",
-        "$",
-        locale,
-        crate::executor::format_prefs::fiat_options(),
-    );
+fn split_fiat(usd: f64, locale: &str, money: &Money) -> (SharedString, Option<SharedString>) {
+    let formatted = money.text(usd, locale);
     match formatted.rsplit_once('.') {
         Some((whole, minor)) if minor.chars().all(|c| c.is_ascii_digit()) => (
             SharedString::from(whole.to_owned()),
@@ -473,7 +518,7 @@ mod tests {
     /// The figure the mock draws, from a real total.
     #[test]
     fn a_known_total_renders_split_for_the_hero() {
-        let model = balance(&view(Some(1383.28)), &strings(), "en");
+        let model = balance(&view(Some(1383.28)), &strings(), "en", &Money::default());
         assert_eq!(model.state, BalanceState::Normal);
         assert_eq!(model.integer, SharedString::from("$1,383"));
         assert_eq!(model.decimals, Some(SharedString::from("28")));
@@ -483,7 +528,7 @@ mod tests {
     /// somebody their money is gone.
     #[test]
     fn an_unknown_total_is_a_skeleton_and_never_a_zero() {
-        let model = balance(&view(None), &strings(), "en");
+        let model = balance(&view(None), &strings(), "en", &Money::default());
         assert_eq!(model.state, BalanceState::Loading);
         assert!(
             !model.integer.contains('0'),
@@ -497,7 +542,7 @@ mod tests {
     /// state — the mocks draw them differently on purpose.
     #[test]
     fn a_real_zero_is_not_the_same_as_unknown() {
-        let model = balance(&view(Some(0.0)), &strings(), "en");
+        let model = balance(&view(Some(0.0)), &strings(), "en", &Money::default());
         assert_eq!(model.state, BalanceState::ZeroLive);
         assert_eq!(model.integer, SharedString::from("$0"));
     }
@@ -509,7 +554,7 @@ mod tests {
     fn a_cached_total_paints_first_and_says_it_is_refreshing() {
         let mut cached = view(None);
         cached.cached_total_usd = Some(42.5);
-        let model = balance(&cached, &strings(), "en");
+        let model = balance(&cached, &strings(), "en", &Money::default());
         assert_eq!(model.state, BalanceState::Normal);
         assert_eq!(model.integer, SharedString::from("$42"));
         assert_eq!(model.decimals, Some(SharedString::from("50")));
@@ -521,7 +566,7 @@ mod tests {
         // Live wins over the cache the moment it is there.
         let mut live = view(Some(40.0));
         live.cached_total_usd = Some(42.5);
-        let model = balance(&live, &strings(), "en");
+        let model = balance(&live, &strings(), "en", &Money::default());
         assert_eq!(model.integer, SharedString::from("$40"));
         assert!(model.status.is_none(), "{:?}", model.status.map(|s| s.1));
     }
@@ -533,14 +578,14 @@ mod tests {
         let mut partial = view(Some(0.0));
         partial.balance_partial = true;
         assert_eq!(
-            balance(&partial, &strings(), "en").state,
+            balance(&partial, &strings(), "en", &Money::default()).state,
             BalanceState::Normal
         );
 
         let mut cached = view(None);
         cached.cached_total_usd = Some(0.0);
         assert_eq!(
-            balance(&cached, &strings(), "en").state,
+            balance(&cached, &strings(), "en", &Money::default()).state,
             BalanceState::Normal
         );
     }
@@ -552,16 +597,45 @@ mod tests {
     fn hiding_masks_and_carries_no_figure() {
         let mut hidden = view(None);
         hidden.hidden = true;
-        let model = balance(&hidden, &strings(), "en");
+        let model = balance(&hidden, &strings(), "en", &Money::default());
         assert_eq!(model.state, BalanceState::Hidden);
         assert_eq!(model.integer, SharedString::from(BALANCE_MASK));
         assert_eq!(model.decimals, None);
     }
 
     /// A locale whose group separator is `.` must not be cut in half.
+    /// The rule the whole type exists for: a currency nobody could price is
+    /// drawn as USD, **never** as that currency at rate 1. "A rate of 1 is a
+    /// claim (1 USD = 1 CNY)", and the core answers `None` rather than 1 for
+    /// exactly this reason — a shell that quietly filled in 1 would put a ¥
+    /// in front of a dollar figure.
+    #[test]
+    fn an_unpriceable_currency_is_drawn_in_dollars() {
+        let priced = Money::new("EUR", Some(0.92));
+        let text = priced.text(1000.0, "en-US");
+        assert!(text.contains("920"), "converted: {text}");
+        assert!(!text.contains('$'), "and wearing its own symbol: {text}");
+
+        let unpriced = Money::new("EUR", None);
+        let text = unpriced.text(1000.0, "en-US");
+        assert!(text.contains('$'), "USD, symbol and all: {text}");
+        assert!(text.contains("1,000"), "the figure is untouched: {text}");
+
+        // Zero-decimal currencies keep the core's own rule about minor units.
+        let yen = Money::new("JPY", Some(157.0));
+        let text = yen.text(10.0, "en-US");
+        assert!(!text.contains('.'), "a yen figure has no cents: {text}");
+
+        assert_eq!(
+            Money::default().text(1.5, "en-US"),
+            Money::new("USD", Some(1.0)).text(1.5, "en-US"),
+            "the default IS dollars"
+        );
+    }
+
     #[test]
     fn splitting_survives_a_dot_grouped_locale() {
-        let (integer, decimals) = split_fiat(1383.28, "de");
+        let (integer, decimals) = split_fiat(1383.28, "de", &Money::default());
         assert!(
             integer.contains("1.383") || integer.contains("1,383"),
             "the whole part lost its grouping: {integer}"
@@ -633,7 +707,7 @@ mod tests {
             let s = strings();
 
             // The SECOND row, because that is the one clicked.
-            let mon = asset_detail(&held, &feed, 1, &s, "en-US")
+            let mon = asset_detail(&held, &feed, 1, &s, "en-US", &Money::default())
                 .unwrap_or_else(|| unreachable!("row 1 exists"));
             assert_eq!(mon.ticker, "MON");
             assert_eq!(mon.amount, "12 MON");
@@ -651,7 +725,7 @@ mod tests {
             // xDAI's transaction is not MON's.
             assert!(mon.activity.is_empty());
 
-            let xdai = asset_detail(&held, &feed, 0, &s, "en-US")
+            let xdai = asset_detail(&held, &feed, 0, &s, "en-US", &Money::default())
                 .unwrap_or_else(|| unreachable!("row 0 exists"));
             assert_eq!(xdai.ticker, "xDAI");
             assert!(xdai.sub.starts_with("$0.76"));
@@ -696,7 +770,7 @@ mod tests {
             assert!(params.prefilled_recipient.is_none() && !params.locked);
 
             // The list moved underneath: no panel rather than the wrong one.
-            assert!(asset_detail(&held, &feed, 9, &s, "en-US").is_none());
+            assert!(asset_detail(&held, &feed, 9, &s, "en-US", &Money::default()).is_none());
         });
     }
 
@@ -725,7 +799,7 @@ mod tests {
             ];
             let s = strings();
 
-            let assets = asset_rows(&held, &s, "en-US", None);
+            let assets = asset_rows(&held, &s, "en-US", None, &Money::default());
             assert_eq!(assets.len(), 3);
             // The core's order, kept: it already sorted by value.
             assert_eq!(assets[0].ticker, "ETH");
@@ -747,7 +821,7 @@ mod tests {
 
             // Still counting: an empty strip, never somebody else's tokens.
             let counting = view(None);
-            assert!(asset_rows(&counting, &s, "en-US", None).is_empty());
+            assert!(asset_rows(&counting, &s, "en-US", None, &Money::default()).is_empty());
             assert_eq!(chain_rows(&counting, &s, None).len(), 1, "only the all row");
         });
     }
@@ -783,7 +857,7 @@ mod tests {
             let s = strings();
 
             let gnosis = Some(100);
-            let rows = asset_rows(&held, &s, "en-US", gnosis);
+            let rows = asset_rows(&held, &s, "en-US", gnosis, &Money::default());
             assert_eq!(rows.len(), 2);
             assert_eq!(rows[0].ticker, "xDAI");
             assert_eq!(rows[1].ticker, "USDC");
@@ -808,10 +882,13 @@ mod tests {
             assert_eq!(picked.count, 2);
 
             // A chain held on with nothing else: still a real, if short, list.
-            assert_eq!(asset_rows(&held, &s, "en-US", Some(56)).len(), 1);
+            assert_eq!(
+                asset_rows(&held, &s, "en-US", Some(56), &Money::default()).len(),
+                1
+            );
             // And a chain nothing is held on narrows to nothing rather than
             // falling back to everything.
-            assert!(asset_rows(&held, &s, "en-US", Some(137)).is_empty());
+            assert!(asset_rows(&held, &s, "en-US", Some(137), &Money::default()).is_empty());
         });
     }
 
@@ -922,7 +999,7 @@ mod tests {
             crate::executor::chainlink::invalidate();
             const GOLDEN: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
             let view = settle(GOLDEN);
-            let model = balance(&view, &strings(), "en-US");
+            let model = balance(&view, &strings(), "en-US", &Money::default());
             println!(
                 "  hero: {}{}  state={:?} notice={:?}",
                 model.integer,
@@ -1000,6 +1077,7 @@ pub fn asset_rows(
     s: &WalletStrings,
     locale: &str,
     filter: Option<u32>,
+    money: &Money,
 ) -> Vec<AssetRowModel> {
     let unpriced: std::collections::BTreeSet<(u32, String)> = view
         .unpriced_tokens
@@ -1046,13 +1124,9 @@ pub fn asset_rows(
                 } else if unpriced.contains(&key) {
                     Fiat::NoPrice(s.no_price.clone())
                 } else {
-                    Fiat::Value(SharedString::from(format_fiat(
-                        amount * token.price_usd.unwrap_or(0.0),
-                        "USD",
-                        "$",
-                        locale,
-                        crate::executor::format_prefs::fiat_options(),
-                    )))
+                    Fiat::Value(SharedString::from(
+                        money.text(amount * token.price_usd.unwrap_or(0.0), locale),
+                    ))
                 },
             }
         })
@@ -1196,6 +1270,7 @@ pub fn asset_detail(
     index: usize,
     s: &WalletStrings,
     locale: &str,
+    money: &Money,
 ) -> Option<AssetDetailModel> {
     let token = view.tokens.get(index)?;
     let own: Vec<&FeedItem> = feed
@@ -1212,15 +1287,7 @@ pub fn asset_detail(
         .collect();
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     let chain = crate::executor::custom_tokens::network_name(token.chain_id);
-    let figure = |value: f64| {
-        format_fiat(
-            value,
-            "USD",
-            "$",
-            locale,
-            crate::executor::format_prefs::fiat_options(),
-        )
-    };
+    let figure = |value: f64| money.text(value, locale);
 
     let mut facts = vec![(s.label_name.clone(), SharedString::from(token.name.clone()))];
     if let Some(price) = token.price_usd {

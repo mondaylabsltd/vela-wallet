@@ -29,13 +29,12 @@ const SAMPLE: f64 = 1234.56;
 
 /// Symbols for the codes a person can actually reach today.
 ///
-/// Deliberately small. The shell owns the currency catalog — that is the core's
-/// division of labour, stated in `display_currency.rs` — but a full catalog is
-/// only *useful* once rates exist, because until then no code but USD can be
-/// priced at all. It arrives with the rates in spec 031. Unknown codes fall back
-/// to the code itself, which `format_fiat` spaces correctly (`CHF 1,234.56`)
-/// because CLDR's `currencySpacing` keys off the symbol being alphabetic.
-fn symbol_for(code: &str) -> &str {
+/// Deliberately small, and it does not need to be big: an unknown code falls
+/// back to the code itself, which `format_fiat` spaces correctly
+/// (`CHF 1,234.56`) because CLDR's `currencySpacing` keys off the symbol being
+/// alphabetic. The rate endpoint prices about thirty currencies and most of
+/// them have no symbol anybody would recognise anyway.
+pub fn symbol_for(code: &str) -> &str {
     match code {
         "USD" => "$",
         "EUR" => "€",
@@ -71,6 +70,62 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
             SharedString::from(format!("{} · {sample}", view.code))
         }
         None => SharedString::from(view.code.clone()),
+    }
+}
+
+/// The storage page's rows, measured rather than drawn.
+///
+/// Same labels and same order as the fixture — it is the same page — with the
+/// meta line replaced by what this machine actually holds. A row with no
+/// records shows a size alone: `records_in` answers `None` for a value that is
+/// not a list, and inventing "1 record" for a cache blob would be a number
+/// somebody might act on.
+#[must_use]
+pub fn storage_groups(
+    s: &SettingsStrings,
+    report: &crate::executor::device_storage::Report,
+) -> Vec<crate::settings::fixtures::StorageGroup> {
+    let mut groups = crate::settings::fixtures::storage_groups(s);
+    for group in &mut groups {
+        for item in &mut group.items {
+            let Some(measured) = report.item(item.id) else {
+                continue;
+            };
+            let size = human_size(measured.bytes);
+            item.meta = SharedString::from(match (measured.records, item.id) {
+                (Some(count), "contacts") => format!(
+                    "{} · {size}",
+                    crate::wallet::fill(&s.count_contacts, "count", &count.to_string())
+                ),
+                (Some(count), "custom") => format!(
+                    "{} · {size}",
+                    crate::wallet::fill(&s.count_items, "count", &count.to_string())
+                ),
+                (Some(count), _) => format!(
+                    "{} · {size}",
+                    crate::wallet::fill(&s.count_records, "count", &count.to_string())
+                ),
+                (None, _) => size,
+            });
+        }
+    }
+    groups
+}
+
+/// `1.0 MB`, `42 KB`, `0 KB`. The page's other figure (`human_bytes`) splits
+/// amount from unit for the hero; a row wants one string.
+#[must_use]
+pub fn human_size_public(bytes: usize) -> String {
+    human_size(bytes)
+}
+
+fn human_size(bytes: usize) -> String {
+    #[allow(clippy::cast_precision_loss)]
+    let kb = bytes as f64 / 1024.0;
+    if kb >= 1024.0 {
+        format!("{:.1} MB", kb / 1024.0)
+    } else {
+        format!("{} KB", kb.round() as u64)
     }
 }
 

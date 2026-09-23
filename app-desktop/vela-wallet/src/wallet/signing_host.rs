@@ -105,6 +105,11 @@ pub struct SigningHost {
     /// reading of an untrusted payload is a second answer to "what am I
     /// signing", and only one of them would be on screen.
     pub facts: crate::signing::live::RequestFacts,
+    /// The request exactly as it arrived — its method and its params, kept so
+    /// the sheet's "view raw data" can show what is being signed rather than
+    /// only what somebody decoded from it. Never re-parsed for a second
+    /// reading: `facts` is the one reading, and this is the text.
+    pub raw: (String, String),
     ctx: SignContext,
     #[allow(dead_code, reason = "held so the ceremony outlives the request")]
     channel: Arc<CeremonyChannel>,
@@ -163,6 +168,7 @@ impl SigningHost {
             origin: request.origin.clone(),
             chain_id: request.chain_id,
             facts: facts_of(&request),
+            raw: (request.method.clone(), request.params_json.clone()),
             sign,
             view,
             clear,
