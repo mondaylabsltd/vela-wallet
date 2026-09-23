@@ -88,6 +88,16 @@ the parallel space against Gnosis. "Measured" means it was watched happening;
       priced it, the slide answered it, and the worker closed the window at
       t+22s.*
 
+- [x] **T022** Dismissal IS rejection, on the panel too. *Measured on a fresh
+      origin: flicking the consent sheet away by its scrim answered the dApp
+      `User rejected the request` — 4001, the code that says "nothing happened"
+      — the card went, and the wallet was what was left.*
+- [x] **T023** No permission is written by a card nobody answered. *Measured:
+      after a consent card was torn down (4900), `storage.local` held
+      `vela.chain.<origin>` — the chain it asked on — and NO `vela.perm.<origin>`,
+      while the two origins that were answered had theirs. A negative result,
+      checked because the guard and the reset touch this path.*
+
 ## Phase D — the dedicated window keeps its ending
 
 - [x] **T020** `request/+page.svelte` is now the window alone, and mounts the
