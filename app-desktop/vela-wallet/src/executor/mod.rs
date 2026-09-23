@@ -73,6 +73,8 @@ pub mod sign_pref;
 /// The signing panel's seven operations.
 ///
 pub mod sign_request;
+/// Spec 076: is the Clear Signer's page the page it is supposed to be?
+pub mod signer_integrity;
 pub mod sim;
 pub mod storage;
 pub mod token_trust;
