@@ -146,6 +146,14 @@ jobs:
       # Static too: no toolchain, well under a second.
       - name: Shell events carry the fields the core declares
         run: node scripts/check-event-payloads.mjs
+      # The third one in the family: a control that is drawn, has a hit area,
+      # and calls the no-op its handler defaults to. A device run found one on
+      # the Add Network results; sweeping all four shells for the shape found
+      # twenty. This catches the half that is decidable — a handler no live
+      # call site passes at all — and its header says plainly what it misses,
+      # including the row that prompted it.
+      - name: No control is drawn with a handler nobody passes
+        run: node scripts/check-dead-controls.mjs
       # Byte-parity between the Rust core and the JS library the app still ships on
       # native — over every address literal in the repo plus 200k random seeds.
       - name: Identicon parity (Rust core vs the shipped JS library)
