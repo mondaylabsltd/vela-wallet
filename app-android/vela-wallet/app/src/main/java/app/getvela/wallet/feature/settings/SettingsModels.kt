@@ -209,6 +209,14 @@ data class AccountsSheetModel(
     val rows: List<AccountsSheetRowModel>,
     val primary: String,
     val secondary: String,
+    /**
+     * The words for taking ONE wallet off this device (2026-09-23). Empty
+     * leaves the affordance undrawn, which is what a fixture with nothing
+     * wired behind it wants — the screen resolves no strings of its own.
+     */
+    val remove: String = "",
+    val removeBody: String = "",
+    val removeCancel: String = "",
 )
 
 /** ST3 / ST13b / ST16 share this; only the tone and the callout differ. */

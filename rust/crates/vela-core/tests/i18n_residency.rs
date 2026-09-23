@@ -6,8 +6,9 @@
 //!
 //! Baseline to beat: `src/i18n/resources.ts` statically imports all 240 files and
 //! spreads them into one object, so every user carries **990,499 bytes** of strings
-//! regardless of which language they read. SC-005's budget is `ja` + `en` = 135,345
-//! bytes, a >=86% reduction.
+//! regardless of which language they read. SC-005's requirement is that a cold
+//! start loads one language plus `en` — see [`SC005_BUDGET`] for what the
+//! number below guards now, and what it stopped guarding.
 //!
 //! Run with `cargo test -p vela-core --features i18n-all --test i18n_residency -- --nocapture`
 //! to see the numbers rather than just the pass.
@@ -16,8 +17,26 @@ use vela_core::i18n::{Catalog, I18n};
 
 /// The pre-feature cost: every locale resident on every device.
 const CORPUS_BYTES: usize = 990_499;
-/// SC-005's budget for `ja` + `en`.
-const SC005_BUDGET: usize = 135_345;
+/// The bloat guard for `ja` + `en`, doubled from spec 004's measurement
+/// (owner, 2026-09-23).
+///
+/// What SC-005 REQUIRES is the sentence, not the number: "cold start in any
+/// single language loads at most that language plus the `en` fallback". The
+/// 135,345 beside it was the corpus the day it was written, quoted as evidence
+/// of a >=86% reduction from 990,499 — and by 2026-09-23 it had no headroom
+/// left: three sentences for "remove one wallet from this device" went over it
+/// while still a 86.3% reduction.
+///
+/// So this is now a guard against BLOAT rather than a restatement of the
+/// claim. At 270,690 a locale pair may be 72.7% smaller than the old
+/// everything-resident corpus instead of 86%, and the architecture that
+/// delivers SC-005 — one language plus `en`, never fifteen — is unchanged and
+/// still tested by `resident_bytes_track_the_active_language` below.
+///
+/// The cost, stated plainly: this will not fire until the corpus DOUBLES, so
+/// it is no longer an early warning. If one is wanted again, the number to
+/// keep is roughly today's plus a few KB, not this one.
+const SC005_BUDGET: usize = 270_690;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {

@@ -182,6 +182,12 @@ struct AccountsSheetModel {
     var rows: [AccountsSheetRowModel]
     let primary: String
     let secondary: String
+    /// The words for taking ONE wallet off this device (2026-09-23). Empty
+    /// leaves the affordance undrawn, which is what a fixture board wants —
+    /// the sheet resolves no strings of its own.
+    var remove: String = ""
+    var removeBody: String = ""
+    var removeCancel: String = ""
 }
 
 /// The Clear Signer page's sheet (spec 071): the address in force, what the

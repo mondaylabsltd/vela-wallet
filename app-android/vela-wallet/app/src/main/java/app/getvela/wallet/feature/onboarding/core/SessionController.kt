@@ -73,6 +73,17 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
         driver.dispatch(JSONObject().put("type", "switch_account").put("index", index).toString())
 
     /**
+     * Drop ONE wallet from this device and stay on the others (2026-09-23).
+     *
+     * `index` is the position in the ORIGINAL list, as `switchAccount` takes —
+     * the rows carry it so a balance-sorted sheet cannot remove a stranger.
+     * Removing the last one signs this device out, which the core decides, not
+     * this call.
+     */
+    fun removeAccount(index: Int) =
+        driver.dispatch(JSONObject().put("type", "remove_account").put("index", index).toString())
+
+    /**
      * Append an account the ONBOARDING machines did not write (spec 043's
      * parallel space). The session core's `add_account` persists only the
      * active index — the record itself is the create/login machines' write

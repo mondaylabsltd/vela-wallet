@@ -193,6 +193,8 @@ struct SignOutSheet: View {
     @Environment(\.theme) private var theme
     let loc: Loc
     let pendingUploadWarning: Bool
+    /// How many wallets go with it. One and six cannot read the same.
+    var accountCount: Int = 1
     let onConfirm: () -> Void
     let onDismiss: () -> Void
 
@@ -201,6 +203,18 @@ struct SignOutSheet: View {
             Text(loc.t("settings.signOut.title"))
                 .typeRole(Typography.title)
                 .foregroundStyle(theme.fgBase)
+
+            // What this takes, when it is more than one wallet. `keeps` below is
+            // true either way — the address returns, the history is still
+            // there — and on a device holding six it was ALSO how the sheet
+            // managed to say nothing about signing in six times (owner,
+            // 2026-09-23).
+            if accountCount > 1 {
+                Text(loc.t("settings.signOut.descMany", vars: ["count": String(accountCount)]))
+                    .typeRole(Typography.body)
+                    .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Text(loc.t("settings.signOut.keeps"))
                 .typeRole(Typography.body)

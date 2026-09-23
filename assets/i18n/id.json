@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Ganti akun",
-   "contactsSubtitle": "Alamat tersimpan dan penerima terbaru"
+   "contactsSubtitle": "Alamat tersimpan dan penerima terbaru",
+   "remove": "Hapus dari perangkat ini",
+   "removeBody": "Hanya dompet ini yang pergi; yang lain tetap."
   },
   "appearance": {
    "themeLight": "Terang",
@@ -106,7 +108,8 @@
    "keeps": "Pilih “Saya sudah punya dompet” untuk masuk lagi dengan passkey yang sama: alamatnya tetap sama, dan riwayat transaksi, kontak, token serta pengaturan Anda masih ada.",
    "warning": "Kunci publik Anda belum sampai ke server sinkronisasi. Aplikasi akan mencoba lagi saat dibuka berikutnya, tetapi sebelum berhasil Anda mungkin tidak bisa masuk di perangkat lain — juga di perangkat ini jika aplikasinya dihapus.",
    "anyway": "Tetap Keluar",
-   "cancel": "Batal"
+   "cancel": "Batal",
+   "descMany": "Semua {{count}} dompet di perangkat ini akan keluar. Tidak ada yang dihapus."
   },
   "eraseDevice": {
    "title": "Hapus Perangkat Ini",

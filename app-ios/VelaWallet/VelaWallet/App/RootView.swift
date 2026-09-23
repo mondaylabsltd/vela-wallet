@@ -828,6 +828,7 @@ struct RootView: View {
                 SignOutSheet(
                     loc: loc,
                     pendingUploadWarning: sheet.pendingUploadWarning,
+                    accountCount: sheet.accountCount,
                     onConfirm: { session.signOutConfirmed() },
                     onDismiss: { session.signOutDismissed() }
                 )
@@ -1108,6 +1109,14 @@ struct RootView: View {
                             onAccountSignIn: {
                                 closeHomeSwitcher()
                                 onboarding.showSignInMethods = true
+                            },
+                            // One wallet leaves, the others stay (2026-09-23).
+                            // The sheet closes because the list under it just
+                            // changed: leaving it open would put the next row
+                            // where the finger already is.
+                            onRemoveAccount: { index in
+                                closeHomeSwitcher()
+                                session.removeAccount(index: index)
                             }
                         )
                         .themed(scheme)
@@ -2805,6 +2814,7 @@ struct RootView: View {
             // from Welcome.
             onAccountCreate: { router.path.append(.create) },
             onAccountSignIn: { onboarding.showSignInMethods = true },
+            onRemoveAccount: { index in session.removeAccount(index: index) },
             // The rows' ids ARE the core's field and provider names (the
             // pages are built from its view), so each maps back one to one.
             endpointActions: SettingsEndpointActions(

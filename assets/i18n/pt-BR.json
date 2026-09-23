@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Trocar de conta",
-   "contactsSubtitle": "Endereços salvos e destinatários recentes"
+   "contactsSubtitle": "Endereços salvos e destinatários recentes",
+   "remove": "Remover deste dispositivo",
+   "removeBody": "Só esta carteira sai; as outras ficam."
   },
   "appearance": {
    "themeLight": "Claro",
@@ -106,7 +108,8 @@
    "keeps": "Escolha “Já tenho uma carteira” para entrar de novo com a mesma passkey: o endereço é o mesmo, e seu histórico, contatos, tokens e configurações continuam aqui.",
    "warning": "Sua chave pública ainda não chegou ao servidor de sincronização. O app tentará de novo na próxima abertura, mas até dar certo você pode não conseguir entrar em outro dispositivo — nem aqui, se desinstalar o app.",
    "anyway": "Sair mesmo assim",
-   "cancel": "Cancelar"
+   "cancel": "Cancelar",
+   "descMany": "As {{count}} carteiras deste dispositivo sairão. Nada é apagado."
   },
   "eraseDevice": {
    "title": "Apagar este dispositivo",

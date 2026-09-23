@@ -578,6 +578,15 @@ fun VelaNavHost(
                         },
                         onPrimary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.CREATE) },
                         onSecondary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.WELCOME) },
+                        // One wallet leaves, the others stay (2026-09-23). The
+                        // sheet closes because the list under it just changed:
+                        // leaving it open would put the next row where the
+                        // finger already is.
+                        onRemove = { index ->
+                            switcherOpen = false
+                            wallet.switcherClosed()
+                            application.container.session.removeAccount(index)
+                        },
                     )
                 }
                 // Spec 044: a page opened from outside 探索 (a deep link, the dev seam) shows itself.
@@ -2052,6 +2061,7 @@ fun VelaNavHost(
     session.signOut?.let { sheet ->
         SignOutSheet(
             pendingUploadWarning = sheet.pendingUploadWarning,
+            accountCount = sheet.accountCount,
             onConfirm = {
                 ParallelSpaceHook.leave()
                 application.container.session.signOutConfirmed()

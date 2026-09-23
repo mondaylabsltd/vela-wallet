@@ -44,9 +44,17 @@ class OnboardingExecutorTest {
         assertNotNull("an unknown operation must throw, not answer", thrown)
     }
 
+    /**
+     * The session machine's operations, all of them — a count, because the
+     * failure map below answers by NAME and a new operation that nobody taught
+     * it would fall through to `accounts_unavailable` and sign the device out.
+     *
+     * Eight since 2026-09-23: `remove_account`, one wallet leaving a device
+     * that keeps the others.
+     */
     @Test
-    fun sessionOperationsAreAllSeven() {
-        assertEquals(7, SessionExecutor.OPERATIONS.size)
+    fun sessionOperationsAreAllEight() {
+        assertEquals(8, SessionExecutor.OPERATIONS.size)
     }
 
     /**

@@ -1400,8 +1400,18 @@ private fun ConfirmSheetBody(
 }
 
 @Composable
-internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Unit = {}, onPrimary: () -> Unit = {}, onSecondary: () -> Unit = {}) {
+internal fun AccountsSheetBody(
+    sheet: AccountsSheetModel,
+    onSelect: (Int) -> Unit = {},
+    onPrimary: () -> Unit = {},
+    onSecondary: () -> Unit = {},
+    // Spec 017's narrow half (2026-09-23): a wallet can leave this device
+    // without taking the others. `null` draws no affordance at all, which is
+    // what the settings gallery and the fixtures want.
+    onRemove: ((Int) -> Unit)? = null,
+) {
     val colors = VelaTheme.colors
+    var removing by remember(sheet.rows.size) { mutableStateOf<Int?>(null) }
     SheetTitle(sheet.title)
     Text(
         text = sheet.summary,
@@ -1463,6 +1473,44 @@ internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Uni
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }
+            if (onRemove != null && sheet.remove.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                Icon(
+                    imageVector = VelaIcons.Close,
+                    contentDescription = sheet.remove,
+                    tint = colors.fgSubtle,
+                    modifier = Modifier
+                        .size(VelaIconSize.md)
+                        .clickable { removing = index },
+                )
+            }
+        }
+    }
+    // Asked before it happens, because the row it takes is the one under a
+    // finger that was aiming to switch.
+    removing?.let { index ->
+        val row = sheet.rows.getOrNull(index)
+        if (row == null) {
+            removing = null
+        } else {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { removing = null },
+                title = { androidx.compose.material3.Text(row.name) },
+                text = { androidx.compose.material3.Text(sheet.removeBody) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        removing = null
+                        onRemove?.invoke(index)
+                    }) {
+                        androidx.compose.material3.Text(sheet.remove, color = colors.errorBase)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { removing = null }) {
+                        androidx.compose.material3.Text(sheet.removeCancel)
+                    }
+                },
+            )
         }
     }
     Spacer(modifier = Modifier.height(VelaSpacing.xl3))

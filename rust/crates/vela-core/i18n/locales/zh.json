@@ -29,7 +29,9 @@
     },
     "account": {
       "switch": "切换账户",
-      "contactsSubtitle": "已保存地址与最近收款人"
+      "contactsSubtitle": "已保存地址与最近收款人",
+      "remove": "从这台设备移除",
+      "removeBody": "只有这个钱包离开，其余的不动。"
     },
     "appearance": {
       "themeLight": "浅色",
@@ -106,7 +108,8 @@
       "keeps": "选择「我已有钱包」用该通行密钥重新登录：地址不变，交易记录、联系人、代币和各项设置也都还在。",
       "warning": "您的公钥尚未同步到服务器。下次启动会自动重试，但在成功之前，您可能无法在其他设备上登录——如果卸载了应用，这台设备也一样。",
       "anyway": "仍然退出",
-      "cancel": "取消"
+      "cancel": "取消",
+      "descMany": "这台设备上的 {{count}} 个钱包都会退出。不会删除任何东西。"
     },
     "eraseDevice": {
       "title": "清理数据",

@@ -224,7 +224,13 @@ data class LoginView(val busy: Boolean, val endpointUnreachable: Boolean) {
 data class SessionAccountRow(val index: Int, val name: String, val address: String)
 
 /** `SessionSignOutView` — present iff the confirmation dialog is open. */
-data class SessionSignOutView(val pendingUploadWarning: Boolean)
+data class SessionSignOutView(
+    val pendingUploadWarning: Boolean,
+    /** How many wallets this device is signed into — the sheet says so when
+     *  it is more than one, because "nothing is deleted, it all comes back"
+     *  says nothing about signing in six times (2026-09-23). */
+    val accountCount: Int = 1,
+)
 
 /** `SessionView` — the route guard and the account list. */
 data class SessionView(
@@ -262,7 +268,11 @@ data class SessionView(
             },
             allowedRoute = SessionRoute.of(json.getString("allowed_route")),
             signOut = json.optJSONObject("sign_out")?.let { sheet ->
-                SessionSignOutView(pendingUploadWarning = sheet.optBoolean("pending_upload_warning"))
+                SessionSignOutView(
+                    pendingUploadWarning = sheet.optBoolean("pending_upload_warning"),
+                    // One wallet and six cannot read the same (2026-09-23).
+                    accountCount = sheet.optInt("account_count", 1),
+                )
             },
         )
     }

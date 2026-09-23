@@ -29,7 +29,9 @@
     },
     "account": {
       "switch": "Switch account",
-      "contactsSubtitle": "Saved addresses and recent payees"
+      "contactsSubtitle": "Saved addresses and recent payees",
+      "remove": "Remove from this device",
+      "removeBody": "Only this wallet leaves; the others stay."
     },
     "appearance": {
       "themeLight": "Light",
@@ -106,7 +108,8 @@
       "keeps": "Choose “I already have a wallet” to sign back in with that passkey: the same address returns, and your history, contacts, tokens and settings are still here.",
       "warning": "Your public key has not reached the sync server yet. It will be retried on the next launch, but until it succeeds you may not be able to sign in on another device — or here, if you remove the app.",
       "anyway": "Sign Out Anyway",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "descMany": "All {{count}} wallets on this device sign out. Nothing is deleted."
     },
     "eraseDevice": {
       "title": "Erase This Device",

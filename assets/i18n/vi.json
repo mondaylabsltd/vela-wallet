@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Chuyển tài khoản",
-   "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây"
+   "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây",
+   "remove": "Gỡ khỏi thiết bị này",
+   "removeBody": "Chỉ ví này rời đi; các ví khác vẫn còn."
   },
   "appearance": {
    "themeLight": "Sáng",
@@ -106,7 +108,8 @@
    "keeps": "Chọn “Tôi đã có ví” để đăng nhập lại bằng chính passkey đó: địa chỉ vẫn như cũ, và lịch sử giao dịch, danh bạ, token cùng các cài đặt vẫn còn nguyên.",
    "warning": "Khóa công khai của bạn chưa tới được máy chủ đồng bộ. Ứng dụng sẽ thử lại ở lần mở kế tiếp, nhưng cho tới khi thành công, bạn có thể không đăng nhập được trên thiết bị khác — và cả trên máy này nếu bạn gỡ ứng dụng.",
    "anyway": "Vẫn đăng xuất",
-   "cancel": "Hủy"
+   "cancel": "Hủy",
+   "descMany": "Cả {{count}} ví trên thiết bị này sẽ đăng xuất. Không xoá gì cả."
   },
   "eraseDevice": {
    "title": "Xoá sạch thiết bị này",

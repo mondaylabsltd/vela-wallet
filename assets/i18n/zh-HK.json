@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "切換帳戶",
-   "contactsSubtitle": "已儲存嘅地址同最近收款人"
+   "contactsSubtitle": "已儲存嘅地址同最近收款人",
+   "remove": "從這部裝置移除",
+   "removeBody": "只有這個錢包離開，其餘的不動。"
   },
   "appearance": {
    "themeLight": "淺色",
@@ -106,7 +108,8 @@
    "keeps": "選擇「我已有錢包」用同一把通行密鑰重新登入：地址不變，交易紀錄、聯絡人、代幣與各項設定亦全部保留。",
    "warning": "你的公鑰尚未同步至伺服器。下次啟動會自動重試，但在成功之前，你可能無法在其他裝置上登入——若移除此 App，這部裝置亦一樣。",
    "anyway": "仍然登出",
-   "cancel": "取消"
+   "cancel": "取消",
+   "descMany": "這部裝置上的 {{count}} 個錢包都會登出。不會刪除任何東西。"
   },
   "eraseDevice": {
    "title": "清除資料",

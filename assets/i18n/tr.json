@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Hesap değiştir",
-   "contactsSubtitle": "Kayıtlı adresler ve son alıcılar"
+   "contactsSubtitle": "Kayıtlı adresler ve son alıcılar",
+   "remove": "Bu cihazdan kaldır",
+   "removeBody": "Yalnızca bu cüzdan ayrılır, diğerleri kalır."
   },
   "appearance": {
    "themeLight": "Açık",
@@ -106,7 +108,8 @@
    "keeps": "“Zaten bir cüzdanım var” seçeneğiyle aynı geçiş anahtarını kullanarak yeniden giriş yapın: adres aynı kalır, işlem geçmişiniz, kişileriniz, tokenlarınız ve ayarlarınız da yerinde durur.",
    "warning": "Açık anahtarınız henüz eşitleme sunucusuna ulaşmadı. Uygulama bir sonraki açılışta yeniden deneyecek, ancak başarılı olana kadar başka bir cihazda giriş yapamayabilirsiniz — uygulamayı kaldırırsanız bu cihazda da.",
    "anyway": "Yine de Çıkış Yap",
-   "cancel": "İptal"
+   "cancel": "İptal",
+   "descMany": "Bu cihazdaki {{count}} cüzdanın tamamı oturumu kapatır. Hiçbir şey silinmez."
   },
   "eraseDevice": {
    "title": "Bu Cihazı Temizle",

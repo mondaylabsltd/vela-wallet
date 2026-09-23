@@ -540,6 +540,11 @@ enum SettingsLive {
                 selected: index == session.activeIndex
             )
         }
+        // Taking ONE wallet off this device (2026-09-23), resolved here because
+        // the sheet resolves nothing of its own.
+        copy.accountsSheet.remove = loc.t(I18nKeys.SettingsUi.accountRemove)
+        copy.accountsSheet.removeBody = loc.t(I18nKeys.SettingsUi.accountRemoveBody)
+        copy.accountsSheet.removeCancel = loc.t("settings.signOut.cancel")
         copy.accountsSheet.summary =
             loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
             + loc.t(k.accountsTotal, vars: [

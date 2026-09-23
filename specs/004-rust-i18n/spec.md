@@ -563,9 +563,15 @@ distinct keys has flat memory.
   resolutions change; each is enumerated with its count, before string and after
   string.
 - **SC-005**: **Cold start in any single language loads at most that language plus
-  the `en` fallback.** Measured resident catalog bytes for `ja` are ≤ 135,345
-  (75,608 + 59,737), against 990,499 today — a ≥86% reduction. After a switch to
+  the `en` fallback.** Measured resident catalog bytes for `ja` were ≤ 135,345
+  (75,608 + 59,737), against 990,499 then — a ≥86% reduction. After a switch to
   `de` and a release of `ja`, resident bytes return to at most `de` + `en`.
+
+  *2026-09-23, owner:* the corpus grew into that measurement, and the test's
+  constant was doubled to 270,690. The requirement is the sentence above — one
+  language plus `en`, never fifteen — and it is unchanged; the number is now a
+  guard against bloat, which a locale pair reaches only by doubling. The
+  reduction it still permits is 72.7%.
 - **SC-006**: The generated TypeScript resources produce a resource object deep-equal
   to the hand-maintained one they replace, and regenerating the corpus leaves
   `git diff --exit-code` clean.

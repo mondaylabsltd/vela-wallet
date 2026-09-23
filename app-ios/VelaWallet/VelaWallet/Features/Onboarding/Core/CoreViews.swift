@@ -165,6 +165,10 @@ struct SessionAccountRow: Decodable, Equatable {
 /// second source of truth for a fact the core already owns.
 struct SessionSignOutView: Decodable, Equatable, Identifiable {
     let pendingUploadWarning: Bool
+    /// How many wallets this device is signed into — the sheet says so when it
+    /// is more than one, because "nothing is deleted, it all comes back" says
+    /// nothing about signing in six times (2026-09-23).
+    let accountCount: Int
 
     var id: Bool { pendingUploadWarning }
 }

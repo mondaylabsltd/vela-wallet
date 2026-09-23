@@ -53,6 +53,7 @@ object I18nKeys {
         const val SIGN_OUT_BUTTON = "settings.signOut.button"
         const val SIGN_OUT_TITLE = "settings.signOut.title"
         const val SIGN_OUT_KEEPS = "settings.signOut.keeps"
+        const val SIGN_OUT_DESC_MANY = "settings.signOut.descMany"
         const val SIGN_OUT_WARNING = "settings.signOut.warning"
         const val SIGN_OUT_ANYWAY = "settings.signOut.anyway"
         const val SIGN_OUT_CANCEL = "settings.signOut.cancel"
@@ -733,6 +734,8 @@ object I18nKeys {
 
         // Home rows.
         const val ACCOUNT_SWITCH = "settings.account.switch"
+        const val ACCOUNT_REMOVE = "settings.account.remove"
+        const val ACCOUNT_REMOVE_BODY = "settings.account.removeBody"
         const val CONTACTS_SUBTITLE = "settings.account.contactsSubtitle"
         const val FEEDBACK_TITLE = "settings.feedback.title"
         const val FEEDBACK_SUBTITLE = "settings.feedback.subtitle"

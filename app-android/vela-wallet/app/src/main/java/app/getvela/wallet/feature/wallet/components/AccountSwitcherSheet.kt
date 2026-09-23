@@ -29,6 +29,8 @@ fun AccountSwitcherSheet(
     onSelect: (Int) -> Unit,
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
+    /** Taking ONE wallet off this device; `null` draws no affordance. */
+    onRemove: ((Int) -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -43,7 +45,13 @@ fun AccountSwitcherSheet(
                 .padding(bottom = VelaSpacing.xl)
                 .navigationBarsPadding(),
         ) {
-            AccountsSheetBody(sheet = sheet, onSelect = onSelect, onPrimary = onPrimary, onSecondary = onSecondary)
+            AccountsSheetBody(
+                sheet = sheet,
+                onSelect = onSelect,
+                onPrimary = onPrimary,
+                onSecondary = onSecondary,
+                onRemove = onRemove,
+            )
         }
     }
 }

@@ -50,6 +50,11 @@ class SessionExecutor(private val store: AccountStore) {
                 result("pending_uploads_unavailable") {}
             }
 
+            "remove_account" -> {
+                runCatching { store.removeAccountAtAddress(operation.optString("address")) }
+                result("account_removed") {}
+            }
+
             "clear_signed_in_wallet" -> {
                 runCatching { store.clearSignedInWallet() }
                 result("signed_in_wallet_cleared") {}
@@ -72,6 +77,7 @@ class SessionExecutor(private val store: AccountStore) {
             "save_account",
             "save_active_index",
             "check_pending_uploads",
+            "remove_account",
             "clear_signed_in_wallet",
             "clear_extension_cache",
         )
@@ -94,6 +100,7 @@ class SessionExecutor(private val store: AccountStore) {
                 "check_pending_uploads" -> JSONObject().put("type", "pending_uploads_unavailable")
                 "save_account" -> JSONObject().put("type", "account_saved")
                 "save_active_index" -> JSONObject().put("type", "active_index_saved")
+                "remove_account" -> JSONObject().put("type", "account_removed")
                 "clear_signed_in_wallet" -> JSONObject().put("type", "signed_in_wallet_cleared")
                 "clear_extension_cache" -> JSONObject().put("type", "extension_cache_cleared")
                 else -> JSONObject().put("type", "accounts_unavailable")

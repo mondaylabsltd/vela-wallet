@@ -284,6 +284,8 @@ enum I18nKeys {
 
             // Home rows.
         static let accountSwitch = "settings.account.switch"
+        static let accountRemove = "settings.account.remove"
+        static let accountRemoveBody = "settings.account.removeBody"
         static let contactsSubtitle = "settings.account.contactsSubtitle"
         static let feedbackTitle = "settings.feedback.title"
         static let feedbackSubtitle = "settings.feedback.subtitle"

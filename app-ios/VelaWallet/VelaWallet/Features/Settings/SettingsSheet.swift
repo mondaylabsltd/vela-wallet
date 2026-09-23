@@ -29,6 +29,9 @@ struct SettingsSheet: View {
     var onSelectAccount: ((String) -> Void)?
     var onAccountCreate: (() -> Void)?
     var onAccountSignIn: (() -> Void)?
+    /// Taking ONE wallet off this device (2026-09-23), by its position in the
+    /// session's own list.
+    var onRemoveAccount: ((Int) -> Void)?
     /// SR2's field and its commit (058). Absent in the gallery, where the
     /// endpoint is a picture of one already typed.
     var rpcDraft: Binding<String>?
@@ -67,7 +70,8 @@ struct SettingsSheet: View {
                         sheet: model.accountsSheet,
                         onSelect: { address in onSelectAccount?(address) },
                         onCreate: onAccountCreate,
-                        onSignIn: onAccountSignIn
+                        onSignIn: onAccountSignIn,
+                        onRemove: onRemoveAccount
                     )
                 case .signOut:
                     ConfirmSheetBody(sheet: model.signOutSheet,
@@ -362,6 +366,13 @@ private struct AccountsSheetBody: View {
     /// nothing on purpose; present = the live screen, where they must.
     var onCreate: (() -> Void)?
     var onSignIn: (() -> Void)?
+    /// Taking ONE wallet off this device (2026-09-23); absent draws nothing.
+    /// The index is the position in the ORIGINAL list, which is what the core
+    /// removes by — never the address, which two records can share.
+    var onRemove: ((Int) -> Void)?
+
+    /// The row a confirmation is open for.
+    @State private var removing: Int?
 
     var body: some View {
         SheetTitle(title: sheet.title)
@@ -375,7 +386,7 @@ private struct AccountsSheetBody: View {
         // `ForEach` a duplicate id — the web's switcher threw outright on that
         // pair (issue 214 follow-up). The core refuses to hold the pair now,
         // and this stops the shell from depending on it.
-        ForEach(Array(sheet.rows.enumerated()), id: \.offset) { _, row in
+        ForEach(Array(sheet.rows.enumerated()), id: \.offset) { offset, row in
             Button { onSelect?(row.addressFull) } label: {
             VStack(spacing: 0) {
                 HStack(spacing: Tokens.Space.s12) {
@@ -397,6 +408,14 @@ private struct AccountsSheetBody: View {
                         LucideIcon(.check, size: LucideIconSize.action)
                             .foregroundStyle(theme.accentBase)
                     }
+                    if onRemove != nil, !sheet.remove.isEmpty {
+                        Button { removing = offset } label: {
+                            LucideIcon(.close, size: LucideIconSize.action)
+                                .foregroundStyle(theme.fgSubtle)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(sheet.remove)
+                    }
                 }
                 .padding(.vertical, Tokens.Space.s12)
                 SettingsDivider()
@@ -413,6 +432,24 @@ private struct AccountsSheetBody: View {
             .padding(.top, Tokens.Space.s24)
             .padding(.bottom, Tokens.Space.s12)
         VelaButton(title: sheet.secondary, kind: .secondary) { onSignIn?() }
+            // Asked before it happens: the row it takes is the one under a
+            // finger that was aiming to switch.
+            .alert(
+                removing.flatMap { sheet.rows[safe: $0]?.name } ?? "",
+                isPresented: Binding(
+                    get: { removing != nil },
+                    set: { open in if !open { removing = nil } }
+                ),
+                presenting: removing
+            ) { index in
+                Button(sheet.remove, role: .destructive) {
+                    removing = nil
+                    onRemove?(index)
+                }
+                Button(sheet.removeCancel, role: .cancel) { removing = nil }
+            } message: { _ in
+                Text(sheet.removeBody)
+            }
     }
 }
 

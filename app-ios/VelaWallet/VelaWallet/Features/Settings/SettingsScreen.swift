@@ -60,6 +60,8 @@ struct SettingsScreen: View {
     /// The two ways on from the account sheet. Absent = a fixture board.
     var onAccountCreate: (() -> Void)?
     var onAccountSignIn: (() -> Void)?
+    /// Taking ONE wallet off this device (2026-09-23).
+    var onRemoveAccount: ((Int) -> Void)?
     /// The endpoints and providers pages' live half.
     var endpointActions: SettingsEndpointActions?
     /// The switcher was opened. The balance machine reads every account's
@@ -116,6 +118,7 @@ struct SettingsScreen: View {
         onSelectAccount: ((String) -> Void)? = nil,
         onAccountCreate: (() -> Void)? = nil,
         onAccountSignIn: (() -> Void)? = nil,
+        onRemoveAccount: ((Int) -> Void)? = nil,
         endpointActions: SettingsEndpointActions? = nil,
         onOpenAccounts: (() -> Void)? = nil,
         onEthereumBackup: (() -> Void)? = nil,
@@ -139,6 +142,7 @@ struct SettingsScreen: View {
         self.onSelectAccount = onSelectAccount
         self.onAccountCreate = onAccountCreate
         self.onAccountSignIn = onAccountSignIn
+        self.onRemoveAccount = onRemoveAccount
         self.endpointActions = endpointActions
         self.onOpenAccounts = onOpenAccounts
         self.onEthereumBackup = onEthereumBackup
@@ -221,6 +225,13 @@ struct SettingsScreen: View {
                         {
                             self.overlay = .none
                             go()
+                        }
+                    },
+                    // The sheet closes because the list under it just changed.
+                    onRemoveAccount: onRemoveAccount.map { remove in
+                        { index in
+                            self.overlay = .none
+                            remove(index)
                         }
                     },
                     pendingConfirm: pendingConfirm?.sheet,

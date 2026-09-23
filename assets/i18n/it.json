@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Cambia account",
-   "contactsSubtitle": "Indirizzi salvati e destinatari recenti"
+   "contactsSubtitle": "Indirizzi salvati e destinatari recenti",
+   "remove": "Rimuovi da questo dispositivo",
+   "removeBody": "Se ne va solo questo portafoglio, gli altri restano."
   },
   "appearance": {
    "themeLight": "Chiaro",
@@ -106,7 +108,8 @@
    "keeps": "Scegli «Ho già un wallet» per accedere di nuovo con la stessa passkey: ritrovi lo stesso indirizzo e restano al loro posto cronologia, contatti, token e impostazioni.",
    "warning": "La tua chiave pubblica non è ancora arrivata al server di sincronizzazione. L'app riproverà al prossimo avvio, ma finché non riesce potresti non riuscire ad accedere da un altro dispositivo — né da qui, se disinstalli l'app.",
    "anyway": "Esci comunque",
-   "cancel": "Annulla"
+   "cancel": "Annulla",
+   "descMany": "Tutti i {{count}} portafogli di questo dispositivo usciranno. Non si cancella nulla."
   },
   "eraseDevice": {
    "title": "Cancella questo dispositivo",

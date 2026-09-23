@@ -116,6 +116,22 @@ actor AccountStore {
         defaults.removeObject(forKey: Key.activeIndex)
     }
 
+    /// Drop ONE account from the stored list, by ADDRESS — spec 017's narrow
+    /// half (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+    ///
+    /// By address, not by id or position, because a row's identity is its
+    /// address (session invariant ⑨): a write that raced a re-sorted display
+    /// must not take a stranger. `removeAccount(id:)` above is a different job
+    /// — the parallel space dropping the record it appended, which it knows by
+    /// id. A row that is no longer there is a no-op: the person asked for it to
+    /// be gone, and it is.
+    func removeAccount(address: String) {
+        let kept = loadAccounts().filter {
+            ($0["address"] as? String)?.caseInsensitiveCompare(address) != .orderedSame
+        }
+        writeList(Key.accounts, kept)
+    }
+
     // MARK: - `vela.serviceEndpoints`, which has two writers
 
     /// The whole endpoints blob, as stored — camelCase, partial, absent fields

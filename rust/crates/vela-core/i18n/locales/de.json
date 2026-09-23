@@ -29,7 +29,9 @@
     },
     "account": {
       "switch": "Konto wechseln",
-      "contactsSubtitle": "Gespeicherte Adressen und letzte Empfänger"
+      "contactsSubtitle": "Gespeicherte Adressen und letzte Empfänger",
+      "remove": "Von diesem Gerät entfernen",
+      "removeBody": "Nur diese Wallet geht, die anderen bleiben."
     },
     "appearance": {
       "themeLight": "Hell",
@@ -106,7 +108,8 @@
       "keeps": "Wählen Sie „Ich habe bereits eine Wallet“, um sich mit demselben Passkey wieder anzumelden: Sie erhalten dieselbe Adresse zurück, und Verlauf, Kontakte, Token und Einstellungen sind weiterhin da.",
       "warning": "Ihr öffentlicher Schlüssel hat den Sync-Server noch nicht erreicht. Beim nächsten Start wird es erneut versucht, aber bis dahin können Sie sich auf anderen Geräten möglicherweise nicht anmelden — und auch hier nicht, wenn Sie die App entfernen.",
       "anyway": "Trotzdem abmelden",
-      "cancel": "Abbrechen"
+      "cancel": "Abbrechen",
+      "descMany": "Alle {{count}} Wallets auf diesem Gerät werden abgemeldet. Nichts wird gelöscht."
     },
     "eraseDevice": {
       "title": "Dieses Gerät löschen",

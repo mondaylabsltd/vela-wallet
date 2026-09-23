@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Cambiar de cuenta",
-   "contactsSubtitle": "Direcciones guardadas y destinatarios recientes"
+   "contactsSubtitle": "Direcciones guardadas y destinatarios recientes",
+   "remove": "Quitar de este dispositivo",
+   "removeBody": "Solo se va esta cartera; las demás se quedan."
   },
   "appearance": {
    "themeLight": "Claro",
@@ -106,7 +108,8 @@
    "keeps": "Elige “Ya tengo una billetera” para volver a entrar con esa misma passkey: recuperas la misma dirección, y tu historial, contactos, tokens y ajustes siguen aquí.",
    "warning": "Tu llave pública todavía no llegó al servidor de sincronización. Se reintentará al abrir la app de nuevo, pero hasta que lo logre podrías no poder iniciar sesión en otro dispositivo, ni aquí si desinstalas la app.",
    "anyway": "Cerrar sesión de todos modos",
-   "cancel": "Cancelar"
+   "cancel": "Cancelar",
+   "descMany": "Las {{count}} carteras de este dispositivo cerrarán sesión. No se borra nada."
   },
   "eraseDevice": {
    "title": "Borrar este dispositivo",

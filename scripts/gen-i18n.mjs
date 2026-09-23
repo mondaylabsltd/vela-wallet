@@ -376,8 +376,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   offered and failed at the publish, with nothing said (owner, 2026-09-23).
 //   Two strings, not three: a dimmed row keeps its own caption, and the third
 //   would have said "off" where the dimming already does (SC-005 budget).
-if (PATHS.length !== 1742) fail(`expected 1742 paths (1653 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1653) fail(`expected 1653 leaf paths, got ${leafSet.size}`);
+// 1745 (2026-09-23): +3 — `settings.account.remove{,Body}` and
+//   `settings.signOut.descMany`. A device holding six wallets could sign out
+//   of all six or none, and the dialog's copy was true of one and quietly
+//   false of six (owner: 「有时候不想退出所有，只想退出单个」).
+if (PATHS.length !== 1745) fail(`expected 1745 paths (1656 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1656) fail(`expected 1656 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

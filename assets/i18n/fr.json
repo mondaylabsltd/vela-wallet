@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Changer de compte",
-   "contactsSubtitle": "Adresses enregistrées et destinataires récents"
+   "contactsSubtitle": "Adresses enregistrées et destinataires récents",
+   "remove": "Retirer de cet appareil",
+   "removeBody": "Seul ce portefeuille part, les autres restent."
   },
   "appearance": {
    "themeLight": "Clair",
@@ -106,7 +108,8 @@
    "keeps": "Choisissez « J'ai déjà un portefeuille » pour vous reconnecter avec cette clé d'accès : vous retrouvez la même adresse, ainsi que votre historique, vos contacts, vos jetons et vos réglages.",
    "warning": "Votre clé publique n'est pas encore arrivée sur le serveur de synchronisation. L'application réessaiera au prochain lancement, mais d'ici là vous pourriez ne pas pouvoir vous connecter sur un autre appareil — ni ici, si vous désinstallez l'application.",
    "anyway": "Se déconnecter quand même",
-   "cancel": "Annuler"
+   "cancel": "Annuler",
+   "descMany": "Les {{count}} portefeuilles de cet appareil seront déconnectés. Rien n'est supprimé."
   },
   "eraseDevice": {
    "title": "Effacer cet appareil",

@@ -24,6 +24,7 @@ final class SessionExecutor {
         "save_account",
         "save_active_index",
         "check_pending_uploads",
+        "remove_account",
         "clear_signed_in_wallet",
         "clear_extension_cache",
     ]
@@ -58,6 +59,10 @@ final class SessionExecutor {
                 "type": "pending_uploads",
                 "has_pending": await store.hasPendingUploads(),
             ])
+
+        case "remove_account":
+            await store.removeAccount(address: operation["address"] as? String ?? "")
+            return CoreJSON.string(["type": "account_removed"])
 
         case "clear_signed_in_wallet":
             await store.clearSignedInWallet()
