@@ -100,6 +100,19 @@ class BrowserEngine(
     private val tabId: String = id
 
     val webView: WebView = WebView(context).apply {
+        // MATCH_PARENT, and not for layout's sake: a WebView left at the
+        // default WRAP_CONTENT gives Chromium no viewport HEIGHT, and every
+        // `vh` unit on the page resolves to ZERO while `innerHeight` reports
+        // the real number. Uniswap's connect sheet is
+        // `max-height: calc(100vh - 72px)`, so it computed to 0px and the
+        // sheet — listing this wallet, "已检测到" — collapsed to one pixel
+        // behind its own scrim. The page looked frozen and the wallet looked
+        // undetected (owner, 2026-09-23; found with 100vh/100dvh/100svh all
+        // measuring 0 in the live page).
+        layoutParams = android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+        )
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
