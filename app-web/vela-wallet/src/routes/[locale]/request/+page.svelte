@@ -32,6 +32,10 @@
 	import { getOriginChain } from '$lib/dapp/grants';
 	import { approve, evaluate, type RequestStage } from '$lib/dapp/request';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
+	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
+	import { dappReceiptModel, receiptProgress, type DappReceiptState } from '$lib/signing/dapp-receipt';
+	import { explorerBaseURL } from '$lib/services/networks';
+	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import {
@@ -45,6 +49,15 @@
 	} from '$lib/dapp/transport';
 
 	let { data } = $props();
+
+	/**
+	 * How long to wait for the operation's hash after the dApp was answered.
+	 *
+	 * Generous on purpose: the cost of waiting is a surface that stays a second
+	 * too long, and the cost of not waiting is a person watching their
+	 * transaction vanish.
+	 */
+	const HANDOFF_GRACE_MS = 6000;
 	const m = $derived(data.requestMessages);
 
 	let request = $state<ExtensionRequest | null>(null);
@@ -63,6 +76,25 @@
 	const feeQuote = new FeeQuote();
 	/** Cleared the moment an answer goes out, so teardown owes nothing. */
 	let owing = $state<string | null>(null);
+	/**
+	 * Spec 077: when the dApp was answered. Non-zero means "look for something
+	 * to watch"; the operation's hash arrives on a LATER view than the answer.
+	 */
+	let answeredAtMs = $state(0);
+	/** Spec 077: where the signed operation stands, once one is being watched. */
+	let landing = $state<DappReceiptState>({ kind: 'submitting' });
+	let landedAtMs = $state(0);
+	let unsubscribeTracker: (() => void) | undefined;
+	/**
+	 * Ticks the ring while the chain's usual time passes.
+	 *
+	 * Today it always circles rather than fills: this surface has no figure for
+	 * how long THIS chain usually takes (`typical_inclusion_s` reaches the web
+	 * only on the send's own receipt view). A ring drawn from a number nobody
+	 * measured would be a progress bar for a guess, so it circles — which is
+	 * the same honest drawing a send uses for a chain with no estimate.
+	 */
+	let nowMs = $state(Date.now());
 
 	const facts = $derived({
 		activeAddress: session.view.address,
@@ -150,9 +182,27 @@
 		signRequest.syncAccounts();
 		const transportId = signRequest.registerTransport({
 			sendResponse: (_id, result, error) => {
+				// The answer goes out FIRST and unconditionally. Everything below
+				// is about the chain, and nothing below may delay, swallow or
+				// repeat this (spec 077, the invariant).
 				owing = null;
 				void answerRequest(incoming.rid, error ? { error } : { result });
-				closeSoon();
+				// A transaction the wallet can watch stays on screen and lands,
+				// as a send does. Anything else — a message, a refusal, a
+				// transaction with no operation to follow — leaves as it always
+				// has.
+				// NOT `signRequest.view.tracker_handoff` here: this callback runs
+				// INSIDE the core's dispatch, before the view that carries the
+				// handoff has been committed. Reading it here found `null` every
+				// time and the surface closed on the person mid-submit — found by
+				// driving the packaged extension, not by a test (2026-09-23).
+				//
+				// So the wait is declared and the effect below picks it up.
+				if (error) {
+					closeSoon();
+					return;
+				}
+				answeredAtMs = Date.now();
 			}
 		});
 		signRequest.dispatch({
@@ -175,6 +225,66 @@
 			request_ts_ms: null,
 			now_ms: Date.now()
 		});
+	}
+
+	/**
+	 * The answer has gone; is there an operation to follow?
+	 *
+	 * The handoff lands on a view AFTER the one that answered, so this waits
+	 * for it rather than reading it at the answer. If none arrives — a message,
+	 * a refusal, anything with no chain behind it — the surface leaves as it
+	 * always has.
+	 */
+	$effect(() => {
+		if (answeredAtMs === 0 || stage.kind === 'landing') return;
+		const handoff = signRequest.view.tracker_handoff;
+		if (handoff?.user_op_hash) {
+			watchLanding(handoff.user_op_hash, handoff.chain_id);
+			return;
+		}
+		// Nothing yet. Give the submit a moment, then leave as before.
+		const giveUp = setTimeout(() => {
+			if (stage.kind !== 'landing') closeSoon();
+		}, HANDOFF_GRACE_MS);
+		return () => clearTimeout(giveUp);
+	});
+
+	/**
+	 * Follow one operation to the chain and draw it (spec 077 FR-002).
+	 *
+	 * The tracker is already following it — `sign-resident` hands every
+	 * `tracker_handoff` over the moment it appears — so this subscribes to what
+	 * is already running rather than starting a second watch of the same hash.
+	 */
+	function watchLanding(opHash: string, trackedChain: number): void {
+		const chain = trackedChain > 0 ? trackedChain : chainId;
+		stage = { kind: 'landing', opHash, chainId: chain };
+		landedAtMs = Date.now();
+		readTracker(opHash);
+		unsubscribeTracker?.();
+		unsubscribeTracker = subscribeTxTracker(() => readTracker(opHash));
+	}
+
+	/**
+	 * What the tracker says about this hash, as the receipt's own state.
+	 *
+	 * `dropped` / `rejected` are failures with a hash to look at; `unreachable`
+	 * is NOT — the wallet could not ask, which is not the same as the chain
+	 * saying no, and a cross drawn for it would be the wallet inventing a
+	 * verdict it does not have. That one keeps waiting.
+	 */
+	function readTracker(opHash: string): void {
+		const wanted = opHash.toLowerCase();
+		const entry = txTrackerView().entries.find((row) => row.user_op_hash.toLowerCase() === wanted);
+		if (!entry) return;
+		if (entry.status === 'confirmed' && entry.tx_hash) {
+			landing = { kind: 'confirmed', opHash, txHash: entry.tx_hash };
+		} else if (entry.status === 'dropped' || entry.status === 'rejected') {
+			landing = { kind: 'failed', opHash };
+		} else {
+			landing = { kind: 'submitted', opHash };
+		}
+		if (entry.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
 	}
 
 	async function settleOnClose(rid: string): Promise<void> {
@@ -244,7 +354,22 @@
 
 <svelte:head><title>Vela</title></svelte:head>
 
-{#if stage.kind !== 'signing'}
+{#if stage.kind === 'landing'}
+	<!--
+		Spec 077: the same landing a send shows. The dApp was answered before
+		this appeared; "Done" closes a window, never a conversation.
+	-->
+	<main class="landing">
+		<DappReceipt
+			model={dappReceiptModel(landing, m.receipt, (txHash) => {
+				const base = explorerBaseURL(stage.kind === 'landing' ? stage.chainId : 0);
+				return base ? `${base}/tx/${txHash}` : null;
+			})}
+			progress={landing.kind === 'submitted' ? receiptProgress(landedAtMs, 0, nowMs) : undefined}
+			ondone={() => closeSoon()}
+		/>
+	</main>
+{:else if stage.kind !== 'signing'}
 	<main>
 		{#if stage.kind === 'consent' && request}
 			<h1>{m.title.replace('{{host}}', hostLabel(request.origin))}</h1>

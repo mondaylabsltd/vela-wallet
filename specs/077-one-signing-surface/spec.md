@@ -59,10 +59,18 @@ The dApp already has its answer (the operation hash) the moment it is submitted;
 what is being watched afterwards is the chain, and that is the person's business,
 not the request's.
 
-### FR-003 · The dedicated window keeps its ending
+### FR-003 · The dedicated window lands too
 A request a page fired with no user gesture still opens in its own window
-(`?rid=`). That window may still close on `done` — there is no wallet under it
-to return to. FR-002's receipt is the PANEL's and the wallet's.
+(`?rid=`). It was going to keep today's ending — close on `done` — on the
+reasoning that there is no wallet under it to return to.
+
+**Driving the packaged extension changed that.** A window that shuts itself
+about twenty seconds after the slide, with no word about what happened, is the
+complaint whatever surface it is. The receipt is drawn in both, and "Done"
+closes the window as before.
+
+What the window does NOT get is a wallet behind it; that is FR-001's, and it is
+why the panel is still worth moving.
 
 ### FR-004 · One pipeline, said as a rule
 A transaction signed anywhere in the web shell — a send, a dApp request, the

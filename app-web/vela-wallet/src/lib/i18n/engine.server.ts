@@ -677,7 +677,21 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		body: k('connect.browser.body'),
 		connect: k('connect.browser.connect'),
 		cancel: k('connect.browser.cancel'),
-		preparing: k('connect.browser.preparing')
+		preparing: k('connect.browser.preparing'),
+		// Spec 077: the send receipt's own words, for the landing a dApp
+		// transaction now shows instead of a window that shut itself.
+		receipt: {
+			confirming: k('componentsTx.receipt.confirming'),
+			confirmingHint: k('componentsTx.receipt.confirmingHint'),
+			submitted: k('componentsTx.receipt.statusSubmitted'),
+			confirmed: k('componentsTx.receipt.statusConfirmed'),
+			failed: k('componentsTx.receipt.statusFailed'),
+			failedHint: k('componentsTx.receipt.failedHint'),
+			opHashLabel: k('componentsTx.receipt.userOpHash'),
+			txHashLabel: k('componentsTx.receipt.txHash'),
+			explorer: k('componentsTx.receipt.explorer'),
+			done: k('componentsTx.receipt.done')
+		}
 	};
 }
 

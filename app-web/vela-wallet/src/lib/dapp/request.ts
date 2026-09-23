@@ -39,7 +39,13 @@ export type RequestStage =
 	/** The core refused, in its own words. */
 	| { kind: 'refused'; code: number; message: string }
 	/** A granted origin asking for a signature — 026's sheet, in Phase 5. */
-	| { kind: 'signing'; grantedAddress: string };
+	| { kind: 'signing'; grantedAddress: string }
+	/**
+	 * Spec 077: signed, answered, and now landing. The dApp already HAS its
+	 * answer — this stage watches the chain, which is the person's business
+	 * and not the request's, so nothing in it can answer anything.
+	 */
+	| { kind: 'landing'; opHash: string; chainId: number };
 
 /**
  * Ask the core what to do with this request, and do the parts that need nobody.
