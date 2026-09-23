@@ -18,12 +18,12 @@ cannot be reached at all, then a control that has another route.
 | --- | --- | --- | --- | --- |
 | 1 | iOS | `FlowBlocks.swift:168` ← `FlowHost.swift:334` | The ⇄ toggle under the send amount. `SendStore.toggleFiatInput()` has **no call site in the whole iOS tree**; the other three shells all dispatch it. |**fixed** — `FlowHost.onDenom` seam, `RootView` sends `toggleFiatInput()` |
 | 2 | iOS | `FlowBodies.swift:1308` ← `FlowHost.swift:388` | "View on explorer" on a **confirmed** send receipt. Doubly dead: `RootView.explorerLink(for:)` also returns `nil` for that state. |**fixed** — body gets `onExplorer`, and `explorerLink(for:)` now answers for `.sd4a/b/c` off the token's chain |
-| 3 | Android | `FlowScreens.kt:929` ← `FlowHost.kt:231` | The MAX pill on every sweep row — `onMax` is `() -> Unit`, the row index is discarded, and the core has no per-row max event. |open — Android; needs a device run (sweep, 2+ tokens, MAX on row two) |
+| 3 | Android | `FlowScreens.kt:929` ← `FlowHost.kt:231` | The MAX pill on every sweep row — `onMax` is `() -> Unit`, the row index is discarded, and the core has no per-row max event. |**fixed** — the pill is NOT meaningful (every sweep row is already its token's max, net of the fee's reserve), so the live form draws none, as iOS already did; and `tap_max` now refuses sweep mode in the core, where it used to write the first picked token's hidden amount |
 | 4 | Desktop | `page.rs:3187-3207` | Contact detail's 转账 / 收款 / 二维码 pills. 二维码 has **no other path at all**. |**fixed** — 转账 prefills the send form, 收款 opens receive, 二维码 opens a new dialog with a real code |
 | 5 | Desktop | `page.rs:2994`, `contacts/components.rs:408` | The group view's accent-filled 群发转账 button — accent means "this moves money" in this codebase. |**fixed** — one member prefills, two or more append as split recipients |
 | 6 | Web | `FeeRow.svelte:61` ← `SigningHost.svelte:43` | The signing sheet's fee row, on a chain with exactly one fee coin. |**fixed** — `tappable` decided in the live builder; with one coin the row is a statement, on web, iOS, desktop and Android |
 | 7 | Desktop | `page.rs:7020-7025` | The currency select in Region & formats. `Event::UserChose` is never dispatched: **there is no way to change display currency on desktop at all.** |**fixed** — the menu lists what the rate endpoint can price, with a sample in each |
-| 8 | iOS + Android | `WalletKeysBlock.swift:82`, `SettingsRows.kt:80` | The Ethereum-backup row taps in all four states but only `notBackedUp` carries a `call` — including "could not check", which is exactly when a person taps to retry. Both shells gate the chevron and forget the click. |open — **founder question**: should "could not check" retry, or should the row stop being tappable? |
+| 8 | iOS + Android | `WalletKeysBlock.swift:82`, `SettingsRows.kt:80` | The Ethereum-backup row taps in all four states but only `notBackedUp` carries a `call` — including "could not check", which is exactly when a person taps to retry. Both shells gate the chevron and forget the click. |**Android fixed** (founder ruled 2026-09-23: implement the retry) — `couldNotCheck` is actionable and re-runs the same check the screen runs when it opens, wearing a refresh glyph rather than a chevron; the other three states take no taps at all. iOS still open, and the equivalent change is named in the report. |
 | 9 | iOS | `ConnectionPanelView.swift:58` ← `ExploreScreen.swift:577` | "Switch account" in the dApp connection sheet, chevron and all. Android draws the same row with no click either; web wires it. |**built** (founder, 2026-09-23) — iOS + Android open the switcher and the core re-pins the grant. iOS was also never telling the browser a switch had happened at all |
 | 10 | iOS | `FlowBodies.swift:424-436` ← `FlowHost.swift:538` | The add-token sheet's ERC-20 / native segmented control and its network row. FlowHost has no seam for either, and `FlowsLive.addToken` falls back to the **fixture's** network, so the dead chevron shows a fixture chain name. |**fixed** — 原生 goes to 添加网络 (Android's route), the fixture-network fallback is gone, the row is a label |
 | 11 | Desktop | `settings/components.rs:873`, `page.rs:7793` | Settings → Storage: every per-row 清除 and 清除全部缓存 are plain `div`s. (Same block: only the total is live, every per-row meta is fixture.) |**fixed** — `executor/device_storage.rs` measures it, and each clear asks first |
@@ -60,7 +60,15 @@ Looking at the screens to check the fixes found worse things than the fixes.
 
 ## Cannot be settled by reading
 
-- #3 needs a device run: sweep, two or more tokens, MAX on the second row.
+- ~~#3 needs a device run: sweep, two or more tokens, MAX on the second row.~~
+  **Done on the Xiaomi (2026-09-23).** Reaching it needed a wallet holding two
+  tokens on ONE chain, which the parallel-space Safe does not — it holds three
+  native coins on three chains, and a zero balance is filtered out of both the
+  assets list and the picker, so an added token cannot stand in. Gnosis's RPC
+  override (Settings → Networks) was pointed at a local stand-in over
+  `adb reverse`, which answered the balance walk's `aggregate3`; the sweep then
+  had four Gnosis tokens to pick from. On the old build MAX on the second row
+  changed nothing visible; on the fixed build the pills are gone.
 - #6 needs a chain with exactly one fee coin.
 - #18 needs a hashless activity record, or a custom chain with no explorer URL.
 - #19's nested-`<button>` question needs an SSR/hydration check.
@@ -95,3 +103,9 @@ in all four states and only `notBackedUp` does anything. Either the row
 stops taking taps where there is nothing to do (the house rule), or
 "could not check" retries the check — which is what a person tapping it
 actually wants, and is a small feature rather than a fix.
+
+> **Answered 2026-09-23: both.** "Could not check" retries — it is exactly
+> when a person taps — and the three states with nothing to offer stop taking
+> taps. Android has it (the row carries `actionable`, and `couldNotCheck`
+> wears a refresh glyph; the tap re-runs the very check the screen runs when
+> it opens). iOS is owed the same change.

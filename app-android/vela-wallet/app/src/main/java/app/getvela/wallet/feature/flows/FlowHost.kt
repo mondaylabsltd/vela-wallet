@@ -228,6 +228,12 @@ private fun FlowHostContent(
                     onRecipientPick = send?.onRecipientPick,
                     onFillEmpty = send?.onFillEmpty,
                     onContinue = { send?.onContinue?.invoke() ?: onNavigate(FlowStep.SendConfirm) },
+                    // The index is the ROW the chip sits on, and the live form
+                    // draws exactly one chip: the single token card's, row 0.
+                    // A live sweep draws none (`SendLive.sweepForm` sends an
+                    // empty label) because every sweep row is already its
+                    // token's maximum — so there is no row for this event to
+                    // carry and `TapMax` is the whole answer.
                     onMax = { if (send != null) send.onMax() },
                     onDenom = { if (send != null) send.onDenom() },
                     onAmountChange = send?.onAmountChange,

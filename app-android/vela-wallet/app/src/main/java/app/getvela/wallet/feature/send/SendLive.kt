@@ -350,7 +350,17 @@ object SendLive {
                     symbol = row.symbol,
                     balanceLabel = s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to trim(row.balance))),
                     amount = trim(sweepAmount(view, row)),
-                    max = s.t(I18nKeys.Flows.MAX),
+                    // No Max on a LIVE sweep row (dead-controls #3). A sweep
+                    // already moves the maximum of every row — the core's
+                    // `multi_token_specs` is each whole balance less the
+                    // reserve the fee needs, recomputed on every quote — so
+                    // there is no per-row figure for a chip to fill. The only
+                    // event behind it, `TapMax`, knows one token: the first of
+                    // the pick. An empty label draws no chip; the drawn form
+                    // (the gallery's fixture) keeps it. iOS does the same
+                    // (`SendLive.swift:325`), and the core now refuses the
+                    // event in sweep mode as well.
+                    max = "",
                 )
             },
             amount = null,

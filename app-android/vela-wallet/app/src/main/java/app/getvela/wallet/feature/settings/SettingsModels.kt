@@ -72,8 +72,11 @@ enum class SettingsIcon {
 /** Row emphasis. `Danger` is the red 退出登录 / 清理数据 family. */
 enum class RowTone { Default, Accent, Danger }
 
-/** What sits at the end of a settings row. */
-enum class RowTrailing { Chevron, External, None }
+/**
+ * What sits at the end of a settings row. `Retry` is the one that does not
+ * lead anywhere: it says "ask again", for a row whose answer did not arrive.
+ */
+enum class RowTrailing { Chevron, External, Retry, None }
 
 @Immutable
 data class SettingsRowModel(
@@ -86,6 +89,15 @@ data class SettingsRowModel(
     val value: String? = null,
     val trailing: RowTrailing = RowTrailing.Chevron,
     val tone: RowTone = RowTone.Default,
+    /**
+     * Whether a tap does anything. `false` takes the ripple away with the
+     * chevron: the house rule is that a control which cannot act is not
+     * dressed as one, and a row that presses in under the finger and returns
+     * silently is exactly that (dead-controls #8). Rows are actionable by
+     * default — every one of them routes somewhere — so only a row with
+     * states has to say otherwise.
+     */
+    val actionable: Boolean = true,
 )
 
 @Immutable
