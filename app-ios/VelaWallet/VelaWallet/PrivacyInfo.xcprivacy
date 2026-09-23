@@ -56,21 +56,43 @@
 	     AppFunctionality: without sending the transaction there is no
 	     transaction.
 
-	     OPEN QUESTION, and the founder's to answer, because the App Store
-	     Connect form is a legal attestation he signs:
-	     docs/store-submission/privacy-and-review.md §1.B recommends answering
-	     "Linked: Yes" for this same data, reading a wallet address as an
-	     account identifier. This file says false, following the published
-	     policy ("We don't ask for your name, email, phone number or any ID").
-	     Both feed the same nutrition label — make them agree before
-	     submitting. -->
+	     SETTLED 2026-09-23 by reading the services, not by preference.
+	     `Linked` was false here, following the published policy's "We don't
+	     ask for your name, email, phone number or any ID". That sentence is
+	     true and beside the point: Apple's "linked to the user" means linked
+	     to an ACCOUNT, and the wallet address is the account. The relay logs
+	     the sender on every accepted submit and keeps the whole signed
+	     operation for up to 14 days; the index stores the address, the keys
+	     and the names the person typed, and then publishes them permanently
+	     to Gnosis. The evidence, with file and line, is in
+	     docs/store-submission/privacy-evidence.md.
+
+	     So both types are declared, both Linked, neither tracking. The App
+	     Store Connect form is still the founder's to sign, and it must say
+	     the same thing this file does — a manifest that disagrees with the
+	     nutrition label is itself a rejection reason. -->
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeOtherFinancialInfo</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
 			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- The wallet address as the account's identifier, plus the
+			     passkey public key, credential id and the name the person
+			     chose — all stored by the index and published on-chain. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>
