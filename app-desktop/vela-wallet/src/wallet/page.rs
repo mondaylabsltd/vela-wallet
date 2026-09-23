@@ -3981,6 +3981,8 @@ impl WalletPage {
 
     /// What the live send panels bind to.
     fn send_bindings(&mut self, panel: FlowPanel, cx: &mut Context<Self>) -> Option<SendBindings> {
+        // What currency every `≈` figure below is drawn in.
+        let currency = self.money(cx);
         let host = self.send_host.clone()?;
         let (view, fee) = self.send_views(cx)?;
         let contact_addresses = if panel == FlowPanel::Dsd2e {
@@ -4002,6 +4004,7 @@ impl WalletPage {
                 s: &self.flow_strings,
                 wallet: &self.strings,
                 locale: &self.locale,
+                money: &currency,
                 identity_name: &identity.name,
                 identity_address: &identity.address,
                 speed: None,
@@ -4256,6 +4259,8 @@ impl WalletPage {
     /// panel silently borrowing a mock's numbers, so each live arm is written
     /// out rather than defaulted.
     fn flow_body(&mut self, panel: FlowPanel, cx: &mut Context<Self>) -> flow_fixtures::FlowBody {
+        // What currency every `≈` figure below is drawn in.
+        let currency = self.money(cx);
         let Some(identity) = self.identity.clone() else {
             return flow_fixtures::body(panel, &self.flow_strings);
         };
@@ -4268,6 +4273,7 @@ impl WalletPage {
                     &self.strings,
                     &self.locale,
                     self.chain_filter,
+                    &currency,
                 ))
             }
             FlowPanel::Da1 => {
@@ -4307,6 +4313,7 @@ impl WalletPage {
                     &pay,
                     &self.flow_strings,
                     &self.locale,
+                    &currency,
                 ))
             }
             // Send (DSD*), the scanner, the asset QR and add-token still draw
@@ -4321,7 +4328,14 @@ impl WalletPage {
                 self.tx_detail
                     .as_ref()
                     .and_then(|id| {
-                        flows_live::tx_detail(&feed, id, &self.flow_strings, hidden, &self.locale)
+                        flows_live::tx_detail(
+                            &feed,
+                            id,
+                            &self.flow_strings,
+                            hidden,
+                            &self.locale,
+                            &currency,
+                        )
                     })
                     .map_or_else(
                         // The record is gone. The mock is not a substitute for
@@ -4361,6 +4375,7 @@ impl WalletPage {
                         s: &self.flow_strings,
                         wallet: &self.strings,
                         locale: &self.locale,
+                        money: &currency,
                         identity_name: &identity.name,
                         identity_address: &identity.address,
                         speed: speed.as_ref(),
@@ -4431,6 +4446,7 @@ impl WalletPage {
                         &pay,
                         &self.flow_strings,
                         &self.locale,
+                        &currency,
                     ))
                 }
                 None => flow_fixtures::body(panel, &self.flow_strings),
@@ -6238,6 +6254,7 @@ impl WalletPage {
     ) -> Div {
         let accounts_count = self.settings.accounts_count.clone();
         let accounts_total = self.settings.accounts_total.clone();
+        let currency = self.money(cx);
         self.sync_switcher(session, cx);
         self.ensure_backup_check(cx);
         let s = &self.settings;
@@ -6284,13 +6301,7 @@ impl WalletPage {
             crate::wallet::fill(
                 &accounts_total,
                 "amount",
-                &vela_core::l10n::currency::format_fiat(
-                    known_total,
-                    "USD",
-                    "$",
-                    &self.locale,
-                    crate::executor::format_prefs::fiat_options(),
-                ),
+                &currency.text(known_total, &self.locale),
             )
         ));
         let mut list = div().flex().flex_col();
@@ -6304,17 +6315,14 @@ impl WalletPage {
                 .iter()
                 .find(|entry| entry.address.eq_ignore_ascii_case(&row.account.address))
                 .map(|entry| {
-                    // USD, like every other total this shell prints. The
-                    // display-currency machine owns conversion and its rate can
-                    // be `None` — which is NOT 1 — so a converted figure here
-                    // would be the one place in the app that guessed.
-                    gpui::SharedString::from(vela_core::l10n::currency::format_fiat(
-                        entry.usd,
-                        "USD",
-                        "$",
-                        &self.locale,
-                        crate::executor::format_prefs::fiat_options(),
-                    ))
+                    // In the chosen currency, like every other total this
+                    // shell prints. The comment here used to justify dollars
+                    // by saying a converted figure "would be the one place in
+                    // the app that guessed" — true when nothing else
+                    // converted, and obsolete since `Money` made the rule
+                    // explicit: it converts only when the endpoint priced the
+                    // code, and draws USD when it could not. No guess.
+                    gpui::SharedString::from(currency.text(entry.usd, &self.locale))
                 });
             // The core's own index, not the loop's: it survives a display
             // reorder, which is exactly what invariant ⑦ is about.
@@ -10884,6 +10892,8 @@ impl WalletPage {
     }
 
     fn signing_body(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
+        // What currency every `≈` figure below is drawn in.
+        let currency = self.money(cx);
         // The live sheet when a request is open, the mock otherwise — the same
         // fork every other surface takes, and what keeps the 33 drawn
         // scenarios reviewable after real requests arrive.
@@ -11029,6 +11039,7 @@ impl WalletPage {
                     &self.signing,
                     &self.locale,
                     speed_tier,
+                    &currency,
                 );
                 model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
                 model.confirm_enabled =
@@ -11055,6 +11066,7 @@ impl WalletPage {
                     None,
                     fee,
                     &self.locale,
+                    &currency,
                 ));
             }
         }

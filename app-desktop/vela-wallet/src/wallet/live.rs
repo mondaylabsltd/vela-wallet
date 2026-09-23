@@ -42,6 +42,17 @@ impl Default for Money {
 }
 
 impl Money {
+    /// Dollars, borrowable for as long as the process lives.
+    ///
+    /// Every screen that has no committed pair — signed out, and every drawn
+    /// board — wants the same one, and a `&Money` that outlives the statement
+    /// it was made in is what lets a builder take it by reference.
+    #[must_use]
+    pub fn usd() -> &'static Self {
+        static USD: std::sync::OnceLock<Money> = std::sync::OnceLock::new();
+        USD.get_or_init(Money::default)
+    }
+
     /// The committed pair, straight from `display_currency`.
     #[must_use]
     pub fn new(code: &str, rate: Option<f64>) -> Self {

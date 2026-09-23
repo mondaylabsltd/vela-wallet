@@ -976,6 +976,7 @@ pub fn fee_model(
     s: &SigningStrings,
     locale: &str,
     speed_tier: Option<FeeTier>,
+    currency: &crate::wallet::live::Money,
 ) -> FeeModel {
     if off_chain(clear) {
         return FeeModel::OffChain(s.ok_no_network_fee.clone());
@@ -1003,6 +1004,7 @@ pub fn fee_model(
                 None,
                 fee,
                 locale,
+                currency,
             ))
         },
         // The coins the relay will take, open in the sheet when asked — each
@@ -1770,9 +1772,16 @@ mod tests {
 
         // Picked Slow; the fee in hand is still Fast's.
         assert!(!confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Slow)));
-        let FeeModel::OnChain { value, .. } =
-            fee_model(&clear, &fee, 100, false, &s, "en", Some(FeeTier::Slow))
-        else {
+        let FeeModel::OnChain { value, .. } = fee_model(
+            &clear,
+            &fee,
+            100,
+            false,
+            &s,
+            "en",
+            Some(FeeTier::Slow),
+            crate::wallet::live::Money::usd(),
+        ) else {
             unreachable!("a transaction has an on-chain fee");
         };
         assert_eq!(value, s.fee_estimating);
@@ -1782,9 +1791,16 @@ mod tests {
             estimate.tier = FeeTier::Slow;
         }
         assert!(confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Slow)));
-        let FeeModel::OnChain { value, .. } =
-            fee_model(&clear, &fee, 100, false, &s, "en", Some(FeeTier::Slow))
-        else {
+        let FeeModel::OnChain { value, .. } = fee_model(
+            &clear,
+            &fee,
+            100,
+            false,
+            &s,
+            "en",
+            Some(FeeTier::Slow),
+            crate::wallet::live::Money::usd(),
+        ) else {
             unreachable!("a transaction has an on-chain fee");
         };
         assert_ne!(value, s.fee_estimating);
@@ -1988,7 +2004,16 @@ mod fee_tests {
         let s = strings();
         let clear =
             crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
-        let tappable = |fee: &FeeView| match fee_model(&clear, fee, 1, false, &s, "en", None) {
+        let tappable = |fee: &FeeView| match fee_model(
+            &clear,
+            fee,
+            1,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
             FeeModel::OnChain { tappable, .. } => tappable,
             _ => unreachable!("a transaction has a fee row"),
         };
@@ -2036,11 +2061,29 @@ mod fee_tests {
             false,
         );
 
-        match fee_model(&clear, &fee, 1, false, &s, "en", None) {
+        match fee_model(
+            &clear,
+            &fee,
+            1,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
             FeeModel::OnChain { selector, .. } => assert!(selector.is_none(), "closed"),
             _ => unreachable!("a transaction has a fee row"),
         }
-        match fee_model(&clear, &fee, 1, true, &s, "en", None) {
+        match fee_model(
+            &clear,
+            &fee,
+            1,
+            true,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
             FeeModel::OnChain {
                 selector: Some((title, options)),
                 ..
