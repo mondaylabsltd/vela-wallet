@@ -623,7 +623,11 @@ mod tests {
             .join()
             .unwrap_or_else(|_| unreachable!("the pairing panicked"))
             .unwrap_or_else(|refusal| unreachable!("the pairing failed: {refusal:?}"));
-        let _ = watcher.join();
+        // The person's thread holds this test's two checks on the LINK. Joining
+        // it with `let _ =` would let both of them fail green.
+        watcher
+            .join()
+            .unwrap_or_else(|_| unreachable!("the pairing link was wrong — see the panic above"));
 
         // The page's side of the session, from the vector's own secret.
         let mut signer = Handshake::new(
@@ -879,10 +883,11 @@ mod tests {
                         && pairing.code.as_deref() == Some(code.as_str())
                     {
                         channel.confirm_code();
-                        return;
+                        return true;
                     }
                     std::thread::sleep(Duration::from_millis(5));
                 }
+                false
             })
         };
 
@@ -938,7 +943,12 @@ mod tests {
             .join()
             .unwrap_or_else(|_| unreachable!("the pairing panicked"))
             .unwrap_or_else(|refusal| unreachable!("the pairing failed: {refusal:?}"));
-        let _ = watcher.join();
+        assert!(
+            watcher
+                .join()
+                .unwrap_or_else(|_| unreachable!("the person's thread panicked")),
+            "the two screens never showed the same six digits"
+        );
 
         let id = line.next_id();
         let answering = std::thread::spawn(move || {
