@@ -50,6 +50,7 @@ const WIZARD_RPC_FOCUS: usize = WIZARD_SEARCH_FOCUS + 1;
 /// Two handles per network card, past everything above.
 const OVERRIDE_FOCUS_BASE: usize = WIZARD_RPC_FOCUS + 1;
 use crate::executor::appearance_prefs;
+use crate::executor::display_currency;
 use crate::executor::format_prefs;
 use crate::executor::passkey::WindowHandle;
 use crate::hardware;
@@ -85,7 +86,7 @@ use vela_core::app::contacts::{
     ContactExportScope, ContactFileFormat, ContactGroupInput, ContactSaveInput, Contacts,
     Event as ContactEvent,
 };
-use vela_core::app::display_currency::DisplayCurrency;
+use vela_core::app::display_currency::{DisplayCurrency, Event as CurrencyEvent};
 use vela_core::app::explore_sites::ExploreSites;
 use vela_core::app::fee_policy::Event as FeeEvent;
 use vela_core::app::manage_tokens::{Event as MtokEvent, ManageTokens, MtokNetwork};
@@ -216,6 +217,10 @@ enum ExploreAsk {
     /// which is dropped into the group the moment it exists — a person who
     /// went "move to → new group" meant both halves.
     NewGroup { then_add: Option<String> },
+    /// Pin a site by typing where it lives. The start page's "+ 添加" tile was
+    /// drawn with a pointer cursor and no listener, so the only way to get a
+    /// favourite was to open a site first and use the tab menu.
+    NewFavorite,
 }
 
 #[derive(Clone, Debug)]
@@ -563,6 +568,8 @@ pub struct WalletPage {
     /// changed it would be a delete and an add wearing one button. So editing
     /// an existing contact keeps it fixed and only the name is a draft.
     contact_form: Option<ContactForm>,
+    /// The contact whose address is being shown as a code, if any.
+    contact_qr: Option<(SharedString, SharedString)>,
     /// The group name sheet: `Some((id, name))`, with `None` for a new group.
     /// One dialog for 新建分组 and 重命名分组, because they are one question.
     group_form: Option<(Option<String>, String)>,
@@ -932,6 +939,7 @@ impl WalletPage {
             network_remove: None,
             import_result: None,
             contact_form: None,
+            contact_qr: None,
             group_form: None,
             group_form_focus: cx.focus_handle(),
             contact_form_name_focus: cx.focus_handle(),
@@ -1105,15 +1113,32 @@ impl WalletPage {
         let title = match form.ask {
             ExploreAsk::RenameFavorite { .. } => e.rename.clone(),
             ExploreAsk::NewGroup { .. } => e.new_group.clone(),
+            ExploreAsk::NewFavorite => e.add_to_favorites.clone(),
+        };
+        // The favourite's field takes an address, so it says so — the address
+        // bar's own placeholder, rather than a second phrasing of it.
+        let placeholder = match form.ask {
+            ExploreAsk::NewFavorite => e.search_placeholder.clone(),
+            _ => SharedString::from(""),
         };
         // A name that is only spaces is not a name — the core refuses it, and
         // an armed Save that the core would drop is a button that lies.
-        let can_save = !form.text.trim().is_empty();
+        //
+        // The favourite's field is held to the same standard against a
+        // stricter rule: it takes an ADDRESS, and `save_explore_form` drops
+        // anything `coerce_browser_url` refuses. Armed on "notanaddress", the
+        // button closed the dialog, pinned nothing, and said nothing.
+        let can_save = match form.ask {
+            ExploreAsk::NewFavorite => {
+                vela_core::app::dapp_session::coerce_browser_url(&form.text).is_some()
+            }
+            _ => !form.text.trim().is_empty(),
+        };
         let hover_accent = theme.accent_hover;
         let focus = self.explore_form_focus.clone();
         let strings = crate::ui::NameFieldStrings {
             label: title.clone(),
-            placeholder: SharedString::from(""),
+            placeholder,
             helper: SharedString::from(""),
             too_long_hint: SharedString::from(""),
         };
@@ -1236,6 +1261,27 @@ impl WalletPage {
                 resident.update(cx, |resident, cx| {
                     resident.dispatch(
                         vela_core::app::explore_sites::Event::FavoriteRenamed { origin, name },
+                        cx,
+                    );
+                });
+            }
+            ExploreAsk::NewFavorite => {
+                // Whatever was typed, coerced the way the address bar coerces
+                // it — "uniswap.org" is an address, and the core keys a
+                // favourite on the origin it derives from the URL.
+                let Some(url) = vela_core::app::dapp_session::coerce_browser_url(&name) else {
+                    // Not an address. Refusing is the same answer the address
+                    // bar gives; inventing `https://` in front of a typo would
+                    // pin a tile to a site that does not exist.
+                    return;
+                };
+                resident.update(cx, |resident, cx| {
+                    resident.dispatch(
+                        vela_core::app::explore_sites::Event::FavoriteAdded {
+                            url,
+                            title: None,
+                            now_ms: crate::executor::now_ms(),
+                        },
                         cx,
                     );
                 });
@@ -1423,6 +1469,136 @@ impl WalletPage {
                 .justify_center()
                 .bg(theme.bg_base.opacity(0.55))
                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(card)
+                .into_any_element(),
+        )
+    }
+
+    /// A contact's address as a code, the way the receive card does our own.
+    ///
+    /// The three pills on the contact panel were drawn in 018 and none of them
+    /// did anything until 2026-09-23. 转账 and 收款 had another route (the row's
+    /// context menu); **二维码 had none at all**, which is why it needed a
+    /// surface rather than a handler. The web's sheet is the model: their
+    /// identicon, their name, their address encoded — a picture somebody can
+    /// hold up to a phone.
+    ///
+    /// The identicon is not decoration. It is the anti-forgery mark the receive
+    /// redesign leans on: two addresses that read alike do not draw alike.
+    fn contact_qr_dialog(
+        &mut self,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let (name, address) = self.contact_qr.clone()?;
+        let close = self.strings.close_viewer.clone();
+        let hover_accent = theme.accent_hover;
+
+        // 21 modules for a 42-character address is not a given, so the module
+        // size is derived from the code's own width rather than assumed.
+        let code = qrcode::QrCode::new(address.as_bytes()).ok();
+        let matrix: Div = match code {
+            Some(code) => {
+                let width = code.width();
+                let module = (220.0 / width as f32).floor().max(2.0);
+                let colors = code.to_colors();
+                let mut grid = div().flex().flex_col().p(px(12.)).bg(gpui::rgb(0xffffff));
+                for row in 0..width {
+                    let mut line = div().flex().flex_row();
+                    for col in 0..width {
+                        let dark =
+                            matches!(colors.get(row * width + col), Some(qrcode::Color::Dark));
+                        let mut cell = div().size(px(module));
+                        if dark {
+                            cell = cell.bg(gpui::rgb(0x000000));
+                        }
+                        line = line.child(cell);
+                    }
+                    grid = grid.child(line);
+                }
+                grid
+            }
+            // An address that cannot be encoded is a bug elsewhere; drawing a
+            // fake pattern would be worse than drawing nothing, because a fake
+            // one gets photographed.
+            None => div(),
+        };
+
+        let card = div()
+            // The card takes its own clicks: without this the scrim's
+            // dismiss fires when somebody clicks the CODE, and — because a
+            // gpui hitbox does not block what is under it unless it says so —
+            // the same click also lands on whatever row the dialog is drawn
+            // over, quietly opening a different contact behind it.
+            .id("contact-qr-card")
+            .occlude()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(16.))
+            .p(px(28.))
+            .rounded(px(20.))
+            .bg(theme.bg_raised)
+            .border_1()
+            .border_color(theme.border_card)
+            .child(crate::wallet::components::person_avatar(
+                theme,
+                &mut self.identicons,
+                &address,
+                &name,
+                56.,
+            ))
+            .child(
+                div()
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .child(name),
+            )
+            .child(div().rounded(px(14.)).overflow_hidden().child(matrix))
+            .child(
+                div()
+                    .max_w(px(260.))
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_muted)
+                    .child(address),
+            )
+            .child(
+                div()
+                    .id("contact-qr-close")
+                    .px(px(20.))
+                    .py(px(10.))
+                    .rounded(px(10.))
+                    .bg(theme.accent)
+                    .cursor_pointer()
+                    .hover(move |el| el.bg(hover_accent))
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_inverse)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.contact_qr = None;
+                        cx.notify();
+                    }))
+                    .child(close),
+            );
+
+        Some(
+            div()
+                .id("contact-qr-scrim")
+                // A scrim that only dims is not a scrim: the page beneath it
+                // still takes the click.
+                .occlude()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.bg_base.opacity(0.55))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.contact_qr = None;
+                    cx.notify();
+                }))
                 .child(card)
                 .into_any_element(),
         )
@@ -2887,9 +3063,23 @@ impl WalletPage {
     }
 
     /// DC1: the A–Z sectioned roster.
+    ///
+    /// Rows are identified by ADDRESS, never by their position in this list.
+    /// The list is A–Z (`contacts_live::sections`) and everything that acts on
+    /// "the selected contact" — the detail panel, the context menu, 移入分组,
+    /// 复制地址, 删除 — reads `contacts_live::rows`, which is the CORE's order.
+    /// Setting `self.contact` to the A–Z position therefore opened, menued and
+    /// acted on whoever happened to sit at that position in the other order.
+    /// Found on a desktop with four contacts: clicking Alice opened Dave, and
+    /// right-clicking Alice → 移入分组 wrote **Dave's** address into the group.
     fn contacts_list(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
-        let selected = match self.panel {
-            PanelId::ContactDetail => Some(self.contact),
+        let selected_address = match self.panel {
+            PanelId::ContactDetail => {
+                let view = resident::resident::<Contacts>(cx).read(cx).view();
+                contacts_live::rows(&view)
+                    .get(self.contact)
+                    .map(|row| row.address_full.to_string())
+            }
             _ => None,
         };
         let mut list = div()
@@ -2907,19 +3097,21 @@ impl WalletPage {
             let last = rows.len() - 1;
             for (i, contact) in rows.iter().enumerate() {
                 let at = index;
+                let address = contact.address_full.to_string();
+                let menu_address = address.clone();
+                let is_selected = selected_address
+                    .as_deref()
+                    .is_some_and(|picked| picked.eq_ignore_ascii_case(&address));
                 list = list.child(
                     contact_row(
                         ElementId::from(("contact", at)),
                         theme,
                         &mut self.identicons,
                         contact,
-                        selected == Some(at),
+                        is_selected,
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.contact = at;
-                        this.panel = PanelId::ContactDetail;
-                        this.menu = None;
-                        cx.notify();
+                        this.open_contact_by_address(&address, cx);
                     }))
                     // The contact menu has been drawn since spec 018 and lived
                     // only on the component board. It is the desktop's entry
@@ -2929,10 +3121,11 @@ impl WalletPage {
                     .on_mouse_down(
                         MouseButton::Right,
                         cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                            this.contact = at;
-                            this.menu =
-                                Some((ContactsMenu::Contact, event.position, Anchor::TopLeft));
-                            cx.notify();
+                            if this.open_contact_by_address(&menu_address, cx) {
+                                this.menu =
+                                    Some((ContactsMenu::Contact, event.position, Anchor::TopLeft));
+                                cx.notify();
+                            }
                         }),
                     ),
                 );
@@ -2967,6 +3160,11 @@ impl WalletPage {
             }
         };
         let count = u32::try_from(members.len()).unwrap_or(u32::MAX);
+        // Who 群发转账 is about, captured before the header consumes the rows.
+        let batch_targets: Vec<(String, String)> = members
+            .iter()
+            .map(|m| (m.address_full.to_string(), m.name.to_string()))
+            .collect();
         let members_label = contacts_fixtures::members_count_label(&self.contacts, count);
         let caption = contacts_fixtures::batch_send_caption(&self.contacts, count);
         let batch_send = self.contacts.batch_send.clone();
@@ -2991,13 +3189,12 @@ impl WalletPage {
                     .child(members_label),
             )
             .child(div().flex_1().min_w(px(0.)))
-            .child(accent_button(
-                "group-batch-send",
-                theme,
-                &mut self.icons,
-                None,
-                batch_send,
-            ))
+            .child(
+                accent_button("group-batch-send", theme, &mut self.icons, None, batch_send)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.batch_send_to_group(&batch_targets, cx);
+                    })),
+            )
             .child(
                 icon_button("group-more", theme, &mut self.icons, Icon::Ellipsis).on_click(
                     cx.listener(|this, _, window, cx| {
@@ -3014,13 +3211,33 @@ impl WalletPage {
         let mut column = div().flex_1().min_w(px(0.)).flex().flex_col().child(header);
         let last = members.len().saturating_sub(1);
         for (i, member) in members.iter().enumerate() {
-            column = column.child(contact_row(
-                ElementId::from(("member", i)),
-                theme,
-                &mut self.identicons,
-                member,
-                false,
-            ));
+            // A member row opens and menus exactly like the same row in the
+            // directory. Without this a group was a dead end: from inside one
+            // you could not open, pay or edit anybody in it.
+            let address = member.address_full.to_string();
+            let menu_address = address.clone();
+            column = column.child(
+                contact_row(
+                    ElementId::from(("member", i)),
+                    theme,
+                    &mut self.identicons,
+                    member,
+                    false,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.open_contact_by_address(&address, cx);
+                }))
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                        if this.open_contact_by_address(&menu_address, cx) {
+                            this.menu =
+                                Some((ContactsMenu::Contact, event.position, Anchor::TopLeft));
+                            cx.notify();
+                        }
+                    }),
+                ),
+            );
             if i != last {
                 column = column.child(row_divider(theme));
             }
@@ -3049,6 +3266,73 @@ impl WalletPage {
                     .text_color(theme.fg_muted)
                     .child(caption),
             )
+    }
+
+    /// Point `self.contact` at whoever holds this address, and open them.
+    ///
+    /// The detail panel and the contact menu both read `self.contact` as an
+    /// index into the directory, so a row that knows only an address has to
+    /// find that index rather than invent one — picking the wrong index would
+    /// put somebody else's details under this person's name.
+    fn open_contact_by_address(&mut self, address: &str, cx: &mut Context<Self>) -> bool {
+        if self.identity.is_none() {
+            return false;
+        }
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let Some(index) = contacts_live::rows(&view)
+            .iter()
+            .position(|row| row.address_full.eq_ignore_ascii_case(address))
+        else {
+            return false;
+        };
+        self.contact = index;
+        self.panel = PanelId::ContactDetail;
+        self.menu = None;
+        cx.notify();
+        true
+    }
+
+    /// 群发转账 — the group's members, brought to the send form.
+    ///
+    /// The same rule the web states: **a group of one is a send to that one**,
+    /// and two or more seed split mode. An empty group cannot reach here (its
+    /// caption says why), and seeding appends rather than replaces, so a form
+    /// somebody had already started typing into keeps what is in it.
+    fn batch_send_to_group(&mut self, members: &[(String, String)], cx: &mut Context<Self>) {
+        if members.is_empty() {
+            return;
+        }
+        self.section = Section::Wallet;
+        self.send_sweeping = false;
+        self.flows = FlowPanel::entry(FlowEntry::Send);
+        self.panel = PanelId::Flow;
+        if let [(address, _)] = members {
+            self.open_send(
+                SendOpenParams {
+                    prefilled_recipient: Some(address.clone()),
+                    ..SendOpenParams::default()
+                },
+                cx,
+            );
+            cx.notify();
+            return;
+        }
+        self.open_send(SendOpenParams::default(), cx);
+        let recipients: Vec<SendRecipientDraft> = members
+            .iter()
+            .map(|(address, name)| SendRecipientDraft {
+                id: String::new(),
+                address: address.clone(),
+                amount: String::new(),
+                name: (!name.is_empty()).then(|| name.clone()),
+            })
+            .collect();
+        if let Some(host) = self.send_host.clone() {
+            host.update(cx, |host, cx| {
+                host.dispatch(SendEvent::AppendSplitRecipients { recipients }, cx);
+            });
+        }
+        cx.notify();
     }
 
     /// DC3: the centred empty state with both CTAs.
@@ -3181,30 +3465,70 @@ impl WalletPage {
                     .child(chips),
             );
 
+        // What the three pills DO. They have been drawn since 018 and did
+        // nothing at all; 转账 and 收款 at least had the row's context menu,
+        // and 二维码 had no other route anywhere in the app.
+        let send_to = model.address_full.to_string();
+        let qr_name = model.name.clone();
+        let qr_address = SharedString::from(model.address_full.to_string());
         let actions = div()
             .flex()
+            // Three words in a long language at the largest text size are
+            // wider than this panel: unwrapped, 二维码 was drawn half off the
+            // right edge of the window. The chips above wrap for the same
+            // reason.
+            .flex_wrap()
             .gap(px(10.))
-            .child(action_pill(
-                "contact-send",
-                theme,
-                &mut self.icons,
-                Icon::ArrowUpRight,
-                send,
-            ))
-            .child(action_pill(
-                "contact-receive",
-                theme,
-                &mut self.icons,
-                Icon::ArrowDownLeft,
-                receive,
-            ))
-            .child(action_pill(
-                "contact-qr",
-                theme,
-                &mut self.icons,
-                Icon::QrCode,
-                qr,
-            ));
+            .child(
+                action_pill(
+                    "contact-send",
+                    theme,
+                    &mut self.icons,
+                    Icon::ArrowUpRight,
+                    send,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    // The same route the row's 转账 takes: the send flow with
+                    // this person prefilled. The core takes the prefill; the
+                    // shell does not type into its own screen.
+                    this.section = Section::Wallet;
+                    this.send_sweeping = false;
+                    this.flows = FlowPanel::entry(FlowEntry::Send);
+                    this.panel = PanelId::Flow;
+                    this.open_send(
+                        SendOpenParams {
+                            prefilled_recipient: Some(send_to.clone()),
+                            ..SendOpenParams::default()
+                        },
+                        cx,
+                    );
+                    cx.notify();
+                })),
+            )
+            .child(
+                action_pill(
+                    "contact-receive",
+                    theme,
+                    &mut self.icons,
+                    Icon::ArrowDownLeft,
+                    receive,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    // My own address — what a person needs when the answer to
+                    // "how do I pay you" is asked of them.
+                    this.section = Section::Wallet;
+                    this.enter_flow(FlowEntry::Receive, cx);
+                    cx.notify();
+                })),
+            )
+            .child(
+                action_pill("contact-qr", theme, &mut self.icons, Icon::QrCode, qr).on_click(
+                    cx.listener(move |this, _, _, cx| {
+                        this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
+                        cx.notify();
+                    }),
+                ),
+            );
 
         let mut activity = div().flex().flex_col().child(
             div()
@@ -5738,7 +6062,7 @@ impl WalletPage {
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
             SettingsPage::Storage => self.settings_storage(theme),
-            SettingsPage::About => self.settings_about(theme),
+            SettingsPage::About => self.settings_about(theme, cx),
         };
 
         // The banner DSR1 draws over the wallet, kept above the panel content
@@ -6961,6 +7285,24 @@ impl WalletPage {
         settings_live::currency_row_value(&view, &self.locale)
     }
 
+    /// Ask the rate endpoint which currencies it can price, once per session.
+    ///
+    /// Off the UI thread: it is an HTTP call, and the menu is already on screen
+    /// when it starts. Until it answers the menu holds USD alone — honest,
+    /// because USD is the only code the wallet can price without asking anybody.
+    fn load_currency_catalog(&mut self, cx: &mut Context<Self>) {
+        if self.identity.is_none() || display_currency::priced_currencies().len() > 1 {
+            return;
+        }
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .spawn(async move { display_currency::refresh_priced_currencies() })
+                .await;
+            page.update(cx, |_, cx| cx.notify()).ok();
+        })
+        .detach();
+    }
+
     /// DST3 — currency, number, date and time formats.
     ///
     /// One of the four can be OPEN, and the mock's is 数字格式. The menu is an
@@ -7017,22 +7359,50 @@ impl WalletPage {
             let menu = if !is_open {
                 None
             } else if let Some((_, _, _, menus)) = live.as_ref() {
-                let rows = match id {
-                    "number" => Some(&menus.number),
-                    "date" => Some(&menus.date),
-                    "time" => Some(&menus.time),
-                    _ => None,
-                };
-                rows.map(|rows| {
+                if id == "currency" {
+                    // The currency row's menu is not one of the three format
+                    // menus: its options come from what the rate endpoint can
+                    // price, and picking one goes to a different machine.
+                    let priced = display_currency::priced_currencies();
+                    let view = resident::resident::<DisplayCurrency>(cx).read(cx).view();
+                    let rows = settings_live::currency_menu(&priced, &view.code, &self.locale);
+                    let codes: Vec<String> = priced.into_iter().map(|(code, _)| code).collect();
                     let page = page.clone();
-                    dropdown_menu_picks(theme, &mut self.icons, rows, move |index, _, cx| {
-                        page.update(cx, |this, cx| {
-                            this.pick_format(id, index);
-                            this.settings_open_dropdown = None;
-                            cx.notify();
-                        });
+                    Some(dropdown_menu_picks(
+                        theme,
+                        &mut self.icons,
+                        &rows,
+                        move |index, _, cx| {
+                            let Some(code) = codes.get(index).cloned() else {
+                                return;
+                            };
+                            resident::resident::<DisplayCurrency>(cx).update(cx, |resident, cx| {
+                                resident.dispatch(CurrencyEvent::UserChose { code }, cx);
+                            });
+                            page.update(cx, |this, cx| {
+                                this.settings_open_dropdown = None;
+                                cx.notify();
+                            });
+                        },
+                    ))
+                } else {
+                    let rows = match id {
+                        "number" => Some(&menus.number),
+                        "date" => Some(&menus.date),
+                        "time" => Some(&menus.time),
+                        _ => None,
+                    };
+                    rows.map(|rows| {
+                        let page = page.clone();
+                        dropdown_menu_picks(theme, &mut self.icons, rows, move |index, _, cx| {
+                            page.update(cx, |this, cx| {
+                                this.pick_format(id, index);
+                                this.settings_open_dropdown = None;
+                                cx.notify();
+                            });
+                        })
                     })
-                })
+                }
             } else {
                 (id == "number").then(|| dropdown_menu(theme, &mut self.icons, &number_menu))
             };
@@ -7047,6 +7417,9 @@ impl WalletPage {
                     } else {
                         Some(id)
                     };
+                    if this.settings_open_dropdown == Some("currency") {
+                        this.load_currency_catalog(cx);
+                    }
                     cx.notify();
                 }))
                 .child(trigger)
@@ -7803,7 +8176,7 @@ impl WalletPage {
     }
 
     /// DST8 — the build, the technical inventory, the three links.
-    fn settings_about(&mut self, theme: &Theme) -> Div {
+    fn settings_about(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         // A signed-in window states the crate's OWN version. The panel said
         // v1.0.0 while the crate was 0.1.1, and a bug report that quotes it
@@ -7848,7 +8221,27 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(s.about_section_technical.clone()),
             );
-        for (label, value, mono) in settings_fixtures::about_rows(&self.settings) {
+        // The network count is the CORE's, not the mock's: the drawn 12 was
+        // the built-in list of a year ago, and About is the page somebody
+        // opens to check what they are running.
+        let networks = u32::try_from(
+            vela_core::app::network_admin::BUILTIN_CHAINS.len()
+                + self
+                    .identity
+                    .is_some()
+                    .then(|| {
+                        resident::resident::<NetworkAdmin>(cx)
+                            .read(cx)
+                            .view()
+                            .networks
+                            .iter()
+                            .filter(|row| row.is_custom)
+                            .count()
+                    })
+                    .unwrap_or(0),
+        )
+        .unwrap_or(u32::MAX);
+        for (label, value, mono) in settings_fixtures::about_rows_with(&self.settings, networks) {
             col = col.child(key_value_row(
                 theme,
                 &mut self.icons,
@@ -7856,6 +8249,7 @@ impl WalletPage {
                 value,
                 mono,
                 false,
+                None,
             ));
         }
         col = col.child(
@@ -7866,7 +8260,7 @@ impl WalletPage {
                 .text_color(theme.fg_subtle)
                 .child(self.settings.about_section_links.clone()),
         );
-        for (label, value) in settings_fixtures::about_links(&self.settings) {
+        for (label, value, url) in settings_fixtures::about_links(&self.settings) {
             col = col.child(key_value_row(
                 theme,
                 &mut self.icons,
@@ -7874,6 +8268,7 @@ impl WalletPage {
                 value,
                 true,
                 true,
+                Some(url),
             ));
         }
         col.child(
@@ -9753,12 +10148,22 @@ impl WalletPage {
         // drawn and refusing — the core says which, and a control that cannot
         // work is worse than an absent one.
         if !(live_grid && explore_view.favorites_full) {
-            grid = grid.child(explore_components::add_tile(
-                ElementId::from("tile-add"),
-                theme,
-                &mut self.icons,
-                self.explore.add.clone(),
-            ));
+            grid = grid.child(
+                explore_components::add_tile(
+                    ElementId::from("tile-add"),
+                    theme,
+                    &mut self.icons,
+                    self.explore.add.clone(),
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.explore_form = Some(ExploreForm {
+                        ask: ExploreAsk::NewFavorite,
+                        text: String::new(),
+                    });
+                    window.focus(&this.explore_form_focus, cx);
+                    cx.notify();
+                })),
+            );
         }
         column = column.child(grid);
 
@@ -12006,6 +12411,7 @@ impl Render for WalletPage {
         let contact_form = self.contact_form_dialog(&theme, window, cx);
         let group_form = self.group_form_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
+        let contact_qr = self.contact_qr_dialog(&theme, cx);
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
@@ -12039,6 +12445,9 @@ impl Render for WalletPage {
         }
         if let Some(contact_form) = contact_form {
             root = root.child(contact_form);
+        }
+        if let Some(contact_qr) = contact_qr {
+            root = root.child(contact_qr);
         }
         if let Some(explore_form) = explore_form {
             root = root.child(explore_form);

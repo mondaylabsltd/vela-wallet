@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Stateful,
+    Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, div, px, rgb,
 };
 
@@ -270,6 +270,16 @@ pub fn dropdown_menu_picks(
 
 type PickAction = Rc<dyn Fn(usize, &mut gpui::Window, &mut gpui::App)>;
 
+/// How far a dropped menu may reach before it scrolls instead of growing.
+///
+/// The menu is absolutely positioned at its trigger row, and the window's
+/// minimum is 800pt tall, so an unbounded list runs off the bottom of the
+/// window with no way to reach what is past the edge. The format menus are
+/// three or four rows and never touch this; the currency menu is one row per
+/// priceable currency — thirty of them — and would otherwise offer fourteen
+/// codes nobody could pick.
+const MENU_MAX_H: f32 = 400.;
+
 fn menu_of(
     theme: &Theme,
     icons: &mut IconCache,
@@ -277,17 +287,17 @@ fn menu_of(
     on_pick: Option<PickAction>,
 ) -> Div {
     let hover = theme.bg_sunken;
+    // One id per menu, from the first row it draws — the same trick
+    // `key_value_row` uses, and enough because only one dropdown is open at a
+    // time and the four menus start with different words.
+    let scroller_id = SharedString::from(format!(
+        "dropdown-menu-{}",
+        rows.first().map_or("", |(label, _, _)| label.as_ref())
+    ));
     let mut col = div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .right_0()
-        .px(px(12.))
-        .rounded(px(10.))
-        .bg(theme.bg_raised)
-        .border_1()
-        .border_color(theme.divider)
-        .shadow_lg()
+        .id(ElementId::from(scroller_id))
+        .max_h(px(MENU_MAX_H))
+        .overflow_y_scroll()
         .flex()
         .flex_col();
     let last = rows.len().saturating_sub(1);
@@ -337,7 +347,20 @@ fn menu_of(
             col = col.child(div().h(px(1.)).bg(theme.divider));
         }
     }
-    col
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .px(px(12.))
+        .rounded(px(10.))
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .shadow_lg()
+        .flex()
+        .flex_col()
+        .child(col)
 }
 
 // -- SegmentedControl ---------------------------------------------------------
@@ -887,6 +910,10 @@ pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
 
 /// DST8's technical-detail and link rows: label at the start, value at the end,
 /// mono where the value is an identifier, external glyph where it is a place.
+/// `link` is what an external row DOES. A row wearing the external-link glyph
+/// and opening nothing is the worst of both: it advertises a place and then
+/// refuses to go there. Where there is no link the row keeps the house rule and
+/// drops the pointer and the hover, so it reads as text rather than a control.
 pub fn key_value_row(
     theme: &Theme,
     icons: &mut IconCache,
@@ -894,7 +921,11 @@ pub fn key_value_row(
     value: gpui::SharedString,
     mono: bool,
     external: bool,
+    link: Option<gpui::SharedString>,
 ) -> Div {
+    // A stable id per row, from the label it draws. gpui needs one before the
+    // row can take a click at all, and the labels on this page are unique.
+    let label_id = SharedString::from(format!("settings-kv-{label}"));
     let mut row = div()
         .flex()
         .items_center()
@@ -935,6 +966,14 @@ pub fn key_value_row(
             14.,
         ));
     }
+    let hover = theme.bg_sunken;
+    let row = row
+        .id(ElementId::from(label_id))
+        .when_some(link, |el, url| {
+            el.cursor_pointer()
+                .hover(move |el| el.bg(hover))
+                .on_click(move |_, _, cx| cx.open_url(&url))
+        });
     div()
         .flex()
         .flex_col()

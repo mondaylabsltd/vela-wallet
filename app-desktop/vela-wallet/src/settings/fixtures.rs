@@ -258,7 +258,10 @@ pub const NETWORKS: [NetworkFixture; 8] = [
 pub const DESKTOP_NETWORK_IDS: [&str; 6] =
     ["ethereum", "bnb", "polygon", "arbitrum", "base", "xlayer"];
 
-pub const NETWORK_COUNT: u32 = 12;
+/// What the DRAWN boards say. The live About page counts the core's built-ins
+/// plus this person's own networks instead (`page.rs`), because the number a
+/// person opens About to read must be the one they are running.
+pub const NETWORK_COUNT: u32 = 24;
 
 /// "链 1" — the line under each network's name.
 pub fn chain_meta(s: &SettingsStrings, chain_id: u64) -> SharedString {
@@ -532,6 +535,14 @@ mod about_tests {
 
 /// Label / value / mono, in DST8's order.
 pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)> {
+    about_rows_with(s, NETWORK_COUNT)
+}
+
+/// The same rows with a network count somebody counted rather than drew.
+pub fn about_rows_with(
+    s: &SettingsStrings,
+    networks: u32,
+) -> Vec<(SharedString, SharedString, bool)> {
     vec![
         (
             s.about_wallet_label.clone(),
@@ -554,24 +565,33 @@ pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)
             SharedString::from(fill(
                 &s.about_networks_value,
                 "count",
-                &NETWORK_COUNT.to_string(),
+                &networks.to_string(),
             )),
             false,
         ),
     ]
 }
 
-pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString)> {
+/// The three places About points at: the label, the host as drawn, and the URL
+/// the row opens. The host is what a person reads; the URL is what the row does,
+/// and they are kept side by side so one cannot drift from the other.
+pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString, SharedString)> {
     vec![
         (
             s.about_link_website.clone(),
             SharedString::from("getvela.app"),
+            SharedString::from("https://getvela.app"),
         ),
         (
             s.about_link_github.clone(),
             SharedString::from("github.com/mondaylabsltd/vela-wallet"),
+            SharedString::from("https://github.com/mondaylabsltd/vela-wallet"),
         ),
-        (s.about_link_safe.clone(), SharedString::from("safe.global")),
+        (
+            s.about_link_safe.clone(),
+            SharedString::from("safe.global"),
+            SharedString::from("https://safe.global"),
+        ),
     ]
 }
 
