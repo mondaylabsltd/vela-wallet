@@ -1685,6 +1685,56 @@ fn fiat_toggle_converts_across_the_boundary_both_ways() {
     assert_eq!(view.amount, "1", "round-trips through the strip regex");
 }
 
+/// Pressing ⇄ twice gives back what was typed, at a price that does not
+/// divide cleanly.
+///
+/// The existing round-trip test uses $2000, where `1 → 2000.00 → 1` survives
+/// by luck. A device found the real case: typing `1` on a coin priced at
+/// 6.8123 and toggling there-and-back left **`1.000293813380387808`** in the
+/// field — eighteen digits of arithmetic noise, because the fiat leg is
+/// rounded to two decimals and the way back divides that by the price at the
+/// token's full precision. It is not cosmetic: that field is what a signature
+/// is built from, so the person would have signed an amount they never typed.
+///
+/// The toggle restores rather than recomputes — but only while the fiat figure
+/// is still the one it produced. Edit it and the conversion is what you get,
+/// which the second half pins.
+#[test]
+fn toggling_twice_gives_back_the_digits_that_were_typed() {
+    let mut sut = boot(vec![SendToken {
+        price_usd: Some(6.8123),
+        ..eth("2")
+    }]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+
+    sut.dispatch(Event::ToggleFiatInput);
+    assert_eq!(sut.view().amount, "6.81", "1 × 6.8123, to two places");
+
+    sut.dispatch(Event::ToggleFiatInput);
+    assert_eq!(
+        sut.view().amount,
+        "1",
+        "what was typed, not 6.81 ÷ 6.8123 at eighteen decimals"
+    );
+    assert_eq!(sut.view().amount_fiat_code, None);
+
+    // Changed in fiat: there is nothing to give back, so it converts.
+    sut.dispatch(Event::ToggleFiatInput);
+    sut.dispatch(Event::SetAmount {
+        amount: "13.62".to_owned(),
+    });
+    sut.dispatch(Event::ToggleFiatInput);
+    let back = sut.view().amount;
+    assert!(
+        back.starts_with("1.99") || back.starts_with('2'),
+        "13.62 ÷ 6.8123 ≈ 2, converted rather than restored: {back}"
+    );
+    assert_ne!(back, "1", "the remembered figure must not come back here");
+}
+
 /// An unpriceable display currency closes the fiat-denominated input — and
 /// leaves everything else on the screen working.
 ///
@@ -2211,6 +2261,45 @@ fn max_does_nothing_in_a_split() {
         "no estimate is started for a field nobody sees"
     );
     assert_eq!(sut.view(), before, "and nothing on the view moves");
+}
+
+/// And nothing in a sweep, for a stronger reason: every row is ALREADY that
+/// token's maximum (`multi_specs` — the whole balance less the fee's reserve).
+/// The event only ever knew `selected_token`, the first of the pick, so a Max
+/// on the second row rewrote the hidden amount of the FIRST — and
+/// `derive_amount_warning`, which a sweep does not escape, then said "not
+/// enough ETH for the fee" on a form showing several tokens.
+#[test]
+fn max_does_nothing_in_a_sweep() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    sut.dispatch(Event::SetMultiNetwork { chain_id: Some(1) });
+    sut.dispatch(Event::ToggleAllMultiTokens {
+        visible_ids: vec![eth("2").id(), usdc("5").id()],
+    });
+    sut.dispatch(Event::ConfirmMultiSelection);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 100_000_000_000_000_000),
+    });
+    set_recipient(&mut sut, RECIPIENT);
+    let before = sut.view();
+    assert!(before.multi_select_mode);
+    assert_eq!(
+        before.multi_specs.len(),
+        2,
+        "the rows are the amounts, and there are two of them"
+    );
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(
+        ops.is_empty(),
+        "no rival estimate for a field nobody sees: {ops:?}"
+    );
+    let after = sut.view();
+    assert_eq!(after, before, "and nothing on the view moves");
+    assert_eq!(after.amount, "", "no hidden single amount is written");
+    assert_eq!(
+        after.amount_warning, None,
+        "and no verdict about one token lands on a form showing several"
+    );
 }
 
 /// The single form's live verdict does not follow the person into a split: the
