@@ -30,7 +30,9 @@
 use std::time::Duration;
 
 use serde_json::Value;
-use vela_core::clear_signer::integrity::{self, BUILD_ALLOWED, CheckFailure, Page, Verdict};
+use vela_core::clear_signer::integrity::{
+    self, BUILD_ALLOWED, CheckFailure, NoVersion, Page, Verdict,
+};
 
 use crate::executor::storage;
 
@@ -139,30 +141,41 @@ fn fetch_and_hash(url: &str) -> Result<String, CheckFailure> {
 /// deployed themselves.
 #[must_use]
 pub fn check(base: &str) -> Verdict {
-    let trusted = hashes_at(KEY_SIGNER_TRUSTED);
-    let blocked = hashes_at(KEY_SIGNER_BLOCKED);
+    check_with(
+        base,
+        &hashes_at(KEY_SIGNER_TRUSTED),
+        &hashes_at(KEY_SIGNER_BLOCKED),
+    )
+}
 
+/// The same, with the two per-device lists handed in.
+///
+/// Separated so the network path can be exercised against a real server
+/// without a configured store — which is how it was first driven end to end,
+/// over a LAN address, before anything was published.
+#[must_use]
+pub fn check_with(base: &str, trusted: &[String], blocked: &[String]) -> Verdict {
     // Which version to ask for. The endpoint's index narrows the candidates;
     // the order is this client's, so the endpoint cannot steer the choice.
     let available = published(base);
-    let wanted = integrity::choose_version(&available, &trusted, &blocked);
+    let wanted = integrity::choose_version(&available, trusted, blocked);
 
-    let Some(hash) = wanted else {
-        // Nothing this wallet accepts is published — or, today, this build
-        // accepts nothing at all because `BUILD_ALLOWED` is still empty.
-        return Verdict::CouldNotCheck(CheckFailure::NotChecked);
+    let hash = match wanted {
+        Ok(hash) => hash,
+        // Nothing to ask for. WHY matters: "this endpoint publishes nothing
+        // this wallet knows" sends a person to update, and "you have blocked
+        // every usable version" sends them to their own list. Saying "could
+        // not check" for either would send them to their network settings.
+        Err(why) => return Verdict::NoVersionToAsk(why),
     };
     let Some(url) = integrity::content_addressed_url(base, &hash) else {
-        // A custom deployment has no content-addressed path; its page is
-        // wherever the person said it is.
-        return verdict_for(
-            base,
-            fetch_and_hash(&with_trailing_slash(base)),
-            &trusted,
-            &blocked,
-        );
+        return Verdict::CouldNotCheck(CheckFailure::NotChecked);
     };
-    verdict_for(base, fetch_and_hash(&url), &trusted, &blocked)
+    // A deployment that publishes by hash is asked by hash — including one on a
+    // person's own host, because `dist/` is the same layout wherever it is
+    // copied. A host serving a single page has no index, so `choose_version`
+    // already returned `None` above and this is never reached.
+    verdict_for(base, fetch_and_hash(&url), trusted, blocked)
 }
 
 /// The pure half: bytes-or-failure in, the core's verdict out.
@@ -219,16 +232,25 @@ pub fn describe(verdict: &Verdict) -> String {
             &actual[..16]
         ),
         Verdict::CouldNotCheck(why) => format!("signer page: could not be checked ({why:?})"),
+        Verdict::NoVersionToAsk(NoVersion::NothingPublishedThisWalletKnows) => {
+            "signer page: this address publishes no version this wallet knows — update the wallet"
+                .to_owned()
+        }
+        Verdict::NoVersionToAsk(NoVersion::EverythingUsableIsBlocked) => {
+            "signer page: every version this wallet could use is on this device's block list"
+                .to_owned()
+        }
     }
 }
 
-/// Whether this build can gate on the check at all.
+/// Whether this build may REFUSE on the verdict, as opposed to recording it.
 ///
-/// False while [`BUILD_ALLOWED`] is empty: with nothing to accept, gating would
-/// refuse every page, including the good one. The call site logs instead.
+/// The core owns the answer (`integrity::ENFORCE`), and it is deliberately not
+/// "is the allow-set non-empty": listing the first hash must not, by itself,
+/// start refusing every page that is not published yet.
 #[must_use]
 pub fn can_enforce() -> bool {
-    !BUILD_ALLOWED.is_empty()
+    integrity::ENFORCE
 }
 
 #[cfg(test)]
@@ -295,12 +317,53 @@ mod tests {
     }
 
     #[test]
-    fn this_build_cannot_enforce_yet_and_says_so() {
-        // The guard that keeps phase C from bricking a working Clear Signer.
+    fn this_build_records_but_does_not_refuse_yet() {
+        // The guard that keeps phase C from bricking a working Clear Signer:
+        // the page is not published at the official address yet.
         assert!(
             !can_enforce(),
-            "BUILD_ALLOWED filled: wire the gate, and say so in 076"
+            "076: enforcement is on — publish first, then flip integrity::ENFORCE"
         );
+    }
+
+    /// The whole chain, over a real socket: index → choose → fetch by hash →
+    /// hash the bytes → the core's verdict.
+    ///
+    /// Run with a `dist/` served somewhere reachable:
+    ///
+    /// ```sh
+    /// (cd app-web/clearsigning/dist && python3 -m http.server 8920)
+    /// SIGNER_DIST=http://127.0.0.1:8920/ cargo test signer_integrity -- --ignored --nocapture
+    /// ```
+    ///
+    /// Ignored by default because it needs that server; it is the test that
+    /// proved the design works before anything was published, against a LAN
+    /// address rather than the production host.
+    #[test]
+    #[ignore = "needs a dist/ served at $SIGNER_DIST"]
+    fn the_whole_chain_against_a_served_dist() {
+        let Ok(base) = std::env::var("SIGNER_DIST") else {
+            return;
+        };
+        let verdict = check_with(&base, &[], &[]);
+        println!("LAN check({base}) → {verdict:?}\n  {}", describe(&verdict));
+        assert_eq!(
+            verdict,
+            Verdict::Open,
+            "a dist/ this build ships a hash for must open"
+        );
+
+        // And the deny-list still outranks the build's own set, over the wire.
+        // Blocking the only version this build ships means there is nothing to
+        // ask for — and the person is told THAT, not "could not be checked".
+        let blocked = vec![BUILD_ALLOWED[0].to_owned()];
+        let denied = check_with(&base, &[], &blocked);
+        println!("LAN check with it blocked → {}", describe(&denied));
+        assert_eq!(
+            denied,
+            Verdict::NoVersionToAsk(NoVersion::EverythingUsableIsBlocked)
+        );
+        assert!(describe(&denied).contains("block list"));
     }
 
     #[test]

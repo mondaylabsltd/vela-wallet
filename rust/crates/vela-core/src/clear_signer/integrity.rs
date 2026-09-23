@@ -53,7 +53,27 @@
 ///
 /// Empty until 076 phase B publishes the first content-addressed page. See the
 /// module note: enforcing an empty set opens nothing.
-pub const BUILD_ALLOWED: &[&str] = &[];
+pub const BUILD_ALLOWED: &[&str] = &[
+    // The first published page (076 phase B). Built from `app-web/clearsigning/
+    // src/` by `bun samples/build-single.mjs`, reproducibly, under both Bun and
+    // Node; the bytes are committed at
+    // `app-web/clearsigning/dist/b/<this hash>/sign.html`.
+    "810db7c5dbb461897287ae6e8a8c863e9075779e96a07af06efff98fbd925178",
+];
+
+/// Whether a shell may REFUSE on this module's verdict, as opposed to merely
+/// recording it.
+///
+/// Deliberately separate from [`BUILD_ALLOWED`] being non-empty. The two
+/// answer different questions — "which bytes would we accept" and "may we stop
+/// a person yet" — and tying them together means the commit that lists the
+/// first hash also, silently, starts refusing every page that is not yet
+/// published. That is a self-inflicted outage in the shape of a security
+/// feature.
+///
+/// Flip this in the commit that publishes the page at the official address,
+/// and not before. Until then the shells check, log and open.
+pub const ENFORCE: bool = false;
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).
@@ -109,6 +129,9 @@ pub enum Verdict {
     },
     /// The check did not complete, so nothing opens (FR-006).
     CouldNotCheck(CheckFailure),
+    /// There was no version to even ask for. Not a failure of the check — the
+    /// check never started — and the two reasons need different words.
+    NoVersionToAsk(NoVersion),
 }
 
 /// Everything the decision is made from. All of it is already known to the
@@ -189,17 +212,25 @@ pub fn is_official(url: &str) -> bool {
 /// wrong, a mismatch is attributable and reproducible by anyone, and old
 /// clients keep working because the server keeps every published version.
 ///
-/// `None` for a custom address: content-addressing is the official page's
-/// publishing discipline, and a person's own deployment is opened at the
-/// address they typed. Their bytes are still pinned — by the hash they
-/// trusted (FR-009) — which is the property that matters.
+/// It works for ANY address, not just the official one: content addressing is a
+/// property of the DEPLOYMENT — the `dist/` directory laid out as an index plus
+/// `b/<sha256>/sign.html` — and someone who deploys that directory on their own
+/// host has the same layout and deserves the same check. Limiting it to one
+/// hostname would mean the self-hoster's bytes were never fetched by hash, and
+/// the path everyone else relies on would go untested on any machine but the
+/// official one.
+///
+/// `None` only when the hash is not a hash. A deployment that serves a single
+/// page and no `b/` directory is handled by the caller falling back to the
+/// address as typed.
 #[must_use]
 pub fn content_addressed_url(url: &str, hash: &str) -> Option<String> {
-    if !is_official(url) {
+    let hash = normalize_hash(hash)?;
+    let base = url.trim().trim_end_matches('/');
+    if base.is_empty() {
         return None;
     }
-    let hash = normalize_hash(hash)?;
-    Some(format!("https://{OFFICIAL_HOST}/b/{hash}/sign.html"))
+    Some(format!("{base}/b/{hash}/sign.html"))
 }
 
 /// Which published version to ask for, given what the endpoint still has.
@@ -225,20 +256,43 @@ pub fn content_addressed_url(url: &str, hash: &str) -> Option<String> {
 /// The index is an OPTIMISATION, not a dependency: a shell that cannot fetch
 /// it may try its own preferred hash directly, since the URL is derivable from
 /// the hash alone.
-#[must_use]
 pub fn choose_version(
     available: &[String],
     trusted: &[String],
     blocked: &[String],
-) -> Option<String> {
+) -> Result<String, NoVersion> {
     let offered: Vec<String> = available.iter().filter_map(|h| normalize_hash(h)).collect();
-    BUILD_ALLOWED
-        .iter()
-        .filter_map(|h| normalize_hash(h))
-        .chain(trusted.iter().filter_map(|h| normalize_hash(h)))
-        .find(|candidate| {
-            !contains(blocked, candidate) && offered.iter().any(|offer| offer == candidate)
-        })
+    let candidates = || {
+        BUILD_ALLOWED
+            .iter()
+            .filter_map(|h| normalize_hash(h))
+            .chain(trusted.iter().filter_map(|h| normalize_hash(h)))
+            .filter(|candidate| offered.iter().any(|offer| offer == candidate))
+    };
+    if let Some(usable) = candidates().find(|candidate| !contains(blocked, candidate)) {
+        return Ok(usable);
+    }
+    // Nothing to ask for — and WHY decides what a person is told. "Could not
+    // check" reads as a network fault and sends them debugging the wrong
+    // thing; "you have blocked every version this wallet can use" is both true
+    // and actionable. Found by driving the real chain over a LAN address.
+    if candidates().next().is_some() {
+        Err(NoVersion::EverythingUsableIsBlocked)
+    } else {
+        Err(NoVersion::NothingPublishedThisWalletKnows)
+    }
+}
+
+/// Why there was no version to ask for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoVersion {
+    /// The endpoint publishes nothing this wallet accepts. "Update the wallet",
+    /// not "you are under attack" — and with content addressing it should not
+    /// normally happen, because a published path never goes away.
+    NothingPublishedThisWalletKnows,
+    /// Every version that WOULD have been usable is on this device's deny-list.
+    /// The person did that, and can undo it.
+    EverythingUsableIsBlocked,
 }
 
 /// Whether the page may be opened, and what to say when it may not.
@@ -452,16 +506,23 @@ mod tests {
     }
 
     #[test]
-    fn the_content_addressed_url_is_the_official_page_by_hash() {
-        // FR-002: ask for a version you already know.
+    fn a_deployment_is_addressed_by_hash_wherever_it_lives() {
+        // FR-002: ask for a version you already know. The `dist/` layout is
+        // what makes this possible, and it is the same layout wherever it is
+        // copied — so a self-hoster gets the same check, and the path everyone
+        // relies on is exercisable on a machine that is not the official one.
         assert_eq!(
             content_addressed_url("https://sign.getvela.app/", &A.to_ascii_uppercase()),
             Some(format!("https://sign.getvela.app/b/{A}/sign.html"))
         );
-        // A custom deployment is opened where the person said it is.
         assert_eq!(
-            content_addressed_url("https://signer.example.test/", A),
-            None
+            content_addressed_url("http://192.168.1.20:8080/", A),
+            Some(format!("http://192.168.1.20:8080/b/{A}/sign.html"))
+        );
+        // A base with a path keeps it: a deployment can live in a subdirectory.
+        assert_eq!(
+            content_addressed_url("https://example.test/signer", A),
+            Some(format!("https://example.test/signer/b/{A}/sign.html"))
         );
         // And a hash that is not a hash addresses nothing.
         assert_eq!(
@@ -475,18 +536,21 @@ mod tests {
         // A version only the ENDPOINT knows about is not a version this wallet
         // will run. The index has no authority; it only says what is there.
         let available = vec![B.to_owned()];
-        assert_eq!(choose_version(&available, &[], &[]), None);
+        assert_eq!(
+            choose_version(&available, &[], &[]),
+            Err(NoVersion::NothingPublishedThisWalletKnows)
+        );
 
         // One the person trusted, and the endpoint still has: that is the one.
         let trusted = vec![B.to_owned()];
-        assert_eq!(
-            choose_version(&available, &trusted, &[]),
-            Some(B.to_owned())
-        );
+        assert_eq!(choose_version(&available, &trusted, &[]), Ok(B.to_owned()));
 
         // Blocked outranks both, here as everywhere (FR-010).
         let blocked = vec![B.to_owned()];
-        assert_eq!(choose_version(&available, &trusted, &blocked), None);
+        assert_eq!(
+            choose_version(&available, &trusted, &blocked),
+            Err(NoVersion::EverythingUsableIsBlocked)
+        );
     }
 
     #[test]
@@ -495,33 +559,51 @@ mod tests {
         // other order. The CLIENT's order decides.
         let trusted = vec![A.to_owned(), B.to_owned()];
         let available = vec![B.to_owned(), A.to_owned()];
-        assert_eq!(
-            choose_version(&available, &trusted, &[]),
-            Some(A.to_owned())
-        );
+        assert_eq!(choose_version(&available, &trusted, &[]), Ok(A.to_owned()));
     }
 
     #[test]
     fn an_endpoint_serving_nothing_this_wallet_knows_is_not_an_attack() {
         // It is "update the wallet". Content addressing is what should keep it
         // from happening: a published path never goes away.
-        assert_eq!(choose_version(&[], &[A.to_owned()], &[]), None);
+        assert_eq!(
+            choose_version(&[], &[A.to_owned()], &[]),
+            Err(NoVersion::NothingPublishedThisWalletKnows)
+        );
         assert_eq!(
             choose_version(&["not-a-hash".to_owned()], &[A.to_owned()], &[]),
-            None
+            Err(NoVersion::NothingPublishedThisWalletKnows)
         );
     }
 
     #[test]
-    fn the_shipped_set_is_empty_until_the_page_is_published() {
-        // Phase B fills this. The test exists so that filling it is a
-        // deliberate act with a failing test attached, not a quiet edit —
-        // and so nobody wires `decide` into the launch path first and bricks
-        // a Clear Signer that works today.
+    fn every_shipped_hash_is_a_hash() {
         assert!(
-            BUILD_ALLOWED.is_empty(),
-            "076 phase B published a page: update this test, and check that \
-             every shipped hash stays reachable at its path for ever"
+            !BUILD_ALLOWED.is_empty(),
+            "a build that accepts nothing opens nothing"
+        );
+        for hash in BUILD_ALLOWED {
+            assert_eq!(
+                normalize_hash(hash).as_deref(),
+                Some(*hash),
+                "{hash} is not 64 lowercase hex characters"
+            );
+        }
+    }
+
+    #[test]
+    // The assertion IS on a constant, and that is the point: this is a tripwire
+    // on `ENFORCE`, so that turning refusals on is a deliberate act with a
+    // failing test attached rather than a one-character edit nobody reviews.
+    #[allow(clippy::assertions_on_constants)]
+    fn refusing_is_still_switched_off() {
+        // The guard against a self-inflicted outage: listing a hash must not,
+        // by itself, start refusing pages that are not published yet. Flip
+        // `ENFORCE` in the commit that publishes, and change this test with it.
+        assert!(
+            !ENFORCE,
+            "076: enforcement is on — the page must be published at the official \
+             address first, and every listed hash reachable at its own path"
         );
     }
 }
