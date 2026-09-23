@@ -4,7 +4,20 @@ A spec's `tasks.md` holds what that spec found. This holds what the owner
 reported while a *different* spec was open, so it survives the spec that was
 current when it was said. Each entry names the evidence, not just the symptom.
 
-## B-1 · A scanned address locks the asset (owner, 2026-09-23)
+## B-1 · A scanned address locks the asset (owner, 2026-09-23) — ✅ FIXED
+
+`send.rs`'s `Back` from `EnterDetails` clears the recipient only when it was
+TYPED: `if model.params.prefilled_recipient.is_none()`. A recipient handed in
+from outside — a scan, a contact, a payment request — survives the trip to the
+picker, so changing the asset costs nothing.
+
+Pinned by two tests in `tests/app_send.rs`
+(`an_unlocked_prefill_still_carries_its_recipient_across_a_token_change`, and
+the scan case that ends "the scan is still in hand"). 131 tests green.
+
+The web shell's workaround — `changeToken` = Back + SetRecipient, a dance the
+native shells never learned, which is why the bug showed there and not on web —
+is no longer what makes it work.
 
 **Reported:** 「扫码到一个地址后无法切换发送资产，只能发送里面的默认代币」 — after
 scanning a QR to get a recipient, the send screen will only send the token it
