@@ -27,7 +27,7 @@
 	import type { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
-	import type { FeeCall } from '$lib/core/generated/FeeCall';
+	import { feeCallsOf } from '$lib/signing/fee-calls';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { onMount } from 'svelte';
@@ -66,28 +66,6 @@
 			signingSheet.dismiss();
 		}
 	});
-
-	/**
-	 * The REAL calls of a transaction request, as the fee machine prices them.
-	 * `null` for anything that is not an on-chain operation (a message has no
-	 * fee) or whose params this cannot read — then no fee is drawn, and the
-	 * slide does not wait for one.
-	 */
-	function callsOf(kind: string, paramsJson: string): FeeCall[] | null {
-		try {
-			const first = (JSON.parse(paramsJson) as unknown[])[0] as
-				{ to?: string; value?: string; data?: string; calls?: unknown[] } | undefined;
-			const raw = kind === 'batch' ? (first?.calls ?? []) : kind === 'transaction' ? [first] : [];
-			const calls = (raw as { to?: string; value?: string; data?: string }[]).map((call) => ({
-				to: call?.to ?? '',
-				value: BigInt(call?.value ?? '0x0').toString(),
-				data: call?.data ?? '0x'
-			}));
-			return calls.length > 0 && calls.every((call) => call.to !== '') ? calls : null;
-		} catch {
-			return null;
-		}
-	}
 
 	// The speed control (spec 069): the send form's own, over this sheet's fee
 	// session. A dApp transaction starts at the person's stored default, can be
@@ -128,7 +106,7 @@
 			return;
 		}
 		if (quotedFor === request.id) return;
-		const calls = callsOf(request.kind, request.params_json);
+		const calls = feeCallsOf(request.kind, request.params_json);
 		if (calls === null) return;
 		// A new request starts at the stored default, never at the last one's pick.
 		speedControl.reset();

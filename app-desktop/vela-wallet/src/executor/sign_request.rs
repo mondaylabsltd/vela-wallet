@@ -446,20 +446,47 @@ pub fn calls_of(method: &str, params_json: &str) -> Option<Vec<FeeCall>> {
 fn fee_call(raw: &Value) -> Option<FeeCall> {
     Some(FeeCall {
         to: raw.get("to")?.as_str()?.to_owned(),
-        // A missing value is zero, not a failure: most contract calls carry
-        // none. Hex on the wire, decimal to the core.
-        value: raw
-            .get("value")
-            .and_then(Value::as_str)
-            .and_then(|hex| u128::from_str_radix(hex.trim_start_matches("0x"), 16).ok())
-            .unwrap_or(0)
-            .to_string(),
+        value: wei_of(raw.get("value"))?,
         data: raw
             .get("data")
             .and_then(Value::as_str)
             .unwrap_or("0x")
             .to_owned(),
     })
+}
+
+/// A JSON-RPC quantity as wei, or `None` when it is not a number.
+///
+/// **Absent is zero; unreadable is not.** Most contract calls carry no value,
+/// so a missing field is 0 — but a field that is there and cannot be read used
+/// to be priced as 0 too, which puts a wrong fee beside a real transaction.
+/// Refusing it draws no fee instead, and no fee is better than a made-up one.
+///
+/// `"0x"` is zero. Several dApp libraries write it that way, and taking it for
+/// unreadable is what cost the WEB shell its fee and its speed control on a
+/// Uniswap swap (B-4, owner 2026-09-23).
+fn wei_of(value: Option<&Value>) -> Option<String> {
+    let Some(value) = value else {
+        return Some("0".to_owned());
+    };
+    if value.is_null() {
+        return Some("0".to_owned());
+    }
+    if let Some(number) = value.as_u64() {
+        return Some(number.to_string());
+    }
+    let text = value.as_str()?.trim();
+    let digits = text
+        .strip_prefix("0x")
+        .or_else(|| text.strip_prefix("0X"))
+        .map(|hex| (hex, 16))
+        .unwrap_or((text, 10));
+    if digits.0.is_empty() {
+        return Some("0".to_owned());
+    }
+    u128::from_str_radix(digits.0, digits.1)
+        .ok()
+        .map(|wei| wei.to_string())
 }
 
 /// Poll until the receipt lands or the budget runs out.
@@ -960,6 +987,43 @@ mod tests {
             .unwrap_or_else(|| unreachable!("a bare call reads"));
         assert_eq!(calls[0].value, "0");
         assert_eq!(calls[0].data, "0x");
+    }
+
+    /// `"0x"` is ZERO, and a value nobody can read is not.
+    ///
+    /// The web shell took `"0x"` for unreadable (`BigInt("0x")` throws) and
+    /// lost the whole request's fee AND its speed control, silently, on a
+    /// Uniswap swap (B-4, owner 2026-09-23). This shell parsed it correctly by
+    /// luck — and priced an unreadable value as zero, which is the other half
+    /// of the same mistake: a wrong fee beside a real transaction.
+    #[test]
+    fn a_bare_0x_is_zero_and_an_unreadable_amount_is_refused() {
+        let zero = calls_of("eth_sendTransaction", r#"[{"to":"0xbbb","value":"0x"}]"#)
+            .unwrap_or_else(|| unreachable!("`0x` is zero, not unreadable"));
+        assert_eq!(zero[0].value, "0");
+
+        // Absent, empty and null are all zero too.
+        for params in [
+            r#"[{"to":"0xbbb"}]"#,
+            r#"[{"to":"0xbbb","value":""}]"#,
+            r#"[{"to":"0xbbb","value":null}]"#,
+        ] {
+            let calls = calls_of("eth_sendTransaction", params)
+                .unwrap_or_else(|| unreachable!("{params} reads as zero"));
+            assert_eq!(calls[0].value, "0", "{params}");
+        }
+
+        // And what is NOT a number draws no fee rather than a made-up one.
+        for params in [
+            r#"[{"to":"0xbbb","value":"soon"}]"#,
+            r#"[{"to":"0xbbb","value":"0xzz"}]"#,
+            r#"[{"to":"0xbbb","value":{}}]"#,
+        ] {
+            assert!(
+                calls_of("eth_sendTransaction", params).is_none(),
+                "{params} was priced anyway"
+            );
+        }
     }
 
     /// EIP-5792: one entry carrying many calls, and they stay in order —
