@@ -248,9 +248,32 @@ expected and the actual hash.
 ## Open questions — to be MEASURED, not assumed
 
 1. **`cache: 'only-if-cached'`** — does it return the navigation's response body
-   on WKWebView and on Android WebView? Both platforms, both OS versions in
-   support. If not, FR-004 needs another way to read the bytes and the whole
-   "keep the fingerprint" position has to be re-argued.
+   on WKWebView and on Android WebView?
+
+   **Android WebView: YES.** Measured 2026-09-23 on a real device (M2012K11AC,
+   Android 13) by `SignerPageProbeTest`, against a counting server inside the
+   test process:
+
+   ```
+   max-age=300 → OK status=200 bytes=12603 secure/subtle=true/true sha256=86810537…
+                 the DOCUMENT was asked for exactly once
+   no-store    → THREW TypeError: Failed to fetch
+   ```
+
+   `12603` is the page's own length to the byte, and the digest is the same one
+   headless Chromium computes for the same page — so what came back is the
+   navigation's bytes and not a re-fetch. `secure/subtle=true/true`: http on
+   loopback is a secure context, so `crypto.subtle` is there to hash with. And
+   `no-store` throws, which is precisely the fail-closed case FR-006 needs —
+   the server that wants to defeat this check cannot do so silently.
+
+   One correction to the probe itself: a browser asks for `/favicon.ico` on its
+   own, so "asked once" must be counted per PATH. Counting every request would
+   have reported a second fetch that never happened.
+
+   **WKWebView: being measured** (`SignerPageProbeTests.swift`). WebKit's cache
+   semantics are not Chromium's, and this is the answer that can still cost
+   FR-004 its "keep the fingerprint" position.
 2. **WebRTC / STUN** — content blockers govern HTTP; a page could try to leak
    over UDP. Can WebRTC be disabled in each WebView? If not, FR-005 has a hole
    and must say so.

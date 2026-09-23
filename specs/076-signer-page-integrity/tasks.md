@@ -8,7 +8,38 @@ whether the verification MECHANISM (FR-004) can keep the browser's fingerprint,
 which is phase C's problem. Nothing in A is built on a guess from the spec.
 
 ## P0 — probes (do these first, and alone)
-- [ ] T001 P1 — `only-if-cached` on WKWebView and Android WebView: does it return the navigation's body?
+
+**Desktop Chromium first, as a check on the probe rather than on the platform**
+(2026-09-23, headless Chrome for Testing 151 against a counting server):
+
+```
+max-age=300  → OK status=200 bytes=12603 secure/subtle=true/true sha256=86810537…
+                server asked 1× for the document (plus /favicon.ico)
+no-store     → THREW TypeError: Failed to fetch
+```
+
+So the mechanism itself is sound: `only-if-cached` returns the navigation's own
+bytes, at exactly the page's length, with no second request for the document;
+`crypto.subtle` is there because http on loopback IS a secure context; and
+`no-store` throws, which is the fail-closed case FR-006 needs. It also caught a
+flaw in the probe: a browser asks for `/favicon.ico` on its own, so "asked
+once" has to be counted per PATH, not in total.
+
+**This does not answer T001.** Android's WebView and WKWebView are the engines
+076 will actually run in, and they are what the probes below measure.
+
+- [x] **T001 P1 · Android WebView — YES.** Real device, M2012K11AC / Android 13:
+      the body comes back at exactly the page's length (12603), the digest
+      matches headless Chromium's for the same bytes, the DOCUMENT is asked for
+      once, `crypto.subtle` is available (loopback http is a secure context),
+      and `no-store` throws — fail-closed, as FR-006 needs.
+- [ ] T001 P1 · **WKWebView — being measured.** The one that can still cost
+      FR-004 its position.
+      *Probes:
+      `app-android/…/androidTest/…/SignerPageProbeTest.kt` and
+      `app-ios/VelaWallet/VelaWalletTests/SignerPageProbeTests.swift` — each runs
+      a counting server in-process, so "no second request" is the server's word
+      and not an API's.*
 - [ ] T002 P2 — what escapes a blocked WebView: fetch / XHR / sendBeacon / WebSocket / WebRTC
 - [ ] T003 P3 — a logging server compares the probe's request with a real navigation's (UA, headers, JA4, H2)
 - [ ] T004 Write up all three, with numbers, into spec.md's open questions
