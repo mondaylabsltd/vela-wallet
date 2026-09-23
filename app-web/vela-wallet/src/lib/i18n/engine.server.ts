@@ -677,21 +677,7 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		body: k('connect.browser.body'),
 		connect: k('connect.browser.connect'),
 		cancel: k('connect.browser.cancel'),
-		preparing: k('connect.browser.preparing'),
-		// Spec 077: the send receipt's own words, for the landing a dApp
-		// transaction now shows instead of a window that shut itself.
-		receipt: {
-			confirming: k('componentsTx.receipt.confirming'),
-			confirmingHint: k('componentsTx.receipt.confirmingHint'),
-			submitted: k('componentsTx.receipt.statusSubmitted'),
-			confirmed: k('componentsTx.receipt.statusConfirmed'),
-			failed: k('componentsTx.receipt.statusFailed'),
-			failedHint: k('componentsTx.receipt.failedHint'),
-			opHashLabel: k('componentsTx.receipt.userOpHash'),
-			txHashLabel: k('componentsTx.receipt.txHash'),
-			explorer: k('componentsTx.receipt.explorer'),
-			done: k('componentsTx.receipt.done')
-		}
+		preparing: k('connect.browser.preparing')
 	};
 }
 
@@ -924,6 +910,20 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signWithPlatform: k('onboarding.create.methodPlatformTitle'),
 		signWithHybrid: k('onboarding.create.methodHybridTitle'),
 		signWithSecurityKey: k('onboarding.create.methodSecurityKeyTitle'),
+		// Spec 077: the send receipt's own words, for the landing this sheet
+		// draws once a transaction is submitted.
+		receipt: {
+			confirming: k('componentsTx.receipt.confirming'),
+			confirmingHint: k('componentsTx.receipt.confirmingHint'),
+			submitted: k('componentsTx.receipt.statusSubmitted'),
+			confirmed: k('componentsTx.receipt.statusConfirmed'),
+			failed: k('componentsTx.receipt.statusFailed'),
+			failedHint: k('componentsTx.receipt.failedHint'),
+			opHashLabel: k('componentsTx.receipt.userOpHash'),
+			txHashLabel: k('componentsTx.receipt.txHash'),
+			explorer: k('componentsTx.receipt.explorer'),
+			done: k('componentsTx.receipt.done')
+		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),
 		safeInnerCall: k('componentsUi.signing.safeInnerCall'),

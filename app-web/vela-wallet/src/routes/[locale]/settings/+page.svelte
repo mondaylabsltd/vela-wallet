@@ -428,7 +428,7 @@
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
 		model = withLiveFeeSpeed(model, feeTierPreference.view);
-		model = withLiveSigning(model, signPreference.view, m);
+		model = withLiveSigning(model, signPreference.view);
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale);
@@ -463,7 +463,7 @@
 		// The desktop page reuses the phone sheet's rows — one list of tiers,
 		// one set of words, whichever layout is showing.
 		model = withLiveFeeSpeedDesktop(model, feeTierPreference.view, liveHome.feeSpeedSheet);
-		model = withLiveSigningDesktop(model, signPreference.view, liveHome.signWithSheet, m);
+		model = withLiveSigningDesktop(model, signPreference.view, liveHome.signWithSheet);
 		model = {
 			...model,
 			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }
@@ -648,7 +648,16 @@
 	The wallet's own request to copy its keys to Ethereum is answered HERE
 	(spec 062). Same host, same four machines, same sheet as a page's request.
 -->
-<SigningHost messages={data.signingMessages} fee={feeQuote} />
+<!--
+	Spec 077: the backup to Ethereum is a transaction, and it lands here
+	like any other — it posts into the same seam a dApp does, so it gets the
+	same receipt rather than a second one written for it.
+-->
+<SigningHost
+	messages={data.signingMessages}
+	fee={feeQuote}
+	receipt={data.signingMessages.receipt}
+/>
 
 <style>
 	/* The phone screens are `height: 100%` of whatever holds them, and the

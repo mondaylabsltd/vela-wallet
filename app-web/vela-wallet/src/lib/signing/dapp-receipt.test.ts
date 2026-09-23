@@ -6,7 +6,13 @@
  * SEND's, not about a second design.
  */
 import { describe, expect, it } from 'vitest';
-import { dappReceiptModel, receiptProgress, type DappReceiptCopy } from './dapp-receipt';
+import {
+	dappReceiptModel,
+	landingToRaise,
+	receiptProgress,
+	type DappReceiptCopy
+} from './dapp-receipt';
+import { ringProgress } from '$lib/flows/ui/ring';
 
 const copy: DappReceiptCopy = {
 	confirming: 'Confirming…',
@@ -82,16 +88,51 @@ describe('the receipt a dApp transaction lands on', () => {
 	});
 });
 
+describe('which operation raises a landing', () => {
+	it('raises one for an operation it has not shown yet', () => {
+		expect(landingToRaise(OP, null)).toBe(OP);
+	});
+
+	it('does NOT raise the same one again — which is what made Done work', () => {
+		// The handoff STAYS in the view after the receipt is dismissed. Gating on
+		// "no landing is showing" meant Done cleared it and the watcher put it
+		// straight back: a receipt a person could not get out of. Measured in the
+		// packaged extension, where neither a trusted click nor a synthetic one
+		// could dismiss it.
+		expect(landingToRaise(OP, OP)).toBeNull();
+	});
+
+	it('raises a new one for the NEXT operation', () => {
+		// The panel stays open and takes request after request; a dismissed
+		// receipt must not deafen it to the one after.
+		expect(landingToRaise(TX, OP)).toBe(TX);
+	});
+
+	it('raises nothing when there is no operation to follow', () => {
+		// A message, a refusal, a transaction with nothing at the bundler.
+		expect(landingToRaise(null, null)).toBeNull();
+		expect(landingToRaise(undefined, OP)).toBeNull();
+		expect(landingToRaise('', null)).toBeNull();
+	});
+});
+
 describe('the ring that fills while it waits', () => {
-	it('fills with the time the chain usually takes', () => {
-		expect(receiptProgress(1_000, 20, 1_000)).toBe(0);
-		expect(receiptProgress(1_000, 20, 11_000)).toBeCloseTo(0.5);
+	it("draws the SEND receipt's curve, not a second one that looks like it", () => {
+		// The owner asked for "和转账一样". `ringProgress` is the send's own, so
+		// this checks the two agree rather than re-deriving the easing here.
+		expect(receiptProgress(1_000, 20, 1_000)).toBe(ringProgress(0, 20));
+		expect(receiptProgress(1_000, 20, 21_000)).toBe(ringProgress(20, 20));
+	});
+
+	it('is about 70% at the time the chain usually takes', () => {
+		expect(receiptProgress(1_000, 20, 21_000)).toBeCloseTo(0.69, 2);
 	});
 
 	it('never closes before the tick does', () => {
 		// A full ring beside the word "Submitted" reads as a finished
-		// transaction that is not finished.
-		expect(receiptProgress(1_000, 20, 1_000_000)).toBe(0.95);
+		// transaction that is not finished. Only the confirmation closes it.
+		expect(receiptProgress(1_000, 20, 1_000_000)).toBeCloseTo(0.92, 4);
+		expect(receiptProgress(1_000, 20, 1_000_000)).toBeLessThan(0.92001);
 	});
 
 	it('a chain with no typical time circles instead of filling', () => {

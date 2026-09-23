@@ -28,6 +28,17 @@
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import { feeCallsOf } from '$lib/signing/fee-calls';
+	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
+	import {
+		dappReceiptModel,
+		landingToRaise,
+		receiptProgress,
+		type DappReceiptCopy,
+		type DappReceiptState
+	} from '$lib/signing/dapp-receipt';
+	import { explorerBaseURL } from '$lib/services/networks';
+	import { typicalInclusionSeconds } from '$lib/core/kernels';
+	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { onMount } from 'svelte';
@@ -40,8 +51,122 @@
 		fee: FeeQuote;
 		/** The fee-coin sheet is a shell surface; a host that draws none says so. */
 		onfee?: () => void;
+		/**
+		 * Spec 077: the send receipt's own words, for the landing this host
+		 * draws once a transaction is submitted. A host that passes none draws
+		 * no landing — which is what every surface did before 077.
+		 */
+		receipt?: DappReceiptCopy;
+		/**
+		 * A transaction has been answered and is landing HERE. The request
+		 * window uses it to stop closing itself.
+		 */
+		onlanding?: () => void;
+		/** The person pressed Done on the landing. */
+		onreceiptdone?: () => void;
 	}
-	let { messages, fee, onfee = () => {} }: Props = $props();
+	let { messages, fee, onfee = () => {}, receipt, onlanding, onreceiptdone }: Props = $props();
+
+	/**
+	 * Spec 077: where a submitted transaction stands.
+	 *
+	 * It lives HERE rather than in one surface, because every surface that
+	 * mounts this sheet submits through the same machine — a dApp request,
+	 * Settings' backup to Ethereum, a payment request. The first version put
+	 * the landing in the request window alone and the BACKUP still had none:
+	 * it posts into the same seam deliberately, so as not to build "a second,
+	 * lesser copy of the most dangerous screen there is". One sheet, one
+	 * landing.
+	 */
+	let landing = $state<DappReceiptState | null>(null);
+	let landingChain = $state(0);
+	let landedAtMs = $state(0);
+	let unsubscribeTracker: (() => void) | undefined;
+	/** This chain's usual time to land, in seconds; `0` when there is none. */
+	let landingTypicalS = $state(0);
+	/**
+	 * The receipt's clock. One second is the right grain — the ring has to
+	 * MOVE while a person watches it, and a `Date.now()` read inside the markup
+	 * would be sampled once and then sit still (spec 038 #D3 does the same).
+	 */
+	let nowMs = $state(Date.now());
+	$effect(() => {
+		if (landing?.kind !== 'submitted') return;
+		const tick = setInterval(() => (nowMs = Date.now()), 1000);
+		return () => clearInterval(tick);
+	});
+
+	/**
+	 * Follow one operation to the chain.
+	 *
+	 * The tracker is ALREADY following it — `sign-resident` hands every
+	 * `tracker_handoff` over the moment it appears — so this subscribes to what
+	 * is running rather than starting a second watch of the same hash.
+	 */
+	function watchLanding(opHash: string, chain: number): void {
+		landingChain = chain;
+		landedAtMs = Date.now();
+		// How long this chain usually takes, from the CORE's table — the same
+		// number the send receipt draws its ring with. `0` (a chain Vela ships
+		// no estimate for) makes the ring circle instead of filling.
+		landingTypicalS = typicalInclusionSeconds(chain);
+		landing = { kind: 'submitting' };
+		readTracker(opHash);
+		unsubscribeTracker?.();
+		unsubscribeTracker = subscribeTxTracker(() => readTracker(opHash));
+		onlanding?.();
+	}
+
+	/**
+	 * What the tracker says, as the receipt's own state.
+	 *
+	 * `dropped` / `rejected` are failures with a hash to look at; `unreachable`
+	 * is NOT — the wallet could not ask, which is not the chain saying no, and
+	 * a cross drawn for it would be a verdict this wallet does not have.
+	 */
+	function readTracker(opHash: string): void {
+		const wanted = opHash.toLowerCase();
+		const entry = txTrackerView().entries.find((row) => row.user_op_hash.toLowerCase() === wanted);
+		if (!entry) return;
+		if (entry.status === 'confirmed' && entry.tx_hash) {
+			landing = { kind: 'confirmed', opHash, txHash: entry.tx_hash };
+		} else if (entry.status === 'dropped' || entry.status === 'rejected') {
+			landing = { kind: 'failed', opHash };
+		} else {
+			landing = { kind: 'submitted', opHash };
+		}
+		if (entry.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
+	}
+
+	/**
+	 * The operation a landing has already been raised for.
+	 *
+	 * Deliberately NOT `$state`: the effect below writes it, and the one thing it
+	 * must not do is depend on it. Gating on `landing !== null` instead is what
+	 * made the receipt undismissable — Done set `landing = null`, the effect
+	 * re-ran, the handoff was still in the view, and it raised the same receipt
+	 * again. Measured in the packaged extension: neither a trusted click nor a
+	 * synthetic one could get past it.
+	 */
+	let landedOp: string | null = null;
+
+	/**
+	 * The handoff lands on a view AFTER the one that answered the requester, so
+	 * this WATCHES for it rather than reading it at the answer. Reading it too
+	 * early found `null` every time and the request window closed on the person
+	 * mid-submit — found by driving the packaged extension, not by a test.
+	 *
+	 * One landing per operation: a NEW request brings a new hash and raises a new
+	 * receipt, and a dismissed one stays dismissed.
+	 */
+	$effect(() => {
+		if (!receipt) return;
+		const handoff = signRequest.view.tracker_handoff;
+		const op = landingToRaise(handoff?.user_op_hash, landedOp);
+		if (!op || !handoff) return;
+		landedOp = op;
+		watchLanding(op, handoff.chain_id);
+	});
 
 	const view = $derived(session.view);
 	const signView = $derived(signRequest.view);
@@ -240,7 +365,30 @@
 	}
 </script>
 
-{#if model}
+<!--
+	Spec 077: the landing, over whatever surface mounted this sheet. It sits
+	BEFORE the sheet so a submitted transaction is what is on screen, and the
+	sheet underneath is gone by then anyway (the request was answered).
+-->
+{#if landing && receipt}
+	<div class="landing-over">
+		<DappReceipt
+			model={dappReceiptModel(landing, receipt, (txHash) => {
+				const base = explorerBaseURL(landingChain);
+				return base ? `${base}/tx/${txHash}` : null;
+			})}
+			progress={landing.kind === 'submitted'
+				? receiptProgress(landedAtMs, landingTypicalS, nowMs)
+				: undefined}
+			ondone={() => {
+				landing = null;
+				unsubscribeTracker?.();
+				unsubscribeTracker = undefined;
+				onreceiptdone?.();
+			}}
+		/>
+	</div>
+{:else if model}
 	<!--
 		Dismissal IS rejection (the 022 interaction contract draws no reject
 		button), so closing answers the transport with 4001 through the core.
@@ -280,3 +428,15 @@
 	/>
 {/if}
 
+<style>
+	/* Over the surface that raised the request — its own scrim, like the sheet's. */
+	.landing-over {
+		position: fixed;
+		inset: 0;
+		/* Above the sheet's own 20/21 (`SigningSheet.svelte`): the landing
+		   replaces the sheet rather than sharing the screen with it. */
+		z-index: 60;
+		background: var(--color-bg-base);
+		overflow-y: auto;
+	}
+</style>

@@ -167,6 +167,29 @@ export interface SigningMessages {
 	signWithPlatform: string;
 	signWithHybrid: string;
 	signWithSecurityKey: string;
+	/**
+	 * Spec 077: the landing a submitted transaction shows, in the SEND
+	 * receipt's own words. Borrowed rather than written again so the two
+	 * surfaces cannot drift into describing the same moment differently —
+	 * which is what the owner asked for ("UI 要保持一致性").
+	 *
+	 * On `SigningMessages` rather than any one surface's, because the LANDING
+	 * belongs to the sheet: every surface that mounts it submits through the
+	 * same machine, and the first version — which put it on the request
+	 * window's copy alone — left Settings' backup to Ethereum without one.
+	 */
+	receipt: {
+		confirming: string;
+		confirmingHint: string;
+		submitted: string;
+		confirmed: string;
+		failed: string;
+		failedHint: string;
+		opHashLabel: string;
+		txHashLabel: string;
+		explorer: string;
+		done: string;
+	};
 	viewOnExplorer: string;
 	byteSize: string;
 	safeInnerCall: string;
@@ -174,4 +197,3 @@ export interface SigningMessages {
 	expiredValue: string;
 	sentToTokenContract: string;
 }
-

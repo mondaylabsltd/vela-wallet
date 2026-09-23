@@ -17,6 +17,7 @@
  * delay or duplicate one (spec 077, "The invariant this must not break").
  */
 import type { ReceiptStage } from '$lib/flows/model';
+import { ringProgress } from '$lib/flows/ui/ring';
 
 /** The send receipt's words, as the request surface already resolves them. */
 export interface DappReceiptCopy {
@@ -109,22 +110,45 @@ export function dappReceiptModel(
 }
 
 /**
+ * The operation a landing should be raised for, or `null` for none.
+ *
+ * One landing per operation. The obvious gate — "no landing is showing" — is
+ * wrong in a way that only a real browser shows: the handoff STAYS in the view
+ * after the receipt is dismissed, so the moment Done cleared the landing the
+ * watcher raised the same receipt again, and the person could not get out.
+ * Measured 2026-09-23 in the packaged extension, where neither a trusted click
+ * nor a synthetic one could dismiss it.
+ *
+ * So the question is not "is one showing" but "has this one been shown".
+ *
+ * @param handoffOp the `tracker_handoff`'s operation hash, if the view has one
+ * @param alreadyRaised the operation this surface has already raised a landing
+ *   for — dismissed or still on screen, it makes no difference
+ */
+export function landingToRaise(
+	handoffOp: string | null | undefined,
+	alreadyRaised: string | null
+): string | null {
+	if (!handoffOp) return null;
+	return handoffOp === alreadyRaised ? null : handoffOp;
+}
+
+/**
  * How much of the ring is drawn, 0–1, from when the chain accepted it and how
  * long this chain usually takes.
  *
+ * The curve is `ringProgress` — the SEND receipt's own, not a second one that
+ * looks similar. The owner asked for "和转账一样"; a different easing would be
+ * the same picture moving at a different speed, which is the drift this whole
+ * spec is about.
+ *
  * `undefined` when the chain has no typical time — `StatusHero` then circles
- * instead of filling, which is the honest drawing of "no estimate" and the
- * same one a send uses.
+ * instead of filling, which is the honest drawing of "no estimate".
  */
 export function receiptProgress(
 	submittedAtMs: number,
 	typicalS: number,
 	nowMs: number
 ): number | undefined {
-	if (typicalS <= 0) return undefined;
-	const elapsed = Math.max(0, nowMs - submittedAtMs) / 1000;
-	// Never a full ring before it has actually confirmed: the tick is what
-	// closes it, and a ring that completes while the screen still says
-	// "submitted" reads as a finished transaction that is not finished.
-	return Math.min(0.95, elapsed / typicalS);
+	return ringProgress(Math.max(0, nowMs - submittedAtMs) / 1000, typicalS);
 }

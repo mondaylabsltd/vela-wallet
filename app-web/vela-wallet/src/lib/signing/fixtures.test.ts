@@ -27,19 +27,11 @@ describe('signing messages', () => {
 	it.each(SUPPORTED_LOCALES)('no signing string is empty in %s', (locale) => {
 		for (const [field] of KEYS) {
 			const value = resolveSigningMessages(locale)[field as keyof typeof messages];
-			// The speed control's words are a group (spec 069): every leaf of it.
-			const leaves =
-				typeof value === 'string'
-					? [value]
-					: [
-							value.label,
-							value.once,
-							value.free,
-							value.single,
-							value.gasPriceLabel,
-							...Object.values(value.names),
-							...Object.values(value.hints)
-						];
+			// Two fields are GROUPS, not strings: the speed control's words
+			// (spec 069) and the landing's (spec 077). Every leaf of either has
+			// to resolve, so the walk is generic rather than a list per group —
+			// a new group would otherwise pass this test by not being checked.
+			const leaves = typeof value === 'string' ? [value] : flatten(value);
 			for (const leaf of leaves) expect(leaf?.trim(), `${field} in ${locale}`).not.toBe('');
 		}
 	});
@@ -167,3 +159,10 @@ describe('fee shapes', () => {
 		expect(build('cs29').tech.identities).toHaveLength(2);
 	});
 });
+
+/** Every string inside a group of words, however deeply it is nested. */
+function flatten(group: unknown): string[] {
+	if (typeof group === 'string') return [group];
+	if (group && typeof group === 'object') return Object.values(group).flatMap(flatten);
+	return [];
+}
