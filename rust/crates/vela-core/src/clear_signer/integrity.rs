@@ -202,6 +202,45 @@ pub fn content_addressed_url(url: &str, hash: &str) -> Option<String> {
     Some(format!("https://{OFFICIAL_HOST}/b/{hash}/sign.html"))
 }
 
+/// Which published version to ask for, given what the endpoint still has.
+///
+/// The page is content-addressed (`/b/<sha256>/sign.html`), so a client asks
+/// for a version it already knows — but it cannot know which of them the
+/// server still keeps. An index at a well-known path says what is available
+/// (owner, 2026-09-23: 「需要有一个索引不然的话,不知道端点支持哪些版」).
+///
+/// **The index narrows; it never chooses.** The candidates are this build's
+/// set and then the person's own trusted hashes, IN THAT ORDER, and the first
+/// one the endpoint still serves wins. So a lying index can do exactly two
+/// things: hide versions (a refusal — loud, and fail-closed), or list versions
+/// this wallet does not trust (ignored entirely). It cannot steer a person on
+/// to a particular trusted version, and it certainly cannot introduce one.
+/// That is why the index needs no authority of its own and is not signed.
+///
+/// `None` means the endpoint serves nothing this wallet accepts. That is
+/// "update the wallet", not "you are under attack" — and with content
+/// addressing it should not normally happen at all, because a published path
+/// never goes away.
+///
+/// The index is an OPTIMISATION, not a dependency: a shell that cannot fetch
+/// it may try its own preferred hash directly, since the URL is derivable from
+/// the hash alone.
+#[must_use]
+pub fn choose_version(
+    available: &[String],
+    trusted: &[String],
+    blocked: &[String],
+) -> Option<String> {
+    let offered: Vec<String> = available.iter().filter_map(|h| normalize_hash(h)).collect();
+    BUILD_ALLOWED
+        .iter()
+        .filter_map(|h| normalize_hash(h))
+        .chain(trusted.iter().filter_map(|h| normalize_hash(h)))
+        .find(|candidate| {
+            !contains(blocked, candidate) && offered.iter().any(|offer| offer == candidate)
+        })
+}
+
 /// Whether the page may be opened, and what to say when it may not.
 ///
 /// See the module documentation for the ordering; it is the whole design.
@@ -427,6 +466,48 @@ mod tests {
         // And a hash that is not a hash addresses nothing.
         assert_eq!(
             content_addressed_url("https://sign.getvela.app/", "nope"),
+            None
+        );
+    }
+
+    #[test]
+    fn the_index_narrows_the_choice_and_never_makes_it() {
+        // A version only the ENDPOINT knows about is not a version this wallet
+        // will run. The index has no authority; it only says what is there.
+        let available = vec![B.to_owned()];
+        assert_eq!(choose_version(&available, &[], &[]), None);
+
+        // One the person trusted, and the endpoint still has: that is the one.
+        let trusted = vec![B.to_owned()];
+        assert_eq!(
+            choose_version(&available, &trusted, &[]),
+            Some(B.to_owned())
+        );
+
+        // Blocked outranks both, here as everywhere (FR-010).
+        let blocked = vec![B.to_owned()];
+        assert_eq!(choose_version(&available, &trusted, &blocked), None);
+    }
+
+    #[test]
+    fn the_endpoint_cannot_steer_which_trusted_version_is_taken() {
+        // The person trusts two, in their order; the index lists them in the
+        // other order. The CLIENT's order decides.
+        let trusted = vec![A.to_owned(), B.to_owned()];
+        let available = vec![B.to_owned(), A.to_owned()];
+        assert_eq!(
+            choose_version(&available, &trusted, &[]),
+            Some(A.to_owned())
+        );
+    }
+
+    #[test]
+    fn an_endpoint_serving_nothing_this_wallet_knows_is_not_an_attack() {
+        // It is "update the wallet". Content addressing is what should keep it
+        // from happening: a published path never goes away.
+        assert_eq!(choose_version(&[], &[A.to_owned()], &[]), None);
+        assert_eq!(
+            choose_version(&["not-a-hash".to_owned()], &[A.to_owned()], &[]),
             None
         );
     }

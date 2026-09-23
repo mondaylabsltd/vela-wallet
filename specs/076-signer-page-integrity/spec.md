@@ -84,7 +84,7 @@ No chain is read. The trust root is the app binary, which the person already
 trusts completely, and it works offline. (A chain-published list can be added
 later as a second source for out-of-band revocation; it is not in scope.)
 
-### FR-002 · The page is requested by hash
+### FR-002 · The page is requested by hash, and an index says which are there
 The client opens a content-addressed URL:
 
 ```
@@ -94,6 +94,30 @@ https://sign.getvela.app/b/<sha256>/sign.html
 It asks for a version it already knows. There is no "which version is current"
 to get wrong, a mismatch is attributable and reproducible by anyone, and old
 clients keep working because the server keeps every published version.
+
+**Publishing at the root was considered and rejected** (owner, 2026-09-23, both
+directions in one sitting). Serving only the current page at
+`https://sign.getvela.app/` is simpler to operate, and it breaks the moment the
+page is updated: every client whose allow-set lacks the new hash refuses to
+open it. That would make an ordinary release look exactly like an attack, and a
+warning spent on the routine case is not there on the real one. Content
+addressing is what lets a new page ship without locking anyone out.
+
+**The index** (「需要有一个索引不然的话,不知道端点支持哪些版」). A client
+knows which hashes it trusts but not which the endpoint still keeps, so a
+well-known path lists what is published.
+
+Its one rule: **the index narrows the choice and never makes it.** The
+candidates are this build's set and then the person's own trusted hashes, in
+that order, and the first the endpoint still serves wins (`choose_version`). So
+a lying index can only hide versions — a loud, fail-closed refusal — or list
+versions this wallet does not trust, which are ignored. It cannot steer anyone
+on to a particular version, and it cannot introduce one. That is why it needs
+no authority of its own and is not signed.
+
+It is an optimisation, not a dependency: the URL is derivable from the hash, so
+a client that cannot fetch the index can still ask for its own preferred
+version directly.
 
 ### FR-003 · One file, and no network of its own
 The page is a SINGLE file: HTML, CSS and JS in one document, no subresources.
