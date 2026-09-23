@@ -113,6 +113,27 @@ const keccak256 = (() => {
       // is for a person looking at a screenshot.
       last.textContent = line;
     };
+    // The viewport units, measured and PAINTED (2026-09-23). Android's
+    // in-app browser was handing Chromium no viewport height — every `vh` on
+    // every page resolved to 0 and modern sheets collapsed to a pixel — and
+    // the only way to know whether WKWebView does the same is to ask a page
+    // inside it.
+    (() => {
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;width:1px;visibility:hidden';
+      document.body.appendChild(probe);
+      const unit = (name) => {
+        probe.style.height = '100' + name;
+        return Math.round(probe.getBoundingClientRect().height);
+      };
+      const measured = { vh: unit('vh'), dvh: unit('dvh'), svh: unit('svh'), inner: Math.round(innerHeight) };
+      probe.remove();
+      const line = document.createElement('pre');
+      line.id = 'viewport';
+      line.textContent = '#viewport ' + JSON.stringify(measured);
+      document.body.insertBefore(line, document.getElementById('verdicts'));
+    })();
+
     const state = { announced: [], legacy: null, results: {}, events: [] };
     // Bounded: the full object grows with every action, and XCUITest pays for
     // every character of it on every poll.

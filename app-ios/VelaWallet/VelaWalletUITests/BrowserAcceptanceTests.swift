@@ -148,6 +148,22 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30),
                       "no page rendered — the engine never loaded, or the URL never reached it")
 
+        // The viewport units, as the page measures them (2026-09-23). Android's
+        // in-app browser was handing Chromium no viewport height: every `vh`
+        // resolved to 0 and modern sheets collapsed to a pixel. A `vh` of 0
+        // here would mean WKWebView is sized the same way, and every page that
+        // lays itself out against the viewport is broken in this browser too.
+        let viewport = app.webViews.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "#viewport")
+        ).firstMatch
+        XCTAssertTrue(viewport.waitForExistence(timeout: 20), "the probe never painted")
+        let measured = viewport.label
+        XCTContext.runActivity(named: measured) { _ in }
+        XCTAssertFalse(
+            measured.contains("\"vh\":0"),
+            "`100vh` resolves to zero in this WebView: \(measured)"
+        )
+
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict announce Vela Wallet app.getvela"),
                       "the page did not hear the discovery announcement: the provider is missing, or it was injected into an isolated content world where no dApp can see it")
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict legacy present isVela=true"),
