@@ -98,11 +98,35 @@ Two things the build taught, both measured rather than reasoned:
   arrived instead of believing the API. Trusting the return value would have
   reported a leak that is not there.
 
-## C — the verifier (per shell)
-- [ ] T030 Hidden WebView, real navigation, UA set to the browser's
-- [ ] T031 Block everything but the document (iOS `WKContentRuleList`; Android `shouldInterceptRequest`)
-- [ ] T032 Digest from `only-if-cached` inside the page's context
-- [ ] T033 Fail closed on every failure, including the cache read (SC-002)
+## C — the verifier
+
+The tasks below were written for FR-004b (the hidden WebView). FR-004 is a
+plain request now, so they do not apply; what replaced them is measured.
+
+- [x] **T030 · desktop, end to end over a LAN address.** index →
+      `choose_version` → fetch by hash → `hash_page` → `decide`, over a real
+      socket. *`dist/` served at 192.168.50.51:8920; `check(base) → Open`, the
+      served bytes hashing to exactly their own path name.* Driven before
+      anything was published, which was the point.
+- [x] **T031 · content addressing belongs to the DEPLOYMENT.** It was limited
+      to the official hostname, so a self-hoster's bytes were never fetched by
+      hash — and the path everyone relies on could not be exercised on any
+      machine but the production one.
+- [x] **T032 · the allow-set and the off switch are separate.**
+      `BUILD_ALLOWED` lists the first published hash; `ENFORCE` is false.
+      Tying them together would make the commit that lists a hash silently
+      start refusing every page not yet published. A test is a tripwire on
+      `ENFORCE`.
+- [x] **T033 · fail closed**, and two silences told apart. Blocking the only
+      usable version used to answer "could not be checked" — which reads as a
+      network fault. It now names the block list. *Found by driving it: no unit
+      test would have noticed, because both answers refuse.*
+- [ ] T034 Android and iOS: the same three steps. The core and the desktop show
+      the shape; neither phone has it yet.
+
+~~T030–T033 (FR-004b): hidden WebView, `WKContentRuleList` /
+`shouldInterceptRequest`, `only-if-cached`.~~ Not being built — see FR-004b and
+probe P2.
 
 ## D — when it runs
 - [ ] T040 Background, unpredictable, result cached; never adjacent to an open
