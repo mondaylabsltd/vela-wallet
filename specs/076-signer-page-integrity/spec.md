@@ -135,8 +135,40 @@ writing it there would be a claim the file cannot keep. It belongs on the
 response header where the page is served — which is FR-002's publishing
 discipline, not the page's.
 
-### FR-004 · The check is a real navigation, in a hidden WebView
-Not a `fetch()` from the app's HTTP stack.
+### FR-004 · The check is a plain HTTPS request
+
+**Owner, 2026-09-23: 「我们先用 http 请求 html 来判断吧,后续在用更加复杂的判断
+… 先跑通」.** The app asks for the content-addressed URL over its own HTTP
+stack, hashes the bytes, and rules with [`decide`]. No WebView, no navigation,
+no cache archaeology.
+
+This keeps exactly the property this spec claims. It catches **attack A** — a
+replaced build, served to everyone: a hijacked bucket, a bad CDN config, a
+poisoned release. That is the realistic attack and the one that hits everyone
+at once. It does not catch **attack B**, a server that serves bad bytes only to
+the real navigation or only to one victim — and neither did the elaborate
+version, which merely forced B to guess (see the table above; only FR-008's
+Service Worker answers B).
+
+**And the probes made the simple version look better, not merely cheaper.**
+Verifying by navigation means LOADING the attacker's page, which means RUNNING
+the attacker's code, and P2 measured what that code can still do inside a
+WebView whose subresources are all intercepted: a WebSocket handshake goes
+straight out (`shouldInterceptRequest` never sees one) and WebRTC leaves over
+UDP (a content blocker governs HTTP; STUN is not HTTP). Closing those needs the
+JS environment stripped of `WebSocket` and `RTCPeerConnection` — which a page
+can notice. A plain request never runs a line of the page, so none of that
+exists.
+
+What the simple version gives up is that the bytes HASHED are not, literally,
+the bytes EXECUTED: they are two requests. The content-addressed URL (FR-002)
+is what narrows that gap — the path names the hash, so serving something else
+there is detectable by anyone, reproducible by anyone, and the page is opened
+at the same URL that was checked — and FR-008 closes it afterwards.
+
+### FR-004b · The hidden-WebView check — NOT being built, and why it is written down
+The original design, kept because the day it is wanted again the measurements
+are already here. It would not be a `fetch()` from the app's HTTP stack.
 
 - `WKWebView` (iOS) is Safari's WebKit; Android's WebView is Chromium. Loading
   by NAVIGATION gives the same TLS fingerprint, the same HTTP/2 fingerprint and
@@ -157,7 +189,11 @@ const hash = await crypto.subtle.digest('SHA-256', await r.arrayBuffer());
 `only-if-cached` reads the HTTP cache and issues no second request, so what is
 hashed is what the navigation actually received.
 
-### FR-005 · The page cannot speak while it is being checked
+### FR-005 · The page cannot speak while it is being checked — **moot under FR-004**
+
+With a plain request nothing of the page runs, so there is nothing to silence.
+This section applies only to FR-004b, and P2 measured that it does not hold as
+written: see open question 2. It is kept for the same reason FR-004b is.
 It is the attacker's page; loading it runs its code. A page that can detect a
 verification context (hidden, no interaction, odd viewport) could simply tell
 its server.
@@ -171,11 +207,16 @@ So everything but the document itself is blocked:
   the engine fetch it, which is what preserves the fingerprint — and an empty
   response for everything else.
 
-### FR-006 · Fail closed, including when the cache read fails
-A server can send `Cache-Control: no-store` so `only-if-cached` returns 504.
-That is exactly what a server defeating this check would do.
+### FR-006 · Fail closed
+**A check that cannot complete is a check that failed.** No page opens —
+whether the request timed out, the TLS handshake failed, the status was not
+200, or the body could not be read. `Verdict::CouldNotCheck`, and nothing
+opens on it.
 
-**A check that cannot complete is a check that failed.** No page opens.
+(Under FR-004b this had a sharper edge: a server sending `Cache-Control:
+no-store` made `only-if-cached` throw, which is exactly what a server defeating
+that check would do. Measured on both engines — Android WebView and headless
+Chromium both threw `TypeError: Failed to fetch`.)
 
 ### FR-007 · The check is decoupled in TIME from signing
 It runs in the background at an unpredictable moment — app launch, once a day,
@@ -275,8 +316,40 @@ expected and the actual hash.
    semantics are not Chromium's, and this is the answer that can still cost
    FR-004 its "keep the fingerprint" position.
 2. **WebRTC / STUN** — content blockers govern HTTP; a page could try to leak
-   over UDP. Can WebRTC be disabled in each WebView? If not, FR-005 has a hole
-   and must say so.
+   over UDP.
+
+   **Android: FR-005 as written has TWO holes.** Measured 2026-09-23 on an
+   emulator (Pixel 7, API 34) by `SignerPageEscapeProbeTest`: a hostile page in
+   a WebView whose `shouldInterceptRequest` returns an empty response for every
+   subresource, against TCP and UDP servers in the test process.
+
+   | way out | reached the server? |
+   |---|---|
+   | `fetch` | no — intercepted |
+   | `XMLHttpRequest` | no — intercepted |
+   | `navigator.sendBeacon` | no — intercepted |
+   | image | no — intercepted |
+   | **`WebSocket`** | **YES** — `GET /ws` arrived, and the interceptor never saw it |
+   | **WebRTC** | **YES** — four 20-byte STUN packets arrived over UDP |
+
+   `shouldInterceptRequest` never sees a WebSocket handshake, and WebRTC does
+   not go over HTTP at all, so neither is governed by it. A page that can tell
+   it is being verified could say so over either.
+
+   A nice side effect of the part that DOES work: an intercepted `fetch` gets
+   an empty 200, so the page's own code reports success. It cannot tell
+   "blocked" from "the server sent nothing".
+
+   **The candidate fix is not a network one.** The only place to stop an API
+   that does not touch the HTTP stack is the environment the page runs in:
+   `WebViewCompat.addDocumentStartJavaScript` removes `WebSocket` and
+   `RTCPeerConnection` before any page script runs (the dApp browser already
+   uses that API, so it is proven in this codebase). Being measured.
+
+   That trade must be stated where the spec claims indistinguishability: a page
+   CAN notice that `WebSocket` is missing. It cannot tell anyone — which is the
+   point — but it can choose to behave during the check and misbehave later,
+   and that is attack B, which only the Service Worker (FR-008) answers.
 3. **Client Hints** — Chromium sends `Sec-CH-UA`, and Android WebView's brand
    list may name itself. Does it, on current versions, and can it be overridden?
 4. **The publishing discipline** — the page must be up at its content-addressed

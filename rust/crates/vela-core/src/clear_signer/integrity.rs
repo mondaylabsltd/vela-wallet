@@ -133,6 +133,26 @@ pub struct Page<'a> {
     pub verification_off: bool,
 }
 
+/// The hash of the bytes a page was served as, lowercase hex.
+///
+/// In the core so that every shell agrees on what "the page's hash" means:
+/// sha256 over the response body exactly as received, with no normalisation —
+/// no trimming, no re-encoding, no line-ending fixes. A page is its bytes, and
+/// anything that "helpfully" tidies them would make the published hash
+/// unreproducible.
+///
+/// The shells fetch, this hashes, [`decide`] rules.
+#[must_use]
+pub fn hash_page(bytes: &[u8]) -> String {
+    use sha2::{Digest as _, Sha256};
+    let digest = Sha256::digest(bytes);
+    digest.iter().fold(String::with_capacity(64), |mut out, b| {
+        use core::fmt::Write as _;
+        let _ = write!(out, "{b:02x}");
+        out
+    })
+}
+
 /// A sha256 hex string as this module compares them: lowercase, 64 hex
 /// characters, or `None` for anything else.
 ///
@@ -253,6 +273,26 @@ mod tests {
             blocked: &[],
             verification_off: false,
         }
+    }
+
+    #[test]
+    fn a_page_is_its_bytes() {
+        // The empty page, and a known vector — so a shell that "helpfully"
+        // trims or re-encodes before handing bytes over is caught by the
+        // number rather than by a reviewer.
+        assert_eq!(
+            hash_page(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            hash_page(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        // Whitespace is part of the page. A trailing newline is a different
+        // page, and must hash differently.
+        assert_ne!(hash_page(b"<html></html>"), hash_page(b"<html></html>\n"));
+        // And what it produces is what `decide` compares.
+        assert_eq!(normalize_hash(&hash_page(b"abc")), Some(hash_page(b"abc")));
     }
 
     #[test]
