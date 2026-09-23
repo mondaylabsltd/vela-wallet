@@ -127,7 +127,12 @@ let missing = 0;
 let sent = 0;
 for (const chain of CHAINS) {
 	if (only !== null && chain.id !== only) continue;
-	const def = { id: chain.id, name: chain.name, nativeCurrency: { name: chain.symbol, symbol: chain.symbol, decimals: 18 }, rpcUrls: { default: { http: [chain.rpc] } } };
+	const def = {
+		id: chain.id,
+		name: chain.name,
+		nativeCurrency: { name: chain.symbol, symbol: chain.symbol, decimals: 18 },
+		rpcUrls: { default: { http: [chain.rpc] } }
+	};
 	const pub = createPublicClient({ chain: def, transport: http(chain.rpc, { timeout: 20_000 }) });
 	const label = chain.name.padEnd(13);
 	try {
@@ -154,15 +159,25 @@ for (const chain of CHAINS) {
 		const funded = account ? balance >= cost : false;
 		console.log(
 			`${label} needs deploying · ≈ ${formatEther(cost)} ${chain.symbol}` +
-				(account ? ` · deployer holds ${formatEther(balance)} ${chain.symbol}${funded ? '' : ' — NOT ENOUGH'}` : '')
+				(account
+					? ` · deployer holds ${formatEther(balance)} ${chain.symbol}${funded ? '' : ' — NOT ENOUGH'}`
+					: '')
 		);
 		if (!broadcast) continue;
 		if (!funded) {
 			console.log(`${label} skipped: fund ${account.address} on ${chain.name} first`);
 			continue;
 		}
-		const wallet = createWalletClient({ account, chain: def, transport: http(chain.rpc, { timeout: 20_000 }) });
-		const hash = await wallet.sendTransaction({ to: SAFE_SINGLETON_FACTORY, data: calldata, gas: GAS });
+		const wallet = createWalletClient({
+			account,
+			chain: def,
+			transport: http(chain.rpc, { timeout: 20_000 })
+		});
+		const hash = await wallet.sendTransaction({
+			to: SAFE_SINGLETON_FACTORY,
+			data: calldata,
+			gas: GAS
+		});
 		const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 180_000 });
 		if (receipt.status !== 'success') {
 			console.log(`${label} FAILED in ${hash}`);
@@ -178,7 +193,9 @@ for (const chain of CHAINS) {
 		console.log(`${label} ${ok ? 'DEPLOYED' : 'deployed but UNVERIFIED'} in ${hash}`);
 		if (ok) sent++;
 	} catch (error) {
-		console.log(`${label} could not ask: ${String(error?.shortMessage ?? error?.message).slice(0, 80)}`);
+		console.log(
+			`${label} could not ask: ${String(error?.shortMessage ?? error?.message).slice(0, 80)}`
+		);
 	}
 }
 
