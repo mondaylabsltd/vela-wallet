@@ -29,7 +29,11 @@ import { tmpdir } from 'node:os';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
-const PAGE = join(ROOT, 'dist', 'sign.html');
+// The page this build produces, found where it is published. `dist/` holds
+// every version ever published, so the test must name the one under test
+// rather than assume there is only one.
+const { build } = await import('./build-single.mjs');
+const PAGE = join(ROOT, 'dist', 'b', build().hash, 'sign.html');
 const PORT = 8911;
 const CDP = 9225;
 
@@ -41,7 +45,7 @@ const check = (what, ok, detail) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 if (!existsSync(PAGE)) {
-	console.log('FAILED: dist/sign.html is missing — run `node samples/build-single.mjs`');
+	console.log(`FAILED: ${PAGE} is missing — run \`bun samples/build-single.mjs\``);
 	process.exit(1);
 }
 if (!process.env.CHROME_BIN) {

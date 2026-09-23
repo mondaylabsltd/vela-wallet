@@ -194,6 +194,7 @@ published as ONE file whose every executable byte is covered by one hash.
 
 | File | Role |
 | --- | --- |
+| `dist/` | **What is deployed** — an index and every published version at `b/<sha256>/sign.html`. In git, so a published path cannot vanish by accident. Built by `bun samples/build-single.mjs`. |
 | `index.html` | The demo / self-check page |
 | `sign.html` | The signing page the wallets open |
 | `app.css`, `sheet.css` | Styles, light + dark via `prefers-color-scheme` |

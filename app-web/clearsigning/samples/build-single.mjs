@@ -1,8 +1,19 @@
 // Build the signer page as ONE file (spec 076, FR-003 / T020).
 //
-//   node samples/build-single.mjs          → writes dist/sign.html, prints the hash
-//   node samples/build-single.mjs --check  → fails if dist/sign.html is not what
-//                                            these sources produce
+//   bun samples/build-single.mjs           → adds dist/b/<sha256>/sign.html and
+//                                            rewrites dist/index.json
+//   bun samples/build-single.mjs --check   → fails if this build is not already
+//                                            published, or the index has drifted
+//
+// Zero dependencies, like the page it builds: `node:crypto`, `node:fs`,
+// `node:path`, `node:url` and nothing else — no npm, no lockfile, nothing to
+// audit. Bun is the runtime (owner, 2026-09-23), and Node runs it unchanged.
+//
+// **They agree, and that is the point.** The same sources under Bun 1.4.2 and
+// under Node 22 produce the same 312257 bytes and the same sha256
+// (810db7c5…, measured). A build whose output depended on which runtime ran it
+// would be a build nobody else could reproduce, and an unreproducible hash
+// verifies nothing.
 //
 // Why one file. The wallet checks the page before opening it by hashing the
 // bytes it receives (076). One file means ONE hash covers every executable
@@ -18,8 +29,23 @@
 //
 // This does NOT replace `sign.html`. The folder stays hand-written and
 // zero-build — `sign.html` and `lib/*.js` are what a person reads and edits —
-// and this produces the artefact that is PUBLISHED, at the content-addressed
-// path `/b/<sha256>/sign.html`. `--check` keeps the two from drifting.
+// and this produces the artefact that is PUBLISHED.
+//
+// **`dist/` is the deployment, and it is in git** (owner, 2026-09-23). It holds
+// EVERY version ever published, each at its own content-addressed path, plus an
+// index of them:
+//
+//     dist/index.json            what is published
+//     dist/b/<sha256>/sign.html  a version, for ever
+//
+// Deploying is copying that directory. Two things follow, and both are the
+// point: "a published path never goes away" stops being a discipline and
+// becomes a fact anyone can see in the history — losing a version means
+// deleting a committed file — and the index is GENERATED from the directory, so
+// it cannot claim a version that is not there.
+//
+// A build therefore APPENDS. It never overwrites and never removes; the only
+// way a version leaves is a deliberate deletion, in a commit, with a reason.
 //
 // (Until 2026-09-23 there was a harder reason: the folder was also a Chrome MV3
 // extension, and MV3 refuses to load a page with an inline <script> at all.
@@ -47,14 +73,16 @@
 //     Until that lands, memberProof does not work in the single-file build.
 
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const SOURCE = join(ROOT, 'sign.html');
-const OUT = join(ROOT, 'dist', 'sign.html');
+const DIST = join(ROOT, 'dist');
+const INDEX = join(DIST, 'index.json');
+const pageAt = (hash) => join(DIST, 'b', hash, 'sign.html');
 
 const sha256 = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const cspHash = (text) => `'sha256-${createHash('sha256').update(text, 'utf8').digest('base64')}'`;
@@ -129,6 +157,25 @@ export function build() {
 	return { html: out, hash: sha256(out), csp, styles, scripts };
 }
 
+/**
+ * Every version the dist directory actually holds, by reading it — never by
+ * trusting the index, which is the thing being generated.
+ */
+function publishedVersions() {
+	const root = join(DIST, 'b');
+	if (!existsSync(root)) return [];
+	return readdirSync(root, { withFileTypes: true })
+		.filter((entry) => entry.isDirectory() && /^[0-9a-f]{64}$/.test(entry.name))
+		.map((entry) => entry.name)
+		.filter((hash) => existsSync(pageAt(hash)))
+		.sort();
+}
+
+/** The index, as bytes. Sorted, so the file is stable in git. */
+function indexText(versions) {
+	return `${JSON.stringify({ versions: [...versions].sort() }, null, 2)}\n`;
+}
+
 function main() {
 	const check = process.argv.includes('--check');
 	const built = build();
@@ -140,38 +187,64 @@ function main() {
 		process.exit(1);
 	}
 
+	const already = publishedVersions();
+	const wanted = indexText(already.includes(built.hash) ? already : [...already, built.hash]);
+
 	if (check) {
-		if (!existsSync(OUT)) {
-			console.error('build-single --check: dist/sign.html is missing — run the build');
-			process.exit(1);
-		}
-		const onDisk = readFileSync(OUT, 'utf8');
-		if (onDisk !== built.html) {
+		if (!existsSync(pageAt(built.hash))) {
 			console.error(
-				`build-single --check: dist/sign.html is stale\n` +
-					`  on disk: ${sha256(onDisk)}\n  sources: ${built.hash}`
+				`build-single --check: these sources build ${built.hash}, which is not published.\n` +
+					`  run: bun samples/build-single.mjs`
 			);
 			process.exit(1);
 		}
-		// Reproducible, not merely deterministic-looking: build it again and
-		// insist on the same bytes. A hash nobody else can reproduce verifies
-		// nothing.
+		const onDisk = readFileSync(pageAt(built.hash), 'utf8');
+		if (onDisk !== built.html) {
+			// Same path, different bytes: impossible unless the file was edited
+			// by hand, and a content-addressed path that lies about its content
+			// is the one thing this whole design cannot tolerate.
+			console.error(
+				`build-single --check: dist/b/${built.hash}/sign.html does NOT hash to its own path\n` +
+					`  on disk: ${sha256(onDisk)}`
+			);
+			process.exit(1);
+		}
+		// Every published path must hash to its own name, not just this one.
+		for (const hash of already) {
+			const bytes = readFileSync(pageAt(hash), 'utf8');
+			if (sha256(bytes) !== hash) {
+				console.error(`build-single --check: dist/b/${hash}/ holds ${sha256(bytes)}`);
+				process.exit(1);
+			}
+		}
+		if (!existsSync(INDEX) || readFileSync(INDEX, 'utf8') !== indexText(already)) {
+			console.error('build-single --check: dist/index.json does not match what dist/b/ holds');
+			process.exit(1);
+		}
+		// Reproducible, not merely deterministic-looking.
 		if (build().hash !== built.hash) {
 			console.error('build-single --check: two builds of the same sources disagree');
 			process.exit(1);
 		}
-		console.log(`build-single --check: dist/sign.html is current (sha256 ${built.hash})`);
+		console.log(
+			`build-single --check: ${built.hash} is published; ` +
+				`${already.length} version(s) in dist, index agrees`
+		);
 		return;
 	}
 
-	mkdirSync(dirname(OUT), { recursive: true });
-	writeFileSync(OUT, built.html);
+	const fresh = !existsSync(pageAt(built.hash));
+	mkdirSync(dirname(pageAt(built.hash)), { recursive: true });
+	writeFileSync(pageAt(built.hash), built.html);
+	writeFileSync(INDEX, wanted);
 	console.log(
-		`build-single: dist/sign.html — ${built.styles.length} stylesheet, ` +
-			`${built.scripts.length} scripts, ${built.html.length} bytes`
+		`build-single: ${fresh ? 'published' : 'already published'} ` +
+			`dist/b/${built.hash}/sign.html — ${built.html.length} bytes, ` +
+			`${built.styles.length} stylesheet, ${built.scripts.length} scripts`
 	);
-	console.log(`  sha256 ${built.hash}`);
-	console.log(`  publish at https://sign.getvela.app/b/${built.hash}/sign.html`);
+	console.log(`  index now lists ${JSON.parse(wanted).versions.length} version(s)`);
+	console.log(`  deploy: copy dist/ to the signer host's root`);
+	console.log(`  allow-set: add ${built.hash} to BUILD_ALLOWED, at the FRONT`);
 	console.log(`  CSP ${built.csp}`);
 }
 

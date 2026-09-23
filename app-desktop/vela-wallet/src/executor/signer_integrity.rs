@@ -40,7 +40,11 @@ pub const KEY_SIGNER_TRUSTED: &str = "vela.signerPage.trusted";
 pub const KEY_SIGNER_BLOCKED: &str = "vela.signerPage.blocked";
 
 /// Where the endpoint lists what it still publishes (FR-002).
-const INDEX_PATH: &str = "b/index.json";
+///
+/// The deployment IS `app-web/clearsigning/dist/`: an index at its root and
+/// every published version under `b/<sha256>/sign.html`. Copying that directory
+/// is the whole of publishing.
+const INDEX_PATH: &str = "index.json";
 
 /// Short on purpose: this runs in the background at an unpredictable moment
 /// (FR-007), and a slow endpoint must not become a hang.

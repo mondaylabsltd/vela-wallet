@@ -119,6 +119,35 @@ It is an optimisation, not a dependency: the URL is derivable from the hash, so
 a client that cannot fetch the index can still ask for its own preferred
 version directly.
 
+**The deployment is a directory, and it is in git** (owner, 2026-09-23):
+
+```
+app-web/clearsigning/dist/
+  index.json                 what is published
+  b/<sha256>/sign.html       a version, for ever
+```
+
+Publishing is copying that directory to the signer host's root. Two properties
+come free, and both are the reason:
+
+- **"a published path never goes away" stops being a discipline.** Losing a
+  version means deleting a committed file, in a commit, in review. The risk
+  plan.md names — a version garbage-collected from a bucket bricking every
+  client that allows only it — is no longer a thing anyone can do by accident.
+- **the index cannot lie about what is there**, because it is generated from
+  the directory rather than maintained beside it. `--check` also re-hashes
+  every published path and refuses one whose bytes do not hash to its own name.
+
+The build APPENDS. It never overwrites and never removes.
+
+**The builder is zero-dependency too**, like the page: `node:crypto`,
+`node:fs`, `node:path`, `node:url` and nothing else — no npm, no lockfile,
+nothing to audit. Bun is the runtime, and Node runs it unchanged. **They
+produce the same bytes and the same hash** (measured: Bun 1.4.2 and Node 22
+both give 312257 bytes, sha256 810db7c5…). A build whose output depended on
+which runtime ran it would be one nobody else could reproduce, and an
+unreproducible hash verifies nothing.
+
 ### FR-003 · One file, and no network of its own
 The page is a SINGLE file: HTML, CSS and JS in one document, no subresources.
 Two things follow, and the second is the bigger prize:
