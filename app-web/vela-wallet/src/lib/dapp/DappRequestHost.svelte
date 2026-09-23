@@ -117,7 +117,11 @@
 	 * the worker hands them over oldest-first and keeps the rest.
 	 */
 	async function take(): Promise<void> {
-		if (taking || disposed || owing) return;
+		// Not while a landing is on screen. The receipt REPLACES the sheet
+		// (`SigningHost` draws one or the other), so a request taken now would
+		// have an invisible sheet and a person answering a screen they cannot
+		// see. It waits — the worker still holds it — and Done brings it up.
+		if (taking || disposed || owing || landing) return;
 		taking = true;
 		try {
 			await session.boot();
@@ -138,6 +142,11 @@
 			}
 			request = incoming;
 			owing = incoming.rid;
+			// A fresh request gets live buttons. The panel outlives the request
+			// that raised it, so `busy` left over from the LAST one would render
+			// the next consent card with both buttons disabled — a card a person
+			// cannot answer, on a request that then only times out.
+			busy = false;
 
 			// Publish what the worker will need to answer this origin instantly
 			// next time. The core authors it; this only stores it.
@@ -297,6 +306,10 @@
 			await approve(request, facts, chainId);
 			owing = null;
 			stage = { kind: 'done' };
+			// The card is answered and gone; in the panel the wallet is what is
+			// behind it, and this surface goes on living.
+			request = null;
+			busy = false;
 			leave();
 		} catch {
 			// The core did not sanction it. Nothing was written and nothing sent,
