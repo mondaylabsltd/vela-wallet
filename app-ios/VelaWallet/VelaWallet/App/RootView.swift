@@ -18,7 +18,11 @@ final class Router {
 }
 
 struct RootView: View {
-    @Environment(\.colorScheme) private var systemScheme
+    /// The scheme the WINDOW is in. Read only so that a change to it
+    /// invalidates this view — never as the answer to "what is the device set
+    /// to", because this app sets `preferredColorScheme` on the very window it
+    /// would be reading back. See `deviceScheme`.
+    @Environment(\.colorScheme) private var windowScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let loc: Loc
     /// The `vela.*` shelf, for the reads that are not a machine's — the
@@ -317,7 +321,7 @@ struct RootView: View {
         let clearSigner = ClearSigner(
             loc: loc,
             signerUrl: { [settingsStore] in settingsStore.signPref?.signerUrl },
-            relayUrl: { [settingsStore] in settingsStore.signPref?.relayUrl }
+            tunnelUrl: { [settingsStore] in settingsStore.signPref?.tunnelUrl }
         )
         spine.clearSigner = clearSigner
         onboarding.clearSigner = clearSigner
@@ -506,7 +510,34 @@ struct RootView: View {
         // person's own choice; then the OS. `system` pins NOTHING — that is the
         // whole meaning of the choice, and a resolved "dark" would stop
         // following an OS that changes at sunset.
-        ThemeOverride.launchScheme ?? chosenScheme ?? systemScheme
+        ThemeOverride.launchScheme ?? chosenScheme ?? deviceScheme(whenWindowIs: windowScheme)
+    }
+
+    /// What the DEVICE is set to — the honest answer to 跟随系统.
+    ///
+    /// It cannot be `@Environment(\.colorScheme)`. This view SETS
+    /// `preferredColorScheme` below; SwiftUI carries that down to the window,
+    /// and reading the scheme back here then returns the app's own choice
+    /// dressed as the system's. So picking 深色 and then 跟随系统 left the app
+    /// reading its own dark back, for ever: the segment moved, the page stayed
+    /// dark. Spec 072's device test said so from the day it was written; the
+    /// traits behind it, measured on a LIGHT simulator on 2026-09-23, were
+    ///
+    ///     scene = dark   window = dark   window.override = unspecified
+    ///     screen = light
+    ///
+    /// — nothing had overridden the window, and the window was still dark,
+    /// because it was following the app. Only the SCREEN was telling the truth,
+    /// and it is the one thing here the app cannot paint. (Taken from the
+    /// scene's own `screen`, not `UIScreen.main`, which iOS 16 retired.)
+    ///
+    /// `whenWindowIs` is taken and not used: it is the dependency that makes
+    /// SwiftUI re-evaluate this when the appearance changes, which is what
+    /// keeps 跟随系统 following an OS that flips at sunset.
+    private func deviceScheme(whenWindowIs _: ColorScheme) -> ColorScheme {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        return scene?.screen.traitCollection.userInterfaceStyle == .dark ? .dark : .light
     }
 
     private var chosenScheme: ColorScheme? {
@@ -2849,12 +2880,12 @@ struct RootView: View {
                 return settings.signPref?.signerUrlError == nil
             },
             onResetSignerUrl: { settings.resetSignerUrl() },
-            // The relay, under the same rule (spec 075).
-            onSaveRelayUrl: { text in
-                settings.submitRelayUrl(text)
-                return settings.signPref?.relayUrlError == nil
+            // The tunnel, under the same rule (spec 075).
+            onSaveTunnelUrl: { text in
+                settings.submitTunnelUrl(text)
+                return settings.signPref?.tunnelUrlError == nil
             },
-            onResetRelayUrl: { settings.resetRelayUrl() },
+            onResetTunnelUrl: { settings.resetTunnelUrl() },
             onOpenLink: { openExternal($0) }
         )
         // The wallet's own request, over the page that raised it. Settings
