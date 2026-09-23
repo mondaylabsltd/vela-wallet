@@ -53,7 +53,6 @@ import {
 	sendBatchCalls,
 	UserOpFeeHoldError,
 	UserOpRejectedError,
-	type OperationToSign,
 	type SubmitResult
 } from '$lib/services/safe-transaction';
 import { findAccountByAddress, findAccountByCredentialId } from '$lib/services/accounts';
@@ -335,11 +334,11 @@ export function createSendExecutor(ports: SendShellPorts) {
 						// The wallet's own send: no method, no site (contract §1).
 						request: { method: '', params: [], origin: '', chainId: operation.chain_id }
 					};
-					const signFn = async (challenge: Uint8Array, toSign?: OperationToSign) => {
+					const signFn = async (challenge: Uint8Array) => {
 						// The passkey sheet is opening — the core moves to 'signing' here,
 						// exactly where `setTxStatus('signing')` sat.
 						ports.signingStarted();
-						const assertion = await signChallenge(challenge, signer, toSign);
+						const assertion = await signChallenge(challenge, signer);
 						const compat = verifySafeWebAuthn(assertion);
 						if (!compat.ok) {
 							throw new Error(

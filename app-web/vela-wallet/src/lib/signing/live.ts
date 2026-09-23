@@ -41,7 +41,6 @@ import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
-import { encodeQr } from '$lib/wallet/qr';
 import type { SignMethod } from '$lib/onboarding/core/passkey';
 import type { SigningMessages } from './messages';
 import type {
@@ -594,4 +593,3 @@ export function signWithModel(input: {
 		}
 	};
 }
-

@@ -30,7 +30,6 @@ import { signPreference } from './sign-pref.svelte';
 import {
 	CLEAR_SIGNER_URL_KEY,
 	SIGN_METHOD_KEY,
-	executeSignPrefOperation,
 	signPrefOperationFailure
 } from './sign-pref-executor';
 
@@ -96,7 +95,7 @@ describe('the row and its sheet', () => {
 	});
 
 	const home = (patch: Partial<SignPrefView> = {}) =>
-		withLiveSigning(buildMobileState('st1', m, IDENTICON), view(patch), m);
+		withLiveSigning(buildMobileState('st1', m, IDENTICON), view(patch));
 
 	it('sits next to "Transaction speed", in the advanced block', () => {
 		const rows = home().sections.flatMap((section) => section.rows.map((row) => row.id));
@@ -108,9 +107,7 @@ describe('the row and its sheet', () => {
 		const model = home({ method: 'hybrid', method_committed: true });
 		const row = model.sections.flatMap((s) => s.rows).find((r) => r.id === 'sign-with');
 		expect(row?.value).toBe(m.signing.methods.hybrid);
-		expect(model.signWithSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual([
-			'hybrid'
-		]);
+		expect(model.signWithSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual(['hybrid']);
 	});
 
 	it('the Clear Signer is never drawn, whatever the core offers', () => {
@@ -133,8 +130,7 @@ describe('the row and its sheet', () => {
 		const desktop = withLiveSigningDesktop(
 			buildDesktopState('dst1', m, IDENTICON),
 			view({ method: 'hybrid', method_committed: true }),
-			home().signWithSheet,
-			m
+			home().signWithSheet
 		);
 		expect(desktop.signing.rows[0]?.value).toBe(m.signing.methods.hybrid);
 		expect(desktop.signing.rows[0]?.options?.map((o) => o.id)).toEqual([

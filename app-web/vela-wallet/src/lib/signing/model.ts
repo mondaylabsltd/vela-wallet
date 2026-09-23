@@ -180,8 +180,6 @@ export interface FeeTokenOption {
 }
 
 import type { FeeSpeedModel } from '$lib/flows/model';
-/** Spec 075: the pairing link, drawn as the receive screen draws an address. */
-import type { QrCode } from '$lib/wallet/qr';
 
 export type FeeModel =
 	| {
@@ -263,4 +261,3 @@ export interface SigningModel {
 	/** Desktop third-column heading — "签名请求". */
 	panelTitle: string;
 }
-

@@ -20,8 +20,6 @@ import {
 	type SignMethod
 } from '$lib/onboarding/core/passkey';
 import { loadAccounts } from '$lib/onboarding/core/storage';
-import { chainName, nativeSymbol } from '$lib/services/networks';
-import type { OperationToSign } from '$lib/services/safe-transaction';
 import { signPreference } from '$lib/settings/core/sign-pref.svelte';
 import type { AccountKey } from '$lib/onboarding/generated/AccountKey';
 import { signRoute, type DeviceKey } from './sign-route';
@@ -41,14 +39,15 @@ export interface ChallengeSigner {
 }
 
 /**
- * Sign `challenge` the way this request's "Sign with" says. A transaction
- * hands over the ASSEMBLED `operation` its digest covers (the code that
- * assembled it does — see `safe-transaction.ts`); a message has none.
+ * Sign `challenge` the way this request's "Sign with" says.
+ *
+ * It used to take the ASSEMBLED operation the digest covers, for the clear
+ * signer to show on its own page. Spec 075 cut the clear signer, and with it
+ * the only reader: what is signed here is the challenge, and nothing else.
  */
 export async function signChallenge(
 	challenge: Uint8Array,
-	signer: ChallengeSigner,
-	operation?: OperationToSign
+	signer: ChallengeSigner
 ): Promise<Assertion> {
 	// The open sheet's pick — which started at Settings' default — or, with no
 	// sheet (the wallet's own send), Settings' default itself: the person's,

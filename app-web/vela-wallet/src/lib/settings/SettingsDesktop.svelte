@@ -539,24 +539,6 @@
 		margin-bottom: var(--space-3xl);
 	}
 
-	.signer-page {
-		padding-top: var(--space-2xl);
-	}
-
-	.signer-page h2 {
-		margin: 0;
-		font-size: calc(var(--text-lg) * var(--text-scale, 1));
-		font-weight: var(--weight-semibold);
-		color: var(--color-fg-base);
-	}
-
-	.signer-page p {
-		margin: var(--space-md) 0 var(--space-lg);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
-	}
-
 	hr {
 		border: none;
 		border-top: var(--border-hairline) solid var(--color-border-base);

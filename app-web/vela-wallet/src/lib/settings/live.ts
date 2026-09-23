@@ -574,11 +574,7 @@ export function withLiveFeeSpeedDesktop(
  * refused and whether a page there can use this wallet's passkeys — both the
  * core's findings, worded here.
  */
-export function withLiveSigning(
-	model: SettingsHomeModel,
-	view: SignPrefView,
-	m: SettingsMessages
-): SettingsHomeModel {
+export function withLiveSigning(model: SettingsHomeModel, view: SignPrefView): SettingsHomeModel {
 	const rows = liveSignWithRows(model.signWithSheet.rows, view);
 	const method = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
 	return {
@@ -595,8 +591,7 @@ export function withLiveSigning(
 export function withLiveSigningDesktop(
 	model: SettingsDesktopModel,
 	view: SignPrefView,
-	sheet: SelectSheetModel,
-	m: SettingsMessages
+	sheet: SelectSheetModel
 ): SettingsDesktopModel {
 	const rows = liveSignWithRows(sheet.rows, view);
 	const label = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';

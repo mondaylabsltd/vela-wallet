@@ -40,7 +40,6 @@ import {
 	computeSafeMessageHash,
 	keySetOf,
 	signerAddressFor,
-	type OperationToSign,
 	type QuotedInBandFee,
 	type WalletKeySet,
 	type WalletSigner,
@@ -443,8 +442,8 @@ export async function handleSendTransaction(
 		: [{ id: account.id }];
 
 	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
-	const signFn = async (challenge: Uint8Array, operation?: OperationToSign) => {
-		const assertion = await signChallenge(challenge, signer, operation);
+	const signFn = async (challenge: Uint8Array) => {
+		const assertion = await signChallenge(challenge, signer);
 
 		const compat = verifySafeWebAuthn(assertion);
 		if (!compat.ok) {
@@ -711,8 +710,8 @@ export async function handleSendCalls(
 		: [{ id: account.id }];
 
 	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
-	const signFn = async (challenge: Uint8Array, operation?: OperationToSign) => {
-		const assertion = await signChallenge(challenge, signer, operation);
+	const signFn = async (challenge: Uint8Array) => {
+		const assertion = await signChallenge(challenge, signer);
 
 		const compat = verifySafeWebAuthn(assertion);
 		if (!compat.ok) {
