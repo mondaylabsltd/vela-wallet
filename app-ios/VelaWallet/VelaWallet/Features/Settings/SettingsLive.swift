@@ -148,6 +148,7 @@ enum SettingsLive {
                             : nil
                     },
                     link: provider.hasKey ? nil : "\(loc.t(k.providerGetKey)) →",
+                    linkUrl: provider.hasKey ? nil : providerKeyUrl(provider.provider),
                     test: card.test
                 )
             }
@@ -178,6 +179,17 @@ enum SettingsLive {
         case .passkeyIndex: k.endpointPasskeyHint
         case .bundlerService: k.endpointRelayHint
         case .fiatRates: k.endpointFiatHint
+        }
+    }
+
+    /// Where a provider hands out keys. The same three URLs Android opens
+    /// (`SettingsLive.kt:609`), kept as a `switch` so a new provider cannot be
+    /// added without somebody deciding where its link goes.
+    static func providerKeyUrl(_ provider: NetProviderIdWire) -> String {
+        switch provider {
+        case .alchemy: "https://dashboard.alchemy.com/"
+        case .drpc: "https://drpc.org/"
+        case .ankr: "https://www.ankr.com/rpc/"
         }
     }
 

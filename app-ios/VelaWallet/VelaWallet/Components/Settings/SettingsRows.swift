@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// One settings row: an optional leading glyph, a title, an optional second
 /// line, an optional right-aligned value, and a trailing chevron or external
@@ -385,6 +386,16 @@ struct KeyValueRow: View {
     let row: KeyValueRowModel
 
     var body: some View {
+        if let link = row.link, let url = URL(string: link) {
+            Button { UIApplication.shared.open(url) } label: { content }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(.isLink)
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
             HStack(spacing: Tokens.Space.s12) {
                 Text(row.label)

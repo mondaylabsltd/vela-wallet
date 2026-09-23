@@ -61,6 +61,9 @@ struct RootView: View {
     @State private var identiconViewer: IdenticonSubject?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
+    /// The settings page a screen elsewhere is sending somebody to. Cleared
+    /// the moment settings opens, so it steers exactly one visit.
+    @State private var pendingSettingsPage: SettingsPage?
     /// An erase ran and these keys survived (spec 081 FR-017).
     ///
     /// Never `Some([])`: an empty survivor list is the success, and the app has
@@ -722,6 +725,11 @@ struct RootView: View {
                         case .settings:
                             settingsScreen()
                                 .navigationBarBackButtonHidden()
+                                // The steer is spent on arrival: the screen has
+                                // already seeded its page from it, and leaving
+                                // it set would send the NEXT visit to the same
+                                // place for no reason.
+                                .onAppear { pendingSettingsPage = nil }
                         }
                     }
             }
@@ -2242,6 +2250,16 @@ struct RootView: View {
                     onSendFilter: { id in sendClassFilter = id },
                     onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
+                    onDenom: { send.toggleFiatInput() },
+                    // 原生 is not a second kind of token to paste an address
+                    // for — a native coin arrives with its network. Android
+                    // has sent people to 添加网络 from this tab since 044; on
+                    // iOS the toggle moved and nothing happened.
+                    onAddTokenTab: { id in
+                        guard id == "native" else { return }
+                        pendingSettingsPage = .addNetwork
+                        router.path.append(.settings)
+                    },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
                     onFillEmpty: { amount in fillEmptyRows(amount) },
@@ -2465,6 +2483,14 @@ struct RootView: View {
             let chainId = ChainCatalog.chains.indices.contains(receiveNetwork)
                 ? ChainCatalog.chains[receiveNetwork].chainId : 0
             return ExplorerLinks.address(chainId: chainId, session.view.address, store: shelf)
+        case .sd4a, .sd4b, .sd4c:
+            // The send receipt. The chain is the token's, never the wallet's
+            // current one: a send can confirm while the person has already
+            // looked at another network, and linking THAT chain's explorer
+            // would show them a hash that is not there.
+            guard let view = send.view, let token = view.selectedToken,
+                  let hash = view.txHash, !hash.isEmpty else { return nil }
+            return ExplorerLinks.tx(chainId: token.chainId, hash: hash, store: shelf)
         default:
             return nil
         }
@@ -2690,6 +2716,13 @@ struct RootView: View {
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
         model = SettingsLive.withProviderTests(on: model, loc: loc)
+        // Somebody was sent here for one page in particular. `SettingsScreen`
+        // seeds its own state from this once, at init, and owns it from then
+        // on; the pending value is cleared when the screen appears so the next
+        // visit opens where settings normally opens.
+        if let pendingSettingsPage {
+            model.page = pendingSettingsPage
+        }
         // Measured, not drawn (058). `storageTick` is what makes a clear show
         // up: the report is read here, so the page has to be asked to build
         // again after keys are removed.

@@ -447,12 +447,15 @@ enum SettingsFixtures {
             ],
             links: [
                 KeyValueRowModel(label: loc.t(k.aboutLinkWebsite), value: "getvela.app",
-                                 mono: true, external: true),
+                                 mono: true, external: true,
+                                 link: "https://getvela.app"),
                 KeyValueRowModel(label: loc.t(k.aboutLinkGithub),
                                  value: "github.com/mondaylabsltd/vela-wallet",
-                                 mono: true, external: true),
+                                 mono: true, external: true,
+                                 link: "https://github.com/mondaylabsltd/vela-wallet"),
                 KeyValueRowModel(label: loc.t(k.aboutLinkSafe), value: "safe.global",
-                                 mono: true, external: true),
+                                 mono: true, external: true,
+                                 link: "https://safe.global"),
             ],
             footer: loc.t(k.aboutFooter)
         )
