@@ -16,10 +16,17 @@
 - [x] T014 Hostile tests: foreign challenge, create from a site, stand-in wallet
 
 ## R — Relay (agent)
-- [ ] T020 `vela-relay` rules + unit tests
-- [ ] T021 `vela-relay-server` + Dockerfile
-- [ ] T022 `vela-relay-worker` (Durable Object, hibernation)
-- [ ] T023 Conformance on native, Worker (wrangler dev), Docker
+- [x] T020 `vela-relay` rules + unit tests — the room rules as a crate
+  (`crates/vela-relay`, in the workspace, three test modules)
+- [x] T021 `vela-relay-server` + Dockerfile — the native host, distroless image
+  (`690963d7`)
+- [x] T022 `vela-relay-worker` (Durable Object, hibernation) — its own workspace,
+  wasm32 through worker-build (`b388e836`, docs `8e4accac`)
+- [x] T023 Conformance on native, Worker (wrangler dev), Docker — the desktop's
+  `relay_conformance_against_a_real_relay` runs against a real one (`--ignored`)
+  **Nothing is deployed**: `sign.getvela.app` and a public relay are the owner's
+  to put up, so the cross-device route works against a relay you run, not one
+  that already exists.
 
 ## A+ — after the contracts (lead)
 - [x] T007 `sign_pref`: the relay is a preference (`vela.clearSignerRelay`), with its own rules and refusals

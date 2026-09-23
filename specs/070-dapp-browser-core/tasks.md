@@ -53,3 +53,20 @@ Legend: `[P]` parallelisable, `[USn]` user story. Paths are repo-relative.
 - [x] T062 extension e2e — 23/23 on chromium. SC-305 had been failing on `main` too: the storage row's confirm sheet (spec 058) was untitled, so it never named the site, and the test predated the sheet; both fixed
 - [ ] T063 Delete the browser half of `dapp_permissions` — **deferred**: every in-app browser is off it, but the web wallet's own connect flow (`src/lib/dapp/core/dperm-connect.ts`: `provider_request`, `navigation_started`, `browser_closed`) still drives it. Moving that flow onto `dapp_browser` is its own change. `docs/dapp-browser/ARCHITECTURE.md` rewritten (done)
 - [x] T064 CI pre-push checklist: i18n vectors (no diff), rustfmt in `rust/` and the desktop, `build-web.mjs --check` after the rebuild, Swift wires (iOS suite green)
+
+## What the owner's device pass reported, and where it went
+
+- **「dapp 签名时，滑动到底 没有弹出用户签名的地方呀」（iPhone · 平行空间）** — not
+  a browser defect, and not a signing defect: the parallel space signs with
+  `vela-core`'s fixed keyset by design (043 FR-002), so no passkey sheet can
+  appear. What was wrong is that NOTHING SAID SO, and the 「签名方式」 row still
+  offered four routes that would not be used — so a slide that worked read as a
+  slide that did nothing. Fixed in the 074 batch, not here: `b9f21429a` (debug
+  builds show 平行空间内置钥匙 with no chooser, and an options-less row draws no
+  chevron), with `170c6ac98` giving the slide a detent so the confirm is felt.
+  `BrowserAcceptanceTests` asserts the marker before dragging the slide.
+  **Both are in `075-clear-signer-channel`, which is where 070–075 have all
+  been merged; a build from THIS branch alone does not have them.**
+- The demo page's own signing sheet (`ExploreScreen.swift`, confirm = close) is
+  gallery-only: with a `BrowserController` attached, `.browsing` requires a live
+  engine, so the shipping app cannot reach it.
