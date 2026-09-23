@@ -27,8 +27,8 @@ the owner and are rewritten there:
 - "签名页永远不创建 passkey" (the signing page never creates a passkey) → it creates one when
   the wallet's CREATE flow asks, as its own request, never inside a signature.
 - "没有服务器。没有中继。跨设备走 BLE。" (no server, no relay; cross-device goes over BLE) →
-  cross-device goes over a **relay** (WebSocket) or **BLE**. The relay is blind: it only
-  sees ciphertext (contracts/relay.md).
+  cross-device goes over a **tunnel** (WebSocket) or **BLE**. The tunnel is blind: it only
+  sees ciphertext (contracts/tunnel.md).
 
 The page's founding invariant stays and is extended: **it signs only what it derived
 itself.** A sign-in or a proof is a challenge the page generates or fetches from the
@@ -58,9 +58,9 @@ The proofs inside create/recover (verify, recover ×2, member) run on the same r
 ceremony that made or found the key.
 
 ### US4: Across devices (P2)
-- **Relay.** The wallet shows a QR code and a link. Another device opens the signer page
+- **Tunnel.** The wallet shows a QR code and a link. Another device opens the signer page
   from it, and both screens show the same six-digit code; the person confirms it on the
-  wallet, and the request goes through an end-to-end-encrypted relay. The relay is written
+  wallet, and the request goes through an end-to-end-encrypted tunnel. The tunnel is written
   in Rust and runs in Docker or as a Cloudflare Worker.
 - **BLE.** A native wallet advertises; a Chrome signer page nearby connects over BLE GATT
   (PROTOCOL.md §1–4), with the same code check.
@@ -95,11 +95,11 @@ ceremony that made or found the key.
   - an assertion's clientDataJSON challenge is the one the page declared for that request
     kind, and its origin is the page's;
   - a signing assertion verifies against the key (as 071).
-- **FR-006** Cross-device: the relay (contracts/relay.md); BLE per PROTOCOL.md §1–4. Both run
+- **FR-006** Cross-device: the tunnel (contracts/tunnel.md); BLE per PROTOCOL.md §1–4. Both run
   the same session code in the core (Rust) and in the page (`lib/transport/secure.js`),
   checked against shared vectors.
-- **FR-007** Settings: "Clear Signer page" (071) plus "Relay" (default
-  `wss://relay.getvela.app`, same URL rules).
+- **FR-007** Settings: "Clear Signer page" (071) plus "Tunnel" (default
+  `wss://tunnel.getvela.app`, same URL rules).
 
 ## Success criteria
 
@@ -108,11 +108,11 @@ ceremony that made or found the key.
 - **SC-002** On the Android phone, a wallet is created through the Clear Signer page, signs
   a send that lands on chain, and signs in again after its local record is removed.
 - **SC-003** A cross-device pass: the phone's wallet and the Mac's Chrome signer page pair
-  through the relay (native host and Worker host), and a send signed there lands.
+  through the tunnel (native host and Worker host), and a send signed there lands.
 - **SC-004** The page refuses:
   - a sign-in or proof whose challenge it did not derive;
   - a create from a non-wallet requester;
-  - a relay requester whose key does not match the link.
+  - a tunnel requester whose key does not match the link.
 
   Hostile-intent tests cover each refusal.
 
@@ -177,7 +177,7 @@ in 075.
 
 Tempting, and worth writing down before somebody builds the version that only
 looks safe: **the wallet never sees the bytes the browser ran.** The page
-executes in a browser — on another device entirely, over BLE or the relay — so
+executes in a browser — on another device entirely, over BLE or the tunnel — so
 a hash the wallet computes is a hash of ITS OWN fetch. A server can answer the
 wallet with the reviewed version and the browser with another, and a cached
 copy in the browser was fetched before either. A page that reports its own hash

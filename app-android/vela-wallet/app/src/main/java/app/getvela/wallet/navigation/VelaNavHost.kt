@@ -1923,8 +1923,8 @@ fun VelaNavHost(
                         },
                         onSignerUrlSave = settings::submitSignerUrl,
                         onSignerUrlReset = settings::resetSignerUrl,
-                        onRelayUrlSave = settings::submitRelayUrl,
-                        onRelayUrlReset = settings::resetRelayUrl,
+                        onTunnelUrlSave = settings::submitTunnelUrl,
+                        onTunnelUrlReset = settings::resetTunnelUrl,
                         // Spec 072: the providers page loads the saved keys and
                         // tests them; the endpoints page probes; the wizard starts
                         // clean — the phone web's own open events.

@@ -2,13 +2,13 @@
  * Creating a wallet with the Clear Signer on ANOTHER device (spec 075 US4).
  *
  * Two browser pages stand in for two devices: the wallet, and the signer page
- * opened from the pairing link. Between them runs the page's own mock relay
- * (`app-web/clearsigning/samples/mock-relay.mjs`, written against
- * `contracts/relay.md` §1) — dumb and blind, forwarding frames it cannot read.
+ * opened from the pairing link. Between them runs the page's own mock tunnel
+ * (`app-web/clearsigning/samples/mock-tunnel.mjs`, written against
+ * `contracts/tunnel.md` §1) — dumb and blind, forwarding frames it cannot read.
  *
  * What this pins is the part no unit test can: the person's two looks. The
  * wallet draws a link (and its QR) and waits; the page joins the room, the two
- * ends derive the same six digits without the relay learning anything; and
+ * ends derive the same six digits without the tunnel learning anything; and
  * nothing is sent until the person confirms those digits on the wallet. Then a
  * real `navigator.credentials.create()` runs on the other device, and its key
  * and member proof come back sealed, one after the other, on the same room.
@@ -32,28 +32,28 @@ test.setTimeout(180_000);
 
 const RELAY = /vela-relay(-cf)?\.getvela\.app/;
 
-interface MockRelay {
+interface MockTunnel {
 	url: string;
 	tap: { room: string; from: string; isBinary: boolean; data: Buffer | string }[];
 	close(): Promise<void>;
 }
 
 let signer: ServedPage;
-let relay: MockRelay;
+let tunnel: MockTunnel;
 
 test.beforeAll(async () => {
 	signer = await serveSignerPage();
 	// The page's own mock, by path: it is plain ESM beside the page, with no
 	// types, and this suite only ever reads from `app-web/clearsigning`.
 	const module = (await import(
-		/* @vite-ignore */ new URL('../../clearsigning/samples/mock-relay.mjs', import.meta.url).href
-	)) as { startRelay(options?: { port?: number }): Promise<MockRelay> };
-	relay = await module.startRelay();
+		/* @vite-ignore */ new URL('../../clearsigning/samples/mock-tunnel.mjs', import.meta.url).href
+	)) as { startTunnel(options?: { port?: number }): Promise<MockTunnel> };
+	tunnel = await module.startTunnel();
 });
 
 test.afterAll(async () => {
 	signer.close();
-	await relay.close();
+	await tunnel.close();
 });
 
 function pageShows(popup: Page, kind: string): Promise<unknown> {
@@ -68,7 +68,7 @@ function pageShows(popup: Page, kind: string): Promise<unknown> {
 	);
 }
 
-test('a wallet is created on another device, through the relay, after the codes are compared', async ({
+test('a wallet is created on another device, through the tunnel, after the codes are compared', async ({
 	page,
 	context
 }) => {
@@ -79,11 +79,11 @@ test('a wallet is created on another device, through the relay, after the codes 
 	);
 	await stubRelay(page, RELAY, happyRelay('0x' + '11'.repeat(32), '0x' + '22'.repeat(32)));
 	await stubRegistry(page, context, registry);
-	// The page this person uses, and the relay they pair through — both as
+	// The page this person uses, and the tunnel they pair through — both as
 	// Settings would have written them.
 	await seedKv(page, {
 		'vela.clearSignerUrl': signer.url,
-		'vela.clearSignerRelay': relay.url
+		'vela.clearSignerTunnel': tunnel.url
 	});
 	await page.addInitScript(() => {
 		localStorage.setItem('vela.intro.seen', String(Date.now()));
@@ -111,7 +111,7 @@ test('a wallet is created on another device, through the relay, after the codes 
 	const link = (await page.locator('.sheet .link').textContent())?.trim() ?? '';
 	expect(link.startsWith(`${signer.url}sign.html?ch=relay#`)).toBe(true);
 	const fragment = new URLSearchParams(new URL(link).hash.slice(1));
-	expect(fragment.get('relay')).toBe(relay.url);
+	expect(fragment.get('relay')).toBe(tunnel.url);
 	expect(fragment.get('room')).toMatch(/^[A-Za-z0-9_-]{22}$/);
 	expect(fragment.get('rk')).toMatch(/^[A-Za-z0-9_-]{22}$/);
 
@@ -162,12 +162,12 @@ test('a wallet is created on another device, through the relay, after the codes 
 		timeout: 120_000
 	});
 
-	// The relay saw two hellos in the clear and nothing else — no intent, no
+	// The tunnel saw two hellos in the clear and nothing else — no intent, no
 	// answer, no key.
-	const clear = relay.tap.filter((frame) => !frame.isBinary);
+	const clear = tunnel.tap.filter((frame) => !frame.isBinary);
 	expect(clear).toHaveLength(2);
 	expect(clear.every((frame) => JSON.parse(String(frame.data)).t === 'hello')).toBe(true);
-	const sealed = relay.tap.filter((frame) => frame.isBinary);
+	const sealed = tunnel.tap.filter((frame) => frame.isBinary);
 	expect(sealed.length).toBeGreaterThanOrEqual(4);
 	expect(
 		sealed.every((frame) => {

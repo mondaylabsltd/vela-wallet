@@ -16,7 +16,7 @@
 //    talks to — and the page in an `SFSafariViewController`. An in-app tab
 //    keeps this app in the foreground, which is what keeps the listener alive
 //    for the whole ceremony (research R2);
-//  - on another device, a `ClearSignerRelayConversation` — the QR, the link,
+//  - on another device, a `ClearSignerTunnelConversation` — the QR, the link,
 //    and the six digits the person compares before anything is sent;
 //  - the one sheet under all of it (`ClearSignerSheets`), which is also where
 //    "open the page again" and cancel live.
@@ -138,10 +138,10 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     /// The page Settings names (`sign_pref`); `nil` before it has said, which
     /// is the official page.
     private let signerUrl: () -> String?
-    /// The relay Settings names (`sign_pref`, spec 075).
-    private let relayUrl: () -> String?
-    /// The relay conversation, as a seam for tests.
-    private let makeRelay: (_ signerUrl: String, _ relay: String) -> ClearSignerRelayConversation?
+    /// The tunnel Settings names (`sign_pref`, spec 075).
+    private let tunnelUrl: () -> String?
+    /// The tunnel conversation, as a seam for tests.
+    private let makeTunnel: (_ signerUrl: String, _ tunnel: String) -> ClearSignerTunnelConversation?
     /// The nearby (BLE) conversation, as a seam for tests.
     private let makeBle: (_ signerUrl: String) -> ClearSignerBleConversation?
 
@@ -149,7 +149,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     private var conversation: ClearSignerConversation?
     /// The same session when it is the loopback one — it alone has a tab.
     private var channel: ClearSignerChannel?
-    private var relay: ClearSignerRelayConversation?
+    private var tunnel: ClearSignerTunnelConversation?
     private var ble: ClearSignerBleConversation?
     /// The page this session is talking to; every answer's origin is checked
     /// against it by the core.
@@ -165,15 +165,15 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     private var busy = false
     /// The person pressed cancel while no question was pending — during the
     /// pairing wait, say. Without it, a cancelled pairing came back as "the
-    /// relay could not be reached", which blames the relay for a decision.
+    /// tunnel could not be reached", which blames the tunnel for a decision.
     private var declined = false
 
     init(
         loc: Loc,
         signerUrl: @escaping () -> String?,
-        relayUrl: @escaping () -> String? = { nil },
-        makeRelay: @escaping (String, String) -> ClearSignerRelayConversation? = { signer, relay in
-            ClearSignerRelayConversation(signerUrl: signer, relay: relay)
+        tunnelUrl: @escaping () -> String? = { nil },
+        makeTunnel: @escaping (String, String) -> ClearSignerTunnelConversation? = { signer, tunnel in
+            ClearSignerTunnelConversation(signerUrl: signer, tunnel: tunnel)
         },
         makeBle: @escaping (String) -> ClearSignerBleConversation? = { signer in
             ClearSignerBleConversation(signerUrl: signer)
@@ -181,8 +181,8 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     ) {
         self.loc = loc
         self.signerUrl = signerUrl
-        self.relayUrl = relayUrl
-        self.makeRelay = makeRelay
+        self.tunnelUrl = tunnelUrl
+        self.makeTunnel = makeTunnel
         self.makeBle = makeBle
         super.init()
     }
@@ -238,7 +238,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         conversation?.end()
         conversation = nil
         channel = nil
-        relay = nil
+        tunnel = nil
         ble = nil
         openPage = nil
         launchUrl = nil
@@ -271,7 +271,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
             self?.finishAsk(pick: .agreed)
         }
         model.copyLink = { [weak self] in
-            guard let self, let link = self.relay?.link else { return }
+            guard let self, let link = self.tunnel?.link else { return }
             VelaHaptic.select.play()
             UIPasteboard.general.string = link
             self.model?.copied = true
@@ -292,9 +292,9 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
                     return ending
                 }
                 if declined { return .outcome(.refused(refusal: .declined)) }
-                // The relay would not come up. The choice is offered again
+                // The tunnel would not come up. The choice is offered again
                 // with the reason under it, rather than dying on a spinner.
-                model.stage = .relayDown
+                model.stage = .tunnelDown
             case .nearby:
                 if let ending = await onNearbyDevice(ask, page: wanted, model: model) {
                     return ending
@@ -329,32 +329,32 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         return await channel.ending()
     }
 
-    /// The relay: the QR, the link, and the six digits. `nil` when the relay
+    /// The tunnel: the QR, the link, and the six digits. `nil` when the tunnel
     /// never came up — the caller offers the choice again.
     private func onAnotherDevice(
         _ ask: ClearSignerAsk, page: String, model: ClearSignerSheetModel
     ) async -> ClearSignerChannel.Ending? {
-        guard let relay = makeRelay(page, relayUrl() ?? clearSignerDefaultRelay()) else { return nil }
-        self.relay = relay
-        model.link = relay.link
+        guard let tunnel = makeTunnel(page, tunnelUrl() ?? clearSignerDefaultTunnel()) else { return nil }
+        self.tunnel = tunnel
+        model.link = tunnel.link
         model.copied = false
         model.stage = .pairing
-        guard let code = await relay.pair() else {
-            relay.cancel()
-            self.relay = nil
+        guard let code = await tunnel.pair() else {
+            tunnel.cancel()
+            self.tunnel = nil
             return nil
         }
         model.stage = .code(code)
         // NOTHING is sent until the person says both screens show the same
         // digits: that is the whole defence against a stand-in page.
         guard await awaitAnswer(), lastPick == .agreed else {
-            relay.cancel()
-            self.relay = nil
+            tunnel.cancel()
+            self.tunnel = nil
             return .outcome(.refused(refusal: .declined))
         }
-        conversation = relay
+        conversation = tunnel
         model.stage = .waiting
-        return await relay.begin(ask)
+        return await tunnel.begin(ask)
     }
 
     /// Nearby, over Bluetooth (spec 075 T041): this phone advertises as a GATT
@@ -429,7 +429,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     func cancel() {
         declined = true
         channel?.cancel()
-        relay?.cancel()
+        tunnel?.cancel()
         ble?.cancel()
     }
 

@@ -42,8 +42,8 @@ pub mod clear_signer;
 /// The Clear Signer against the real page in a real browser — local only.
 #[cfg(test)]
 mod clear_signer_e2e;
-/// Spec 075: the Clear Signer across devices, through a blind relay.
-pub mod clear_signer_relay;
+/// Spec 075: the Clear Signer across devices, through a blind tunnel.
+pub mod clear_signer_tunnel;
 pub mod clear_signing;
 pub mod contacts;
 pub mod custom_tokens;

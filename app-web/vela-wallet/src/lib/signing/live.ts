@@ -666,7 +666,7 @@ export function clearSignerModel(
 		refused: m.clearSignerRefused,
 		mismatch: m.clearSignerMismatch,
 		timeout: m.clearSignerTimeout,
-		relay: m.clearSignerRelayDown
+		tunnel: m.clearSignerTunnelDown
 	};
 	return { waiting: false, title: endings[state.notice], dismiss: m.close };
 }

@@ -68,12 +68,12 @@
       "pageForeign": "Geçiş anahtarlarınız getvela.app'e ait. Başka bir alan adındaki sayfa bir isteği gösterebilir ama imzalayamaz.",
       "pageReset": "Resmi sayfayı kullan",
       "pageSave": "Kaydet",
-      "relayTitle": "Aktarıcı",
-      "relaySubtitle": "Başka bir cihazla eşleşme bu aktarıcı üzerinden yapılır. Aktarıcı yalnızca şifreli mesajları iletir.",
-      "relayOfficial": "Resmi",
-      "relayInvalid": "Bu bir aktarıcı adresi değil.",
-      "relayInsecure": "Bir wss:// adresi ya da bu cihazın kendi loopback'inde ws:// kullanın.",
-      "relayReset": "Resmi aktarıcıyı kullan"
+      "tunnelTitle": "Tünel",
+      "tunnelSubtitle": "Başka bir cihazla eşleşme bu tünel üzerinden yapılır. Tünel yalnızca şifreli mesajları iletir.",
+      "tunnelOfficial": "Resmi",
+      "tunnelInvalid": "Bu bir tünel adresi değil.",
+      "tunnelInsecure": "Bir wss:// adresi ya da bu cihazın kendi loopback'inde ws:// kullanın.",
+      "tunnelReset": "Resmi tüneli kullan"
     },
     "advanced": {
       "networksTitle": "Ağlar",

@@ -671,10 +671,10 @@ class SettingsLiveTest {
     /**
      * Spec 071/075: how this device signs by default — five routes in the
      * picker (auto and the four places a passkey can be), the Clear Signer
-     * page row, and the relay row beside it.
+     * page row, and the tunnel row beside it.
      */
     @Test
-    fun `the sign-with sheet offers five routes and the relay row sits beside the page row`() {
+    fun `the sign-with sheet offers five routes and the tunnel row sits beside the page row`() {
         val view = app.getvela.wallet.feature.settings.core.SignPrefView()
         val model = SettingsLive.withSignPref(base(), view, strings)
 
@@ -688,24 +688,24 @@ class SettingsLiveTest {
 
         fun rowValue(id: String) = model.sections.flatMap { it.rows }.single { it.id == id }.value
         assertEquals(strings.t("settings.signing.pageOfficial"), rowValue(SettingsFixtures.SIGNER_PAGE_ROW))
-        assertEquals(strings.t("settings.signing.relayOfficial"), rowValue(SettingsFixtures.RELAY_ROW))
-        assertEquals(strings.t("settings.signing.relayTitle"), model.signerRelay.title)
-        // Nothing to reset while it IS the official relay.
-        assertNull(model.signerRelay.reset)
+        assertEquals(strings.t("settings.signing.tunnelOfficial"), rowValue(SettingsFixtures.TUNNEL_ROW))
+        assertEquals(strings.t("settings.signing.tunnelTitle"), model.signerTunnel.title)
+        // Nothing to reset while it IS the official tunnel.
+        assertNull(model.signerTunnel.reset)
 
-        // A relay of the person's own: the row shows its host, and the sheet
+        // A tunnel of the person's own: the row shows its host, and the sheet
         // offers the way back.
         val mine = view.copy(
-            relay_url = "wss://relay.example.test/",
-            relay_url_is_default = false,
-            relay_url_error = "insecure",
+            tunnel_url = "wss://tunnel.example.test/",
+            tunnel_url_is_default = false,
+            tunnel_url_error = "insecure",
         )
         val chosen = SettingsLive.withSignPref(base(), mine, strings)
         fun chosenValue(id: String) = chosen.sections.flatMap { it.rows }.single { it.id == id }.value
-        assertEquals("relay.example.test", chosenValue(SettingsFixtures.RELAY_ROW))
-        assertEquals(strings.t("settings.signing.relayReset"), chosen.signerRelay.reset)
-        assertEquals(strings.t("settings.signing.relayInsecure"), chosen.signerRelay.error)
-        // A relay is blind, so whose it is says nothing about the passkeys.
-        assertNull(chosen.signerRelay.foreign)
+        assertEquals("tunnel.example.test", chosenValue(SettingsFixtures.TUNNEL_ROW))
+        assertEquals(strings.t("settings.signing.tunnelReset"), chosen.signerTunnel.reset)
+        assertEquals(strings.t("settings.signing.tunnelInsecure"), chosen.signerTunnel.error)
+        // A tunnel is blind, so whose it is says nothing about the passkeys.
+        assertNull(chosen.signerTunnel.foreign)
     }
 }

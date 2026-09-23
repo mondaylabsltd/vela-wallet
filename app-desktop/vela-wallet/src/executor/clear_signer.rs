@@ -1,5 +1,5 @@
 //! The Clear Signer on the desktop: a **loopback WebSocket** on this device,
-//! a **relay** to another (specs 071 and 075).
+//! a **tunnel** to another (specs 071 and 075).
 //!
 //! The fourth passkey route is a page, not a key. `app-web/clearsigning`,
 //! opened in the person's default browser, is told a request, derives what it
@@ -9,7 +9,7 @@
 //! - the request is the core's (`clear_signer::request` for a signature,
 //!   `clear_signer::ceremony::request` for a create / sign-in / proof);
 //! - the wire is the core's too — [`ws::Connection`] frames every byte of the
-//!   loopback socket, `secure::Session` seals every byte of the relay;
+//!   loopback socket, `secure::Session` seals every byte of the tunnel;
 //! - whether an answer is this wallet's signature over this request
 //!   (`clear_signer::verify`) or a ceremony the page was allowed to run
 //!   (`ceremony::verify`) is the core's.
@@ -70,7 +70,7 @@ use vela_core::clear_signer::{
 use vela_core::primitives::{to_base64url, to_hex};
 use vela_core::user_op::{MultiSendCall, UserOperation, WalletKey};
 
-use crate::executor::clear_signer_relay as relay;
+use crate::executor::clear_signer_tunnel as tunnel;
 use crate::executor::passkey::{self, PasskeyFailure};
 
 /// How long a page has to answer one request. The core has no clock; this is
@@ -101,7 +101,7 @@ pub enum Refusal {
     Mismatch,
     /// Nothing came back in time.
     TimedOut,
-    /// Spec 075: the relay could not be reached, or dropped the pairing.
+    /// Spec 075: the tunnel could not be reached, or dropped the pairing.
     Unreachable,
 }
 
@@ -129,7 +129,7 @@ impl Refusal {
             Self::Refused => "componentsUi.signing.clearSignerRefused",
             Self::Mismatch => "componentsUi.signing.clearSignerMismatch",
             Self::TimedOut => "componentsUi.signing.clearSignerTimeout",
-            Self::Unreachable => "componentsUi.signing.clearSignerRelayDown",
+            Self::Unreachable => "componentsUi.signing.clearSignerTunnelDown",
         }
     }
 }
@@ -140,7 +140,7 @@ impl Refusal {
 pub enum Place {
     /// This computer's own browser, over the loopback socket.
     ThisDevice,
-    /// Another device, paired through the relay.
+    /// Another device, paired through the tunnel.
     OtherDevice,
 }
 
@@ -149,7 +149,8 @@ pub enum Place {
 /// said they match.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Pairing {
-    /// `<page>sign.html?ch=relay#relay=…&room=…&rk=…&v=1`.
+    /// `<page>sign.html?ch=relay#relay=…&room=…&rk=…&v=1` — the link's two
+    /// keys keep their pre-rename spelling (they are the wire).
     pub link: String,
     /// The six digits both screens show. `None` until the page has said hello.
     pub code: Option<String>,
@@ -308,8 +309,8 @@ impl Channel {
         self.with(|state| state.pairing.clone())
     }
 
-    /// "The codes match" — the one gate before anything is sent over a relay
-    /// (relay.md §2.4).
+    /// "The codes match" — the one gate before anything is sent over a tunnel
+    /// (tunnel.md §2.4).
     pub fn confirm_code(&self) {
         self.with(|state| {
             if let Some(pairing) = state.pairing.as_mut() {
@@ -342,7 +343,7 @@ impl Channel {
 
     /// The screen that owned this channel is gone: a wait stops now, and none
     /// starts — an attempt nobody can see must not hold a port, or somebody
-    /// else's relay room, for minutes. Any page visit a flow was holding open
+    /// else's tunnel room, for minutes. Any page visit a flow was holding open
     /// is ended too.
     pub fn close(&self) {
         self.with(|state| {
@@ -355,7 +356,7 @@ impl Channel {
 
     /// End the page visit this channel's flow was holding open, if any — the
     /// page leaves its waiting card for its done card and the port, or the
-    /// relay room, goes. Called when a flow finishes, when anything refuses,
+    /// tunnel room, goes. Called when a flow finishes, when anything refuses,
     /// and when the screen goes away.
     ///
     /// **Safe to call from the screen while a ceremony runs**, because a
@@ -364,7 +365,7 @@ impl Channel {
     /// thread and that one could both be writing one socket.
     ///
     /// **And safe to call from the main thread**, because saying goodbye is
-    /// socket I/O — a `bye` and a close frame, over TLS on the relay — and
+    /// socket I/O — a `bye` and a close frame, over TLS on the tunnel — and
     /// every caller but the ceremony itself is a `Drop` on the thread that
     /// draws the window. It goes on a thread of its own, which is allowed to
     /// outlive this call by the second or two a dead peer costs.
@@ -547,7 +548,7 @@ impl Channel {
 // ---------------------------------------------------------------------------
 
 /// One page visit, whichever way it runs: the loopback socket on this device,
-/// or the relay to another. A visit carries **several requests in order** —
+/// or the tunnel to another. A visit carries **several requests in order** —
 /// create then member proof, sign-in then recovery's two proofs — and ends on
 /// `bye` (contract §1.5).
 pub trait Line: Send {
@@ -595,7 +596,7 @@ fn busy() -> PasskeyFailure {
 /// Every refusal is told to the screen and answered as a cancelled passkey —
 /// the request stays open to be answered another way. A **listener the OS will
 /// not give** is the one real failure: it is not the person refusing and it is
-/// not a relay being unreachable, so it carries its own words into the bug
+/// not a tunnel being unreachable, so it carries its own words into the bug
 /// report rather than borrowing either sentence.
 fn open_line(
     page: &str,
@@ -617,24 +618,28 @@ fn open_line(
                     )),
                 }
             }),
-        Place::OtherDevice => {
-            relay::open(page, &relay_url(), relay::Seed::random(), channel, deadline)
-                .map(|line| Box::new(line) as Box<dyn Line>)
-                .map_err(|refusal| gave_up(channel, refusal))
-        }
+        Place::OtherDevice => tunnel::open(
+            page,
+            &tunnel_url(),
+            tunnel::Seed::random(),
+            channel,
+            deadline,
+        )
+        .map(|line| Box::new(line) as Box<dyn Line>)
+        .map_err(|refusal| gave_up(channel, refusal)),
     }
 }
 
-/// The relay from Settings, or the official one.
+/// The tunnel from Settings, or the official one.
 #[must_use]
-pub fn relay_url() -> String {
-    crate::executor::storage::read_value(crate::executor::storage::KEY_CLEAR_SIGNER_RELAY)
+pub fn tunnel_url() -> String {
+    crate::executor::storage::read_value(crate::executor::storage::KEY_CLEAR_SIGNER_TUNNEL)
         .ok()
         .flatten()
         .as_ref()
         .and_then(Value::as_str)
-        .and_then(|text| clear_signer::relay_url(text).ok())
-        .unwrap_or_else(|| clear_signer::DEFAULT_RELAY_URL.to_owned())
+        .and_then(|text| clear_signer::tunnel_url(text).ok())
+        .unwrap_or_else(|| clear_signer::DEFAULT_TUNNEL_URL.to_owned())
 }
 
 /// The Clear Signer page from Settings, or the official one.

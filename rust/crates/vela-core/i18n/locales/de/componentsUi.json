@@ -220,7 +220,7 @@
       "clearSignerCode": "Prüfe, ob das andere Gerät denselben Code zeigt: {{code}}",
       "clearSignerCodeConfirm": "Die Codes stimmen überein",
       "clearSignerCopyLink": "Link kopieren",
-      "clearSignerRelayDown": "Das Relay ist nicht erreichbar. Versuche es erneut oder nutze den Clear Signer auf diesem Gerät."
+      "clearSignerTunnelDown": "Der Tunnel ist nicht erreichbar. Versuche es erneut oder nutze den Clear Signer auf diesem Gerät."
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",

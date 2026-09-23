@@ -68,12 +68,12 @@
       "pageForeign": "你嘅通行密鑰屬於 getvela.app。其他網域上嘅頁面可以顯示請求，但無法簽署。",
       "pageReset": "使用官方頁面",
       "pageSave": "儲存",
-      "relayTitle": "中繼",
-      "relaySubtitle": "與另一部裝置配對時經由這個中繼。它只轉發加密後的訊息。",
-      "relayOfficial": "官方",
-      "relayInvalid": "這不是一個中繼地址。",
-      "relayInsecure": "請使用 wss:// 地址，或本機回送地址上的 ws://。",
-      "relayReset": "使用官方中繼"
+      "tunnelTitle": "隧道",
+      "tunnelSubtitle": "與另一部裝置配對時經由這個隧道。它只轉發加密後的訊息。",
+      "tunnelOfficial": "官方",
+      "tunnelInvalid": "這不是一個隧道地址。",
+      "tunnelInsecure": "請使用 wss:// 地址，或本機回送地址上的 ws://。",
+      "tunnelReset": "使用官方隧道"
     },
     "advanced": {
       "networksTitle": "網絡",

@@ -123,25 +123,25 @@ object SettingsLive {
             save = s.t("settings.signing.pageSave"),
             reset = if (view.signer_url_is_default) null else s.t("settings.signing.pageReset"),
         )
-        // Spec 075: the relay row, shaped exactly like the page row — the value
+        // Spec 075: the tunnel row, shaped exactly like the page row — the value
         // is "official" or the host, the sheet is a field with Save and (once it
         // is not the official one) a reset, and the core's refusal sits under
-        // the field. No `foreign` line: a relay is blind, so whose it is says
+        // the field. No `foreign` line: a tunnel is blind, so whose it is says
         // nothing about whether this wallet's passkeys can be reached.
-        val relayOfficial = s.t("settings.signing.relayOfficial")
-        val relayHost = view.relay_url.substringAfter("://").substringBefore('/')
-        val relay = SignerPageModel(
-            title = s.t("settings.signing.relayTitle"),
-            subtitle = s.t("settings.signing.relaySubtitle"),
-            value = view.relay_url,
-            error = when (view.relay_url_error) {
-                "invalid" -> s.t("settings.signing.relayInvalid")
-                "insecure" -> s.t("settings.signing.relayInsecure")
+        val tunnelOfficial = s.t("settings.signing.tunnelOfficial")
+        val tunnelHost = view.tunnel_url.substringAfter("://").substringBefore('/')
+        val tunnel = SignerPageModel(
+            title = s.t("settings.signing.tunnelTitle"),
+            subtitle = s.t("settings.signing.tunnelSubtitle"),
+            value = view.tunnel_url,
+            error = when (view.tunnel_url_error) {
+                "invalid" -> s.t("settings.signing.tunnelInvalid")
+                "insecure" -> s.t("settings.signing.tunnelInsecure")
                 else -> null
             },
             foreign = null,
             save = s.t("settings.signing.pageSave"),
-            reset = if (view.relay_url_is_default) null else s.t("settings.signing.relayReset"),
+            reset = if (view.tunnel_url_is_default) null else s.t("settings.signing.tunnelReset"),
         )
         return model.copy(
             sections = model.sections.map { section ->
@@ -150,7 +150,7 @@ object SettingsLive {
                         when (row.id) {
                             SettingsFixtures.SIGN_WITH_ROW -> row.copy(value = titles[view.method] ?: row.value)
                             SettingsFixtures.SIGNER_PAGE_ROW -> row.copy(value = if (view.signer_url_is_default) official else host)
-                            SettingsFixtures.RELAY_ROW -> row.copy(value = if (view.relay_url_is_default) relayOfficial else relayHost)
+                            SettingsFixtures.TUNNEL_ROW -> row.copy(value = if (view.tunnel_url_is_default) tunnelOfficial else tunnelHost)
                             else -> row
                         }
                     },
@@ -158,7 +158,7 @@ object SettingsLive {
             },
             signWithSheet = sheet,
             signerPage = page,
-            signerRelay = relay,
+            signerTunnel = tunnel,
         )
     }
 

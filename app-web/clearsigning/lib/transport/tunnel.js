@@ -1,23 +1,23 @@
-// The relay — the cross-device WebSocket channel (spec 075, contracts/relay.md).
+// The tunnel — the cross-device WebSocket channel (spec 075, contracts/tunnel.md).
 //
 // The wallet shows a pairing link:
 //
 //   <this page>#relay=<wss URL>&room=<22 base64url>&rk=<22 base64url>&v=1
 //
 // The page reads it from its fragment (never sent to any server), joins the
-// room as `signer`, and once the relay says both ends are there (`joined`) it
+// room as `signer`, and once the tunnel says both ends are there (`joined`) it
 // runs the same handshake BLE runs (lib/transport/secure.js) under the label
-// `vela-relay/1`. Two checks stop a stand-in:
+// `vela-tunnel/1`. Two checks stop a stand-in:
 //
 //   · `rk` — the page refuses a requester hello whose key does not hash to the
-//     fingerprint in the link. The relay, or anyone who guessed the room,
+//     fingerprint in the link. The tunnel, or anyone who guessed the room,
 //     cannot pose as the wallet: they do not hold its key.
 //   · the six-digit code — shown on both screens; the person confirms it on the
 //     wallet before the wallet sends anything. That stops a stand-in for THIS
 //     page (a stolen link).
 //
-// The relay is blind: after the two hellos every frame is binary,
-// IV ‖ AES-GCM, and the relay only ever forwards it.
+// The tunnel is blind: after the two hellos every frame is binary,
+// IV ‖ AES-GCM, and the tunnel only ever forwards it.
 //
 // Each `joined` starts a fresh handshake (a new key pair, new nonces, a new
 // code): a wallet that drops out and comes back is checked again from scratch.
@@ -28,9 +28,9 @@ window.VelaCS = window.VelaCS || {};
   var ID = /^[A-Za-z0-9_-]{22}$/;
   var LOOPBACK = /^(localhost|127\.0\.0\.1|\[::1\])$/;
 
-  // wss anywhere; ws only on this machine's loopback (tests, a local relay) —
+  // wss anywhere; ws only on this machine's loopback (tests, a local tunnel) —
   // the same rule as the wallet's Settings row.
-  function validRelay(url) {
+  function validTunnel(url) {
     var parsed;
     try { parsed = new URL(url); } catch (e) { return false; }
     if (parsed.username || parsed.password || parsed.search || parsed.hash) return false;
@@ -38,31 +38,35 @@ window.VelaCS = window.VelaCS || {};
     return parsed.protocol === 'ws:' && LOOPBACK.test(parsed.hostname);
   }
 
-  /** `{relay, room, rk, v, valid}` from a fragment, or null when it is not a pairing link. */
+  /**
+   * `{tunnel, room, rk, v, valid}` from a fragment, or null when it is not a
+   * pairing link. The fragment KEY is still `relay`: the link is protocol
+   * (tunnel.md §3), and the 2026-09-23 rename stopped at the wire.
+   */
   function parseLink(hash) {
     var fragment = new URLSearchParams(String(hash || '').replace(/^#/, ''));
-    var relay = fragment.get('relay');
-    if (!relay) return null;
+    var tunnel = fragment.get('relay');
+    if (!tunnel) return null;
     var link = {
-      relay: relay.replace(/\/+$/, ''),
+      tunnel: tunnel.replace(/\/+$/, ''),
       room: fragment.get('room') || '',
       rk: fragment.get('rk') || '',
       v: fragment.get('v') || '',
     };
-    link.valid = validRelay(link.relay) && ID.test(link.room) && ID.test(link.rk) && link.v === '1';
+    link.valid = validTunnel(link.tunnel) && ID.test(link.room) && ID.test(link.rk) && link.v === '1';
     return link;
   }
 
   function roomUrl(link) {
-    return link.relay + '/v1/rooms/' + link.room + '?role=signer';
+    return link.tunnel + '/v1/rooms/' + link.room + '?role=signer';
   }
 
-  // The relay's close codes (relay.md §1), as reasons the page can word.
+  // The tunnel's close codes (tunnel.md §1), as reasons the page can word.
   var CLOSES = { 4408: 'expired', 4409: 'taken', 4400: 'bad', 1009: 'bad' };
 
   /**
    * Join the room. `handlers`:
-   *   onOpen()          — connected to the relay, waiting for the wallet
+   *   onOpen()          — connected to the tunnel, waiting for the wallet
    *   onJoined()        — both ends are in the room; the handshake starts
    *   onCode(code)      — the session is up; show the six digits
    *   onLeft()          — the wallet dropped out (the room waits for it)
@@ -117,7 +121,8 @@ window.VelaCS = window.VelaCS || {};
       var frame = null;
       try { frame = JSON.parse(data); } catch (e) { return; }
       if (!frame || typeof frame !== 'object') return;
-      // The relay's own frames carry a "relay" key; an end's never do.
+      // The tunnel's own frames carry a "relay" key — the host crates' spelling,
+      // kept — and an end's never do.
       if (Object.prototype.hasOwnProperty.call(frame, 'relay')) {
         if (frame.relay === 'joined') this.joined();
         else if (frame.relay === 'left') this.left();
@@ -137,7 +142,7 @@ window.VelaCS = window.VelaCS || {};
       if (session !== self.session || self.ended) return;
       var message;
       try { message = JSON.parse(new TextDecoder().decode(plain)); } catch (e) { return; }
-      // Every message carries its `n`, and `n` only goes up (relay.md §2.5).
+      // Every message carries its `n`, and `n` only goes up (tunnel.md §2.5).
       if (!message || typeof message.n !== 'number' || message.n <= self.lastSeen) return;
       self.lastSeen = message.n;
       self.emit('onMessage', message);
@@ -165,7 +170,7 @@ window.VelaCS = window.VelaCS || {};
     var self = this;
     if (!attempt.handshake || !attempt.peerHello || attempt.completing) return;
     attempt.completing = true;
-    attempt.handshake.complete(attempt.peerHello, 'relay', this.link.rk).then(function (session) {
+    attempt.handshake.complete(attempt.peerHello, 'tunnel', this.link.rk).then(function (session) {
       if (self.attempt !== attempt || self.ended) return;
       self.attempt = null;
       self.session = session;
@@ -195,7 +200,7 @@ window.VelaCS = window.VelaCS || {};
     object.n = Math.max(this.outgoing, this.lastSeen) + 1;
     this.outgoing = object.n;
     return this.session.seal(new TextEncoder().encode(JSON.stringify(object))).then(function (sealed) {
-      if (ws.readyState !== 1) throw new Error('the relay connection closed');
+      if (ws.readyState !== 1) throw new Error('the tunnel connection closed');
       ws.send(sealed);
     });
   };
@@ -223,9 +228,9 @@ window.VelaCS = window.VelaCS || {};
   };
 
   ns.transport = ns.transport || {};
-  ns.transport.relay = {
+  ns.transport.tunnel = {
     parseLink: parseLink,
     connect: connect,
-    _validRelay: validRelay,
+    _validTunnel: validTunnel,
   };
 })(window.VelaCS);

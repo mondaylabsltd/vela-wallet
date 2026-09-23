@@ -16,7 +16,7 @@
 //     to supply — refused before any passkey prompt;
 //   · a create (and a member proof) from a site that is not a Vela wallet,
 //     even one that dresses its context up as an app channel;
-//   · a relay requester whose key does not hash to the link's `rk` — the page
+//   · a tunnel requester whose key does not hash to the link's `rk` — the page
 //     shows no code, sends nothing sealed, and leaves the room;
 //   · a member proof whose registry answer is not the challenge for the
 //     inputs on the card — refused, never signable.
@@ -43,9 +43,9 @@ for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js']) {
 }
 const lib = globalThis.VelaCS;
 
-import { Page, b64url, loopbackWallet, relayWallet, startBrowser } from './test-kit.mjs';
+import { Page, b64url, loopbackWallet, tunnelWallet, startBrowser } from './test-kit.mjs';
 import { startRegistry } from './mock-registry.mjs';
-import { startRelay } from './mock-relay.mjs';
+import { startTunnel } from './mock-tunnel.mjs';
 
 const results = [];
 function check(name, pass, detail) {
@@ -219,7 +219,7 @@ Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: tr
 
 const browser = await startBrowser({ cdp: 9397, tlsPort: 8447, hosts: ['evil.test'] });
 const registry = await startRegistry({ ns: ns075 });
-const relay = await startRelay();
+const tunnel = await startTunnel();
 try {
   const page = await Page.open(9397, 'about:blank');
   await page.send('Page.enable');
@@ -324,25 +324,25 @@ try {
     await viaUrl.close();
   }
 
-  // --- 3. a relay requester whose key does not match the link
+  // --- 3. a tunnel requester whose key does not match the link
   {
     const room = b64url(webcrypto.getRandomValues(new Uint8Array(16)));
     const someoneElse = await ns075.transport.secure.handshake({ role: 'requester' });
     const linkRk = await ns075.transport.secure.fingerprint(someoneElse.publicKey);
-    const impostor = await relayWallet({ ns: ns075, relayUrl: relay.url, room, rk: linkRk });
+    const impostor = await tunnelWallet({ ns: ns075, tunnelUrl: tunnel.url, room, rk: linkRk });
     await impostor.connect();
-    await page.navigate(`${SIGNER}?ch=relay&lang=en&s=h#relay=${encodeURIComponent(relay.url)}&room=${room}&rk=${linkRk}&v=1`);
+    await page.navigate(`${SIGNER}?ch=relay&lang=en&s=h#relay=${encodeURIComponent(tunnel.url)}&room=${room}&rk=${linkRk}&v=1`);
     const ended = await page.waitFor("window.__velaState.phase === 'ended'", 10000);
     const text = await page.text();
     check('wrong rk: the page refuses the requester and says so',
       ended && /not the wallet that made this link/.test(text), (await page.status()) || '');
     check('wrong rk: no code is ever shown', !(await page.ev('window.__velaState.code')) &&
       !(await page.ev("!!document.querySelector('.pairing-code')")));
-    const fromPage = relay.tap.filter((f) => f.room === room && f.from === 'signer');
+    const fromPage = tunnel.tap.filter((f) => f.room === room && f.from === 'signer');
     check('wrong rk: the page sent its hello and nothing sealed', fromPage.length === 1 && !fromPage[0].isBinary);
     check('wrong rk: the page left the room', await (async () => {
       for (let i = 0; i < 40; i++) {
-        if (impostor.relayFrames.includes('left')) return true;
+        if (impostor.tunnelFrames.includes('left')) return true;
         await new Promise((r) => setTimeout(r, 100));
       }
       return false;
@@ -357,7 +357,7 @@ try {
 } finally {
   browser.kill();
   await registry.close();
-  await relay.close();
+  await tunnel.close();
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} checks passed`);
   process.exit(passed === results.length ? 0 : 1);

@@ -81,7 +81,7 @@ fun ClearSignerSheets(
  *
  * The page can be on this phone (a tab over the app, on its own loopback), on
  * another device entirely — a laptop's browser holding the passkey, reached
- * through the blind relay — or on a browser in the same room, which connects
+ * through the blind tunnel — or on a browser in the same room, which connects
  * to this phone over Bluetooth with no server in between at all. All three are
  * the same route as far as the wallet is concerned; only the wire differs, so
  * this is one question with three answers rather than three rows in the method
@@ -189,8 +189,8 @@ fun ClearSignerWhereSheet(
  * The pairing sheet: the link as a QR code, the link itself to copy, and the
  * line that says we are waiting for the other device.
  *
- * The fragment carries the relay, the room and `rk` — the fingerprint of this
- * wallet's session key — and a fragment never reaches a server, so the relay
+ * The fragment carries the tunnel, the room and `rk` — the fingerprint of this
+ * wallet's session key — and a fragment never reaches a server, so the tunnel
  * learns nothing from the link even if somebody pastes it into a chat.
  */
 @OptIn(ExperimentalMaterial3Api::class)

@@ -68,12 +68,12 @@
    "pageForeign": "Passkey Anda milik getvela.app. Halaman di domain lain dapat menampilkan permintaan tetapi tidak dapat menandatanganinya.",
    "pageReset": "Gunakan halaman resmi",
    "pageSave": "Simpan",
-   "relayTitle": "Relay",
-   "relaySubtitle": "Penyandingan dengan perangkat lain melewati relay ini. Relay hanya meneruskan pesan yang terenkripsi.",
-   "relayOfficial": "Resmi",
-   "relayInvalid": "Itu bukan alamat relay.",
-   "relayInsecure": "Gunakan alamat wss://, atau ws:// di loopback perangkat ini sendiri.",
-   "relayReset": "Gunakan relay resmi"
+   "tunnelTitle": "Tunnel",
+   "tunnelSubtitle": "Penyandingan dengan perangkat lain melewati tunnel ini. Tunnel hanya meneruskan pesan yang terenkripsi.",
+   "tunnelOfficial": "Resmi",
+   "tunnelInvalid": "Itu bukan alamat tunnel.",
+   "tunnelInsecure": "Gunakan alamat wss://, atau ws:// di loopback perangkat ini sendiri.",
+   "tunnelReset": "Gunakan tunnel resmi"
   },
   "advanced": {
    "networksTitle": "Jaringan",
@@ -1390,7 +1390,7 @@
    "clearSignerCode": "Pastikan perangkat lain menampilkan kode yang sama: {{code}}",
    "clearSignerCodeConfirm": "Kodenya cocok",
    "clearSignerCopyLink": "Salin tautan",
-   "clearSignerRelayDown": "Relay tidak dapat dijangkau. Coba lagi, atau gunakan Clear Signer di perangkat ini."
+   "clearSignerTunnelDown": "Tunnel tidak dapat dijangkau. Coba lagi, atau gunakan Clear Signer di perangkat ini."
   },
   "signingApprove": {
    "resultingTotal": "Total izin belanja baru",

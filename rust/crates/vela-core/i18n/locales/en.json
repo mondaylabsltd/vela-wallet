@@ -68,12 +68,12 @@
       "pageForeign": "Your passkeys belong to getvela.app. A page on another domain can show a request but cannot sign it.",
       "pageReset": "Use the official page",
       "pageSave": "Save",
-      "relayTitle": "Relay",
-      "relaySubtitle": "Pairing with another device goes through this relay. It only ever passes on encrypted messages.",
-      "relayOfficial": "Official",
-      "relayInvalid": "That is not a relay address.",
-      "relayInsecure": "Use a wss:// address, or ws:// on this device's own loopback.",
-      "relayReset": "Use the official relay"
+      "tunnelTitle": "Tunnel",
+      "tunnelSubtitle": "Pairing with another device goes through this tunnel. It only ever passes on encrypted messages.",
+      "tunnelOfficial": "Official",
+      "tunnelInvalid": "That is not a tunnel address.",
+      "tunnelInsecure": "Use a wss:// address, or ws:// on this device's own loopback.",
+      "tunnelReset": "Use the official tunnel"
     },
     "advanced": {
       "networksTitle": "Networks",

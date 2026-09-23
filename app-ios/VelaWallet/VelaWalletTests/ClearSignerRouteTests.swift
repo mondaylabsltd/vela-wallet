@@ -9,9 +9,9 @@
 //
 //  - a session of several requests on one page visit — create, then that
 //    key's member proof, then `bye` — spoken to the way the page speaks to it;
-//  - the relay requester, against the shared vectors
+//  - the tunnel requester, against the shared vectors
 //    (`rust/crates/vela-core/tests/clear-signer/secure-session.json`) and
-//    against a fake relay;
+//    against a fake tunnel;
 //  - the create and sign-in choosers listing four routes, and the signing
 //    sheet five;
 //  - `signer_origin` round-tripping through the account record and taking the
@@ -344,11 +344,11 @@ struct ClearSignerSessionTests {
     }
 }
 
-// MARK: - The relay requester
+// MARK: - The tunnel requester
 
-/// A relay socket that plays a script: what it hands the wallet, and what the
+/// A tunnel socket that plays a script: what it hands the wallet, and what the
 /// wallet handed it.
-final class FakeRelaySocket: ClearSignerSocket {
+final class FakeTunnelSocket: ClearSignerSocket {
     private var inbound: [ClearSignerFrame]
     private(set) var sent: [ClearSignerFrame] = []
     private(set) var closed = false
@@ -372,7 +372,7 @@ final class FakeRelaySocket: ClearSignerSocket {
 }
 
 @MainActor
-struct ClearSignerRelayTests {
+struct ClearSignerTunnelTests {
 
     /// One case of the shared session vectors.
     struct Vector {
@@ -395,7 +395,7 @@ struct ClearSignerRelayTests {
             .appendingPathComponent("rust/crates/vela-core/tests/clear-signer/secure-session.json")
         let json = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url))) as? [String: Any]
         let cases = (json?["cases"] as? [[String: Any]] ?? []).filter {
-            $0["label"] as? String == "vela-relay/1"
+            $0["label"] as? String == "vela-tunnel/1"
         }
         return cases.map { item in
             let requester = item["requester"] as? [String: Any] ?? [:]
@@ -422,7 +422,7 @@ struct ClearSignerRelayTests {
 
     static func unhex(_ text: String) -> Data { UserOpSpine.unhex(text) }
 
-    /// The wallet's side of the relay session, byte for byte against the
+    /// The wallet's side of the tunnel session, byte for byte against the
     /// vectors the page is pinned to: the requester's key, the `rk` its link
     /// carries, the six digits both screens show, and every message sealed and
     /// opened in order.
@@ -448,7 +448,7 @@ struct ClearSignerRelayTests {
             #expect(ours["role"] as? String == "requester")
             #expect(ours["app"] as? String == vector.app)
 
-            let session = try handshake.complete(peerHello: vector.signerHello, relay: true)
+            let session = try handshake.complete(peerHello: vector.signerHello, tunnel: true)
             #expect(session.code() == vector.code, "the two screens would show different digits")
             for message in vector.messages {
                 if message.fromRequester {
@@ -460,14 +460,14 @@ struct ClearSignerRelayTests {
         }
     }
 
-    /// The pairing link the QR carries: the page's own address, the relay, the
+    /// The pairing link the QR carries: the page's own address, the tunnel, the
     /// room, and the `rk` that lets the PAGE refuse a stand-in wallet.
     @Test func thePairingLinkCarriesTheRoomAndTheRequestersFingerprint() throws {
         let vector = try #require(Self.vectors.first)
         var draws = [Data(repeating: 0x07, count: 16), vector.requesterSecret, vector.requesterNonce]
-        let conversation = try #require(ClearSignerRelayConversation(
+        let conversation = try #require(ClearSignerTunnelConversation(
             signerUrl: "https://sign.getvela.app/",
-            relay: "wss://relay.getvela.app",
+            tunnel: "wss://tunnel.getvela.app",
             app: vector.app,
             random: { _ in draws.removeFirst() },
             openSocket: { _ in nil }
@@ -475,28 +475,28 @@ struct ClearSignerRelayTests {
         #expect(conversation.link.hasPrefix("https://sign.getvela.app/"))
         #expect(conversation.link.contains("rk=\(vector.rk)"))
         #expect(conversation.link.contains("&v=1"))
-        let room = try #require(clearSignerRelayRoom(random: Data(repeating: 0x07, count: 16)))
+        let room = try #require(clearSignerTunnelRoom(random: Data(repeating: 0x07, count: 16)))
         #expect(conversation.link.contains("room=\(room)"))
-        #expect(conversation.roomUrl == "wss://relay.getvela.app/v1/rooms/\(room)?role=requester")
+        #expect(conversation.roomUrl == "wss://tunnel.getvela.app/v1/rooms/\(room)?role=requester")
     }
 
-    /// Against a relay that only forwards frames: the wallet waits for
+    /// Against a tunnel that only forwards frames: the wallet waits for
     /// `joined`, answers the page's hello with its own, shows the code the
     /// vectors pin — and then seals its request as a BINARY frame in the
-    /// requester's direction, so nothing readable ever reaches the relay.
-    @Test func theWalletPairsThroughARelayAndSealsEverythingAfterTheHandshake() async throws {
+    /// requester's direction, so nothing readable ever reaches the tunnel.
+    @Test func theWalletPairsThroughATunnelAndSealsEverythingAfterTheHandshake() async throws {
         let vector = try #require(Self.vectors.first)
         var draws = [Data(repeating: 0x07, count: 16), vector.requesterSecret, vector.requesterNonce]
-        let socket = FakeRelaySocket([
+        let socket = FakeTunnelSocket([
             .text(#"{"v":1,"relay":"joined"}"#),
             .text(vector.signerHello),
             // The vectors' first signer message, under the same key: opening
             // it is the proof that this end derived the session correctly.
             .binary(vector.messages.first { !$0.fromRequester }?.sealed ?? Data()),
         ])
-        let conversation = try #require(ClearSignerRelayConversation(
+        let conversation = try #require(ClearSignerTunnelConversation(
             signerUrl: "https://sign.getvela.app/",
-            relay: "wss://relay.getvela.app",
+            tunnel: "wss://tunnel.getvela.app",
             app: vector.app,
             random: { _ in draws.removeFirst() },
             openSocket: { _ in socket },
@@ -515,7 +515,7 @@ struct ClearSignerRelayTests {
         let vectorKey = try CoreJSON.object(vector.requesterHello)["pk"] as? String
         #expect(ourKey == vectorKey)
 
-        // The request. The relay sees a binary frame whose IV says "requester
+        // The request. The tunnel sees a binary frame whose IV says "requester
         // → signer, message 1" and nothing else.
         let ending = await conversation.send(.signature(
             request: #"{"id":"e6f3","intent":{"method":"personal_sign","params":[],"origin":""},"context":{}}"#,
@@ -529,7 +529,7 @@ struct ClearSignerRelayTests {
         #expect(sealed.prefix(4) == Data("P2C.".utf8))
         #expect(sealed.count > 12 + 16, "IV, ciphertext and tag")
         #expect(!ClearSignerFixture.hex(sealed).contains("706572736f6e616c5f7369676e"),
-                "the relay must never see `personal_sign` in the clear")
+                "the tunnel must never see `personal_sign` in the clear")
 
         // The answer opened — and then the core refused it, because the
         // vectors' `result` carries no signature. What matters here is that it
@@ -551,17 +551,17 @@ struct ClearSignerRelayTests {
         #expect(farewell.prefix(4) == Data("P2C.".utf8))
     }
 
-    /// A relay that never pairs the two ends: no code, and the wallet says so
+    /// A tunnel that never pairs the two ends: no code, and the wallet says so
     /// rather than sitting on a spinner — the sheet offers "this device" again.
-    @Test func aRelayThatNeverPairsAnswersNothing() async throws {
+    @Test func aTunnelThatNeverPairsAnswersNothing() async throws {
         let vector = try #require(Self.vectors.first)
         var draws = [Data(repeating: 0x07, count: 16), vector.requesterSecret, vector.requesterNonce]
-        let conversation = try #require(ClearSignerRelayConversation(
+        let conversation = try #require(ClearSignerTunnelConversation(
             signerUrl: "https://sign.getvela.app/",
-            relay: "wss://relay.getvela.app",
+            tunnel: "wss://tunnel.getvela.app",
             app: vector.app,
             random: { _ in draws.removeFirst() },
-            openSocket: { _ in FakeRelaySocket([.text(#"{"v":1,"relay":"joined"}"#)]) }
+            openSocket: { _ in FakeTunnelSocket([.text(#"{"v":1,"relay":"joined"}"#)]) }
         ))
         #expect(await conversation.pair() == nil)
     }
@@ -570,11 +570,11 @@ struct ClearSignerRelayTests {
     /// did not slide is a decline (never an error), and everything else keeps
     /// the page's reason.
     @Test func thePagesRefusalCodesKeepTheirMeaning() {
-        #expect(ClearSignerRelayConversation.refusal(code: "user_rejected") == .declined)
-        #expect(ClearSignerRelayConversation.refusal(code: "") == .declined)
-        #expect(ClearSignerRelayConversation.refusal(code: "refused") == .pageRefused(code: "refused"))
-        #expect(ClearSignerNotice(ClearSignerRelayConversation.refusal(code: "refused")) == .refused)
-        #expect(ClearSignerNotice(ClearSignerRelayConversation.refusal(code: "")) == .closed)
+        #expect(ClearSignerTunnelConversation.refusal(code: "user_rejected") == .declined)
+        #expect(ClearSignerTunnelConversation.refusal(code: "") == .declined)
+        #expect(ClearSignerTunnelConversation.refusal(code: "refused") == .pageRefused(code: "refused"))
+        #expect(ClearSignerNotice(ClearSignerTunnelConversation.refusal(code: "refused")) == .refused)
+        #expect(ClearSignerNotice(ClearSignerTunnelConversation.refusal(code: "")) == .closed)
     }
 }
 
@@ -611,42 +611,42 @@ struct ClearSignerChooserTests {
         #expect(offered.dropLast().allSatisfy { SigningLive.signMethodDetail($0, loc: loc) == nil })
     }
 
-    /// Settings' relay row, beside the page row: the value is "official" or
+    /// Settings' tunnel row, beside the page row: the value is "official" or
     /// the host, and every verdict under the field is the core's.
-    @Test func settingsShowsTheRelayBesideTheSignerPage() throws {
+    @Test func settingsShowsTheTunnelBesideTheSignerPage() throws {
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         let executor = SignPrefExecutor(store: store)
         let core = SignPrefCore()
         let base = SettingsFixtures.build(.st1, loc: loc)
 
         var view = try Self.run(core, executor, ["type": "refresh"])
-        #expect(view.relayUrlIsDefault && view.relayUrl == clearSignerDefaultRelay())
+        #expect(view.tunnelUrlIsDefault && view.tunnelUrl == clearSignerDefaultTunnel())
         var model = SettingsLive.withSignPref(view, on: base, loc: loc)
-        #expect(model.sections.flatMap(\.rows).first { $0.id == SettingsFixtures.relayRow }?.value == "官方")
-        #expect(model.relay?.reset == nil, "nothing to put back while it is the official one")
+        #expect(model.sections.flatMap(\.rows).first { $0.id == SettingsFixtures.tunnelRow }?.value == "官方")
+        #expect(model.tunnel?.reset == nil, "nothing to put back while it is the official one")
 
         // Refused: nothing stored, and the sheet says why.
-        view = try Self.run(core, executor, ["type": "relay_url_submitted", "text": "ws://192.168.1.4/"])
-        #expect(view.relayUrlError == "insecure")
-        #expect(store.readString(VelaStore.Key.clearSignerRelay) == nil)
+        view = try Self.run(core, executor, ["type": "tunnel_url_submitted", "text": "ws://192.168.1.4/"])
+        #expect(view.tunnelUrlError == "insecure")
+        #expect(store.readString(VelaStore.Key.clearSignerTunnel) == nil)
         model = SettingsLive.withSignPref(view, on: base, loc: loc)
-        #expect(model.relay?.error == "请使用 wss:// 地址，或本机回环地址上的 ws://。")
+        #expect(model.tunnel?.error == "请使用 wss:// 地址，或本机回环地址上的 ws://。")
 
-        view = try Self.run(core, executor, ["type": "relay_url_submitted", "text": "wss://relay.example/"])
-        #expect(view.relayUrlError == nil && !view.relayUrlIsDefault)
-        #expect(store.readString(VelaStore.Key.clearSignerRelay) == "wss://relay.example")
+        view = try Self.run(core, executor, ["type": "tunnel_url_submitted", "text": "wss://tunnel.example/"])
+        #expect(view.tunnelUrlError == nil && !view.tunnelUrlIsDefault)
+        #expect(store.readString(VelaStore.Key.clearSignerTunnel) == "wss://tunnel.example")
         model = SettingsLive.withSignPref(view, on: base, loc: loc)
         #expect(model.sections.flatMap(\.rows)
-            .first { $0.id == SettingsFixtures.relayRow }?.value == "relay.example")
-        #expect(model.relay?.reset == "使用官方中继")
+            .first { $0.id == SettingsFixtures.tunnelRow }?.value == "tunnel.example")
+        #expect(model.tunnel?.reset == "使用官方隧道")
 
         // A second launch reads it back under its own key.
         let again = try Self.run(SignPrefCore(), SignPrefExecutor(store: store), ["type": "refresh"])
-        #expect(again.relayUrl == "wss://relay.example" && !again.relayUrlIsDefault)
+        #expect(again.tunnelUrl == "wss://tunnel.example" && !again.tunnelUrlIsDefault)
 
-        view = try Self.run(core, executor, ["type": "relay_url_reset"])
-        #expect(view.relayUrlIsDefault)
-        #expect(store.readString(VelaStore.Key.clearSignerRelay) == nil)
+        view = try Self.run(core, executor, ["type": "tunnel_url_reset"])
+        #expect(view.tunnelUrlIsDefault)
+        #expect(store.readString(VelaStore.Key.clearSignerTunnel) == nil)
     }
 
     /// Drives the machine the way `CoreStore` does — dispatch, perform each

@@ -6,9 +6,11 @@
 //                                                    and session.endReason says why
 //   session.end(reason)   the page ends it (says `bye` where the channel can)
 //   session.persistent    true when it carries several requests in order
-//                         (loopback WebSocket, postMessage, relay, BLE); the
+//                         (loopback WebSocket, postMessage, tunnel, BLE); the
 //                         URL fragment and the extension carry exactly one
 //   session.channel       'post' | 'url' | 'ws' | 'ext' | 'ble' | 'relay'
+//                         ('relay' is the tunnel: the `?ch=` token is protocol,
+//                          and the 2026-09-23 rename stopped at the wire)
 //   session.answered      how many requests have been answered
 //
 // and every request has one shape:
@@ -468,28 +470,28 @@ window.VelaCS = window.VelaCS || {};
     });
   }
 
-  // --- 5. cross-device: the relay ----------------------------------------------
+  // --- 5. cross-device: the tunnel ---------------------------------------------
 
-  function fromRelay(options) {
-    var link = ns.transport.relay.parseLink(location.hash);
+  function fromTunnel(options) {
+    var link = ns.transport.tunnel.parseLink(location.hash);
     if (!link) return null;
     scrubFragment();
 
     var session = new Session('relay', true, options);
     if (!link.valid) {
-      session.finish('error', 'ui.relayBadLink');
+      session.finish('error', 'ui.tunnelBadLink');
       return Promise.resolve(session);
     }
     var ENDS = {
-      foreign: 'ui.relayForeign',
-      expired: 'ui.relayExpired',
-      taken: 'ui.relayTaken',
-      bad: 'ui.relayBadLink',
-      closed: 'ui.relayClosed',
+      foreign: 'ui.tunnelForeign',
+      expired: 'ui.tunnelExpired',
+      taken: 'ui.tunnelTaken',
+      bad: 'ui.tunnelBadLink',
+      closed: 'ui.tunnelClosed',
     };
-    var channel = ns.transport.relay.connect(link, {
-      onOpen: function () { session.emit('onState', 'relayWaiting'); },
-      onJoined: function () { session.emit('onState', 'relayJoined'); },
+    var channel = ns.transport.tunnel.connect(link, {
+      onOpen: function () { session.emit('onState', 'tunnelWaiting'); },
+      onJoined: function () { session.emit('onState', 'tunnelJoined'); },
       onCode: function (code) {
         session.comparisonCode = code;
         session.emit('onCode', code);
@@ -498,7 +500,7 @@ window.VelaCS = window.VelaCS || {};
         // The keys that request was sealed under are gone with the wallet.
         session.comparisonCode = null;
         session.lose();
-        session.emit('onState', 'relayLeft');
+        session.emit('onState', 'tunnelLeft');
       },
       onMessage: function (message) {
         if (message.t === 'bye') {
@@ -527,11 +529,11 @@ window.VelaCS = window.VelaCS || {};
       },
       onEnd: function (reason) {
         if (reason === 'closed' && session.received) session.finish('closed');
-        else session.finish('error', ENDS[reason] || 'ui.relayClosed');
+        else session.finish('error', ENDS[reason] || 'ui.tunnelClosed');
       },
-    }, options.relay || {});
+    }, options.tunnel || {});
     session.close = function (reason) { channel.close(reason || 'done'); };
-    session.relay = channel;
+    session.tunnel = channel;
     return Promise.resolve(session);
   }
 
@@ -550,7 +552,7 @@ window.VelaCS = window.VelaCS || {};
       ws: function () { return fromWebSocket(options); },
       ext: function () { return fromExtension(options); },
       ble: function () { return fromBle(options); },
-      relay: function () { return fromRelay(options); },
+      relay: function () { return fromTunnel(options); },
     };
 
     if (forced) {
@@ -587,6 +589,6 @@ window.VelaCS = window.VelaCS || {};
     fromWebSocket: fromWebSocket,
     fromExtension: fromExtension,
     fromBle: fromBle,
-    fromRelay: fromRelay,
+    fromTunnel: fromTunnel,
   };
 })(window.VelaCS);

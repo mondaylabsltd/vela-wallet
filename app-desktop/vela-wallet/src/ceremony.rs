@@ -323,7 +323,7 @@ impl CeremonyChannel {
         if let Ok(mut slot) = self.qr.lock() {
             *slot = None;
         }
-        // A page visit the flow was holding open — and the port or the relay
+        // A page visit the flow was holding open — and the port or the tunnel
         // room under it — goes down with the flow.
         self.clear_signer.close();
         // A scan still waiting for a phone must not outlive the flow by up to

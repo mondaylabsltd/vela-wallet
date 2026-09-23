@@ -6,7 +6,7 @@
 // implementation of sections 1–4 and nothing more.
 //
 // Zero dependencies: framing is hand-rolled here; the handshake and the
-// AES-GCM session are lib/transport/secure.js, shared with the relay and pinned
+// AES-GCM session are lib/transport/secure.js, shared with the tunnel and pinned
 // against vela-core by samples/secure-vectors.mjs.
 window.VelaCS = window.VelaCS || {};
 (function (ns) {
@@ -213,7 +213,7 @@ window.VelaCS = window.VelaCS || {};
     // wallet had already used 1, and a conforming peer drops a message whose
     // `n` did not rise. That is what the radio pass saw: every frame arrived,
     // the session opened the message, and the wallet threw it away
-    // ("a message whose n did not rise was dropped"). `relay.js` had it right;
+    // ("a message whose n did not rise was dropped"). `tunnel.js` had it right;
     // this transport did not.
     object.n = Math.max(this.outgoing, this.lastSeen) + 1;
     this.outgoing = object.n;

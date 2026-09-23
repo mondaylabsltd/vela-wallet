@@ -220,7 +220,7 @@
       "clearSignerCode": "Diğer cihazda aynı kodun göründüğünü kontrol edin: {{code}}",
       "clearSignerCodeConfirm": "Kodlar eşleşiyor",
       "clearSignerCopyLink": "Bağlantıyı kopyala",
-      "clearSignerRelayDown": "Aktarıcıya ulaşılamadı. Tekrar deneyin ya da bu cihazdaki Clear Signer'ı kullanın."
+      "clearSignerTunnelDown": "Tünele ulaşılamadı. Tekrar deneyin ya da bu cihazdaki Clear Signer'ı kullanın."
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

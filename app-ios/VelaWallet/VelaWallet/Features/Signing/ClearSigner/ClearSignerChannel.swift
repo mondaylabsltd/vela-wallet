@@ -62,8 +62,8 @@ enum ClearSignerAsk {
 }
 
 /// A page that is holding this flow's session: the loopback tab on this
-/// device (`ClearSignerChannel`), or the relay to another device
-/// (`ClearSignerRelayConversation`).
+/// device (`ClearSignerChannel`), or the tunnel to another device
+/// (`ClearSignerTunnelConversation`).
 protocol ClearSignerConversation: AnyObject {
     /// Opens whatever has to be opened and puts the FIRST request. `nil` when
     /// nothing could be opened.
@@ -78,7 +78,7 @@ protocol ClearSignerConversation: AnyObject {
 /// that goes out, the verdict that comes back, and the page's refusal codes in
 /// the core's vocabulary.
 ///
-/// The relay (`ClearSignerRelayConversation`) and the BLE peripheral
+/// The tunnel (`ClearSignerTunnelConversation`) and the BLE peripheral
 /// (`ClearSignerBleConversation`) run the same core session; the only thing
 /// that differs between them is what carries the bytes — a WebSocket frame or
 /// a GATT notification. So the JSON lives here once rather than twice, where

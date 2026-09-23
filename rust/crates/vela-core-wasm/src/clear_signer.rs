@@ -311,35 +311,43 @@ pub fn clear_signer_verify_ceremony(
     .to_string()
 }
 
-#[wasm_bindgen(js_name = clearSignerDefaultRelay)]
-pub fn clear_signer_default_relay() -> String {
-    clear_signer::DEFAULT_RELAY_URL.to_owned()
+// The five exports below say `tunnel`, the name the owner gave this service on
+// 2026-09-23. A `js_name` is baked into the wasm module's export table, so they
+// moved only once `rust/scripts/build-web.mjs` had rebuilt `rust/pkg-web/` in
+// the same commit — and the uniffi bridge moved with them, so the two FFI
+// surfaces still agree. Nothing here is on the WIRE: the pairing link's
+// `?ch=relay` and the tunnel's `"relay"` frame key are, and they stay
+// (contracts/tunnel.md, the header).
+
+#[wasm_bindgen(js_name = clearSignerDefaultTunnel)]
+pub fn clear_signer_default_tunnel() -> String {
+    clear_signer::DEFAULT_TUNNEL_URL.to_owned()
 }
 
-/// A relay address, normalised, or `undefined` when it cannot be used.
-#[wasm_bindgen(js_name = clearSignerRelayUrl)]
-pub fn clear_signer_relay_url(input: &str) -> Option<String> {
-    clear_signer::relay_url(input).ok()
+/// A tunnel address, normalised, or `undefined` when it cannot be used.
+#[wasm_bindgen(js_name = clearSignerTunnelUrl)]
+pub fn clear_signer_tunnel_url(input: &str) -> Option<String> {
+    clear_signer::tunnel_url(input).ok()
 }
 
 /// A room id from 16 random bytes.
-#[wasm_bindgen(js_name = clearSignerRelayRoom)]
-pub fn clear_signer_relay_room(random: &[u8]) -> Option<String> {
+#[wasm_bindgen(js_name = clearSignerTunnelRoom)]
+pub fn clear_signer_tunnel_room(random: &[u8]) -> Option<String> {
     let bytes: [u8; 16] = random.try_into().ok()?;
-    Some(clear_signer::relay_room(&bytes))
+    Some(clear_signer::tunnel_room(&bytes))
 }
 
-#[wasm_bindgen(js_name = clearSignerRelayRoomUrl)]
-pub fn clear_signer_relay_room_url(relay: &str, room: &str) -> String {
-    clear_signer::relay_room_url(relay, room, "requester")
+#[wasm_bindgen(js_name = clearSignerTunnelRoomUrl)]
+pub fn clear_signer_tunnel_room_url(tunnel: &str, room: &str) -> String {
+    clear_signer::tunnel_room_url(tunnel, room, "requester")
 }
 
-#[wasm_bindgen(js_name = clearSignerRelayLink)]
-pub fn clear_signer_relay_link(signer_url: &str, relay: &str, room: &str, rk: &str) -> String {
-    clear_signer::relay_link(signer_url, relay, room, rk)
+#[wasm_bindgen(js_name = clearSignerTunnelLink)]
+pub fn clear_signer_tunnel_link(signer_url: &str, tunnel: &str, room: &str, rk: &str) -> String {
+    clear_signer::tunnel_link(signer_url, tunnel, room, rk)
 }
 
-// The relay's end-to-end session is NOT exported here: the web wallet runs
+// The tunnel's end-to-end session is NOT exported here: the web wallet runs
 // it with the browser's own WebCrypto (ECDH, HKDF, AES-GCM), as the signer
 // page does, pinned by `vela-core/tests/clear-signer/secure-session.json`.
 // Linking the Rust session added ~120 KB to a module at its size ceiling.

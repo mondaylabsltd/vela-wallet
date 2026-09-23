@@ -220,6 +220,15 @@ The first three are Vela services that each expose a `/api/health` endpoint. The
 
 The **Exchange-Rate Source** is any USD-based FX API — the default is `https://vela-currency.getvela.app/v2/rates?base=USD`, served by [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency), Vela's small Frankfurter-compatible service (ECB daily reference rates, dual-runtime Deno / Cloudflare Workers). It's validated by returning a parseable USD-based rate set (not `/api/health`). A self-hosted [Frankfurter](https://frankfurter.dev) instance works as a drop-in alternative. Pin the base to USD (`?base=USD`), or every conversion is silently wrong. For the response shapes Vela accepts, the Chainlink fallback, and a porting guide, see [docs/fiat-price.md](docs/fiat-price.md).
 
+A fifth endpoint is **optional**, and only for the Clear Signer: signing a transaction on
+a *second* device pairs the two through a WebSocket **tunnel**, which forwards sealed
+frames and can read none of them. It lives in its own repository, `vela-tunnel` (a Rust
+room-rules crate plus two hosts — a distroless Docker image and a Cloudflare Worker), and
+the wallet reaches it by URL under **Settings > Sign with > Tunnel**. Anyone can run
+their own; the protocol is [specs/075-clear-signer-channel/contracts/tunnel.md](specs/075-clear-signer-channel/contracts/tunnel.md).
+Signing on the same device uses Bluetooth or the device's own loopback and needs no
+tunnel at all.
+
 ## Gas & Fee Model
 
 Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a **bundler** instead of being submitted directly by the user. This means:

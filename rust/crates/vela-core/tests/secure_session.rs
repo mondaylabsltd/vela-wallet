@@ -1,4 +1,4 @@
-//! Spec 075: the relay/BLE session, pinned for BOTH implementations — this
+//! Spec 075: the tunnel/BLE session, pinned for BOTH implementations — this
 //! crate's `clear_signer::secure` and the page's `lib/transport/secure.js`
 //! read the same `tests/clear-signer/secure-session.json`.
 //!
@@ -34,7 +34,7 @@ fn case(label: Label, name: &str, seeds: (u8, u8, u8, u8)) -> Value {
     assert_eq!(s.code(), r.code());
 
     let tail = |i: u8| match label {
-        Label::Relay => Tail::Counter,
+        Label::Tunnel => Tail::Counter,
         Label::Ble => Tail::MsgId(i),
     };
     let script: [(&str, &str); 4] = [
@@ -83,10 +83,10 @@ fn case(label: Label, name: &str, seeds: (u8, u8, u8, u8)) -> Value {
 
 fn vectors() -> Value {
     json!({
-        "about": "Spec 075: the Clear Signer's end-to-end session (relay.md §2, PROTOCOL.md §3). Hellos compare as JSON objects, not text.",
+        "about": "Spec 075: the Clear Signer's end-to-end session (tunnel.md §2, PROTOCOL.md §3). Hellos compare as JSON objects, not text.",
         "cases": [
-            case(Label::Relay, "relay-a", (0x11, 0x22, 0xa1, 0xb2)),
-            case(Label::Relay, "relay-b", (0x5a, 0x6b, 0x01, 0xfe)),
+            case(Label::Tunnel, "tunnel-a", (0x11, 0x22, 0xa1, 0xb2)),
+            case(Label::Tunnel, "tunnel-b", (0x5a, 0x6b, 0x01, 0xfe)),
             case(Label::Ble, "ble-a", (0x11, 0x22, 0xa1, 0xb2)),
         ],
     })

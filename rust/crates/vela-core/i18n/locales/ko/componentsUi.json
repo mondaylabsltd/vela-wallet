@@ -220,7 +220,7 @@
       "clearSignerCode": "다른 기기에 같은 코드가 표시되는지 확인하세요: {{code}}",
       "clearSignerCodeConfirm": "코드가 일치합니다",
       "clearSignerCopyLink": "링크 복사",
-      "clearSignerRelayDown": "릴레이에 연결할 수 없습니다. 다시 시도하거나 이 기기의 Clear Signer를 사용하세요."
+      "clearSignerTunnelDown": "터널에 연결할 수 없습니다. 다시 시도하거나 이 기기의 Clear Signer를 사용하세요."
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",

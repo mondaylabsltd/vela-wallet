@@ -4,7 +4,7 @@
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
 //! 1745 paths = 1656 leaf + 89 branch. Repeated per locale these key bytes
-//! would cost 693660 bytes; interned once they cost 47853.
+//! would cost 693765 bytes; interned once they cost 47860.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
@@ -426,11 +426,11 @@ pub(crate) static PATHS: [&str; 1745] = [
     "componentsUi.signing.clearSignerPairHint",
     "componentsUi.signing.clearSignerPairWaiting",
     "componentsUi.signing.clearSignerRefused",
-    "componentsUi.signing.clearSignerRelayDown",
     "componentsUi.signing.clearSignerReopen",
     "componentsUi.signing.clearSignerThisDevice",
     "componentsUi.signing.clearSignerTimeout",
     "componentsUi.signing.clearSignerTitle",
+    "componentsUi.signing.clearSignerTunnelDown",
     "componentsUi.signing.clearSignerWaiting",
     "componentsUi.signing.clearSignerWaitingHint",
     "componentsUi.signing.clearSignerWhere",
@@ -1589,14 +1589,14 @@ pub(crate) static PATHS: [&str; 1745] = [
     "settings.signing.pageSave",
     "settings.signing.pageSubtitle",
     "settings.signing.pageTitle",
-    "settings.signing.relayInsecure",
-    "settings.signing.relayInvalid",
-    "settings.signing.relayOfficial",
-    "settings.signing.relayReset",
-    "settings.signing.relaySubtitle",
-    "settings.signing.relayTitle",
     "settings.signing.subtitle",
     "settings.signing.title",
+    "settings.signing.tunnelInsecure",
+    "settings.signing.tunnelInvalid",
+    "settings.signing.tunnelOfficial",
+    "settings.signing.tunnelReset",
+    "settings.signing.tunnelSubtitle",
+    "settings.signing.tunnelTitle",
     "settings.storage",
     "settings.storage.caches",
     "settings.storage.clear",

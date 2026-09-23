@@ -48,7 +48,7 @@ describe('the store', () => {
 			type: 'stored',
 			method: null,
 			signer_url: null,
-			relay_url: null
+			tunnel_url: null
 		});
 	});
 
@@ -122,9 +122,9 @@ describe('the rows and sheets', () => {
 		signer_url_is_default: true,
 		signer_url_error: null,
 		signer_uses_wallet_passkeys: true,
-		relay_url: 'wss://relay.getvela.app',
-		relay_url_is_default: true,
-		relay_url_error: null,
+		tunnel_url: 'wss://tunnel.getvela.app',
+		tunnel_url_is_default: true,
+		tunnel_url_error: null,
 		...patch
 	});
 	const rows = (model: ReturnType<typeof buildMobileState>) =>
@@ -138,7 +138,7 @@ describe('the rows and sheets', () => {
 			'sign-with',
 			'clear-signer-page',
 			// Spec 075: how the Clear Signer is reached on another device.
-			'clear-signer-relay'
+			'clear-signer-tunnel'
 		]);
 	});
 
@@ -195,34 +195,34 @@ describe('the rows and sheets', () => {
 		expect(said('insecure').field.tone).toBe('error');
 	});
 
-	it('the relay row (spec 075): official by default, the host and a reset when it is not', () => {
+	it('the tunnel row (spec 075): official by default, the host and a reset when it is not', () => {
 		const official = withLiveSigning(buildMobileState('st1', m, IDENTICON), view({}), m);
-		expect(rows(official).find((r) => r.id === 'clear-signer-relay')?.value).toBe(
-			m.signing.relayOfficial
+		expect(rows(official).find((r) => r.id === 'clear-signer-tunnel')?.value).toBe(
+			m.signing.tunnelOfficial
 		);
-		expect(official.relayPage.title).toBe(m.signing.relayTitle);
-		expect(official.relayPage.subtitle).toBe(m.signing.relaySubtitle);
-		expect(official.relayPage.field.value).toBe('wss://relay.getvela.app');
-		expect(official.relayPage.reset).toBeUndefined();
-		// A relay sees nothing but ciphertext: there is no rpId line to draw.
-		expect(official.relayPage.foreign).toBeUndefined();
+		expect(official.tunnelPage.title).toBe(m.signing.tunnelTitle);
+		expect(official.tunnelPage.subtitle).toBe(m.signing.tunnelSubtitle);
+		expect(official.tunnelPage.field.value).toBe('wss://tunnel.getvela.app');
+		expect(official.tunnelPage.reset).toBeUndefined();
+		// A tunnel sees nothing but ciphertext: there is no rpId line to draw.
+		expect(official.tunnelPage.foreign).toBeUndefined();
 
 		const own = withLiveSigning(
 			buildMobileState('st1', m, IDENTICON),
-			view({ relay_url: 'ws://127.0.0.1:8787', relay_url_is_default: false }),
+			view({ tunnel_url: 'ws://127.0.0.1:8787', tunnel_url_is_default: false }),
 			m
 		);
-		expect(rows(own).find((r) => r.id === 'clear-signer-relay')?.value).toBe('127.0.0.1:8787');
-		expect(own.relayPage.field.value).toBe('ws://127.0.0.1:8787');
-		expect(own.relayPage.reset).toBe(m.signing.relayReset);
+		expect(rows(own).find((r) => r.id === 'clear-signer-tunnel')?.value).toBe('127.0.0.1:8787');
+		expect(own.tunnelPage.field.value).toBe('ws://127.0.0.1:8787');
+		expect(own.tunnelPage.reset).toBe(m.signing.tunnelReset);
 	});
 
-	it('the relay’s own refusals are worded under its field', () => {
+	it('the tunnel’s own refusals are worded under its field', () => {
 		const said = (error: string) =>
-			withLiveSigning(buildMobileState('st1', m, IDENTICON), view({ relay_url_error: error }), m)
-				.relayPage;
-		expect(said('invalid').error).toBe(m.signing.relayInvalid);
-		expect(said('insecure').error).toBe(m.signing.relayInsecure);
+			withLiveSigning(buildMobileState('st1', m, IDENTICON), view({ tunnel_url_error: error }), m)
+				.tunnelPage;
+		expect(said('invalid').error).toBe(m.signing.tunnelInvalid);
+		expect(said('insecure').error).toBe(m.signing.tunnelInsecure);
 		expect(said('insecure').field.tone).toBe('error');
 	});
 
@@ -244,8 +244,8 @@ describe('the rows and sheets', () => {
 			'security_key'
 		]);
 		expect(desktop.signing.page.reset).toBe(m.signing.pageReset);
-		// Spec 075: and the relay section, the same body as the phone's sheet.
-		expect(desktop.signing.relay.title).toBe(m.signing.relayTitle);
-		expect(desktop.signing.relay.field.value).toBe('wss://relay.getvela.app');
+		// Spec 075: and the tunnel section, the same body as the phone's sheet.
+		expect(desktop.signing.tunnel.title).toBe(m.signing.tunnelTitle);
+		expect(desktop.signing.tunnel.field.value).toBe('wss://tunnel.getvela.app');
 	});
 });

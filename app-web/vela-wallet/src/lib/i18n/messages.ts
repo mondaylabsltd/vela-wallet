@@ -230,7 +230,7 @@ const FLOW_CLEAR_SIGNER_KEYS = [
 	'componentsUi.signing.clearSignerCopyLink',
 	'componentsUi.signing.clearSignerCode',
 	'componentsUi.signing.clearSignerCodeConfirm',
-	'componentsUi.signing.clearSignerRelayDown'
+	'componentsUi.signing.clearSignerTunnelDown'
 ] as const;
 
 /** The transient status line the create machine reports. */

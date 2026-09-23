@@ -9,10 +9,10 @@
  * - **this device**: `postMessage` to a window this wallet opened. The only
  *   channel where the browser itself vouches for both origins, which is why
  *   the page lets a create through on it (PROTOCOL.md §10.2).
- * - **another device**: the relay (`contracts/relay.md`). The wallet draws a
+ * - **another device**: the tunnel (`contracts/tunnel.md`). The wallet draws a
  *   QR of the pairing link, the page joins the room, the two ends run the
- *   session in `relay/secure-session.ts`, and the person confirms the
- *   six-digit code on THIS side before anything is sent. The relay only ever
+ *   session in `tunnel/secure-session.ts`, and the person confirms the
+ *   six-digit code on THIS side before anything is sent. The tunnel only ever
  *   sees ciphertext.
  *
  * What a channel decides is only what a transport must: who may speak, which
@@ -23,9 +23,9 @@
  */
 
 import {
-	clearSignerRelayLink,
-	clearSignerRelayRoom,
-	clearSignerRelayRoomUrl
+	clearSignerTunnelLink,
+	clearSignerTunnelRoom,
+	clearSignerTunnelRoomUrl
 } from '$lib/core/kernels';
 import {
 	completeSession,
@@ -34,7 +34,7 @@ import {
 	requesterKey,
 	type RequesterKey,
 	type SecureSession
-} from './relay/secure-session';
+} from './tunnel/secure-session';
 
 /** One request's wait, as on every shell (contract §2–4). */
 export const CLEAR_SIGNER_TIMEOUT_MS = 5 * 60_000;
@@ -46,7 +46,7 @@ const CLOSED_POLL_MS = 500;
 const WINDOW_NAME = 'vela-clear-signer';
 const WINDOW_FEATURES = 'popup,width=460,height=760';
 
-/** What this wallet calls itself in the relay hello (relay.md §2.2). */
+/** What this wallet calls itself in the tunnel hello (tunnel.md §2.2). */
 const APP_NAME = 'vela-web/1';
 
 /**
@@ -74,7 +74,7 @@ export function signerPageUrl(base: string, channel = 'post'): string {
  *
  * `code` is the page's (`user_rejected` → `declined`, anything else →
  * `refused`) or the channel's own: `declined` (the page was closed or the
- * person cancelled), `timeout`, and `relay_down` (the room could not be
+ * person cancelled), `timeout`, and `tunnel_down` (the room could not be
  * reached or was lost for good).
  */
 export type ClearSignerReply =
@@ -92,7 +92,7 @@ export interface ClearSignerChannel {
 	end(): void;
 	/** The person cancelled: the request in flight is declined and the session ends. */
 	cancel(): void;
-	/** "Open the page again" — this-device only; the relay has nothing to reopen. */
+	/** "Open the page again" — this-device only; the tunnel has nothing to reopen. */
 	reopen(): void;
 	/** Ended: nothing more can be asked of it. */
 	readonly ended: boolean;
@@ -285,11 +285,11 @@ function refusal(code: string, detail: string): ClearSignerReply {
 }
 
 // ---------------------------------------------------------------------------
-// The relay — another device (contracts/relay.md)
+// The tunnel — another device (contracts/tunnel.md)
 // ---------------------------------------------------------------------------
 
-/** What the relay channel needs of a WebSocket; `window.WebSocket`, or a test's. */
-export interface RelaySocket {
+/** What the tunnel channel needs of a WebSocket; `window.WebSocket`, or a test's. */
+export interface TunnelSocket {
 	send(data: string | ArrayBufferView): void;
 	close(code?: number, reason?: string): void;
 	onopen: (() => void) | null;
@@ -299,9 +299,9 @@ export interface RelaySocket {
 	binaryType?: string;
 }
 
-export interface RelayChannelOptions {
-	/** The relay (`SignPrefView.relay_url`). */
-	relayUrl: string;
+export interface TunnelChannelOptions {
+	/** The tunnel (`SignPrefView.tunnel_url`). */
+	tunnelUrl: string;
 	/** The page the other device is asked to open. */
 	signerUrl: string;
 	/** The pairing link is ready to be shown as a QR and copied. */
@@ -314,12 +314,12 @@ export interface RelayChannelOptions {
 	onCode(code: string | null): void;
 	/** The room could not be reached, or was lost for good. */
 	onDown?(reason: string): void;
-	sockets?: (url: string) => RelaySocket;
+	sockets?: (url: string) => TunnelSocket;
 	timeoutMs?: number;
 }
 
-/** The relay channel, plus the one thing only a person can do: confirm the code. */
-export interface RelayChannel extends ClearSignerChannel {
+/** The tunnel channel, plus the one thing only a person can do: confirm the code. */
+export interface TunnelChannel extends ClearSignerChannel {
 	/** The person says both screens show the same digits. Nothing is sent before this. */
 	confirm(): void;
 	/** The link this pairing is for — a QR, and copyable. */
@@ -331,18 +331,18 @@ export interface RelayChannel extends ClearSignerChannel {
  *
  * Nothing is sent until `confirm()`: the six-digit code is the only thing
  * standing between this wallet and a page that is not the one the person
- * opened (relay.md §2.4), and for a CREATE that matters most — a substituted
+ * opened (tunnel.md §2.4), and for a CREATE that matters most — a substituted
  * page would hand the wallet somebody else's key.
  */
-export async function openRelayChannel(options: RelayChannelOptions): Promise<RelayChannel> {
+export async function openTunnelChannel(options: TunnelChannelOptions): Promise<TunnelChannel> {
 	const timeoutMs = options.timeoutMs ?? CLEAR_SIGNER_TIMEOUT_MS;
 	const random = new Uint8Array(16);
 	crypto.getRandomValues(random);
-	const room = clearSignerRelayRoom(random);
-	if (room === undefined) throw new Error('the relay room could not be built');
+	const room = clearSignerTunnelRoom(random);
+	if (room === undefined) throw new Error('the tunnel room could not be built');
 	const key: RequesterKey = await requesterKey();
 	const rk = await keyFingerprint(key.publicKey);
-	const link = clearSignerRelayLink(options.signerUrl, options.relayUrl, room, rk);
+	const link = clearSignerTunnelLink(options.signerUrl, options.tunnelUrl, room, rk);
 
 	let session: SecureSession | null = null;
 	let confirmed = false;
@@ -352,8 +352,8 @@ export async function openRelayChannel(options: RelayChannelOptions): Promise<Re
 	let outgoing = 0;
 	let lastSeen = 0;
 
-	const socket: RelaySocket = (options.sockets ?? defaultSocket)(
-		clearSignerRelayRoomUrl(options.relayUrl, room)
+	const socket: TunnelSocket = (options.sockets ?? defaultSocket)(
+		clearSignerTunnelRoomUrl(options.tunnelUrl, room)
 	);
 	socket.binaryType = 'arraybuffer';
 
@@ -392,7 +392,7 @@ export async function openRelayChannel(options: RelayChannelOptions): Promise<Re
 		if (!confirmed || session === null || pending === null) return;
 		const { id, request } = pending;
 		void send({ t: 'intent', id, intent: request.intent, context: request.context }).catch(() =>
-			finish('relay_down', 'the request could not be sent')
+			finish('tunnel_down', 'the request could not be sent')
 		);
 	}
 
@@ -406,13 +406,13 @@ export async function openRelayChannel(options: RelayChannelOptions): Promise<Re
 			session = next;
 			// Every pairing is confirmed on its own: a page that dropped out and
 			// came back is a new session, a new code, and a new look from the
-			// person (relay.md §2.4).
+			// person (tunnel.md §2.4).
 			confirmed = false;
 			outgoing = 0;
 			lastSeen = 0;
 			options.onCode(next.code);
 		} catch {
-			finish('relay_down', 'the pairing could not be established');
+			finish('tunnel_down', 'the pairing could not be established');
 		}
 	}
 
@@ -455,7 +455,10 @@ export async function openRelayChannel(options: RelayChannelOptions): Promise<Re
 				return;
 			}
 			if (!frame || typeof frame !== 'object') return;
-			// The relay's own frames carry a `relay` key; an end's never do.
+			// The tunnel's own frames carry a `relay` key; an end's never do. The
+			// key on the wire keeps the pre-rename spelling: it is read by a
+			// deployed page, a committed wasm and the hosts in their own
+			// repository, none of which this client can rename alone.
 			if (Object.prototype.hasOwnProperty.call(frame, 'relay')) {
 				if (frame.relay === 'left') {
 					// The other device is gone; the room waits for it. Whatever was
@@ -476,7 +479,7 @@ export async function openRelayChannel(options: RelayChannelOptions): Promise<Re
 		// 4408 expired/idle, 4409 role taken, 1009 too big: all of them mean
 		// this pairing is over, and the person is told so rather than left
 		// looking at a code nobody will match.
-		finish('relay_down', `the relay closed (${event.code})`);
+		finish('tunnel_down', `the tunnel closed (${event.code})`);
 	};
 	socket.onerror = () => {
 		/* `onclose` follows with the code */
@@ -489,7 +492,7 @@ export async function openRelayChannel(options: RelayChannelOptions): Promise<Re
 			return ended;
 		},
 		ask(request) {
-			if (ended) return Promise.resolve(refusal('relay_down', 'the pairing is over'));
+			if (ended) return Promise.resolve(refusal('tunnel_down', 'the pairing is over'));
 			if (pending !== null) {
 				return Promise.resolve(refusal('malformed', 'a request is already in flight'));
 			}
@@ -527,6 +530,6 @@ export async function openRelayChannel(options: RelayChannelOptions): Promise<Re
 	};
 }
 
-function defaultSocket(url: string): RelaySocket {
-	return new WebSocket(url) as unknown as RelaySocket;
+function defaultSocket(url: string): TunnelSocket {
+	return new WebSocket(url) as unknown as TunnelSocket;
 }

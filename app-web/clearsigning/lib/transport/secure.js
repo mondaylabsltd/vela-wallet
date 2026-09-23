@@ -1,15 +1,15 @@
 // The end-to-end session a cross-device channel runs: BLE (PROTOCOL.md §3) and
-// the relay (specs/075-clear-signer-channel/contracts/relay.md §2).
+// the tunnel (specs/075-clear-signer-channel/contracts/tunnel.md §2).
 //
 // P-256 ECDH → HKDF-SHA256 → AES-256-GCM, and a six-digit code both screens
 // show — the one place a stand-in on the path is caught. The channel's label
-// (`vela-ble/1`, `vela-relay/1`) goes into every derivation and every AAD, so a
+// (`vela-ble/1`, `vela-tunnel/1`) goes into every derivation and every AAD, so a
 // message from one channel can never be replayed into the other.
 //
 // Byte-identical to vela-core's `clear_signer::secure` (Rust), and pinned
 // against it by `rust/crates/vela-core/tests/clear-signer/secure-session.json`
 // (samples/secure-vectors.mjs). Nothing here knows about frames or sockets:
-// BLE adds its framing around it, the relay sends each sealed message as one
+// BLE adds its framing around it, the tunnel sends each sealed message as one
 // binary WebSocket frame.
 //
 // Roles are the BLE ones. The SIGNER is this page (BLE's central) and speaks
@@ -25,7 +25,7 @@ window.VelaCS = window.VelaCS || {};
 (function (ns) {
   'use strict';
 
-  var LABELS = { ble: 'vela-ble/1', relay: 'vela-relay/1' };
+  var LABELS = { ble: 'vela-ble/1', tunnel: 'vela-tunnel/1' };
 
   // --- bytes -----------------------------------------------------------------
 
@@ -287,7 +287,7 @@ window.VelaCS = window.VelaCS || {};
     return out;
   }
 
-  // The relay binds the IV's counter; BLE binds the frame's msgId (§3.5).
+  // The tunnel binds the IV's counter; BLE binds the frame's msgId (§3.5).
   Session.prototype.aad = function (direction, counter, tail) {
     var end = tail === undefined || tail === null ? counter.toString() : String(tail);
     return utf8(this.label + '|' + direction + '|' + end);

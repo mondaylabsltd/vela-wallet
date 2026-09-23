@@ -6,9 +6,9 @@
 **钥匙仪式**（创建、登录、证明，第 10 节）。清晰签名器是和「这台设备 / 手机或平板 /
 USB 安全密钥」平级的一条 passkey 通道（创始人，2026-09-22）。
 
-~~没有服务器。没有中继。跨设备走 BLE。~~ —— **已被创始人推翻（2026-09-22）**：跨设备走
-**中继**（WebSocket，第 7.5 节）或 **BLE**。中继是瞎的：它只转发两端加密好的字节
-（`specs/075-clear-signer-channel/contracts/relay.md`）。
+~~没有服务器。没有隧道。跨设备走 BLE。~~ —— **已被创始人推翻（2026-09-22）**：跨设备走
+**隧道**（WebSocket，第 7.5 节）或 **BLE**。隧道是瞎的：它只转发两端加密好的字节
+（`specs/075-clear-signer-channel/contracts/tunnel.md`）。
 
 ---
 
@@ -20,7 +20,7 @@ USB 安全密钥」平级的一条 passkey 通道（创始人，2026-09-22）。
 | 同浏览器的网页 dApp | Chrome 扩展 | `externally_connectable`（7.3） | ✅ 浏览器背书 | 一个 |
 | 同机的 Android / iOS / 桌面 App | 本页 | 回环 WebSocket（7.4） | ❌ 自述；一次性 token 证明「是打开本页的那个 App」 | 多个 |
 | 同机桌面 App（旧） | 本页 / 扩展 | URL 片段 + 回环回调（7.2） | ❌ 自述 | 一个 |
-| **任何一端，跨设备** | **另一台设备上的本页** | **中继**（7.5） | ❌ 自述；`rk` + 六位码证明「是那个钱包」 | 多个 |
+| **任何一端，跨设备** | **另一台设备上的本页** | **隧道**（7.5） | ❌ 自述；`rk` + 六位码证明「是那个钱包」 | 多个 |
 | 原生 App，跨设备 | 附近的 Chrome | **BLE GATT**（1–4） | ❌ 自述，但**邻近可证** | 多个 |
 
 同机的 App 不要用 BLE：蓝牙控制器一般扫不到本机自己发出的广播。桌面 App 正从 URL 片段
@@ -82,12 +82,12 @@ BLE 一次写不了几百字节，而一个批量意图可以有几 KB。每条�
 
 ## 3. 握手：ECDH + 数字比对
 
-BLE 自身的链路加密在各家实现上参差不齐，中继又不该看见任何东西，所以**我们自己加密**，
+BLE 自身的链路加密在各家实现上参差不齐，隧道又不该看见任何东西，所以**我们自己加密**，
 用的全是浏览器内建的 WebCrypto（P-256 ECDH + HKDF + AES-GCM），零依赖。
 
-BLE 和中继跑**同一份会话代码**：页面这边是 `lib/transport/secure.js`，钱包那边是
+BLE 和隧道跑**同一份会话代码**：页面这边是 `lib/transport/secure.js`，钱包那边是
 vela-core 的 `clear_signer::secure`（Rust）。**标签是参数**：BLE 用 `vela-ble/1`，
-中继用 `vela-relay/1`（下文写作 `<label>`）。两边由
+隧道用 `vela-tunnel/1`（下文写作 `<label>`）。两边由
 `rust/crates/vela-core/tests/clear-signer/secure-session.json` 的向量钉死
 （`node samples/secure-vectors.mjs`，Node 与 Chrome 各跑一遍）。
 
@@ -123,7 +123,7 @@ vela-core 的 `clear_signer::secure`（Rust）。**标签是参数**：BLE 用 `
    ```
    IV  = 4 字节方向标签（"C2P." / "P2C."）‖ 8 字节计数器（big-endian，每方向各自从 1 递增，绝不重用）
    AAD = "<label>|" ‖ 方向("c2p"/"p2c") ‖ "|" ‖ 尾巴
-         尾巴：BLE 是这条消息帧的 msgId；中继是 IV 里的计数器（十进制）
+         尾巴：BLE 是这条消息帧的 msgId；隧道是 IV 里的计数器（十进制）
    ```
 
    `c2p` 是签名页 → 钱包，`p2c` 是钱包 → 签名页（BLE 的叫法：页面是 central）。
@@ -187,7 +187,7 @@ vela-core 的 `clear_signer::secure`（Rust）。**标签是参数**：BLE 用 `
 **保证**
 - 内容对射频窃听者不可读（AES-GCM），且被篡改会被 GCM 认证标签发现。
 - 有中间人时比对码不一致 —— 前提是**用户真的看了**。
-- 攻击者必须在射频范围内。相比二维码 + 中继，截屏钓鱼这条路被切断了。
+- 攻击者必须在射频范围内。相比二维码 + 隧道，截屏钓鱼这条路被切断了。
 
 **不保证**
 - **请求方身份**。BLE 上没有任何东西能证明"这是 Uniswap"。`intent.origin` 是
@@ -316,7 +316,7 @@ App  → {v:1, t:"bye", reason:"done"} + 关闭帧        会话结束
 不带 `bye` 直接关掉 socket 也算会话结束；请求还没答时关掉 = 那一个请求作废。
 片段在页面加载后立刻抹掉。可运行参考：`samples/test-kit.mjs` 的 `loopbackWallet`。
 
-### 7.5 中继（跨设备，075）
+### 7.5 隧道（跨设备，075）
 
 钱包生成房间号和一把静态 P-256 密钥，显示二维码 + 可复制的链接：
 
@@ -324,22 +324,28 @@ App  → {v:1, t:"bye", reason:"done"} + 关闭帧        会话结束
 https://sign.getvela.app/sign.html?ch=relay#relay=<wss URL，percent 编码>&room=<22 位 base64url>&rk=<22 位 base64url>&v=1
 ```
 
+> `ch=relay`、片段键 `relay`、以及隧道自己的帧键 `"relay"`，都保留改名前的写法
+> （2026-09-23 创始人把这个服务改叫 tunnel/隧道）。它们是**线上协议**：已经部署的
+> 页面、已提交的 wasm、以及独立仓库 `vela-tunnel` 里的三个宿主 crate 都按这个拼法
+> 读写。唯一随改名动过的线上取值是 HKDF 标签 `vela-tunnel/1`——它的两端都在本仓库
+> 里，可以一起改。
+
 - `rk = b64url(SHA-256(钱包公钥)[0..16])`。
-- 页面从片段读出（片段不发给任何服务器，读完立刻抹掉），连 `<relay>/v1/rooms/<room>?role=signer`。
-- 中继 URL 只接受 `wss:`，或本机回环上的 `ws:`。
-- 中继发来 `{"v":1,"relay":"joined"}` 后，页面发明文 hello（文本帧），钱包回 hello；
+- 页面从片段读出（片段不发给任何服务器，读完立刻抹掉），连 `<tunnel>/v1/rooms/<room>?role=signer`。
+- 隧道 URL 只接受 `wss:`，或本机回环上的 `ws:`。
+- 隧道发来 `{"v":1,"relay":"joined"}` 后，页面发明文 hello（文本帧），钱包回 hello；
   **钱包公钥哈希对不上 `rk` → 页面拒绝**：不算比对码、不发任何加密帧、离开房间
-  （这挡住中继或猜到房间号的人冒充钱包）。
+  （这挡住隧道或猜到房间号的人冒充钱包）。
 - 对上了 → 双方显示同一个**六位码**，人在钱包上确认后钱包才发请求（这挡住冒充页面的人，
   对「创建钥匙」尤其要紧：冒充的页面会塞给钱包一把别人的钥匙）。
-- 之后每条消息是一个二进制帧 `IV(12) ‖ AES-GCM`（第 3 节，`vela-relay/1`，AAD 尾巴是计数器），
+- 之后每条消息是一个二进制帧 `IV(12) ‖ AES-GCM`（第 3 节，`vela-tunnel/1`，AAD 尾巴是计数器），
   没有 BLE 分帧。明文 JSON 与第 4 节相同。
 - 钱包掉线（`{"relay":"left"}`）：屏幕上那个请求作废（不再能确认，也不会答复），页面等它回来；
   再次 `joined` 时从头握手（新密钥、新 nonce、新比对码，`rk` 再查一遍）。
 - 比对码画在等待卡和会话里的**每一张卡**上。
-- 中继关闭码：4408 过期/空闲、4409 角色已占、4400/1009 请求不对 —— 页面各有说法。
+- 隧道关闭码：4408 过期/空闲、4409 角色已占、4400/1009 请求不对 —— 页面各有说法。
 
-参考：`lib/transport/relay.js`；房间规则的模拟实现 `samples/mock-relay.mjs`（真中继是 Rust，
+参考：`lib/transport/tunnel.js`；房间规则的模拟实现 `samples/mock-tunnel.mjs`（真隧道是 Rust，
 `vela-relay`，Docker 与 Cloudflare Worker 两种部署）。
 
 ---
@@ -450,7 +456,7 @@ EntryPoint / 4337 模块地址若不是 Vela 的那两个，会挂一条 danger 
 **创建钥匙**和**成员证明**只接受 Vela 钱包发来的请求（成员证明会把一把钥匙写进公开的注册表，
 和创建同样要紧）：
 
-- App 通道：回环 WebSocket（一次性 token）、中继（`rk` + 比对码）、BLE（邻近 + 比对码）；
+- App 通道：回环 WebSocket（一次性 token）、隧道（`rk` + 比对码）、BLE（邻近 + 比对码）；
 - 或浏览器背书的 origin（postMessage、扩展端口）是 `https://getvela.app` / `https://*.getvela.app`，
   或本机回环（开发与测试时网页钱包跑在这里）。
 
@@ -478,7 +484,7 @@ postMessage:  {vela:"result", id, registration|assertion, origin}
 
 ## 11. 会话：一个通道，多个请求（075）
 
-回环 WebSocket、postMessage、中继、BLE 上，一个会话按顺序承载多个请求（创建 → 成员证明；
+回环 WebSocket、postMessage、隧道、BLE 上，一个会话按顺序承载多个请求（创建 → 成员证明；
 恢复第 1 步 → 第 2 步），钱包每个流程只打开本页一次：
 
 - 答完一个请求，页面回到平静的「等待钱包」，继续等下一个 `intent`；

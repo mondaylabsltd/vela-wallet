@@ -1,7 +1,7 @@
 // Shared plumbing for the Clear Signer's Chrome tests (ceremony-test,
 // hostile-test): Chrome + CDP, the page's own libraries in Node, and two
 // stand-in wallets — one on the loopback WebSocket (the phones' channel), one
-// in a relay room. Zero dependencies.
+// in a tunnel room. Zero dependencies.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { webcrypto } from 'node:crypto';
@@ -248,14 +248,14 @@ export function loopbackWallet({ origin = 'https://getvela.app', token }) {
   return wallet;
 }
 
-// --- the relay wallet (075 relay.md) ----------------------------------------------
+// --- the tunnel wallet (075 tunnel.md) ----------------------------------------------
 
 /**
- * A wallet in a relay room: it owns a static key pair (the link's `rk` is its
+ * A wallet in a tunnel room: it owns a static key pair (the link's `rk` is its
  * fingerprint), answers the page's hello, and seals intents with the shared
  * session code (lib/transport/secure.js, pinned to vela-core by the vectors).
  */
-export async function relayWallet({ ns, relayUrl, room, secret, rk }) {
+export async function tunnelWallet({ ns, tunnelUrl, room, secret, rk }) {
   const secure = ns.transport.secure;
   const walletSecret = secret || webcrypto.getRandomValues(new Uint8Array(32));
   const probe = await secure.handshake({ role: 'requester', secret: walletSecret });
@@ -268,7 +268,7 @@ export async function relayWallet({ ns, relayUrl, room, secret, rk }) {
     session: null,
     ws: null,
     received: [],
-    relayFrames: [],
+    tunnelFrames: [],
     outgoing: 0,
     lastSeen: 0,
     waiters: [],
@@ -276,7 +276,7 @@ export async function relayWallet({ ns, relayUrl, room, secret, rk }) {
   };
 
   wallet.connect = () => new Promise((resolve) => {
-    const ws = new WebSocket(`${relayUrl}/v1/rooms/${room}?role=requester`);
+    const ws = new WebSocket(`${tunnelUrl}/v1/rooms/${room}?role=requester`);
     ws.binaryType = 'arraybuffer';
     wallet.ws = ws;
     wallet.session = null;
@@ -289,12 +289,12 @@ export async function relayWallet({ ns, relayUrl, room, secret, rk }) {
     ws.addEventListener('message', async (event) => {
       if (typeof event.data === 'string') {
         const frame = JSON.parse(event.data);
-        if ('relay' in frame) { wallet.relayFrames.push(frame.relay); return; }
+        if ('relay' in frame) { wallet.tunnelFrames.push(frame.relay); return; }
         if (frame.t === 'hello') {
           // A new nonce every time; the key stays the link's.
           handshake = await secure.handshake({ role: 'requester', secret: walletSecret });
           ws.send(JSON.stringify(handshake.hello('vela-test/1')));
-          wallet.session = await handshake.complete(frame, 'relay');
+          wallet.session = await handshake.complete(frame, 'tunnel');
           wallet.code = wallet.session.code;
           wallet.outgoing = 0;
           wallet.lastSeen = 0;

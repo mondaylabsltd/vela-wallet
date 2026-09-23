@@ -494,7 +494,7 @@ pub enum KeyMethod {
     SecurityKey,
     /// Spec 075: the Clear Signer — our own route to a passkey. A page that
     /// shows what is being signed runs the ceremony (on this device over a
-    /// loopback socket or `postMessage`, on another over the relay or BLE)
+    /// loopback socket or `postMessage`, on another over the tunnel or BLE)
     /// and the answer comes back to be verified here. A peer of the three
     /// above, offered wherever they are.
     ClearSigner,

@@ -220,7 +220,7 @@
       "clearSignerCode": "Pastikan perangkat lain menampilkan kode yang sama: {{code}}",
       "clearSignerCodeConfirm": "Kodenya cocok",
       "clearSignerCopyLink": "Salin tautan",
-      "clearSignerRelayDown": "Relay tidak dapat dijangkau. Coba lagi, atau gunakan Clear Signer di perangkat ini."
+      "clearSignerTunnelDown": "Tunnel tidak dapat dijangkau. Coba lagi, atau gunakan Clear Signer di perangkat ini."
     },
     "signingApprove": {
       "resultingTotal": "Total izin belanja baru",

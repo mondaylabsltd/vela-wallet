@@ -343,14 +343,14 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					trailing: 'chevron'
 				},
 				// Spec 075: how the Clear Signer is reached when it is on
-				// ANOTHER device. The relay only ever passes on ciphertext,
+				// ANOTHER device. The tunnel only ever passes on ciphertext,
 				// which is why naming one's own is a preference and not a fork.
 				{
-					id: 'clear-signer-relay',
+					id: 'clear-signer-tunnel',
 					// A server the person can point elsewhere, as the RPC row is.
 					icon: 'server',
-					title: m.signing.relayTitle,
-					value: m.signing.relayOfficial,
+					title: m.signing.tunnelTitle,
+					value: m.signing.tunnelOfficial,
 					trailing: 'chevron'
 				},
 				{
@@ -770,7 +770,7 @@ function languageSheet(m: SettingsMessages, current: string): SelectSheetModel {
  * that speed buys — the owner's ruling: the heading asks 交易速度, so every
  * option has to be a speed, and the advantage goes on the second line where it
  * is the reason somebody would pick the slow one. `rapid` is not offered — it
- * is a dead variant nothing constructs and the relay refuses on the wire.
+ * is a dead variant nothing constructs and the bundler refuses on the wire.
  * The subtitle is load-bearing: it says that this is where every transaction
  * STARTS, and that a single send can still be changed, so nobody reads the
  * send screen's picker as having quietly rewritten this.
@@ -789,8 +789,8 @@ function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
 
 /** The official Clear Signer page (`clear_signer::DEFAULT_SIGNER_URL`). */
 const OFFICIAL_SIGNER_URL = 'https://sign.getvela.app/';
-/** Spec 075: the official relay, as `clear_signer::DEFAULT_RELAY_URL` names it. */
-const OFFICIAL_RELAY_URL = 'wss://relay.getvela.app';
+/** Spec 075: the official tunnel, as `clear_signer::DEFAULT_TUNNEL_URL` names it. */
+const OFFICIAL_TUNNEL_URL = 'wss://tunnel.getvela.app';
 
 /**
  * The default "Sign with" (spec 071): the five the core offers, in its order,
@@ -816,16 +816,16 @@ function signWithSheet(m: SettingsMessages): SelectSheetModel {
 	};
 }
 
-/** The relay, official — what a device that never chose pairs through. */
-function relayPage(m: SettingsMessages): SignerPageModel {
+/** The tunnel, official — what a device that never chose pairs through. */
+function tunnelPage(m: SettingsMessages): SignerPageModel {
 	return {
-		title: m.signing.relayTitle,
-		subtitle: m.signing.relaySubtitle,
+		title: m.signing.tunnelTitle,
+		subtitle: m.signing.tunnelSubtitle,
 		field: {
-			id: 'relay-url',
-			label: m.signing.relayTitle,
-			value: OFFICIAL_RELAY_URL,
-			placeholder: OFFICIAL_RELAY_URL
+			id: 'tunnel-url',
+			label: m.signing.tunnelTitle,
+			value: OFFICIAL_TUNNEL_URL,
+			placeholder: OFFICIAL_TUNNEL_URL
 		},
 		save: m.signing.pageSave
 	};
@@ -1175,7 +1175,7 @@ export function buildMobileState(
 		feeSpeedSheet: feeSpeedSheet(m),
 		signWithSheet: signWithSheet(m),
 		signerPage: signerPage(m),
-		relayPage: relayPage(m),
+		tunnelPage: tunnelPage(m),
 		numberSheet: formatSheet(
 			m,
 			m.localization.numberTitle,
@@ -1343,7 +1343,7 @@ export function buildDesktopState(
 				}
 			],
 			page: signerPage(m),
-			relay: relayPage(m)
+			tunnel: tunnelPage(m)
 		},
 		networks: {
 			title: m.advanced.networksTitle,

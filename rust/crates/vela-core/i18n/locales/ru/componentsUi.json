@@ -220,7 +220,7 @@
       "clearSignerCode": "Убедитесь, что на другом устройстве тот же код: {{code}}",
       "clearSignerCodeConfirm": "Коды совпадают",
       "clearSignerCopyLink": "Скопировать ссылку",
-      "clearSignerRelayDown": "Не удалось связаться с ретранслятором. Повторите попытку или используйте Clear Signer на этом устройстве."
+      "clearSignerTunnelDown": "Не удалось связаться с туннелем. Повторите попытку или используйте Clear Signer на этом устройстве."
     },
     "signingApprove": {
       "resultingTotal": "Новый общий лимит",

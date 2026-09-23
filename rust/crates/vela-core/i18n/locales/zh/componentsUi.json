@@ -220,7 +220,7 @@
       "clearSignerCode": "请确认另一台设备显示的是同一个码：{{code}}",
       "clearSignerCodeConfirm": "两边的码一致",
       "clearSignerCopyLink": "复制链接",
-      "clearSignerRelayDown": "无法连接中继。请重试，或改用这台设备上的清晰签名器。"
+      "clearSignerTunnelDown": "无法连接隧道。请重试，或改用这台设备上的清晰签名器。"
     },
     "currency": {
       "title": "显示货币",

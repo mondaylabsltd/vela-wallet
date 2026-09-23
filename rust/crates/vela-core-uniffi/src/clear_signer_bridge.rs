@@ -396,7 +396,7 @@ pub fn clear_signer_ceremony_request(
     Some(clear_signer::ceremony::request(&ceremony, &id, &wallet_name, &registry).to_string())
 }
 
-/// Judge a ceremony's answer that arrived by another channel (the relay, BLE).
+/// Judge a ceremony's answer that arrived by another channel (the tunnel, BLE).
 #[uniffi::export]
 pub fn clear_signer_verify_ceremony(
     operation_json: String,
@@ -447,41 +447,46 @@ fn ceremony_verdict(
     }
 }
 
-/// The relay the wallet pairs through unless Settings name another.
+// The five functions below say `tunnel`, the name the owner gave this service on
+// 2026-09-23. A uniffi symbol is derived from its Rust name, so every binding
+// regenerated in the same commit as the wasm module's matching exports — one FFI
+// surface renamed without the other would be worse than either spelling.
+
+/// The tunnel the wallet pairs through unless Settings name another.
 #[uniffi::export]
-pub fn clear_signer_default_relay() -> String {
-    clear_signer::DEFAULT_RELAY_URL.to_owned()
+pub fn clear_signer_default_tunnel() -> String {
+    clear_signer::DEFAULT_TUNNEL_URL.to_owned()
 }
 
-/// A relay address the person typed, normalised — `None` when it cannot be
+/// A tunnel address the person typed, normalised — `None` when it cannot be
 /// used (wss anywhere, ws only on loopback).
 #[uniffi::export]
-pub fn clear_signer_relay_url(input: String) -> Option<String> {
-    clear_signer::relay_url(&input).ok()
+pub fn clear_signer_tunnel_url(input: String) -> Option<String> {
+    clear_signer::tunnel_url(&input).ok()
 }
 
 /// A room id from 16 random bytes the shell drew.
 #[uniffi::export]
-pub fn clear_signer_relay_room(random: Vec<u8>) -> Option<String> {
+pub fn clear_signer_tunnel_room(random: Vec<u8>) -> Option<String> {
     let bytes: [u8; 16] = random.try_into().ok()?;
-    Some(clear_signer::relay_room(&bytes))
+    Some(clear_signer::tunnel_room(&bytes))
 }
 
-/// The socket the wallet opens: `<relay>/v1/rooms/<room>?role=requester`.
+/// The socket the wallet opens: `<tunnel>/v1/rooms/<room>?role=requester`.
 #[uniffi::export]
-pub fn clear_signer_relay_room_url(relay: String, room: String) -> String {
-    clear_signer::relay_room_url(&relay, &room, "requester")
+pub fn clear_signer_tunnel_room_url(tunnel: String, room: String) -> String {
+    clear_signer::tunnel_room_url(&tunnel, &room, "requester")
 }
 
 /// The pairing link (QR + copy) for the page on another device.
 #[uniffi::export]
-pub fn clear_signer_relay_link(
+pub fn clear_signer_tunnel_link(
     signer_url: String,
-    relay: String,
+    tunnel: String,
     room: String,
     rk: String,
 ) -> String {
-    clear_signer::relay_link(&signer_url, &relay, &room, &rk)
+    clear_signer::tunnel_link(&signer_url, &tunnel, &room, &rk)
 }
 
 /// `rk`: the requester key's fingerprint the pairing link carries.
@@ -490,7 +495,7 @@ pub fn clear_signer_key_fingerprint(public_key: Vec<u8>) -> String {
     clear_signer::secure::key_fingerprint(&public_key)
 }
 
-/// The wallet's side of the end-to-end session (relay and BLE), before the
+/// The wallet's side of the end-to-end session (tunnel and BLE), before the
 /// page's hello. The shell draws the 32 secret bytes and the 16-byte nonce.
 #[derive(uniffi::Object)]
 pub struct ClearSignerHandshake {
@@ -536,18 +541,18 @@ impl ClearSignerHandshake {
             .unwrap_or_default()
     }
 
-    /// Finish with the page's hello. `relay` picks the label (`vela-relay/1`,
-    /// else `vela-ble/1`). Once only.
+    /// Finish with the page's hello. `tunnel` picks the tunnel's label
+    /// (`vela-tunnel/1`); `false` picks BLE's (`vela-ble/1`). Once only.
     pub fn complete(
         &self,
         peer_hello: String,
-        relay: bool,
+        tunnel: bool,
     ) -> Result<Arc<ClearSignerSession>, CoreError> {
         let handshake = lock(&self.inner)
             .take()
             .ok_or_else(|| CoreError::Internal("the handshake is already complete".into()))?;
-        let label = if relay {
-            clear_signer::secure::Label::Relay
+        let label = if tunnel {
+            clear_signer::secure::Label::Tunnel
         } else {
             clear_signer::secure::Label::Ble
         };
@@ -574,7 +579,7 @@ impl ClearSignerSession {
     }
 
     /// Seal the next outgoing message. `msg_id` is BLE's frame message id;
-    /// `None` on the relay (the AAD binds the counter).
+    /// `None` on the tunnel (the AAD binds the counter).
     pub fn seal(&self, plaintext: Vec<u8>, msg_id: Option<u8>) -> Vec<u8> {
         lock(&self.inner).seal(&plaintext, tail(msg_id))
     }

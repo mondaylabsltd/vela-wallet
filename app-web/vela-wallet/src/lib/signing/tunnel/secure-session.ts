@@ -1,9 +1,9 @@
 /**
  * The end-to-end session a cross-device pairing runs — the REQUESTER's half
- * (spec 075, `contracts/relay.md` §2; PROTOCOL.md §3).
+ * (spec 075, `contracts/tunnel.md` §2; PROTOCOL.md §3).
  *
  * P-256 ECDH → HKDF-SHA256 → AES-256-GCM, and a six-digit code both screens
- * show: the one place a stand-in on the path is caught. The relay only ever
+ * show: the one place a stand-in on the path is caught. The tunnel only ever
  * forwards ciphertext, so everything that matters is derived here and on the
  * page — nothing is trusted to the server in the middle.
  *
@@ -22,7 +22,7 @@
  */
 
 /** The label is a parameter: one session implementation, two channels. */
-export const RELAY_LABEL = 'vela-relay/1';
+export const TUNNEL_LABEL = 'vela-tunnel/1';
 
 const ECDH = { name: 'ECDH', namedCurve: 'P-256' } as const;
 
@@ -160,7 +160,7 @@ async function hkdf(
 /**
  * Finish the handshake with the page's hello and derive the session.
  *
- * `label` is the channel (`vela-relay/1`); `nonce` is this side's 16 bytes,
+ * `label` is the channel (`vela-tunnel/1`); `nonce` is this side's 16 bytes,
  * fresh for every handshake — a wallet that dropped out and came back is a new
  * session with a new code, checked again from scratch.
  */
@@ -168,7 +168,7 @@ export async function completeSession(
 	key: RequesterKey,
 	nonce: Uint8Array,
 	peerHello: unknown,
-	label: string = RELAY_LABEL
+	label: string = TUNNEL_LABEL
 ): Promise<SecureSession> {
 	const hello = (
 		typeof peerHello === 'string' ? safeParse(peerHello) : peerHello
@@ -198,7 +198,7 @@ export async function completeSession(
 	const shared = new Uint8Array(
 		await crypto.subtle.deriveBits({ name: 'ECDH', public: peerKey }, key.privateKey, 256)
 	);
-	// The signer's nonce first, whichever side is deriving (relay.md §2.3).
+	// The signer's nonce first, whichever side is deriving (tunnel.md §2.3).
 	const salt = concat([peerNonce, nonce]);
 	const [material, codeBytes] = await Promise.all([
 		hkdf(shared, salt, `${label} key`, 32),
@@ -310,7 +310,7 @@ export class SecureSession {
 		});
 	}
 
-	/** The relay binds the IV's counter into the AAD (relay.md §2.5). */
+	/** The tunnel binds the IV's counter into the AAD (tunnel.md §2.5). */
 	#additionalData(direction: string, counter: bigint): Uint8Array {
 		return utf8(`${this.label}|${direction}|${counter.toString()}`);
 	}

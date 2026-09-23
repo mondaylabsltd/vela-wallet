@@ -10,20 +10,20 @@ import okio.ByteString.Companion.toByteString
 import java.util.concurrent.TimeUnit
 
 /**
- * A WebSocket to the Clear Signer relay, as little of one as the requester
- * needs (spec 075, contracts/relay.md): text frames for the two hellos and the
- * relay's own `joined` / `left`, binary frames for everything after, and one
+ * A WebSocket to the Clear Signer tunnel, as little of one as the requester
+ * needs (spec 075, contracts/tunnel.md): text frames for the two hellos and the
+ * tunnel's own `joined` / `left`, binary frames for everything after, and one
  * close.
  *
- * It is an interface because the relay half of the pairing has to be testable
+ * It is an interface because the tunnel half of the pairing has to be testable
  * without a network: the JVM suite runs the same requester against a fake
- * relay that implements relay.md §1 in-process.
+ * tunnel that implements tunnel.md §1 in-process.
  */
-interface RelaySockets {
-    fun open(url: String, listener: RelayListener): RelaySocket
+interface TunnelSockets {
+    fun open(url: String, listener: TunnelListener): TunnelSocket
 }
 
-interface RelaySocket {
+interface TunnelSocket {
     fun send(text: String)
     fun send(bytes: ByteArray)
 
@@ -31,7 +31,7 @@ interface RelaySocket {
     fun close()
 }
 
-interface RelayListener {
+interface TunnelListener {
     fun onText(text: String)
     fun onBinary(bytes: ByteArray)
 
@@ -42,23 +42,23 @@ interface RelayListener {
 /**
  * The app's own transport, on the OkHttp the wallet already ships.
  *
- * The relay pings every 30 s where its host lets it; this end pings too, so a
+ * The tunnel pings every 30 s where its host lets it; this end pings too, so a
  * phone that dozes behind a NAT still finds out its socket is gone rather than
  * waiting out the five-minute clock on a connection nobody is on the other end
  * of.
  */
-class OkHttpRelaySockets(
+class OkHttpTunnelSockets(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)
-        // A relay that cannot be reached must say so quickly: the person is
+        // A tunnel that cannot be reached must say so quickly: the person is
         // looking at a QR code with nothing happening.
         .connectTimeout(15, TimeUnit.SECONDS)
         // The socket is long-lived by design; the session's own clock ends it.
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build(),
-) : RelaySockets {
+) : TunnelSockets {
 
-    override fun open(url: String, listener: RelayListener): RelaySocket {
+    override fun open(url: String, listener: TunnelListener): TunnelSocket {
         val socket = client.newWebSocket(
             Request.Builder().url(url).build(),
             object : WebSocketListener() {
@@ -74,7 +74,7 @@ class OkHttpRelaySockets(
                     listener.onClosed(t.message ?: response?.message)
             },
         )
-        return object : RelaySocket {
+        return object : TunnelSocket {
             override fun send(text: String) {
                 socket.send(text)
             }

@@ -12,7 +12,7 @@ import uniffi.vela_core_uniffi.WalletKeyRecord
  * is an assertion over one digest by one of this wallet's keys (spec 071), and
  * a CEREMONY is a passkey operation the create/sign-in machines asked for,
  * judged against the operation's own rules. Both ride the same channels — the
- * loopback socket on this device, the relay to another — and both carry the
+ * loopback socket on this device, the tunnel to another — and both carry the
  * page they belong to, so a channel never has to know which flow it is in.
  */
 sealed interface ClearSignerAsk {
@@ -63,7 +63,7 @@ sealed interface ClearSignerAnswer {
      * the SHAPE of the failure, which the channel turns into words alongside
      * the route it was on.
      *
-     * Both halves are needed. "The relay could not be reached" told to
+     * Both halves are needed. "The tunnel could not be reached" told to
      * somebody who picked Bluetooth — and then advised to try a route they did
      * not choose — is a sentence about the wrong thing, and a person reading
      * it has no way to tell that the app is confused rather than the radio
@@ -77,7 +77,7 @@ sealed interface ClearSignerAnswer {
 
 /** The shape of a channel failure — never its words, which the route picks. */
 enum class Unreachability {
-    /** It never opened: a relay that would not answer, a radio that would not advertise. */
+    /** It never opened: a tunnel that would not answer, a radio that would not advertise. */
     Channel,
 
     /** It opened and then the other end left — a closed socket, a dropped link. */

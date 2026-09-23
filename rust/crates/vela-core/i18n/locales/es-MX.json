@@ -68,12 +68,12 @@
       "pageForeign": "Tus passkeys pertenecen a getvela.app. Una página en otro dominio puede mostrar una solicitud, pero no puede firmarla.",
       "pageReset": "Usar la página oficial",
       "pageSave": "Guardar",
-      "relayTitle": "Relé",
-      "relaySubtitle": "El emparejamiento con otro dispositivo pasa por este relé. Solo reenvía mensajes cifrados.",
-      "relayOfficial": "Oficial",
-      "relayInvalid": "Esa no es una dirección de relé.",
-      "relayInsecure": "Usa una dirección wss://, o ws:// en el loopback propio de este dispositivo.",
-      "relayReset": "Usar el relé oficial"
+      "tunnelTitle": "Túnel",
+      "tunnelSubtitle": "El emparejamiento con otro dispositivo pasa por este túnel. Solo reenvía mensajes cifrados.",
+      "tunnelOfficial": "Oficial",
+      "tunnelInvalid": "Esa no es una dirección de túnel.",
+      "tunnelInsecure": "Usa una dirección wss://, o ws:// en el loopback propio de este dispositivo.",
+      "tunnelReset": "Usar el túnel oficial"
     },
     "advanced": {
       "networksTitle": "Redes",

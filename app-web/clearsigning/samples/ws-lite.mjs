@@ -1,4 +1,4 @@
-// The server half of RFC 6455, in plain Node, for the samples: the mock relay
+// The server half of RFC 6455, in plain Node, for the samples: the mock tunnel
 // and the mock wallets listen with it. Zero dependencies, like the page.
 //
 //   server.on('upgrade', (req, socket, head) => {
@@ -10,7 +10,7 @@
 //
 // Only what the samples need: no extensions, no subprotocols. Fragmented
 // messages are joined; pings are answered; a message over `maxMessage` bytes
-// is closed with 1009, as the relay contract says.
+// is closed with 1009, as the tunnel contract says.
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 

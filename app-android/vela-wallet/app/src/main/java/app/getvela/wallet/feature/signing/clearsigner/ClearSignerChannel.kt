@@ -17,7 +17,7 @@ import uniffi.vela_core_uniffi.ClearSignerCeremonyOutcome
 import uniffi.vela_core_uniffi.ClearSignerOutcome
 import uniffi.vela_core_uniffi.ClearSignerRefusal
 import uniffi.vela_core_uniffi.WalletKeyRecord
-import uniffi.vela_core_uniffi.clearSignerDefaultRelay
+import uniffi.vela_core_uniffi.clearSignerDefaultTunnel
 import java.security.SecureRandom
 
 /**
@@ -32,7 +32,7 @@ import java.security.SecureRandom
  *
  * 1. **Where the signer is.** On this device the page is a Custom Tab over the
  *    app on a loopback socket ([ClearSignerLoopback]); on another device it is
- *    reached through a blind relay ([ClearSignerRelayWire]) or, when the other
+ *    reached through a blind tunnel ([ClearSignerTunnelWire]) or, when the other
  *    device is in the room, over Bluetooth with this phone as the GATT
  *    peripheral ([ClearSignerBleWire]). The person is asked once per flow.
  * 2. **One page visit per flow.** A create mints a key and then confirms its
@@ -53,8 +53,8 @@ class ClearSignerChannel(
     /** Put the app back over the tab. */
     private val bringBack: () -> Unit,
     private val words: () -> Words,
-    /** Spec 075: the relay a cross-device pairing goes through (`sign_pref`'s). */
-    private val relayUrl: () -> String = { "" },
+    /** Spec 075: the tunnel a cross-device pairing goes through (`sign_pref`'s). */
+    private val tunnelUrl: () -> String = { "" },
     /** The chain's name and coin, the account's name — from the wallet's own lists. */
     private val labels: (chainId: Int, account: String) -> ClearSignerLabels = { _, _ -> ClearSignerLabels() },
     private val timeoutMs: Long = 5 * 60_000L,
@@ -63,8 +63,8 @@ class ClearSignerChannel(
     private val appIcon: () -> String = { "" },
     /** `Vela Wallet <version>` — what the page shows as the requester, marked there as self-reported. */
     private val appName: String = "vela-android",
-    /** The relay transport; a fake one in tests. */
-    private val sockets: RelaySockets = OkHttpRelaySockets(),
+    /** The tunnel transport; a fake one in tests. */
+    private val sockets: TunnelSockets = OkHttpTunnelSockets(),
     /**
      * Spec 075 T040: the Bluetooth route's platform side — the activity's, and
      * `null` where there is none (a process with no activity attached, a test
@@ -82,13 +82,13 @@ class ClearSignerChannel(
         val refused: String,
         val mismatch: String,
         val timeout: String,
-        /** Spec 075: the relay could not be reached. */
-        val relayDown: String = timeout,
+        /** Spec 075: the tunnel could not be reached. */
+        val tunnelDown: String = timeout,
         /**
          * Spec 075 T040: the Bluetooth permission was refused, or this phone
          * cannot advertise at all (`clearSignerBluetoothNeeded`).
          */
-        val bluetoothNeeded: String = relayDown,
+        val bluetoothNeeded: String = tunnelDown,
         /** Spec 075 T040: the radio is off (`clearSignerBluetoothOff`). */
         val bluetoothOff: String = bluetoothNeeded,
         /**
@@ -110,7 +110,7 @@ class ClearSignerChannel(
         /** A Custom Tab over the app, on the wallet's own loopback. */
         ThisDevice,
 
-        /** Another device entirely, reached through the blind relay. */
+        /** Another device entirely, reached through the blind tunnel. */
         OtherDevice,
 
         /** A browser in the room: this phone advertises and it connects. */
@@ -122,7 +122,7 @@ class ClearSignerChannel(
 
         /**
          * Spec 075: "where is your Clear Signer?" — this device, another one
-         * through the relay, or, when this phone can advertise, one nearby
+         * through the tunnel, or, when this phone can advertise, one nearby
          * over Bluetooth.
          */
         data class Where(val nearby: Boolean = false) : State
@@ -205,7 +205,7 @@ class ClearSignerChannel(
      * [route] itself cannot answer this: a request that came back with nothing
      * ends its flow, and [endFlow] clears [route] BEFORE the caller turns the
      * answer into a sentence. Reading it there gave every failed Bluetooth
-     * request the relay's words (T043 defect 2) — right up to the point where
+     * request the tunnel's words (T043 defect 2) — right up to the point where
      * a test finally asked.
      */
     @Volatile
@@ -378,7 +378,7 @@ class ClearSignerChannel(
             judgedRoute = route
             // A later request of the same flow raises no sheet of its own. The
             // loopback names its page again from inside `ask` (its sheet offers
-            // "open it again"); a page on another device — relayed or nearby —
+            // "open it again"); a page on another device — tunneled or nearby —
             // has no page of ours to name, so the wait is said here.
             if (!mine && route != null && route != Route.ThisDevice) _state.value = State.Paired
             val answer = try {
@@ -430,8 +430,8 @@ class ClearSignerChannel(
                     random = random,
                     onOpened = { url -> _state.value = State.Waiting(url) },
                 )
-                Route.OtherDevice -> ClearSignerRelayWire(
-                    relayUrl = relayUrl().ifEmpty { clearSignerDefaultRelay() },
+                Route.OtherDevice -> ClearSignerTunnelWire(
+                    tunnelUrl = tunnelUrl().ifEmpty { clearSignerDefaultTunnel() },
                     signerUrl = page,
                     sockets = sockets,
                     appName = appName,
@@ -564,7 +564,7 @@ class ClearSignerChannel(
             ClearSignerAnswer.TimedOut -> w.timeout
             is ClearSignerAnswer.Unreachable -> {
                 // The route picks the words. Telling somebody who chose
-                // Bluetooth that the relay could not be reached — and advising
+                // Bluetooth that the tunnel could not be reached — and advising
                 // them to try a route they did not choose — names the wrong
                 // channel and offers the wrong remedy (T043 radio pass).
                 VelaLog.event(
@@ -575,7 +575,7 @@ class ClearSignerChannel(
                     "detail" to answer.detail,
                 )
                 when {
-                    judgedRoute != Route.Nearby -> w.relayDown
+                    judgedRoute != Route.Nearby -> w.tunnelDown
                     answer.why == Unreachability.PeerGone -> w.nearbyLost
                     else -> w.bluetoothUnsupported
                 }

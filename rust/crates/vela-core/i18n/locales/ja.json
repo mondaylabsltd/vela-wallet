@@ -68,12 +68,12 @@
       "pageForeign": "パスキーは getvela.app のものです。他のドメインのページはリクエストを表示できても、署名はできません。",
       "pageReset": "公式ページを使う",
       "pageSave": "保存",
-      "relayTitle": "リレー",
-      "relaySubtitle": "別のデバイスとのペアリングはこのリレーを経由します。リレーが中継するのは暗号化されたメッセージだけです。",
-      "relayOfficial": "公式",
-      "relayInvalid": "リレーのアドレスではありません。",
-      "relayInsecure": "wss:// のアドレス、またはこのデバイス自身のループバック上の ws:// を使ってください。",
-      "relayReset": "公式のリレーを使う"
+      "tunnelTitle": "トンネル",
+      "tunnelSubtitle": "別のデバイスとのペアリングはこのトンネルを経由します。トンネルが転送するのは暗号化されたメッセージだけです。",
+      "tunnelOfficial": "公式",
+      "tunnelInvalid": "トンネルのアドレスではありません。",
+      "tunnelInsecure": "wss:// のアドレス、またはこのデバイス自身のループバック上の ws:// を使ってください。",
+      "tunnelReset": "公式のトンネルを使う"
     },
     "advanced": {
       "networksTitle": "ネットワーク",

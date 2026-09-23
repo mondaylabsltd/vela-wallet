@@ -622,58 +622,58 @@ fn the_wallets_own_send_is_sent_as_its_calls_with_the_fee_leg_after_them() {
     assert_eq!(built["context"]["operation"]["feeLegIndex"], 1);
 }
 
-/// Spec 075: the relay the wallet pairs through — wss anywhere, ws only on the
-/// device's own loopback (a relay under test), nothing a page could not reach.
+/// Spec 075: the tunnel the wallet pairs through — wss anywhere, ws only on the
+/// device's own loopback (a tunnel under test), nothing a page could not reach.
 #[test]
-fn a_relay_address_is_wss_or_a_loopback_socket() {
-    use vela_core::clear_signer::{relay_url, SignerUrlError, DEFAULT_RELAY_URL};
+fn a_tunnel_address_is_wss_or_a_loopback_socket() {
+    use vela_core::clear_signer::{tunnel_url, SignerUrlError, DEFAULT_TUNNEL_URL};
     assert_eq!(
-        relay_url(DEFAULT_RELAY_URL),
-        Ok("wss://relay.getvela.app".to_owned())
+        tunnel_url(DEFAULT_TUNNEL_URL),
+        Ok("wss://tunnel.getvela.app".to_owned())
     );
     assert_eq!(
-        relay_url("relay.example.org/"),
-        Ok("wss://relay.example.org".to_owned())
+        tunnel_url("tunnel.example.org/"),
+        Ok("wss://tunnel.example.org".to_owned())
     );
     assert_eq!(
-        relay_url("ws://127.0.0.1:8787"),
+        tunnel_url("ws://127.0.0.1:8787"),
         Ok("ws://127.0.0.1:8787".to_owned())
     );
     assert_eq!(
-        relay_url("ws://192.168.1.4:8787"),
+        tunnel_url("ws://192.168.1.4:8787"),
         Err(SignerUrlError::Insecure)
     );
     assert_eq!(
-        relay_url("https://relay.example.org"),
+        tunnel_url("https://tunnel.example.org"),
         Err(SignerUrlError::Invalid)
     );
     assert_eq!(
-        relay_url("wss://relay.example.org/?room=x"),
+        tunnel_url("wss://tunnel.example.org/?room=x"),
         Err(SignerUrlError::Invalid)
     );
-    assert_eq!(relay_url(""), Err(SignerUrlError::Invalid));
+    assert_eq!(tunnel_url(""), Err(SignerUrlError::Invalid));
 }
 
 #[test]
-fn a_pairing_link_names_the_relay_the_room_and_the_wallets_key() {
-    use vela_core::clear_signer::{relay_link, relay_room, relay_room_url};
-    let room = relay_room(&[0xfb; 16]);
+fn a_pairing_link_names_the_tunnel_the_room_and_the_wallets_key() {
+    use vela_core::clear_signer::{tunnel_link, tunnel_room, tunnel_room_url};
+    let room = tunnel_room(&[0xfb; 16]);
     assert_eq!(room.len(), 22);
     assert!(room
         .bytes()
         .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
     assert_eq!(
-        relay_room_url("wss://relay.getvela.app/", &room, "requester"),
-        format!("wss://relay.getvela.app/v1/rooms/{room}?role=requester")
+        tunnel_room_url("wss://tunnel.getvela.app/", &room, "requester"),
+        format!("wss://tunnel.getvela.app/v1/rooms/{room}?role=requester")
     );
-    let link = relay_link(
+    let link = tunnel_link(
         "https://sign.getvela.app/",
-        "wss://relay.getvela.app",
+        "wss://tunnel.getvela.app",
         &room,
         "AbC-_d",
     );
     assert_eq!(
         link,
-        format!("https://sign.getvela.app/sign.html?ch=relay#relay=wss%3A%2F%2Frelay.getvela.app&room={room}&rk=AbC-_d&v=1")
+        format!("https://sign.getvela.app/sign.html?ch=relay#relay=wss%3A%2F%2Ftunnel.getvela.app&room={room}&rk=AbC-_d&v=1")
     );
 }

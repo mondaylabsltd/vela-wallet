@@ -8,7 +8,7 @@
  * the passkey ceremony and answers.
  *
  * HOW it is reached is `clear-signer-channel.ts`: `postMessage` to a window
- * this wallet opened (same device), or the relay (another device). What this
+ * this wallet opened (same device), or the tunnel (another device). What this
  * module adds is the signature's own half — which answer is a signature this
  * wallet may use, and the sentence a refusal ends with — and it decides
  * neither: the verdict is the core's (`clearSignerVerify`), the same verdict
@@ -33,13 +33,13 @@ export type { ClearSignerHost };
  * `foreign_key`, `bad_signature`, `not_verified`, `malformed`, …) or the
  * channel's own: `declined` (the person closed the page, or it said
  * `user_rejected`), `refused` (the page's rules said no — `detail` is its
- * code), `timeout` and `relay_down`.
+ * code), `timeout` and `tunnel_down`.
  */
 export type ClearSignerOutcome =
 	{ kind: 'accepted'; assertion: Assertion } | { kind: 'refused'; code: string; detail: string };
 
-/** Which sentence a refusal is shown with (contract §5, plus 075's relay). */
-export type ClearSignerNotice = 'closed' | 'refused' | 'mismatch' | 'timeout' | 'relay';
+/** Which sentence a refusal is shown with (contract §5, plus 075's tunnel). */
+export type ClearSignerNotice = 'closed' | 'refused' | 'mismatch' | 'timeout' | 'tunnel';
 
 export function noticeOf(code: string): ClearSignerNotice {
 	switch (code) {
@@ -49,8 +49,8 @@ export function noticeOf(code: string): ClearSignerNotice {
 			return 'refused';
 		case 'timeout':
 			return 'timeout';
-		case 'relay_down':
-			return 'relay';
+		case 'tunnel_down':
+			return 'tunnel';
 		default:
 			// wrong_challenge, foreign_key, bad_signature, not_verified,
 			// wrong_token, malformed: whatever came back is not a signature this

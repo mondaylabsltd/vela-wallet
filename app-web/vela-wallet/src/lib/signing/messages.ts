@@ -199,7 +199,7 @@ export interface SigningMessages {
 	/** `{{code}}` — the six digits. */
 	clearSignerCode: string;
 	clearSignerCodeConfirm: string;
-	clearSignerRelayDown: string;
+	clearSignerTunnelDown: string;
 	viewOnExplorer: string;
 	byteSize: string;
 	safeInnerCall: string;
@@ -238,5 +238,5 @@ export type ClearSignerWords = Pick<
 	| 'clearSignerCopyLink'
 	| 'clearSignerCode'
 	| 'clearSignerCodeConfirm'
-	| 'clearSignerRelayDown'
+	| 'clearSignerTunnelDown'
 >;

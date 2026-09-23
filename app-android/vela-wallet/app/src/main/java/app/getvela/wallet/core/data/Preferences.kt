@@ -108,6 +108,15 @@ class Preferences(
         const val AUTO_LANGUAGE = "auto"
 
         /** What the core's codec reads, including the desktop's old `vela.formats` and the retired avatar style. */
-        private val READ_KEYS = listOf(KEY_LANGUAGE, KEY_LOCALE_PREFS, KEY_TEXT_SCALE, "vela.formats", RETIRED_AVATAR_STYLE)
+        private val READ_KEYS = listOf(
+            KEY_LANGUAGE,
+            KEY_LOCALE_PREFS,
+            KEY_TEXT_SCALE,
+            "vela.formats",
+            RETIRED_AVATAR_STYLE,
+            // Spec 075, renamed 2026-09-23: the core MOVES this to
+            // `vela.clearSignerTunnel`, so the migration has to see it.
+            KeyValueStore.Keys.RETIRED_CLEAR_SIGNER_RELAY,
+        )
     }
 }

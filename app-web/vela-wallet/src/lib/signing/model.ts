@@ -281,7 +281,7 @@ export interface ClearSignerModel {
 	dismiss: string;
 	/**
 	 * Spec 075 — WHERE the person's Clear Signer is: on this device (a window
-	 * this wallet opens) or on another one (the relay). Asked before anything
+	 * this wallet opens) or on another one (the tunnel). Asked before anything
 	 * opens, because the two are different places, not different settings.
 	 */
 	where?: { thisDevice: string; otherDevice: string };

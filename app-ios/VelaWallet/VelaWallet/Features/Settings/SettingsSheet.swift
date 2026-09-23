@@ -47,8 +47,8 @@ struct SettingsSheet: View {
     var onSaveSignerUrl: ((String) -> Bool)?
     var onResetSignerUrl: (() -> Void)?
     /// The relay's Save and reset (spec 075) — the same pair, the other key.
-    var onSaveRelayUrl: ((String) -> Bool)?
-    var onResetRelayUrl: (() -> Void)?
+    var onSaveTunnelUrl: ((String) -> Bool)?
+    var onResetTunnelUrl: (() -> Void)?
     /// The language sheet's "suggest a fix". Absent in the gallery.
     var onOpenLink: ((String) -> Void)?
 
@@ -112,14 +112,14 @@ struct SettingsSheet: View {
                             }
                         )
                     }
-                case .signerRelay:
-                    if let relay = model.relay {
+                case .signerTunnel:
+                    if let tunnel = model.tunnel {
                         SignerPageSheetBody(
-                            model: relay,
+                            model: tunnel,
                             onSave: { text in
-                                if onSaveRelayUrl?(text) == true { onDismiss() }
+                                if onSaveTunnelUrl?(text) == true { onDismiss() }
                             },
-                            onReset: onResetRelayUrl.map { reset in
+                            onReset: onResetTunnelUrl.map { reset in
                                 {
                                     reset()
                                     onDismiss()

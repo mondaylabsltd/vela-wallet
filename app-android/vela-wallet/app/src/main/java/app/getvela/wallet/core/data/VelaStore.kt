@@ -76,8 +76,15 @@ interface KeyValueStore {
         const val SIGN_METHOD = "vela.signMethod"
         const val CLEAR_SIGNER_URL = "vela.clearSignerUrl"
 
-        /** Spec 075: the relay a cross-device pairing goes through. Survives sign-out. */
-        const val CLEAR_SIGNER_RELAY = "vela.clearSignerRelay"
+        /** Spec 075: the tunnel a cross-device pairing goes through. Survives sign-out. */
+        const val CLEAR_SIGNER_TUNNEL = "vela.clearSignerTunnel"
+
+        /**
+         * What the tunnel was stored under before the 2026-09-23 rename. Only
+         * `Preferences` reads it, to hand it to the core's `prefsMigrations`,
+         * which MOVES the value to [CLEAR_SIGNER_TUNNEL] and removes this key.
+         */
+        const val RETIRED_CLEAR_SIGNER_RELAY = "vela.clearSignerRelay"
         const val CUSTOM_NETWORKS = "vela.customNetworks"
 
         /**

@@ -1,11 +1,11 @@
 //
-//  ClearSignerRelay.swift
+//  ClearSignerTunnel.swift
 //  VelaWallet
 //
-//  The wallet's end of the Clear Signer relay (spec 075,
-//  `contracts/relay.md`): the channel to a signer page on ANOTHER device.
+//  The wallet's end of the Clear Signer tunnel (spec 075,
+//  `contracts/tunnel.md`): the channel to a signer page on ANOTHER device.
 //
-//  The relay is dumb and blind. It pairs two sockets in a room and forwards
+//  The tunnel is dumb and blind. It pairs two sockets in a room and forwards
 //  their frames; it never sees a key, an intent or a signature. What makes
 //  that safe is the session both ends run over it — P-256 ECDH, HKDF-SHA256,
 //  AES-GCM — and that session is the CORE's (`ClearSignerHandshake` /
@@ -14,7 +14,7 @@
 //
 //  What is here is the part only a shell can do:
 //
-//  - a WebSocket to `<relay>/v1/rooms/<room>?role=requester`;
+//  - a WebSocket to `<tunnel>/v1/rooms/<room>?role=requester`;
 //  - the order of the handshake (wait for `joined`, then the page's hello,
 //    then ours) and the frames the sealed messages ride in;
 //  - the pairing link the QR carries, with the `rk` that lets the PAGE refuse
@@ -33,15 +33,15 @@ import Foundation
 import UIKit
 import VelaCore
 
-/// A frame on a relay socket. Text carries the relay's own words and the two
+/// A frame on a tunnel socket. Text carries the tunnel's own words and the two
 /// hellos; everything after the handshake is binary and sealed.
 enum ClearSignerFrame: Equatable {
     case text(String)
     case binary(Data)
 }
 
-/// The socket under the relay conversation — a seam, so the pairing can be
-/// tested against a fake relay without a server.
+/// The socket under the tunnel conversation — a seam, so the pairing can be
+/// tested against a fake tunnel without a server.
 protocol ClearSignerSocket: AnyObject {
     func send(_ frame: ClearSignerFrame) async -> Bool
     /// The next frame, or `nil` once the socket has ended.
@@ -50,7 +50,7 @@ protocol ClearSignerSocket: AnyObject {
 }
 
 /// `URLSessionWebSocketTask`, as a `ClearSignerSocket`.
-final class WebSocketRelaySocket: ClearSignerSocket {
+final class WebSocketTunnelSocket: ClearSignerSocket {
     private let task: URLSessionWebSocketTask
     private var done = false
 
@@ -95,14 +95,14 @@ final class WebSocketRelaySocket: ClearSignerSocket {
 
 /// One pairing with a signer page on another device, and the session of
 /// requests that follows it.
-final class ClearSignerRelayConversation: ClearSignerConversation {
+final class ClearSignerTunnelConversation: ClearSignerConversation {
 
     /// The page the link points at — and what every answer's origin is
     /// checked against.
     let signerUrl: String
     /// The QR's payload, and what "copy link" copies.
     let link: String
-    /// `<relay>/v1/rooms/<room>?role=requester`.
+    /// `<tunnel>/v1/rooms/<room>?role=requester`.
     let roomUrl: String
 
     private let app: String
@@ -123,14 +123,14 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
     /// ~2⁻³² event the caller retries, or falls back to this device.
     init?(
         signerUrl: String,
-        relay: String,
-        app: String = ClearSignerRelayConversation.appName,
-        icon: String = ClearSignerRelayConversation.appIcon,
-        random: (Int) -> Data = ClearSignerRelayConversation.randomBytes,
-        openSocket: @escaping (String) -> ClearSignerSocket? = { WebSocketRelaySocket(url: $0) },
+        tunnel: String,
+        app: String = ClearSignerTunnelConversation.appName,
+        icon: String = ClearSignerTunnelConversation.appIcon,
+        random: (Int) -> Data = ClearSignerTunnelConversation.randomBytes,
+        openSocket: @escaping (String) -> ClearSignerSocket? = { WebSocketTunnelSocket(url: $0) },
         nextId: @escaping () -> String = { UUID().uuidString.lowercased() }
     ) {
-        guard let room = clearSignerRelayRoom(random: random(16)),
+        guard let room = clearSignerTunnelRoom(random: random(16)),
               let handshake = try? ClearSignerHandshake(secret: random(32), nonce: random(16))
         else { return nil }
         self.signerUrl = signerUrl
@@ -139,9 +139,9 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
         self.openSocket = openSocket
         self.nextId = nextId
         self.handshake = handshake
-        self.roomUrl = clearSignerRelayRoomUrl(relay: relay, room: room)
-        self.link = clearSignerRelayLink(
-            signerUrl: signerUrl, relay: relay, room: room,
+        self.roomUrl = clearSignerTunnelRoomUrl(tunnel: tunnel, room: room)
+        self.link = clearSignerTunnelLink(
+            signerUrl: signerUrl, tunnel: tunnel, room: room,
             rk: clearSignerKeyFingerprint(publicKey: handshake.publicKey())
         )
     }
@@ -196,14 +196,14 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
     // MARK: - Pairing
 
     /// Connect, wait for the page, and derive the session. Answers the six
-    /// digits both screens must show, or `nil` when the relay or the page
+    /// digits both screens must show, or `nil` when the tunnel or the page
     /// never came through.
     func pair() async -> String? {
         guard let socket = openSocket(roomUrl) else { return nil }
         self.socket = socket
-        // The relay says `joined` when both roles are present; the page then
+        // The tunnel says `joined` when both roles are present; the page then
         // speaks first. A hello that arrives before we read `joined` is
-        // taken as it comes — the relay never buffers, so it cannot be early.
+        // taken as it comes — the tunnel never buffers, so it cannot be early.
         while !ended {
             guard let frame = await socket.receive() else { return nil }
             guard case .text(let text) = frame, let message = Self.json(text) else { continue }
@@ -219,7 +219,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
     /// before it will talk to us at all.
     private func complete(with pageHello: String) async -> String? {
         guard let socket, await socket.send(.text(handshake.hello(app: app, icon: icon))),
-              let session = try? handshake.complete(peerHello: pageHello, relay: true)
+              let session = try? handshake.complete(peerHello: pageHello, tunnel: true)
         else { return nil }
         self.session = session
         return session.code()
@@ -280,7 +280,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
             }
             switch frame {
             case .text:
-                // The relay's own words (`joined`, `left`). A page that left
+                // The tunnel's own words (`joined`, `left`). A page that left
                 // may come back in the same room, so this waits rather than
                 // giving up on it.
                 continue
@@ -299,7 +299,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
     }
 
     /// The page's `code`, in the core's vocabulary. Kept as a name here
-    /// because it is the relay's own vocabulary too; the one implementation
+    /// because it is the tunnel's own vocabulary too; the one implementation
     /// is `ClearSignerAnswer`'s, shared with the BLE peripheral.
     static func refusal(code: String) -> ClearSignerRefusal {
         ClearSignerAnswer.refusal(code: code)

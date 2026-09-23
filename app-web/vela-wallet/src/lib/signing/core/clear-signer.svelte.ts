@@ -24,13 +24,13 @@ import type { Assertion } from '$lib/onboarding/core/passkey';
 import { signPreference } from '$lib/settings/core/sign-pref.svelte';
 import {
 	openPostMessageChannel,
-	openRelayChannel,
+	openTunnelChannel,
 	signerPageUrl,
 	type ClearSignerChannel,
 	type ClearSignerHost,
 	type ClearSignerReply,
-	type RelayChannel,
-	type RelaySocket
+	type TunnelChannel,
+	type TunnelSocket
 } from '../clear-signer-channel';
 import {
 	ClearSignerRefusedError,
@@ -67,9 +67,9 @@ const IDLE: ClearSignerSessionView = {
 class ClearSignerSession {
 	view = $state<ClearSignerSessionView>(IDLE);
 
-	/** Test seams: the browser a window is opened in, and the relay's socket. */
+	/** Test seams: the browser a window is opened in, and the tunnel's socket. */
 	host: ClearSignerHost | undefined = undefined;
-	sockets: ((url: string) => RelaySocket) | undefined = undefined;
+	sockets: ((url: string) => TunnelSocket) | undefined = undefined;
 
 	#channel: ClearSignerChannel | null = null;
 	/** The page this channel reaches, for the core's verdicts. */
@@ -80,8 +80,8 @@ class ClearSignerSession {
 	#asking: ((where: ClearSignerWhere | null) => void) | null = null;
 	/** The person pressed Cancel: they know, so no sentence follows. */
 	#cancelled = false;
-	/** The relay channel, while one is up: only it has a code to confirm. */
-	#relay: RelayChannel | null = null;
+	/** The tunnel channel, while one is up: only it has a code to confirm. */
+	#tunnel: TunnelChannel | null = null;
 
 	/** The page in force for a request that does not name its own. */
 	async #defaultUrl(): Promise<string> {
@@ -113,14 +113,14 @@ class ClearSignerSession {
 			this.view = { ...this.view, asking: false, pairing: null };
 			return this.#channel;
 		}
-		// A relay that cannot even be addressed is the likeliest failure of the
+		// A tunnel that cannot even be addressed is the likeliest failure of the
 		// whole route, and the person gets its own sentence rather than "something
 		// went wrong": the room is what could not be reached, and this device's
 		// own page is still there.
-		let relay: RelayChannel;
+		let tunnel: TunnelChannel;
 		try {
-			relay = await openRelayChannel({
-				relayUrl: signPreference.view.relay_url,
+			tunnel = await openTunnelChannel({
+				tunnelUrl: signPreference.view.tunnel_url,
 				signerUrl,
 				onLink: (link) => {
 					this.view = { ...this.view, asking: false, pairing: { link, code: null } };
@@ -134,13 +134,13 @@ class ClearSignerSession {
 		} catch (error) {
 			this.#page = '';
 			throw new ClearSignerRefusedError(
-				'relay_down',
+				'tunnel_down',
 				error instanceof Error ? error.message : String(error)
 			);
 		}
-		this.#relay = relay;
-		this.#channel = relay;
-		return relay;
+		this.#tunnel = tunnel;
+		this.#channel = tunnel;
+		return tunnel;
 	}
 
 	/** Put the question up and wait. A second question supersedes the first. */
@@ -165,7 +165,7 @@ class ClearSignerSession {
 
 	/** The person says both screens show the same six digits. */
 	confirmCode(): void {
-		this.#relay?.confirm();
+		this.#tunnel?.confirm();
 		const pairing = this.view.pairing;
 		// The code is answered: the wait is now on the other device's person.
 		if (pairing !== null) this.view = { ...this.view, pairing: null, waiting: true };
@@ -174,7 +174,7 @@ class ClearSignerSession {
 	#closeChannel(): void {
 		this.#channel?.end();
 		this.#channel = null;
-		this.#relay = null;
+		this.#tunnel = null;
 		this.#page = '';
 	}
 
@@ -187,7 +187,7 @@ class ClearSignerSession {
 		try {
 			channel = await this.#channelFor(signerUrl);
 		} catch (error) {
-			// The channel could not be opened at all (an unreachable relay). Its
+			// The channel could not be opened at all (an unreachable tunnel). Its
 			// sentence is shown, and the request is answered rather than hanging.
 			const refused = error instanceof ClearSignerRefusedError ? error : null;
 			const code = refused?.code ?? 'malformed';
@@ -254,7 +254,7 @@ class ClearSignerSession {
 		this.#closeChannel();
 		const url = signerUrl && signerUrl !== '' ? signerUrl : await this.#defaultUrl();
 		const request = clearSignerRequest(input);
-		// A channel that cannot be opened (an unreachable relay) rejects with its
+		// A channel that cannot be opened (an unreachable tunnel) rejects with its
 		// own sentence; every caller already treats that as "nothing was signed".
 		let channel: ClearSignerChannel | null;
 		try {

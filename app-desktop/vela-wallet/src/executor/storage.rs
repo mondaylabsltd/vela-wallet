@@ -52,10 +52,10 @@ pub const KEY_SIGN_METHOD: &str = "vela.signMethod";
 /// The Clear Signer's page, when the person chose one; absent is the
 /// official page.
 pub const KEY_CLEAR_SIGNER_URL: &str = "vela.clearSignerUrl";
-/// Spec 075: the relay a cross-device pairing goes through, when the person
-/// named one; absent is the official relay. Same rule as the page above, and
+/// Spec 075: the tunnel a cross-device pairing goes through, when the person
+/// named one; absent is the official tunnel. Same rule as the page above, and
 /// the same key every client reads.
-pub const KEY_CLEAR_SIGNER_RELAY: &str = "vela.clearSignerRelay";
+pub const KEY_CLEAR_SIGNER_TUNNEL: &str = vela_core::prefs::keys::CLEAR_SIGNER_TUNNEL;
 
 /// The storage failed in a way the core answers with `storage_failed`, never a
 /// crash: a read-only home directory, a full disk, a file another process holds.

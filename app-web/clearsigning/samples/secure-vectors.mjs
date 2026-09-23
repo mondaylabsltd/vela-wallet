@@ -53,7 +53,7 @@ async function runChecks(secure, vectors) {
   };
 
   for (const c of vectors.cases) {
-    const label = c.label === 'vela-ble/1' ? 'ble' : 'relay';
+    const label = c.label === 'vela-ble/1' ? 'ble' : 'tunnel';
     const tail = (m) => (label === 'ble' ? m.msgId : undefined);
 
     // Both ends, from the vector's randomness. The signer imports its bare
@@ -106,13 +106,13 @@ async function runChecks(secure, vectors) {
     const ownDirection = c.messages.find((m) => m.from === 'signer');
     check(`${c.name}: a message in our own direction is refused`,
       (await codeOf(fresh.open(hex(ownDirection.sealedHex), tail(ownDirection)))) === 'replayed');
-    if (label === 'relay') {
-      // The relay's AAD ends with the counter: the same bytes under another
+    if (label === 'tunnel') {
+      // The tunnel's AAD ends with the counter: the same bytes under another
       // label (a BLE session) must not open.
       const other = await (await secure.handshake({
         role: 'signer', secret: hex(c.signer.secretHex), nonce: hex(c.signer.nonceHex),
       })).complete(c.requester.hello, 'ble', c.rk);
-      check(`${c.name}: a relay message does not open in a BLE session`,
+      check(`${c.name}: a tunnel message does not open in a BLE session`,
         (await codeOf(other.open(hex(firstFromWallet.sealedHex), 1))) === 'unreadable');
     }
 

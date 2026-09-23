@@ -118,7 +118,7 @@
     waitingState.code = state.code || (session && session.comparisonCode);
     // Who is on the other end, and whether anything vouches for it. The
     // postMessage and extension channels are verified by the browser itself;
-    // a socket, a radio and a relay are not.
+    // a socket, a radio and a tunnel are not.
     waitingState.requesterApp = (session && session.requesterApp) || '';
     waitingState.requesterIcon = (session && session.requesterIcon) || '';
     waitingState.requesterVerified = !!(session && session.channel === 'post')
@@ -129,7 +129,7 @@
   }
 
   function channelLine() {
-    return session && { ws: 'value.viaApp', relay: 'value.viaRelay', ble: 'value.viaBle' }[session.channel];
+    return session && { ws: 'value.viaApp', relay: 'value.viaTunnel', ble: 'value.viaBle' }[session.channel];
   }
 
   // A request was answered. A session that carries more goes back to a calm
@@ -436,8 +436,8 @@
       onCode: function (code) {
         state.code = code;
         if (!current) {
-          waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.relayConfirm', originKey: channelLine() });
-          say('ui.relayConfirm');
+          waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.tunnelConfirm', originKey: channelLine() });
+          say('ui.tunnelConfirm');
         } else {
           var codes = slot.querySelectorAll('.pairing-code b');
           for (var i = 0; i < codes.length; i++) codes[i].textContent = code;
@@ -445,9 +445,9 @@
       },
       onState: function (name) {
         if (current) return;
-        var notes = { relayWaiting: 'ui.relayWaiting', relayJoined: 'ui.relayJoined', relayLeft: 'ui.relayLeft' };
+        var notes = { tunnelWaiting: 'ui.tunnelWaiting', tunnelJoined: 'ui.tunnelJoined', tunnelLeft: 'ui.tunnelLeft' };
         if (notes[name]) {
-          waiting({ titleKey: 'ui.waitingForWallet', noteKey: notes[name], originKey: 'value.viaRelay' });
+          waiting({ titleKey: 'ui.waitingForWallet', noteKey: notes[name], originKey: 'value.viaTunnel' });
           say(notes[name]);
         }
       },
@@ -463,9 +463,9 @@
         var slider = slot.querySelector('.slide');
         if (slider) slider.classList.add('slide-off');
         window.__slider = null;
-        say(session && session.channel === 'relay' && !session.ended ? 'ui.relayLeft' : 'ui.walletGone');
+        say(session && session.channel === 'relay' && !session.ended ? 'ui.tunnelLeft' : 'ui.walletGone');
         phase('gone');
-        // The session may carry on (a relay wallet coming back); listen again.
+        // The session may carry on (a tunnel wallet coming back); listen again.
         // `lose()` runs before a session is marked ended, so wait a tick.
         setTimeout(loop, 0);
       },
@@ -474,8 +474,8 @@
         session = opened;
         state.channel = opened.channel;
         if (opened.channel === 'relay' && !opened.ended) {
-          waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.relayConnecting', originKey: 'value.viaRelay' });
-          say('ui.relayConnecting');
+          waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.tunnelConnecting', originKey: 'value.viaTunnel' });
+          say('ui.tunnelConnecting');
         }
         loop();
       })

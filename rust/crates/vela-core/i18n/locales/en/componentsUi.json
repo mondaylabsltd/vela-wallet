@@ -249,7 +249,7 @@
       "clearSignerCode": "Check that the other device shows the same code: {{code}}",
       "clearSignerCodeConfirm": "The codes match",
       "clearSignerCopyLink": "Copy link",
-      "clearSignerRelayDown": "The relay could not be reached. Try again, or use the Clear Signer on this device."
+      "clearSignerTunnelDown": "The tunnel could not be reached. Try again, or use the Clear Signer on this device."
     },
     "currency": {
       "title": "Display currency",

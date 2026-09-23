@@ -165,9 +165,9 @@ data class SettingsActions(
     /** Spec 071: the Clear Signer page, as typed, and back to the official one. */
     val onSignerUrlSave: (String) -> Unit = {},
     val onSignerUrlReset: () -> Unit = {},
-    /** Spec 075: the relay a cross-device pairing goes through. */
-    val onRelayUrlSave: (String) -> Unit = {},
-    val onRelayUrlReset: () -> Unit = {},
+    /** Spec 075: the tunnel a cross-device pairing goes through. */
+    val onTunnelUrlSave: (String) -> Unit = {},
+    val onTunnelUrlReset: () -> Unit = {},
     /** Spec 072: a page came on screen — the providers and endpoints pages ask the core to load and test. */
     val onPageShown: (SettingsPage) -> Unit = {},
     /** Spec 072: a sheet came up (or went: `None`) — the account sheet asks for every account's total. */
@@ -217,7 +217,7 @@ fun SettingsRoute(
                 SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
                 SettingsFixtures.SIGN_WITH_ROW -> overlay = SettingsOverlay.SignWith
                 SettingsFixtures.SIGNER_PAGE_ROW -> overlay = SettingsOverlay.SignerPage
-                SettingsFixtures.RELAY_ROW -> overlay = SettingsOverlay.SignerRelay
+                SettingsFixtures.TUNNEL_ROW -> overlay = SettingsOverlay.SignerTunnel
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
                 "time-format" -> overlay = SettingsOverlay.TimeFormat
@@ -306,8 +306,8 @@ fun SettingsRoute(
         },
         onSignerUrlSave = actions.onSignerUrlSave,
         onSignerUrlReset = actions.onSignerUrlReset,
-        onRelayUrlSave = actions.onRelayUrlSave,
-        onRelayUrlReset = actions.onRelayUrlReset,
+        onTunnelUrlSave = actions.onTunnelUrlSave,
+        onTunnelUrlReset = actions.onTunnelUrlReset,
     )
 }
 
@@ -362,8 +362,8 @@ fun SettingsScreen(
     onRpcFixPrimary: () -> Unit = {},
     onSignerUrlSave: (String) -> Unit = {},
     onSignerUrlReset: () -> Unit = {},
-    onRelayUrlSave: (String) -> Unit = {},
-    onRelayUrlReset: () -> Unit = {},
+    onTunnelUrlSave: (String) -> Unit = {},
+    onTunnelUrlReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -480,8 +480,8 @@ fun SettingsScreen(
                 onRpcFixPrimary = onRpcFixPrimary,
                 onSignerUrlSave = onSignerUrlSave,
                 onSignerUrlReset = onSignerUrlReset,
-                onRelayUrlSave = onRelayUrlSave,
-                onRelayUrlReset = onRelayUrlReset,
+                onTunnelUrlSave = onTunnelUrlSave,
+                onTunnelUrlReset = onTunnelUrlReset,
             )
         }
     }
@@ -1164,8 +1164,8 @@ private fun SettingsSheet(
     onRpcFixPrimary: () -> Unit = {},
     onSignerUrlSave: (String) -> Unit = {},
     onSignerUrlReset: () -> Unit = {},
-    onRelayUrlSave: (String) -> Unit = {},
-    onRelayUrlReset: () -> Unit = {},
+    onTunnelUrlSave: (String) -> Unit = {},
+    onTunnelUrlReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1220,11 +1220,11 @@ private fun SettingsSheet(
                     onReset = onSignerUrlReset,
                     onDone = onDismiss,
                 )
-                // Spec 075: the same sheet, the relay's words and events.
-                SettingsOverlay.SignerRelay -> SignerPageSheetBody(
-                    model.signerRelay,
-                    onSave = onRelayUrlSave,
-                    onReset = onRelayUrlReset,
+                // Spec 075: the same sheet, the tunnel's words and events.
+                SettingsOverlay.SignerTunnel -> SignerPageSheetBody(
+                    model.signerTunnel,
+                    onSave = onTunnelUrlSave,
+                    onReset = onTunnelUrlReset,
                     onDone = onDismiss,
                 )
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {

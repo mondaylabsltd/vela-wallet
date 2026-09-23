@@ -79,9 +79,14 @@ struct VelaStore {
         static let signMethod = "vela.signMethod"
         /// The Clear Signer page; absent is the official one.
         static let clearSignerUrl = "vela.clearSignerUrl"
-        /// Spec 075: the relay a cross-device pairing goes through; absent is
+        /// Spec 075: the tunnel a cross-device pairing goes through; absent is
         /// the official one.
-        static let clearSignerRelay = "vela.clearSignerRelay"
+        static let clearSignerTunnel = "vela.clearSignerTunnel"
+
+        /// What the tunnel was stored under before the 2026-09-23 rename.
+        /// Only `Preferences` reads it, to hand it to the core's
+        /// `prefsMigrations`, which MOVES the value and removes this key.
+        static let retiredClearSignerRelay = "vela.clearSignerRelay"
 
         // Owned by the read path (spec 051).
         /// `address → { usd, at }`, 24-hour TTL. The last total the wallet

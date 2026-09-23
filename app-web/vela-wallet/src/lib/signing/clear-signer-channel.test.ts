@@ -1,27 +1,27 @@
 /**
- * The two Clear Signer channels as SESSIONS (spec 075 §1.5, relay.md).
+ * The two Clear Signer channels as SESSIONS (spec 075 §1.5, tunnel.md).
  *
  * 071 pinned the same-device transport for one request; what is new here is
  * that a flow's requests ride one page visit — create then member proof, sign
  * in then recover twice — and that there is a second way to reach a page at
  * all. Both are checked against a stand-in page: the same-device one through
- * the fake browser 071 already had, the relay one through a stand-in room
+ * the fake browser 071 already had, the tunnel one through a stand-in room
  * that runs the page's own half of the session.
  *
- * The relay's bytes themselves are pinned elsewhere, against the core's
- * vectors (`relay/secure-session.test.ts`). What is pinned here is the
+ * The tunnel's bytes themselves are pinned elsewhere, against the core's
+ * vectors (`tunnel/secure-session.test.ts`). What is pinned here is the
  * conversation: nothing is sent before the person confirms the code, the
- * relay only ever carries two hellos in the clear, a page that drops out is
+ * tunnel only ever carries two hellos in the clear, a page that drops out is
  * waited for, and every way a room can end reaches the caller as an answer
  * rather than a hang.
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from './__fixtures__/clear-signer-page';
-import { fakeRelay } from './__fixtures__/relay-page';
+import { fakeTunnel } from './__fixtures__/tunnel-page';
 import {
 	openPostMessageChannel,
-	openRelayChannel,
+	openTunnelChannel,
 	signerPageUrl,
 	type ClearSignerReply
 } from './clear-signer-channel';
@@ -126,15 +126,15 @@ describe('this device: one page visit, several requests', () => {
 	});
 });
 
-describe('another device: the relay', () => {
+describe('another device: the tunnel', () => {
 	/** A channel paired with the stand-in page, code in hand. */
 	async function paired() {
-		const room = fakeRelay();
+		const room = fakeTunnel();
 		let connected = '';
 		const codes: (string | null)[] = [];
 		const links: string[] = [];
-		const channel = await openRelayChannel({
-			relayUrl: 'wss://relay.getvela.app',
+		const channel = await openTunnelChannel({
+			tunnelUrl: 'wss://tunnel.getvela.app',
 			signerUrl: SIGNER,
 			onLink: (link) => links.push(link),
 			onCode: (code) => codes.push(code),
@@ -159,14 +159,16 @@ describe('another device: the relay', () => {
 	it('draws a pairing link for the page, and joins the room as the requester', async () => {
 		const { channel, links, connected, room, codes } = await paired();
 		expect(connected).toMatch(
-			/^wss:\/\/relay\.getvela\.app\/v1\/rooms\/[A-Za-z0-9_-]{22}\?role=requester$/
+			/^wss:\/\/tunnel\.getvela\.app\/v1\/rooms\/[A-Za-z0-9_-]{22}\?role=requester$/
 		);
 		expect(links).toHaveLength(1);
 		const link = new URL(links[0]);
 		expect(link.origin + link.pathname).toBe('https://sign.getvela.app/sign.html');
+		// `ch` and the fragment key stay spelled `relay`: they are the protocol
+		// the signer page reads, and the rename stopped at the wire.
 		expect(link.searchParams.get('ch')).toBe('relay');
 		const fragment = new URLSearchParams(link.hash.slice(1));
-		expect(fragment.get('relay')).toBe('wss://relay.getvela.app');
+		expect(fragment.get('relay')).toBe('wss://tunnel.getvela.app');
 		expect(fragment.get('room')).toMatch(/^[A-Za-z0-9_-]{22}$/);
 		expect(fragment.get('rk')).toMatch(/^[A-Za-z0-9_-]{22}$/);
 		expect(fragment.get('v')).toBe('1');
@@ -222,7 +224,7 @@ describe('another device: the relay', () => {
 		expect(channel.ended).toBe(true);
 	});
 
-	it('lets the relay see two hellos and nothing else', async () => {
+	it('lets the tunnel see two hellos and nothing else', async () => {
 		const { channel, room } = await paired();
 		void channel.ask(SIGN_IN);
 		channel.confirm();
@@ -277,9 +279,9 @@ describe('another device: the relay', () => {
 		channel.confirm();
 		await settleAll();
 		room.shut(4408);
-		expect(await asked).toMatchObject({ kind: 'refused', code: 'relay_down' });
+		expect(await asked).toMatchObject({ kind: 'refused', code: 'tunnel_down' });
 		expect(channel.ended).toBe(true);
-		expect(await channel.ask(PROOF)).toMatchObject({ kind: 'refused', code: 'relay_down' });
+		expect(await channel.ask(PROOF)).toMatchObject({ kind: 'refused', code: 'tunnel_down' });
 	});
 
 	it('cancelling leaves the room at once', async () => {

@@ -26,8 +26,8 @@ use crate::outcome::SHEET_RADIUS;
 use crate::theme::{self, FLOW_GAP_MD, FLOW_GAP_SM, TOUCH_DISC, Theme};
 use crate::ui::{ButtonVariant, vela_button, vela_button_opts};
 
-/// How wide the pairing QR is drawn. The relay link is long — a page URL, a
-/// percent-encoded relay address, a room and a fingerprint — so its matrix has
+/// How wide the pairing QR is drawn. The tunnel link is long — a page URL, a
+/// percent-encoded tunnel address, a room and a fingerprint — so its matrix has
 /// many more modules than a caBLE payload's, and a fixed module size would
 /// paint a card nobody can fit a phone in front of. The WIDTH is fixed instead
 /// and the module divides into it.
@@ -41,7 +41,7 @@ pub type PickPlace = std::sync::Arc<dyn Fn(Place, &mut Window, &mut App)>;
 /// "Where is your Clear Signer?" — asked whenever the route is chosen, because
 /// both answers are real on every desktop (contract §2): this computer's own
 /// browser over a loopback socket, or the phone in the person's hand over the
-/// relay.
+/// tunnel.
 ///
 /// Neither row is greyed out and neither is a default. A wallet cannot know
 /// which browser holds somebody's passkey, and guessing wrong here means a
@@ -93,7 +93,7 @@ pub fn where_card(
         ))
 }
 
-/// The cross-device pairing (relay.md §§2–3): the link as a QR and as
+/// The cross-device pairing (tunnel.md §§2–3): the link as a QR and as
 /// something to copy, then the six digits.
 ///
 /// Two states on one card, because they are one moment for the person: while
@@ -101,7 +101,7 @@ pub fn where_card(
 /// instant both ends have derived a code it is "do these two screens agree?".
 ///
 /// **The confirm button is the security boundary**, not a courtesy. Until it is
-/// pressed the wallet has sent the relay nothing but its own hello — which is
+/// pressed the wallet has sent the tunnel nothing but its own hello — which is
 /// what stops a stand-in page (somebody who got the link) from being handed a
 /// create and answering it with a key of their own.
 pub fn pair_card(
@@ -328,7 +328,7 @@ mod tests {
     /// Every ending has its own sentence in every build — a key echoed on
     /// this card is the person told nothing at the one moment something went
     /// wrong, and two endings sharing a sentence is the person told the wrong
-    /// thing. Spec 075's fifth ending (an unreachable relay) is in the set.
+    /// thing. Spec 075's fifth ending (an unreachable tunnel) is in the set.
     #[test]
     fn every_ending_has_its_own_sentence() {
         let loc = Loc::from_env();
@@ -404,15 +404,15 @@ mod tests {
         );
     }
 
-    /// A pairing link draws a QR. The relay link is long — a page URL, a
-    /// percent-encoded relay address, a room and a fingerprint — and a version
+    /// A pairing link draws a QR. The tunnel link is long — a page URL, a
+    /// percent-encoded tunnel address, a room and a fingerprint — and a version
     /// that could not hold it would leave the sheet with the copy button and
     /// nothing to scan.
     #[test]
     fn a_real_pairing_link_still_fits_in_a_qr() {
-        let link = vela_core::clear_signer::relay_link(
+        let link = vela_core::clear_signer::tunnel_link(
             vela_core::clear_signer::DEFAULT_SIGNER_URL,
-            vela_core::clear_signer::DEFAULT_RELAY_URL,
+            vela_core::clear_signer::DEFAULT_TUNNEL_URL,
             "AAECAwQFBgcICQoLDA0ODw",
             "b8ZqkEhhccpptRK-GF1mpw",
         );

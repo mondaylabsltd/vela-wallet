@@ -1,14 +1,14 @@
-//! Across devices: the Clear Signer relay, from the requester's end (spec 075,
-//! `specs/075-clear-signer-channel/contracts/relay.md`).
+//! Across devices: the Clear Signer tunnel, from the requester's end (spec 075,
+//! `specs/075-clear-signer-channel/contracts/tunnel.md`).
 //!
-//! The owner's call — "跨端时，websocket 蓝牙是核心通道" — put a relay between a
+//! The owner's call — "跨端时，websocket 蓝牙是核心通道" — put a tunnel between a
 //! wallet on this computer and a signer page on the phone in the person's hand.
-//! **The relay is blind**: it pairs two sockets in a room and forwards their
+//! **The tunnel is blind**: it pairs two sockets in a room and forwards their
 //! frames, and everything after the two hellos is sealed. So nothing here trusts
 //! it with anything:
 //!
 //! - the session is the core's (`clear_signer::secure`) — P-256 ECDH, HKDF and
-//!   AES-GCM under the `vela-relay/1` label, byte for byte what the page's
+//!   AES-GCM under the `vela-tunnel/1` label, byte for byte what the page's
 //!   `lib/transport/secure.js` runs, and pinned on both sides by
 //!   `rust/crates/vela-core/tests/clear-signer/secure-session.json`;
 //! - the page refuses a stand-in wallet with `rk`, the fingerprint of this
@@ -19,7 +19,7 @@
 //!   somebody else's key.
 //!
 //! This file is the socket, the clock, and the order of the frames. It is the
-//! same [`Line`] a loopback socket is, so a create over the relay and a create
+//! same [`Line`] a loopback socket is, so a create over the tunnel and a create
 //! on this device run the same code above it.
 
 use std::io;
@@ -37,13 +37,13 @@ use crate::executor::clear_signer::{Channel, Line, POLL, Refusal};
 use crate::executor::passkey;
 
 /// What the wallet says it is in its hello — the page shows nothing of it, but
-/// the field is part of the wire (relay.md §2.2).
+/// the field is part of the wire (tunnel.md §2.2).
 const APP: &str = concat!("vela-desktop/", env!("CARGO_PKG_VERSION"));
 
 type Socket = WebSocket<MaybeTlsStream<TcpStream>>;
 
 /// How long a write may take before the socket counts as gone. A frame is a
-/// few kilobytes; anything slower than this is a relay that stopped reading.
+/// few kilobytes; anything slower than this is a tunnel that stopped reading.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The randomness one pairing needs, all of it the shell's — the core holds
@@ -76,9 +76,9 @@ impl Seed {
     }
 }
 
-/// A paired relay session: the socket, the sealed session over it, and the two
+/// A paired tunnel session: the socket, the sealed session over it, and the two
 /// counters the wire carries (the request id, and the protocol's `n`).
-pub struct Relay {
+pub struct Tunnel {
     socket: Socket,
     session: Session,
     /// The request id, so an answer can be matched to its question.
@@ -87,37 +87,37 @@ pub struct Relay {
     sent: u64,
     /// The highest `n` accepted from the page. One that does not increase is
     /// dropped: the seal already refuses a replay, and this refuses a reorder
-    /// the relay could have caused.
+    /// the tunnel could have caused.
     seen: u64,
 }
 
 /// Pair with a signer page on another device, and hold the line open.
 ///
-/// In order (relay.md §2): the link on screen as a QR and a copyable address,
+/// In order (tunnel.md §2): the link on screen as a QR and a copyable address,
 /// the room, `joined`, the page's hello, ours, the derived code — and then
 /// nothing at all until the person has said the two screens agree.
 pub fn open(
     page: &str,
-    relay: &str,
+    tunnel: &str,
     seed: Seed,
     channel: &Channel,
     deadline: Instant,
-) -> Result<Relay, Refusal> {
+) -> Result<Tunnel, Refusal> {
     let handshake = Handshake::new(&seed.secret, seed.nonce, Role::Requester).map_err(|error| {
         // A scalar the curve rejects is a ~2⁻³² event; there is nothing for a
         // person to do about it but try again.
-        eprintln!("[vela-wallet] clear signer relay: {error}");
+        eprintln!("[vela-wallet] clear signer tunnel: {error}");
         Refusal::Unreachable
     })?;
-    let room = clear_signer::relay_room(&seed.room);
+    let room = clear_signer::tunnel_room(&seed.room);
     let rk = key_fingerprint(handshake.public_key());
-    if !channel.pair(clear_signer::relay_link(page, relay, &room, &rk)) {
+    if !channel.pair(clear_signer::tunnel_link(page, tunnel, &room, &rk)) {
         return Err(Refusal::Closed);
     }
 
-    let url = clear_signer::relay_room_url(relay, &room, "requester");
+    let url = clear_signer::tunnel_room_url(tunnel, &room, "requester");
     let (mut socket, _response) = tungstenite::connect(&url).map_err(|error| {
-        eprintln!("[vela-wallet] clear signer relay: {url} did not answer: {error}");
+        eprintln!("[vela-wallet] clear signer tunnel: {url} did not answer: {error}");
         Refusal::Unreachable
     })?;
     set_poll_timeout(&mut socket);
@@ -153,9 +153,9 @@ pub fn open(
     // The page checks our key against `rk`; we have no fingerprint to check
     // it against — the code the person reads is what does that job here.
     let session = handshake
-        .complete(&peer_hello, Label::Relay, None)
+        .complete(&peer_hello, Label::Tunnel, None)
         .map_err(|error| {
-            eprintln!("[vela-wallet] clear signer relay: bad hello: {error}");
+            eprintln!("[vela-wallet] clear signer tunnel: bad hello: {error}");
             Refusal::Mismatch
         })?;
 
@@ -168,13 +168,13 @@ pub fn open(
         if Instant::now() >= deadline {
             return Err(Refusal::TimedOut);
         }
-        // The relay's own ping keeps the room alive while the person reads;
+        // The tunnel's own ping keeps the room alive while the person reads;
         // a frame arriving here would be one nobody asked for.
         drain(&mut socket)?;
         std::thread::sleep(POLL);
     }
 
-    Ok(Relay {
+    Ok(Tunnel {
         socket,
         session,
         seq: 0,
@@ -183,21 +183,21 @@ pub fn open(
     })
 }
 
-impl Relay {
+impl Tunnel {
     /// The next `n`, as PROTOCOL.md §4 defines it: **the larger of the highest
     /// this side has sent and the highest it has received, plus one.**
     ///
     /// Not `sent + 1`. The sequence belongs to the SESSION, not to a
     /// direction — intent 1, result 2, intent 3 — and a peer that enforces
     /// that (the wallet's own `seen` check does) would drop a second intent
-    /// numbered 2. On a create over the relay that is the member proof
+    /// numbered 2. On a create over the tunnel that is the member proof
     /// silently never arriving, and a five-minute wait with nothing to say.
     fn next_n(&mut self) {
         self.sent = self.sent.max(self.seen) + 1;
     }
 }
 
-impl Line for Relay {
+impl Line for Tunnel {
     fn next_id(&mut self) -> String {
         self.seq += 1;
         format!("r{}", self.seq)
@@ -232,21 +232,21 @@ impl Line for Relay {
         loop {
             let sealed = match recv(&mut self.socket, channel, deadline)? {
                 Message::Binary(bytes) => bytes,
-                // The relay's own frames are text and have a `relay` key; the
+                // The tunnel's own frames are text and have a `tunnel` key; the
                 // page sends nothing else in the clear after the handshake.
-                // The relay's own frames are the only text after the
+                // The tunnel's own frames are the only text after the
                 // handshake. `left` is the page going; `joined` is it coming
                 // BACK, which per §7.5 means new keys, a new nonce and a new
                 // code — this session cannot be spoken on any more, and
                 // waiting out five minutes would say nothing.
-                Message::Text(text) => match relay_frame(&text) {
+                Message::Text(text) => match tunnel_frame(&text) {
                     Some("left" | "joined") => return Err(Refusal::Closed),
                     _ => continue,
                 },
                 _ => continue,
             };
             let Ok(plain) = self.session.open(&sealed, Tail::Counter) else {
-                // A message that will not open is the relay's doing or a
+                // A message that will not open is the tunnel's doing or a
                 // replay; neither is this page answering.
                 continue;
             };
@@ -292,7 +292,7 @@ impl Line for Relay {
 fn set_poll_timeout(socket: &mut Socket) {
     let read = Some(POLL);
     // A WRITE timeout too, and a generous one: `end` writes the `bye` on
-    // whatever thread is tearing the session down, and a relay that has
+    // whatever thread is tearing the session down, and a tunnel that has
     // stopped reading would otherwise hold that thread for as long as the
     // OS's own TCP timeout — minutes.
     let write = Some(WRITE_TIMEOUT);
@@ -320,7 +320,7 @@ fn send(socket: &mut Socket, message: Message) -> Result<(), Refusal> {
     match trouble {
         None => Ok(()),
         Some(error) => {
-            eprintln!("[vela-wallet] clear signer relay: could not write: {error}");
+            eprintln!("[vela-wallet] clear signer tunnel: could not write: {error}");
             Err(Refusal::Unreachable)
         }
     }
@@ -343,7 +343,7 @@ fn recv(socket: &mut Socket, channel: &Channel, deadline: Instant) -> Result<Mes
                 return Err(Refusal::Unreachable);
             }
             Err(error) => {
-                eprintln!("[vela-wallet] clear signer relay: {error}");
+                eprintln!("[vela-wallet] clear signer tunnel: {error}");
                 return Err(Refusal::Unreachable);
             }
         }
@@ -351,19 +351,19 @@ fn recv(socket: &mut Socket, channel: &Channel, deadline: Instant) -> Result<Mes
 }
 
 /// Take whatever is waiting, once, without blocking — used while the person
-/// reads the code, so a relay that hangs up is noticed then rather than
+/// reads the code, so a tunnel that hangs up is noticed then rather than
 /// minutes later.
 fn drain(socket: &mut Socket) -> Result<(), Refusal> {
     match socket.read() {
         Ok(Message::Close(frame)) => Err(closed_by(frame.as_ref())),
-        Ok(Message::Text(text)) if relay_said_left(&text) => Err(Refusal::Closed),
+        Ok(Message::Text(text)) if tunnel_said_left(&text) => Err(Refusal::Closed),
         Ok(_) => Ok(()),
         Err(tungstenite::Error::Io(error)) if would_block(&error) => Ok(()),
         Err(tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed) => {
             Err(Refusal::Unreachable)
         }
         Err(error) => {
-            eprintln!("[vela-wallet] clear signer relay: {error}");
+            eprintln!("[vela-wallet] clear signer tunnel: {error}");
             Err(Refusal::Unreachable)
         }
     }
@@ -376,10 +376,10 @@ fn would_block(error: &io::Error) -> bool {
     )
 }
 
-/// Why the relay hung up, in a sentence the sheet can say (relay.md §1's close
+/// Why the tunnel hung up, in a sentence the sheet can say (tunnel.md §1's close
 /// codes). 4408 is the room's ten minutes or an idle end — a wait that ran out,
 /// which is what the person actually saw; everything else, including 4409
-/// (somebody already in our role) and a peer that just went, reads as a relay
+/// (somebody already in our role) and a peer that just went, reads as a tunnel
 /// that could not carry this.
 fn closed_by(frame: Option<&tungstenite::protocol::CloseFrame<'_>>) -> Refusal {
     let code = frame.map(|frame| u16::from(frame.code));
@@ -388,7 +388,7 @@ fn closed_by(frame: Option<&tungstenite::protocol::CloseFrame<'_>>) -> Refusal {
         _ => {
             if let Some(frame) = frame {
                 eprintln!(
-                    "[vela-wallet] clear signer relay: closed {} {}",
+                    "[vela-wallet] clear signer tunnel: closed {} {}",
                     u16::from(frame.code),
                     frame.reason
                 );
@@ -398,9 +398,11 @@ fn closed_by(frame: Option<&tungstenite::protocol::CloseFrame<'_>>) -> Refusal {
     }
 }
 
-/// What the RELAY said, when a text frame is its own. An end's own JSON never
-/// carries a `relay` key (relay.md §1), so this is how the two are told apart.
-fn relay_frame(text: &str) -> Option<&'static str> {
+/// What the TUNNEL said, when a text frame is its own. An end's own JSON never
+/// carries a `relay` key (tunnel.md §1), so this is how the two are told apart.
+/// The key on the wire is still spelled `relay`: it is read by a deployed page,
+/// a committed wasm and the hosts in their own repository, so the rename left it.
+fn tunnel_frame(text: &str) -> Option<&'static str> {
     let frame: Value = serde_json::from_str(text).ok()?;
     match frame.get("relay").and_then(Value::as_str) {
         Some("joined") => Some("joined"),
@@ -410,8 +412,8 @@ fn relay_frame(text: &str) -> Option<&'static str> {
     }
 }
 
-fn relay_said_left(text: &str) -> bool {
-    relay_frame(text) == Some("left")
+fn tunnel_said_left(text: &str) -> bool {
+    tunnel_frame(text) == Some("left")
 }
 
 #[cfg(test)]
@@ -442,7 +444,7 @@ mod tests {
         out
     }
 
-    /// The relay's first case, as a seed this requester can be run with.
+    /// The tunnel's first case, as a seed this requester can be run with.
     fn seeded(case: &Value) -> Seed {
         Seed {
             secret: bytes::<32>(case["requester"]["secretHex"].as_str().unwrap_or_default()),
@@ -451,13 +453,13 @@ mod tests {
         }
     }
 
-    /// A stand-in relay AND the page behind it, on one loopback socket: it
-    /// speaks relay.md §1's frames (`joined`, forwarding) and then the page's
+    /// A stand-in tunnel AND the page behind it, on one loopback socket: it
+    /// speaks tunnel.md §1's frames (`joined`, forwarding) and then the page's
     /// half of §2. Everything the wallet sends after the hellos arrives here
-    /// sealed, which is what lets a test assert the relay saw no plaintext.
-    struct FakeRelay {
+    /// sealed, which is what lets a test assert the tunnel saw no plaintext.
+    struct FakeTunnel {
         port: u16,
-        /// Every frame the "relay" forwarded, in order — text or binary.
+        /// Every frame the "tunnel" forwarded, in order — text or binary.
         seen: Arc<std::sync::Mutex<Vec<Message>>>,
         page: std::sync::mpsc::Receiver<PageEnd>,
     }
@@ -468,7 +470,7 @@ mod tests {
         seen: Arc<std::sync::Mutex<Vec<Message>>>,
     }
 
-    impl FakeRelay {
+    impl FakeTunnel {
         fn start() -> Self {
             let listener =
                 TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap_or_else(|e| unreachable!("{e}"));
@@ -541,16 +543,16 @@ mod tests {
 
     /// The pairing, byte for byte against the shared vectors: the link's `rk`,
     /// the six digits, and every message sealed exactly as the page's
-    /// `secure.js` seals it. The relay never sees a plaintext request.
+    /// `secure.js` seals it. The tunnel never sees a plaintext request.
     #[test]
     fn the_requester_pairs_and_seals_as_the_vectors_say() {
         let cases = vectors();
         let case = cases["cases"]
             .as_array()
-            .and_then(|cases| cases.iter().find(|case| case["name"] == "relay-a"))
-            .unwrap_or_else(|| unreachable!("the relay-a vector"));
+            .and_then(|cases| cases.iter().find(|case| case["name"] == "tunnel-a"))
+            .unwrap_or_else(|| unreachable!("the tunnel-a vector"));
 
-        let relay = FakeRelay::start();
+        let tunnel = FakeTunnel::start();
         let (channel, _changed) = Channel::new();
         let seed = seeded(case);
         let expected_code = case["code"].as_str().unwrap_or_default().to_owned();
@@ -579,12 +581,13 @@ mod tests {
                     link.contains(&format!("rk={rk}")),
                     "the link must carry this wallet's fingerprint: {link}"
                 );
+                // `ch=relay` — the wire token kept its pre-rename spelling.
                 assert!(link.contains("ch=relay"), "{link}");
                 link
             })
         };
 
-        let url = relay.url();
+        let url = tunnel.url();
         let paired = {
             let channel = Arc::clone(&channel);
             std::thread::spawn(move || {
@@ -598,7 +601,7 @@ mod tests {
             })
         };
 
-        let mut page = relay.page();
+        let mut page = tunnel.page();
         page.joined();
         page.say(Message::text(
             case["signer"]["hello"].as_str().unwrap_or_default(),
@@ -629,7 +632,7 @@ mod tests {
             Role::Signer,
         )
         .unwrap_or_else(|e| unreachable!("{e}"))
-        .complete(&hello, Label::Relay, Some(&expected_rk))
+        .complete(&hello, Label::Tunnel, Some(&expected_rk))
         .unwrap_or_else(|e| unreachable!("{e}"));
         assert_eq!(signer.code(), expected_code, "both screens' six digits");
 
@@ -675,7 +678,11 @@ mod tests {
             .unwrap_or_else(|_| unreachable!("the page panicked"));
         line.end();
         // Everything after the two hellos was ciphertext on the wire.
-        let seen = relay.seen.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let seen = tunnel
+            .seen
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         let plaintext: Vec<&Message> = seen
             .iter()
             .filter(|message| matches!(message, Message::Text(_)))
@@ -689,10 +696,10 @@ mod tests {
         let _ = keys();
     }
 
-    /// The relay that will not answer at all: the sheet says so, and the
+    /// The tunnel that will not answer at all: the sheet says so, and the
     /// request stays open to be signed another way.
     #[test]
-    fn a_relay_that_cannot_be_reached_says_so() {
+    fn a_tunnel_that_cannot_be_reached_says_so() {
         // A port nothing is listening on — bound and dropped, so it is free.
         let port = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
             .and_then(|listener| listener.local_addr())
@@ -707,29 +714,29 @@ mod tests {
             Instant::now() + Duration::from_secs(5),
         )
         .err()
-        .unwrap_or_else(|| unreachable!("a dead relay paired"));
+        .unwrap_or_else(|| unreachable!("a dead tunnel paired"));
         assert_eq!(refusal, Refusal::Unreachable);
         assert_eq!(
             refusal.key(),
-            "componentsUi.signing.clearSignerRelayDown",
+            "componentsUi.signing.clearSignerTunnelDown",
             "the sentence the sheet says"
         );
     }
 
     /// Nothing leaves the wallet until the person says the two screens show
-    /// the same six digits (relay.md §2.4) — the check that stops a stand-in
+    /// the same six digits (tunnel.md §2.4) — the check that stops a stand-in
     /// page from being handed a create.
     #[test]
     fn no_request_is_sent_before_the_person_confirms_the_code() {
         let cases = vectors();
         let case = cases["cases"]
             .as_array()
-            .and_then(|cases| cases.iter().find(|case| case["name"] == "relay-a"))
-            .unwrap_or_else(|| unreachable!("the relay-a vector"));
-        let relay = FakeRelay::start();
+            .and_then(|cases| cases.iter().find(|case| case["name"] == "tunnel-a"))
+            .unwrap_or_else(|| unreachable!("the tunnel-a vector"));
+        let tunnel = FakeTunnel::start();
         let (channel, _changed) = Channel::new();
         let seed = seeded(case);
-        let url = relay.url();
+        let url = tunnel.url();
         let paired = {
             let channel = Arc::clone(&channel);
             std::thread::spawn(move || {
@@ -742,7 +749,7 @@ mod tests {
                 )
             })
         };
-        let mut page = relay.page();
+        let mut page = tunnel.page();
         page.joined();
         page.say(Message::text(
             case["signer"]["hello"].as_str().unwrap_or_default(),
@@ -781,7 +788,7 @@ mod tests {
     fn the_vector_seed_reproduces_the_vectors_own_fingerprint() {
         let cases = vectors();
         for case in cases["cases"].as_array().unwrap_or(&vec![]) {
-            if case["label"] != "vela-relay/1" {
+            if case["label"] != "vela-tunnel/1" {
                 continue;
             }
             let seed = seeded(case);
@@ -821,42 +828,43 @@ mod tests {
         )));
     }
 
-    /// The relay's own frames are the two it may send; a `left` while a
+    /// The tunnel's own frames are the two it may send; a `left` while a
     /// request is out is the page going away.
     #[test]
-    fn the_relays_own_frames_are_read_as_its_own() {
-        assert!(relay_said_left(r#"{"v":1,"relay":"left"}"#));
-        assert!(!relay_said_left(r#"{"v":1,"relay":"joined"}"#));
-        assert!(!relay_said_left(r#"{"v":1,"t":"result"}"#));
-        assert!(!relay_said_left("not json"));
+    fn the_tunnels_own_frames_are_read_as_its_own() {
+        assert!(tunnel_said_left(r#"{"v":1,"relay":"left"}"#));
+        assert!(!tunnel_said_left(r#"{"v":1,"relay":"joined"}"#));
+        assert!(!tunnel_said_left(r#"{"v":1,"t":"result"}"#));
+        assert!(!tunnel_said_left("not json"));
     }
 
-    /// The same pairing against a **real relay**, when one is running.
+    /// The same pairing against a **real tunnel**, when one is running.
     ///
-    /// Opt-in: `VELA_RELAY_URL=ws://127.0.0.1:8787` and
-    /// `cargo test relay_conformance -- --ignored`. Start one with
-    /// `cd rust && PORT=8787 cargo run -p vela-relay-server`.
+    /// Opt-in: `VELA_TUNNEL_URL=ws://127.0.0.1:8787` and
+    /// `cargo test tunnel_conformance -- --ignored`. Start one with
+    /// `PORT=8787 cargo run -p vela-tunnel-server` in the `vela-tunnel`
+    /// repository (the hosts left this one on 2026-09-23).
     ///
-    /// The fake relay above is faithful to relay.md §1 by construction, which
+    /// The fake tunnel above is faithful to tunnel.md §1 by construction, which
     /// means it cannot catch a disagreement about the contract. This can: the
     /// room id this shell writes, the role in the query, `joined` arriving only
     /// once both ends are in, and both kinds of frame reaching the other end
-    /// byte for byte are all the RELAY's to get right, and it is the one thing
+    /// byte for byte are all the TUNNEL's to get right, and it is the one thing
     /// here nobody on this side controls.
     #[test]
-    #[ignore = "needs a relay: VELA_RELAY_URL=ws://127.0.0.1:8787"]
-    fn relay_conformance_against_a_real_relay() {
-        let Ok(relay) = std::env::var("VELA_RELAY_URL") else {
-            eprintln!("VELA_RELAY_URL is not set — see this test's note");
+    #[ignore = "needs a tunnel: VELA_TUNNEL_URL=ws://127.0.0.1:8787"]
+    fn tunnel_conformance_against_a_real_tunnel() {
+        let Ok(tunnel) = std::env::var("VELA_TUNNEL_URL") else {
+            eprintln!("VELA_TUNNEL_URL is not set — see this test's note");
             return;
         };
         let cases = vectors();
         let case = cases["cases"]
             .as_array()
-            .and_then(|cases| cases.iter().find(|case| case["name"] == "relay-a"))
-            .unwrap_or_else(|| unreachable!("the relay-a vector"));
+            .and_then(|cases| cases.iter().find(|case| case["name"] == "tunnel-a"))
+            .unwrap_or_else(|| unreachable!("the tunnel-a vector"));
         let seed = seeded(case);
-        let room = clear_signer::relay_room(&seed.room);
+        let room = clear_signer::tunnel_room(&seed.room);
         let expected_code = case["code"].as_str().unwrap_or_default().to_owned();
         let expected_rk = case["rk"].as_str().unwrap_or_default().to_owned();
         let (channel, _changed) = Channel::new();
@@ -879,11 +887,11 @@ mod tests {
         };
 
         let paired = {
-            let (channel, relay) = (Arc::clone(&channel), relay.clone());
+            let (channel, tunnel) = (Arc::clone(&channel), tunnel.clone());
             std::thread::spawn(move || {
                 open(
                     "https://sign.getvela.app/",
-                    &relay,
+                    &tunnel,
                     seed,
                     &channel,
                     Instant::now() + Duration::from_secs(30),
@@ -891,22 +899,22 @@ mod tests {
             })
         };
 
-        // The page's end of the same room, on the same real relay.
-        let url = clear_signer::relay_room_url(&relay, &room, "signer");
+        // The page's end of the same room, on the same real tunnel.
+        let url = clear_signer::tunnel_room_url(&tunnel, &room, "signer");
         let (mut socket, response) = tungstenite::connect(&url)
-            .unwrap_or_else(|e| unreachable!("the relay refused {url}: {e}"));
+            .unwrap_or_else(|e| unreachable!("the tunnel refused {url}: {e}"));
         assert_eq!(response.status().as_u16(), 101, "{url}");
         let read = |socket: &mut tungstenite::WebSocket<MaybeTlsStream<TcpStream>>| loop {
             match socket.read() {
                 Ok(Message::Ping(_) | Message::Pong(_)) => {}
                 Ok(message) => return message,
-                Err(error) => unreachable!("the relay stopped talking: {error}"),
+                Err(error) => unreachable!("the tunnel stopped talking: {error}"),
             }
         };
         let Message::Text(joined) = read(&mut socket) else {
-            unreachable!("the relay's first frame is text");
+            unreachable!("the tunnel's first frame is text");
         };
-        assert_eq!(joined, r#"{"v":1,"relay":"joined"}"#, "relay.md §1");
+        assert_eq!(joined, r#"{"v":1,"relay":"joined"}"#, "tunnel.md §1");
 
         let signer = Handshake::new(
             &bytes::<32>(case["signer"]["secretHex"].as_str().unwrap_or_default()),
@@ -922,7 +930,7 @@ mod tests {
         // The page's own check: a requester whose key does not hash to the
         // link's `rk` is refused before anything is derived.
         let mut signer = signer
-            .complete(&hello, Label::Relay, Some(&expected_rk))
+            .complete(&hello, Label::Tunnel, Some(&expected_rk))
             .unwrap_or_else(|e| unreachable!("the wallet's hello: {e:?}"));
         assert_eq!(signer.code(), expected_code);
 
@@ -974,16 +982,16 @@ mod tests {
 
     /// A stray helper the tests above lean on: reading a whole HTTP head.
     #[test]
-    fn the_fake_relay_speaks_websocket() {
-        let relay = FakeRelay::start();
-        let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, relay.port))
+    fn the_fake_tunnel_speaks_websocket() {
+        let tunnel = FakeTunnel::start();
+        let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, tunnel.port))
             .unwrap_or_else(|e| unreachable!("{e}"));
         let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
         let head = format!(
             "GET /v1/rooms/x?role=requester HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
              Upgrade: websocket\r\nConnection: Upgrade\r\n\
              Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
-            relay.port
+            tunnel.port
         );
         let _ = stream.write_all(head.as_bytes());
         let mut buffer = [0u8; 256];

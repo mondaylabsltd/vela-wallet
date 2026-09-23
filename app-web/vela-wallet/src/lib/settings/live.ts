@@ -583,7 +583,7 @@ export function withLiveSigning(
 	const rows = liveSignWithRows(model.signWithSheet.rows, view);
 	const method = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
 	const page = view.signer_url_is_default ? m.signing.pageOfficial : hostOf(view.signer_url);
-	const relay = view.relay_url_is_default ? m.signing.relayOfficial : hostOf(view.relay_url);
+	const tunnel = view.tunnel_url_is_default ? m.signing.tunnelOfficial : hostOf(view.tunnel_url);
 	return {
 		...model,
 		sections: model.sections.map((section) => ({
@@ -593,14 +593,14 @@ export function withLiveSigning(
 					? { ...row, value: method }
 					: row.id === 'clear-signer-page'
 						? { ...row, value: page }
-						: row.id === 'clear-signer-relay'
-							? { ...row, value: relay }
+						: row.id === 'clear-signer-tunnel'
+							? { ...row, value: tunnel }
 							: row
 			)
 		})),
 		signWithSheet: { ...model.signWithSheet, rows },
 		signerPage: liveSignerPage(model.signerPage, view, m),
-		relayPage: liveRelayPage(model.relayPage, view, m)
+		tunnelPage: liveTunnelPage(model.tunnelPage, view, m)
 	};
 }
 
@@ -619,7 +619,7 @@ export function withLiveSigningDesktop(
 			...model.signing,
 			rows: model.signing.rows.map((row) => ({ ...row, value: label, options: rows })),
 			page: liveSignerPage(model.signing.page, view, m),
-			relay: liveRelayPage(model.signing.relay, view, m)
+			tunnel: liveTunnelPage(model.signing.tunnel, view, m)
 		}
 	};
 }
@@ -652,27 +652,27 @@ export function liveSignerPage(
 }
 
 /**
- * Spec 075: the relay row, shaped exactly as the page row — the address in
+ * Spec 075: the tunnel row, shaped exactly as the page row — the address in
  * force, the field to type another over it, and the core's word on the last
  * one submitted (`wss://` anywhere, `ws://` only on this machine's loopback).
- * There is no "foreign" line: a relay sees nothing but ciphertext, so where
+ * There is no "foreign" line: a tunnel sees nothing but ciphertext, so where
  * it runs cannot cost anybody their keys.
  */
-export function liveRelayPage(
+export function liveTunnelPage(
 	page: SignerPageModel,
 	view: SignPrefView,
 	m: SettingsMessages
 ): SignerPageModel {
 	const error =
-		view.relay_url_error === 'invalid'
-			? m.signing.relayInvalid
-			: view.relay_url_error === 'insecure'
-				? m.signing.relayInsecure
+		view.tunnel_url_error === 'invalid'
+			? m.signing.tunnelInvalid
+			: view.tunnel_url_error === 'insecure'
+				? m.signing.tunnelInsecure
 				: undefined;
 	return {
 		...page,
-		field: { ...page.field, value: view.relay_url, tone: error ? 'error' : 'default' },
-		reset: view.relay_url_is_default ? undefined : m.signing.relayReset,
+		field: { ...page.field, value: view.tunnel_url, tone: error ? 'error' : 'default' },
+		reset: view.tunnel_url_is_default ? undefined : m.signing.tunnelReset,
 		error,
 		foreign: undefined
 	};

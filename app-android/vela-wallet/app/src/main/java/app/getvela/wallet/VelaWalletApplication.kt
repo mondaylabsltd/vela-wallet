@@ -352,7 +352,7 @@ class AppContainer(private val app: Application) {
                     refused = i18nRuntime.t("componentsUi.signing.clearSignerRefused"),
                     mismatch = i18nRuntime.t("componentsUi.signing.clearSignerMismatch"),
                     timeout = i18nRuntime.t("componentsUi.signing.clearSignerTimeout"),
-                    relayDown = i18nRuntime.t("componentsUi.signing.clearSignerRelayDown"),
+                    tunnelDown = i18nRuntime.t("componentsUi.signing.clearSignerTunnelDown"),
                     bluetoothNeeded = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothNeeded"),
                     bluetoothOff = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothOff"),
                     bluetoothUnsupported =
@@ -363,9 +363,9 @@ class AppContainer(private val app: Application) {
             // Spec 075 T040: the phone advertises as a GATT peripheral for a
             // Clear Signer page open in a browser in the same room.
             bleHost = { clearSignerBleHost },
-            // Spec 075: the relay a cross-device pairing goes through, and how
+            // Spec 075: the tunnel a cross-device pairing goes through, and how
             // this app names itself to the page.
-            relayUrl = { settings.signPref.value.relay_url },
+            tunnelUrl = { settings.signPref.value.tunnel_url },
             // Read by a person on the signer page, beside "the name and mark
             // it gave for itself" — so both are written for a person, not for
             // a log. Neither is proof of anything and the page says so; what

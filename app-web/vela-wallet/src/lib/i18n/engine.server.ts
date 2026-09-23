@@ -389,13 +389,13 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			pageForeign: k('settings.signing.pageForeign'),
 			pageReset: k('settings.signing.pageReset'),
 			pageSave: k('settings.signing.pageSave'),
-			// Spec 075: the relay row, beside the page row.
-			relayTitle: k('settings.signing.relayTitle'),
-			relaySubtitle: k('settings.signing.relaySubtitle'),
-			relayOfficial: k('settings.signing.relayOfficial'),
-			relayInvalid: k('settings.signing.relayInvalid'),
-			relayInsecure: k('settings.signing.relayInsecure'),
-			relayReset: k('settings.signing.relayReset')
+			// Spec 075: the tunnel row, beside the page row.
+			tunnelTitle: k('settings.signing.tunnelTitle'),
+			tunnelSubtitle: k('settings.signing.tunnelSubtitle'),
+			tunnelOfficial: k('settings.signing.tunnelOfficial'),
+			tunnelInvalid: k('settings.signing.tunnelInvalid'),
+			tunnelInsecure: k('settings.signing.tunnelInsecure'),
+			tunnelReset: k('settings.signing.tunnelReset')
 		},
 		networks: {
 			count: k('settings.networks.count'),
@@ -937,7 +937,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		clearSignerCopyLink: k('componentsUi.signing.clearSignerCopyLink'),
 		clearSignerCode: k('componentsUi.signing.clearSignerCode'),
 		clearSignerCodeConfirm: k('componentsUi.signing.clearSignerCodeConfirm'),
-		clearSignerRelayDown: k('componentsUi.signing.clearSignerRelayDown'),
+		clearSignerTunnelDown: k('componentsUi.signing.clearSignerTunnelDown'),
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),
 		safeInnerCall: k('componentsUi.signing.safeInnerCall'),

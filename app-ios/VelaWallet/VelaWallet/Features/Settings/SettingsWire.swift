@@ -319,13 +319,13 @@ struct SignPrefViewWire: Decodable, Equatable {
     let signerUrlError: String?
     /// Whether a page there can use this wallet's `getvela.app` passkeys.
     let signerUsesWalletPasskeys: Bool
-    /// Spec 075: the relay a cross-device pairing goes through. Always
+    /// Spec 075: the tunnel a cross-device pairing goes through. Always
     /// usable — the core normalises whatever was typed, or keeps the last
     /// good one.
-    let relayUrl: String
-    let relayUrlIsDefault: Bool
+    let tunnelUrl: String
+    let tunnelUrlIsDefault: Bool
     /// `invalid` | `insecure`, as `signerUrlError`.
-    let relayUrlError: String?
+    let tunnelUrlError: String?
 
     /// Spelled out because a hand-written `init(from:)` suppresses the
     /// synthesized set; the names are the decoder's post-`convertFromSnakeCase`
@@ -333,13 +333,13 @@ struct SignPrefViewWire: Decodable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case method, methodCommitted, offered, signerUrl, signerUrlIsDefault
         case signerUrlError, signerUsesWalletPasskeys
-        case relayUrl, relayUrlIsDefault, relayUrlError
+        case tunnelUrl, tunnelUrlIsDefault, tunnelUrlError
     }
 
     /// `decodeIfPresent` for the 075 fields, with the core's own defaults
     /// behind them.
     ///
-    /// The three relay fields did not exist before this spec, and this app
+    /// The three tunnel fields did not exist before this spec, and this app
     /// is not the only thing that writes this view's JSON — the fixtures and
     /// the gallery do too. A mirror that hard-required a field the wire
     /// grew would refuse to decode the whole view and leave Settings with no
@@ -355,9 +355,10 @@ struct SignPrefViewWire: Decodable, Equatable {
         signerUrlError = try values.decodeIfPresent(String.self, forKey: .signerUrlError)
         signerUsesWalletPasskeys =
             try values.decodeIfPresent(Bool.self, forKey: .signerUsesWalletPasskeys) ?? true
-        relayUrl = try values.decodeIfPresent(String.self, forKey: .relayUrl) ?? clearSignerDefaultRelay()
-        relayUrlIsDefault = try values.decodeIfPresent(Bool.self, forKey: .relayUrlIsDefault) ?? true
-        relayUrlError = try values.decodeIfPresent(String.self, forKey: .relayUrlError)
+        // `clearSignerDefaultTunnel()` answers `wss://tunnel.getvela.app`.
+        tunnelUrl = try values.decodeIfPresent(String.self, forKey: .tunnelUrl) ?? clearSignerDefaultTunnel()
+        tunnelUrlIsDefault = try values.decodeIfPresent(Bool.self, forKey: .tunnelUrlIsDefault) ?? true
+        tunnelUrlError = try values.decodeIfPresent(String.self, forKey: .tunnelUrlError)
     }
 
     /// What the machine says before it has read anything: `auto`, the

@@ -85,7 +85,7 @@ class ClearSignerBleTest {
         refused = "refused",
         mismatch = "mismatch",
         timeout = "timeout",
-        relayDown = "the relay is down",
+        tunnelDown = "the tunnel is down",
         bluetoothNeeded = "Vela needs Bluetooth permission so the signing page can find this device.",
         bluetoothOff = "Turn Bluetooth on to pair this way.",
         // Distinct on purpose: these default to each other in production, and
@@ -548,12 +548,12 @@ class ClearSignerBleTest {
     }
 
     /**
-     * T043 defect 2: on the nearby route the wallet said "the relay could not
+     * T043 defect 2: on the nearby route the wallet said "the tunnel could not
      * be reached" and advised switching to a route the person had not chosen.
-     * The relay was never involved — only the words were.
+     * The tunnel was never involved — only the words were.
      */
     @Test
-    fun `a Bluetooth link that drops is not told as a relay that is down`() = runBlocking {
+    fun `a Bluetooth link that drops is not told as a tunnel that is down`() = runBlocking {
         val host = FakeHost(BleReadiness.Ready)
         val channel = channel(host = host)
         val asking = scope.async(Dispatchers.Default) {
@@ -567,7 +567,7 @@ class ClearSignerBleTest {
         val failure = withTimeout(6_000L) { asking.await() }.exceptionOrNull()
         assertTrue("$failure", failure is PasskeyFailure)
         assertEquals("the pairing dropped, and the sentence says so", WORDS.nearbyLost, failure!!.message)
-        assertNotEquals("nothing here went near a relay", WORDS.relayDown, failure.message)
+        assertNotEquals("nothing here went near a tunnel", WORDS.tunnelDown, failure.message)
         assertEquals(WORDS.nearbyLost, channel.notice.value)
     }
 
@@ -582,7 +582,7 @@ class ClearSignerBleTest {
         channel.chooseWhere(ClearSignerChannel.Route.Nearby)
         val failure = withTimeout(6_000L) { asking.await() }.exceptionOrNull()
         assertEquals(WORDS.bluetoothUnsupported, (failure as PasskeyFailure).message)
-        assertNotEquals(WORDS.relayDown, failure.message)
+        assertNotEquals(WORDS.tunnelDown, failure.message)
     }
 
     /**

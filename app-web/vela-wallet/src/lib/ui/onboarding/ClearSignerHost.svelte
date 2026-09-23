@@ -43,7 +43,7 @@
 		clearSignerCopyLink: strings('componentsUi.signing.clearSignerCopyLink'),
 		clearSignerCode: strings('componentsUi.signing.clearSignerCode'),
 		clearSignerCodeConfirm: strings('componentsUi.signing.clearSignerCodeConfirm'),
-		clearSignerRelayDown: strings('componentsUi.signing.clearSignerRelayDown')
+		clearSignerTunnelDown: strings('componentsUi.signing.clearSignerTunnelDown')
 	} satisfies ClearSignerWords);
 
 	const model = $derived(clearSignerModel(clearSignerSession.view, words));

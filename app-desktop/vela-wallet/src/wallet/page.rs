@@ -576,10 +576,10 @@ pub struct WalletPage {
     /// per keystroke: half an address is not an error yet.
     signer_page_draft: Option<String>,
     signer_page_focus: Option<gpui::FocusHandle>,
-    /// Spec 075: the relay, the same way — typed until Save, and the core
+    /// Spec 075: the tunnel, the same way — typed until Save, and the core
     /// says whether it is one (https/wss only, loopback allowed).
-    relay_draft: Option<String>,
-    relay_focus: Option<gpui::FocusHandle>,
+    tunnel_draft: Option<String>,
+    tunnel_focus: Option<gpui::FocusHandle>,
     /// Which network card's probes have been asked for, so opening one asks
     /// once rather than on every frame.
     settings_probed_network: Option<u32>,
@@ -972,8 +972,8 @@ impl WalletPage {
             endpoint_focuses: Vec::new(),
             signer_page_draft: None,
             signer_page_focus: None,
-            relay_draft: None,
-            relay_focus: None,
+            tunnel_draft: None,
+            tunnel_focus: None,
             settings_probed_network: None,
             settings_probed_panel: None,
             settings_fix_chain: None,
@@ -4159,7 +4159,7 @@ impl WalletPage {
             channel.asking_place() || channel.waiting() || channel.ended().is_some()
         })?;
         let card = if channel.asking_place() {
-            // Asked before a port is bound or a relay room is taken: the
+            // Asked before a port is bound or a tunnel room is taken: the
             // answer decides which of the two even starts.
             let answering = Arc::clone(&channel);
             let cancel = Arc::clone(&channel);
@@ -8562,7 +8562,7 @@ impl WalletPage {
                     ),
             );
         }
-        let relay = self.settings_relay_row(theme, &view, window, cx);
+        let tunnel = self.settings_tunnel_row(theme, &view, window, cx);
         div()
             .flex()
             .flex_col()
@@ -8570,19 +8570,19 @@ impl WalletPage {
             .max_w(px(560.))
             .child(list)
             .child(section.child(actions))
-            .child(relay)
+            .child(tunnel)
     }
 
-    /// Spec 075: the relay a cross-device pairing goes through — the Clear
+    /// Spec 075: the tunnel a cross-device pairing goes through — the Clear
     /// Signer page row's twin, and deliberately so.
     ///
     /// They are two addresses with one rule (https/wss, or this device's own
     /// loopback), one badge ("Official", or the host a person named), one
     /// field, one Save that asks the core and one reset that appears only once
     /// the value is not the default. A person who has moved one has not moved
-    /// the other: the page is where they read a request, the relay is only
+    /// the other: the page is where they read a request, the tunnel is only
     /// what carries the sealed bytes to it, and it never sees either.
-    fn settings_relay_row(
+    fn settings_tunnel_row(
         &mut self,
         theme: &Theme,
         view: &vela_core::app::sign_pref::SignPrefView,
@@ -8593,42 +8593,42 @@ impl WalletPage {
         let s = &self.settings;
         let badge = pill(
             Tone::Neutral,
-            if view.relay_url_is_default {
-                s.relay_official.clone()
+            if view.tunnel_url_is_default {
+                s.tunnel_official.clone()
             } else {
-                SharedString::from(page_host(&view.relay_url))
+                SharedString::from(page_host(&view.tunnel_url))
             },
         );
-        let refused = match view.relay_url_error.as_deref() {
-            Some("insecure") => Some(s.relay_insecure.clone()),
-            Some(_) => Some(s.relay_invalid.clone()),
+        let refused = match view.tunnel_url_error.as_deref() {
+            Some("insecure") => Some(s.tunnel_insecure.clone()),
+            Some(_) => Some(s.tunnel_invalid.clone()),
             None => None,
         };
         let (title, subtitle, save, reset) = (
-            s.relay_title.clone(),
-            s.relay_subtitle.clone(),
+            s.tunnel_title.clone(),
+            s.tunnel_subtitle.clone(),
             s.signer_page_save.clone(),
-            s.relay_reset.clone(),
+            s.tunnel_reset.clone(),
         );
         let focus = self
-            .relay_focus
+            .tunnel_focus
             .get_or_insert_with(|| cx.focus_handle())
             .clone();
         let typed = self
-            .relay_draft
+            .tunnel_draft
             .clone()
-            .unwrap_or_else(|| view.relay_url.clone());
+            .unwrap_or_else(|| view.tunnel_url.clone());
         let page = cx.entity();
         let mut section = div()
             .flex()
             .flex_col()
             .gap(px(12.))
             .child(editable_url_field(
-                "settings-signer-relay",
+                "settings-signer-tunnel",
                 theme,
                 Some(title),
                 &typed,
-                SharedString::from(vela_core::clear_signer::DEFAULT_RELAY_URL),
+                SharedString::from(vela_core::clear_signer::DEFAULT_TUNNEL_URL),
                 Some(&badge),
                 Some(subtitle),
                 refused.is_some().then_some(Tone::Error),
@@ -8636,7 +8636,7 @@ impl WalletPage {
                 window,
                 move |text: String, _window: &mut Window, cx: &mut gpui::App| {
                     page.update(cx, |page, cx| {
-                        page.relay_draft = Some(text);
+                        page.tunnel_draft = Some(text);
                         cx.notify();
                     });
                 },
@@ -8652,7 +8652,7 @@ impl WalletPage {
         }
         let mut actions = div().flex().items_center().gap(px(16.)).child(
             div()
-                .id("settings-signer-relay-save")
+                .id("settings-signer-tunnel-save")
                 .h(px(36.))
                 .px(px(16.))
                 .rounded(px(10.))
@@ -8668,30 +8668,30 @@ impl WalletPage {
                 .text_color(theme.fg_base)
                 .child(save)
                 .on_click(cx.listener(move |page, _, _, cx| {
-                    let text = page.relay_draft.clone().unwrap_or_else(|| typed.clone());
+                    let text = page.tunnel_draft.clone().unwrap_or_else(|| typed.clone());
                     let stored = resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                        pref.dispatch(SignPrefEvent::RelayUrlSubmitted { text }, cx);
-                        pref.view().relay_url_error.is_none()
+                        pref.dispatch(SignPrefEvent::TunnelUrlSubmitted { text }, cx);
+                        pref.view().tunnel_url_error.is_none()
                     });
                     if stored {
-                        page.relay_draft = None;
+                        page.tunnel_draft = None;
                     }
                     cx.notify();
                 })),
         );
-        if !view.relay_url_is_default {
+        if !view.tunnel_url_is_default {
             actions = actions.child(
                 div()
-                    .id("settings-signer-relay-reset")
+                    .id("settings-signer-tunnel-reset")
                     .flex()
                     .items_center()
                     .gap(px(8.))
                     .cursor_pointer()
                     .on_click(cx.listener(|page, _, _, cx| {
                         resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                            pref.dispatch(SignPrefEvent::RelayUrlReset, cx);
+                            pref.dispatch(SignPrefEvent::TunnelUrlReset, cx);
                         });
-                        page.relay_draft = None;
+                        page.tunnel_draft = None;
                         cx.notify();
                     }))
                     .child(icon_img(

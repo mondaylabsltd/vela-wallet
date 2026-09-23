@@ -32,7 +32,7 @@ const m = {
 	clearSignerCopyLink: 'Copy link',
 	clearSignerCode: 'Check that the other device shows the same code: {{code}}',
 	clearSignerCodeConfirm: 'The codes match',
-	clearSignerRelayDown: 'The relay could not be reached.'
+	clearSignerTunnelDown: 'The tunnel could not be reached.'
 } as SigningMessages;
 
 async function drawn(model: NonNullable<ReturnType<typeof clearSignerModel>>) {
@@ -88,9 +88,9 @@ describe('the Clear Signer’s sheet', () => {
 		expect(view.labels).toEqual([m.close]);
 	});
 
-	it('a relay that could not be reached says so, and points back to this device', async () => {
-		const view = await drawn(clearSignerModel({ waiting: false, notice: 'relay' }, m)!);
-		expect(view.text).toContain(m.clearSignerRelayDown);
+	it('a tunnel that could not be reached says so, and points back to this device', async () => {
+		const view = await drawn(clearSignerModel({ waiting: false, notice: 'tunnel' }, m)!);
+		expect(view.text).toContain(m.clearSignerTunnelDown);
 	});
 });
 

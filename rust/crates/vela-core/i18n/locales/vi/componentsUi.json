@@ -220,7 +220,7 @@
       "clearSignerCode": "Kiểm tra thiết bị kia hiển thị cùng một mã: {{code}}",
       "clearSignerCodeConfirm": "Hai mã khớp nhau",
       "clearSignerCopyLink": "Sao chép liên kết",
-      "clearSignerRelayDown": "Không kết nối được bộ chuyển tiếp. Hãy thử lại hoặc dùng Clear Signer trên thiết bị này."
+      "clearSignerTunnelDown": "Không kết nối được đường hầm. Hãy thử lại hoặc dùng Clear Signer trên thiết bị này."
     },
     "signingApprove": {
       "resultingTotal": "Tổng hạn mức mới",

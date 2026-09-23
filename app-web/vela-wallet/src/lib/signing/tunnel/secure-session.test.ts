@@ -1,5 +1,5 @@
 /**
- * The relay requester, against the shared vectors (spec 075).
+ * The tunnel requester, against the shared vectors (spec 075).
  *
  * `rust/crates/vela-core/tests/clear-signer/secure-session.json` is the one
  * source both ends are pinned to: the Rust session the phones run, the signer
@@ -15,7 +15,7 @@
  *   page sends, opened.
  *
  * A replay and a frame from our own direction are refused without decrypting,
- * which is the other half of the guarantee: the relay cannot reorder a session.
+ * which is the other half of the guarantee: the tunnel cannot reorder a session.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -69,18 +69,18 @@ const fromHex = (hex: string) =>
 const toHex = (bytes: Uint8Array) =>
 	Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 
-describe('the relay session, byte for byte with the core', () => {
+describe('the tunnel session, byte for byte with the core', () => {
 	it('has vectors to check against at all', () => {
 		expect(cases.length).toBeGreaterThan(0);
-		expect(cases.some((one) => one.label === 'vela-relay/1')).toBe(true);
+		expect(cases.some((one) => one.label === 'vela-tunnel/1')).toBe(true);
 	});
 
-	// Only the relay's cases carry frames this module can reproduce: BLE binds
+	// Only the tunnel's cases carry frames this module can reproduce: BLE binds
 	// the FRAME's msgId into the AAD instead of the IV's counter (PROTOCOL.md
 	// §3.5), and this channel has no frames — a WebSocket message is already
 	// whole. The key, `rk`, hello and code are the same derivation on both, and
 	// the last test below reads the BLE case for exactly that.
-	for (const one of cases.filter((candidate) => candidate.label === 'vela-relay/1')) {
+	for (const one of cases.filter((candidate) => candidate.label === 'vela-tunnel/1')) {
 		it(`${one.name} (${one.label}): key, rk, hello, code and every frame`, async () => {
 			const key = await requesterKey(fromHex(one.requester.secretHex));
 			expect(toHex(key.publicKey)).toBe(one.requester.publicKeyHex);
@@ -110,21 +110,21 @@ describe('the relay session, byte for byte with the core', () => {
 });
 
 describe('what a session refuses', () => {
-	const relay = cases.find((one) => one.label === 'vela-relay/1') as Case;
+	const tunnel = cases.find((one) => one.label === 'vela-tunnel/1') as Case;
 
 	const paired = async () => {
-		const key = await requesterKey(fromHex(relay.requester.secretHex));
-		return completeSession(key, fromHex(relay.requester.nonceHex), relay.signer.hello, relay.label);
+		const key = await requesterKey(fromHex(tunnel.requester.secretHex));
+		return completeSession(key, fromHex(tunnel.requester.nonceHex), tunnel.signer.hello, tunnel.label);
 	};
 
 	it('a frame it already opened, and one from its own direction', async () => {
 		const session = await paired();
-		const first = relay.messages.find((m) => m.from === 'signer') as Case['messages'][0];
+		const first = tunnel.messages.find((m) => m.from === 'signer') as Case['messages'][0];
 		await session.open(fromHex(first.sealedHex));
 		await expect(session.open(fromHex(first.sealedHex))).rejects.toMatchObject({
 			code: 'replayed'
 		});
-		const own = relay.messages.find((m) => m.from === 'requester') as Case['messages'][0];
+		const own = tunnel.messages.find((m) => m.from === 'requester') as Case['messages'][0];
 		await expect(session.open(fromHex(own.sealedHex))).rejects.toMatchObject({
 			code: 'replayed'
 		});
@@ -132,30 +132,30 @@ describe('what a session refuses', () => {
 
 	it('a frame whose bytes were touched', async () => {
 		const session = await paired();
-		const signed = relay.messages.find((m) => m.from === 'signer') as Case['messages'][0];
+		const signed = tunnel.messages.find((m) => m.from === 'signer') as Case['messages'][0];
 		const sealed = fromHex(signed.sealedHex);
 		sealed[sealed.length - 1] ^= 0x01;
 		await expect(session.open(sealed)).rejects.toMatchObject({ code: 'unreadable' });
 	});
 
 	it('a hello that is not one, and a peer speaking in our own role', async () => {
-		const key = await requesterKey(fromHex(relay.requester.secretHex));
-		const nonce = fromHex(relay.requester.nonceHex);
-		await expect(completeSession(key, nonce, '{}', relay.label)).rejects.toBeInstanceOf(
+		const key = await requesterKey(fromHex(tunnel.requester.secretHex));
+		const nonce = fromHex(tunnel.requester.nonceHex);
+		await expect(completeSession(key, nonce, '{}', tunnel.label)).rejects.toBeInstanceOf(
 			SecureSessionError
 		);
-		const hello = JSON.parse(relay.signer.hello) as Record<string, unknown>;
+		const hello = JSON.parse(tunnel.signer.hello) as Record<string, unknown>;
 		await expect(
-			completeSession(key, nonce, { ...hello, role: 'requester' }, relay.label)
+			completeSession(key, nonce, { ...hello, role: 'requester' }, tunnel.label)
 		).rejects.toMatchObject({ code: 'wrong_role' });
 		await expect(
-			completeSession(key, nonce, { ...hello, nonce: b64url(new Uint8Array(8)) }, relay.label)
+			completeSession(key, nonce, { ...hello, nonce: b64url(new Uint8Array(8)) }, tunnel.label)
 		).rejects.toMatchObject({ code: 'bad_hello' });
 	});
 
 	it('the label is in the derivation: the same keys give each channel its own code', async () => {
 		const ble = cases.find((one) => one.label === 'vela-ble/1');
-		const sameKeys = cases.find((one) => one.label === 'vela-relay/1' && one.rk === ble?.rk);
+		const sameKeys = cases.find((one) => one.label === 'vela-tunnel/1' && one.rk === ble?.rk);
 		expect(ble && sameKeys).toBeTruthy();
 		if (!ble || !sameKeys) return;
 		const key = await requesterKey(fromHex(ble.requester.secretHex));

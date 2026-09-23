@@ -37,9 +37,9 @@ const INITIAL: SignPrefView = {
 	signer_url_is_default: true,
 	signer_url_error: null,
 	signer_uses_wallet_passkeys: true,
-	relay_url: 'wss://relay.getvela.app',
-	relay_url_is_default: true,
-	relay_url_error: null
+	tunnel_url: 'wss://tunnel.getvela.app',
+	tunnel_url_is_default: true,
+	tunnel_url_error: null
 };
 
 class SignPreference {
@@ -121,14 +121,14 @@ class SignPreference {
 		this.#loop?.dispatch({ type: 'signer_url_reset' });
 	}
 
-	/** Spec 075 — Settings: the relay, as typed. The core validates it. */
-	submitRelayUrl(text: string): void {
-		this.#loop?.dispatch({ type: 'relay_url_submitted', text });
+	/** Spec 075 — Settings: the tunnel, as typed. The core validates it. */
+	submitTunnelUrl(text: string): void {
+		this.#loop?.dispatch({ type: 'tunnel_url_submitted', text });
 	}
 
-	/** Settings: back to the official relay. */
-	resetRelayUrl(): void {
-		this.#loop?.dispatch({ type: 'relay_url_reset' });
+	/** Settings: back to the official tunnel. */
+	resetTunnelUrl(): void {
+		this.#loop?.dispatch({ type: 'tunnel_url_reset' });
 	}
 
 	refresh(): void {

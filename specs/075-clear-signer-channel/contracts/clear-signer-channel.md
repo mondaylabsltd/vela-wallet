@@ -1,7 +1,7 @@
 # Contract — the Clear Signer as a passkey route
 
 Extends `specs/071-clear-signer/contracts/clear-signer.md`; everything there stands unless
-changed here. The relay's wire is `relay.md`; BLE's is `app-web/clearsigning/PROTOCOL.md`
+changed here. The tunnel's wire is `tunnel.md`; BLE's is `app-web/clearsigning/PROTOCOL.md`
 §1–4.
 
 ## 1. The core
@@ -82,15 +82,15 @@ the page once per flow, not once per ceremony.
 |---|---|---|
 | Android / iOS / desktop | same device | loopback WebSocket (071 §2). The desktop moves off fragment + callback. |
 | Web | same browser | postMessage (071 §4) |
-| any shell, web included | another device | relay (`relay.md`): QR + link, 6-digit code confirmed on the wallet |
+| any shell, web included | another device | tunnel (`tunnel.md`): QR + link, 6-digit code confirmed on the wallet |
 | Android / iOS / desktop (macOS) | Chrome on another device | BLE GATT (PROTOCOL.md §1–4), same code check |
 
-The relay and BLE share one session implementation:
+The tunnel and BLE share one session implementation:
 - the core's `secure_session` (Rust: P-256 ECDH, HKDF-SHA256, AES-GCM), exported to UniFFI and
   wasm;
 - the page's `lib/transport/secure.js`.
 
-The label (`vela-relay/1`, `vela-ble/1`) is a parameter. Shared vectors in
+The label (`vela-tunnel/1`, `vela-ble/1`) is a parameter. Shared vectors in
 `rust/crates/vela-core/tests/clear-signer/secure-session.json` pin both sides.
 
 ## 3. Words
@@ -108,5 +108,5 @@ New corpus keys (all fifteen locales):
 | `componentsUi.signing.clearSignerCodeConfirm` | the confirm button |
 | `componentsUi.signing.clearSignerCopyLink` | the copy button |
 | `componentsUi.signing.clearSignerThisDevice` / `clearSignerOtherDevice` | the choice between the two, when both are possible |
-| `settings.signing.relayTitle`, `relaySubtitle`, `relayInvalid`, `relayReset` | the Settings row, as the page row |
+| `settings.signing.tunnelTitle`, `tunnelSubtitle`, `tunnelInvalid`, `tunnelReset` | the Settings row, as the page row |
 | `componentsUi.signing.clearSignerCreate`, `clearSignerSignIn`, `clearSignerProof` | the page's card titles (the page carries its own zh/en copies in `lib/locales`) |

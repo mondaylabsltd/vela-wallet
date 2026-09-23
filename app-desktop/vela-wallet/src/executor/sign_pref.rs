@@ -41,7 +41,7 @@ impl Machine for SignPref {
             SignPrefOperation::ReadStored => Answer::Now(SignPrefShellResult::Stored {
                 method: stored(storage::KEY_SIGN_METHOD),
                 signer_url: stored(storage::KEY_CLEAR_SIGNER_URL),
-                relay_url: stored(storage::KEY_CLEAR_SIGNER_RELAY),
+                tunnel_url: stored(storage::KEY_CLEAR_SIGNER_TUNNEL),
             }),
             // Best effort, both: the committed choice stays on screen either
             // way, and the next launch simply reads the old value.
@@ -62,15 +62,15 @@ impl Machine for SignPref {
                 };
                 Answer::Now(SignPrefShellResult::Written)
             }
-            // Spec 075: the same shape for the relay, under its own key, so a
+            // Spec 075: the same shape for the tunnel, under its own key, so a
             // person who moved one has not moved the other.
-            SignPrefOperation::WriteRelayUrl { url } => {
+            SignPrefOperation::WriteTunnelUrl { url } => {
                 let _ = match url {
                     Some(url) => storage::write_value(
-                        storage::KEY_CLEAR_SIGNER_RELAY,
+                        storage::KEY_CLEAR_SIGNER_TUNNEL,
                         Value::String(url.clone()),
                     ),
-                    None => storage::remove_value(storage::KEY_CLEAR_SIGNER_RELAY),
+                    None => storage::remove_value(storage::KEY_CLEAR_SIGNER_TUNNEL),
                 };
                 Answer::Now(SignPrefShellResult::Written)
             }

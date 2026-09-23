@@ -184,7 +184,7 @@ enum I18nKeys {
         static let copyLink = "componentsUi.signing.clearSignerCopyLink"
         static let code = "componentsUi.signing.clearSignerCode"
         static let codeConfirm = "componentsUi.signing.clearSignerCodeConfirm"
-        static let relayDown = "componentsUi.signing.clearSignerRelayDown"
+        static let tunnelDown = "componentsUi.signing.clearSignerTunnelDown"
 
         /// Spec 075 T041, the nearby route. `nearbyHint` carries the
         /// foreground rule (PROTOCOL.md §1) rather than having a line of its
@@ -241,7 +241,7 @@ enum I18nKeys {
         ClearSigner.thisDevice, ClearSigner.otherDevice,
         ClearSigner.pair, ClearSigner.pairHint, ClearSigner.pairWaiting,
         ClearSigner.copyLink, ClearSigner.code, ClearSigner.codeConfirm,
-        ClearSigner.relayDown, ClearSigner.nearby, ClearSigner.nearbyHint,
+        ClearSigner.tunnelDown, ClearSigner.nearby, ClearSigner.nearbyHint,
         ClearSigner.nearbyName, ClearSigner.bluetoothNeeded, ClearSigner.bluetoothOff,
         ClearSigner.bluetoothUnsupported,
         Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,

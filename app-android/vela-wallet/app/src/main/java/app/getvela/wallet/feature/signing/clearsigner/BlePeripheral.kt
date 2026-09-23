@@ -37,7 +37,7 @@ object BleGatt {
  * (`ClearSignerHandshake` / `ClearSignerSession`), and every verdict is the
  * core's too.
  *
- * It is an interface for the same reason [RelaySockets] is: a peripheral can
+ * It is an interface for the same reason [TunnelSockets] is: a peripheral can
  * only be exercised on real hardware, and the whole of the glue above it — the
  * handshake, the code gate, reassembly, `bye` — has to be testable without a
  * radio. The JVM suite drives a fake that calls these callbacks directly.

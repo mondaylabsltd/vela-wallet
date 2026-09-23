@@ -220,7 +220,7 @@
       "clearSignerCode": "別のデバイスに同じコードが表示されていることを確認してください：{{code}}",
       "clearSignerCodeConfirm": "コードが一致しています",
       "clearSignerCopyLink": "リンクをコピー",
-      "clearSignerRelayDown": "リレーに接続できませんでした。もう一度試すか、このデバイスの Clear Signer を使ってください。"
+      "clearSignerTunnelDown": "トンネルに接続できませんでした。もう一度試すか、このデバイスの Clear Signer を使ってください。"
     },
     "signingApprove": {
       "resultingTotal": "新しい承認上限",

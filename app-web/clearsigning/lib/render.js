@@ -405,7 +405,7 @@ window.VelaCS = window.VelaCS || {};
     sheet.appendChild(el('div', 'grabber'));
     var head = el('header', 'sheet-head');
     // Only a channel that vouches for the peer gets Vela's mark; over a radio
-    // or a relay this is whatever connected, and it is drawn as that.
+    // or a tunnel this is whatever connected, and it is drawn as that.
     var named = state.requesterApp || '';
     head.appendChild(
       state.requesterVerified

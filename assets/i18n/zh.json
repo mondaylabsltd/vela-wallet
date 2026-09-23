@@ -68,12 +68,12 @@
    "pageForeign": "你的通行密钥属于 getvela.app。其他域名上的页面可以显示请求，但无法签名。",
    "pageReset": "使用官方页面",
    "pageSave": "保存",
-   "relayTitle": "中继",
-   "relaySubtitle": "与另一台设备配对时经由这个中继。它只转发加密后的消息。",
-   "relayOfficial": "官方",
-   "relayInvalid": "这不是一个中继地址。",
-   "relayInsecure": "请使用 wss:// 地址，或本机回环地址上的 ws://。",
-   "relayReset": "使用官方中继"
+   "tunnelTitle": "隧道",
+   "tunnelSubtitle": "与另一台设备配对时经由这个隧道。它只转发加密后的消息。",
+   "tunnelOfficial": "官方",
+   "tunnelInvalid": "这不是一个隧道地址。",
+   "tunnelInsecure": "请使用 wss:// 地址，或本机回环地址上的 ws://。",
+   "tunnelReset": "使用官方隧道"
   },
   "advanced": {
    "networksTitle": "网络",
@@ -1400,7 +1400,7 @@
    "clearSignerCode": "请确认另一台设备显示的是同一个码：{{code}}",
    "clearSignerCodeConfirm": "两边的码一致",
    "clearSignerCopyLink": "复制链接",
-   "clearSignerRelayDown": "无法连接中继。请重试，或改用这台设备上的清晰签名器。"
+   "clearSignerTunnelDown": "无法连接隧道。请重试，或改用这台设备上的清晰签名器。"
   },
   "currency": {
    "title": "显示货币",

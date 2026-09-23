@@ -69,7 +69,7 @@ export interface SettingsMessages {
 	 * The speed sheet (spec 068). The option NAMES are the send flow's own
 	 * (`send.gasTier.*`) — one set of words for a tier, so Settings and the
 	 * send form can never call the same speed two different things. `rapid` is
-	 * not among them: it is a dead variant the relay refuses.
+	 * not among them: it is a dead variant the bundler refuses.
 	 */
 	feeSpeed: {
 		title: string;
@@ -115,17 +115,17 @@ export interface SettingsMessages {
 		pageReset: string;
 		pageSave: string;
 		/**
-		 * Spec 075: the relay a cross-device pairing goes through — the same
+		 * Spec 075: the tunnel a cross-device pairing goes through — the same
 		 * row shape as the page above, because it is the same kind of
-		 * decision: an address of one's own instead of ours. The relay never
-		 * sees anything but ciphertext, which is what `relaySubtitle` says.
+		 * decision: an address of one's own instead of ours. The tunnel never
+		 * sees anything but ciphertext, which is what `tunnelSubtitle` says.
 		 */
-		relayTitle: string;
-		relaySubtitle: string;
-		relayOfficial: string;
-		relayInvalid: string;
-		relayInsecure: string;
-		relayReset: string;
+		tunnelTitle: string;
+		tunnelSubtitle: string;
+		tunnelOfficial: string;
+		tunnelInvalid: string;
+		tunnelInsecure: string;
+		tunnelReset: string;
 	};
 	networks: {
 		/** Template with `{{count}}`. */
@@ -491,12 +491,12 @@ export const SETTINGS_KEYS = [
 	'settings.signing.pageForeign',
 	'settings.signing.pageReset',
 	'settings.signing.pageSave',
-	'settings.signing.relayTitle',
-	'settings.signing.relaySubtitle',
-	'settings.signing.relayOfficial',
-	'settings.signing.relayInvalid',
-	'settings.signing.relayInsecure',
-	'settings.signing.relayReset',
+	'settings.signing.tunnelTitle',
+	'settings.signing.tunnelSubtitle',
+	'settings.signing.tunnelOfficial',
+	'settings.signing.tunnelInvalid',
+	'settings.signing.tunnelInsecure',
+	'settings.signing.tunnelReset',
 	'settings.networks.count',
 	'settings.networks.custom',
 	'settings.networks.builtinNote',

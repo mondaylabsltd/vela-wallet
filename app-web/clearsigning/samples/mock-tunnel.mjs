@@ -1,5 +1,5 @@
-// A mock of the Clear Signer relay, faithful to contracts/relay.md §1, for the
-// page's tests. The real relay is Rust (vela-relay, in Docker and as a Worker);
+// A mock of the Clear Signer tunnel, faithful to contracts/tunnel.md §1, for the
+// page's tests. The real tunnel is Rust (vela-tunnel, in Docker and as a Worker);
 // this one exists so the page can be exercised against the same room rules
 // without it.
 //
@@ -16,12 +16,12 @@
 // · Every frame (text or binary) reaches the other end byte-for-byte, in order.
 // · A frame over 256 KiB → 1009. A room lives 10 minutes → 4408 "expired";
 //   an end silent for 120 s → 4408. An empty room is forgotten at once.
-// · The relay pings every 30 s.
+// · The tunnel pings every 30 s.
 //
-// `tap` records every forwarded frame, so a test can check the relay only ever
+// `tap` records every forwarded frame, so a test can check the tunnel only ever
 // saw what it should (the hellos in the clear, everything else sealed).
 //
-//   node samples/mock-relay.mjs [port]     — run it on its own
+//   node samples/mock-tunnel.mjs [port]     — run it on its own
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { accept } from './ws-lite.mjs';
@@ -35,7 +35,7 @@ export const LIMITS = {
   pingMs: 30 * 1000,
 };
 
-export function startRelay(options = {}) {
+export function startTunnel(options = {}) {
   const limits = { ...LIMITS, ...(options.limits || {}) };
   const rooms = new Map();
   const tap = [];
@@ -54,7 +54,7 @@ export function startRelay(options = {}) {
   }
 
   const server = createServer((req, res) => {
-    const url = new URL(req.url, 'http://relay');
+    const url = new URL(req.url, 'http://tunnel');
     if (req.method === 'GET' && url.pathname === '/healthz') {
       res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
       return;
@@ -63,7 +63,7 @@ export function startRelay(options = {}) {
   });
 
   server.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url, 'http://relay');
+    const url = new URL(req.url, 'http://tunnel');
     const match = /^\/v1\/rooms\/([^/]+)$/.exec(url.pathname);
     if (!match || !ROOM.test(match[1])) {
       socket.end('HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
@@ -148,6 +148,6 @@ export function startRelay(options = {}) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const relay = await startRelay({ port: Number(process.argv[2]) || 8787 });
-  console.log(`mock relay on ${relay.url}  (GET /healthz, /v1/rooms/{room}?role=…)`);
+  const tunnel = await startTunnel({ port: Number(process.argv[2]) || 8787 });
+  console.log(`mock tunnel on ${tunnel.url}  (GET /healthz, /v1/rooms/{room}?role=…)`);
 }

@@ -700,7 +700,7 @@ export function chooseNativePrice(dex?: number | null, chainlink_local?: number 
  */
 export function clearSignerCeremonyRequest(operation_json: string, id: string, wallet_name: string, registry: string): string | undefined;
 
-export function clearSignerDefaultRelay(): string;
+export function clearSignerDefaultTunnel(): string;
 
 export function clearSignerDefaultUrl(): string;
 
@@ -714,20 +714,6 @@ export function clearSignerDefaultUrl(): string;
  */
 export function clearSignerRegistryRpId(signer_origin?: string | null): string | undefined;
 
-export function clearSignerRelayLink(signer_url: string, relay: string, room: string, rk: string): string;
-
-/**
- * A room id from 16 random bytes.
- */
-export function clearSignerRelayRoom(random: Uint8Array): string | undefined;
-
-export function clearSignerRelayRoomUrl(relay: string, room: string): string;
-
-/**
- * A relay address, normalised, or `undefined` when it cannot be used.
- */
-export function clearSignerRelayUrl(input: string): string | undefined;
-
 /**
  * `{method, params, origin, chainId, chainName?, nativeSymbol?, account,
  * accountName?, credentialIdsHex, userOp?, calls?}` → the page's `{intent,
@@ -736,6 +722,20 @@ export function clearSignerRelayUrl(input: string): string | undefined;
  * and an empty `method` — the wallet's own send — makes them the intent.
  */
 export function clearSignerRequest(input_json: string): string;
+
+export function clearSignerTunnelLink(signer_url: string, tunnel: string, room: string, rk: string): string;
+
+/**
+ * A room id from 16 random bytes.
+ */
+export function clearSignerTunnelRoom(random: Uint8Array): string | undefined;
+
+export function clearSignerTunnelRoomUrl(tunnel: string, room: string): string;
+
+/**
+ * A tunnel address, normalised, or `undefined` when it cannot be used.
+ */
+export function clearSignerTunnelUrl(input: string): string | undefined;
 
 /**
  * The ONE relying party a unit is filed under, or an error naming the parties
@@ -1187,14 +1187,14 @@ export interface InitOutput {
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
     readonly clearSignerCeremonyRequest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly clearSignerDefaultRelay: () => [number, number];
+    readonly clearSignerDefaultTunnel: () => [number, number];
     readonly clearSignerDefaultUrl: () => [number, number];
     readonly clearSignerRegistryRpId: (a: number, b: number) => [number, number];
-    readonly clearSignerRelayLink: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly clearSignerRelayRoom: (a: number, b: number) => [number, number];
-    readonly clearSignerRelayRoomUrl: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly clearSignerRelayUrl: (a: number, b: number) => [number, number];
     readonly clearSignerRequest: (a: number, b: number) => [number, number, number, number];
+    readonly clearSignerTunnelLink: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly clearSignerTunnelRoom: (a: number, b: number) => [number, number];
+    readonly clearSignerTunnelRoomUrl: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly clearSignerTunnelUrl: (a: number, b: number) => [number, number];
     readonly clearSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly clearSignerUrl: (a: number, b: number) => [number, number, number, number];
     readonly clearSignerUsesWalletPasskeys: (a: number, b: number) => number;

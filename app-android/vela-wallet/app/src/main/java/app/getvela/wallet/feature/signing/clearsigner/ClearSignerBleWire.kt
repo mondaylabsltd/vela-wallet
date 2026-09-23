@@ -29,7 +29,7 @@ import java.security.SecureRandom
  *
  * What makes proximity enough:
  *
- * - **There is no link to steal.** Unlike the relay there is no `rk` and no
+ * - **There is no link to steal.** Unlike the tunnel there is no `rk` and no
  *   pairing URL; the attacker has to be inside radio range.
  * - **The six-digit code is confirmed before anything is sent.** Both ends
  *   derive it from the two public keys and the two nonces, so it agrees only

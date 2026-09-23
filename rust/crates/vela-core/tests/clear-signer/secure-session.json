@@ -1,32 +1,32 @@
 {
-  "about": "Spec 075: the Clear Signer's end-to-end session (relay.md §2, PROTOCOL.md §3). Hellos compare as JSON objects, not text.",
+  "about": "Spec 075: the Clear Signer's end-to-end session (tunnel.md §2, PROTOCOL.md §3). Hellos compare as JSON objects, not text.",
   "cases": [
     {
-      "code": "082567",
-      "label": "vela-relay/1",
+      "code": "013333",
+      "label": "vela-tunnel/1",
       "messages": [
         {
           "from": "requester",
           "plaintext": "{\"v\":1,\"t\":\"intent\",\"n\":1,\"id\":\"e6f3\",\"intent\":{\"method\":\"vela_signIn\",\"params\":[{}],\"origin\":\"\"}}",
-          "sealedHex": "5032432e0000000000000001b19e06a6f8954976edbdc06fc9bf3ec165dcbb8c7af15730773a93e0350415d53f23ebbb5a61bd0ca2ec20fc421774514626687ecf36cfa5664dc1c1411ea3fe3fa223d22f23e23e654a52daadd8de93e930a6294a526905a30889bf4864f36d5e82269b5f53ce6a6de33f24bd765dd6426a"
+          "sealedHex": "5032432e0000000000000001ce2e250622d9baa8469b3e9ddab92986b4efec3265c0bbff2cd5b5aa13fe4a6128676fd3303be379faaa50add0b5299b6f38c2915cf1e92fad994cbbaf49d265b152e3c994caf7c8c812c283ba489fde281db87c1d09ae0e760a22e10717a8bc94a82b9051e19028f0213a646347bd2b8b36"
         },
         {
           "from": "signer",
           "plaintext": "{\"v\":1,\"t\":\"result\",\"n\":2,\"id\":\"e6f3\"}",
-          "sealedHex": "4332502e0000000000000001c4ab0d8947f3cf58ae61f06f6f15cec7ff1761e10ab3d1277c00aa81a106f8c82d090383692e59caab352afd086b7a8307cdae1a6670"
+          "sealedHex": "4332502e0000000000000001fe01b268319bb800539eb88c1e15759ca57d6c8c235222d9c0c72f3f578665c244971364814ad641d61eb8ee04e04b5751362b34eb1e"
         },
         {
           "from": "requester",
           "plaintext": "{\"v\":1,\"t\":\"intent\",\"n\":3,\"id\":\"a1b2\"}",
-          "sealedHex": "5032432e0000000000000002ddad9af30f2190542386e8a885df1a34436915201ee47ec27a773ee7dcd33c028dab3ee109761f72bcb6513119344e9b1ec9088fb635"
+          "sealedHex": "5032432e0000000000000002883cb8e22039f75d0064aeb3a641e5a2b95dce77242018f2bcf03523485ca8e03b9bf76011bea84f8c28bf631164a900fdf9e2e35f2f"
         },
         {
           "from": "signer",
           "plaintext": "{\"v\":1,\"t\":\"bye\",\"n\":4,\"reason\":\"done\"}",
-          "sealedHex": "4332502e0000000000000002ceec9dee345fb37c6d302e2d2a2f521df8cceda060c06594e4b6e88e3d362aa2d594e29b50838ca35b63189d212e58e7a7df3ecfd917a8"
+          "sealedHex": "4332502e0000000000000002b60e0a8fc5a203b90ab855e095dd2e9911f568988c79709996d032299f385dc4a815fb20f926b337d0ffe868049871a923319988d263cd"
         }
       ],
-      "name": "relay-a",
+      "name": "tunnel-a",
       "requester": {
         "app": "vela-test/1",
         "hello": "{\"app\":\"vela-test/1\",\"nonce\":\"srKysrKysrKysrKysrKysg\",\"pk\":\"BNZak5d8qj0bCBhS_1ennkZfFmBXcwS66tUF3TpIWJzzUBheiVNy32Ih6joTdVfkc_3bZ1XwW9UHw8Uz_OnJEoU\",\"role\":\"requester\",\"t\":\"hello\",\"v\":1}",
@@ -43,31 +43,31 @@
       }
     },
     {
-      "code": "651209",
-      "label": "vela-relay/1",
+      "code": "485334",
+      "label": "vela-tunnel/1",
       "messages": [
         {
           "from": "requester",
           "plaintext": "{\"v\":1,\"t\":\"intent\",\"n\":1,\"id\":\"e6f3\",\"intent\":{\"method\":\"vela_signIn\",\"params\":[{}],\"origin\":\"\"}}",
-          "sealedHex": "5032432e00000000000000010078fdb9f2bacd3333e85700c6d938f3f70b4a591c0799ea7b6cf1b713c2a0956d8aaa14cb281916e26a6df356c63b8e8b3e86409752432218139690645b3e1ebaac8e9572af6b453e10d9ee470dd7be7c88c8350633e0fba3069459f130b2ff3b1d2bb125f7c83dca809479a39549e3f923"
+          "sealedHex": "5032432e00000000000000016bb4796081b33d557fc821805cc56f97c9ab37bc00656111c08cf45e032d6336efe7c6e5988a89526e49c3f68da7cf3eced2065b4e8f298ff58c0d54ab8e2345dc98dbc2d8a87f8791e15f4b4848f961ac57d3b2d7c9a889be307816c31f485f996b74fd9a3eddcadb69d49c8cfe2ec92950"
         },
         {
           "from": "signer",
           "plaintext": "{\"v\":1,\"t\":\"result\",\"n\":2,\"id\":\"e6f3\"}",
-          "sealedHex": "4332502e0000000000000001826d8895b0ced6fd5a9bb0fc84ca09a8db6202337bb7fcc3021b260695a750838f5e712c5be274b40addc476432bacef04957b56f3a3"
+          "sealedHex": "4332502e0000000000000001fb912ee396cec4ac8be8b678772f042ccfa8ab83d8984b7b66e5fe5e1f1d287fdcc7f26e2b00b1a1e20b4b4e7c009f46efc23b890c0f"
         },
         {
           "from": "requester",
           "plaintext": "{\"v\":1,\"t\":\"intent\",\"n\":3,\"id\":\"a1b2\"}",
-          "sealedHex": "5032432e00000000000000024e3041ddb1c1e5efaf25f9385c65ae037acc0e4ad391e49f1c0f321e2bcc21ef77ef996511339584e4e61a786f805ce0e151736174dc"
+          "sealedHex": "5032432e0000000000000002d2e16930c65fa0831699a759ca08e1c4dc74e35c3b0f56fc7256270ab9326a444a25971877f06aa7ded41dcf03fc45cb86c1e47dc541"
         },
         {
           "from": "signer",
           "plaintext": "{\"v\":1,\"t\":\"bye\",\"n\":4,\"reason\":\"done\"}",
-          "sealedHex": "4332502e00000000000000022dadbb154745802cac8edca4f00cd5da9ea9ec276daa7312f320cfec3db40cb022e5447ecad226daacf8e1b51b33b85655808bcca7553d"
+          "sealedHex": "4332502e00000000000000021676a2fe4d1ff8d722cff77a374289f954269c5a41350891ddf1a56712bb88db3f63dd4d6c932f55a3a440de98abecd6d8a4bdcff5f9f5"
         }
       ],
-      "name": "relay-b",
+      "name": "tunnel-b",
       "requester": {
         "app": "vela-test/1",
         "hello": "{\"app\":\"vela-test/1\",\"nonce\":\"_v7-_v7-_v7-_v7-_v7-_g\",\"pk\":\"BJ8uJ5o67CgmIRW7bfoyNr1n1jJMYN-Tl01uAsRjPL-4ISAM6LQ5d5kqmOHHEv2Bh-r5VC218FJn9vzAncUjyWA\",\"role\":\"requester\",\"t\":\"hello\",\"v\":1}",

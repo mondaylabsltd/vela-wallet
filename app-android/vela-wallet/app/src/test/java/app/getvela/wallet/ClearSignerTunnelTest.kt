@@ -2,10 +2,10 @@ package app.getvela.wallet
 
 import app.getvela.wallet.feature.signing.clearsigner.ClearSignerAnswer
 import app.getvela.wallet.feature.signing.clearsigner.ClearSignerAsk
-import app.getvela.wallet.feature.signing.clearsigner.RelayListener
-import app.getvela.wallet.feature.signing.clearsigner.RelaySocket
-import app.getvela.wallet.feature.signing.clearsigner.RelaySockets
-import app.getvela.wallet.feature.signing.clearsigner.ClearSignerRelayWire
+import app.getvela.wallet.feature.signing.clearsigner.TunnelListener
+import app.getvela.wallet.feature.signing.clearsigner.TunnelSocket
+import app.getvela.wallet.feature.signing.clearsigner.TunnelSockets
+import app.getvela.wallet.feature.signing.clearsigner.ClearSignerTunnelWire
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,15 +19,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.vela_core_uniffi.ClearSignerHandshake
 import uniffi.vela_core_uniffi.clearSignerKeyFingerprint
-import uniffi.vela_core_uniffi.clearSignerRelayLink
-import uniffi.vela_core_uniffi.clearSignerRelayRoom
-import uniffi.vela_core_uniffi.clearSignerRelayRoomUrl
+import uniffi.vela_core_uniffi.clearSignerTunnelLink
+import uniffi.vela_core_uniffi.clearSignerTunnelRoom
+import uniffi.vela_core_uniffi.clearSignerTunnelRoomUrl
 import java.io.File
 import java.security.SecureRandom
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * The wallet's side of a cross-device pairing (spec 075, contracts/relay.md).
+ * The wallet's side of a cross-device pairing (spec 075, contracts/tunnel.md).
  *
  * Two halves, both without a network:
  *
@@ -36,12 +36,12 @@ import java.util.concurrent.CopyOnWriteArrayList
  *   the six digits, and every sealed frame byte for byte. The requester here
  *   is the same `ClearSignerHandshake` / `ClearSignerSession` the app uses, so
  *   if this passes the phone and the page agree.
- * - **A fake relay.** `ClearSignerRelayWire` against an in-process relay that
- *   implements relay.md §1, with the vectors' page as the signer: the link it
+ * - **A fake tunnel.** `ClearSignerTunnelWire` against an in-process tunnel that
+ *   implements tunnel.md §1, with the vectors' page as the signer: the link it
  *   publishes, the code it shows, and — the one that matters — that **nothing
  *   is sent before the person confirms the code**.
  */
-class ClearSignerRelayTest {
+class ClearSignerTunnelTest {
 
     private val repoRoot = File(
         System.getProperty("vela.repo.root")
@@ -65,7 +65,7 @@ class ClearSignerRelayTest {
             val vector = vectors.getJSONObject(index)
             val requester = vector.getJSONObject("requester")
             val signer = vector.getJSONObject("signer")
-            val relay = vector.getString("label") == "vela-relay/1"
+            val tunnel = vector.getString("label") == "vela-tunnel/1"
 
             val handshake = ClearSignerHandshake(
                 unhex(requester.getString("secretHex")),
@@ -76,7 +76,7 @@ class ClearSignerRelayTest {
                 requester.getString("publicKeyHex"),
                 hex(handshake.publicKey()),
             )
-            // Only the relay's link carries `rk`; the fingerprint itself is the
+            // Only the tunnel's link carries `rk`; the fingerprint itself is the
             // same function on both channels.
             if (vector.has("rk")) {
                 assertEquals(
@@ -100,7 +100,7 @@ class ClearSignerRelayTest {
                 ),
             )
 
-            val session = handshake.complete(signer.getString("hello"), relay)
+            val session = handshake.complete(signer.getString("hello"), tunnel)
             assertEquals(
                 "${vector.getString("name")}: the six digits",
                 vector.getString("code"),
@@ -112,7 +112,7 @@ class ClearSignerRelayTest {
                 val message = messages.getJSONObject(m)
                 val plaintext = message.getString("plaintext")
                 val sealed = message.getString("sealedHex")
-                // BLE binds its frame message id into the AAD; the relay binds
+                // BLE binds its frame message id into the AAD; the tunnel binds
                 // the counter (`null`).
                 val msgId = if (message.has("msgId")) message.getInt("msgId").toUByte() else null
                 if (message.getString("from") == "requester") {
@@ -132,29 +132,29 @@ class ClearSignerRelayTest {
         }
     }
 
-    // -- the fake relay -------------------------------------------------------
+    // -- the fake tunnel -------------------------------------------------------
 
     /**
-     * relay.md §1, in process: one room, one requester, one signer, `joined`
+     * tunnel.md §1, in process: one room, one requester, one signer, `joined`
      * when both are in, and every frame forwarded byte for byte. The tap
-     * records what the relay saw, which is how the test can say the relay
+     * records what the tunnel saw, which is how the test can say the tunnel
      * learned nothing it should not have.
      */
-    private class FakeRelay(
+    private class FakeTunnel(
         /** What the page says once both ends are in the room. */
         private val signerHello: String,
         /** Sealed frames the page sends, in order, one per requester frame. */
         private val replies: List<ByteArray> = emptyList(),
-    ) : RelaySockets {
+    ) : TunnelSockets {
         val opened = CopyOnWriteArrayList<String>()
         val fromRequester = CopyOnWriteArrayList<Any>()
-        private var listener: RelayListener? = null
+        private var listener: TunnelListener? = null
         private var sent = 0
 
-        override fun open(url: String, listener: RelayListener): RelaySocket {
+        override fun open(url: String, listener: TunnelListener): TunnelSocket {
             opened += url
             this.listener = listener
-            val socket = object : RelaySocket {
+            val socket = object : TunnelSocket {
                 override fun send(text: String) {
                     fromRequester += text
                 }
@@ -168,7 +168,7 @@ class ClearSignerRelayTest {
                     listener.onClosed("1000")
                 }
             }
-            // Both roles are in the room: the relay says so, then the page
+            // Both roles are in the room: the tunnel says so, then the page
             // (the signer) speaks first.
             listener.onText("""{"v":1,"relay":"joined"}""")
             listener.onText(signerHello)
@@ -177,16 +177,16 @@ class ClearSignerRelayTest {
     }
 
     private fun wireFor(
-        relay: FakeRelay,
+        tunnel: FakeTunnel,
         vector: JSONObject,
         onLink: (String) -> Unit = {},
         confirm: suspend (String) -> Boolean,
-    ): ClearSignerRelayWire {
+    ): ClearSignerTunnelWire {
         val requester = vector.getJSONObject("requester")
-        return ClearSignerRelayWire(
-            relayUrl = "wss://relay.example",
+        return ClearSignerTunnelWire(
+            tunnelUrl = "wss://tunnel.example",
             signerUrl = "https://sign.getvela.app/",
-            sockets = relay,
+            sockets = tunnel,
             appName = requester.optString("app"),
             timeoutMs = 5_000L,
             random = scripted(
@@ -201,11 +201,11 @@ class ClearSignerRelayTest {
 
     @Test
     fun `the pairing link is the core's, and the room is the socket the wallet opens`() {
-        val vector = case("relay-a")
-        val relay = FakeRelay(vector.getJSONObject("signer").getString("hello"))
+        val vector = case("tunnel-a")
+        val tunnel = FakeTunnel(vector.getJSONObject("signer").getString("hello"))
         val published = CompletableDeferred<String>()
         // The page never answers here — only the link and the room are on trial.
-        val wire = wireFor(relay, vector, onLink = { published.complete(it) }) { true }
+        val wire = wireFor(tunnel, vector, onLink = { published.complete(it) }) { true }
         val link = runBlocking {
             val asking = launch(Dispatchers.Default) {
                 wire.ask(ClearSignerAsk.Signature("{}", ByteArray(32), emptyList()))
@@ -217,21 +217,21 @@ class ClearSignerRelayTest {
             }
         }
 
-        val room = clearSignerRelayRoom(ByteArray(16) { 0x5a })!!
+        val room = clearSignerTunnelRoom(ByteArray(16) { 0x5a })!!
         assertEquals(
-            clearSignerRelayLink("https://sign.getvela.app/", "wss://relay.example", room, vector.getString("rk")),
+            clearSignerTunnelLink("https://sign.getvela.app/", "wss://tunnel.example", room, vector.getString("rk")),
             link,
         )
-        assertEquals(clearSignerRelayRoomUrl("wss://relay.example", room), relay.opened.single())
+        assertEquals(clearSignerTunnelRoomUrl("wss://tunnel.example", room), tunnel.opened.single())
     }
 
     @Test
     fun `the code is the core's six digits, and nothing is sent until the person confirms it`() {
-        val vector = case("relay-a")
-        val relay = FakeRelay(vector.getJSONObject("signer").getString("hello"))
+        val vector = case("tunnel-a")
+        val tunnel = FakeTunnel(vector.getJSONObject("signer").getString("hello"))
         val shown = CompletableDeferred<String>()
         val confirmed = CompletableDeferred<Boolean>()
-        val wire = wireFor(relay, vector) { code ->
+        val wire = wireFor(tunnel, vector) { code ->
             shown.complete(code)
             confirmed.await()
         }
@@ -241,10 +241,10 @@ class ClearSignerRelayTest {
             }
             val code = withTimeout(5_000L) { shown.await() }
             assertEquals(vector.getString("code"), code)
-            // The relay has seen the two hellos and NOTHING else: the request
+            // The tunnel has seen the two hellos and NOTHING else: the request
             // does not leave this device before the codes are agreed.
-            assertEquals(1, relay.fromRequester.size)
-            assertTrue("only the wallet's hello, in the clear", relay.fromRequester.single() is String)
+            assertEquals(1, tunnel.fromRequester.size)
+            assertTrue("only the wallet's hello, in the clear", tunnel.fromRequester.single() is String)
             confirmed.complete(false)
             asking.join()
             ClearSignerAnswer.Cancelled
@@ -254,20 +254,20 @@ class ClearSignerRelayTest {
         // session says on its way out.
         assertFalse(
             "no intent was ever sealed",
-            relay.fromRequester.filterIsInstance<ByteArray>().size > 1,
+            tunnel.fromRequester.filterIsInstance<ByteArray>().size > 1,
         )
     }
 
     @Test
-    fun `a relay that cannot be reached is told as the relay being down, not as a refusal`() {
-        val vector = case("relay-a")
-        val dead = object : RelaySockets {
-            override fun open(url: String, listener: RelayListener): RelaySocket =
+    fun `a tunnel that cannot be reached is told as the tunnel being down, not as a refusal`() {
+        val vector = case("tunnel-a")
+        val dead = object : TunnelSockets {
+            override fun open(url: String, listener: TunnelListener): TunnelSocket =
                 throw java.io.IOException("no route to host")
         }
         val requester = vector.getJSONObject("requester")
-        val wire = ClearSignerRelayWire(
-            relayUrl = "wss://relay.example",
+        val wire = ClearSignerTunnelWire(
+            tunnelUrl = "wss://tunnel.example",
             signerUrl = "https://sign.getvela.app/",
             sockets = dead,
             appName = "vela-test/1",

@@ -2585,16 +2585,16 @@ public func FfiConverterTypeClearSignerFramer_lower(_ value: ClearSignerFramer) 
 
 
 /**
- * The wallet's side of the end-to-end session (relay and BLE), before the
+ * The wallet's side of the end-to-end session (tunnel and BLE), before the
  * page's hello. The shell draws the 32 secret bytes and the 16-byte nonce.
  */
 public protocol ClearSignerHandshakeProtocol: AnyObject, Sendable {
     
     /**
-     * Finish with the page's hello. `relay` picks the label (`vela-relay/1`,
-     * else `vela-ble/1`). Once only.
+     * Finish with the page's hello. `tunnel` picks the tunnel's label
+     * (`vela-tunnel/1`); `false` picks BLE's (`vela-ble/1`). Once only.
      */
-    func complete(peerHello: String, relay: Bool) throws  -> ClearSignerSession
+    func complete(peerHello: String, tunnel: Bool) throws  -> ClearSignerSession
     
     /**
      * This side's hello text frame. `icon` is an optional mark for the page
@@ -2610,7 +2610,7 @@ public protocol ClearSignerHandshakeProtocol: AnyObject, Sendable {
     
 }
 /**
- * The wallet's side of the end-to-end session (relay and BLE), before the
+ * The wallet's side of the end-to-end session (tunnel and BLE), before the
  * page's hello. The shell draws the 32 secret bytes and the 16-byte nonce.
  */
 open class ClearSignerHandshake: ClearSignerHandshakeProtocol, @unchecked Sendable {
@@ -2677,16 +2677,16 @@ public convenience init(secret: Data, nonce: Data)throws  {
 
     
     /**
-     * Finish with the page's hello. `relay` picks the label (`vela-relay/1`,
-     * else `vela-ble/1`). Once only.
+     * Finish with the page's hello. `tunnel` picks the tunnel's label
+     * (`vela-tunnel/1`); `false` picks BLE's (`vela-ble/1`). Once only.
      */
-open func complete(peerHello: String, relay: Bool)throws  -> ClearSignerSession  {
+open func complete(peerHello: String, tunnel: Bool)throws  -> ClearSignerSession  {
     return try  FfiConverterTypeClearSignerSession_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_clearsignerhandshake_complete(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(peerHello),
-        FfiConverterBool.lower(relay),uniffiCallStatus
+        FfiConverterBool.lower(tunnel),uniffiCallStatus
     )
 })
 }
@@ -2965,7 +2965,7 @@ public protocol ClearSignerSessionProtocol: AnyObject, Sendable {
     
     /**
      * Seal the next outgoing message. `msg_id` is BLE's frame message id;
-     * `None` on the relay (the AAD binds the counter).
+     * `None` on the tunnel (the AAD binds the counter).
      */
     func seal(plaintext: Data, msgId: UInt8?)  -> Data
     
@@ -3055,7 +3055,7 @@ open func `open`(sealed: Data, msgId: UInt8?)throws  -> Data  {
     
     /**
      * Seal the next outgoing message. `msg_id` is BLE's frame message id;
-     * `None` on the relay (the AAD binds the counter).
+     * `None` on the tunnel (the AAD binds the counter).
      */
 open func seal(plaintext: Data, msgId: UInt8?) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
@@ -13063,12 +13063,12 @@ public func clearSignerCeremonyRequest(operationJson: String, id: String, wallet
 })
 }
 /**
- * The relay the wallet pairs through unless Settings name another.
+ * The tunnel the wallet pairs through unless Settings name another.
  */
-public func clearSignerDefaultRelay() -> String  {
+public func clearSignerDefaultTunnel() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_vela_core_uniffi_fn_func_clear_signer_default_relay(uniffiCallStatus
+    uniffi_vela_core_uniffi_fn_func_clear_signer_default_tunnel(uniffiCallStatus
     )
 })
 }
@@ -13108,55 +13108,6 @@ public func clearSignerRegistryRpId(signerOrigin: String?) -> String?  {
 })
 }
 /**
- * The pairing link (QR + copy) for the page on another device.
- */
-public func clearSignerRelayLink(signerUrl: String, relay: String, room: String, rk: String) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_vela_core_uniffi_fn_func_clear_signer_relay_link(
-        FfiConverterString.lower(signerUrl),
-        FfiConverterString.lower(relay),
-        FfiConverterString.lower(room),
-        FfiConverterString.lower(rk),uniffiCallStatus
-    )
-})
-}
-/**
- * A room id from 16 random bytes the shell drew.
- */
-public func clearSignerRelayRoom(random: Data) -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_vela_core_uniffi_fn_func_clear_signer_relay_room(
-        FfiConverterData.lower(random),uniffiCallStatus
-    )
-})
-}
-/**
- * The socket the wallet opens: `<relay>/v1/rooms/<room>?role=requester`.
- */
-public func clearSignerRelayRoomUrl(relay: String, room: String) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_vela_core_uniffi_fn_func_clear_signer_relay_room_url(
-        FfiConverterString.lower(relay),
-        FfiConverterString.lower(room),uniffiCallStatus
-    )
-})
-}
-/**
- * A relay address the person typed, normalised — `None` when it cannot be
- * used (wss anywhere, ws only on loopback).
- */
-public func clearSignerRelayUrl(input: String) -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_vela_core_uniffi_fn_func_clear_signer_relay_url(
-        FfiConverterString.lower(input),uniffiCallStatus
-    )
-})
-}
-/**
  * The page's `{intent, context}` as JSON. `draft` is the ASSEMBLED
  * operation for a transaction (the digest covers it), `None` for a message.
  */
@@ -13166,6 +13117,55 @@ public func clearSignerRequest(input: ClearSignerInput, draft: UserOpDraft?)thro
     uniffi_vela_core_uniffi_fn_func_clear_signer_request(
         FfiConverterTypeClearSignerInput_lower(input),
         FfiConverterOptionTypeUserOpDraft.lower(draft),uniffiCallStatus
+    )
+})
+}
+/**
+ * The pairing link (QR + copy) for the page on another device.
+ */
+public func clearSignerTunnelLink(signerUrl: String, tunnel: String, room: String, rk: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_tunnel_link(
+        FfiConverterString.lower(signerUrl),
+        FfiConverterString.lower(tunnel),
+        FfiConverterString.lower(room),
+        FfiConverterString.lower(rk),uniffiCallStatus
+    )
+})
+}
+/**
+ * A room id from 16 random bytes the shell drew.
+ */
+public func clearSignerTunnelRoom(random: Data) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_tunnel_room(
+        FfiConverterData.lower(random),uniffiCallStatus
+    )
+})
+}
+/**
+ * The socket the wallet opens: `<tunnel>/v1/rooms/<room>?role=requester`.
+ */
+public func clearSignerTunnelRoomUrl(tunnel: String, room: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_tunnel_room_url(
+        FfiConverterString.lower(tunnel),
+        FfiConverterString.lower(room),uniffiCallStatus
+    )
+})
+}
+/**
+ * A tunnel address the person typed, normalised — `None` when it cannot be
+ * used (wss anywhere, ws only on loopback).
+ */
+public func clearSignerTunnelUrl(input: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_tunnel_url(
+        FfiConverterString.lower(input),uniffiCallStatus
     )
 })
 }
@@ -13199,7 +13199,7 @@ public func clearSignerVerify(resultJson: String, digest: Data, keys: [WalletKey
 })
 }
 /**
- * Judge a ceremony's answer that arrived by another channel (the relay, BLE).
+ * Judge a ceremony's answer that arrived by another channel (the tunnel, BLE).
  */
 public func clearSignerVerifyCeremony(operationJson: String, answerJson: String, signerOrigin: String, expectedMemberChallenge: Data?) -> ClearSignerCeremonyOutcome  {
     return try!  FfiConverterTypeClearSignerCeremonyOutcome_lift(try! rustCall() {
@@ -13895,7 +13895,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_ceremony_request() != 37720) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_default_relay() != 17664) {
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_default_tunnel() != 30444) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_default_url() != 36170) {
@@ -13907,19 +13907,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_registry_rp_id() != 23040) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_relay_link() != 43724) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_relay_room() != 58217) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_relay_room_url() != 57236) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_relay_url() != 16039) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_request() != 61569) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_tunnel_link() != 52834) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_tunnel_room() != 35682) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_tunnel_room_url() != 10839) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_tunnel_url() != 55903) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_unit_rp_id() != 14302) {
@@ -13928,7 +13928,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_verify() != 26706) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_verify_ceremony() != 6110) {
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_verify_ceremony() != 29996) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_ws_launch() != 27606) {
@@ -14078,7 +14078,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_next_id() != 35232) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_complete() != 10649) {
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_complete() != 8961) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_hello() != 59234) {
@@ -14102,7 +14102,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_clearsignersession_open() != 10032) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_clearsignersession_seal() != 44638) {
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignersession_seal() != 33076) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_cableframeport_write_frame() != 33387) {

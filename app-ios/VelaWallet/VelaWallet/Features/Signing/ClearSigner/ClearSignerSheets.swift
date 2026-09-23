@@ -15,7 +15,7 @@
 //  The model is driven from `ClearSigner`; nothing here decides anything. In
 //  particular the confirm button does not "approve" the request — it says the
 //  two screens show the same six digits, which is the one check that catches a
-//  stand-in page on the relay, and until it is tapped the wallet has sent
+//  stand-in page on the tunnel, and until it is tapped the wallet has sent
 //  nothing.
 //
 
@@ -28,7 +28,7 @@ import VelaCore
 enum ClearSignerPick: Equatable {
     /// The loopback page, in a tab over this sheet.
     case thisDevice
-    /// A page on another device, through the relay.
+    /// A page on another device, through the tunnel.
     case otherDevice
     /// A page on a computer in this room, over BLE (spec 075 T041).
     case nearby
@@ -42,8 +42,8 @@ final class ClearSignerSheetModel {
     enum Stage: Equatable {
         /// This device, another one, or nearby (`clearSignerWhere`).
         case choosing
-        /// The relay could not be reached: the line, and the choice again.
-        case relayDown
+        /// The tunnel could not be reached: the line, and the choice again.
+        case tunnelDown
         /// Bluetooth cannot carry a session: what is missing, and the choice
         /// again.
         case bleTrouble(ClearSignerBleTrouble)
@@ -86,7 +86,7 @@ struct ClearSignerSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             switch model.stage {
-            case .choosing, .relayDown, .bleTrouble:
+            case .choosing, .tunnelDown, .bleTrouble:
                 where_
             case .pairing:
                 pairing
@@ -116,8 +116,8 @@ struct ClearSignerSheet: View {
             Text(loc.t(I18nKeys.ClearSigner.whereIsIt))
                 .typeRole(Typography.title)
                 .foregroundStyle(theme.fgBase)
-            if model.stage == .relayDown {
-                Text(loc.t(I18nKeys.ClearSigner.relayDown))
+            if model.stage == .tunnelDown {
+                Text(loc.t(I18nKeys.ClearSigner.tunnelDown))
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.errorBase)
                     .fixedSize(horizontal: false, vertical: true)

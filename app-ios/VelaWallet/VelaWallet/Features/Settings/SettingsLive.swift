@@ -597,8 +597,8 @@ enum SettingsLive {
                     changed.value = sheet.rows.first(where: \.selected)?.label ?? row.value
                 case SettingsFixtures.signerPageRow:
                     changed.value = signerPageValue(view, loc: loc)
-                case SettingsFixtures.relayRow:
-                    changed.value = relayValue(view, loc: loc)
+                case SettingsFixtures.tunnelRow:
+                    changed.value = tunnelValue(view, loc: loc)
                 default:
                     return row
                 }
@@ -624,27 +624,27 @@ enum SettingsLive {
             save: loc.t("settings.signing.pageSave"),
             reset: view.signerUrlIsDefault ? nil : loc.t("settings.signing.pageReset")
         )
-        // Spec 075: the relay row, shaped like the page row — value, sheet,
+        // Spec 075: the tunnel row, shaped like the page row — value, sheet,
         // the core's own error under the field, reset only when it is not the
-        // official one. There is no "foreign" callout: a relay never sees a
+        // official one. There is no "foreign" callout: a tunnel never sees a
         // key, only ciphertext, so whose it is changes nothing about what it
         // can do.
-        let relayError: String? = switch view.relayUrlError {
-        case "invalid": loc.t("settings.signing.relayInvalid")
-        case "insecure": loc.t("settings.signing.relayInsecure")
+        let tunnelError: String? = switch view.tunnelUrlError {
+        case "invalid": loc.t("settings.signing.tunnelInvalid")
+        case "insecure": loc.t("settings.signing.tunnelInsecure")
         default: nil
         }
-        copy.relay = SignerPageModel(
-            title: loc.t("settings.signing.relayTitle"),
-            subtitle: loc.t("settings.signing.relaySubtitle"),
+        copy.tunnel = SignerPageModel(
+            title: loc.t("settings.signing.tunnelTitle"),
+            subtitle: loc.t("settings.signing.tunnelSubtitle"),
             field: UrlFieldModel(
-                id: "relay-url", label: "", value: view.relayUrl,
-                placeholder: clearSignerDefaultRelay(), tone: relayError == nil ? nil : .error
+                id: "tunnel-url", label: "", value: view.tunnelUrl,
+                placeholder: clearSignerDefaultTunnel(), tone: tunnelError == nil ? nil : .error
             ),
-            error: relayError,
+            error: tunnelError,
             foreign: nil,
             save: loc.t("settings.signing.pageSave"),
-            reset: view.relayUrlIsDefault ? nil : loc.t("settings.signing.relayReset")
+            reset: view.tunnelUrlIsDefault ? nil : loc.t("settings.signing.tunnelReset")
         )
         return copy
     }
@@ -655,10 +655,10 @@ enum SettingsLive {
         return URL(string: view.signerUrl)?.host ?? view.signerUrl
     }
 
-    /// "Official", or the host of the relay a person chose.
-    static func relayValue(_ view: SignPrefViewWire, loc: Loc) -> String {
-        guard !view.relayUrlIsDefault else { return loc.t("settings.signing.relayOfficial") }
-        return URL(string: view.relayUrl)?.host ?? view.relayUrl
+    /// "Official", or the host of the tunnel a person chose.
+    static func tunnelValue(_ view: SignPrefViewWire, loc: Loc) -> String {
+        guard !view.tunnelUrlIsDefault else { return loc.t("settings.signing.tunnelOfficial") }
+        return URL(string: view.tunnelUrl)?.host ?? view.tunnelUrl
     }
 
     static func withCurrency(

@@ -719,40 +719,40 @@ export function clearSignerUnitRpId(
 }
 
 // ---------------------------------------------------------------------------
-// The Clear Signer across devices (spec 075, contracts/relay.md) — the room,
+// The Clear Signer across devices (spec 075, contracts/tunnel.md) — the room,
 // its address and the pairing link are the core's; the session inside the room
-// is `$lib/signing/relay/secure-session.ts`, because the Rust one does not fit
+// is `$lib/signing/tunnel/secure-session.ts`, because the Rust one does not fit
 // in this wasm module.
 // ---------------------------------------------------------------------------
 
-/** The official relay, `wss://relay.getvela.app`. */
-export function clearSignerDefaultRelay(): string {
-	return wasm.clearSignerDefaultRelay();
+/** The official tunnel, `wss://tunnel.getvela.app`. */
+export function clearSignerDefaultTunnel(): string {
+	return wasm.clearSignerDefaultTunnel();
 }
 
-/** A relay address normalised (wss anywhere, ws on loopback), or `undefined`. */
-export function clearSignerRelayUrl(input: string): string | undefined {
-	return wasm.clearSignerRelayUrl(input);
+/** A tunnel address normalised (wss anywhere, ws on loopback), or `undefined`. */
+export function clearSignerTunnelUrl(input: string): string | undefined {
+	return wasm.clearSignerTunnelUrl(input);
 }
 
 /** A room id — 22 base64url characters — from 16 random bytes. */
-export function clearSignerRelayRoom(random: Uint8Array): string | undefined {
-	return wasm.clearSignerRelayRoom(random);
+export function clearSignerTunnelRoom(random: Uint8Array): string | undefined {
+	return wasm.clearSignerTunnelRoom(random);
 }
 
 /** The requester's socket address for a room. */
-export function clearSignerRelayRoomUrl(relay: string, room: string): string {
-	return wasm.clearSignerRelayRoomUrl(relay, room);
+export function clearSignerTunnelRoomUrl(tunnel: string, room: string): string {
+	return wasm.clearSignerTunnelRoomUrl(tunnel, room);
 }
 
-/** The pairing link the wallet shows as a QR: the page, the relay, the room, `rk`. */
-export function clearSignerRelayLink(
+/** The pairing link the wallet shows as a QR: the page, the tunnel, the room, `rk`. */
+export function clearSignerTunnelLink(
 	signerUrl: string,
-	relay: string,
+	tunnel: string,
 	room: string,
 	rk: string
 ): string {
-	return wasm.clearSignerRelayLink(signerUrl, relay, room, rk);
+	return wasm.clearSignerTunnelLink(signerUrl, tunnel, room, rk);
 }
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@
 //
 //  A browser can only ever be a central, and Web Bluetooth exists only in a
 //  document — so this channel is always "our native app advertising, their
-//  open tab connecting". Unlike the relay there is no server, no room and no
+//  open tab connecting". Unlike the tunnel there is no server, no room and no
 //  pairing link: what stands in for them is PROXIMITY (the attacker has to be
 //  in radio range) and the six digits the person compares.
 //
@@ -213,10 +213,10 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
     /// caller retries, or falls back to another route.
     init?(
         signerUrl: String,
-        app: String = ClearSignerRelayConversation.appName,
-        icon: String = ClearSignerRelayConversation.appIcon,
+        app: String = ClearSignerTunnelConversation.appName,
+        icon: String = ClearSignerTunnelConversation.appIcon,
         localName: String = ClearSignerBleConversation.deviceName(),
-        random: (Int) -> Data = ClearSignerRelayConversation.randomBytes,
+        random: (Int) -> Data = ClearSignerTunnelConversation.randomBytes,
         makeRadio: @escaping (CBPeripheralManagerDelegate) -> ClearSignerBleRadio = { LiveBleRadio(delegate: $0) },
         nextId: @escaping () -> String = { UUID().uuidString.lowercased() },
         clock: @escaping () -> UInt64 = ClearSignerBleConversation.nowMs
@@ -447,7 +447,7 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
         // Ours FIRST: `complete` consumes the handshake, and the page cannot
         // derive anything without our key.
         emit(Data(handshake.hello(app: app, icon: icon).utf8), sealed: false)
-        guard let session = try? handshake.complete(peerHello: text, relay: false) else {
+        guard let session = try? handshake.complete(peerHello: text, tunnel: false) else {
             return finishPairing(nil, trouble: .unavailable)
         }
         self.session = session

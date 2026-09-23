@@ -39,10 +39,10 @@ export type SettingsPrefEvent =
 	| { kind: 'signer-page'; text: string }
 	/** Back to the official page. */
 	| { kind: 'signer-page-reset' }
-	/** Spec 075: the relay a cross-device pairing goes through, as typed and saved. */
-	| { kind: 'relay-page'; text: string }
-	/** Back to the official relay. */
-	| { kind: 'relay-page-reset' }
+	/** Spec 075: the tunnel a cross-device pairing goes through, as typed and saved. */
+	| { kind: 'tunnel-page'; text: string }
+	/** Back to the official tunnel. */
+	| { kind: 'tunnel-page-reset' }
 	| { kind: 'number-format'; id: string }
 	| { kind: 'date-format'; id: string }
 	| { kind: 'time-format'; id: string }

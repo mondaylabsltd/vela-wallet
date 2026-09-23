@@ -1,18 +1,18 @@
 /**
- * A stand-in for the other device: the signer page's half of a relay room,
- * and the room itself (spec 075, relay.md).
+ * A stand-in for the other device: the signer page's half of a tunnel room,
+ * and the room itself (spec 075, tunnel.md).
  *
  * The wallet's half is the code under test (`clear-signer-channel.ts` +
- * `relay/secure-session.ts`, pinned to the core's vectors). This is the other
+ * `tunnel/secure-session.ts`, pinned to the core's vectors). This is the other
  * end of the same conversation, written the way the page writes it
- * (`app-web/clearsigning/lib/transport/{relay,secure}.js`): joined → the
+ * (`app-web/clearsigning/lib/transport/{tunnel,secure}.js`): joined → the
  * signer's hello first → both derive → sealed frames only.
  *
  * Tests only; nothing in the app imports this. The real page, over a real
- * mock relay, is what `e2e/clear-signer-relay.e2e.ts` runs.
+ * mock tunnel, is what `e2e/clear-signer-tunnel.e2e.ts` runs.
  */
-import type { RelaySocket } from '../clear-signer-channel';
-import { b64url, unb64url } from '../relay/secure-session';
+import type { TunnelSocket } from '../clear-signer-channel';
+import { b64url, unb64url } from '../tunnel/secure-session';
 
 const ECDH = { name: 'ECDH', namedCurve: 'P-256' } as const;
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -99,14 +99,14 @@ class PageSession {
 	}
 }
 
-export interface FakeRelay {
+export interface FakeTunnel {
 	/** The socket the wallet's channel is given. */
-	socket: RelaySocket;
+	socket: TunnelSocket;
 	/** Both ends are in the room: the page joins and speaks first. */
 	join(): Promise<void>;
 	/** The page dropped out; the room waits for it. */
 	leave(): void;
-	/** The relay itself closed the room (4408 expired, 4409 role taken, …). */
+	/** The tunnel itself closed the room (4408 expired, 4409 role taken, …). */
 	shut(code: number): void;
 	/** The six digits the page shows, once the two ends have derived them. */
 	code(): string | null;
@@ -116,7 +116,7 @@ export interface FakeRelay {
 	answer(id: string, body: Record<string, unknown>): Promise<void>;
 	/** Answer with the page's error vocabulary (`user_rejected`, `refused`, …). */
 	refuse(id: string, code: string): Promise<void>;
-	/** Everything the relay forwarded: text frames are `string`, sealed ones are bytes. */
+	/** Everything the tunnel forwarded: text frames are `string`, sealed ones are bytes. */
 	frames: (string | Uint8Array)[];
 }
 
@@ -124,15 +124,15 @@ export interface FakeRelay {
  * A room with the page already in it. `label` and the page's key material can
  * be pinned for a vector check; by default both ends are fresh.
  */
-export function fakeRelay(options: { label?: string } = {}): FakeRelay {
-	const label = options.label ?? 'vela-relay/1';
+export function fakeTunnel(options: { label?: string } = {}): FakeTunnel {
+	const label = options.label ?? 'vela-tunnel/1';
 	const frames: (string | Uint8Array)[] = [];
 	const received: Record<string, unknown>[] = [];
 	let session: PageSession | null = null;
 	let outgoing = 0;
 	let lastSeen = 0;
 
-	const socket: RelaySocket = {
+	const socket: TunnelSocket = {
 		binaryType: 'blob',
 		onopen: null,
 		onmessage: null,
@@ -155,7 +155,7 @@ export function fakeRelay(options: { label?: string } = {}): FakeRelay {
 		}
 	};
 
-	/** Deliver a frame to the wallet, as the relay would. */
+	/** Deliver a frame to the wallet, as the tunnel would. */
 	function toWallet(data: string | Uint8Array): void {
 		socket.onmessage?.({
 			data:
@@ -220,7 +220,7 @@ export function fakeRelay(options: { label?: string } = {}): FakeRelay {
 			const nonce = new Uint8Array(16);
 			crypto.getRandomValues(nonce);
 			pending = { privateKey: pair.privateKey, nonce };
-			// The page speaks first, in the clear (relay.md §2.1).
+			// The page speaks first, in the clear (tunnel.md §2.1).
 			toWallet(
 				JSON.stringify({
 					v: 1,

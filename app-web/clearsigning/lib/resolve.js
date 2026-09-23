@@ -838,7 +838,7 @@ window.VelaCS = window.VelaCS || {};
    * Is the requester a Vela wallet? Only two kinds of evidence count:
    *
    *  · an app channel: the loopback WebSocket (the app that opened this page
-   *    proved it with its one-time token), the relay (the wallet's key matches
+   *    proved it with its one-time token), the tunnel (the wallet's key matches
    *    the link's `rk`, and the person compares the code), BLE (proximity and
    *    the code);
    *  · an origin the BROWSER vouches for (postMessage, the extension port)
@@ -901,7 +901,7 @@ window.VelaCS = window.VelaCS || {};
     if (ctx.originVerified === true && ctx.requester) {
       return { origin: hostOf(ctx.requester) || ctx.requester, verified: true };
     }
-    var byChannel = { ws: 'value.viaApp', relay: 'value.viaRelay', ble: 'value.viaBle' }[ctx.channel];
+    var byChannel = { ws: 'value.viaApp', relay: 'value.viaTunnel', ble: 'value.viaBle' }[ctx.channel];
     return { originKey: byChannel || 'value.viaUnknown', verified: false };
   }
 
@@ -938,7 +938,7 @@ window.VelaCS = window.VelaCS || {};
     // The head names whoever is asking — and only wears Vela's mark when the
     // channel vouches for it.
     //
-    // This page is a signer anything can connect to: over BLE or the relay the
+    // This page is a signer anything can connect to: over BLE or the tunnel the
     // requester is whatever dialled in, and its hello's `app` is a CLAIM. The
     // page already refuses to launder a dApp's self-reported name into a
     // verified one; painting Vela's V and "Vela 钱包" on an unverified peer was

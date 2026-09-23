@@ -7,14 +7,14 @@ import org.json.JSONObject
 import uniffi.vela_core_uniffi.ClearSignerHandshake
 import uniffi.vela_core_uniffi.ClearSignerSession
 import uniffi.vela_core_uniffi.clearSignerKeyFingerprint
-import uniffi.vela_core_uniffi.clearSignerRelayLink
-import uniffi.vela_core_uniffi.clearSignerRelayRoom
-import uniffi.vela_core_uniffi.clearSignerRelayRoomUrl
+import uniffi.vela_core_uniffi.clearSignerTunnelLink
+import uniffi.vela_core_uniffi.clearSignerTunnelRoom
+import uniffi.vela_core_uniffi.clearSignerTunnelRoomUrl
 import java.security.SecureRandom
 
 /**
- * The wallet's side of a cross-device pairing (spec 075, contracts/relay.md):
- * a blind relay carries sealed frames between this phone and a Clear Signer
+ * The wallet's side of a cross-device pairing (spec 075, contracts/tunnel.md):
+ * a blind tunnel carries sealed frames between this phone and a Clear Signer
  * page open on another device.
  *
  * Everything that decides anything is the core's. This class draws the room id
@@ -24,21 +24,21 @@ import java.security.SecureRandom
  * functions — the same Rust the page's own `lib/transport/secure.js` is pinned
  * against by shared vectors.
  *
- * Two checks make the relay's blindness enough:
+ * Two checks make the tunnel's blindness enough:
  * - the pairing link carries `rk`, the fingerprint of THIS wallet's key, so a
- *   relay (or anyone who guessed the room) cannot stand in for the wallet —
+ *   tunnel (or anyone who guessed the room) cannot stand in for the wallet —
  *   the page refuses a hello that does not hash to it;
  * - the six-digit code is shown on both screens and the person confirms it
  *   **before the wallet sends anything**, so a stolen link cannot substitute a
  *   page. That matters most for a create, where a substituted page would hand
  *   the wallet somebody else's key.
  */
-class ClearSignerRelayWire(
-    /** The relay, as the preference holds it (`wss://…`). */
-    private val relayUrl: String,
+class ClearSignerTunnelWire(
+    /** The tunnel, as the preference holds it (`wss://…`). */
+    private val tunnelUrl: String,
     /** The page the link opens — a key's own `signer_origin`, or Settings'. */
     private val signerUrl: String,
-    private val sockets: RelaySockets,
+    private val sockets: TunnelSockets,
     /** `Vela Wallet <version>`, shown on the page as a name it gave for itself. */
     private val appName: String,
     /** This app's mark, inline PNG; empty when it could not be rendered. */
@@ -60,11 +60,11 @@ class ClearSignerRelayWire(
         val secret = ByteArray(32).also(random::nextBytes)
         val nonce = ByteArray(16).also(random::nextBytes)
         handshake = ClearSignerHandshake(secret, nonce)
-        room = clearSignerRelayRoom(ByteArray(16).also(random::nextBytes))
+        room = clearSignerTunnelRoom(ByteArray(16).also(random::nextBytes))
             ?: error("a 16-byte room id is always a room id")
         val rk = clearSignerKeyFingerprint(handshake.publicKey())
-        link = clearSignerRelayLink(signerUrl, relayUrl, room, rk)
-        roomUrl = clearSignerRelayRoomUrl(relayUrl, room)
+        link = clearSignerTunnelLink(signerUrl, tunnelUrl, room, rk)
+        roomUrl = clearSignerTunnelRoomUrl(tunnelUrl, room)
     }
 
     private sealed interface Incoming {
@@ -80,7 +80,7 @@ class ClearSignerRelayWire(
     private val inbox = Channel<Incoming>(Channel.UNLIMITED)
 
     @Volatile
-    private var socket: RelaySocket? = null
+    private var socket: TunnelSocket? = null
 
     @Volatile
     private var session: ClearSignerSession? = null
@@ -140,7 +140,7 @@ class ClearSignerRelayWire(
         val opened = runCatching {
             sockets.open(
                 roomUrl,
-                object : RelayListener {
+                object : TunnelListener {
                     override fun onText(text: String) {
                         inbox.trySend(Incoming.Text(text))
                     }
@@ -156,14 +156,14 @@ class ClearSignerRelayWire(
             )
         }.getOrElse { error ->
             return ClearSignerAnswer.Unreachable(
-                error.message ?: "the relay could not be reached",
+                error.message ?: "the tunnel could not be reached",
                 Unreachability.Channel,
             )
         }
         socket = opened
 
-        // The relay says when both ends are in the room; only then does either
-        // start its handshake (relay.md §1 — there is no buffering, so a frame
+        // The tunnel says when both ends are in the room; only then does either
+        // start its handshake (tunnel.md §1 — there is no buffering, so a frame
         // sent before that is simply dropped).
         var joined = false
         var peerHello: String? = null
@@ -178,8 +178,12 @@ class ClearSignerRelayWire(
                 is Incoming.Text -> {
                     val message = runCatching { JSONObject(next.text) }.getOrNull() ?: continue
                     when {
+                        // The wire key is still spelled `relay`. It is ON THE
+                        // WIRE, between a deployed page, a committed wasm and the
+                        // hosts in their own repository (`vela-tunnel`), so the
+                        // 2026-09-23 rename left it alone — tunnel.md's header.
                         message.has("relay") -> {
-                            // `joined` / `left`: the relay's own, never an end's.
+                            // `joined` / `left`: the tunnel's own, never an end's.
                             joined = message.optString("relay") == "joined"
                         }
                         joined && message.optString("t") == "hello" -> peerHello = next.text
@@ -192,7 +196,7 @@ class ClearSignerRelayWire(
         // and the same six digits from the two nonces and the two keys.
         opened.send(handshake.hello(appName.ifEmpty { null }, appIcon.ifEmpty { null }))
         val live = runCatching { handshake.complete(peerHello, true) }.getOrElse { error ->
-            VelaLog.failure("clearsigner.relay", "handshake refused", error)
+            VelaLog.failure("clearsigner.tunnel", "handshake refused", error)
             return ClearSignerAnswer.Unreachable(
                 error.message ?: "the handshake failed",
                 Unreachability.Channel,
@@ -226,7 +230,7 @@ class ClearSignerRelayWire(
                     return null
                 }
                 is Incoming.Text -> {
-                    // After the hellos, an end's frames are binary. The relay's
+                    // After the hellos, an end's frames are binary. The tunnel's
                     // own `left` means the page went away.
                     val message = runCatching { JSONObject(next.text) }.getOrNull() ?: continue
                     if (message.optString("relay") == "left") {
@@ -239,7 +243,7 @@ class ClearSignerRelayWire(
                         // A replay, a reflection or a tampered frame. The
                         // session's counters never go backwards, so the only
                         // safe thing is to stop.
-                        VelaLog.failure("clearsigner.relay", "sealed frame refused", error)
+                        VelaLog.failure("clearsigner.tunnel", "sealed frame refused", error)
                         gone = true
                         return null
                     }

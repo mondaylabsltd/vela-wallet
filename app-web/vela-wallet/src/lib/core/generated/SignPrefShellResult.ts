@@ -2,6 +2,6 @@
 
 export type SignPrefShellResult = { "type": "stored", method: string | null, signer_url: string | null, 
 /**
- * Spec 075; absent from a shell that predates the relay.
+ * Spec 075; absent from a shell that predates the tunnel.
  */
-relay_url: string | null, } | { "type": "written" };
+tunnel_url: string | null, } | { "type": "written" };

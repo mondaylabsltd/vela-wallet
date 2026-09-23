@@ -1,6 +1,6 @@
 //! The end-to-end session a Clear Signer channel runs when the path between the
-//! wallet and the page is not the browser's own: the relay (spec 075,
-//! `contracts/relay.md`) and BLE (`app-web/clearsigning/PROTOCOL.md` §3).
+//! wallet and the page is not the browser's own: the tunnel (spec 075,
+//! `contracts/tunnel.md`) and BLE (`app-web/clearsigning/PROTOCOL.md` §3).
 //!
 //! P-256 ECDH → HKDF-SHA256 → AES-256-GCM, and a six-digit code both screens
 //! show — the one place a stand-in on the path is caught. Byte-identical to the
@@ -25,10 +25,10 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 /// Which channel the session runs on. The label goes into every derivation and
-/// every AAD, so a BLE message can never be replayed into a relay session.
+/// every AAD, so a BLE message can never be replayed into a tunnel session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Label {
-    Relay,
+    Tunnel,
     Ble,
 }
 
@@ -36,7 +36,7 @@ impl Label {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Label::Relay => "vela-relay/1",
+            Label::Tunnel => "vela-tunnel/1",
             Label::Ble => "vela-ble/1",
         }
     }
@@ -249,7 +249,7 @@ impl Handshake {
     }
 }
 
-/// What a sealed message's AAD ends with. The relay binds the IV counter; BLE
+/// What a sealed message's AAD ends with. The tunnel binds the IV counter; BLE
 /// binds its frame message id (PROTOCOL.md §3.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tail {
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn both_ends_derive_the_same_code_and_talk() {
-        let (mut signer, mut requester) = pair(Label::Relay);
+        let (mut signer, mut requester) = pair(Label::Tunnel);
         assert_eq!(signer.code(), requester.code());
         assert_eq!(signer.code().len(), 6);
         let intent = br#"{"v":1,"t":"intent","n":1}"#;
@@ -446,7 +446,7 @@ mod tests {
 
     #[test]
     fn a_replayed_or_reflected_message_is_refused() {
-        let (mut signer, mut requester) = pair(Label::Relay);
+        let (mut signer, mut requester) = pair(Label::Tunnel);
         let sealed = requester.seal(b"one", Tail::Counter);
         signer.open(&sealed, Tail::Counter).unwrap();
         assert_eq!(
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn a_tampered_message_or_another_label_does_not_open() {
-        let (mut signer, mut requester) = pair(Label::Relay);
+        let (mut signer, mut requester) = pair(Label::Tunnel);
         let mut sealed = requester.seal(b"intent", Tail::Counter);
         let last = sealed.len() - 1;
         sealed[last] ^= 1;
@@ -473,10 +473,10 @@ mod tests {
         );
 
         let (_, mut ble_requester) = pair(Label::Ble);
-        let (mut relay_signer, _) = pair(Label::Relay);
+        let (mut tunnel_signer, _) = pair(Label::Tunnel);
         let crossed = ble_requester.seal(b"intent", Tail::Counter);
         assert_eq!(
-            relay_signer.open(&crossed, Tail::Counter),
+            tunnel_signer.open(&crossed, Tail::Counter),
             Err(SecureError::Unreadable)
         );
     }
@@ -488,7 +488,7 @@ mod tests {
         let wallet = Handshake::new(&REQUESTER_SECRET, REQUESTER_NONCE, Role::Requester).unwrap();
         let rk = key_fingerprint(wallet.public_key());
         assert!(matches!(
-            signer.complete(&stranger.hello(None), Label::Relay, Some(&rk)),
+            signer.complete(&stranger.hello(None), Label::Tunnel, Some(&rk)),
             Err(SecureError::ForeignPeer)
         ));
     }
@@ -498,14 +498,14 @@ mod tests {
         let signer = Handshake::new(&SIGNER_SECRET, SIGNER_NONCE, Role::Signer).unwrap();
         let other = Handshake::new(&REQUESTER_SECRET, REQUESTER_NONCE, Role::Signer).unwrap();
         assert!(matches!(
-            signer.complete(&other.hello(None), Label::Relay, None),
+            signer.complete(&other.hello(None), Label::Tunnel, None),
             Err(SecureError::WrongRole)
         ));
         let signer = Handshake::new(&SIGNER_SECRET, SIGNER_NONCE, Role::Signer).unwrap();
         assert!(matches!(
             signer.complete(
                 r#"{"t":"hello","role":"requester","pk":"AAAA","nonce":"AAAA"}"#,
-                Label::Relay,
+                Label::Tunnel,
                 None
             ),
             Err(SecureError::BadHello)

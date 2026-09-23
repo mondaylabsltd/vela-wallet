@@ -28,6 +28,15 @@ pub mod keys {
     pub const TEXT_SCALE: &str = "vela.textScale";
     /// The desktop's old spelling of `vela.localePrefs` (`{number,date,time}`).
     pub const LEGACY_FORMATS: &str = "vela.formats";
+    /// Spec 075: the cross-device pairing service a person named instead of
+    /// the official one. It was called the relay until the owner renamed it
+    /// the tunnel (2026-09-23) — the word passkeys' own hybrid flow uses for
+    /// the same thing — and the bundler kept the name `relay`.
+    pub const CLEAR_SIGNER_TUNNEL: &str = "vela.clearSignerTunnel";
+    /// The spelling shipped before that rename. [`migrations`](super::migrations)
+    /// MOVES what a device stored here, so a person who named their own
+    /// pairing service keeps it.
+    pub const LEGACY_CLEAR_SIGNER_RELAY: &str = "vela.clearSignerRelay";
 }
 
 /// `system` follows the device; the others pin it.
@@ -183,7 +192,9 @@ pub fn locale_prefs_json(number_format: &str, date_format: &str, time_format: &s
 /// spelling of what an older shell wrote. Only the KNOWN legacy spellings are
 /// rewritten — a value this build does not ship reads as the default but is
 /// left alone, so a newer build's choice survives a trip through this one.
-/// A retired key ([`keys::AVATAR_STYLE`]) is removed whatever it holds.
+/// A retired key ([`keys::AVATAR_STYLE`]) is removed whatever it holds, and a
+/// renamed one ([`keys::LEGACY_CLEAR_SIGNER_RELAY`]) is MOVED — its value is
+/// the person's, not this build's.
 /// Empty for a store that already agrees, so it is safe at every launch.
 #[must_use]
 pub fn migrations(entries: &[(String, String)]) -> Vec<(String, Option<String>)> {
@@ -233,6 +244,21 @@ pub fn migrations(entries: &[(String, String)]) -> Vec<(String, Option<String>)>
     // the identicon is now the only avatar, and the stored choice goes.
     if get(keys::AVATAR_STYLE).is_some() {
         writes.push((keys::AVATAR_STYLE.to_owned(), None));
+    }
+    // Spec 075's pairing service was renamed relay → tunnel. Unlike the avatar
+    // style this value is the PERSON's — the address of the service they chose
+    // to pair through — so it moves rather than going: read the old key, write
+    // the new one, then remove the old. An address already under the new key
+    // wins (this build wrote it), and either way the old key does not survive,
+    // so the move happens once.
+    if let Some(chosen) = get(keys::LEGACY_CLEAR_SIGNER_RELAY) {
+        if !chosen.is_empty() && get(keys::CLEAR_SIGNER_TUNNEL).is_none() {
+            writes.push((
+                keys::CLEAR_SIGNER_TUNNEL.to_owned(),
+                Some(chosen.to_owned()),
+            ));
+        }
+        writes.push((keys::LEGACY_CLEAR_SIGNER_RELAY.to_owned(), None));
     }
     writes
 }
@@ -327,6 +353,47 @@ mod tests {
             read(&entries(&[("vela.language", "zh-TW")])).language,
             "zh-TW"
         );
+    }
+
+    #[test]
+    fn a_stored_relay_moves_to_the_tunnel_key_and_keeps_its_value() {
+        // A person who named their own pairing service keeps it (spec 075).
+        let stored = entries(&[
+            ("vela.clearSignerRelay", "wss://tunnel.example"),
+            ("vela.theme", "dark"),
+        ]);
+        assert_eq!(
+            migrations(&stored),
+            vec![
+                (
+                    "vela.clearSignerTunnel".to_owned(),
+                    Some("wss://tunnel.example".to_owned())
+                ),
+                ("vela.clearSignerRelay".to_owned(), None),
+            ]
+        );
+        // Once moved, nothing more to do — and the moved value is what a shell
+        // now reads.
+        let after = entries(&[
+            ("vela.clearSignerTunnel", "wss://tunnel.example"),
+            ("vela.theme", "dark"),
+        ]);
+        assert!(migrations(&after).is_empty());
+        // A value already under the new key wins; the old key still goes.
+        assert_eq!(
+            migrations(&entries(&[
+                ("vela.clearSignerTunnel", "wss://new.example"),
+                ("vela.clearSignerRelay", "wss://old.example"),
+            ])),
+            vec![("vela.clearSignerRelay".to_owned(), None)]
+        );
+        // An empty old value is nothing to keep, and is not written on.
+        assert_eq!(
+            migrations(&entries(&[("vela.clearSignerRelay", "")])),
+            vec![("vela.clearSignerRelay".to_owned(), None)]
+        );
+        // Nothing stored under either key asks for no write at all.
+        assert!(migrations(&entries(&[("vela.theme", "dark")])).is_empty());
     }
 
     #[test]

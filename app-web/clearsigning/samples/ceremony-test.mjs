@@ -6,7 +6,7 @@
 //      create → member proof → bye, then another carrying sign-in → verify →
 //      recover ×2 → a close without bye, then the idle end;
 //   C. postMessage from a getvela.app web wallet: create → sign-in → bye;
-//   D. the relay: the code on both screens and on every card, requests sealed
+//   D. the tunnel: the code on both screens and on every card, requests sealed
 //      end to end, the wallet dropping out and coming back, bye.
 //
 // Every passkey ceremony is real WebAuthn against a CDP virtual authenticator;
@@ -20,10 +20,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   Page, b64url, clientData, fromHex, isBareHex, loadPageLibs, loopbackWallet, makeChecks,
-  relayWallet, root, sleep, startBrowser, unb64url, verifies,
+  tunnelWallet, root, sleep, startBrowser, unb64url, verifies,
 } from './test-kit.mjs';
 import { startRegistry } from './mock-registry.mjs';
-import { startRelay } from './mock-relay.mjs';
+import { startTunnel } from './mock-tunnel.mjs';
 
 const CDP = 9392;
 const TLS_PORT = 8446;
@@ -110,15 +110,16 @@ async function p256PublicHex() {
 
 const browser = await startBrowser({ cdp: CDP, tlsPort: TLS_PORT });
 const registry = await startRegistry({ ns });
-// VELA_RELAY_URL points the relay section at a relay that is already running
-// — the Rust host (`cargo run -p vela-relay-server`), its Docker image, or
+// VELA_TUNNEL_URL points the tunnel section at a tunnel that is already running
+// — the Rust host (`cargo run -p vela-tunnel-server`, in the `vela-tunnel`
+// repository), its Docker image, or
 // the Worker under `wrangler dev` — instead of the Node mock. The checks that
 // read the mock's own tap are skipped then; everything else is the same run.
-const externalRelay = process.env.VELA_RELAY_URL;
-const relay = externalRelay
-  ? { url: externalRelay, tap: null, close: async () => {} }
-  : await startRelay();
-if (externalRelay) console.log(`relay: using ${externalRelay} (the mock's tap checks are skipped)`);
+const externalTunnel = process.env.VELA_TUNNEL_URL;
+const tunnel = externalTunnel
+  ? { url: externalTunnel, tap: null, close: async () => {} }
+  : await startTunnel();
+if (externalTunnel) console.log(`tunnel: using ${externalTunnel} (the mock's tap checks are skipped)`);
 
 try {
   // === B. the loopback WebSocket =============================================
@@ -352,30 +353,30 @@ try {
     await opener.close();
   }
 
-  // === D. the relay ============================================================
+  // === D. the tunnel ============================================================
   {
     const room = b64url(webcrypto.getRandomValues(new Uint8Array(16)));
-    const wallet = await relayWallet({ ns, relayUrl: relay.url, room });
+    const wallet = await tunnelWallet({ ns, tunnelUrl: tunnel.url, room });
     await wallet.connect();
-    const link = `${SIGNER}?ch=relay&lang=en#relay=${encodeURIComponent(relay.url)}&room=${room}&rk=${wallet.rk}&v=1`;
+    const link = `${SIGNER}?ch=relay&lang=en#relay=${encodeURIComponent(tunnel.url)}&room=${room}&rk=${wallet.rk}&v=1`;
     await page.navigate(link);
     const walletCode = await Promise.race([wallet.codeReady, sleep(10000).then(() => null)]);
     await page.waitFor('!!window.__velaState.code');
     const pageCode = await page.ev('window.__velaState.code');
-    check('relay: both screens derive the same six digits', !!walletCode && walletCode === pageCode && /^\d{6}$/.test(pageCode), `${pageCode} / ${walletCode}`);
-    check('relay: the waiting card shows the code, prominently',
+    check('tunnel: both screens derive the same six digits', !!walletCode && walletCode === pageCode && /^\d{6}$/.test(pageCode), `${pageCode} / ${walletCode}`);
+    check('tunnel: the waiting card shows the code, prominently',
       (await page.ev("document.querySelector('.pairing-code b') && document.querySelector('.pairing-code b').textContent")) === pageCode &&
       /same code/.test(await page.text()));
-    check('relay: the link is scrubbed from history', (await page.ev('location.hash')) === '');
+    check('tunnel: the link is scrubbed from history', (await page.ev('location.hash')) === '');
 
     const signIn = wallet.request('rs1', { method: 'vela_signIn', params: [{}], origin: '' }, {});
     await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.kind === 'signIn'");
-    check('relay: the request card carries the code too',
+    check('tunnel: the request card carries the code too',
       (await page.ev("document.querySelector('.sheet-ceremony .pairing-code b') && document.querySelector('.sheet-ceremony .pairing-code b').textContent")) === pageCode &&
-      (await page.text()).includes('through the relay'));
+      (await page.text()).includes('through the tunnel'));
     await page.ev('window.__slider.__confirm()', true);
     const answer = await signIn;
-    check('relay: the sign-in comes back sealed, as {t:"result", id, assertion, origin}',
+    check('tunnel: the sign-in comes back sealed, as {t:"result", id, assertion, origin}',
       answerShape(answer, 'rs1', 'assertion') && await verifies(answer.assertion, key) &&
       /^vela-signin-/.test(challengeText(answer.assertion)));
 
@@ -384,31 +385,31 @@ try {
     await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.kind === 'proof'");
     await page.ev('window.__slider.__confirm()', true);
     const verified = await verify;
-    check('relay: a second request in the same room', verified.t === 'result' && await verifies(verified.assertion, key));
+    check('tunnel: a second request in the same room', verified.t === 'result' && await verifies(verified.assertion, key));
 
-    if (relay.tap) {
-      const frames = relay.tap.filter((f) => f.room === room);
+    if (tunnel.tap) {
+      const frames = tunnel.tap.filter((f) => f.room === room);
       const clear = frames.filter((f) => !f.isBinary);
-      check('relay: the relay saw two hellos in the clear and nothing else',
+      check('tunnel: the tunnel saw two hellos in the clear and nothing else',
         clear.length === 2 && clear.every((f) => JSON.parse(f.data).t === 'hello'), `${clear.length} text / ${frames.length - clear.length} sealed`);
-      check('relay: no request or answer crossed it readable',
+      check('tunnel: no request or answer crossed it readable',
         frames.filter((f) => f.isBinary).every((f) => !f.data.toString('latin1').includes('vela_') && !f.data.toString('latin1').includes('assertion')));
     }
 
     // The wallet drops out (a phone locking its screen) and comes back.
     await page.waitFor("window.__velaState.phase === 'waiting'");
     wallet.leave();
-    check('relay: a wallet that leaves is noticed', await page.waitFor("/dropped out/.test(document.body.innerText)", 8000));
+    check('tunnel: a wallet that leaves is noticed', await page.waitFor("/dropped out/.test(document.body.innerText)", 8000));
     await sleep(200);
     await wallet.connect();
     const again = await Promise.race([wallet.codeReady, sleep(10000).then(() => null)]);
     await page.waitFor(`window.__velaState.code === ${JSON.stringify(again)}`);
-    check('relay: it comes back through a fresh handshake, and the page shows the new code',
+    check('tunnel: it comes back through a fresh handshake, and the page shows the new code',
       !!again && (await page.ev("document.querySelector('.pairing-code b').textContent")) === again);
     const back = wallet.request('rv2', { method: 'vela_proof', params: [{ credentialId, purpose: 'verify' }], origin: '' }, {});
     await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.kind === 'proof'");
     await page.ev('window.__slider.__confirm()', true);
-    check('relay: and requests go through again', (await back).t === 'result');
+    check('tunnel: and requests go through again', (await back).t === 'result');
 
     // It drops out again, this time with a card on screen: that card can no
     // longer be answered, and the next one after its return must still come.
@@ -416,7 +417,7 @@ try {
     wallet.send({ t: 'intent', id: 'rv3', intent: { method: 'vela_proof', params: [{ credentialId, purpose: 'verify' }], origin: '' }, context: {} });
     await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.kind === 'proof'");
     wallet.leave();
-    check('relay: a card whose wallet dropped out gives way to "waiting for it to come back", unconfirmable',
+    check('tunnel: a card whose wallet dropped out gives way to "waiting for it to come back", unconfirmable',
       await page.waitFor("window.__velaState.phase === 'waiting' && !window.__slider && !document.querySelector('.slide')", 8000) &&
       /dropped out/.test(await page.text()));
     await sleep(200);
@@ -426,13 +427,13 @@ try {
     const shownAgain = await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.received === 5");
     if (shownAgain) await page.ev('window.__slider.__confirm()', true);
     const laterAnswer = shownAgain ? await later : null;
-    check('relay: after it returns, its next request is shown and answered (the lost one never is)',
+    check('tunnel: after it returns, its next request is shown and answered (the lost one never is)',
       !!laterAnswer && laterAnswer.id === 'rv4' && laterAnswer.t === 'result' &&
       !wallet.received.some((m) => m.id === 'rv3'));
 
     await page.waitFor("window.__velaState.phase === 'waiting'");
     await wallet.send({ t: 'bye', reason: 'done' });
-    check('relay: bye ends the session', await page.waitFor("window.__velaState.phase === 'ended' && window.__velaState.endReason === 'bye'"));
+    check('tunnel: bye ends the session', await page.waitFor("window.__velaState.phase === 'ended' && window.__velaState.endReason === 'bye'"));
     wallet.leave();
   }
 
@@ -444,6 +445,6 @@ try {
 } finally {
   browser.kill();
   await registry.close();
-  await relay.close();
+  await tunnel.close();
   process.exit(check.summary() ? 0 : 1);
 }

@@ -588,17 +588,17 @@ pub fn ws_launch(base: &str, port: u16, token: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Spec 075: across devices — the relay (`contracts/relay.md`)
+// Spec 075: across devices — the tunnel (`contracts/tunnel.md`)
 // ---------------------------------------------------------------------------
 
-/// The relay the wallet pairs through unless Settings name another.
-pub const DEFAULT_RELAY_URL: &str = "wss://relay.getvela.app";
+/// The tunnel the wallet pairs through unless Settings name another.
+pub const DEFAULT_TUNNEL_URL: &str = "wss://tunnel.getvela.app";
 
-/// A relay address the person typed, normalised — or why it cannot be used.
+/// A tunnel address the person typed, normalised — or why it cannot be used.
 /// `wss://` anywhere (a bare host gets it); `ws://` only on this device's own
-/// loopback (a relay under test). The page and the wallet both connect to it,
+/// loopback (a tunnel under test). The page and the wallet both connect to it,
 /// and an https page cannot open a plain socket to anywhere else.
-pub fn relay_url(input: &str) -> Result<String, SignerUrlError> {
+pub fn tunnel_url(input: &str) -> Result<String, SignerUrlError> {
     let text = input.trim().trim_end_matches('/');
     if text.is_empty() || text.chars().any(char::is_whitespace) {
         return Err(SignerUrlError::Invalid);
@@ -630,29 +630,35 @@ pub fn relay_url(input: &str) -> Result<String, SignerUrlError> {
 
 /// A room id from 16 random bytes (the shell's): 22 characters of base64url.
 #[must_use]
-pub fn relay_room(random: &[u8; 16]) -> String {
+pub fn tunnel_room(random: &[u8; 16]) -> String {
     URL_SAFE_NO_PAD.encode(random)
 }
 
-/// The socket an end opens: `<relay>/v1/rooms/<room>?role=<requester|signer>`.
+/// The socket an end opens: `<tunnel>/v1/rooms/<room>?role=<requester|signer>`.
 #[must_use]
-pub fn relay_room_url(relay: &str, room: &str, role: &str) -> String {
+pub fn tunnel_room_url(tunnel: &str, room: &str, role: &str) -> String {
     format!(
         "{}/v1/rooms/{room}?role={role}",
-        relay.trim_end_matches('/')
+        tunnel.trim_end_matches('/')
     )
 }
 
 /// The pairing link the wallet shows as a QR code and a copyable address:
-/// `<page>sign.html?ch=relay#relay=<relay>&room=<room>&rk=<rk>&v=1`. The
+/// `<page>sign.html?ch=relay#relay=<tunnel>&room=<room>&rk=<rk>&v=1`. The
 /// fragment never reaches a server; `rk` lets the page refuse a stand-in
 /// wallet ([`secure::key_fingerprint`]).
+///
+/// The channel token and the fragment key are still spelled `relay`. They are
+/// ON THE WIRE — the signer page reads them, and so do the host crates'
+/// `{"v":1,"relay":"joined"}` frames — so the 2026-09-23 rename stops at the
+/// edge of the protocol. Only the HKDF label moved with it (`vela-tunnel/1`),
+/// because both ends of THAT are this repo's and change together.
 #[must_use]
-pub fn relay_link(signer_url: &str, relay: &str, room: &str, rk: &str) -> String {
+pub fn tunnel_link(signer_url: &str, tunnel: &str, room: &str, rk: &str) -> String {
     format!(
         "{}#relay={}&room={}&rk={}&v=1",
         sign_page(signer_url, "ch=relay"),
-        percent(relay),
+        percent(tunnel),
         percent(room),
         percent(rk)
     )

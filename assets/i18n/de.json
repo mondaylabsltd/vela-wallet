@@ -68,12 +68,12 @@
    "pageForeign": "Ihre Passkeys gehören zu getvela.app. Eine Seite auf einer anderen Domain kann eine Anfrage anzeigen, aber nicht signieren.",
    "pageReset": "Offizielle Seite verwenden",
    "pageSave": "Speichern",
-   "relayTitle": "Relay",
-   "relaySubtitle": "Die Kopplung mit einem anderen Gerät läuft über dieses Relay. Es leitet nur verschlüsselte Nachrichten weiter.",
-   "relayOfficial": "Offiziell",
-   "relayInvalid": "Das ist keine Relay-Adresse.",
-   "relayInsecure": "Verwende eine wss://-Adresse oder ws:// auf dem eigenen Loopback dieses Geräts.",
-   "relayReset": "Offizielles Relay verwenden"
+   "tunnelTitle": "Tunnel",
+   "tunnelSubtitle": "Die Kopplung mit einem anderen Gerät läuft über diesen Tunnel. Er leitet nur verschlüsselte Nachrichten weiter.",
+   "tunnelOfficial": "Offiziell",
+   "tunnelInvalid": "Das ist keine Tunnel-Adresse.",
+   "tunnelInsecure": "Verwende eine wss://-Adresse oder ws:// auf dem eigenen Loopback dieses Geräts.",
+   "tunnelReset": "Offiziellen Tunnel verwenden"
   },
   "advanced": {
    "networksTitle": "Netzwerke",
@@ -1390,7 +1390,7 @@
    "clearSignerCode": "Prüfe, ob das andere Gerät denselben Code zeigt: {{code}}",
    "clearSignerCodeConfirm": "Die Codes stimmen überein",
    "clearSignerCopyLink": "Link kopieren",
-   "clearSignerRelayDown": "Das Relay ist nicht erreichbar. Versuche es erneut oder nutze den Clear Signer auf diesem Gerät."
+   "clearSignerTunnelDown": "Der Tunnel ist nicht erreichbar. Versuche es erneut oder nutze den Clear Signer auf diesem Gerät."
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",

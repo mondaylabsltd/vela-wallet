@@ -220,7 +220,7 @@
       "clearSignerCode": "請確認另一部裝置顯示的是同一個碼：{{code}}",
       "clearSignerCodeConfirm": "兩邊的碼一致",
       "clearSignerCopyLink": "複製連結",
-      "clearSignerRelayDown": "無法連接中繼。請重試，或改用這部裝置上的清晰簽署器。"
+      "clearSignerTunnelDown": "無法連接隧道。請重試，或改用這部裝置上的清晰簽署器。"
     },
     "currency": {
       "title": "顯示貨幣",

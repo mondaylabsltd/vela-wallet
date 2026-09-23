@@ -435,9 +435,9 @@ fn entries() -> Vec<Entry> {
         Fixture::ClearSignerPair(crate::executor::clear_signer::Pairing {
             // A link of the real shape and the real length: a shorter one would
             // draw a smaller QR than any person will ever be shown.
-            link: vela_core::clear_signer::relay_link(
+            link: vela_core::clear_signer::tunnel_link(
                 vela_core::clear_signer::DEFAULT_SIGNER_URL,
-                vela_core::clear_signer::DEFAULT_RELAY_URL,
+                vela_core::clear_signer::DEFAULT_TUNNEL_URL,
                 "AAECAwQFBgcICQoLDA0ODw",
                 "b8ZqkEhhccpptRK-GF1mpw",
             ),
@@ -448,9 +448,9 @@ fn entries() -> Vec<Entry> {
     signer(
         "pair · do these two screens agree?",
         Fixture::ClearSignerPair(crate::executor::clear_signer::Pairing {
-            link: vela_core::clear_signer::relay_link(
+            link: vela_core::clear_signer::tunnel_link(
                 vela_core::clear_signer::DEFAULT_SIGNER_URL,
-                vela_core::clear_signer::DEFAULT_RELAY_URL,
+                vela_core::clear_signer::DEFAULT_TUNNEL_URL,
                 "AAECAwQFBgcICQoLDA0ODw",
                 "b8ZqkEhhccpptRK-GF1mpw",
             ),
@@ -459,7 +459,7 @@ fn entries() -> Vec<Entry> {
         }),
     );
     signer(
-        "ended · the relay could not be reached",
+        "ended · the tunnel could not be reached",
         Fixture::ClearSignerEnded(crate::executor::clear_signer::Refusal::Unreachable),
     );
     let mut sheet = |code: &'static str, kind: PromptKind, confirmable: bool| {

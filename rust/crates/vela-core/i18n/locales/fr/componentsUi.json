@@ -220,7 +220,7 @@
       "clearSignerCode": "Vérifiez que l'autre appareil affiche le même code : {{code}}",
       "clearSignerCodeConfirm": "Les codes correspondent",
       "clearSignerCopyLink": "Copier le lien",
-      "clearSignerRelayDown": "Le relais est injoignable. Réessayez, ou utilisez le Clear Signer de cet appareil."
+      "clearSignerTunnelDown": "Le tunnel est injoignable. Réessayez, ou utilisez le Clear Signer de cet appareil."
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",

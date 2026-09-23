@@ -33,14 +33,14 @@ signer_url_error: string | null,
  */
 signer_uses_wallet_passkeys: boolean, 
 /**
- * Spec 075: the relay a cross-device pairing goes through. Always usable.
+ * Spec 075: the tunnel a cross-device pairing goes through. Always usable.
  */
-relay_url: string, 
+tunnel_url: string, 
 /**
- * `true` ⇒ the official relay.
+ * `true` ⇒ the official tunnel.
  */
-relay_url_is_default: boolean, 
+tunnel_url_is_default: boolean, 
 /**
- * `"invalid"` | `"insecure"` — the last submitted relay was refused.
+ * `"invalid"` | `"insecure"` — the last submitted tunnel was refused.
  */
-relay_url_error: string | null, };
+tunnel_url_error: string | null, };

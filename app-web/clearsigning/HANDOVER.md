@@ -13,7 +13,7 @@
 075 起它还是**一条 passkey 通道**，和「这台设备 / 手机或平板 / USB 安全密钥」平级
 （创始人，2026-09-22）：钱包的创建、登录、证明流程也能走它 —— 四种**钥匙仪式**
 （`vela_createPasskey` / `vela_signIn` / `vela_proof` / `vela_memberProof`），各有自己的卡。
-一个会话可以承载多个请求；跨设备走中继或 BLE。
+一个会话可以承载多个请求；跨设备走隧道或 BLE。
 
 一句话目标：**所见即所签，不容有沙子。** 屏幕上每一样东西都要能说清来源，
 凡是请求方能改又被当成事实展示的，一律拿掉或明确标注。
@@ -29,10 +29,10 @@ node samples/safeop-test.mjs      #  9/9  摘要对拍 vela-core 的 wasm
 node samples/identicon-test.mjs   #  9/9  头像与 vela-core 逐字节一致
 node samples/secure-vectors.mjs   # 82/82 secure.js 对拍 vela-core 的会话向量（Node + Chrome）
 node samples/ble-loopback.mjs     # 10/10 BLE 分帧/握手/加密/防重放
-node samples/mock-relay-test.mjs  # 14/14 模拟中继守 relay.md §1 的房间规则
+node samples/mock-tunnel-test.mjs  # 14/14 模拟隧道守 tunnel.md §1 的房间规则
 node samples/hostile-test.mjs     # 39/39 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
 node samples/channels-test.mjs    # 36/36 各通道 + 真 WebAuthn + 交易 + 篡改拒签
-node samples/ceremony-test.mjs    # 55/55 四种仪式 + 多请求会话 + 中继与比对码
+node samples/ceremony-test.mjs    # 55/55 四种仪式 + 多请求会话 + 隧道与比对码
 node samples/extension-surface-test.mjs   # 扩展页里的表现（33 张卡，0 失败）
 node samples/desktop-demo.mjs --auto      #  8/8 桌面应用全流程 + 自验签
 ```
@@ -78,8 +78,8 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
 | `lib/digest.js` `lib/safeop.js` | 摘要 | 只签**自己算出来的**；算不出就拒签 |
 | `lib/signer.js` | 签名意图的 passkey 断言 | **没有创建能力**：签名意图走到的只有 `sign()` |
 | `lib/ceremony.js` | 钥匙仪式：挑战码推导、成员挑战码的获取与核对、创建、断言 | 只签**自己生成或自己核对过**的挑战码；创建只由 resolve 放行的 `vela_createPasskey` 调用 |
-| `lib/transport/secure.js` | BLE 与中继共用的 ECDH/HKDF/AES-GCM 会话 | 与 vela-core 的 `clear_signer::secure` 逐字节一致（向量） |
-| `lib/transport/ble.js` `relay.js` | BLE 分帧 / 中继房间 | 中继：`rk` 对不上就拒绝并离开；比对码画在每张卡上 |
+| `lib/transport/secure.js` | BLE 与隧道共用的 ECDH/HKDF/AES-GCM 会话 | 与 vela-core 的 `clear_signer::secure` 逐字节一致（向量） |
+| `lib/transport/ble.js` `tunnel.js` | BLE 分帧 / 隧道房间 | 隧道：`rk` 对不上就拒绝并离开；比对码画在每张卡上 |
 | `lib/identicon*.js` | 头像 | 与 vela-core 逐字节一致 |
 | `lib/fee.js` | 费用 | 从 calldata 里的**费用腿**读，不接受成品字符串 |
 | `lib/intake.js` | 六条通道归一成**会话** | 只有浏览器背书的通道才 `originVerified: true`；通道事实覆盖请求方 context 里的同名字段 |
@@ -100,9 +100,9 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
 - 桌面应用演示 `samples/desktop-demo.mjs`（自带回环回调 + 自验签）
 - **075**：四种钥匙仪式（各有卡、中英文）；创建从 `lib/enrol.js` 挪进 `lib/ceremony.js`，
   只对 Vela 钱包放行；成员挑战码由本页自己取、自己算、对上才签（与线上注册表对过）；
-  多请求会话（回环 WebSocket、postMessage、中继、BLE），空闲 5 分钟结束；
-  `lib/transport/secure.js`（BLE 与中继共用，对拍 Rust 向量）；中继通道 + `rk` 核对 + 比对码；
-  模拟中继 `samples/mock-relay.mjs`、模拟注册表 `samples/mock-registry.mjs`、
+  多请求会话（回环 WebSocket、postMessage、隧道、BLE），空闲 5 分钟结束；
+  `lib/transport/secure.js`（BLE 与隧道共用，对拍 Rust 向量）；隧道通道 + `rk` 核对 + 比对码；
+  模拟隧道 `samples/mock-tunnel.mjs`、模拟注册表 `samples/mock-registry.mjs`、
   两个替身钱包（`samples/test-kit.mjs`）、网页钱包替身 `samples/wallet-sim.html`
 
 ## 还没做
@@ -117,9 +117,9 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
    应当标注，而不是当事实 —— 这一条需要创始人再点一次头。
 4. **部署到 `getvela.app`**。目前只在 localhost / 假 TLS 下验证过。
 5. **真机 Touch ID 的取消/超时路径**。虚拟认证器永远说"用户已验证"。
-6. **真中继**。页面只对过 `samples/mock-relay.mjs`（照 relay.md §1 写的）；Rust 的
-   `vela-relay`（Docker / Worker）上线后要拿真中继跑一遍 `ceremony-test` 的 D 段。
-   中继的 120 秒空闲断开靠它自己的 ping/pong 维持，页面不发心跳 —— 人在钱包上核对比对码
+6. **真隧道**。页面只对过 `samples/mock-tunnel.mjs`（照 tunnel.md §1 写的）；Rust 的
+   `vela-relay`（Docker / Worker）上线后要拿真隧道跑一遍 `ceremony-test` 的 D 段。
+   隧道的 120 秒空闲断开靠它自己的 ping/pong 维持，页面不发心跳 —— 人在钱包上核对比对码
    超过两分钟时要确认 ping 真的在跑。
 7. **BLE 上的多请求会话**只在代码层面接好了（`fromBle` 用同一个会话），没有测试覆盖；
    BLE 本身的真机射频见第 1 条。
@@ -145,8 +145,8 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
    Vela 走带内费用，4337 的 gas 字段通常全是零。
 6. 桌面 App 与同机浏览器**不要用 BLE**（控制器扫不到自己）；同机走回环 WebSocket
    （桌面正从 URL + 回环回调迁过来）。
-7. ~~没有服务器，没有中继，跨设备走 BLE~~ —— **已被创始人推翻（2026-09-22）**：跨设备走
-   **中继**（WebSocket，Rust 写，Docker 与 Cloudflare Worker）或 **BLE**。中继是瞎的，只转发
+7. ~~没有服务器，没有隧道，跨设备走 BLE~~ —— **已被创始人推翻（2026-09-22）**：跨设备走
+   **隧道**（WebSocket，Rust 写，Docker 与 Cloudflare Worker）或 **BLE**。隧道是瞎的，只转发
    两端加密好的字节；页面凭 `rk` 拒绝冒充的钱包，人凭六位码拒绝冒充的页面。
 
 ## 环境坑（踩过的，别重踩）
@@ -156,7 +156,7 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
 - `fetch('/json/new?<url>')` 会**丢掉 `#` 之后的一切** —— 要 `encodeURIComponent`。
 - **CDP 虚拟认证器只属于添加它的 target**（同一个标签页导航后还在）。签名意图的测试用
   `WebAuthn.addCredential` **预先注入**钥匙；`ceremony-test` 则让页面自己建一把，后面的登录、
-  证明、中继都用这一把 —— 所以它们必须在同一个标签页里。
+  证明、隧道都用这一把 —— 所以它们必须在同一个标签页里。
 - 只改片段的导航是同文档导航，页面不会重载：测试换通道时要改查询串（`&s=2`）。
 - 测试缩短空闲时钟：导航前 `Page.addScriptToEvaluateOnNewDocument('window.__velaIdleMs = 1500')`。
 - 系统 socks5 代理会绕开 `--host-resolver-rules`，测试会静默打到线上真站 →

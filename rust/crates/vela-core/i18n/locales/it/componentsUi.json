@@ -220,7 +220,7 @@
       "clearSignerCode": "Controlla che l'altro dispositivo mostri lo stesso codice: {{code}}",
       "clearSignerCodeConfirm": "I codici coincidono",
       "clearSignerCopyLink": "Copia link",
-      "clearSignerRelayDown": "Impossibile raggiungere il relay. Riprova, oppure usa il Clear Signer di questo dispositivo."
+      "clearSignerTunnelDown": "Impossibile raggiungere il tunnel. Riprova, oppure usa il Clear Signer di questo dispositivo."
     },
     "signingApprove": {
       "resultingTotal": "Nuovo limite totale",

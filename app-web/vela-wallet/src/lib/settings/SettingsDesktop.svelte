@@ -339,14 +339,14 @@
 						onreset={() => onprefevent?.({ kind: 'signer-page-reset' })}
 					/>
 				</section>
-				<!-- Spec 075: and the relay under it, the same row in both layouts. -->
-				<section class="signer-page" aria-label={model.signing.relay.title}>
-					<h2>{model.signing.relay.title}</h2>
-					<p>{model.signing.relay.subtitle}</p>
+				<!-- Spec 075: and the tunnel under it, the same row in both layouts. -->
+				<section class="signer-page" aria-label={model.signing.tunnel.title}>
+					<h2>{model.signing.tunnel.title}</h2>
+					<p>{model.signing.tunnel.subtitle}</p>
 					<SignerPageBody
-						page={model.signing.relay}
-						onsave={(text) => onprefevent?.({ kind: 'relay-page', text })}
-						onreset={() => onprefevent?.({ kind: 'relay-page-reset' })}
+						page={model.signing.tunnel}
+						onsave={(text) => onprefevent?.({ kind: 'tunnel-page', text })}
+						onreset={() => onprefevent?.({ kind: 'tunnel-page-reset' })}
 					/>
 				</section>
 			{:else if page === 'networks'}

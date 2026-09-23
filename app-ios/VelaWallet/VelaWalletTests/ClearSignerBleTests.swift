@@ -18,7 +18,7 @@
 //  both are held to the vectors the page's own JavaScript reads —
 //  `tests/clear-signer/ble-frames.json` and the `ble-a` case of
 //  `tests/clear-signer/secure-session.json`. A shell that drove the session in
-//  the wrong role, under the relay's label, or with the counter instead of the
+//  the wrong role, under the tunnel's label, or with the counter instead of the
 //  frame's `msgId` would compile perfectly and produce a channel no page can
 //  read; these tests are what catches that.
 //
@@ -260,7 +260,7 @@ struct ClearSignerBleSessionTests {
     /// The wallet's side of the BLE session, byte for byte against the vectors
     /// the page is pinned to: the requester's key, the six digits both screens
     /// show, and every message sealed and opened under the `msgId` its FRAMES
-    /// carry rather than the relay's counter.
+    /// carry rather than the tunnel's counter.
     @Test func theBleSessionMatchesTheSharedVectors() throws {
         let vector = try #require(BleVector.ble, "the shared session vectors did not load")
         let handshake = try ClearSignerHandshake(
@@ -276,10 +276,10 @@ struct ClearSignerBleSessionTests {
         #expect(ours["role"] as? String == "requester", "the wallet asks; the page signs")
 
         // `relay: false` is the whole difference: it picks `vela-ble/1` rather
-        // than `vela-relay/1`, and the two derive different keys from the same
+        // than `vela-tunnel/1`, and the two derive different keys from the same
         // ECDH. A shell that passed `true` here would show six digits the page
         // never shows, and the person would be told to compare them.
-        let session = try handshake.complete(peerHello: vector.signerHello, relay: false)
+        let session = try handshake.complete(peerHello: vector.signerHello, tunnel: false)
         #expect(session.code() == vector.code, "the two screens would show different digits")
         for message in vector.messages {
             if message.fromRequester {
@@ -304,7 +304,7 @@ struct ClearSignerBleSessionTests {
         let handshake = try ClearSignerHandshake(
             secret: vector.requesterSecret, nonce: vector.requesterNonce
         )
-        let session = try handshake.complete(peerHello: vector.signerHello, relay: false)
+        let session = try handshake.complete(peerHello: vector.signerHello, tunnel: false)
         let page = try #require(vector.fromPage.first)
         #expect(throws: (any Error).self) {
             try session.open(sealed: page.sealed, msgId: page.msgId &+ 1)

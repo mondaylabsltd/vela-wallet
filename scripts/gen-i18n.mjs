@@ -352,8 +352,13 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1733 (spec 075, 2026-09-22): the Clear Signer across devices. +10
 //   `componentsUi.signing.clearSigner*` leaves (where the signer is — this
 //   device or another — the pairing sheet, its waiting line, the six-digit
-//   code and its confirmation, copy link, the relay unreachable) and +6
-//   `settings.signing.relay*` (the Settings row, as the page row). No new branch.
+//   code and its confirmation, copy link, the tunnel unreachable) and +6
+//   `settings.signing.tunnel*` (the Settings row, as the page row). No new
+//   branch. (The service was called the relay until 2026-09-23, when the owner
+//   renamed it the tunnel — passkeys' own word for the same thing. The six keys
+//   and `clearSignerTunnelDown` were renamed with it; the BUNDLER keeps `relay`
+//   in `componentsUi.gas.relayerFee`, `componentsUi.treasuryBootstrap.*` and
+//   `settingsModals.endpoints.bundler*`.)
 // 1738 (spec 075, 2026-09-22): the Bluetooth route. +5
 //   `componentsUi.signing.clearSigner*` leaves — the third row in "where is
 //   your Clear Signer", what it means (and that the app must stay open), the

@@ -10,7 +10,7 @@ import uniffi.vela_core_uniffi.clearSignerVerifyCeremony
  * PROTOCOL.md §4: the envelope a request rides in, and the sequence number
  * that keeps a replay out of it.
  *
- * The relay and BLE carry exactly the same JSON — only the wire under it
+ * The tunnel and BLE carry exactly the same JSON — only the wire under it
  * differs (a WebSocket frame there, six-byte-headed BLE frames here) — so the
  * shape lives once, and one channel cannot drift into a dialect of its own.
  *
