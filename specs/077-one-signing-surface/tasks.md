@@ -72,13 +72,38 @@ the parallel space against Gnosis. "Measured" means it was watched happening;
 - [x] **T016** The panel no longer dismisses itself: `panelDone` and the
       worker's `closePanel` are gone. "Nothing more to show" stopped being a
       thing that happens — there is always the wallet.
+- [x] **T017** A SECOND site's consent card has live buttons. The panel outlives
+      the request that raised it and `busy` did not: a successful Connect left it
+      `true` forever, because the window it was written for closed a moment later
+      and nobody noticed. *Measured both ways, two fresh origins in one standing
+      panel: before, `Cancel disabled=true, Connect disabled=true` — a card
+      nobody can answer; after, both live, and both origins answered.*
+- [x] **T018** A request that arrives DURING a landing waits. The receipt
+      replaces the sheet (`SigningHost` draws one or the other), so taking it
+      then would give it an invisible sheet — a person answering a screen they
+      cannot see. Done brings it up.
+- [x] **T019** The dedicated-window path re-verified after the lifecycle moved
+      out of its page. *Measured: a request fired with no gesture opened
+      `request.html?rid=…` in a popup window with no wallet behind it, the sheet
+      priced it, the slide answered it, and the worker closed the window at
+      t+22s.*
 
 ## Phase D — the dedicated window keeps its ending
 
 - [x] **T020** `request/+page.svelte` is now the window alone, and mounts the
       same `DappRequestHost` in `window` mode. *Measured: the worker's
       `settle()` removes the window the moment the answer goes out, so the
-      receipt cannot live there — see FR-003.*
+      receipt cannot live there — see FR-003, and T019 for the re-verification.*
+
+## The core changes, and the shells that share them
+
+- [x] **T021** `network_admin::typical_inclusion_s` is public and exported to
+      wasm; `send.rs` uses it instead of its own inline lookup. *Gates: the Rust
+      workspace green, clippy `-D warnings`, `rustfmt` in both trees,
+      `build-web --check`, `gen-core-types --check`, the i18n corpus lint, the
+      vectors dump, and the Kotlin AND Swift binding smokes — the mobile shells
+      read the same table through uniffi, so both were replayed rather than
+      assumed.*
 
 ## Not verified
 
