@@ -11,7 +11,7 @@
 ## 1. Summary
 
 Vela resolves ERC-20 `symbol()`/`decimals()` **robustly on-chain** through a 3-layer cache
-(static known-tokens → memory → AsyncStorage → on-chain), decodes legacy `bytes32` symbols (MKR) and
+(static known-tokens → memory → the shell's persistent store → on-chain), decodes legacy `bytes32` symbols (MKR) and
 multibyte UTF-8 ("USD₮0"), and treats decimals as security-critical (never assumed 18). A single
 consolidated **`KNOWN_TOKENS`** registry is the canonical source for well-known symbol/decimals.
 
@@ -29,7 +29,7 @@ previously duplicated in three places; they're now consolidated so there's one s
 
 ## 4. Functional requirements
 
-- **FR-1** — Resolve `symbol`/`decimals` via cache cascade: static `KNOWN_TOKENS` → memory → AsyncStorage → on-chain read.
+- **FR-1** — Resolve `symbol`/`decimals` via cache cascade: the core's known-token table → memory → the shell's persistent store → on-chain read.
 - **FR-2** — Decode legacy `bytes32` symbols and multibyte UTF-8 symbols correctly.
 - **FR-3** — **Never assume 18 decimals**; unresolved decimals fall back to 18 but flag `unverified` (floors risk at caution in signing, I07).
 - **FR-4** — Negative lookups are **session-only** (a transient RPC failure doesn't poison the cache permanently).

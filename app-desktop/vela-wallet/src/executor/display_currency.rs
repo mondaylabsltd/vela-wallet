@@ -34,6 +34,72 @@ use vela_core::app::display_currency::{
 use crate::executor::{proxy, storage};
 use crate::resident::{Answer, Machine};
 
+use std::sync::{Mutex, OnceLock, PoisonError};
+
+/// Every currency the configured endpoint priced, the last time it answered.
+///
+/// The picker needs a catalog and the core deliberately does not own one ("the
+/// shell owns the currency catalog", `display_currency.rs`). The endpoint that
+/// prices a currency is also the only honest list of which currencies CAN be
+/// priced, so the table is remembered as a side effect of asking — no second
+/// service, and nothing offered that the wallet could not then convert with.
+///
+/// It is for the menu's illustrative samples only. `resolve_rate` still fetches
+/// every time, because the rate that converts money may not be a cached one.
+static PRICED: OnceLock<Mutex<Vec<(String, f64)>>> = OnceLock::new();
+
+fn priced_cell() -> &'static Mutex<Vec<(String, f64)>> {
+    PRICED.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// The codes the picker may offer, with the sample rate for each. USD first —
+/// it is the base, so it is the one code that needs no source.
+#[must_use]
+pub(crate) fn priced_currencies() -> Vec<(String, f64)> {
+    let guard = priced_cell().lock().unwrap_or_else(PoisonError::into_inner);
+    let mut out = vec![("USD".to_owned(), 1.0)];
+    out.extend(guard.iter().filter(|(code, _)| code != "USD").cloned());
+    out
+}
+
+/// Ask the endpoint for the whole table. **Blocking** — off the UI thread only.
+pub(crate) fn refresh_priced_currencies() {
+    let Some(rows) = fetch_rate_table() else {
+        return;
+    };
+    remember(&rows);
+}
+
+fn remember(rows: &[(String, f64)]) {
+    let mut guard = priced_cell().lock().unwrap_or_else(PoisonError::into_inner);
+    *guard = rows.to_vec();
+}
+
+/// `[{quote, rate}, …]` from the configured endpoint, sorted by code.
+fn fetch_rate_table() -> Option<Vec<(String, f64)>> {
+    let url = fiat_rates_url();
+    let mut response = proxy::agent(std::time::Duration::from_secs(8))
+        .get(&url)
+        .call()
+        .ok()?;
+    let mut body = String::new();
+    std::io::Read::read_to_string(&mut response.body_mut().as_reader(), &mut body).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&body).ok()?;
+    let mut rows: Vec<(String, f64)> = parsed
+        .as_array()?
+        .iter()
+        .filter_map(|row| {
+            let code = row.get("quote")?.as_str()?;
+            let rate = row.get("rate")?.as_f64()?;
+            (rate > 0.0 && code.len() == 3 && code.chars().all(|c| c.is_ascii_uppercase()))
+                .then(|| (code.to_owned(), rate))
+        })
+        .collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    rows.dedup_by(|a, b| a.0 == b.0);
+    Some(rows)
+}
+
 /// The device region's currency, from the primary locale.
 ///
 /// Deliberately a small table over the locales the app ships rather than a CLDR
@@ -81,20 +147,13 @@ pub(crate) fn resolve_rate(code: &str) -> Option<f64> {
     if code == "USD" {
         return Some(1.0);
     }
-    let url = fiat_rates_url();
-    let mut response = proxy::agent(std::time::Duration::from_secs(8))
-        .get(&url)
-        .call()
-        .ok()?;
-    let mut body = String::new();
-    std::io::Read::read_to_string(&mut response.body_mut().as_reader(), &mut body).ok()?;
-    let parsed: serde_json::Value = serde_json::from_str(&body).ok()?;
-    let rows = parsed.as_array()?;
+    // Fetched fresh every time: this rate converts money. The table is kept on
+    // the way past for the picker, which only illustrates.
+    let rows = fetch_rate_table()?;
+    remember(&rows);
     rows.iter()
-        .find(|row| row.get("quote").and_then(serde_json::Value::as_str) == Some(code))
-        .and_then(|row| row.get("rate"))
-        .and_then(serde_json::Value::as_f64)
-        .filter(|rate| *rate > 0.0)
+        .find(|(quote, _)| quote == code)
+        .map(|(_, rate)| *rate)
 }
 
 /// The configured endpoint, or the built-in default.

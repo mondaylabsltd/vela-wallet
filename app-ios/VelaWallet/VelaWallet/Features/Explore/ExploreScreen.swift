@@ -50,6 +50,15 @@ struct ExploreScreen: View {
     /// scanner is a picture of a frame.
     var camera: CameraScanner?
     var onSelectTab: (WalletTab) -> Void = { _ in }
+    /// The connection panel's "Switch account". Absent in the gallery.
+    ///
+    /// What it MEANS is the reason it took until 2026-09-23: a grant is pinned
+    /// to the address it was given to, deliberately, so that switching the
+    /// wallet's account cannot silently hand a site a different identity. An
+    /// explicit switch is not silent, and the core already does the right
+    /// thing with it — `AccountSwitched` re-pins the grant to the new address,
+    /// writes it, and emits `accountsChanged` to the page. Nobody was asking.
+    var onSwitchAccount: (() -> Void)?
 
     @State private var viewOverride: ExploreView?
     /// **Which** sheet is open — never a snapshot of what it said when it
@@ -58,6 +67,10 @@ struct ExploreScreen: View {
     /// for a site that is still asking. Android found the same bug on its
     /// group sheet; this one was device-found here.
     @State private var sheet: ExploreSheetKind?
+    /// The switcher is opened AFTER this sheet is really gone. Presenting one
+    /// sheet in the same breath as dismissing another is how iOS ends up
+    /// showing neither.
+    @State private var switchAfterDismiss = false
     @State private var signingUp = false
     /// Groups hidden here rather than in the fixture: hiding is something a
     /// person does, and the sheet has to show it happening.
@@ -188,6 +201,10 @@ struct ExploreScreen: View {
             if consentOpen {
                 consentOpen = false
                 controller?.consentRejected()
+            }
+            if switchAfterDismiss {
+                switchAfterDismiss = false
+                onSwitchAccount?()
             }
         }) { sheet in
             sheetContent(sheet)
@@ -577,6 +594,10 @@ struct ExploreScreen: View {
                 ConnectionPanelView(
                     connection: connection, closeLabel: loc.t("explore.close"),
                     onClose: { self.sheet = nil },
+                    onSwitch: onSwitchAccount == nil ? {} : {
+                        switchAfterDismiss = true
+                        self.sheet = nil
+                    },
                     onDisconnect: {
                         self.sheet = nil
                         controller?.revoke()

@@ -52,6 +52,7 @@ import app.getvela.wallet.BuildConfig
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1151,6 +1152,15 @@ fun VelaNavHost(
                                     message = refusal,
                                 )
                             },
+                            // The connection sheet's "Switch account": the same
+                            // switcher the wallet home opens, so the two can never
+                            // show different accounts. Switching re-pins the
+                            // connected site's grant — the session flow already
+                            // tells the permissions machine on every change.
+                            onSwitchAccount = {
+                                wallet.switcherOpened(session.accounts.map { it.address })
+                                switcherOpen = true
+                            },
                         )
                     } else {
                         // The holdings, the feed and the currency are this device's
@@ -1590,7 +1600,12 @@ fun VelaNavHost(
                 // The Ethereum backup row (spec 062): asked of the chain, never of our
                 // server, each time this screen meets an account. `null` = still asking.
                 var backupCheck by remember(session.address) { mutableStateOf<RegistryBackup.Check?>(null) }
-                LaunchedEffect(session.address) {
+                // …and each time a person asks for it again. "Could not check" is
+                // exactly when someone taps that row, and what they want is another
+                // attempt (dead-controls #8), so the tap bumps this and the SAME
+                // check runs — no second code path to drift from the opening one.
+                var backupAttempt by remember(session.address) { mutableIntStateOf(0) }
+                LaunchedEffect(session.address, backupAttempt) {
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
                     val key = application.container.foundingKeyOf(address) ?: return@LaunchedEffect
@@ -1747,12 +1762,26 @@ fun VelaNavHost(
                         // would look for it.
                         onSignOut = { application.container.session.signOut() },
                         onOpenContacts = { navController.push(VelaDestinations.CONTACTS) },
-                        // Only while there is something to do. The signing sheet is hosted on
-                        // the wallet route, so the person goes there and the request follows.
+                        // Only while there is something to do — and in one state there
+                        // are two things. With a call in hand the person is taken to the
+                        // signing sheet, which is hosted on the wallet route, so they go
+                        // there and the request follows. After a check that did not
+                        // finish, the tap asks again: the answer is dropped (the row says
+                        // "checking…" once more) and the effect above re-runs (#8).
                         onEthereumBackup = {
-                            backupCheck?.call?.let { call ->
-                                selectFromPushed(VelaTab.Wallet)
-                                application.container.openEthereumBackup(call)
+                            val check = backupCheck
+                            val call = check?.call
+                            when {
+                                call != null -> {
+                                    selectFromPushed(VelaTab.Wallet)
+                                    application.container.openEthereumBackup(call)
+                                }
+                                check?.state == RegistryBackup.State.CouldNotCheck -> {
+                                    settingsHaptic(VelaHaptic.Select)
+                                    backupCheck = null
+                                    backupAttempt += 1
+                                }
+                                else -> Unit
                             }
                         },
                         onSheetSelect = { sheet, id ->

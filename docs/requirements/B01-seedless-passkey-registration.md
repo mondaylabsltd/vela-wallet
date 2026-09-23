@@ -56,7 +56,7 @@ Entered from Create Wallet (C02). Copy avoids "backup your phrase" language enti
 ## 9. Dependencies, risks & open questions
 
 - **Risk:** platform passkey UX varies; non-canonical domains need the proxy extension (B04).
-- **Open question:** second/backup passkey per wallet is **not yet supported** (signer-module constraint) — see B09.
+- ~~**Open question:** second/backup passkey per wallet is not yet supported~~ — settled: a wallet is created with **1 to 7 keys**, any one of which signs alone, and the set is fixed at creation because the address derives from all of it. See B09.
 
 ## 10. Source anchors
 

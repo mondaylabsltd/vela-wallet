@@ -148,6 +148,13 @@ pub fn read_value(key: &str) -> Result<Option<Value>> {
 /// `(bytes, records)`. Zero for both when the file is not there yet, which is a
 /// true statement about a wallet that has written nothing.
 #[must_use]
+/// The whole document, for whoever needs to see every key — the storage page
+/// measures with it. Read-only by construction: it is a copy.
+#[must_use]
+pub fn read_all_public() -> Map<String, Value> {
+    read_all().unwrap_or_default()
+}
+
 pub fn usage() -> (u64, u32) {
     let Ok(path) = path() else {
         return (0, 0);

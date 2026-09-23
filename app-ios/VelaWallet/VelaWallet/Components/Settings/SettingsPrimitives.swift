@@ -167,6 +167,8 @@ struct SettingsUrlField: View {
     var text: Binding<String>?
     /// Committed on submit or on losing focus — where the core runs its probes.
     var onCommit: () -> Void = {}
+    /// The blue words inside the box, when they DO something.
+    var onAction: (() -> Void)?
 
     private var border: Color {
         switch field.tone {
@@ -228,9 +230,23 @@ struct SettingsUrlField: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let action = field.action {
-                    Text(action)
-                        .typeRole(Typography.body)
-                        .foregroundStyle(theme.infoBase)
+                    // Drawn in link blue since 023 and tappable nowhere. It is
+                    // a control on Android (`EditableUrlField(onAction:)`,
+                    // which tests the key), so it is one here too; where no
+                    // handler is given — the gallery — it stays a label rather
+                    // than a button that does nothing.
+                    if let onAction {
+                        Button(action: onAction) {
+                            Text(action)
+                                .typeRole(Typography.body)
+                                .foregroundStyle(theme.infoBase)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(action)
+                            .typeRole(Typography.body)
+                            .foregroundStyle(theme.infoBase)
+                    }
                 }
             }
             .padding(.horizontal, Tokens.Space.s12)

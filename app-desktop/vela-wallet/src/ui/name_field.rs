@@ -89,13 +89,22 @@ pub fn text_field(
             .child(SharedString::from(shown))
     };
 
-    let mut inner = div().flex().items_center().child(
-        div()
-            .min_w(px(0.))
-            .overflow_hidden()
-            .whitespace_nowrap()
-            .child(text),
-    );
+    // The row itself has to be clipped too, not just the text inside it: a
+    // flex item's `min-width` is `auto`, so a 42-character address in a
+    // 400px dialog grew the row past the well and painted across the card
+    // behind it. Visible from the moment ⌘V could fill the field in one go.
+    let mut inner = div()
+        .flex()
+        .items_center()
+        .min_w(px(0.))
+        .overflow_hidden()
+        .child(
+            div()
+                .min_w(px(0.))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .child(text),
+        );
     if focused {
         // Caret: a styled bar after the text (no blink — nothing timed here).
         inner = inner.child(
@@ -125,12 +134,34 @@ pub fn text_field(
             .px(px(FLOW_GAP_MD))
             .flex()
             .items_center()
+            .overflow_hidden()
             .cursor_text()
             .child(inner)
             .on_click(move |_, window, cx| focus_for_click.focus(window, cx))
             .on_key_down(move |event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
-                if ks.modifiers.platform || ks.modifiers.control || ks.modifiers.alt {
+                // ⌘V. The one chord this minimal input owes a person: every
+                // value these fields take — an address, a URL, an RPC
+                // endpoint, a contract — arrives from somewhere else, and
+                // until 2026-09-23 a paste-an-address dialog answered ⌘V with
+                // nothing. A newline is dropped rather than typed: these are
+                // single-line wells, and a pasted trailing newline is what
+                // turns a good address into one the core refuses.
+                if ks.modifiers.platform && !ks.modifiers.control && !ks.modifiers.alt {
+                    if ks.key != "v" {
+                        return;
+                    }
+                    let Some(pasted) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+                        return;
+                    };
+                    let pasted: String = pasted.chars().filter(|c| !c.is_control()).collect();
+                    if pasted.is_empty() {
+                        return;
+                    }
+                    on_change(format!("{current}{pasted}"), window, cx);
+                    return;
+                }
+                if ks.modifiers.control || ks.modifiers.alt {
                     return;
                 }
                 let mut next = current.clone();

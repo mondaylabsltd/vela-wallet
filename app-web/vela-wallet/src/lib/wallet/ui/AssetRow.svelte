@@ -13,23 +13,30 @@
 		dimmed?: boolean;
 		/** Spec 021 SD1b: chosen for a multi-token send. */
 		selected?: boolean;
-		/** Spec 021 SD2d: a trailing control (Max) after the numbers. */
+		/**
+		 * Spec 021 SD2d: a trailing control (Max) after the numbers.
+		 *
+		 * A control inside a control is why this row stopped being a `<button>`
+		 * unconditionally: the sweep form's Max is a real `<button>`, and
+		 * `<button>` inside `<button>` is markup no parser keeps — the HTML
+		 * parser closes the outer one at the inner's start tag, so the server's
+		 * page and the client's DOM disagree about the row's shape. See
+		 * `onclick` below.
+		 */
 		trailing?: Snippet;
+		/**
+		 * What picking this row does. Absent ⇒ the row is a READING, not a
+		 * control: no button, no pointer, no press. The sweep form lists the
+		 * tokens already chosen and only the Max beside each one acts, so the
+		 * row there answers to nothing (spec 081, dead-controls #19).
+		 */
 		onclick?: () => void;
 	}
 
 	let { row, dimmed = false, selected = false, trailing, onclick }: Props = $props();
 </script>
 
-<button
-	type="button"
-	class="row"
-	class:dimmed
-	class:selected
-	disabled={dimmed}
-	aria-pressed={selected ? true : undefined}
-	{onclick}
->
+{#snippet body()}
 	<TokenIcon
 		ticker={row.ticker}
 		badgeColor={row.badgeColor}
@@ -52,7 +59,23 @@
 		{/if}
 	</span>
 	{#if trailing}<span class="trailing">{@render trailing()}</span>{/if}
-</button>
+{/snippet}
+
+{#if onclick !== undefined}
+	<button
+		type="button"
+		class="row"
+		class:dimmed
+		class:selected
+		disabled={dimmed}
+		aria-pressed={selected ? true : undefined}
+		{onclick}
+	>
+		{@render body()}
+	</button>
+{:else}
+	<div class="row stated" class:dimmed class:selected>{@render body()}</div>
+{/if}
 
 <style>
 	.row {
@@ -71,6 +94,13 @@
 
 	.row:active:not(:disabled) {
 		transform: scale(var(--motion-press-row));
+	}
+
+	/* Nothing to pick: no invitation, and no press under the finger. */
+	.row.stated,
+	.row.stated:active {
+		cursor: default;
+		transform: none;
 	}
 
 	.dimmed {

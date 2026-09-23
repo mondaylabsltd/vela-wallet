@@ -258,7 +258,10 @@ pub const NETWORKS: [NetworkFixture; 8] = [
 pub const DESKTOP_NETWORK_IDS: [&str; 6] =
     ["ethereum", "bnb", "polygon", "arbitrum", "base", "xlayer"];
 
-pub const NETWORK_COUNT: u32 = 12;
+/// What the DRAWN boards say. The live About page counts the core's built-ins
+/// plus this person's own networks instead (`page.rs`), because the number a
+/// person opens About to read must be the one they are running.
+pub const NETWORK_COUNT: u32 = 24;
 
 /// "链 1" — the line under each network's name.
 pub fn chain_meta(s: &SettingsStrings, chain_id: u64) -> SharedString {
@@ -394,6 +397,9 @@ pub const STORAGE_RECORDS: u32 = 216;
 pub const STORAGE_SEGMENTS: [(f32, u32); 3] = [(0.5, 0x5a7cf6), (0.3, 0x3da872), (0.2, 0x85827a)];
 
 pub struct StorageItem {
+    /// The row's id, shared with the other three shells
+    /// (`executor::device_storage::ITEMS`). What 清除 acts on.
+    pub id: &'static str,
     pub label: SharedString,
     pub meta: SharedString,
     /// 清除 for most rows; 断开全部 for the dApp sessions one.
@@ -419,12 +425,14 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             action: None,
             items: vec![
                 StorageItem {
+                    id: "transactions",
                     label: s.item_transactions.clone(),
                     meta: SharedString::from(format!("{} · 1.0 MB", records(200))),
                     action: s.storage_clear.clone(),
                     destructive: true,
                 },
                 StorageItem {
+                    id: "contacts",
                     label: s.item_contacts.clone(),
                     meta: SharedString::from(format!(
                         "{} · 42 KB",
@@ -434,6 +442,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
                     destructive: true,
                 },
                 StorageItem {
+                    id: "custom",
                     label: s.item_custom.clone(),
                     meta: SharedString::from(format!(
                         "{} · 12 KB",
@@ -443,6 +452,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
                     destructive: true,
                 },
                 StorageItem {
+                    id: "browsing",
                     label: s.item_browsing.clone(),
                     meta: SharedString::from(format!("{} · 58 KB", records(31))),
                     action: s.storage_clear.clone(),
@@ -455,18 +465,21 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             action: Some(s.storage_clear_all.clone()),
             items: vec![
                 StorageItem {
+                    id: "balances",
                     label: s.item_balances.clone(),
                     meta: SharedString::from("0.6 MB"),
                     action: s.storage_clear.clone(),
                     destructive: false,
                 },
                 StorageItem {
+                    id: "rates",
                     label: s.item_rates.clone(),
                     meta: SharedString::from("96 KB"),
                     action: s.storage_clear.clone(),
                     destructive: false,
                 },
                 StorageItem {
+                    id: "scan",
                     label: s.item_scan.clone(),
                     meta: SharedString::from("31 KB"),
                     action: s.storage_clear.clone(),
@@ -478,6 +491,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             label: s.storage_connections.clone(),
             action: None,
             items: vec![StorageItem {
+                id: "dapps",
                 label: s.item_dapps.clone(),
                 meta: SharedString::from(fill(&s.count_sites, "count", "4")),
                 action: s.storage_disconnect_all.clone(),
@@ -532,6 +546,14 @@ mod about_tests {
 
 /// Label / value / mono, in DST8's order.
 pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)> {
+    about_rows_with(s, NETWORK_COUNT)
+}
+
+/// The same rows with a network count somebody counted rather than drew.
+pub fn about_rows_with(
+    s: &SettingsStrings,
+    networks: u32,
+) -> Vec<(SharedString, SharedString, bool)> {
     vec![
         (
             s.about_wallet_label.clone(),
@@ -554,24 +576,33 @@ pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)
             SharedString::from(fill(
                 &s.about_networks_value,
                 "count",
-                &NETWORK_COUNT.to_string(),
+                &networks.to_string(),
             )),
             false,
         ),
     ]
 }
 
-pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString)> {
+/// The three places About points at: the label, the host as drawn, and the URL
+/// the row opens. The host is what a person reads; the URL is what the row does,
+/// and they are kept side by side so one cannot drift from the other.
+pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString, SharedString)> {
     vec![
         (
             s.about_link_website.clone(),
             SharedString::from("getvela.app"),
+            SharedString::from("https://getvela.app"),
         ),
         (
             s.about_link_github.clone(),
             SharedString::from("github.com/mondaylabsltd/vela-wallet"),
+            SharedString::from("https://github.com/mondaylabsltd/vela-wallet"),
         ),
-        (s.about_link_safe.clone(), SharedString::from("safe.global")),
+        (
+            s.about_link_safe.clone(),
+            SharedString::from("safe.global"),
+            SharedString::from("https://safe.global"),
+        ),
     ]
 }
 

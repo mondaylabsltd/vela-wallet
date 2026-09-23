@@ -29,6 +29,7 @@
 
 pub mod abi;
 pub mod activity_feed;
+pub mod appearance_prefs;
 pub mod approval_guard;
 pub mod balance_dashboard;
 pub mod balances;
@@ -42,6 +43,7 @@ pub mod clear_signing;
 pub mod contacts;
 pub mod custom_tokens;
 pub mod dapp_rpc;
+pub mod device_storage;
 pub mod display_currency;
 pub mod explore_sites;
 pub mod fee;

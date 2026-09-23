@@ -16,12 +16,11 @@
 
 	interface Props {
 		model: TxDetailModel;
-		onexplorer?: () => void;
 		/** The record's delete (spec 028 Phase 8). Absent in the gallery. */
 		ondelete?: () => void;
 	}
 
-	let { model, onexplorer, ondelete }: Props = $props();
+	let { model, ondelete }: Props = $props();
 
 	let copiedIndex = $state(-1);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -57,7 +56,13 @@
 		{#if model.explorerUrl !== undefined}
 			<Button variant="secondary" href={model.explorerUrl} external>{model.viewOnExplorer}</Button>
 		{:else}
-			<Button variant="secondary" onclick={onexplorer}>{model.viewOnExplorer}</Button>
+			<!-- No hash yet — a send the tracker has not resolved. The record's
+			     own builder calls this "inert" and nothing made it LOOK inert: it
+			     was drawn exactly like the working link, with a handler no caller
+			     ever passed (spec 081, dead-controls #18). Kept on screen rather
+			     than hidden, because it comes back the moment the hash lands and
+			     a button that appears under a thumb is its own hazard. -->
+			<Button variant="secondary" disabled>{model.viewOnExplorer}</Button>
 		{/if}
 		{#if model.deleteLabel !== undefined}
 			<!-- Removes the local record only; the chain keeps the transaction. -->

@@ -255,11 +255,20 @@ enum ExploreLive {
                 : loc.t("connect.browser.title", vars: ["host": host]),
             site: asked,
             statusLine: status,
-            account: (
-                name: identity.name,
-                address: AddressText.short(identity.address),
-                seed: identity.address
-            ),
+            // WHICH account this site holds, not which one the wallet is on.
+            //
+            // A grant is pinned to the address it was given to, so the two can
+            // differ — and they differ exactly when it matters: after an
+            // account switch, or on a grant made before one. The panel named
+            // `identity` regardless, so a device found it saying
+            // "Parallel One · 0x88cC…6894" over a page that had been handed
+            // `0xA9aE…2B`. The identicon goes with it: that artwork is the
+            // anti-forgery mark, and a mark for the wrong account is worse
+            // than none.
+            //
+            // A consent card has no grant yet, so it names the account that is
+            // about to get one — which IS the active one.
+            account: grantedAccount(permissions: permissions, identity: identity),
             switchLabel: loc.t("explore.switchAccount"),
             networkLabel: loc.t("explore.network"),
             network: (
@@ -291,6 +300,26 @@ enum ExploreLive {
     ///
     /// The host is still shown when there is no sentence to show (an empty
     /// origin), because naming what you are looking at beats saying nothing.
+    /// The account a connection panel is ABOUT.
+    ///
+    /// The granted address when the site holds one and it is not the active
+    /// account; the active account otherwise. Where they differ the name is
+    /// the address itself — this shell does not have the other account's name
+    /// here, and a name that belongs to somebody else is the one thing this
+    /// row must never print.
+    private static func grantedAccount(
+        permissions: DpermViewWire,
+        identity: (name: String, address: String)
+    ) -> (name: String, address: String, seed: String) {
+        guard let granted = permissions.connectedAddress,
+              !granted.isEmpty,
+              granted.caseInsensitiveCompare(identity.address) != .orderedSame
+        else {
+            return (identity.name, AddressText.short(identity.address), identity.address)
+        }
+        return (AddressText.short(granted), AddressText.short(granted), granted)
+    }
+
     static func statusLine(secure: Bool, connected: Bool, host: String, loc: Loc) -> String {
         let pieces = [
             secure ? loc.t("explore.secureSite") : loc.t("connect.browser.a11yInsecure"),

@@ -12,9 +12,10 @@
 
 Recovery is the **passkey synced by iCloud Keychain (Apple) or Google Password Manager (Android)** —
 **no seed phrase, no social recovery, no guardians**. The honest, repeated caveat: lose **both** your
-device **and** your cloud-synced passkey and the account is **unrecoverable by design**. A second
-backup passkey is **not yet supported** (a signer-module constraint); the redundancy today is the OS
-sync.
+device **and** every key you created the wallet with and the account is **unrecoverable by design**.
+Redundancy comes from two places: the OS passkey sync, and **up to seven founding keys**, any one of
+which can sign alone (1-of-N). Keys are chosen at creation and cannot be added, removed or replaced
+afterwards, because the address is derived from the whole set.
 
 ## 2. Background & context
 
@@ -33,7 +34,7 @@ stated plainly, not hidden.
 - **FR-1** — On a new device, the OS-synced passkey (same rpId, B03) reproduces the same wallet (address derivation is deterministic, B07) — see restore flow C04.
 - **FR-2** — No seed phrase, social recovery, or guardian mechanism exists or is implied anywhere.
 - **FR-3** — Recovery copy states the honest limit: losing device **and** cloud passkey = unrecoverable by design.
-- **FR-4** — Only **one passkey per wallet** is currently supported; document the OS sync as the backup.
+- **FR-4** — A wallet has **1 to 7 keys**, fixed at creation, any one of which signs on its own (`MAX_MULTI_KEYS = 7`, `rust/crates/vela-core/src/safe.rs`); document both the OS sync and the extra keys as the backup, and the fixed-at-creation rule as the limit.
 - **FR-5** — The proxy extension (B04) is the escape hatch if the rpId domain itself is lost.
 
 ## 5. Non-functional requirements
@@ -53,7 +54,7 @@ Onboarding (C01) and About/Settings explain recovery = OS passkey sync + its lim
 
 ## 8. Out of scope / non-goals
 
-- The restore flow UI — **C04**; multi-passkey backup (not yet supported — roadmap dependent on signer module).
+- The restore flow UI — **C04**; multi-key wallets shipped (create with up to seven keys, sign in with any one).
 
 ## 9. Dependencies, risks & open questions
 

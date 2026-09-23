@@ -316,6 +316,24 @@ pub const CONTACTS_RAIL_W: f32 = 216.;
 /// reason — it is the same column, doing the same job, one section over.
 pub const SETTINGS_NAV_W: f32 = 216.;
 
+/// The same column, at the person's text size.
+///
+/// This column exists to hold labels and nothing else, so it grows with them.
+/// Left at 216 it could not: at `xlarge` in German,
+/// "Transaktionsgeschwindigkeit" ran out of the column, across the divider and
+/// onto the network list behind it — measured, not imagined. Truncation in the
+/// row is still the backstop; this is what stops it having to.
+///
+/// It only ever GROWS. Multiplying it down at the smaller stops bought
+/// nothing — the panel beside it has room to spare either way — and cost two
+/// German labels their endings at `compact`, where a 216px column would have
+/// held them whole.
+#[must_use]
+pub fn settings_nav_w() -> f32 {
+    let factor = crate::executor::appearance_prefs::text_factor();
+    (SETTINGS_NAV_W * factor.max(1.0)).round()
+}
+
 /// One row of that column.
 pub const SETTINGS_NAV_ROW_H: f32 = 36.;
 
@@ -386,36 +404,53 @@ pub const CONTACTS_MOTION_CROSSFADE_MS: u64 = 150;
 )]
 pub const CONTACTS_MOTION_HOVER_MS: u64 = 120;
 
+/// One type size, through the person's text-size setting.
+///
+/// Every `text_*` below is mock-measured at 100%; this is the only place the
+/// multiplier is applied, so a new size cannot forget it. Rounded to whole
+/// pixels because a glyph drawn at 13.94px against a hairline measured in
+/// whole pixels is how a row starts looking half a pixel wrong.
+///
+/// **What this does NOT scale** — and the reason the setting was worth wiring
+/// carefully: every fixed `px` row height, button height and dialog width in
+/// this shell stays put. At the larger stops the type grows inside boxes that
+/// do not, which is exactly the class of bug issues 195/198 were. The settings
+/// dialog was given a scrolling body for this reason; the rest is seen, not
+/// assumed.
+fn scaled(base: f32) -> Pixels {
+    px((base * crate::executor::appearance_prefs::text_factor()).round())
+}
+
 /// Wallet type scale (mock-measured).
 pub fn text_balance_hero() -> Pixels {
-    px(40.)
+    scaled(40.)
 }
 pub fn text_balance_decimals() -> Pixels {
-    px(24.)
+    scaled(24.)
 }
 pub fn text_row_title() -> Pixels {
-    px(15.)
+    scaled(15.)
 }
 pub fn text_row_sub() -> Pixels {
-    px(13.)
+    scaled(13.)
 }
 pub fn text_section() -> Pixels {
-    px(17.)
+    scaled(17.)
 }
 pub fn text_label() -> Pixels {
-    px(11.)
+    scaled(11.)
 }
 pub fn text_amount() -> Pixels {
-    px(15.)
+    scaled(15.)
 }
 pub fn text_unit() -> Pixels {
-    px(11.)
+    scaled(11.)
 }
 pub fn text_panel_title() -> Pixels {
-    px(20.)
+    scaled(20.)
 }
 pub fn text_mono_address() -> Pixels {
-    px(13.)
+    scaled(13.)
 }
 
 /// Monospace family for addresses. Menlo ships on macOS; the DejaVu face is
@@ -627,39 +662,39 @@ pub const GALLERY_SIDEBAR_W: f32 = 280.;
 
 /// Progress/outcome headline.
 pub fn text_flow_headline() -> Pixels {
-    px(17.)
+    scaled(17.)
 }
 /// Step counter / helper captions.
 pub fn text_flow_caption() -> Pixels {
-    px(12.)
+    scaled(12.)
 }
 /// The glyph inside the status badge circle.
 pub fn text_badge_glyph() -> Pixels {
-    px(26.)
+    scaled(26.)
 }
 
 /// The v2 wordmark is small, heavy and widely tracked — a label beside the
 /// mark, not a title. v1's 42 px display treatment is gone with the two-column
 /// welcome it belonged to.
 pub fn text_wordmark() -> Pixels {
-    px(19.)
+    scaled(19.)
 }
 /// The rail's step ordinal, set in the mono face at display size. It is
 /// TYPOGRAPHY, not a widget: a stepper drawn as a control reads as chrome
 /// bolted to the side of the page, which is exactly what it looked like.
 pub fn text_step_ordinal() -> Pixels {
-    px(104.)
+    scaled(104.)
 }
 pub fn line_height_step_ordinal() -> Pixels {
     px(104. * 0.82)
 }
 /// The `/03` that follows it.
 pub fn text_step_total() -> Pixels {
-    px(20.)
+    scaled(20.)
 }
 /// The step's name, under the ordinal.
 pub fn text_step_name() -> Pixels {
-    px(20.)
+    scaled(20.)
 }
 /// The rail's tagline, shown before the journey starts and after it ends.
 ///
@@ -669,7 +704,7 @@ pub fn text_step_name() -> Pixels {
 /// fit the rail's 256px inner measure whole, and the longer latin ones wrap
 /// into two lines instead of orphaning a glyph.
 pub fn text_rail_tagline() -> Pixels {
-    px(26.)
+    scaled(26.)
 }
 pub fn line_height_rail_tagline() -> Pixels {
     px(26. * 1.35)
@@ -681,7 +716,7 @@ pub fn line_height_rail_detail() -> Pixels {
 /// The v2 welcome hero. It carries the screen, so it is nearly twice v1's
 /// tagline; the copy ships its own line break rather than relying on a wrap.
 pub fn text_hero() -> Pixels {
-    px(46.)
+    scaled(46.)
 }
 /// `line-height: 1.25` at the hero size.
 pub fn line_height_hero() -> Pixels {
@@ -693,7 +728,7 @@ pub fn line_height_hero() -> Pixels {
 /// the widest authored line runs 6.9em (zh) to 12.8em (fr), and at 46 px the
 /// widest of them overruns the 620 px column.
 pub fn text_hero_long() -> Pixels {
-    px(38.)
+    scaled(38.)
 }
 /// `line-height: 1.25` at the long-locale hero size.
 pub fn line_height_hero_long() -> Pixels {
@@ -701,25 +736,25 @@ pub fn line_height_hero_long() -> Pixels {
 }
 /// Flow-screen titles (spec 014). Not the welcome hero — that is `text_hero`.
 pub fn text_tagline() -> Pixels {
-    px(26.)
+    scaled(26.)
 }
 pub fn text_card_title() -> Pixels {
-    px(16.)
+    scaled(16.)
 }
 pub fn text_body() -> Pixels {
-    px(13.)
+    scaled(13.)
 }
 pub fn text_numeral() -> Pixels {
-    px(12.)
+    scaled(12.)
 }
 /// Every v2 button label — welcome, flow, sheet — is this size and BOLD.
 pub fn text_cta() -> Pixels {
-    px(15.)
+    scaled(15.)
 }
 /// Flow subtitles and the name field's own text. One notch under
 /// `text_card_title`, which the wallet home still uses at 16.
 pub fn text_flow_sub() -> Pixels {
-    px(15.)
+    scaled(15.)
 }
 /// `line-height: 1.5` at 15.
 pub fn line_height_flow_sub() -> Pixels {
@@ -738,15 +773,15 @@ pub fn line_height_title() -> Pixels {
 /// tracked in the design; gpui cannot track, so the case and the weight carry
 /// it (see `ui::vela_wordmark` for the one place hand-tracking was worth it).
 pub fn text_section_label() -> Pixels {
-    px(11.)
+    scaled(11.)
 }
 /// A key row's name, and a progress task's label.
 pub fn text_row_name() -> Pixels {
-    px(14.)
+    scaled(14.)
 }
 /// A key row's provider line, and the mono counters beside a section label.
 pub fn text_row_meta() -> Pixels {
-    px(12.)
+    scaled(12.)
 }
 /// Relaxed body line height (~1.55 at 13 px).
 pub fn line_height_body() -> Pixels {

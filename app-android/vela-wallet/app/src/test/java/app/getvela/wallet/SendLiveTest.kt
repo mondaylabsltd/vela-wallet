@@ -645,6 +645,11 @@ class SendLiveTest {
         assertEquals(listOf("XDAI", "USDC"), live.sweepRows.map { it.symbol })
         assertEquals("0.4", live.sweepRows[0].amount)
         assertEquals("3", live.sweepRows[1].amount)
+        // …and no MAX chip on any of them (dead-controls #3). Those amounts
+        // ARE the maximum — the core's specs, each balance less the fee's
+        // reserve — so the chip had nothing to fill, and the event behind it
+        // knows only the single selected token. An empty label draws none.
+        assertEquals(listOf("", ""), live.sweepRows.map { it.max })
         assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT), live.recipient!!.note)
         assertEquals(recipient, live.recipient!!.raw)
         assertTrue(live.ctaEnabled)

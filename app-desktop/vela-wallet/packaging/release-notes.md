@@ -11,7 +11,7 @@ gh attestation verify <file> --repo mondaylabsltd/vela-wallet
 The macOS images are signed with our Developer ID and notarized by Apple (`xcrun stapler validate`, `spctl -a -t open --context context:primary-signature -v`) and attested from the published file afterwards. Provenance is not code signing: it does not remove the Windows prompt below.
 
 **Windows** — `VelaWallet-Setup-<version>-x64.exe` for most PCs, `-arm64.exe` for Snapdragon / Surface Pro X class machines.
-The installer is not code-signed, so Windows SmartScreen stops it once with *"Windows protected your PC"*. Click **More info**, then **Run anyway**. This is expected for this release; it is the same file the checksum describes.
+The installer is not code-signed, so Windows SmartScreen stops it once with *"Windows protected your PC"*. Click **More info**, then **Run anyway**. This is permanent, not a gap waiting to be closed: a code-signing certificate removes the prompt without making the file any more genuine. What proves the file is ours is its checksum and its build attestation, both of which you can check.
 
 **macOS** — if a `.dmg` is attached, it is signed with our Developer ID and notarized by Apple: open it and drag *Vela Wallet* to *Applications*. `universal` runs on every Mac; `arm64` (Apple silicon) and `x86_64` (Intel) are smaller.
 If no `.dmg` is attached, this version's macOS build has not been published — we only attach one that opens without warnings. Use the [web wallet](https://wallet.getvela.app/) in the meantime.

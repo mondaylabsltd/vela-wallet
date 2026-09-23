@@ -23,5 +23,5 @@
 
 ## Waits on the founder
 - [X] **N2** agreed 2026-09-19: `main` no longer deploys the web wallet
-- [ ] **N1** Cloudflare → `vela-wallet-web` → production branch `released` (after the first release creates it)
+- [x] **N1** Cloudflare → `vela-wallet-web` → production branch `released` (after the first release creates it) — done by the founder, confirmed 2026-09-23; `docs/project-takeover/05-deployment-runbook.md` says so now
 - [ ] **N3** branch protection for `released`

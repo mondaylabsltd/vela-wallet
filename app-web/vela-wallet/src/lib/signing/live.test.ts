@@ -157,8 +157,77 @@ describe('the fee the sheet shows', () => {
 		expect(model?.fee).toEqual({
 			kind: 'onchain',
 			label: m.feeLabel,
-			value: '0.0021 ETH · ≈$6.30'
+			value: '0.0021 ETH · ≈$6.30',
+			selector: undefined,
+			speed: undefined,
+			warning: undefined,
+			// One coin and a quote in hand: nothing to choose, nothing to ask
+			// again. The row is drawn as the fee STATED — no chevron, no pointer
+			// (spec 081, dead-controls #6: it was a button whose handler, live,
+			// was `SigningHost`'s defaulted no-op).
+			tappable: false
 		});
+	});
+
+	/** Two coins to pay in, and the row is the door to the list again. */
+	it('is a control again when there is a coin to choose', () => {
+		const priced = {
+			...QUOTED_FEE,
+			options: [
+				{
+					symbol: 'ETH',
+					contract: null,
+					decimals: 18,
+					balance: '1500000000000000000',
+					recipient: '0x1',
+					usd_balance: '4500',
+					usd_price: '3000',
+					amount: '2100000000000000',
+					insufficient: false,
+					selected: true
+				},
+				{
+					symbol: 'USDC',
+					contract: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+					decimals: 6,
+					balance: '2000000',
+					recipient: '0x1',
+					usd_balance: '2',
+					usd_price: '1',
+					amount: '6300000',
+					insufficient: false,
+					selected: false
+				}
+			]
+		};
+		const model = buildSigningModel(inputs({ fee: priced }));
+		expect(model?.fee).toMatchObject({ kind: 'onchain', tappable: true });
+	});
+
+	/** A refused quote can always be asked again, one coin or many. */
+	it('is a control when the quote failed, with one coin', () => {
+		const failed = {
+			...QUOTED_FEE,
+			fee: null,
+			busy: false,
+			failed: 'quote_unavailable' as const,
+			options: [
+				{
+					symbol: 'ETH',
+					contract: null,
+					decimals: 18,
+					balance: '1500000000000000000',
+					recipient: '0x1',
+					usd_balance: '4500',
+					usd_price: '3000',
+					amount: '2100000000000000',
+					insufficient: false,
+					selected: true
+				}
+			]
+		};
+		const model = buildSigningModel(inputs({ fee: failed }));
+		expect(model?.fee).toMatchObject({ kind: 'onchain', tappable: true });
 	});
 
 	// Issue 262: 0 ETH and 2 USDT on mainnet, quoted in ETH. The core keeps the

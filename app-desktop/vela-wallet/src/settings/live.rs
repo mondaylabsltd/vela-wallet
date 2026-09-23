@@ -29,13 +29,12 @@ const SAMPLE: f64 = 1234.56;
 
 /// Symbols for the codes a person can actually reach today.
 ///
-/// Deliberately small. The shell owns the currency catalog — that is the core's
-/// division of labour, stated in `display_currency.rs` — but a full catalog is
-/// only *useful* once rates exist, because until then no code but USD can be
-/// priced at all. It arrives with the rates in spec 031. Unknown codes fall back
-/// to the code itself, which `format_fiat` spaces correctly (`CHF 1,234.56`)
-/// because CLDR's `currencySpacing` keys off the symbol being alphabetic.
-fn symbol_for(code: &str) -> &str {
+/// Deliberately small, and it does not need to be big: an unknown code falls
+/// back to the code itself, which `format_fiat` spaces correctly
+/// (`CHF 1,234.56`) because CLDR's `currencySpacing` keys off the symbol being
+/// alphabetic. The rate endpoint prices about thirty currencies and most of
+/// them have no symbol anybody would recognise anyway.
+pub fn symbol_for(code: &str) -> &str {
     match code {
         "USD" => "$",
         "EUR" => "€",
@@ -74,9 +73,130 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
     }
 }
 
+/// The storage page's rows, measured rather than drawn.
+///
+/// Same labels and same order as the fixture — it is the same page — with the
+/// meta line replaced by what this machine actually holds. A row with no
+/// records shows a size alone: `records_in` answers `None` for a value that is
+/// not a list, and inventing "1 record" for a cache blob would be a number
+/// somebody might act on.
+#[must_use]
+pub fn storage_groups(
+    s: &SettingsStrings,
+    report: &crate::executor::device_storage::Report,
+) -> Vec<crate::settings::fixtures::StorageGroup> {
+    let mut groups = crate::settings::fixtures::storage_groups(s);
+    for group in &mut groups {
+        for item in &mut group.items {
+            let Some(measured) = report.item(item.id) else {
+                continue;
+            };
+            let size = human_size(measured.bytes);
+            item.meta = SharedString::from(match (measured.records, item.id) {
+                (Some(count), "contacts") => format!(
+                    "{} · {size}",
+                    crate::wallet::fill(&s.count_contacts, "count", &count.to_string())
+                ),
+                (Some(count), "custom") => format!(
+                    "{} · {size}",
+                    crate::wallet::fill(&s.count_items, "count", &count.to_string())
+                ),
+                (Some(count), _) => format!(
+                    "{} · {size}",
+                    crate::wallet::fill(&s.count_records, "count", &count.to_string())
+                ),
+                (None, _) => size,
+            });
+        }
+    }
+    groups
+}
+
+/// `1.0 MB`, `42 KB`, `0 KB`. The page's other figure (`human_bytes`) splits
+/// amount from unit for the hero; a row wants one string.
+#[must_use]
+pub fn human_size_public(bytes: usize) -> String {
+    human_size(bytes)
+}
+
+fn human_size(bytes: usize) -> String {
+    #[allow(clippy::cast_precision_loss)]
+    let kb = bytes as f64 / 1024.0;
+    if kb >= 1024.0 {
+        format!("{:.1} MB", kb / 1024.0)
+    } else {
+        format!("{} KB", kb.round() as u64)
+    }
+}
+
+/// The 货币 dropdown: every currency the rate endpoint can price, each beside
+/// what the row's sample figure looks like in it.
+///
+/// The sample is the point. A list of three-letter codes asks a person to
+/// remember what ₩ is worth; `KRW · ₩1,712,430` tells them. It is illustrative
+/// — the rate that converts money is fetched when it is needed — so a stale
+/// sample costs a wrong-looking preview and never a wrong payment.
+///
+/// Codes with no rate are not offered at all, which is the same rule the row
+/// value follows: the wallet does not put a currency in front of somebody when
+/// nothing could price it.
+#[must_use]
+pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> Vec<MenuRow> {
+    priced
+        .iter()
+        .map(|(code, rate)| {
+            let sample = format_fiat(
+                SAMPLE * rate,
+                code,
+                symbol_for(code),
+                locale,
+                crate::executor::format_prefs::fiat_options(),
+            );
+            (
+                SharedString::from(code.clone()),
+                Some(SharedString::from(sample)),
+                code.eq_ignore_ascii_case(selected),
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The menu offers what can be priced, says what each one looks like, and
+    /// ticks the one in force. The desktop had no currency picker at all until
+    /// 2026-09-23 — the row opened a menu that was never built, so
+    /// `Event::UserChose` had no sender on this shell.
+    #[test]
+    fn the_currency_menu_shows_a_sample_and_marks_the_choice() {
+        let priced = [
+            ("USD".to_owned(), 1.0),
+            ("EUR".to_owned(), 0.92),
+            ("JPY".to_owned(), 157.0),
+        ];
+        let rows = currency_menu(&priced, "eur", "en");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].0, "USD");
+        assert!(
+            rows[0].1.as_ref().is_some_and(|s| s.contains("1,234")),
+            "the sample is the row's point: {:?}",
+            rows[0].1
+        );
+        // JPY is zero-decimal, and the core's formatter knows it.
+        assert!(
+            rows[2].1.as_ref().is_some_and(|s| !s.contains('.')),
+            "a yen figure has no cents: {:?}",
+            rows[2].1
+        );
+        assert_eq!(
+            rows.iter().filter(|(_, _, selected)| *selected).count(),
+            1,
+            "exactly one tick"
+        );
+        assert!(rows[1].2, "the chosen code is matched case-insensitively");
+    }
 
     use crate::core_host::CoreHost;
     use vela_core::app::network_admin::{Event as NetEvent, NetNetworkRow, NetworkAdmin};

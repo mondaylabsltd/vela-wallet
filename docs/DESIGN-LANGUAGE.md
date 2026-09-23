@@ -1,7 +1,12 @@
 # Vela Design Language — "Quiet, typographic, de-containered"
 
 The confirmed visual language for the whole app (Apple Wallet / Wise register). Every
-screen — and every future change — MUST follow it. Reference screen: **HomeScreen**.
+screen — and every future change — MUST follow it, on all four shells. Reference screen:
+the **wallet home**.
+
+The principles are the contract; the component and API names below are named where they live in
+the web shell (`app-web/vela-wallet/src/lib/`), and each of the other shells has its own
+equivalent. Where a name was left over from the retired Expo tree it has been corrected.
 
 ## Principles
 
@@ -18,11 +23,12 @@ screen — and every future change — MUST follow it. Reference screen: **HomeS
 
 3. **Hairline dividers.** Between de-boxed rows use a 1px `color.border.base` line,
    **inset past the leading icon** so it aligns under the text (Apple-Wallet style).
-   Reuse `<Divider/>` (from `DetailRow`) or a `sep` style `{height:1, backgroundColor:
-   color.border.base, marginLeft: <icon+gap>}`.
+   Reuse the shell's `Divider` (the one `DetailRow` draws), or a 1px rule inset by the
+   icon width plus its gap.
 
-4. **Section labels.** Use `<SectionLabel>` (uppercase, letter-spaced, `fg.subtle`,
-   small) — `src/components/ui/SectionLabel.tsx`. Not bold black headings.
+4. **Section labels.** Use `SectionLabel` (uppercase, letter-spaced, `fg.subtle`, small) —
+   `app-web/vela-wallet/src/lib/settings/ui/SectionLabel.svelte` and its per-shell twins.
+   Not bold black headings.
 
 5. **Subordinated symbols.** In big amounts, the currency symbol is smaller than the
    number (the number is the hero). Use `AmountText` with `symbolScale` (~0.58).
@@ -38,19 +44,27 @@ screen — and every future change — MUST follow it. Reference screen: **HomeS
    Single accent (`#E8572A`) reserved for CTAs and truly-primary actions. Warm/light,
    low contrast with the page.
 
-9. **Tokens only.** All values from `theme.ts` (`color.* space.* text.* radius.*
-   inter.*`). Never hardcode hex/px. Must work in **light AND dark** (uses `color.*`).
+9. **Tokens only.** All values from the generated token layer — `tokens.css` / `tokens.ts` on
+   web, `Tokens.swift` on iOS, and so on — whose one source is
+   [`docs/design-tokens.json`](design-tokens.json) (`color.* space.* text.* radius.* weight.*
+   leading.*`). Never hardcode hex/px; literals are test-banned in product UI. Must work in
+   **light AND dark** (uses `color.*`).
 
 10. **Entrances play once.** `entering` (fadeIn/fadeInDown) must not replay on re-render
     (gate with a `hasEntered` ref) — else the screen "flickers/slides" on state updates.
 
 ## Accessibility is not optional (already in place — keep it)
 
-Every pressable: `accessibilityRole="button"` + a translated `accessibilityLabel`;
-selected controls expose `accessibilityState={{selected}}`; ≥44×44 targets; keyboard
-focus ring (web `:focus-visible`); modals trap focus + close on Escape (`useWebDialog`).
+Every pressable carries its role and a **translated** accessible name, and a selected control
+says it is selected — in each platform's own idiom (`aria-*` and real `<button>` elements on the
+web, `accessibilityLabel`/`accessibilityAddTraits` on iOS, `contentDescription`/`semantics` on
+Android). ≥44×44 targets; a visible keyboard focus ring (web `:focus-visible`); sheets and
+dialogs trap focus and close on Escape.
 
 ## Shared primitives to reuse (don't reinvent)
 
-`SectionLabel`, `Divider` (DetailRow), `AmountText` (symbolScale), `SegmentedToggle`
-(light), `VelaButton` (CTA), `AppModal`/`AppAlert` (sheets), `DetailRow`.
+`SectionLabel`, `Divider` (DetailRow), `AmountText` (`--amount-symbolScale`, 0.58),
+`SegmentedToggle` (the **only** segmented control — no second dialect), `VelaButton` (CTA),
+`DetailRow`, and the sheet/dialog family (`Sheet.svelte`, `ConfirmSheet.svelte`,
+`Dialog.svelte` — the old `AppModal`/`AppAlert` names are gone). On the desktop a sheet becomes a
+third column or a `Dialog`, never a bottom sheet.

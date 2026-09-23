@@ -976,6 +976,7 @@ pub fn fee_model(
     s: &SigningStrings,
     locale: &str,
     speed_tier: Option<FeeTier>,
+    currency: &crate::wallet::live::Money,
 ) -> FeeModel {
     if off_chain(clear) {
         return FeeModel::OffChain(s.ok_no_network_fee.clone());
@@ -991,6 +992,10 @@ pub fn fee_model(
     // is shut for the same reason.
     FeeModel::OnChain {
         label: s.fee_label.clone(),
+        // What the handler already knows (`signing_host::fee_tapped`): a
+        // failed quote can be asked again, more than one coin can be chosen
+        // between — and one coin with a quote in hand is neither.
+        tappable: fee.failed.is_some() || fee.options.len() > 1,
         value: if another_tier {
             s.fee_estimating.clone()
         } else {
@@ -999,6 +1004,7 @@ pub fn fee_model(
                 None,
                 fee,
                 locale,
+                currency,
             ))
         },
         // The coins the relay will take, open in the sheet when asked — each
@@ -1766,9 +1772,16 @@ mod tests {
 
         // Picked Slow; the fee in hand is still Fast's.
         assert!(!confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Slow)));
-        let FeeModel::OnChain { value, .. } =
-            fee_model(&clear, &fee, 100, false, &s, "en", Some(FeeTier::Slow))
-        else {
+        let FeeModel::OnChain { value, .. } = fee_model(
+            &clear,
+            &fee,
+            100,
+            false,
+            &s,
+            "en",
+            Some(FeeTier::Slow),
+            crate::wallet::live::Money::usd(),
+        ) else {
             unreachable!("a transaction has an on-chain fee");
         };
         assert_eq!(value, s.fee_estimating);
@@ -1778,9 +1791,16 @@ mod tests {
             estimate.tier = FeeTier::Slow;
         }
         assert!(confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Slow)));
-        let FeeModel::OnChain { value, .. } =
-            fee_model(&clear, &fee, 100, false, &s, "en", Some(FeeTier::Slow))
-        else {
+        let FeeModel::OnChain { value, .. } = fee_model(
+            &clear,
+            &fee,
+            100,
+            false,
+            &s,
+            "en",
+            Some(FeeTier::Slow),
+            crate::wallet::live::Money::usd(),
+        ) else {
             unreachable!("a transaction has an on-chain fee");
         };
         assert_ne!(value, s.fee_estimating);
@@ -1973,6 +1993,53 @@ mod fee_tests {
         fee
     }
 
+    /// Spec 081's dead-control rule, on the row that prices the request.
+    ///
+    /// The handler has always refused to act on one coin with a quote
+    /// (`signing_host::fee_tapped`); the drawing kept offering. The chevron
+    /// now says what the handler does — and a failed quote keeps it, because
+    /// that press asks again.
+    #[test]
+    fn the_fee_row_is_a_control_only_where_pressing_it_would_do_something() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let tappable = |fee: &FeeView| match fee_model(
+            &clear,
+            fee,
+            1,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
+            FeeModel::OnChain { tappable, .. } => tappable,
+            _ => unreachable!("a transaction has a fee row"),
+        };
+
+        let one_coin = quoted(vec![option("ETH", None, false, true)], true);
+        assert!(!tappable(&one_coin), "one coin, quoted: nothing to choose");
+
+        let two_coins = quoted(
+            vec![
+                option("ETH", None, false, true),
+                option(
+                    "USDT",
+                    Some("0xdac17f958d2ee523a2206206994597c13d831ec7"),
+                    false,
+                    false,
+                ),
+            ],
+            true,
+        );
+        assert!(tappable(&two_coins), "two coins: the list can open");
+
+        let mut failed = quoted(vec![option("ETH", None, false, true)], false);
+        failed.failed = Some(vela_core::app::fee_policy::FeeFailure::QuoteUnavailable);
+        assert!(tappable(&failed), "a failed quote can be asked again");
+    }
+
     /// The coin list opens in the sheet with every coin the relay takes —
     /// including one that cannot pay, drawn for context and marked so the
     /// page binds it nothing.
@@ -1994,11 +2061,29 @@ mod fee_tests {
             false,
         );
 
-        match fee_model(&clear, &fee, 1, false, &s, "en", None) {
+        match fee_model(
+            &clear,
+            &fee,
+            1,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
             FeeModel::OnChain { selector, .. } => assert!(selector.is_none(), "closed"),
             _ => unreachable!("a transaction has a fee row"),
         }
-        match fee_model(&clear, &fee, 1, true, &s, "en", None) {
+        match fee_model(
+            &clear,
+            &fee,
+            1,
+            true,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
             FeeModel::OnChain {
                 selector: Some((title, options)),
                 ..

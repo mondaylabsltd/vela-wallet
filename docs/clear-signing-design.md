@@ -183,25 +183,37 @@ When no ERC-7730 descriptor matches the typeHash.
 
 ### 4.1 Data Flow
 
-```
-SigningRequestModal
-  │
-  ├─ useEffect: resolveTransaction() or resolveTypedData()
-  │     │
-  │     ├─ clear-signing.ts: fetch descriptor from registry
-  │     ├─ abi-decode.ts: decode calldata
-  │     └─ returns ClearSignResult | null
-  │
-  ├─ if ClearSignResult → <ClearSignView />
-  ├─ if null + personal_sign → <MessageSignView />
-  ├─ if null + signTypedData → <BlindTypedDataView />
-  └─ if null + sendTransaction → <BlindTransactionView />
-```
-
-### 4.2 New Component Structure
+> **As built.** The whole pipeline below became a Crux machine in the core —
+> `rust/crates/vela-core/src/app/clear_signing.rs` — which is why every shell decides the same
+> way. The shell no longer *resolves* anything: it dispatches an event, performs the HTTP and
+> `eth_call` operations the machine asks for, and renders the view model it gets back.
 
 ```
-SigningRequestModal.tsx (orchestrator)
+shell: ResolveTransaction / MessagePresented
+  │
+  ▼
+vela-core  app/clear_signing.rs
+  ├─ local descriptor → contract descriptor (HTTP) → token-standard selectors
+  │     → ERC-165 probes (3s cap) → ERC calldata fallbacks → 4-byte DB → blind
+  ├─ decimals warm (4s cap) → fields → risk verdict
+  └─ personal_sign: hex/text split → SIWE parse → domain binding → danger class
+  │
+  ▼
+shell renders the returned view model in one sheet
+```
+
+### 4.2 Component Structure
+
+The names below are the design's vocabulary. As shipped on the web they are
+`app-web/vela-wallet/src/lib/signing/SigningSheet.svelte` (the one render path, production and
+gallery alike) over `SigningHost.svelte`/`SigningPanel.svelte`, with the parts in
+`signing/ui/` — `SigningHeader`, `IntentLabel`/`IntentSentence`, `AmountHero`/`NftHero`,
+`SwapPair`, `PartyRow`, `BalanceChanges`, `DetailCard`/`KeyValueRows`, `TechDetails`,
+`AllowanceEditor`, `WarningBanner`, `FeeRow`, `SlideToConfirm`. The other three shells mirror
+that list in their own toolkits.
+
+```
+signing sheet (orchestrator)
   ├── DAppBanner          — dApp logo, name, domain, E2E badge
   ├── ClearSignView       — descriptor-driven rendering
   │   ├── IntentHeader    — large colored intent word
@@ -217,7 +229,11 @@ SigningRequestModal.tsx (orchestrator)
 
 ### 4.3 ClearSignResult Extension
 
-Current `ClearSignResult`:
+> The TypeScript below is the *shape*, not the code: these types are Rust structs today, in
+> `rust/crates/vela-core/src/app/clear_signing.rs`, and each shell receives the generated
+> binding for them. `risk` and `role` did land.
+
+`ClearSignResult`, as this design proposed it:
 ```typescript
 interface ClearSignResult {
   intent: string;

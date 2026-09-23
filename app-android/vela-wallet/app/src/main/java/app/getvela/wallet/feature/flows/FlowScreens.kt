@@ -904,6 +904,37 @@ fun SendFormBody(
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
         model.sweepRows.forEachIndexed { index, row ->
+            // An empty label means NO chip, and the row keeps the space it
+            // would have taken. A sweep moves the maximum of every row by
+            // definition — the core computes each one net of the fee's
+            // reserve — so the live form has nothing for this control to do,
+            // and the only event behind it (`TapMax`) acts on the single
+            // selected token rather than on this row. The drawn form (the
+            // gallery's fixture) keeps the chip; the live one does not, which
+            // is how iOS reads it too (`FlowBodies.swift:688`).
+            val maxChip: (@Composable () -> Unit)? = if (row.max.isEmpty()) {
+                null
+            } else {
+                {
+                    Box(
+                        modifier = Modifier
+                            .background(colors.bgSunken, CircleShape)
+                            .clickable { onMax(index) }
+                            .padding(
+                                horizontal = VelaSpacing.md,
+                                vertical = VelaSpacing.xs,
+                            ),
+                    ) {
+                        Text(
+                            text = row.max,
+                            color = colors.fgBase,
+                            fontFamily = VelaFontFamily,
+                            fontWeight = VelaFontWeight.semibold,
+                            fontSize = VelaTextSize.xs,
+                        )
+                    }
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -922,25 +953,7 @@ fun SendFormBody(
                         fiat = AssetFiatModel.None,
                         masked = false,
                     ),
-                    trailing = {
-                        Box(
-                            modifier = Modifier
-                                .background(colors.bgSunken, CircleShape)
-                                .clickable { onMax(index) }
-                                .padding(
-                                    horizontal = VelaSpacing.md,
-                                    vertical = VelaSpacing.xs,
-                                ),
-                        ) {
-                            Text(
-                                text = row.max,
-                                color = colors.fgBase,
-                                fontFamily = VelaFontFamily,
-                                fontWeight = VelaFontWeight.semibold,
-                                fontSize = VelaTextSize.xs,
-                            )
-                        }
-                    },
+                    trailing = maxChip,
                 )
             }
             Spacer(modifier = Modifier.height(VelaSpacing.sm))

@@ -1,12 +1,12 @@
 # 05 — 部署手册 (Deployment Runbook)
 
-> 现状(**2026-09-11,spec 039 后**):**Web 钱包 = Cloudflare Worker `vela-wallet-web`**,由 Cloudflare 从 `app-web/vela-wallet` 自建(merge 进 main 即构建),**`wallet.getvela.app` 已于 2026-09-11 由创始人迁到该 Worker**(实测:`/` 按 Accept-Language 307 到 `/en`、`/zh`;`/en/wallet` 是 SvelteKit 页面;旧的 `/onboarding`、`/pay`、`/web-request` 均 404)。旧的 Pages 项目只剩回滚用途。官网/API 与移动端仍手动发布。`.github/workflows/ci.yml` 是合并门禁。
+> 现状(**2026-09-23 更新**):**Web 钱包 = Cloudflare Worker `vela-wallet-web`**,由 Cloudflare 从 `app-web/vela-wallet` 自建;**生产分支是 `released`,不是 `main`**(创始人已在 Cloudflare 面板改好,spec 064 §6 N1 完成)——合并进 main **不会**让网页钱包上线,它跟着发版走。**`wallet.getvela.app` 已于 2026-09-11 由创始人迁到该 Worker**(实测:`/` 按 Accept-Language 307 到 `/en`、`/zh`;`/en/wallet` 是 SvelteKit 页面;旧的 `/onboarding`、`/pay`、`/web-request` 均 404)。旧的 Pages 项目只剩回滚用途。官网/API 与移动端仍手动发布。`.github/workflows/ci.yml` 是合并门禁。
 
 ## 部署单元一览
 
 | 单元 | 产物 | 目标 | 命令 |
 | --- | --- | --- | --- |
-| Web 钱包 | `.svelte-kit/cloudflare`(Worker + 预渲染的 15 个 locale 页) | Cloudflare Worker `vela-wallet-web` = `wallet.getvela.app`(自建;自定义域名在面板配置,`wrangler.jsonc` 不记录) | merge 进 main → Cloudflare 自动执行 `pnpm build`;本地 `pnpm build && pnpm preview` 仅作验证 |
+| Web 钱包 | `.svelte-kit/cloudflare`(Worker + 预渲染的 15 个 locale 页) | Cloudflare Worker `vela-wallet-web` = `wallet.getvela.app`(自建;自定义域名在面板配置,`wrangler.jsonc` 不记录) | **快进 `released` 分支** → Cloudflare 自动执行 `pnpm build`(生产分支已设为 `released`);merge 进 main 不再触发;本地 `pnpm build && pnpm preview` 仅作验证 |
 | 官网+API | `.svelte-kit/cloudflare` | Cloudflare Workers(getvela.app) | `cd app-web/getvela.app && bun run deploy` |
 | iOS App | .ipa | App Store Connect(**不发 GitHub Releases**,spec 063) | Xcode Archive(`app-ios/VelaWallet/VelaWallet.xcodeproj`);EAS 已随 Expo 退役 |
 | Android App | .aab | Google Play(**不发 GitHub Releases**,spec 063) | `app-android/vela-wallet` 的 gradle release 构建;**签名密钥方案待创始人定**(EAS 托管 keystore 已随 Expo 退役,见 `docs/store-submission/`) |
@@ -36,8 +36,8 @@ iOS/Android 的编译与单测由 CI 的 `ios`/`android` job 跑;本地跑法见
 
 ## Web 钱包发布(Worker,自动)
 
-1. 分支上开发 → PR → CI 全绿 → merge 进 main
-2. Cloudflare 从 `app-web/vela-wallet` 自建:`pnpm build`(token 漂移检查 + wasm 同步 + worker 类型 + 预渲染全部 locale)。构建失败只在 CF 面板可见,**CI 绿 ≠ 已发布**
+1. 分支上开发 → PR → CI 全绿 → merge 进 main(**到这里网页钱包还没上线**)
+2. 发版时快进 `released`(见下面「发版步骤」)→ Cloudflare 从 `app-web/vela-wallet` 自建:`pnpm build`(token 漂移检查 + wasm 同步 + worker 类型 + 预渲染全部 locale)。构建失败只在 CF 面板可见,**CI 绿 ≠ 已发布**
 3. **Smoke Test**(Worker 的 `workers.dev` 地址;域名迁移后改用 `wallet.getvela.app`):
    - `/` 307 到某个 locale;`/en/wallet` 的 HTML 里没有 `/_expo/` 路径
    - 首屏加载、无控制台报错;创建 / 登录弹出 passkey(rpId=getvela.app)

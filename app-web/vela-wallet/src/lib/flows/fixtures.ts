@@ -67,6 +67,17 @@ export const USDT_CONTRACT_SHORT = '0xdAC1…1ec7';
 const ALICE = CONTACTS[0];
 
 const TX_HASH_RECEIVED = '0x8f3a…c21d';
+/**
+ * The same transaction, unelided, for the link.
+ *
+ * The screen shows a shortened hash and links the whole one — which is what
+ * live does (`live-detail.ts` builds the URL from `item.tx_hash` while the
+ * fact shows the short form). Without it these boards drew the explorer CTA
+ * in its DISABLED state, which is a state live reaches only when there is no
+ * hash at all: a picture of something that cannot happen.
+ */
+const TX_HASH_RECEIVED_FULL = '0x8f3a1c04bd9e5f7a2b6c8d0e4f1a3b5c7d9e0f2a4b6c8d0e2f4a6b8c0d2e4c21d';
+const EXPLORER_TX_URL = `https://gnosisscan.io/tx/${TX_HASH_RECEIVED_FULL}`;
 const TX_HASH_SENT = '0x3c2d…8e1f';
 
 /**
@@ -453,7 +464,8 @@ function txDetail(
 		fiat: kind === 'received' ? '≈ $120.00' : '≈ $0.98',
 		positive: kind === 'received',
 		facts,
-		viewOnExplorer: m['history.viewOnExplorer']
+		viewOnExplorer: m['history.viewOnExplorer'],
+		explorerUrl: EXPLORER_TX_URL
 	};
 }
 
@@ -530,7 +542,9 @@ function tokenDetail(m: WalletFlowMessages): TokenDetailModel {
 				badgeColor: CHAIN_COLORS.polygon
 			}
 		],
-		viewOnExplorer: m['tokenDetail.viewOnExplorer']
+		viewOnExplorer: m['tokenDetail.viewOnExplorer'],
+		// A token page, the way live links one.
+		explorerUrl: 'https://gnosisscan.io/token/0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0'
 	};
 }
 
@@ -1184,6 +1198,7 @@ function sendReceipt(
 			copyLabel: m['componentsUi.identiconViewer.copyAddress']
 		},
 		viewOnExplorer: m['history.viewOnExplorer'],
+		explorerUrl: EXPLORER_TX_URL,
 		cta: m['componentsTx.receipt.done'],
 		ctaAccent: true
 	};

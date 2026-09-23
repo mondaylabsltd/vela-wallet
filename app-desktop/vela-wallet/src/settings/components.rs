@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Stateful,
+    Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, div, px, rgb,
 };
 
@@ -152,6 +152,14 @@ pub fn settings_nav_row(
         .child(icon_img(icons, icon, false, tint, GLYPH_SM))
         .child(
             div()
+                // Truncate inside the pill rather than draw outside it. At
+                // `xlarge` the selected pill's last letter was being painted
+                // past its own white background and over the column divider;
+                // in German the whole label crossed into the panel beside it.
+                .flex_1()
+                .min_w(px(0.))
+                .whitespace_nowrap()
+                .truncate()
                 .text_size(theme::text_row_sub())
                 .text_color(tint)
                 .when(selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
@@ -262,6 +270,16 @@ pub fn dropdown_menu_picks(
 
 type PickAction = Rc<dyn Fn(usize, &mut gpui::Window, &mut gpui::App)>;
 
+/// How far a dropped menu may reach before it scrolls instead of growing.
+///
+/// The menu is absolutely positioned at its trigger row, and the window's
+/// minimum is 800pt tall, so an unbounded list runs off the bottom of the
+/// window with no way to reach what is past the edge. The format menus are
+/// three or four rows and never touch this; the currency menu is one row per
+/// priceable currency — thirty of them — and would otherwise offer fourteen
+/// codes nobody could pick.
+const MENU_MAX_H: f32 = 400.;
+
 fn menu_of(
     theme: &Theme,
     icons: &mut IconCache,
@@ -269,17 +287,17 @@ fn menu_of(
     on_pick: Option<PickAction>,
 ) -> Div {
     let hover = theme.bg_sunken;
+    // One id per menu, from the first row it draws — the same trick
+    // `key_value_row` uses, and enough because only one dropdown is open at a
+    // time and the four menus start with different words.
+    let scroller_id = SharedString::from(format!(
+        "dropdown-menu-{}",
+        rows.first().map_or("", |(label, _, _)| label.as_ref())
+    ));
     let mut col = div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .right_0()
-        .px(px(12.))
-        .rounded(px(10.))
-        .bg(theme.bg_raised)
-        .border_1()
-        .border_color(theme.divider)
-        .shadow_lg()
+        .id(ElementId::from(scroller_id))
+        .max_h(px(MENU_MAX_H))
+        .overflow_y_scroll()
         .flex()
         .flex_col();
     let last = rows.len().saturating_sub(1);
@@ -329,7 +347,20 @@ fn menu_of(
             col = col.child(div().h(px(1.)).bg(theme.divider));
         }
     }
-    col
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .px(px(12.))
+        .rounded(px(10.))
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .shadow_lg()
+        .flex()
+        .flex_col()
+        .child(col)
 }
 
 // -- SegmentedControl ---------------------------------------------------------
@@ -342,6 +373,24 @@ pub fn segmented(
     icons: &mut IconCache,
     items: &[(Option<Icon>, gpui::SharedString)],
     selected: usize,
+) -> Div {
+    segmented_cells(theme, icons, items, selected, &mut |_, cell| {
+        cell.into_any_element()
+    })
+}
+
+/// The same control, with each cell handed to the caller before it is added.
+///
+/// The drawn version above takes no handler, which is how the Appearance panel
+/// ended up showing two controls that could not be moved. A caller with a
+/// `Context` wraps each cell in `.id().on_click(...)`; the gallery passes the
+/// identity function and gets exactly the picture it always had.
+pub fn segmented_cells(
+    theme: &Theme,
+    icons: &mut IconCache,
+    items: &[(Option<Icon>, gpui::SharedString)],
+    selected: usize,
+    wrap: &mut dyn FnMut(usize, Div) -> gpui::AnyElement,
 ) -> Div {
     let mut row = div()
         .flex()
@@ -372,22 +421,36 @@ pub fn segmented(
         if let Some(icon) = *icon {
             cell = cell.child(icon_img(icons, icon, false, tint, 14.));
         }
-        row = row.child(
-            cell.child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(tint)
-                    .when(is_selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
-                    .child(label.clone()),
-            ),
+        let cell = cell.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(tint)
+                .when(is_selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
+                .child(label.clone()),
         );
+        row = row.child(wrap(i, cell));
     }
     row
 }
 
-/// A ——●—— A. The desktop mock draws seven stops with the thumb on the fourth;
-/// this is a picture of the control, not a live one (spec 023 is UI only).
+/// A ——●—— A, drawn only. The gallery still wants the picture; a real session
+/// uses [`text_scale_stops`] so the thumb can be moved.
 pub fn text_scale(theme: &Theme, steps: usize, index: usize) -> Div {
+    text_scale_stops(theme, steps, index, &mut |_, stop| stop.into_any_element())
+}
+
+/// The same control, with each stop handed to the caller first — the live
+/// panel wraps them in `.id().on_click(...)`.
+///
+/// The stop keeps a 20px-tall hit area whatever its dot is: a 4px target is
+/// not a target. The dots themselves stay the mock's two sizes, because the
+/// thumb has to read as the thumb at a glance.
+pub fn text_scale_stops(
+    theme: &Theme,
+    steps: usize,
+    index: usize,
+    wrap: &mut dyn FnMut(usize, Div) -> gpui::AnyElement,
+) -> Div {
     let mut track = div()
         .flex_1()
         .h(px(20.))
@@ -395,11 +458,19 @@ pub fn text_scale(theme: &Theme, steps: usize, index: usize) -> Div {
         .items_center()
         .justify_between();
     for i in 0..steps {
-        track = track.child(if i == index {
+        let dot = if i == index {
             div().size(px(16.)).rounded_full().bg(theme.fg_muted)
         } else {
             div().size(px(4.)).rounded_full().bg(theme.outline_strong)
-        });
+        };
+        let stop = div()
+            .h(px(20.))
+            .w(px(20.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(dot);
+        track = track.child(wrap(i, stop));
     }
     div()
         .w_full()
@@ -782,7 +853,15 @@ pub fn storage_bar(theme: &Theme, segments: &[(f32, u32)]) -> Div {
 /// One storage group. The group label carries the consequence — "清除后无法
 /// 找回" against "清除后自动重建" — which is why the same word 清除 is red in
 /// the first group and plain in the second.
-pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
+/// `on_clear` is what a row's 清除 DOES. Absent — the gallery, and a signed-out
+/// page with nothing measured — the word stays a label and the row keeps no
+/// pointer: eight rows each ending in a red 清除 that did nothing was this
+/// page until 2026-09-23.
+pub fn storage_group(
+    theme: &Theme,
+    group: &StorageGroup,
+    on_clear: Option<Rc<dyn Fn(&'static str, &mut gpui::Window, &mut gpui::App)>>,
+) -> Div {
     let mut col = div().flex().flex_col().pt(px(16.)).child(
         div()
             .pb(px(4.))
@@ -824,8 +903,18 @@ pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
                         )
                         .child(
                             div()
+                                .id(ElementId::from(SharedString::from(format!(
+                                    "storage-clear-{}",
+                                    item.id
+                                ))))
                                 .text_size(theme::text_row_sub())
                                 .text_color(action_tint)
+                                .when_some(on_clear.clone(), |el, act| {
+                                    let id = item.id;
+                                    el.cursor_pointer()
+                                        .hover(move |el| el.opacity(0.7))
+                                        .on_click(move |_, window, cx| act(id, window, cx))
+                                })
                                 .child(item.action.clone()),
                         ),
                 )
@@ -839,6 +928,10 @@ pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
 
 /// DST8's technical-detail and link rows: label at the start, value at the end,
 /// mono where the value is an identifier, external glyph where it is a place.
+/// `link` is what an external row DOES. A row wearing the external-link glyph
+/// and opening nothing is the worst of both: it advertises a place and then
+/// refuses to go there. Where there is no link the row keeps the house rule and
+/// drops the pointer and the hover, so it reads as text rather than a control.
 pub fn key_value_row(
     theme: &Theme,
     icons: &mut IconCache,
@@ -846,7 +939,11 @@ pub fn key_value_row(
     value: gpui::SharedString,
     mono: bool,
     external: bool,
+    link: Option<gpui::SharedString>,
 ) -> Div {
+    // A stable id per row, from the label it draws. gpui needs one before the
+    // row can take a click at all, and the labels on this page are unique.
+    let label_id = SharedString::from(format!("settings-kv-{label}"));
     let mut row = div()
         .flex()
         .items_center()
@@ -887,6 +984,14 @@ pub fn key_value_row(
             14.,
         ));
     }
+    let hover = theme.bg_sunken;
+    let row = row
+        .id(ElementId::from(label_id))
+        .when_some(link, |el, url| {
+            el.cursor_pointer()
+                .hover(move |el| el.bg(hover))
+                .on_click(move |_, _, cx| cx.open_url(&url))
+        });
     div()
         .flex()
         .flex_col()

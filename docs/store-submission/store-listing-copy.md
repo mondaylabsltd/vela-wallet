@@ -2,13 +2,14 @@
 
 Grounded in real product facts — **re-checked 2026-09-22 by spec 080**: 24 built-in networks (`rust/crates/vela-core/src/app/network_admin.rs` `BUILTIN_CHAINS`); ERC-7730 clear signing shipped; dApps connect through an injected provider (extension + in-app browsers) — **WalletPair was dropped**, and there is no Bluetooth; Safe v1.4.1 + ERC-4337 + one to seven passkeys or security keys. Brand voice matches getvela.app ("An Ethereum wallet you actually own." / "A wallet that does less — on purpose."). *"Your keys. Your face." was retired 2026-09-15 by spec 059 — if it still appears in a submitted listing, it is stale copy.*
 
-**Red lines respected:** no "audited"/"audit planned" claims (open-source = *anyone can inspect the code*, not a third-party audit); no "beta/alpha"; no price/exchange/ROI claims; no fiat on-ramp/trading claims; dApp Connect described as QR/relay, not Bluetooth.
+**Red lines respected:** no "audited"/"audit planned" claims (open-source = *anyone can inspect the code*, not a third-party audit); no "beta/alpha"; no price/exchange/ROI claims; no fiat on-ramp/trading claims; dApp connection described as the app's own browser injecting a provider — never as QR pairing, a relay, WalletConnect or Bluetooth.
 
 > **Before submitting — corrections from spec 080 (2026-09-22).** The listings below were drafted before several product changes. Fix these in every language first; [`specs/080-site-content-accuracy/claim-ledger.md`](../../specs/080-site-content-accuracy/claim-ledger.md) has the canonical wording.
 > - "sign with your face or fingerprint" / "a passkey stored in your device's secure hardware": a key can be a synced passkey (held by the password manager, not confined to secure hardware), another phone, or a hardware security key; face/fingerprint/PIN only *unlock* it (C-keys-2, C-auth-1).
 > - "Your passkey is backed up by iCloud/Google, so you can sign in on a new device": recovery is signing in with any of up to seven founding keys, found through the on-chain registry (C-keys-1, C-sync-1).
 > - "No tracking": the website uses cookieless analytics and the relay logs operations for a limited time; say what the privacy policy says.
 > - Network count is now 24 (fixed below).
+> - "Pair with desktop dApps by scanning a QR code": WalletPair was never built. dApps connect through the provider injected by the app's own browser (and by the Chrome extension); there is no pairing step and no WalletConnect (C-dapp-1). **Fixed below in en and zh — check the other languages before submitting.**
 
 Field character limits noted as `(≤N)`. Counts verified for the English fields.
 
@@ -49,7 +50,7 @@ LOSE YOUR PHONE? KEEP YOUR WALLET.
 Cross-device recovery is built in. Your passkey is backed up by iCloud, so you can sign in on a new device — no seed phrase, no support ticket.
 
 CONNECT TO APPS
-Pair with desktop dApps by scanning a QR code. Review and approve every request right from your phone.
+Open a web3 app in Vela's own browser. Every request is decoded and shown to you before you approve it with your key.
 
 ON-CHAIN PRICING
 Prices come straight from on-chain DEX quotes with a Chainlink oracle fallback — no third-party price API watching your portfolio.
@@ -101,7 +102,7 @@ LOSE YOUR PHONE? KEEP YOUR WALLET.
 Cross-device recovery is built in. Your passkey is backed up by Google, so you can sign in on a new device — no seed phrase, no support ticket.
 
 CONNECT TO APPS
-Pair with desktop dApps by scanning a QR code. Review and approve every request from your phone.
+Open a web3 app in Vela's own browser. Every request is decoded and shown to you before you approve it with your key.
 
 ON-CHAIN PRICING
 Prices come from on-chain DEX quotes with a Chainlink oracle fallback — no third-party price API watching your portfolio.
@@ -148,7 +149,7 @@ Vela 是面向以太坊及 EVM 网络的自我托管加密钱包。私钥由你�
 内置跨设备恢复。通行密钥由 iCloud / Google 备份,换新设备直接登录 —— 不需要助记词,也不用联系客服。
 
 连接 dApp
-扫码即可与桌面 dApp 配对,在手机上审阅并批准每一次请求。
+在 Vela 自带的浏览器里打开 web3 应用。每一次请求都先解码给你看,再由你用钥匙批准。
 
 链上报价
 价格直接来自链上 DEX 报价,并以 Chainlink 预言机兜底 —— 没有第三方报价接口窥探你的资产。

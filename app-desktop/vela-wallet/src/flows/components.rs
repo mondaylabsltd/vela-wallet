@@ -294,13 +294,17 @@ pub fn flow_search(theme: &Theme, icons: &mut IconCache, placeholder: SharedStri
 /// into named halves and fills its width; this is a row of independent
 /// narrowings that hugs its labels.
 pub fn filter_chips(theme: &Theme, chips: &[FilterChip]) -> Div {
-    // No wrap: the strip clips at the column edge the way DSD1L draws it. A
-    // second line of chips pushes the list down and changes the panel's shape
-    // depending on how long a locale's words are.
+    // No wrap WITHIN the strip: a second line of chips pushes the list down
+    // and changes the panel's shape depending on how long a locale's words
+    // are. The strip keeps its own width (`flex_initial`, not `flex_1`) so
+    // the row above can wrap the network pill below it instead of letting the
+    // pill overlap the last chip; `min_w`/`overflow_hidden` still clip as a
+    // last resort, for the locale whose three chips alone are wider than the
+    // column.
     let mut row = div()
         .flex()
         .gap(px(6.))
-        .flex_1()
+        .flex_initial()
         .min_w(px(0.))
         .overflow_hidden();
     for chip in chips {

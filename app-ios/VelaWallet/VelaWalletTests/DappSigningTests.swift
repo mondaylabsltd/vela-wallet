@@ -735,7 +735,7 @@ struct SigningLiveTests {
             )
         }
         func feeValue(_ model: SigningModel) -> String? {
-            if case .onchain(_, let value, _, _) = model.fee { return value }
+            if case .onchain(_, let value, _, _, _) = model.fee { return value }
             return nil
         }
 
@@ -798,7 +798,7 @@ struct SigningLiveTests {
             stale: false, feeToken: nil, options: [eth, usdt], confirmFeeReady: false
         )
         let closed = SigningLive.feeModel(clear: clear(surface: .clearSign), fee: fee, context: context())
-        guard case .onchain(_, _, let shut, let warning) = closed else {
+        guard case .onchain(_, _, let shut, let warning, _) = closed else {
             Issue.record("a transaction's fee row is on-chain")
             return
         }
@@ -807,7 +807,7 @@ struct SigningLiveTests {
 
         var ctx = context()
         ctx.feeOpen = true
-        guard case .onchain(_, _, let open?, _) = SigningLive.feeModel(
+        guard case .onchain(_, _, let open?, _, _) = SigningLive.feeModel(
             clear: clear(surface: .clearSign), fee: fee, context: ctx
         ) else {
             Issue.record("an open list with two coins is drawn")
@@ -832,7 +832,7 @@ struct SigningLiveTests {
             options: [eth, usdt], confirmFeeReady: false
         )
         for view in [paid, busy] {
-            if case .onchain(_, _, _, let none) = SigningLive.feeModel(
+            if case .onchain(_, _, _, let none, _) = SigningLive.feeModel(
                 clear: clear(surface: .clearSign), fee: view, context: ctx
             ) {
                 #expect(none == nil)

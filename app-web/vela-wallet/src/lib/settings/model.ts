@@ -685,6 +685,13 @@ export interface EthereumBackupRowModel {
 	subtitle: string;
 	tone: 'neutral' | 'positive' | 'caution';
 	actionable: boolean;
+	/**
+	 * The action is "ask again", not "do the backup". Only `could_not_check`:
+	 * a person tapping there wants another attempt, which is what the founder
+	 * ruled on 2026-09-23. Android draws the same distinction with
+	 * `RowTrailing.Retry`.
+	 */
+	retry?: boolean;
 }
 
 /**

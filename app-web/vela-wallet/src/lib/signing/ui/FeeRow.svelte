@@ -58,11 +58,22 @@
 			{/each}
 		</section>
 	{:else}
-		<button type="button" class="row" onclick={ontoggle}>
-			<span class="label">{fee.label}</span>
-			<span class="value">{fee.value}</span>
-			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-		</button>
+		{#if fee.tappable}
+			<button type="button" class="row" onclick={ontoggle}>
+				<span class="label">{fee.label}</span>
+				<span class="value">{fee.value}</span>
+				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+			</button>
+		{:else}
+			<!-- One coin, and a quote in hand: there is nothing to choose and
+			     nothing to ask again, so this is the fee STATED. No chevron, no
+			     pointer, no press — the house rule that a control which cannot act
+			     is not drawn as one (spec 081, dead-controls #6). -->
+			<div class="row stated">
+				<span class="label">{fee.label}</span>
+				<span class="value">{fee.value}</span>
+			</div>
+		{/if}
 		{#if fee.speed}
 			<FeeSpeedRow speed={fee.speed} ontoggle={onspeed} onselect={onspeedpick} />
 		{/if}
@@ -95,6 +106,10 @@
 		color: var(--color-fg-muted);
 		cursor: pointer;
 		text-align: start;
+	}
+
+	.row.stated {
+		cursor: default;
 	}
 
 	.label {

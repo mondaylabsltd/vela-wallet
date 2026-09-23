@@ -85,7 +85,11 @@
 			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 		</a>
 	{:else}
-		<button type="button" class="explorer">
+		<!-- A custom chain whose entry names no explorer: there is no page to
+		     open. This carried no handler at all and was still drawn as the link
+		     beside it, chevron and pointer included (spec 081, dead-controls
+		     #18). Now it says the same words in the system's unavailable look. -->
+		<button type="button" class="explorer" disabled>
 			<span>{panel.viewOnExplorer}</span>
 			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 		</button>
@@ -230,6 +234,12 @@
 		color: var(--color-fg-muted);
 		cursor: pointer;
 		text-decoration: none;
+	}
+
+	/* The system's one look for an action that is not available. */
+	.explorer:disabled {
+		opacity: var(--opacity-disabled);
+		cursor: default;
 	}
 
 	.explorer:hover {

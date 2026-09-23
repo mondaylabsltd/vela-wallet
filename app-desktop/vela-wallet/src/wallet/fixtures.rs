@@ -109,6 +109,14 @@ pub enum StatusKind {
 #[derive(Clone)]
 pub struct BalanceModel {
     pub label: SharedString,
+    /// The code the figure is actually drawn in — `总余额 · ZAR`.
+    ///
+    /// Carried rather than assumed: the hero used to write `· USD` verbatim, so
+    /// a wallet converted to ZAR said `总余额 · USD` over `ZAR 157.34`. It is
+    /// [`crate::wallet::live::Money`]'s EFFECTIVE code, which is USD whenever
+    /// the rate is missing — the label and the figure then agree, because the
+    /// figure is dollars too.
+    pub currency: SharedString,
     pub state: BalanceState,
     pub integer: SharedString,
     pub decimals: Option<SharedString>,
@@ -123,6 +131,7 @@ pub const BALANCE_MASK: &str = "••••••";
 pub fn balance_default(s: &WalletStrings) -> BalanceModel {
     BalanceModel {
         label: s.total_balance.clone(),
+        currency: "USD".into(),
         state: BalanceState::Normal,
         integer: "$1,383".into(),
         decimals: Some("28".into()),
@@ -137,6 +146,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
         balance_default(s),
         BalanceModel {
             label: s.total_balance.clone(),
+            currency: "USD".into(),
             state: BalanceState::ZeroLive,
             integer: "$0".into(),
             decimals: Some("00".into()),
@@ -145,6 +155,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
         },
         BalanceModel {
             label: s.total_balance.clone(),
+            currency: "USD".into(),
             state: BalanceState::Loading,
             integer: "".into(),
             decimals: None,
@@ -153,6 +164,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
         },
         BalanceModel {
             label: s.total_balance.clone(),
+            currency: "USD".into(),
             state: BalanceState::Hidden,
             integer: BALANCE_MASK.into(),
             decimals: None,
@@ -161,6 +173,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
         },
         BalanceModel {
             label: s.total_balance.clone(),
+            currency: "USD".into(),
             state: BalanceState::Normal,
             integer: "$1,383".into(),
             decimals: Some("46".into()),
@@ -169,6 +182,7 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
         },
         BalanceModel {
             label: s.total_balance.clone(),
+            currency: "USD".into(),
             state: BalanceState::Normal,
             integer: "$1,383".into(),
             decimals: Some("28".into()),

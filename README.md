@@ -82,7 +82,7 @@ and shipped: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | [`rust/`](rust/README.md) | `vela-core`: state machines, crypto, ABI, WebAuthn/CTAP, i18n; UniFFI and wasm bindings | `cargo test --workspace --features vela-core/i18n-all` in `rust/` |
 | [`app-desktop/vela-wallet`](app-desktop/vela-wallet/README.md) | Desktop app on gpui (macOS, Windows, Linux) | `cargo run` |
 | [`app-web/vela-wallet`](app-web/vela-wallet/README.md) | Web wallet and the Chrome extension | `pnpm install && pnpm dev` |
-| [`app-ios/VelaWallet`](app-ios/VelaWallet) | iOS app, SwiftUI | `./rust/scripts/build-ios-xcframework.sh`, then Xcode |
+| [`app-ios/VelaWallet`](app-ios/VelaWallet) | iOS app, SwiftUI | `./rust/scripts/build-ios-xcframework.sh`, then Xcode — and `./rust/scripts/check-ios-core-fresh.sh` before any device test, because `xcodebuild` never rebuilds the Rust |
 | [`app-android/vela-wallet`](app-android/vela-wallet) | Android app, Jetpack Compose | generate the bindings ([ci.yml](.github/workflows/ci.yml) `android`), then `./gradlew :app:installDebug` |
 | [`app-web/getvela.app`](app-web/getvela.app) | The website and the user docs | `bun install && bun run dev` |
 | [`app-web/clearsigning`](app-web/clearsigning/README.md) | Standalone signing page, zero build | `python3 -m http.server`, or open `index.html` |
@@ -165,9 +165,11 @@ spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-a
 ```
 
 **Windows** — the installer is not code-signed, and an attestation does not
-change that: SmartScreen still says "Windows protected your PC" once (**More
-info → Run anyway**). Verifying the attestation is what actually tells you the
-file is ours; the prompt is about a certificate we have not bought.
+change that: SmartScreen says "Windows protected your PC" once (**More info →
+Run anyway**). That prompt is permanent. We decided against buying a
+code-signing certificate: it removes a warning without making the file any more
+genuine, and what actually tells you the file is ours is the attestation above,
+which you can check yourself and we cannot forge.
 
 Attestations begin with the first release built after this landed; earlier
 packages have their checksums only.

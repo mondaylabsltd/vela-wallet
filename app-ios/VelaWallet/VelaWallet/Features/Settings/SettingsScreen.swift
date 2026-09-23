@@ -17,6 +17,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// The endpoints and providers pages' live half (spec 056 US2). Eleven events
 /// the executor has answered since 050 and nothing had ever sent.
@@ -142,6 +143,13 @@ struct SettingsScreen: View {
                     .padding(.horizontal, Tokens.Space.s24)
                     .padding(.bottom, Tokens.Space.s32)
                 }
+                // A URL field saves when it loses focus, so there has to be a
+                // way to lose focus. Dragging the page is the one every iOS
+                // app has; without it a person who typed an endpoint and
+                // reached for the tab bar lost what they typed, because the
+                // page never blurred and the core was never told. Measured on
+                // an iPhone: `https://index.invalid`, typed, gone.
+                .scrollDismissesKeyboard(.interactively)
                 WalletTabBar(
                     tabs: model.tabs,
                     selected: model.rescue ? .wallet : .settings,
@@ -515,7 +523,15 @@ private struct AddNetworkBody: View {
                     VelaButton(title: primary, kind: .primary) { actions.onConfirmAdd() }
                 }
                 if let secondary = panel.secondary {
-                    VelaButton(title: secondary, kind: .secondary) {}
+                    // "Open chain setup tool" — the one thing the wallet just
+                    // told an incompatible chain's owner to do, and it did
+                    // nothing at all. Desktop has always opened this URL;
+                    // iOS had no such constant anywhere.
+                    VelaButton(title: secondary, kind: .secondary) {
+                        if let url = URL(string: ExternalLinks.chainSetup) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
                 }
                 if let recheck = panel.recheck {
                     Text(recheck)
@@ -538,11 +554,16 @@ private struct AddNetworkBody: View {
                 // one, racing the first.
                 .onChange(of: query) { _, value in actions.onSearch(value) }
                 ForEach(panel.results) { row in
-                    SettingsNetworkRow(row: row)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if let chainId = row.chainId { actions.onSelectChain(chainId) }
-                        }
+                    // Through the row's OWN `onTap`, not an outer gesture.
+                    // `SettingsNetworkRow` carries a `.contentShape` plus an
+                    // `.onTapGesture` that defaults to a no-op; the inner
+                    // gesture wins, so wrapping the row swallowed every tap and
+                    // a searched chain could not be opened at all. Found on a
+                    // device: six different tap shapes, none of them worked.
+                    // The Networks list has always passed `onTap` and works.
+                    SettingsNetworkRow(row: row) { _ in
+                        if let chainId = row.chainId { actions.onSelectChain(chainId) }
+                    }
                 }
             }
         }
@@ -584,6 +605,10 @@ private struct RpcProvidersBody: View {
             Text(panel.description)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.fgMuted)
+                // Same as the endpoints page: a provider key is saved on blur,
+                // so tapping the page has to blur.
+                .contentShape(Rectangle())
+                .onTapGesture { SettingsFocus.release() }
             ForEach(panel.providers) { provider in
                 VStack(alignment: .leading, spacing: Tokens.Space.s12) {
                     HStack {
@@ -596,7 +621,8 @@ private struct RpcProvidersBody: View {
                     SettingsUrlField(
                         field: provider.field,
                         text: actions.map { _ in binding(for: provider.field) },
-                        onCommit: { actions?.onBlurProvider(provider.field.id) }
+                        onCommit: { actions?.onBlurProvider(provider.field.id) },
+                        onAction: actions.map { a in { a.onTestProvider(provider.field.id) } }
                     )
                     if let support = provider.support {
                         Text(support)
@@ -604,9 +630,21 @@ private struct RpcProvidersBody: View {
                             .foregroundStyle(theme.fgSubtle)
                     }
                     if let link = provider.link {
-                        Text(link)
-                            .typeRole(Typography.label)
-                            .foregroundStyle(theme.infoBase)
+                        // It said "Get an API key →" in link blue and went
+                        // nowhere. Android has opened this URL since 046.
+                        if let url = provider.linkUrl.flatMap(URL.init(string:)) {
+                            Button { UIApplication.shared.open(url) } label: {
+                                Text(link)
+                                    .typeRole(Typography.label)
+                                    .foregroundStyle(theme.infoBase)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(.isLink)
+                        } else {
+                            Text(link)
+                                .typeRole(Typography.label)
+                                .foregroundStyle(theme.infoBase)
+                        }
                     }
                     if let actions, let test = provider.test {
                         Button { actions.onTestProvider(provider.field.id) } label: {
@@ -633,6 +671,20 @@ private struct RpcProvidersBody: View {
     }
 }
 
+/// Blur whatever is being typed into, so the field commits.
+///
+/// The fields keep their own `@FocusState` inside `SettingsUrlField`, and
+/// hoisting it into every page that holds one would thread a binding through
+/// four bodies to say one thing. Resigning first responder says it once, and
+/// the field's own `onChange(of: focused)` does the committing.
+enum SettingsFocus {
+    static func release() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
+    }
+}
+
 private struct EndpointsBody: View {
     @Environment(\.theme) private var theme
     let panel: EndpointsModel
@@ -645,6 +697,13 @@ private struct EndpointsBody: View {
             Text(panel.description)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.fgMuted)
+                // The other half of the same problem: tapping the page's own
+                // words is the obvious way to say "I'm done typing", and it
+                // did nothing at all. The fields and the button are children
+                // with gestures of their own, so this only catches the taps
+                // that would otherwise land nowhere.
+                .contentShape(Rectangle())
+                .onTapGesture { SettingsFocus.release() }
             ForEach(panel.fields) { field in
                 SettingsUrlField(
                     field: field,
@@ -828,4 +887,15 @@ private struct IndexDownScreen: View {
         }
         .background(theme.bgBase.ignoresSafeArea())
     }
+}
+
+/// The places outside the app that settings points at.
+///
+/// One list, because the same URL said twice in two files drifts: the desktop
+/// keeps its own `CHAIN_SETUP_URL` beside its self-hosting link for exactly
+/// this reason (`app-desktop/vela-wallet/src/onboarding_flow.rs`).
+enum ExternalLinks {
+    /// The page that walks somebody through deploying the missing contracts on
+    /// a chain the wallet found incompatible.
+    static let chainSetup = "https://getvela.app/chain-setup"
 }

@@ -18,9 +18,9 @@
 **红线（任何文案都不能踩，否则伤害信任）**：
 1. **不得宣称"已审计 / 审计已排期"**。Safe 合约本身经独立审计，但 Vela 自己的集成**未经第三方审计、且当前无排期**；开源 ≠ 审计。现阶段的审查 = 开源 + 社区阅读 + AI 辅助，不能等同专业审计。
 2. **不用恐吓式"Beta / 请容忍 bug"横幅**。可以坦诚 alpha 阶段、"先用小额"，但用"激进透明=可信"的方式表达，而不是免责声明。
-3. **dApp Connect 是扫码 / relay（WalletPair），不是蓝牙 / BLE**。早期 README 写过 BLE，已被 WalletPair WebSocket relay 取代，文案以此为准。
+3. **dApp 连接是注入式 provider（EIP-1193 / EIP-6963），不是配对、不是 WalletConnect、不是蓝牙**。WalletPair 从未落地（创始人裁定）；实际通路是 Chrome 扩展，以及 iOS / Android / 桌面（macOS、Windows）App 内置的浏览器。网页版钱包不连 dApp。文案以此为准（claim ledger C-dapp-1）。
 4. **不做价格 / 收益 / 交易 / 法币入金承诺**。Vela 无代币、无 on-ramp、无理财。
-5. **网络数量以 12 为准**（`src/models/chains.ts`），早期 README 写的 8 已过时。
+5. **网络数量以 24 为准**（`rust/crates/vela-core/src/app/network_admin.rs` 的 `BUILTIN_CHAINS`，全部是主网），早期写的 8 和 12 都已过时。
 6. **恢复要讲"诚实的限制"**：同时丢失设备+云端 passkey 且无其他副本 = 无法找回。这是卖点不是软肋——把它讲成"我们连帮你找回的能力都没有，所以也没人能偷"。
 
 ---
@@ -123,11 +123,11 @@
 
 **7. 每个钱包都是真正的 Safe 智能账户（v1.4.1）。** 基于久经考验、管理着数十亿美元资产的 Safe 合约 + ERC-4337。→ 借用 Safe 的品牌与安全资产为新钱包背书，降低"新项目不敢用"的顾虑。
 
-**8. 12 条网络，一个地址。** Ethereum、Base、Arbitrum、Optimism、Polygon、BNB、Avalanche、Gnosis、Unichain、Tempo、Monad、World Chain + 自定义网络，地址完全相同（`src/models/chains.ts`）。→ "记一个地址，收所有链。"主打多链用户的便利与心智简化。
+**8. 24 条网络，一个地址。** Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume、XRPL EVM + 自定义网络，地址完全相同（`rust/crates/vela-core/src/app/network_admin.rs`）。→ "记一个地址，收所有链。"主打多链用户的便利与心智简化。
 
 **9. 没有代币，Web 版免费。** "There is nothing to buy, farm, or speculate on."（whitepaper）→ 在充斥 token 套路的赛道里，"无代币"本身是信任信号；强调激励对齐，不会割你。⚠️ 商业模型更正（2026-07-02）：Web 免费即用；iOS/Android 商店版为**付费下载**（定价待定）——对外话术不可写 "free app"，可写 "free on web / no token"。
 
-**10. 浏览器即用，无需下载。** 同一套代码跑 iOS / Android / Web，Web 端打开链接就能用。→ 把"试用门槛"降到零，是投放落地页/Product Hunt 的转化利器："Try it now, no install."
+**10. 浏览器即用，无需下载。** 网页版打开链接就能用；iOS / Android / 桌面是各自的原生 App，共用同一个 Rust 核心。→ 把"试用门槛"降到零，是投放落地页/Product Hunt 的转化利器："Try it now, no install."
 
 **11. 丢手机，钱包还在。** passkey 经 iCloud Keychain / Google Password Manager 同步，新设备同账号登录即恢复（`docs/recovery.md`）。→ 主动回答用户最大的恐惧问题"丢手机怎么办"，把无助记词从"风险"转成"放心"。
 
@@ -179,7 +179,7 @@
 
 **33. 公私钥分离的恢复设计：任一半都动不了你的钱。** 链上公钥让任何新安装能"找到"你的账户，平台同步的私钥才能"授权"（`docs/recovery.md` Callout）。→ 把恢复机制讲成"两把锁"，既安全又好懂。
 
-**34. 一套代码三端一致体验。** 平台差异全收敛在 `src/services/platform.ts`（Alert/Clipboard/Haptics/Linking）。→ "iOS、Android、Web 体验一致"是给跨设备用户的承诺，也是给开发者看的工程品味。
+**34. 一个核心、四个原生壳，行为一致。** 每条动钱、签名、RPC、联系人规则都是 `rust/crates/vela-core` 里的 Crux 状态机，四个壳（SvelteKit / gpui / SwiftUI / Compose）只负责渲染与执行副作用。→ "四端表现一致"是给跨设备用户的承诺，也是给开发者看的工程品味——不是一套 UI 代码硬跑四个平台，而是同一份判断。
 
 **35. 签名记录可只读"回放"。** 在 Connections 里点历史签名，会用同一个 SigningSheet 只读重现当时看到的意图与字段（`SigningReplaySheet.tsx`）。→ "你签过的每一笔，事后都能原样复盘"，审计感拉满。
 
@@ -209,13 +209,13 @@
 
 **46. 入账实时检测 + 触觉提醒。** transfer-monitor 发现到账并持久化，付款类活动是首页一等公民（`activity.ts`、README "Deposit detection"）。→ "钱到账，手机轻轻一震"——做成体验亮点短视频，情绪价值高。
 
-**47. 高级品质的自定义交互，而非系统默认。** 品牌化下拉刷新 `VelaRefresh`（手势跟随+SVG 弧线+触觉）、滑动确认 `SlideToConfirmButton`（防误触大额）（`src/components/ui/`）。→ "每个交互都为品牌重做"，对标大厂级打磨，做 UI/UX 种草内容。
+**47. 高级品质的自定义交互，而非系统默认。** 滑动确认（防误触大额，`SlideToConfirmView.swift` 及各壳对应实现、语料键 `slideToConfirm`）、自绘的下拉刷新与触觉反馈，每个壳用本平台的手势/动画 API 各自实现。→ "每个交互都为品牌重做"，对标大厂级打磨，做 UI/UX 种草内容。
 
 **48. 滑动确认防手滑误签。** 危险级签名/向陌生地址转账用拖动确认（Coinbase/Revolut 风格），armed 时轻触觉、成功时成功触觉。→ "大额操作，刻意让你多一个动作"，安全与体验兼顾。
 
 **49. 金额永不折行的动态显示。** `AmountText`：自适应缩放→紧凑记数（$1.23M）→整数大/小数小双层排版（`docs/dynamic-amount-display.md`）。→ "再大再小的数字都好看好读"，细节控的种草点。
 
-**50. 文字可缩放 0.85×–1.28×，无障碍友好。** 全局 `useStyles` 即时重算样式，切换无闪烁（`docs/text-scale-architecture.md`）。→ 面向老年/视障/无障碍合规，是商店审核与 ESG 叙事加分项。
+**50. 文字可缩放 0.82×–1.35×（六档），无障碍友好。** compact 0.82 / small 0.91 / standard 1.00 / comfortable 1.10 / large 1.22 / xlarge 1.35，切换无闪烁（token `core.textScale` 在 `docs/design-tokens.json`；网页档位表在 `app-web/vela-wallet/src/app.html`）。→ 面向老年/视障/无障碍合规，是商店审核与 ESG 叙事加分项。
 
 **51. 温暖精确的设计语言。** 暖中性底色 `#FAFAF8` + 单一橙色强调 `#E8572A`，靠阴影而非边框分层，4px 栅格（`docs/design-system.md`）。→ "不像冷冰冰的加密 App"——视觉差异化，吸引非极客人群。
 
@@ -223,7 +223,7 @@
 
 **53. EIP-5792 批量调用（wallet_sendCalls）原生支持。** dApp 可一次性请求多步操作（`use-dapp-signing.ts`、walletpair capabilities）。→ 面向 DeFi 重度用户/dApp 开发者的兼容性卖点。
 
-**54. 桌面 dApp 扫码即连，手机审批。** WalletPair WebSocket relay，前后台/断网自动重连、25s 心跳（`walletpair-transport.ts`）。→ "桌面操作，手机把关"，对 DeFi 玩家很实用；强调连接稳定性。
+**54. App 内置 dApp 浏览器，所见即所签。** iOS / Android / 桌面（macOS、Windows）自带浏览器注入 EIP-1193 / 6963 provider，请求先模拟、再清晰签名、再过授权守卫，最后才弹 passkey（`app-desktop/vela-wallet/src/webview.rs`、spec 044 / 053）。→ "不用跳出去，也不用配对"，对 DeFi 玩家很实用；强调一条签名通路。
 
 **55. 法币显示按地区本地化。** Chainlink 法币喂价（16 种：EUR/GBP/JPY/CNY/KRW…）+ 可配置 FX 端点（默认 Frankfurter/ECB），数字/日期/时间用显式格式预设（`fiat-rates.ts`、`currency.ts`）。→ "看到的是你熟悉的货币和写法"，多市场转化友好。
 
@@ -281,7 +281,7 @@
 
 **80. i18n key 类型化、编译期校验。** `i18next.d.ts` 增强，写错 key 直接 `tsc` 报错（`docs/localization.md`）。→ "翻译不会漏不会错"的质量保证，给本地化合作方信心。
 
-**81. ~600 个 key × 15 语言 100% 对齐，脚本守门。** parity-check 检查缺失/多余/占位符（`docs/localization.md`）。→ 本地化工程化程度，国际化叙事支撑。
+**81. 1605 个 key × 15 语言 100% 对齐，脚本守门。** 语料在 `rust/crates/vela-core/i18n/locales/`，`scripts/verify-i18n-parity.mjs` 拿 pinned `i18next` 当预言机逐键比对，CI 要求零 diff。→ 本地化工程化程度，国际化叙事支撑。
 
 **82. clear-signing 覆盖大量 ERC-7730 描述符。** 通用 ERC 标准 ERC-20/721/4626/2612/7540 + 链特定与 EIP-712 描述符，无匹配则显式盲签警告（`docs/clear-signing-design.md`）。→ "覆盖广、且诚实地承认覆盖不到的"。
 
