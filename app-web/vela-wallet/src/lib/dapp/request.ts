@@ -129,10 +129,10 @@ export function encode(payload: DpermRespondPayload): unknown {
 		case 'permissions':
 			// EIP-2255's shape.
 			return payload.granted ? [{ parentCapability: 'eth_accounts' }] : [];
-		case 'error':
 		default:
-			// The core never answers a question with an `Error` payload — a refusal
-			// arrives as its own outcome. Defensive tail.
+			// A refusal arrives as its own outcome, never as a payload — the
+			// `Error` variant went with the browser half (spec 070 T063).
+			// Defensive tail.
 			return null;
 	}
 }

@@ -39,6 +39,7 @@ import init, {
 	CreateWalletCore,
 	DappPermissionsCore,
 	DappSessionCore,
+	dpermSettleOnClose,
 	DisplayCurrencyCore,
 	ExtCacheCore,
 	FeePolicyCore,
@@ -130,6 +131,9 @@ export { identiconNormalizeSeed, identiconSvgCircular };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
 export { registryBackupStep, registryNameStep, walletKeysStep };
+// How a pending request is settled when the request window goes away: 4900,
+// never 4001 (spec 070 T063). The window asks rather than restating it.
+export { dpermSettleOnClose };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 export { registryResolveKeyStep, registryResolveUnitStep };
 // Settings' shared rules (spec 072): how every shell's preference spellings

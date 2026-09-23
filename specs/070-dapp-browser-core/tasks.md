@@ -51,7 +51,26 @@ Legend: `[P]` parallelisable, `[USn]` user story. Paths are repo-relative.
 - [x] T060 esbuild entry → core `provider/inpage.js`; `protocol.js` constants pinned by test; `eth_coinbase` / `wallet_revokePermissions` in the table; stale 4001 comments fixed
 - [x] T061 web unit test: `classifyMethod` vs `dappRpcClassify` (wasm) over every method name either side knows
 - [x] T062 extension e2e — 23/23 on chromium. SC-305 had been failing on `main` too: the storage row's confirm sheet (spec 058) was untitled, so it never named the site, and the test predated the sheet; both fixed
-- [ ] T063 Delete the browser half of `dapp_permissions` — **deferred**: every in-app browser is off it, but the web wallet's own connect flow (`src/lib/dapp/core/dperm-connect.ts`: `provider_request`, `navigation_started`, `browser_closed`) still drives it. Moving that flow onto `dapp_browser` is its own change. `docs/dapp-browser/ARCHITECTURE.md` rewritten (done)
+- [x] T063 Delete the browser half of `dapp_permissions` — done 2026-09-23. The
+  machine went from 1,533 lines to 865 and its suite from 46 cases to 23; nine
+  events, fifteen functions, four operations and eleven model fields went with
+  the in-app browser consent flow, which every shell had already left for
+  `dapp_browser`.
+
+  The web request window was the last thing holding it, and it was holding it
+  by IMPERSONATION: `provider_request` + a grant read to reach a consent sheet,
+  `navigation_started` to make a grant store notice an origin, `browser_closed`
+  to read a constant back — a window with no tab, no document and no navigation
+  pretending to be a browser. It has three first-class entries now
+  (`PopupApproved`, `PopupAccountSwitch`, `settle_on_close`), which is what it
+  was always asking for, and the deleted half took six refusal reasons and an
+  error payload the window could never raise with it.
+
+  Originally written as "move that flow onto `dapp_browser`". It is not there:
+  `dapp_browser` is keyed by tab, document and request id, and a one-shot
+  window has none of the three. The goal the task names — ONE browser decision
+  path — is met either way.
+  ~~**deferred**~~: every in-app browser is off it, but the web wallet's own connect flow (`src/lib/dapp/core/dperm-connect.ts`: `provider_request`, `navigation_started`, `browser_closed`) still drives it. Moving that flow onto `dapp_browser` is its own change. `docs/dapp-browser/ARCHITECTURE.md` rewritten (done)
 - [x] T064 CI pre-push checklist: i18n vectors (no diff), rustfmt in `rust/` and the desktop, `build-web.mjs --check` after the rebuild, Swift wires (iOS suite green)
 
 ## What the owner's device pass reported, and where it went

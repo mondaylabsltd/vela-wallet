@@ -73,6 +73,22 @@ final class BrowserController {
     /// The engine in front of the person, if a tab with a page is selected.
     /// For DRAWING only: nothing on the page channel ever falls back to it.
     private(set) var current: BrowserEngine?
+
+    /// Whether the person has ASKED for a page this run (2026-09-23).
+    ///
+    /// Tabs survive a launch, and restoring one is right — landing inside it
+    /// is not. The owner opened 探索 on an iPhone and a page from a previous
+    /// session loaded itself: a tab kept from two days earlier, at a
+    /// `127.0.0.1` address that is nothing on this device now, so the browser
+    /// opened onto an error nobody asked for. Android lands on the start page
+    /// with the same tab waiting in the strip, which is what a person means by
+    /// a browser they have not opened yet.
+    ///
+    /// So `reconcile` will not MINT an engine until one of the three ways a
+    /// person asks for a page has happened: an address, a tab, a site. It
+    /// still keeps and tears down the engines that already exist, because that
+    /// half is about tabs that closed.
+    private var pageWanted = false
     /// Bumped whenever an engine's navigation state changes, so SwiftUI
     /// redraws chrome that reads a non-observable engine property.
     private(set) var engineTick = 0
@@ -209,6 +225,7 @@ final class BrowserController {
     /// to open nothing at all.
     func open(_ text: String) {
         guard let url = dappBrowserInput(text: text) else { return }
+        pageWanted = true
         whenReady { [weak self] in
             guard let self else { return }
             if let selected = explore.selected {
@@ -253,7 +270,13 @@ final class BrowserController {
     }
 
     func selectTab(_ id: String) {
-        guard explore.selectedTab != id else { return }
+        // Asked for, even when it is the tab already selected: tapping a tab in
+        // the strip is how a person reaches the page a launch left dormant.
+        pageWanted = true
+        guard explore.selectedTab != id else {
+            reconcile(explore)
+            return
+        }
         exploreCore.dispatch(CoreJSON.string(["type": "tab_selected", "id": id]))
     }
 
@@ -434,6 +457,13 @@ final class BrowserController {
         }
         if let engine = engines[selected.id] {
             current = engine
+            return
+        }
+        guard pageWanted else {
+            // A restored tab, and nobody has asked for a page yet: leave it
+            // dormant and let Explore show its start page. Selecting the tab
+            // is what wakes it — see `pageWanted`.
+            current = nil
             return
         }
         let engine = makeEngine(id: selected.id)

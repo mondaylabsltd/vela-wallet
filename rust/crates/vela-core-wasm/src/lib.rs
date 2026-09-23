@@ -1600,6 +1600,18 @@ pub fn attest_safe_message_hash(
 // replays its JS table against this one so the two cannot drift.
 // ---------------------------------------------------------------------------
 
+/// How a request still pending when the request window goes away is settled,
+/// as JSON (`{"code":4900,"reason":"browser_closed"}`) — spec 070 T063.
+///
+/// 4900, never 4001: a dApp treats an explicit "user rejected" as safe to
+/// retry, which double-spends a request that may already have landed. The
+/// window asks rather than restating it.
+#[wasm_bindgen(js_name = dpermSettleOnClose)]
+pub fn dperm_settle_on_close() -> String {
+    let (code, reason) = vela_core::app::dapp_permissions::settle_on_close();
+    serde_json::json!({ "code": code, "reason": reason }).to_string()
+}
+
 /// The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
 #[wasm_bindgen(js_name = dappRpcClassify)]
 pub fn dapp_rpc_classify(method: &str) -> String {

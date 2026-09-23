@@ -3676,6 +3676,28 @@ export function derSignatureToRawLowS(der) {
 }
 
 /**
+ * How a request still pending when the request window goes away is settled,
+ * as JSON (`{"code":4900,"reason":"browser_closed"}`) — spec 070 T063.
+ *
+ * 4900, never 4001: a dApp treats an explicit "user rejected" as safe to
+ * retry, which double-spends a request that may already have landed. The
+ * window asks rather than restating it.
+ * @returns {string}
+ */
+export function dpermSettleOnClose() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.dpermSettleOnClose();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * Encode the wallet's registry metadata blob to `0x`-hex, bounded to the
  * contract's 2048-byte cap.
  * @param {RegistryMetadataInput} input

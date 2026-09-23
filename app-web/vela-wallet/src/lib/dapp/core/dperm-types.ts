@@ -51,18 +51,10 @@ export function dpermRejectMessage(reason: DpermRejectReason): string {
 			return 'Connect Vela Wallet to this site first';
 		case 'stale_authorized_address':
 			return 'The requested account is no longer authorized';
-		case 'unauthorized_frame':
-			return 'Unauthorized frame';
-		case 'no_account_available':
-			return 'No active wallet account is available';
-		case 'consent_busy':
-			return 'Another connection request is already open';
-		case 'insecure_origin':
-			return 'Signing is not available on an insecure (http) site';
-		case 'user_rejected':
-			return 'User rejected the connection';
-		case 'navigated_away':
-			return 'The page navigated away before the request finished';
+		// The six refusals an in-app browser could raise went with the browser
+		// half of `dapp_permissions` (spec 070 T063): every real browser is on
+		// `dapp_browser`, which words its own. What a request WINDOW can refuse
+		// is these three.
 		case 'browser_closed':
 		default:
 			return 'The browser closed before the request finished';

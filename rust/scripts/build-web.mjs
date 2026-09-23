@@ -46,11 +46,17 @@ const PUBLIC_DIR = join(dirname(RUST_DIR), 'assets', 'wasm');
  * once and cached immutably under its source-fingerprint name.
  */
 //
-// 4.1 MB since spec 071: the Clear Signer (request, verification, the
-// `sign_pref` machine, and the loopback connection the page's suite runs)
-// added 77 KB raw — 12 KB brotli'd (916,776 → ~929 KB on the wire). Raised
-// by a measured step, not removed: growth still has to be argued for.
-const MAX_WASM_BYTES = 4_100_000;
+// 8 MB since 2026-09-23 (owner). The previous 4.1 MB was a measured step taken
+// in spec 071 and the core had grown into it — today's build is 4,099,186
+// bytes, 814 under — so a cap that tight fails the next feature rather than a
+// regression, which is the opposite of what a guard is for.
+//
+// What that costs, plainly: this artifact ships to every web reader, fetched
+// once and cached immutably under its fingerprint name. 4 MB raw is roughly
+// 1.3 MB brotli'd; the cap no longer argues about growth until the core has
+// nearly doubled. If the wire cost matters again, the number to watch is the
+// brotli'd size, which this gate has never measured.
+const MAX_WASM_BYTES = 8_000_000;
 
 const CHECK_ONLY = process.argv.includes('--check');
 

@@ -4,4 +4,4 @@
  * Why a request was refused. Semantic — the shell owns the words; the code
  * is the core's because the code IS the behavior contract with the dApp.
  */
-export type DpermRejectReason = "unauthorized_frame" | "no_account_available" | "consent_busy" | "insecure_origin" | "user_rejected" | "navigated_away" | "browser_closed" | "not_connected" | "stale_authorized_address";
+export type DpermRejectReason = "not_connected" | "stale_authorized_address" | "browser_closed";

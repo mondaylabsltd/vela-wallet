@@ -811,6 +811,16 @@ export function decodeCalldata(sig: string, calldata: Uint8Array): AbiValue;
 export function derSignatureToRawLowS(der: Uint8Array): Uint8Array;
 
 /**
+ * How a request still pending when the request window goes away is settled,
+ * as JSON (`{"code":4900,"reason":"browser_closed"}`) — spec 070 T063.
+ *
+ * 4900, never 4001: a dApp treats an explicit "user rejected" as safe to
+ * retry, which double-spends a request that may already have landed. The
+ * window asks rather than restating it.
+ */
+export function dpermSettleOnClose(): string;
+
+/**
  * Encode the wallet's registry metadata blob to `0x`-hex, bounded to the
  * contract's 2048-byte cap.
  */
@@ -1229,6 +1239,7 @@ export interface InitOutput {
     readonly displaycurrencycore_new: () => number;
     readonly displaycurrencycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly displaycurrencycore_view: (a: number) => [number, number, number, number];
+    readonly dpermSettleOnClose: () => [number, number];
     readonly encodeRegistryMetadata: (a: any) => [number, number, number, number];
     readonly encodeSplitterDeployCall: (a: number, b: number) => [number, number, number, number];
     readonly encodeType: (a: number, b: number) => [number, number, number, number];

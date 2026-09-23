@@ -1,62 +1,68 @@
-//! Machine — per-origin dApp permissions and the in-app browser consent flow
-//! (spec `017-crux-wallet-state-complete`, inventory `### dapp_permissions (P2)`).
+//! Machine — the per-origin dApp grant store, and the request window's entries
+//! into it (spec `017-crux-wallet-state-complete`, inventory
+//! `### dapp_permissions (P2)`; narrowed to this by spec 070 T063).
 //!
 //! ```text
-//! ProviderRequest ─► grant mirror ──unknown──► ReadGrant ─► park request
-//!        │ known                                    │ GrantRead
-//!        ▼                                          ▼
-//!  decide (pure) ─► Respond / Reject / consent sheet / ForwardToSigning
-//!        │approve                        │navigation / close
-//!        ▼                               ▼
-//!  WriteGrant + audit row + responses    settle EVERYTHING with 4900 — never 4001
-//!  + accountsChanged + chainChanged
+//!  PopupRequest       ─► decide_popup_request ─► verdict on the view (pure)
+//!  PopupApproved      ─► WriteGrant + SaveConnectionRecord + Respond
+//!  PopupAccountSwitch ─► WriteGrant (re-pinned) | RemoveGrant | nothing
+//!  settle_on_close()  ─► 4900 unknown-pending, never 4001
 //! ```
 //!
-//! What converges here: today the grant-check orchestration exists three times
-//! (`browser.tsx` `onProviderRequest`, `web-request.tsx`'s popup flow, the
-//! Safari extension background) sharing pure functions but not orchestration.
-//! This core owns the one browser decision path ([`decide_browser_request`]),
-//! the popup entry's drifted variant ([`decide_popup_request`]) — kept separate
-//! and explicit so neither entry's rules silently adopt the other's — and the
-//! single method-set source of truth ([`CONNECT_METHODS`], [`SIGNING_METHODS`]).
+//! **The in-app browser consent flow is NOT here any more.** Spec 070 moved
+//! every in-app browser — Android, iOS, desktop and web — onto
+//! [`super::dapp_browser`], which owns tabs, documents, navigation, the consent
+//! sheet, the page events and the forwarding of provider traffic to signing.
+//! T063 then deleted this machine's copy of it: `ProviderRequest`,
+//! `ConsentApproved`, `ConsentRejected`, `NavigationStarted`, `BrowserClosed`,
+//! the consent queue, the parked requests, the in-flight grant reads and the
+//! connected chip are gone, with the operations only they could author
+//! (`ReadGrant`, `SettleForwarded`, `EmitEvent`, `ForwardToSigning`). Nobody
+//! should re-add them: two decision paths for one set of rules is exactly the
+//! drift spec 070 existed to end.
+//!
+//! What is left is the part no browser owns:
+//!
+//! - **the grant store's vocabulary** — [`DpermGrant`] (the `vela.perm.<origin>`
+//!   value), the store writes ([`DpermOperation::WriteGrant`],
+//!   [`DpermOperation::RemoveGrant`]) and the two pure rules that read it,
+//!   [`resolve_granted`] and [`should_drop_grant`], which `dapp_browser` and the
+//!   shells import from here so the rules exist once;
+//! - **the web request window's entries** — a one-shot window with no tab, no
+//!   document and no navigation, which owns its own grant I/O and its own
+//!   transport: it asks [`Event::PopupRequest`] for a verdict, states
+//!   [`Event::PopupApproved`] when the person presses Connect,
+//!   [`Event::PopupAccountSwitch`] when the wallet changes account, and reads
+//!   [`settle_on_close`] for the code a still-pending request is settled with;
+//! - **the origin-security helpers** — [`is_insecure_public_origin`] with its
+//!   fully-anchored IP exemptions, and [`origin_of`]. Both are imported by
+//!   `dapp_browser` / `dapp_rpc`; neither is re-implemented there.
 //!
 //! Ported line by line from:
 //!
 //! - `src/services/dapp-permissions.ts` — grant store semantics,
 //!   `resolveGranted` / `shouldDropGrant` including the load-bearing rule:
 //!   NEVER drop a grant on a cold/empty account read, or a transient empty
-//!   state logs the user out of every open dApp.
-//! - `src/services/wallet-browser-router.ts` — `classifyBrowserRequest`,
-//!   `decideBrowserRequest`, the insecure-public-http signing block with its
-//!   fully-anchored IP exemptions (`10.0.0.1.evil.com` is a public FQDN an
-//!   attacker can register and MUST NOT be exempt).
-//! - `src/app/browser.tsx:51-360` — consent queue (same-origin coalesce,
-//!   cross-origin 4001), approve/reject, `NAV_SETTLE_ERROR` (4900)
-//!   settle-on-navigation, the approve-vs-navigation guard, disconnect,
-//!   account switch re-pinning, `chainChanged` gating, `hexChainId`.
+//!   state logs the user out of every open dApp (invariant ②).
 //! - `src/app/web-request.tsx:57-250` — the popup entry's grant checks
-//!   (connect / not-connected 4100 / pinned-address 4100 / forward).
-//! - `src/services/webview-transport.ts:49-133` — the settle vocabulary
-//!   (4900 on navigate/close) and the iframe gate on forwarded traffic. The
-//!   transport instance is a live object: it never crosses the JSON boundary —
-//!   the core only names [`DpermOperation::SettleForwarded`] and the shell
-//!   applies it to the transport's pending set, which also keeps the
-//!   exactly-one-response-per-id gate where it lives today (invariant ⑩).
+//!   (connect / not-connected 4100 / pinned-address 4100 / forward), and what
+//!   its approve authors (grant, audit row, answer).
+//! - `src/services/wallet-browser-router.ts:78-118` — the insecure-public-http
+//!   classification with its fully-anchored IP exemptions
+//!   (`10.0.0.1.evil.com` is a public FQDN an attacker can register and MUST
+//!   NOT be exempt, invariant ③).
+//! - `src/app/browser.tsx:66-73` — `originOf`.
+//! - `src/services/webview-transport.ts:49-133` — the settle vocabulary: 4900
+//!   on a window going away, never 4001 (invariant ⑤).
 //!
-//! Quirks kept verbatim (all doc-marked below): `grantedAt` never participates
-//! in any decision (grants have no TTL — open question in the inventory); a
-//! request-path grant drop does not refresh the connected chip until the next
-//! navigation; the consent sheet only opens for a not-yet-granted origin, so
-//! the audit row fires once per connection, not on revisit.
+//! Quirks kept verbatim: `grantedAt` never participates in any decision (grants
+//! have no TTL — open question in the inventory); an account switch re-pins a
+//! grant's ADDRESS but never rewrites its chain, which records the chain the
+//! site connected on.
 //!
-//! Fail-closed deviations from JS (each marked at its site): requests still
-//! parked when a navigation lands are settled with the same 4900 the rest of
-//! the in-flight work gets (in TS their block-scoped continuations answered a
-//! dead document — an unobservable race, not a rule); non-http(s) URLs never
-//! become an origin; an unparseable origin is treated as insecure, exactly as
-//! the TS `catch` does.
-
-use std::collections::BTreeMap;
+//! Fail-closed deviations from JS (each marked at its site): non-http(s) URLs
+//! never become an origin; an unparseable origin is treated as insecure,
+//! exactly as the TS `catch` does.
 
 use crux_core::capability::Operation;
 use crux_core::macros::effect;
@@ -72,7 +78,7 @@ use ts_rs::TS;
 // hand-synchronized; every consumer now reads these.
 // ---------------------------------------------------------------------------
 
-/// `CONNECT_METHODS` — the only methods that may open the consent sheet.
+/// `CONNECT_METHODS` — the only methods that may ask a person to connect.
 pub const CONNECT_METHODS: [&str; 2] = ["eth_requestAccounts", "wallet_requestPermissions"];
 
 /// Methods that move value or produce a signature (`wallet-browser-router.ts:59-68`).
@@ -91,9 +97,9 @@ pub fn is_connect_method(method: &str) -> bool {
     CONNECT_METHODS.contains(&method)
 }
 
-/// The insecure-origin gate's set: [`SIGNING_METHODS`] AND anything else
-/// `dapp_rpc` calls a signature (spec 070 — the two definitions had drifted:
-/// `eth_signTypedData_v2` escaped this gate yet reached a sheet).
+/// [`SIGNING_METHODS`] AND anything else `dapp_rpc` calls a signature (spec
+/// 070 — the two definitions had drifted: `eth_signTypedData_v2` escaped the
+/// insecure-origin gate yet reached a sheet).
 pub fn is_signing_method(method: &str) -> bool {
     SIGNING_METHODS.contains(&method) || super::dapp_rpc::is_signing_method(method)
 }
@@ -103,7 +109,6 @@ pub fn is_signing_method(method: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 pub const CODE_UNAUTHORIZED: u32 = 4100;
-pub const CODE_USER_REJECTED: u32 = 4001;
 /// "Unknown-pending": the request may have landed — a dApp must NOT treat it
 /// as safe to retry (which it does with 4001).
 pub const CODE_UNKNOWN_PENDING: u32 = 4900;
@@ -114,40 +119,22 @@ pub const CODE_UNKNOWN_PENDING: u32 = 4900;
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum DpermRejectReason {
-    /// A cross-origin iframe asked for accounts/consent/signing (invariant ①).
-    UnauthorizedFrame,
-    /// Connect with no wallet account available (`browser.tsx` decide: 4001).
-    NoAccountAvailable,
-    /// A second ORIGIN collided with the open consent sheet — a page can't
-    /// queue two connect sheets (invariant ④).
-    ConsentBusy,
-    /// Signing on a public non-TLS origin (invariant ③).
-    InsecureOrigin,
-    /// The user pressed reject on the consent sheet.
-    UserRejected,
-    /// The document navigated away — `NAV_SETTLE_ERROR`, always 4900
-    /// (invariant ⑤).
-    NavigatedAway,
-    /// The browser closed with the answer still pending — 4900 for the same
-    /// double-spend reason (`webview-transport.ts:77-79`).
-    BrowserClosed,
-    /// Popup entry: a non-connect request from a never-connected origin
+    /// A non-connect request from a never-connected origin
     /// (`web-request.tsx:187`).
     NotConnected,
-    /// Popup entry: the request pinned an address that is no longer the
-    /// granted one (`web-request.tsx:190-192`).
+    /// The request pinned an address that is no longer the granted one
+    /// (`web-request.tsx:190-192`).
     StaleAuthorizedAddress,
+    /// The window closed with the answer still pending — 4900, for the
+    /// double-spend reason (`webview-transport.ts:77-79`).
+    BrowserClosed,
 }
 
 impl DpermRejectReason {
     pub fn code(self) -> u32 {
         match self {
-            Self::UnauthorizedFrame
-            | Self::InsecureOrigin
-            | Self::NotConnected
-            | Self::StaleAuthorizedAddress => CODE_UNAUTHORIZED,
-            Self::NoAccountAvailable | Self::ConsentBusy | Self::UserRejected => CODE_USER_REJECTED,
-            Self::NavigatedAway | Self::BrowserClosed => CODE_UNKNOWN_PENDING,
+            Self::NotConnected | Self::StaleAuthorizedAddress => CODE_UNAUTHORIZED,
+            Self::BrowserClosed => CODE_UNKNOWN_PENDING,
         }
     }
 }
@@ -174,47 +161,21 @@ pub struct DpermGrant {
 
 /// What a `Respond` puts on the wire. The shell encodes the JSON: `Accounts`
 /// is the address array; `Permissions` is the EIP-2255 shape
-/// (`granted ? [{parentCapability:'eth_accounts'}] : []`); `Error` is
-/// `{code, message}` with the words looked up from the reason.
+/// (`granted ? [{parentCapability:'eth_accounts'}] : []`). A refusal is not
+/// here: it arrives as [`DpermPopupOutcome::Reject`], carrying its own code.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum DpermRespondPayload {
-    Accounts {
-        addresses: Vec<String>,
-    },
-    Permissions {
-        granted: bool,
-    },
-    Error {
-        code: u32,
-        reason: DpermRejectReason,
-    },
+    Accounts { addresses: Vec<String> },
+    Permissions { granted: bool },
 }
 
-/// An EIP-1193 event pushed to the page via the bridge.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub enum DpermPageEvent {
-    AccountsChanged { addresses: Vec<String> },
-    ChainChanged { chain_id_hex: String },
-    Disconnect,
-}
-
-/// One request coalesced into the open consent sheet.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub struct DpermQueuedRequest {
-    pub id: String,
-    pub method: String,
-}
-
-/// The web-popup entry's verdict, on the wire.
+/// The web request window's verdict, on the wire.
 ///
 /// A projection of [`DpermPopupDecision`] — [`decide_popup_request`] keeps
 /// exactly the semantics it was ported with; this only gives the answer a
-/// serialisable shape so the popup window can ASK for it. `ForwardToSigning`
+/// serialisable shape so the window can ASK for it. `ForwardToSigning`
 /// carries the granted address because that is the address the sign path must
 /// be pinned to (invariant ⑨: the grant's own address, never the wallet's
 /// active account).
@@ -225,7 +186,7 @@ pub enum DpermPopupOutcome {
     Respond {
         payload: DpermRespondPayload,
     },
-    /// Open the popup's connect consent.
+    /// Ask the person: show the window's connect consent.
     Consent,
     Reject {
         code: u32,
@@ -241,7 +202,7 @@ pub enum DpermPopupOutcome {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct DpermPopupView {
     pub outcome: DpermPopupOutcome,
-    /// [`resolve_granted`]'s answer for this origin — exposed so the popup
+    /// [`resolve_granted`]'s answer for this origin — exposed so the window
     /// never re-derives the load-bearing cold-read rule (invariant ②) itself.
     pub granted: Vec<String>,
 }
@@ -254,45 +215,23 @@ pub struct DpermPopupView {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "DpermOperation"))]
 pub enum DpermOperation {
-    /// Read `vela.perm.<origin>`. A parse/storage error answers `None`,
-    /// exactly as `getGrant`'s catch does.
-    ReadGrant { origin: String },
     /// Persist `vela.perm.<origin>` — best-effort; the shell swallows storage
     /// errors (`setGrant`).
     WriteGrant { grant: DpermGrant },
     /// Remove `vela.perm.<origin>` — best-effort (`revokeGrant`).
     RemoveGrant { origin: String },
-    /// Answer one provider request via the bridge. Local (connect/state)
-    /// responses bypass the transport's pending-id gate, as today.
+    /// Answer one request via the window's transport.
     Respond {
         id: String,
         payload: DpermRespondPayload,
     },
-    /// Push an EIP-1193 event to the page.
-    EmitEvent { event: DpermPageEvent },
-    /// Settle every request the transport still holds pending with this
-    /// terminal error (`transport.settlePending`). The transport is a live
-    /// object the core never holds — the exactly-one-response-per-id gate
-    /// stays there (invariant ⑩); the core owns WHICH code is used.
-    SettleForwarded {
-        code: u32,
-        reason: DpermRejectReason,
-    },
     /// Write the "Connected to <app>" audit row (`buildConnectionRecord` +
     /// `saveTransaction` — the shell derives the display host and stamps its
-    /// own clock, both presentation).
+    /// own clock, both presentation). A connection nobody can see is a
+    /// connection nobody can revoke, so this is not optional.
     SaveConnectionRecord {
         address: String,
         chain_id: u32,
-        origin: String,
-    },
-    /// Hand to the WebViewTransport → signing pipeline (the `sign_request`
-    /// machine). `params_json` is the raw JSON-RPC params array, verbatim and
-    /// untrusted — this core never interprets it.
-    ForwardToSigning {
-        id: String,
-        method: String,
-        params_json: String,
         origin: String,
     },
 }
@@ -301,11 +240,7 @@ pub enum DpermOperation {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "DpermShellResult"))]
 pub enum DpermShellResult {
-    GrantRead {
-        origin: String,
-        grant: Option<DpermGrant>,
-    },
-    /// Every other operation is fire-and-forget from the core's view.
+    /// Every operation is fire-and-forget from the core's view.
     Ack,
 }
 
@@ -327,53 +262,17 @@ pub enum DpermEffect {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "DpermEvent"))]
 pub enum Event {
-    /// A provider request bubbled up by the WebView. `origin` MUST be the
-    /// native-observed committed origin (iOS `frameInfo.securityOrigin`,
-    /// Android `sourceOrigin`) — never a value the page put in the message
-    /// body (`webview-transport.ts:100-107`).
-    ProviderRequest {
-        id: String,
-        method: String,
-        params_json: String,
-        origin: String,
-        is_main_frame: bool,
-    },
-    /// The user approved the consent sheet. `now_ms` stamps the grant — the
-    /// core owns no clock.
-    ConsentApproved { now_ms: f64 },
-    /// The user rejected the consent sheet.
-    ConsentRejected,
-    /// A fresh document load started (`onNavigationChange` with `loading`;
-    /// SPA pushState does NOT fire this, so same-page route changes keep
-    /// their pending state — ported verbatim).
-    NavigationStarted { url: String },
-    /// The browser screen closed.
-    BrowserClosed,
-    /// ALL wallet addresses (not just the active one) — a grant is pinned to
-    /// the address it was made for, so grant judgments need the full set
-    /// (`browser.tsx:174-178`). `None` while loading → cold-load safe.
-    AccountsUpdated { addresses: Option<Vec<String>> },
-    /// The wallet's active account changed (initial load included). `now_ms`
-    /// re-stamps the grant when a connected origin is re-pinned.
-    AccountSwitched { address: String, now_ms: f64 },
-    /// The global chain changed. The shell must seed the initial chain with
-    /// this before the first consent can be approved.
-    ChainChanged { chain_id: u32 },
-    /// Disconnect. `None` = the current origin (the browser chip); a named
-    /// origin revokes silently (no page events — the page for that origin is
-    /// not in front of us).
-    RevokeRequested { origin: Option<String> },
-    /// The web-popup entry (`web-request.tsx:169-193`) asks for one request's
-    /// verdict.
+    /// The web request window (`web-request.tsx:169-193`) asks for one
+    /// request's verdict.
     ///
-    /// PURE, on purpose: it requests no shell operation, touches none of the
-    /// browser state above, and only publishes its answer on the view — the
-    /// `validate_pay_query` pattern (`payment_request.rs`), because the popup
-    /// is a one-shot window that owns its own grant I/O and its own transport
-    /// and has no document to emit page events into. Without it
-    /// [`decide_popup_request`] is authored, tested and exported but never
-    /// executed anywhere, which is worse than not having it: it reads as the
-    /// source of truth for rules the shell is actually re-implementing.
+    /// PURE, on purpose: it requests no shell operation and only publishes its
+    /// answer on the view — the `validate_pay_query` pattern
+    /// (`payment_request.rs`), because the window is a one-shot surface that
+    /// owns its own grant I/O and its own transport and has no document to emit
+    /// page events into. Without it [`decide_popup_request`] is authored,
+    /// tested and exported but never executed anywhere, which is worse than not
+    /// having it: it reads as the source of truth for rules the shell is
+    /// actually re-implementing.
     PopupRequest {
         method: String,
         /// The stored `vela.perm.<origin>` value — `None` when absent or
@@ -386,61 +285,69 @@ pub enum Event {
         /// The shell maps the TS empty string to `None`.
         pinned_address: Option<String>,
     },
-    #[serde(skip)]
-    ShellCompleted {
-        attempt: u64,
-        result: DpermShellResult,
+    /// The request window's person pressed Connect (spec 070 T063).
+    ///
+    /// The window used to reach this by IMPERSONATING an in-app browser: it
+    /// dispatched `provider_request`, answered the grant read, checked that a
+    /// consent sheet had opened for its origin, then `consent_approved` — five
+    /// events and a loop to author three operations, through a browser model
+    /// the window has no part of (no tab, no document, no navigation).
+    ///
+    /// It says what it means now. The rules that matter are the same and still
+    /// the core's: the grant is written for the ACTIVE address, the audit row
+    /// that gives the person a trail is written with it, and the answer's shape
+    /// follows the method — which is exactly the trio the shell was assembling
+    /// by hand before spec 027 moved it here.
+    PopupApproved {
+        origin: String,
+        /// The request this window is answering — `Respond` carries it back.
+        request_id: String,
+        /// `wallet_requestPermissions` answers with permissions; everything
+        /// else answers with the address.
+        method: String,
+        /// The account the grant pins to: the active one.
+        address: String,
+        chain_id: u32,
+        now_ms: f64,
     },
+    /// The wallet switched accounts, asked about ONE connected site (spec 070
+    /// T063).
+    ///
+    /// The window used to reach this by replaying a navigation and a page's
+    /// first `eth_accounts` — a browser's opening moves, to make a grant-store
+    /// machine re-pin one row. The rules are unchanged and still here:
+    /// [`should_drop_grant`] physically removes a grant whose own account left
+    /// the wallet, and a grant for an address the wallet still holds follows
+    /// the active one. The chain is NOT rewritten: it records the chain the
+    /// site connected on, which is an audit fact.
+    PopupAccountSwitch {
+        origin: String,
+        /// The stored `vela.perm.<origin>` value.
+        grant: Option<DpermGrant>,
+        /// Every wallet address; `None`/empty = not known yet, and invariant ②
+        /// says never to log a site out on that.
+        current_addresses: Option<Vec<String>>,
+        /// The account the wallet switched TO.
+        active_address: String,
+        now_ms: f64,
+    },
+    /// One authored operation came back from the shell. Every operation here is
+    /// fire-and-forget ([`DpermShellResult::Ack`]); the core keeps no
+    /// correlation state to update.
+    #[serde(skip)]
+    ShellCompleted,
 }
 
 // ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug, PartialEq)]
-struct Consent {
-    origin: String,
-    requests: Vec<DpermQueuedRequest>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct PendingRequest {
-    id: String,
-    method: String,
-    params_json: String,
-    origin: String,
-    is_main_frame: bool,
-}
-
 #[derive(Default)]
 pub struct Model {
-    /// Mirror of the KV grant store; an entry present means the state is
-    /// KNOWN (`Some` = granted, `None` = known-absent). This core is the only
-    /// in-session writer, so mirror and store cannot drift.
-    grants: BTreeMap<String, Option<DpermGrant>>,
-    /// Origins with a `ReadGrant` in flight whose answer is still expected. A
-    /// write/revoke removes the origin here so a stale store snapshot can
-    /// never clobber a fresher mirror entry.
-    reads_in_flight: Vec<String>,
-    /// Main-frame requests parked on a grant read.
-    parked: Vec<PendingRequest>,
-    consent: Option<Consent>,
-    /// The committed main-frame origin; empty until the first navigation.
-    current_origin: String,
-    /// A navigation-triggered read refreshes the connected chip when it
-    /// lands; request-path reads deliberately do not (ported verbatim — the
-    /// chip refreshes on navigation, not on every request).
-    nav_refresh: Option<String>,
-    connected_addr: Option<String>,
-    wallet_addresses: Option<Vec<String>>,
-    active_address: Option<String>,
-    chain_id: u32,
-    /// Bumped on navigation/close; a result carrying an older attempt belongs
-    /// to a torn-down document and is dropped.
-    attempt: u64,
-    /// The last [`Event::PopupRequest`] verdict. Separate from every field
-    /// above: the popup is a different entry with a different window, and its
-    /// answer must never be confused with the in-app browser's state.
+    /// The last [`Event::PopupRequest`] verdict — the only thing this machine
+    /// remembers. The grant store itself lives in the shell's KV; the core
+    /// authors its writes and is handed the value back on every question, so it
+    /// keeps no mirror of it (nothing here would read one).
     popup: Option<DpermPopupView>,
 }
 
@@ -450,22 +357,9 @@ pub struct Model {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
-pub struct DpermConsentView {
-    pub origin: String,
-    /// One entry per coalesced request — the sheet shows the origin once,
-    /// however many times the page asked.
-    pub methods: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
 pub struct DpermView {
-    pub consent: Option<DpermConsentView>,
-    /// The connected chip. `None` = disconnected view.
-    pub connected_address: Option<String>,
-    pub current_origin: Option<String>,
     /// The answer to the last [`Event::PopupRequest`]. `None` on every core
-    /// that has never been asked one — the in-app browser never sets it.
+    /// that has never been asked one.
     pub popup: Option<DpermPopupView>,
 }
 
@@ -484,33 +378,6 @@ impl App for DappPermissions {
 
     fn update(&self, event: Event, model: &mut Model) -> Command<DpermEffect, Event> {
         match event {
-            Event::ProviderRequest {
-                id,
-                method,
-                params_json,
-                origin,
-                is_main_frame,
-            } => provider_request(
-                model,
-                PendingRequest {
-                    id,
-                    method,
-                    params_json,
-                    origin,
-                    is_main_frame,
-                },
-            ),
-            Event::ConsentApproved { now_ms } => consent_approved(model, now_ms),
-            Event::ConsentRejected => consent_rejected(model),
-            Event::NavigationStarted { url } => navigation_started(model, &url),
-            Event::BrowserClosed => browser_closed(model),
-            Event::AccountsUpdated { addresses } => {
-                model.wallet_addresses = addresses;
-                render()
-            }
-            Event::AccountSwitched { address, now_ms } => account_switched(model, address, now_ms),
-            Event::ChainChanged { chain_id } => chain_changed(model, chain_id),
-            Event::RevokeRequested { origin } => revoke_requested(model, origin),
             Event::PopupRequest {
                 method,
                 grant,
@@ -523,31 +390,33 @@ impl App for DappPermissions {
                 current_addresses.as_deref(),
                 pinned_address.as_deref(),
             ),
-            Event::ShellCompleted { attempt, result } => {
-                if attempt != model.attempt {
-                    return Command::done();
-                }
-                accept(model, result)
-            }
+            Event::PopupApproved {
+                origin,
+                request_id,
+                method,
+                address,
+                chain_id,
+                now_ms,
+            } => popup_approved(&origin, &request_id, &method, &address, chain_id, now_ms),
+            Event::PopupAccountSwitch {
+                origin,
+                grant,
+                current_addresses,
+                active_address,
+                now_ms,
+            } => popup_account_switch(
+                &origin,
+                grant.as_ref(),
+                current_addresses.as_deref(),
+                &active_address,
+                now_ms,
+            ),
+            Event::ShellCompleted => Command::done(),
         }
     }
 
     fn view(&self, model: &Model) -> DpermView {
         DpermView {
-            consent: model.consent.as_ref().map(|consent| DpermConsentView {
-                origin: consent.origin.clone(),
-                methods: consent
-                    .requests
-                    .iter()
-                    .map(|request| request.method.clone())
-                    .collect(),
-            }),
-            connected_address: model.connected_addr.clone(),
-            current_origin: if model.current_origin.is_empty() {
-                None
-            } else {
-                Some(model.current_origin.clone())
-            },
             popup: model.popup.clone(),
         }
     }
@@ -557,324 +426,12 @@ impl App for DappPermissions {
 // Update handlers
 // ---------------------------------------------------------------------------
 
-fn provider_request(model: &mut Model, request: PendingRequest) -> Command<DpermEffect, Event> {
-    // A subframe never reads the store — it gets a disconnected view derived
-    // right now (`browser.tsx:192`: grant is only fetched for the main frame).
-    if request.is_main_frame && !model.grants.contains_key(&request.origin) {
-        let origin = request.origin.clone();
-        model.parked.push(request);
-        if model.reads_in_flight.iter().any(|o| o == &origin) {
-            // A read for this origin is already in flight — one store round
-            // trip answers every request parked on it.
-            return render();
-        }
-        model.reads_in_flight.push(origin.clone());
-        return finish(model, vec![DpermOperation::ReadGrant { origin }]);
-    }
-    let mut ops = Vec::new();
-    execute_decision(model, request, &mut ops);
-    finish(model, ops)
-}
-
-fn execute_decision(model: &mut Model, request: PendingRequest, ops: &mut Vec<DpermOperation>) {
-    let grant = if request.is_main_frame {
-        model.grants.get(&request.origin).cloned().flatten()
-    } else {
-        None
-    };
-
-    // Physically clean up a grant whose account was DELETED from the wallet
-    // (`browser.tsx:193-196`). `should_drop_grant` is false on a cold/empty
-    // read — dropping there would revoke every dApp on app launch
-    // (invariant ②). Ported verbatim: the connected chip is NOT refreshed
-    // here; it catches up on the next navigation.
-    if should_drop_grant(grant.as_ref(), model.wallet_addresses.as_deref()) {
-        model.grants.insert(request.origin.clone(), None);
-        ops.push(DpermOperation::RemoveGrant {
-            origin: request.origin.clone(),
-        });
-    }
-
-    let granted = if request.is_main_frame {
-        resolve_granted(grant.as_ref(), model.wallet_addresses.as_deref())
-    } else {
-        Vec::new()
-    };
-
-    let decision = decide_browser_request(
-        &request.method,
-        &request.origin,
-        request.is_main_frame,
-        &granted,
-        model.active_address.is_some(),
-        model.consent.as_ref().map(|c| c.origin.as_str()),
-    );
-
-    let entry = DpermQueuedRequest {
-        id: request.id.clone(),
-        method: request.method.clone(),
-    };
-    match decision {
-        DpermDecision::Respond(payload) => ops.push(DpermOperation::Respond {
-            id: request.id,
-            payload,
-        }),
-        DpermDecision::Reject(reason) => ops.push(respond_error(request.id, reason)),
-        DpermDecision::OpenConsent => {
-            model.consent = Some(Consent {
-                origin: request.origin,
-                requests: vec![entry],
-            });
-        }
-        DpermDecision::MergeConsent => {
-            if let Some(consent) = &mut model.consent {
-                consent.requests.push(entry);
-            }
-        }
-        DpermDecision::Forward => ops.push(DpermOperation::ForwardToSigning {
-            id: request.id,
-            method: request.method,
-            params_json: request.params_json,
-            origin: request.origin,
-        }),
-    }
-}
-
-fn consent_approved(model: &mut Model, now_ms: f64) -> Command<DpermEffect, Event> {
-    // A navigation during the user's decision already settled and cleared
-    // this sheet with 4900 — a late approve must not respond, must not
-    // persist a grant for the OLD origin, and must not push
-    // `accountsChanged` into the NEW origin's document (invariant ⑥;
-    // `browser.tsx:245-248`). The old async `consentRef.current !== c` guard
-    // is this same rule, made synchronous by the single-core update.
-    if model.active_address.is_none() {
-        return Command::done();
-    }
-    let Some(consent) = model.consent.take() else {
-        return Command::done();
-    };
-    let Some(active) = model.active_address.clone() else {
-        return Command::done();
-    };
-
-    let grant = DpermGrant {
-        origin: consent.origin.clone(),
-        address: active.clone(),
-        chain_id: model.chain_id,
-        granted_at_ms: now_ms,
-    };
-    model
-        .grants
-        .insert(consent.origin.clone(), Some(grant.clone()));
-    model.reads_in_flight.retain(|o| o != &consent.origin);
-    model.connected_addr = Some(active.clone());
-
-    // Effect order made explicit, matching today's sequence: persist first,
-    // audit row ("Connected to <app>" — fires once per connection because the
-    // sheet only opens for a not-yet-granted origin), then answer every
-    // coalesced request with its method-appropriate result, then announce the
-    // connection to the page (the live channel the extension lacks).
-    let mut ops = vec![
-        DpermOperation::WriteGrant { grant },
-        DpermOperation::SaveConnectionRecord {
-            address: active.clone(),
-            chain_id: model.chain_id,
-            origin: consent.origin.clone(),
-        },
-    ];
-    for request in &consent.requests {
-        let payload = if request.method == "wallet_requestPermissions" {
-            DpermRespondPayload::Permissions { granted: true }
-        } else {
-            DpermRespondPayload::Accounts {
-                addresses: vec![active.clone()],
-            }
-        };
-        ops.push(DpermOperation::Respond {
-            id: request.id.clone(),
-            payload,
-        });
-    }
-    ops.push(DpermOperation::EmitEvent {
-        event: DpermPageEvent::AccountsChanged {
-            addresses: vec![active],
-        },
-    });
-    ops.push(DpermOperation::EmitEvent {
-        event: DpermPageEvent::ChainChanged {
-            chain_id_hex: hex_chain_id(model.chain_id),
-        },
-    });
-    finish(model, ops)
-}
-
-fn consent_rejected(model: &mut Model) -> Command<DpermEffect, Event> {
-    let Some(consent) = model.consent.take() else {
-        return Command::done();
-    };
-    let ops = consent
-        .requests
-        .into_iter()
-        .map(|request| respond_error(request.id, DpermRejectReason::UserRejected))
-        .collect();
-    finish(model, ops)
-}
-
-fn navigation_started(model: &mut Model, url: &str) -> Command<DpermEffect, Event> {
-    // Everything in flight belongs to the document being torn down. Settle it
-    // ALL with 4900 unknown-pending — NEVER 4001: a dApp treats an explicit
-    // "user rejected" as safe to retry, double-spending a request that may
-    // already have landed (invariant ⑤; `browser.tsx:57, 330-341`).
-    model.attempt += 1;
-    model.reads_in_flight.clear();
-    model.nav_refresh = None;
-
-    let mut ops = vec![DpermOperation::SettleForwarded {
-        code: CODE_UNKNOWN_PENDING,
-        reason: DpermRejectReason::NavigatedAway,
-    }];
-    settle_local(model, DpermRejectReason::NavigatedAway, &mut ops);
-
-    // Reset the per-origin connection view only when the origin actually
-    // changes (a reload keeps the chip; `browser.tsx:351-356`).
-    if let Some(new_origin) = origin_of(url) {
-        if new_origin != model.current_origin {
-            model.current_origin = new_origin.clone();
-            if let Some(known) = model.grants.get(&new_origin) {
-                model.connected_addr =
-                    resolve_granted(known.as_ref(), model.wallet_addresses.as_deref())
-                        .into_iter()
-                        .next();
-            } else {
-                model.nav_refresh = Some(new_origin.clone());
-                model.reads_in_flight.push(new_origin.clone());
-                ops.push(DpermOperation::ReadGrant { origin: new_origin });
-            }
-        }
-    }
-    finish(model, ops)
-}
-
-fn browser_closed(model: &mut Model) -> Command<DpermEffect, Event> {
-    model.attempt += 1;
-    model.reads_in_flight.clear();
-    model.nav_refresh = None;
-    model.current_origin.clear();
-    model.connected_addr = None;
-
-    let mut ops = vec![DpermOperation::SettleForwarded {
-        code: CODE_UNKNOWN_PENDING,
-        reason: DpermRejectReason::BrowserClosed,
-    }];
-    // Best-effort: the WebView may already be gone, in which case the bridge
-    // drops these — but the core's bookkeeping stays honest (one terminal
-    // answer per id it ever owned).
-    settle_local(model, DpermRejectReason::BrowserClosed, &mut ops);
-    finish(model, ops)
-}
-
-/// Settle the consent sheet and any parked requests with a terminal error.
-/// Parked requests are settled here as a fail-closed convergence: in TS their
-/// block-scoped continuations ran after the navigation and answered a dead
-/// document (an unobservable race, not a rule).
-fn settle_local(model: &mut Model, reason: DpermRejectReason, ops: &mut Vec<DpermOperation>) {
-    if let Some(consent) = model.consent.take() {
-        for request in consent.requests {
-            ops.push(respond_error(request.id, reason));
-        }
-    }
-    for parked in std::mem::take(&mut model.parked) {
-        ops.push(respond_error(parked.id, reason));
-    }
-}
-
-fn account_switched(
-    model: &mut Model,
-    address: String,
-    now_ms: f64,
-) -> Command<DpermEffect, Event> {
-    model.active_address = Some(address.clone());
-    // Only a CONNECTED main-frame origin hears about the switch — never leak
-    // an address to a site that never connected, and never emit while
-    // disconnected (invariant ⑦; `browser.tsx:301-311`). The grant is
-    // re-pinned to the NEW address so grant + page + signer stay reconciled.
-    if model.connected_addr.is_none() || model.current_origin.is_empty() {
-        return render();
-    }
-    let origin = model.current_origin.clone();
-    let grant = DpermGrant {
-        origin: origin.clone(),
-        address: address.clone(),
-        chain_id: model.chain_id,
-        granted_at_ms: now_ms,
-    };
-    model.grants.insert(origin.clone(), Some(grant.clone()));
-    model.reads_in_flight.retain(|o| o != &origin);
-    model.connected_addr = Some(address.clone());
-    finish(
-        model,
-        vec![
-            DpermOperation::WriteGrant { grant },
-            DpermOperation::EmitEvent {
-                event: DpermPageEvent::AccountsChanged {
-                    addresses: vec![address],
-                },
-            },
-        ],
-    )
-}
-
-fn chain_changed(model: &mut Model, chain_id: u32) -> Command<DpermEffect, Event> {
-    let changed = model.chain_id != chain_id;
-    model.chain_id = chain_id;
-    // Only when connected and only on an actual change — never the address
-    // (`browser.tsx:163-172`: no accountsChanged leak from this channel).
-    if changed && model.connected_addr.is_some() {
-        return finish(
-            model,
-            vec![DpermOperation::EmitEvent {
-                event: DpermPageEvent::ChainChanged {
-                    chain_id_hex: hex_chain_id(chain_id),
-                },
-            }],
-        );
-    }
-    render()
-}
-
-fn revoke_requested(model: &mut Model, origin: Option<String>) -> Command<DpermEffect, Event> {
-    let target = match origin {
-        Some(origin) => origin,
-        None => model.current_origin.clone(),
-    };
-    if target.is_empty() {
-        return Command::done();
-    }
-    model.grants.insert(target.clone(), None);
-    model.reads_in_flight.retain(|o| o != &target);
-    let mut ops = vec![DpermOperation::RemoveGrant {
-        origin: target.clone(),
-    }];
-    if target == model.current_origin {
-        ops.push(DpermOperation::EmitEvent {
-            event: DpermPageEvent::AccountsChanged {
-                addresses: Vec::new(),
-            },
-        });
-        ops.push(DpermOperation::EmitEvent {
-            event: DpermPageEvent::Disconnect,
-        });
-        model.connected_addr = None;
-    }
-    finish(model, ops)
-}
-
-/// The popup entry's one question, answered on the view.
+/// The request window's one question, answered on the view.
 ///
 /// Both halves of the answer come from the pure policy below — nothing is
 /// re-decided here: [`resolve_granted`] says what this origin may see (and
 /// refuses to log it out on a cold read, invariant ②), [`decide_popup_request`]
-/// says what to do about it. The three rules the popup exists to enforce are
+/// says what to do about it. The three rules the window exists to enforce are
 /// therefore stated once, in Rust:
 ///
 /// - a never-connected origin gets no address — 4100, not a forward;
@@ -914,41 +471,89 @@ fn popup_request(
     render()
 }
 
-// ---------------------------------------------------------------------------
-// Shell results
-// ---------------------------------------------------------------------------
-
-fn accept(model: &mut Model, result: DpermShellResult) -> Command<DpermEffect, Event> {
-    match result {
-        DpermShellResult::GrantRead { origin, grant } => {
-            if let Some(index) = model.reads_in_flight.iter().position(|o| o == &origin) {
-                model.reads_in_flight.remove(index);
-                model.grants.insert(origin.clone(), grant);
-            }
-            // else: a write/revoke superseded this read while it was in
-            // flight — the mirror is already fresher than the store snapshot,
-            // so the snapshot must not clobber it.
-
-            let mut ops = Vec::new();
-            if model.nav_refresh.as_deref() == Some(origin.as_str()) {
-                model.nav_refresh = None;
-                let known = model.grants.get(&origin).cloned().flatten();
-                model.connected_addr =
-                    resolve_granted(known.as_ref(), model.wallet_addresses.as_deref())
-                        .into_iter()
-                        .next();
-            }
-            let (ready, parked): (Vec<_>, Vec<_>) = std::mem::take(&mut model.parked)
-                .into_iter()
-                .partition(|request| request.origin == origin);
-            model.parked = parked;
-            for request in ready {
-                execute_decision(model, request, &mut ops);
-            }
-            finish(model, ops)
-        }
-        DpermShellResult::Ack => Command::done(),
+/// The request window's approve (spec 070 T063).
+///
+/// Three operations and no page events: this window has no document to push
+/// `accountsChanged` into — its `Respond` IS the announcement.
+fn popup_approved(
+    origin: &str,
+    request_id: &str,
+    method: &str,
+    address: &str,
+    chain_id: u32,
+    now_ms: f64,
+) -> Command<DpermEffect, Event> {
+    if origin.is_empty() || address.is_empty() {
+        return Command::done();
     }
+    let grant = DpermGrant {
+        origin: origin.to_owned(),
+        address: address.to_owned(),
+        chain_id,
+        granted_at_ms: now_ms,
+    };
+    let payload = if method == "wallet_requestPermissions" {
+        DpermRespondPayload::Permissions { granted: true }
+    } else {
+        DpermRespondPayload::Accounts {
+            addresses: vec![address.to_owned()],
+        }
+    };
+    // Effect order made explicit, matching the flow the browser path ran:
+    // persist first, then the audit row ("Connected to <app>"), then answer the
+    // request that asked.
+    finish(vec![
+        DpermOperation::WriteGrant { grant },
+        DpermOperation::SaveConnectionRecord {
+            address: address.to_owned(),
+            chain_id,
+            origin: origin.to_owned(),
+        },
+        DpermOperation::Respond {
+            id: request_id.to_owned(),
+            payload,
+        },
+    ])
+}
+
+/// What one connected site hears when the wallet switches account (070 T063).
+///
+/// Authored from the two pure rules: a grant whose account LEFT the wallet is
+/// removed, and one whose account is still held is re-pinned to the active
+/// address. Everything else — including a cold read, where `current_addresses`
+/// is not known yet — writes nothing, because invariant ② forbids logging a
+/// site out on an empty read.
+fn popup_account_switch(
+    origin: &str,
+    grant: Option<&DpermGrant>,
+    current_addresses: Option<&[String]>,
+    active_address: &str,
+    now_ms: f64,
+) -> Command<DpermEffect, Event> {
+    let Some(grant) = grant else {
+        return Command::done();
+    };
+    if origin.is_empty() || active_address.is_empty() {
+        return Command::done();
+    }
+    if should_drop_grant(Some(grant), current_addresses) {
+        return finish(vec![DpermOperation::RemoveGrant {
+            origin: origin.to_owned(),
+        }]);
+    }
+    if grant.address.eq_ignore_ascii_case(active_address) {
+        return Command::done();
+    }
+    finish(vec![DpermOperation::WriteGrant {
+        grant: DpermGrant {
+            origin: origin.to_owned(),
+            address: active_address.to_owned(),
+            // The chain the site CONNECTED on: an audit fact a switch of
+            // account must not rewrite.
+            chain_id: grant.chain_id,
+            granted_at_ms: now_ms,
+        },
+    }])
 }
 
 // ---------------------------------------------------------------------------
@@ -1007,104 +612,34 @@ pub fn should_drop_grant(grant: Option<&DpermGrant>, current_addresses: Option<&
         .any(|a| a.eq_ignore_ascii_case(&grant.address))
 }
 
-// ---------------------------------------------------------------------------
-// Pure policy — the browser decision (`wallet-browser-router.ts:30-166`)
-// ---------------------------------------------------------------------------
-
-/// The FULL browser decision for one provider request — the single source of
-/// truth the executor above (and every test) exercises.
-#[derive(Clone, Debug, PartialEq)]
-pub enum DpermDecision {
-    Respond(DpermRespondPayload),
-    Reject(DpermRejectReason),
-    OpenConsent,
-    MergeConsent,
-    Forward,
-}
-
-pub fn decide_browser_request(
-    method: &str,
-    origin: &str,
-    is_main_frame: bool,
-    granted: &[String],
-    has_active_account: bool,
-    pending_consent_origin: Option<&str>,
-) -> DpermDecision {
-    // `eth_accounts` reflects the current grant and NEVER prompts
-    // (invariant ⑧).
-    if method == "eth_accounts" {
-        return DpermDecision::Respond(DpermRespondPayload::Accounts {
-            addresses: granted.to_vec(),
-        });
-    }
-    // EIP-2255 introspection mirrors the grant.
-    if method == "wallet_getPermissions" {
-        return DpermDecision::Respond(DpermRespondPayload::Permissions {
-            granted: !granted.is_empty(),
-        });
-    }
-    if is_connect_method(method) {
-        // Already granted → answer immediately, no prompt on revisit.
-        if !granted.is_empty() {
-            return DpermDecision::Respond(connect_payload(method, granted.to_vec()));
-        }
-        // §5.2 — a cross-origin iframe can never request accounts
-        // (invariant ①).
-        if !is_main_frame {
-            return DpermDecision::Reject(DpermRejectReason::UnauthorizedFrame);
-        }
-        if !has_active_account {
-            return DpermDecision::Reject(DpermRejectReason::NoAccountAvailable);
-        }
-        // Coalesce duplicate prompts from the same origin so the earlier
-        // promise never hangs; reject a colliding second origin — a page
-        // can't queue two connect sheets (invariant ④).
-        return match pending_consent_origin {
-            Some(pending) if pending == origin => DpermDecision::MergeConsent,
-            Some(_) => DpermDecision::Reject(DpermRejectReason::ConsentBusy),
-            None => DpermDecision::OpenConsent,
-        };
-    }
-    // Forward: read-only RPC / chain switch / signing — but never sign on
-    // insecure http (invariant ③; checked before the frame gate, matching
-    // today's order: router first, transport second).
-    if should_block_insecure_signing(method, origin) {
-        return DpermDecision::Reject(DpermRejectReason::InsecureOrigin);
-    }
-    // Security: iframe provider traffic never reaches the signing pipeline
-    // (`webview-transport.ts:116-120`, converged here).
-    if !is_main_frame {
-        return DpermDecision::Reject(DpermRejectReason::UnauthorizedFrame);
-    }
-    DpermDecision::Forward
-}
-
-/// The connect-consent result: accounts, or the EIP-2255 permission shape for
-/// `wallet_requestPermissions`.
-fn connect_payload(method: &str, granted: Vec<String>) -> DpermRespondPayload {
-    if method == "wallet_requestPermissions" {
-        DpermRespondPayload::Permissions { granted: true }
-    } else {
-        DpermRespondPayload::Accounts { addresses: granted }
-    }
+/// How a request still pending when a window goes away is settled (070 T063).
+///
+/// 4900, never 4001 — invariant ⑤, and the whole reason a settle carries a code
+/// at all: a dApp treats an explicit "user rejected" as safe to retry, which
+/// double-spends a request that may already have landed. The request window
+/// asks for this rather than restating it, the way it used to ask by
+/// dispatching `browser_closed` and reading the operation back.
+#[must_use]
+pub fn settle_on_close() -> (u32, DpermRejectReason) {
+    (CODE_UNKNOWN_PENDING, DpermRejectReason::BrowserClosed)
 }
 
 // ---------------------------------------------------------------------------
-// Pure policy — the popup entry's decision (`web-request.tsx:169-193`)
+// Pure policy — the request window's decision (`web-request.tsx:169-193`)
 // ---------------------------------------------------------------------------
 
-/// The web-popup entry decides differently from the in-app browser — most
+/// The request window decides differently from an in-app browser — most
 /// notably a non-connect request from a never-connected origin is REFUSED
 /// (4100) rather than forwarded, and a request may pin the address it was
-/// built for. Kept as its own explicit function so the drift between the two
-/// entries is visible in one file instead of three.
+/// built for. Kept as its own explicit function because that difference is a
+/// rule, not an accident.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DpermPopupDecision {
     Respond(DpermRespondPayload),
-    /// Show the popup's connect consent.
+    /// Show the window's connect consent.
     Consent,
     Reject(DpermRejectReason),
-    /// Hand to the WebPopupTransport → signing pipeline.
+    /// Hand to the window transport → signing pipeline.
     ForwardToSigning,
 }
 
@@ -1134,15 +669,19 @@ pub fn decide_popup_request(
     DpermPopupDecision::ForwardToSigning
 }
 
+/// The connect result: accounts, or the EIP-2255 permission shape for
+/// `wallet_requestPermissions`.
+fn connect_payload(method: &str, granted: Vec<String>) -> DpermRespondPayload {
+    if method == "wallet_requestPermissions" {
+        DpermRespondPayload::Permissions { granted: true }
+    } else {
+        DpermRespondPayload::Accounts { addresses: granted }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Pure policy — origin security (`wallet-browser-router.ts:78-118`)
 // ---------------------------------------------------------------------------
-
-/// Whether a signing/value-moving request must be refused on this origin
-/// (insecure public http).
-pub fn should_block_insecure_signing(method: &str, origin: &str) -> bool {
-    is_signing_method(method) && is_insecure_public_origin(origin)
-}
 
 /// A PUBLIC http (non-TLS) origin, where a MITM can inject page script.
 /// Loopback / private-LAN / link-local hosts and `.local` are exempt so
@@ -1299,34 +838,16 @@ fn parse_origin(value: &str) -> Option<(String, String, Option<u32>)> {
     Some((scheme, host_raw.to_ascii_lowercase(), port))
 }
 
-/// `chainId` number → EIP-1193 hex string (`1` → `"0x1"`). The TS clamps with
-/// `Math.max(0, Math.floor(...))`; a `u32` on this wire already satisfies it.
-pub fn hex_chain_id(chain_id: u32) -> String {
-    format!("0x{chain_id:x}")
-}
-
 // ---------------------------------------------------------------------------
 // Command plumbing
 // ---------------------------------------------------------------------------
 
-fn respond_error(id: String, reason: DpermRejectReason) -> DpermOperation {
-    DpermOperation::Respond {
-        id,
-        payload: DpermRespondPayload::Error {
-            code: reason.code(),
-            reason,
-        },
-    }
-}
-
-/// Issue the operations (answers must match the current attempt), then render.
-fn finish(model: &Model, ops: Vec<DpermOperation>) -> Command<DpermEffect, Event> {
-    let attempt = model.attempt;
+/// Issue the operations, then render.
+fn finish(ops: Vec<DpermOperation>) -> Command<DpermEffect, Event> {
     let mut commands: Vec<Command<DpermEffect, Event>> = ops
         .into_iter()
         .map(|operation| {
-            Command::request_from_shell(operation)
-                .then_send(move |result| Event::ShellCompleted { attempt, result })
+            Command::request_from_shell(operation).then_send(|_result| Event::ShellCompleted)
         })
         .collect();
     commands.push(render());
