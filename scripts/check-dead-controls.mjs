@@ -66,10 +66,6 @@ const ALLOWED = new Map([
 	[
 		'ContactRow.onSend',
 		'The control is a SWIPE action, and it is only drawn when the row carries a `swipe` model — which `ContactsLive` never sets. Nothing inert reaches the screen. Remove this entry when contacts grow swipe actions.'
-	],
-	[
-		'ConnectionPanelView.onSwitch',
-		'Real, and open on purpose: no shell passes it, because "switch which account this site is connected to" is a decision about re-granting an origin rather than a wire somebody dropped. Founder question, 2026-09-23 — see specs/081-audit-product-gaps/dead-controls.md.'
 	]
 ]);
 

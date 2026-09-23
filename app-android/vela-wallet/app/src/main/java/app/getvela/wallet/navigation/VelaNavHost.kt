@@ -1151,6 +1151,15 @@ fun VelaNavHost(
                                     message = refusal,
                                 )
                             },
+                            // The connection sheet's "Switch account": the same
+                            // switcher the wallet home opens, so the two can never
+                            // show different accounts. Switching re-pins the
+                            // connected site's grant — the session flow already
+                            // tells the permissions machine on every change.
+                            onSwitchAccount = {
+                                wallet.switcherOpened(session.accounts.map { it.address })
+                                switcherOpen = true
+                            },
                         )
                     } else {
                         // The holdings, the feed and the currency are this device's
