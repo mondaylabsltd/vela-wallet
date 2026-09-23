@@ -397,42 +397,6 @@ window.VelaCS = window.VelaCS || {};
     return Promise.resolve(session);
   }
 
-  // --- 3. inside the extension: the background worker holds the request -----
-
-  function fromExtension(options) {
-    if (!ns.signer.isExtension()) return null;
-    var id = params().get('id');
-    if (!id) return null;
-    return new Promise(function (resolve, reject) {
-      chrome.runtime.sendMessage({ vela: 'take', id: id }, function (pending) {
-        if (chrome.runtime.lastError || !pending) {
-          reject(new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) ||
-            'the request is gone — the background worker may have restarted'));
-          return;
-        }
-        var session = new Session('ext', false, options);
-        session.push({
-          id: id,
-          intent: pending.intent,
-          context: pending.context || {},
-          channel: 'ext',
-          // The background worker recorded sender.origin, which the browser
-          // filled in when the page connected. That claim survives the hop.
-          originVerified: !!pending.originVerified,
-          requester: pending.requester,
-        }, function (kind, body) {
-          return new Promise(function (done) {
-            chrome.runtime.sendMessage(kind === 'result'
-              ? { vela: 'result', id: id, result: body.result, payload: body }
-              : { vela: 'error', id: id, code: body.code }, done);
-          });
-        });
-        session.finish('single');
-        resolve(session);
-      });
-    });
-  }
-
   /**
    * Open a session. `?ch=` forces a channel; otherwise the first that
    * recognises the situation wins. `options` carries the page's callbacks:
@@ -445,7 +409,6 @@ window.VelaCS = window.VelaCS || {};
       post: function () { return fromPostMessage(options); },
       url: function () { return fromUrlFragment(options); },
       ws: function () { return fromWebSocket(options); },
-      ext: function () { return fromExtension(options); },
     };
 
     if (forced) {
@@ -480,6 +443,5 @@ window.VelaCS = window.VelaCS || {};
     fromPostMessage: fromPostMessage,
     fromUrlFragment: fromUrlFragment,
     fromWebSocket: fromWebSocket,
-    fromExtension: fromExtension,
   };
 })(window.VelaCS);

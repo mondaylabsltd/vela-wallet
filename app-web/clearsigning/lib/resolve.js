@@ -178,7 +178,7 @@ window.VelaCS = window.VelaCS || {};
         // Display-only, and it never touches the digest: a logo cannot change
         // what gets signed, so an https URL from the request is allowed here.
         icon: (known && known.icon) || null,
-        // Only a channel the browser itself vouches for (postMessage, extension
+        // Only a channel the browser itself vouches for (postMessage
         // messaging) proves who is asking. Everything else is the requester's
         // own word, and has to be shown as such.
         originVerified: ctx.originVerified === true,
@@ -841,7 +841,7 @@ window.VelaCS = window.VelaCS || {};
    *    proved it with its one-time token), the tunnel (the wallet's key matches
    *    the link's `rk`, and the person compares the code), BLE (proximity and
    *    the code);
-   *  · an origin the BROWSER vouches for (postMessage, the extension port)
+   *  · an origin the BROWSER vouches for (postMessage)
    *    that is https://getvela.app or a subdomain — or this machine's loopback,
    *    where the web wallet runs in development and in tests.
    *

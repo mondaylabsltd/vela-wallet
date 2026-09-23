@@ -1,35 +1,28 @@
-// Classic script on purpose: works over http(s), chrome-extension:// and file://.
-// No inline script anywhere — MV3 forbids it, and a CSP hash would make the
-// extension refuse to install outright.
+// Classic script on purpose: works over http(s) and file://.
 (function () {
   'use strict';
 
   // --- which shell are we in -------------------------------------------------
 
-  var isExtension =
-    typeof chrome !== 'undefined' &&
-    !!chrome.runtime &&
-    !!chrome.runtime.id &&
-    location.protocol === 'chrome-extension:';
-
   var isFile = location.protocol === 'file:';
-  var surface = isExtension ? 'Chrome extension' : isFile ? 'Local file' : 'Web page';
+  var surface = isFile ? 'Local file' : 'Web page';
 
   // The relying party is decided HERE and nowhere else.
   //
-  // On the web it is simply the hostname, so localhost and preview deploys work
-  // with no extra machinery — except that every getvela.app subdomain folds up
-  // to the bare domain, so the whole family shares one passkey.
+  // It is simply the hostname, so localhost and preview deploys work with no
+  // extra machinery — except that every getvela.app subdomain folds up to the
+  // bare domain, so the whole family shares one passkey.
   //
-  // In the extension it MUST be hardcoded. There, location.hostname is the
-  // extension id, and using it never throws: it mints a perfectly valid passkey
-  // that no other surface on earth recognises, so the user silently lands in a
-  // different, empty wallet. The manifest's host_permissions entry is what lets
-  // this page claim the real domain instead.
+  // There used to be a hardcoded branch for the Chrome extension, because
+  // there location.hostname is the extension id: using it never throws, it
+  // mints a perfectly valid passkey that no other surface on earth recognises,
+  // and the person silently lands in a different, empty wallet. The extension
+  // is gone (owner, 2026-09-23 — the Clear Signer is reached only by the
+  // Android, iOS and desktop clients, in this device's own browser), and that
+  // hazard went with it.
   var VELA_RP_ID = 'getvela.app';
 
   function relyingPartyId() {
-    if (isExtension) return VELA_RP_ID;
     var host = location.hostname;
     if (host === VELA_RP_ID || host.endsWith('.' + VELA_RP_ID)) return VELA_RP_ID;
     return host; // '' under file:// — no origin, no passkeys
@@ -154,7 +147,7 @@
   var signButton = $('sign');
   var checks = $('checks');
 
-  set('runtime-badge', isExtension ? 'Extension' : isFile ? 'File' : 'Web');
+  set('runtime-badge', isFile ? 'File' : 'Web');
   set('fact-surface', surface);
   set('fact-origin', location.origin === 'null' ? location.protocol : location.origin);
   set('fact-rpid', rpId || '— none under file://');
@@ -196,7 +189,7 @@
     if (signButton) signButton.disabled = true;
     say(
       isFile
-        ? 'Passkeys need a real origin. Serve this folder over http://localhost, or load it as the extension.'
+        ? 'Passkeys need a real origin. Serve this folder over http://localhost.'
         : 'This browser exposes no WebAuthn authenticator.',
     );
   } else {

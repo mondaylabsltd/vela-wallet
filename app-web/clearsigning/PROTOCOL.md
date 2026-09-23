@@ -289,24 +289,17 @@ http://127.0.0.1:<port>/vela?t=<同一个token>&error=user_rejected
 
 可运行的参考实现：`samples/desktop-demo.mjs`。
 
-### 7.3 扩展端口（桌面首选）
+### 7.3 扩展端口 —— 已移除（2026-09-23）
 
-我们自己的页面（`externally_connectable` 白名单内）连一个端口：
+曾经有第三条通道：签名页同时是一个 Chrome MV3 扩展，我们自己的 https 页面
+（`externally_connectable` 白名单内）连一个端口把意图递进去。
 
-```js
-const port = chrome.runtime.connect(EXTENSION_ID, { name: 'vela-sign' });
-port.postMessage({ vela: 'intent', intent, context });
-port.onMessage.addListener(m => { /* { vela:'result', result } | { vela:'error', code } */ });
-```
+它的唯一调用方是 **web 钱包**。规格 075 把清晰签名器从 web 钱包整个砍掉之后，
+这条通道再没有人用，于是扩展形态本身也一并移除（owner：清晰签名器只在
+Android / iOS / 桌面客户端上，页面开在本机自己的浏览器里）。
 
-用端口而不是一次性消息：端口在人读签名卡的这段时间里让 service worker 保持存活，
-万一还是被回收，dApp 会收到 `onDisconnect` 而不是无限等待。
-`sender.origin` 由浏览器填写，因此**这条通道的来源是可验证的**。
-
-> Chrome 不允许 `externally_connectable.matches` 写全通配，所以第三方 dApp
-> 不能直接连扩展 —— 它先到我们的 https 页面（7.1），再由那一页转交。
-
-钥匙仪式的答复经扩展转回时，端口上收到的是 `{vela:'result', …字段}`（第 10.3 节）。
+移除它还解开了一个约束:MV3 禁止内联 `<script>`,而规格 076 需要签名页是
+**单个文件** —— 这样一个哈希就覆盖了全部可执行字节。
 
 ### 7.4 回环 WebSocket（同机 App，071 起；075 起一个会话多个请求）
 

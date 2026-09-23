@@ -110,7 +110,7 @@
   function waiting(update) {
     waitingState = Object.assign({}, waitingState || {}, update || {});
     // Who is on the other end, and whether anything vouches for it. The
-    // postMessage and extension channels are verified by the browser itself;
+    // the postMessage channel is verified by the browser itself;
     // a loopback socket and a URL fragment are not.
     waitingState.requesterApp = (session && session.requesterApp) || '';
     waitingState.requesterIcon = (session && session.requesterIcon) || '';

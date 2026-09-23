@@ -13,7 +13,7 @@
 
 ## 这是什么
 
-一个**零构建、零依赖**的纯静态页面，同一个文件夹既是网页也是 Chrome MV3 扩展。
+一个**零构建、零依赖**的纯静态页面。（它曾经同时是 Chrome MV3 扩展；2026-09-23 随 web 钱包不再支持清晰签名器一并移除。）
 它接收一份**签名意图**，渲染成看得懂的签名卡，然后用**真实的 WebAuthn passkey**
 签名并把结果送回请求方。
 
@@ -40,7 +40,6 @@ node samples/mock-tunnel-test.mjs  # 14/14 模拟隧道守 tunnel.md §1 的房�
 node samples/hostile-test.mjs     # 39/39 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
 node samples/channels-test.mjs    # 36/36 各通道 + 真 WebAuthn + 交易 + 篡改拒签
 node samples/ceremony-test.mjs    # 55/55 四种仪式 + 多请求会话 + 隧道与比对码
-node samples/extension-surface-test.mjs   # 扩展页里的表现（33 张卡，0 失败）
 node samples/desktop-demo.mjs --auto      #  8/8 桌面应用全流程 + 自验签
 ```
 
@@ -158,7 +157,7 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
 
 ## 环境坑（踩过的，别重踩）
 
-- **Chrome 152 stable 静默无视 `--load-extension`**。用 ms-playwright 缓存里的
+- **需要真实 origin 才能做 passkey**，用 ms-playwright 缓存里的
   Chrome for Testing。
 - `fetch('/json/new?<url>')` 会**丢掉 `#` 之后的一切** —— 要 `encodeURIComponent`。
 - **CDP 虚拟认证器只属于添加它的 target**（同一个标签页导航后还在）。签名意图的测试用

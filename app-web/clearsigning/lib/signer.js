@@ -11,16 +11,16 @@ window.VelaCS = window.VelaCS || {};
 
   var RP_ID = 'getvela.app';
 
-  function isExtension() {
-    return typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id &&
-      location.protocol === 'chrome-extension:';
-  }
-
-  // Same rule as the demo page: in the extension the relying party MUST be
-  // hardcoded, because there location.hostname is the extension id — using it
-  // mints a valid passkey that no other surface recognises.
+  // The relying party is the page's own host, with every getvela.app
+  // subdomain folded up to the bare domain so the whole family shares one
+  // passkey. localhost and preview deploys work with no extra machinery.
+  //
+  // There used to be a branch here for the Chrome extension, where
+  // location.hostname is the extension id and using it would mint a passkey no
+  // other surface recognises. The extension is gone (owner, 2026-09-23: the
+  // Clear Signer is reached only by the Android, iOS and desktop clients, in
+  // the device's own browser), and with it that hazard.
   function relyingPartyId() {
-    if (isExtension()) return RP_ID;
     var host = location.hostname;
     if (host === RP_ID || host.endsWith('.' + RP_ID)) return RP_ID;
     return host;
@@ -146,7 +146,6 @@ window.VelaCS = window.VelaCS || {};
     knownName: knownName,
     RP_ID: RP_ID,
     relyingPartyId: relyingPartyId,
-    isExtension: isExtension,
     sign: sign,
     // Deliberately absent: any way to CREATE a key. `sign()` is what a signing
     // intent reaches, and it can only assert. Creation is lib/ceremony.js,

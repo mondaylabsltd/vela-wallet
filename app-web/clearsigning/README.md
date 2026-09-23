@@ -1,7 +1,12 @@
 # clearsigning
 
-One folder, two deployments. Pure HTML/CSS/JS — no build step, no dependencies,
-no bundler, nothing to install.
+One folder, one deployment: a static page. Pure HTML/CSS/JS — no build step, no
+dependencies, no bundler, nothing to install.
+
+It is reached by the **Android, iOS and desktop wallets**, which open it in this
+device's own browser. It was also a Chrome MV3 extension once, for the web
+wallet to reach over an extension port; spec 075 cut the Clear Signer from the
+web wallet, so that had no caller left and went with it (owner, 2026-09-23).
 
 ## Run as a web page
 
@@ -15,29 +20,24 @@ python3 -m http.server 8080   # → http://localhost:8080
 
 Opening `index.html` straight off disk (`file://`) also works.
 
-## Run as a Chrome extension
-
-1. `chrome://extensions` → turn on **Developer mode**
-2. **Load unpacked** → pick this folder
-3. Click the toolbar icon → `index.html` opens in a tab
-
 ## 通道
 
-四种通道，一种意图格式，**没有服务器**。规范见 [PROTOCOL.md](PROTOCOL.md)。
+三种通道，一种意图格式，**没有服务器**。规范见 [PROTOCOL.md](PROTOCOL.md)。
 
 | 请求方 | 通道 | 状态 |
 | --- | --- | --- |
 | 同浏览器网页 | `postMessage` | ✅ 端到端已验证 |
-| 同浏览器网页 → 扩展 | 扩展端口 | ✅ 端到端已验证 |
 | 同机桌面 App | URL 片段 + 回环回调 | ✅ 端到端已验证 |
-| 跨设备 App（手机 / 另一台电脑） | **BLE GATT** | 协议与中心端已实现，真机射频未测 |
+| 同机手机 App | 回环 WebSocket | ✅ 由 Android 的 Kotlin 测试覆盖 |
+
+跨设备的 BLE 与 WebSocket 隧道在 075 被砍掉（「只留回环这个，这样更加安全」）；
+扩展端口在 2026-09-23 随扩展形态一起砍掉。
 
 ```sh
-node samples/hostile-test.mjs   # 15 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
-node samples/channels-test.mjs  # 24 项：三条通道 + 真 WebAuthn + 交易 + 篡改拒签
+node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
+node samples/channels-test.mjs  # 19 项：postMessage / URL 片段 + 真 WebAuthn + 交易 + 篡改拒签
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
-node samples/ble-loopback.mjs   # 10 项：握手、比对码、分片、乱序、加密、重放
 ```
 
 每样东西的来源见 [PROTOCOL.md](PROTOCOL.md) 第 9 节。
@@ -150,29 +150,25 @@ What you read is what gets hashed — that is the whole point of clear signing.
 
 | Surface | rpId |
 | --- | --- |
-| `chrome-extension://…` | `getvela.app`, hardcoded |
 | `https://getvela.app`, `https://*.getvela.app` | `getvela.app` (subdomains fold up) |
 | any other host, incl. `localhost` | that hostname |
 | `file://` | none — passkeys are disabled, with a message saying so |
 
-**The extension value must never be derived from `location.hostname`.** There
-the hostname is the extension id, and using it does not throw: it mints a valid
-passkey no other surface recognises, so the user lands in a different, empty
-wallet. `host_permissions: ["https://getvela.app/*"]` in the manifest is what
-lets the extension page claim the real domain — remove it and the ceremony dies
-with `SecurityError`.
+The trade in the second row is deliberate: a deploy on a non-getvela.app host
+mints a *different* passkey, because a different rpId is a different relying
+party.
 
-The trade in the web row is deliberate: a deploy on a non-getvela.app host mints
-a *different* passkey than the extension, because a different rpId is a
-different relying party.
+There used to be a `chrome-extension://` row with `getvela.app` hardcoded,
+because under an extension `location.hostname` is the extension id: using it
+does not throw, it mints a valid passkey no other surface recognises, and the
+person lands in a different, empty wallet. The extension is gone and so is that
+hazard.
 
 ### Re-running the check without touching a fingerprint reader
 
-Both surfaces are driven headlessly with a CDP virtual authenticator. Four
-things that are easy to lose a day to:
+The page is driven headlessly with a CDP virtual authenticator. Three things
+that are easy to lose a day to:
 
-- Chrome 152 stable **silently ignores `--load-extension`**. Use the Chrome for
-  Testing binary in `~/Library/Caches/ms-playwright/chromium-*/`.
 - The rpId check happens in the browser process, so the page must really be on
   the origin under test: `--host-resolver-rules="MAP getvela.app:443 127.0.0.1:8443"`
   plus a local TLS server and `--ignore-certificate-errors`.
@@ -181,35 +177,28 @@ things that are easy to lose a day to:
 - The virtual authenticator only exists for the target that added it; add it per
   page, not once per browser.
 
-## Rules that keep both targets working
+## Rules that keep the page working everywhere
 
-- **No inline `<script>` or `onclick`** — MV3's extension CSP rejects them.
-  Behaviour lives in `app.js`, wired with `addEventListener`.
-- **No absolute paths** (`/app.js`) — they break under `chrome-extension://`
-  and under any web subdirectory. Relative only.
+- **No absolute paths** (`/app.js`) — they break under any web subdirectory.
+  Relative only.
 - **Classic script, not `type="module"`** — modules are blocked over `file://`.
-- **No CDN, no wasm** — MV3 forbids remote code and `WebAssembly` on extension
-  pages.
-- **Feature-detect, never assume** — `app.js` checks for `chrome.runtime.id`
-  before treating itself as an extension, and wraps `localStorage` in
-  `try/catch`.
+- **No CDN, no wasm** — nothing is fetched that is not in this folder.
 - **`file://` cannot do passkeys** — no origin, no rpId. Double-clicking
   `index.html` still renders; the signing buttons explain why they are off.
 
-`manifest.json` is ignored by web hosts, so shipping the same folder to both is
-safe. Do not add `<link rel="manifest">` to `index.html`: that would make the
-browser read the extension manifest as a PWA manifest.
+The "no inline `<script>`" rule is gone with the extension that required it
+(MV3 rejects inline script). Spec 076 relies on that: the signing page is
+published as ONE file whose every executable byte is covered by one hash.
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `index.html` | The only page, both targets |
-| `app.css` | Styles, light + dark via `prefers-color-scheme` |
-| `app.js` | Behaviour; detects which surface it is running on |
-| `manifest.json` | MV3 manifest — extension only |
-| `background.js` | Service worker; toolbar click opens the page in a tab |
-| `icons/` | Extension icons + web favicon |
+| `index.html` | The demo / self-check page |
+| `sign.html` | The signing page the wallets open |
+| `app.css`, `sheet.css` | Styles, light + dark via `prefers-color-scheme` |
+| `app.js`, `sign.js`, `lib/` | Behaviour |
+| `icons/` | Favicons |
 
 `icons/icon.svg` is a copy of the canonical mark at `docs/design/icon/app-icon.svg`.
 Regenerate the PNGs after changing it:
