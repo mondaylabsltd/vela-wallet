@@ -43,3 +43,43 @@ chose that token; only the wallet did, from the balance. `Back` still means
 hand-off is theirs to redo.
 
 Affects every shell, because the step machine is the core's.
+
+## B-2 … B-6 · The Chrome extension's signing surface (owner, 2026-09-23)
+
+Five reports from using the extension against Uniswap. They are listed together
+because the first four may share one cause and the fifth almost certainly does.
+
+**B-2 · the wallet disappears when a request arrives.** Wanted: the side
+panel keeps the wallet UI and the signing sheet rises over it, as on Android and
+iOS. What happens: `extension/panel.js` navigates the panel to
+`<locale>/request.html?rid=…` — a page whose whole job is the one request. The
+wallet is not under it; it was replaced.
+
+**B-3 · no speed switch when signing a dApp transaction.**
+**B-4 · a Uniswap swap on Polygon shows no network fee.**
+
+What I checked before guessing: the web's `SigningHost.svelte` DOES build a
+`SpeedControl` over the sheet's `FeeQuote`, and `SigningSheet` → `FeeRow` draws
+a `FeeSpeedRow`. So "the web never wired the speed control" is FALSE, and the
+simple story — "the dApp path is not the send path" — does not survive contact
+with the code.
+
+Two candidates remain, both to be measured:
+- `SigningHost.callsOf()` returns `null` unless every call has a non-empty `to`,
+  and `null` means no quote is even asked for. A swap should pass that.
+- the quote is asked for and comes back refused, and the sheet then draws
+  nothing rather than saying why.
+
+**B-5 · Arbitrum fails outright.** Not a missing network: chain 42161 is a
+built-in (`network_admin.rs:234`), with an Alchemy slug and an explorer.
+**Blocked on the error text** — "直接失败" could be the bundler refusing the
+chain, a Safe not deployed there, or the in-band fee path. The screen's own
+sentence would name it.
+
+**B-6 · a dApp signature has no on-chain waiting animation**, and
+**B-7 · Settings' "save the public key to Ethereum mainnet" feels unlike a
+transfer.** Both are the same shape: a surface that submits a transaction
+without the send flow's waiting-and-landing treatment.
+
+**Owner's direction:** 「我觉得签名管线应该统一一下吧」 — one signing pipeline,
+not three.
