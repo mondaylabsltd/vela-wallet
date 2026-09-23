@@ -39,10 +39,33 @@ which is phase C's problem. Nothing in A is built on a guess from the spec.
 enforcing this would open nothing and brick a Clear Signer that works today.
 Phase B publishes the page and fills the set; phase C does the wiring.
 
-## B — the page
-- [ ] T020 One file: inline CSS and JS, no subresources, and a REPRODUCIBLE build that produces it
-- [ ] T021 `default-src 'none'` inside the hashed bytes; a test that a matching page cannot reach the network
-- [ ] T022 Publish under `/b/<sha256>/sign.html`, and the rule that a published path never goes away
+## B — the page  ·  `samples/build-single.mjs`, `samples/single-file-test.mjs`
+
+- [x] **T020** One file: one style block, one script block, 19 sources, 312KB,
+      no subresources. Reproducible on purpose — `--check` builds twice and
+      insists on the same bytes, because a hash nobody else can reproduce
+      verifies nothing. It does not replace `sign.html`: the folder stays
+      hand-written and `--check` keeps the artefact from drifting.
+- [x] **T021** `default-src 'none'` inside the hashed bytes, and a real-browser
+      test: 10/10. The scripts RUN under their own CSP hash, the page asks the
+      network for nothing but its own document, and `fetch` / a remote image /
+      `sendBeacon` / a `WebSocket` from inside it all fail to reach a listening
+      server.
+- [ ] **T022** Publish under `/b/<sha256>/sign.html`, and the rule that a
+      published path never goes away. **Not done — this is deployment**, and
+      `sign.getvela.app` is not mine to change.
+
+Two things the build taught, both measured rather than reasoned:
+
+- **`String.replace` with a replacement STRING ate the script.** `$&`, `` $` ``
+  and `$'` are substitutions there, and JavaScript source is full of `$`, so the
+  bytes that landed in the file were not the bytes that were hashed — the page
+  loaded with its own code refused. Every insertion goes through a replacer
+  function now.
+- **`navigator.sendBeacon` returns `true` for "queued", not "sent".** It reports
+  success on a request the CSP then refuses, so the test asks the SERVER what
+  arrived instead of believing the API. Trusting the return value would have
+  reported a leak that is not there.
 
 ## C — the verifier (per shell)
 - [ ] T030 Hidden WebView, real navigation, UA set to the browser's

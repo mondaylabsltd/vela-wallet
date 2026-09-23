@@ -107,6 +107,34 @@ Two things follow, and the second is the bigger prize:
 
 This is a hard constraint on the page, not an optimisation.
 
+**Built and measured, 2026-09-23** (`samples/build-single.mjs`, 312KB: one
+style block, one script block, 19 sources). In a real browser its scripts run
+under their own CSP hash, the page asks the network for nothing but its own
+document, and `fetch`, a remote image, `sendBeacon` and a `WebSocket` from
+inside it all fail to reach a listening server —
+`samples/single-file-test.mjs`, 10/10.
+
+What the constraint COSTS, found by building it:
+
+- **the favicon** — decoration, and a subresource;
+- **remote chain and token logos** from `ethereum-data.getvela.app`. The page
+  already falls back to a drawn letter when an image fails, and the identicon —
+  the actual anti-poisoning signal — is computed locally, so this is a cosmetic
+  loss, not a safety one;
+- **the `memberProof` ceremony's registry fetch**. Transaction signing never
+  touches the network, but that one ceremony fetches a challenge from
+  `p256-index-v2.getvela.app`, and a `connect-src` for it would hand every page
+  matching the hash a way out. The fix is for the WALLET to fetch the challenge
+  and pass it in over the channel: the page already refuses any challenge it
+  cannot recompute itself, so nothing is weakened by where it arrives from.
+  **Until that lands, memberProof does not work in the single-file build**, and
+  it is the one thing FR-003 breaks rather than merely dims.
+
+The CSP omits `frame-ancestors` on purpose: a `<meta>` CSP cannot carry it, so
+writing it there would be a claim the file cannot keep. It belongs on the
+response header where the page is served — which is FR-002's publishing
+discipline, not the page's.
+
 ### FR-004 · The check is a real navigation, in a hidden WebView
 Not a `fetch()` from the app's HTTP stack.
 

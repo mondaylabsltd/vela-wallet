@@ -16,11 +16,15 @@
 // own strings — and that is the one place a signer page must not be able to
 // leak from.
 //
-// This does NOT replace the folder. `app-web/clearsigning` is also a Chrome
-// MV3 extension, and MV3 refuses to load a page with an inline <script>
-// (`clearsigning-package.yml` checks exactly that). So the folder stays as it
-// is, hand-written and zero-build, and this produces a SEPARATE artefact for
-// the content-addressed publication at `/b/<sha256>/sign.html`.
+// This does NOT replace `sign.html`. The folder stays hand-written and
+// zero-build — `sign.html` and `lib/*.js` are what a person reads and edits —
+// and this produces the artefact that is PUBLISHED, at the content-addressed
+// path `/b/<sha256>/sign.html`. `--check` keeps the two from drifting.
+//
+// (Until 2026-09-23 there was a harder reason: the folder was also a Chrome MV3
+// extension, and MV3 refuses to load a page with an inline <script> at all.
+// The extension is gone; the source/artefact split stayed because it is the
+// better shape, not because it was forced.)
 //
 // Reproducibility is load-bearing: if this build is not reproducible the hash
 // is not reproducible, and nobody can independently verify a published
@@ -103,13 +107,22 @@ export function build() {
 	out = out.replace(/\s*<link\s+rel="stylesheet"[^>]*>/g, '');
 	out = out.replace(/\s*<link\s+rel="(?:alternate )?icon"[^>]*>/g, '');
 	out = out.replace(/\s*<script\s+src="[^"]+"\s*><\/script>/g, '');
+	// Every insertion goes through a replacer FUNCTION, never a replacement
+	// STRING. In a replacement string `$&`, `` $` ``, `$'` and `$1` are
+	// substitutions, and JavaScript source is full of `$` — so the bytes that
+	// land in the file would not be the bytes that were hashed, and the browser
+	// refuses to run the script. Measured, not guessed: the first build did
+	// exactly that, and the page loaded with its own code blocked.
 	// The CSP goes FIRST in <head>, so it governs everything after it.
 	out = out.replace(
 		'<meta charset="utf-8" />',
-		`<meta charset="utf-8" />\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`
+		() => `<meta charset="utf-8" />\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`
 	);
-	out = out.replace('</head>', `  <style>${styleText}    </style>\n  </head>`);
-	out = out.replace('</body>', `  <script>${scriptText}    </script>\n  </body>`);
+	// The element's text content must be EXACTLY what was hashed: a CSP hash
+	// covers the content byte for byte, so even the indentation before a
+	// closing tag would make the browser refuse to run it.
+	out = out.replace('</head>', () => `  <style>${styleText}</style>\n  </head>`);
+	out = out.replace('</body>', () => `  <script>${scriptText}</script>\n  </body>`);
 	// One trailing newline, always.
 	out = `${out.replace(/\s*$/, '')}\n`;
 
