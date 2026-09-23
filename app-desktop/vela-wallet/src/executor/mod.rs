@@ -391,6 +391,10 @@ pub fn perform_session(operation: &SessionOperation) -> SessionShellResult {
             // unwarned logout path appears.
             Err(_) => SessionShellResult::PendingUploadsUnavailable,
         },
+        SessionOperation::RemoveAccount { address } => {
+            let _ = storage::remove_account(address);
+            SessionShellResult::AccountRemoved
+        }
         SessionOperation::ClearSignedInWallet => {
             let _ = storage::clear_signed_in_wallet();
             SessionShellResult::SignedInWalletCleared

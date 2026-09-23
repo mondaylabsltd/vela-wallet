@@ -188,6 +188,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 		},
 		signOut: {
 			title: k('settings.signOut.title'),
+			descMany: k('settings.signOut.descMany'),
 			keeps: k('settings.signOut.keeps'),
 			warning: k('settings.signOut.warning'),
 			button: k('settings.signOut.button'),
@@ -523,12 +524,15 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			total: k('settingsModals.account.total'),
 			countPrefix: k('home.switcherAccountCount'),
 			createNew: k('settingsModals.account.createNew'),
-			signInExisting: k('settingsModals.account.signInExisting')
+			signInExisting: k('settingsModals.account.signInExisting'),
+			remove: k('settings.account.remove'),
+			removeBody: k('settings.account.removeBody')
 		},
 		signOut: {
 			button: k('settings.signOut.button'),
 			title: k('settings.signOut.title'),
 			desc: k('settings.signOut.desc'),
+			descMany: k('settings.signOut.descMany'),
 			keeps: k('settings.signOut.keeps'),
 			warning: k('settings.signOut.warning'),
 			anyway: k('settings.signOut.anyway'),

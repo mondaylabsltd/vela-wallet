@@ -149,6 +149,22 @@ export function saveAccount(account: Account): void {
 	writeList(STORAGE_KEYS.accounts, accounts);
 }
 
+/**
+ * Drop ONE account from the stored list, by ADDRESS — spec 017's narrow half
+ * (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+ *
+ * By address, not by id or position, because a row's identity is its address
+ * (session invariant ⑨): a write that raced a re-sorted display must not take
+ * a stranger. A row that is no longer there is a no-op — the person asked for
+ * it to be gone, and it is.
+ */
+export function removeAccount(address: string): void {
+	const kept = loadAccounts().filter(
+		(account) => account.address.toLowerCase() !== address.toLowerCase()
+	);
+	writeList(STORAGE_KEYS.accounts, kept);
+}
+
 export function loadActiveIndex(): number {
 	let raw: string | null;
 	try {

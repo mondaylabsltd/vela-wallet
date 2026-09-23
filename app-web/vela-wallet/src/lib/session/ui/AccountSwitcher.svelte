@@ -78,14 +78,32 @@
 		if (row !== undefined) session.switchAccount(row.index);
 		onclose();
 	}
+
+	/**
+	 * One wallet leaves, the others stay (2026-09-23). The switcher closes
+	 * because the list under it just changed: leaving it open would put the
+	 * next row where the finger already is.
+	 */
+	function remove(position: number): void {
+		const row = view.accounts[position];
+		if (row !== undefined) session.removeAccount(row.index);
+		onclose();
+	}
 </script>
 
 {#if wide}
 	<Dialog title={sheet.title} closeLabel={copy.close} {onclose}>
-		<AccountsSheetBody {sheet} layout="inline" onselect={select} {oncreate} {onsignin} />
+		<AccountsSheetBody
+			{sheet}
+			layout="inline"
+			onselect={select}
+			onremove={remove}
+			{oncreate}
+			{onsignin}
+		/>
 	</Dialog>
 {:else}
 	<BottomSheet title={sheet.title} closeLabel={copy.close} height="tall" {onclose}>
-		<AccountsSheetBody {sheet} onselect={select} {oncreate} {onsignin} />
+		<AccountsSheetBody {sheet} onselect={select} onremove={remove} {oncreate} {onsignin} />
 	</BottomSheet>
 {/if}

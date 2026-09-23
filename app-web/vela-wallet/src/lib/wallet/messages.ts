@@ -81,6 +81,9 @@ export interface WalletMessages {
 	 */
 	signOut: {
 		title: string;
+		/** Template with `{{count}}` — what a sign-out takes when it is more
+		 *  than one wallet (2026-09-23). */
+		descMany: string;
 		keeps: string;
 		warning: string;
 		button: string;

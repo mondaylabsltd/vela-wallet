@@ -274,11 +274,17 @@ export interface SettingsMessages {
 		countPrefix: string;
 		createNew: string;
 		signInExisting: string;
+		/** Taking ONE wallet off this device (2026-09-23). */
+		remove: string;
+		removeBody: string;
 	};
 	signOut: {
 		button: string;
 		title: string;
 		desc: string;
+		/** Template with `{{count}}` — what a sign-out takes when it is more
+		 *  than one wallet. */
+		descMany: string;
 		keeps: string;
 		warning: string;
 		anyway: string;

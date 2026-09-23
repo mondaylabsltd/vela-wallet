@@ -307,6 +307,13 @@ export interface AccountsSheetModel {
 	}[];
 	primary: string;
 	secondary: string;
+	/**
+	 * The words for taking ONE wallet off this device (2026-09-23). Empty
+	 * leaves the affordance undrawn, which is what a fixture board wants.
+	 */
+	remove?: string;
+	removeBody?: string;
+	removeCancel?: string;
 }
 
 /** ST3/ST13b/ST16 all share this shape; only the tone and the callout differ. */

@@ -36,6 +36,7 @@
 	<SignOutSheet
 		{copy}
 		pendingUploadWarning={signOut.pending_upload_warning}
+		accountCount={signOut.account_count}
 		onConfirm={() => session.confirmSignOut()}
 		onDismiss={() => session.dismissSignOut()}
 	/>

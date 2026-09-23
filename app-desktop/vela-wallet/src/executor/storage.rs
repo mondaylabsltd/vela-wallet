@@ -455,6 +455,34 @@ pub fn save_registry_endpoint(url: &str) -> Result<()> {
 /// public key the registry never confirmed, and the next launch can still retry
 /// it — but a deleted record can never be retried, and that credential becomes
 /// unfindable at sign-in.
+/// Drop ONE account from the stored list, by ADDRESS — spec 017's narrow half
+/// (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+///
+/// By address, not by id or position, because a row's identity is its address
+/// (session invariant ⑨): a write that raced a re-sorted display must not take
+/// a stranger. A row that is no longer there is a no-op — the person asked for
+/// it to be gone, and it is.
+pub fn remove_account(address: &str) -> Result<()> {
+    let Ok(_guard) = LOCK.lock() else {
+        return Err(StorageError("the storage lock is poisoned".to_owned()));
+    };
+    let mut map = read_all()?;
+    let accounts = match map.get(KEY_ACCOUNTS) {
+        Some(Value::Array(items)) => items.clone(),
+        _ => Vec::new(),
+    };
+    let kept: Vec<Value> = accounts
+        .into_iter()
+        .filter(|item| {
+            item.get("address")
+                .and_then(Value::as_str)
+                .is_none_or(|stored| !stored.eq_ignore_ascii_case(address))
+        })
+        .collect();
+    map.insert(KEY_ACCOUNTS.to_owned(), Value::Array(kept));
+    write_all(map)
+}
+
 pub fn clear_signed_in_wallet() -> Result<()> {
     let Ok(_guard) = LOCK.lock() else {
         return Err(StorageError("the storage lock is poisoned".to_owned()));

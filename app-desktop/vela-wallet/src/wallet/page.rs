@@ -673,6 +673,9 @@ pub struct WalletPage {
     /// The accounts the switcher last announced. `None` = it is not on screen,
     /// and the core has been told so.
     switcher_addresses: Option<Vec<String>>,
+    /// The switcher row a "remove this wallet" confirmation is open for
+    /// (2026-09-23). A position in the ORIGINAL list, as the core removes by.
+    removing_account: Option<usize>,
     /// DC3: the fixture roster is empty.
     contacts_empty: bool,
     /// Open anchored menu: which fixture feeds it, the window-coordinate
@@ -998,6 +1001,7 @@ impl WalletPage {
             contact: 0,
             inspected_contact: None,
             switcher_addresses: None,
+            removing_account: None,
             contacts_empty: false,
             menu: None,
             tab: match section {
@@ -1785,6 +1789,23 @@ impl WalletPage {
                     .child(s.sign_out_keeps.clone()),
             );
 
+        // What this takes, when it is more than one wallet. `keeps` above is
+        // true either way — the address returns, the history is still there —
+        // and on a machine holding six it was ALSO how the dialog managed to
+        // say nothing about signing in six times (owner, 2026-09-23).
+        if dialog.account_count > 1 {
+            card = card.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .line_height(px(20.))
+                    .text_color(theme.fg_base)
+                    .child(SharedString::from(
+                        s.sign_out_desc_many
+                            .replace("{{count}}", &dialog.account_count.to_string()),
+                    )),
+            );
+        }
+
         if dialog.pending_upload_warning {
             card = card.child(
                 div()
@@ -1848,6 +1869,115 @@ impl WalletPage {
         Some(
             div()
                 .id("sign-out-scrim")
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.backdrop)
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(card)
+                .into_any_element(),
+        )
+    }
+
+    /// "Remove from this device?" — one wallet leaving, the others staying
+    /// (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+    ///
+    /// Asked, like every other destructive row in this shell: the affordance
+    /// sits in a list whose whole purpose is switching, one press away from a
+    /// row somebody meant to land on. The words are the corpus's own, and the
+    /// wallet's NAME says which row the dialog is about.
+    fn account_remove_dialog(
+        &mut self,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let index = self.removing_account?;
+        let view = session::view(cx);
+        let row = view.accounts.get(index)?;
+        let name: SharedString = if row.account.name.is_empty() {
+            row.account.address.clone().into()
+        } else {
+            row.account.name.clone().into()
+        };
+        let s = &self.strings;
+        let hover_confirm = theme.error_base;
+        let hover_cancel = theme.bg_sunken;
+        let card = div()
+            .w(px(400.))
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .p(px(28.))
+            .rounded(px(20.))
+            .bg(theme.bg_raised)
+            .border_1()
+            .border_color(theme.border_card)
+            .child(
+                div()
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .child(name),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .line_height(px(20.))
+                    .text_color(theme.fg_muted)
+                    .child(s.account_remove_body.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .id("account-remove-confirm")
+                            .h(px(44.))
+                            .rounded(px(12.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .bg(theme.error_soft)
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.error_base)
+                            .hover(move |style| {
+                                style.bg(hover_confirm).text_color(theme.fg_inverse)
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.removing_account = None;
+                                session::remove_account(index, cx);
+                                cx.notify();
+                            }))
+                            .child(s.account_remove.clone()),
+                    )
+                    .child(
+                        div()
+                            .id("account-remove-cancel")
+                            .h(px(44.))
+                            .rounded(px(12.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            .hover(move |style| style.bg(hover_cancel))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.removing_account = None;
+                                cx.notify();
+                            }))
+                            .child(s.sign_out_cancel.clone()),
+                    ),
+            );
+
+        Some(
+            div()
+                .id("account-remove-scrim")
                 .absolute()
                 .inset_0()
                 .flex()
@@ -6403,6 +6533,22 @@ impl WalletPage {
                         cx.notify();
                     }));
             }
+            // Taking ONE wallet off this device (2026-09-23). Its own click
+            // target, so it cannot be hit by somebody aiming at the row.
+            card = card.child(
+                div()
+                    .id(("switcher-remove", index as u64))
+                    .px(px(6.))
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .hover(|el| el.text_color(theme.fg_base))
+                    .child(self.strings.account_remove.clone())
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.removing_account = Some(index);
+                        cx.notify();
+                    })),
+            );
             list = list.child(card).child(div().h(px(1.)).bg(theme.divider));
         }
 
@@ -12996,6 +13142,7 @@ impl Render for WalletPage {
         let menu = self.menu_overlay(&theme, cx);
         let sign_out = self.sign_out_dialog(&theme, cx);
         let network_remove = self.network_remove_dialog(&theme, cx);
+        let account_remove = self.account_remove_dialog(&theme, cx);
         let confirm = self.confirm_dialog(&theme, cx);
         let settings_dialog = self.settings_dialog_overlay(&theme, window, cx);
         let import_result = self.import_result_dialog(&theme, cx);
@@ -13051,6 +13198,9 @@ impl Render for WalletPage {
         }
         if let Some(network_remove) = network_remove {
             root = root.child(network_remove);
+        }
+        if let Some(account_remove) = account_remove {
+            root = root.child(account_remove);
         }
         if let Some(confirm) = confirm {
             root = root.child(confirm);

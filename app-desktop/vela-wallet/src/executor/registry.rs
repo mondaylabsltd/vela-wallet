@@ -948,7 +948,10 @@ pub fn publish(
         RELYING_PARTY,
     )
     .map_err(|found| {
-        RegistryError::answered(format!("these keys belong to different sites: {}", found.join(", ")))
+        RegistryError::answered(format!(
+            "these keys belong to different sites: {}",
+            found.join(", ")
+        ))
     })?;
 
     let challenge: GroupChallenge = post_json(

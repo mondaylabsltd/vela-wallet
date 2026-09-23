@@ -151,6 +151,14 @@ pub fn switch_account(index: usize, cx: &mut App) {
     dispatch(vela_core::app::session::Event::SwitchAccount { index }, cx);
 }
 
+/// Drop ONE wallet from this device and stay on the others (2026-09-23).
+///
+/// `index` is a position in the ORIGINAL list, as [`switch_account`] takes.
+/// Removing the last one signs this device out, which the core decides.
+pub fn remove_account(index: usize, cx: &mut App) {
+    dispatch(vela_core::app::session::Event::RemoveAccount { index }, cx);
+}
+
 pub fn sign_out(cx: &mut App) {
     dispatch(vela_core::app::session::Event::SignOut, cx);
 }

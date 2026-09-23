@@ -22,9 +22,17 @@
 		onselect?: (index: number) => void;
 		oncreate?: () => void;
 		onsignin?: () => void;
+		/**
+		 * Taking ONE wallet off this device (2026-09-23). Absent draws no
+		 * affordance, which is what a fixture board wants.
+		 */
+		onremove?: (index: number) => void;
 	}
 
-	let { sheet, layout = 'stacked', onselect, oncreate, onsignin }: Props = $props();
+	let { sheet, layout = 'stacked', onselect, oncreate, onsignin, onremove }: Props = $props();
+
+	/** The row a confirmation is open for. */
+	let removing = $state<number | null>(null);
 </script>
 
 <p class="summary">{sheet.summary}</p>
@@ -58,7 +66,38 @@
 					<span class="check"><Icon icon={UTILITY_ICONS.check} size="md" /></span>
 				{/if}
 			</button>
+			{#if onremove && sheet.remove}
+				<button
+					type="button"
+					class="remove"
+					aria-label={sheet.remove}
+					onclick={() => (removing = i)}
+				>
+					<Icon icon={UTILITY_ICONS['x']} size="md" />
+				</button>
+			{/if}
 		</li>
+		{#if removing === i}
+			<!-- Asked before it happens: the affordance sits in a list whose
+			     whole purpose is switching, one press from a row somebody
+			     meant to land on. -->
+			<li class="confirm">
+				<p>{sheet.removeBody}</p>
+				<div class="confirm-actions">
+					<Button
+						variant="danger"
+						shape="rounded"
+						onclick={() => {
+							removing = null;
+							onremove?.(i);
+						}}>{sheet.remove}</Button
+					>
+					<Button variant="secondary" shape="rounded" onclick={() => (removing = null)}
+						>{sheet.removeCancel}</Button
+					>
+				</div>
+			</li>
+		{/if}
 	{/each}
 </ul>
 
@@ -72,6 +111,34 @@
 		margin: 0 0 var(--space-lg);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.remove {
+		flex: none;
+		padding: var(--space-xs);
+		border: 0;
+		background: none;
+		color: var(--color-fg-subtle);
+		cursor: pointer;
+	}
+
+	.remove:hover {
+		color: var(--color-fg-base);
+	}
+
+	.confirm {
+		padding: var(--space-md) 0 var(--space-lg);
+	}
+
+	.confirm p {
+		margin: 0 0 var(--space-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.confirm-actions {
+		display: flex;
+		gap: var(--space-sm);
 	}
 
 	.accounts {

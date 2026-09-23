@@ -1068,7 +1068,9 @@ export function liveAccountsSheet(
 		summary: liveAccountsSummary(input, m),
 		rows: liveAccountRows(input),
 		primary: m.createNew,
-		secondary: m.signInExisting
+		secondary: m.signInExisting,
+		remove: m.remove,
+		removeBody: m.removeBody
 	};
 }
 

@@ -32,11 +32,13 @@
 		copy: WalletMessages['signOut'];
 		/** The core's answer about unconfirmed key uploads. */
 		pendingUploadWarning: boolean;
+		/** How many wallets go with it. One and six cannot read the same. */
+		accountCount?: number;
 		onConfirm: () => void;
 		onDismiss: () => void;
 	}
 
-	let { copy, pendingUploadWarning, onConfirm, onDismiss }: Props = $props();
+	let { copy, pendingUploadWarning, accountCount = 1, onConfirm, onDismiss }: Props = $props();
 
 	const desktop = new MediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`, false);
 	let sheet = $state<{ requestClose: () => void }>();
@@ -63,6 +65,12 @@
 {#snippet body()}
 	<div class="signout">
 		<h2 class="title">{copy.title}</h2>
+		<!-- What this takes, when it is more than one wallet. `keeps` below is
+		     true either way, and on a browser holding six it was ALSO how the
+		     sheet managed to say nothing about signing in six times. -->
+		{#if accountCount > 1}
+			<p class="many">{copy.descMany.replace('{{count}}', String(accountCount))}</p>
+		{/if}
 		<p class="keeps">{copy.keeps}</p>
 
 		{#if pendingUploadWarning}
