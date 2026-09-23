@@ -3972,11 +3972,60 @@ fn locked_recipients_are_not_editable_either() {
     assert_eq!(sut.view().recipient, RECIPIENT, "locked recipient stays");
 }
 
+/// The owner's report, 2026-09-23: 「扫码到一个地址后无法切换发送资产，只能发送
+/// 里面的默认代币」.
+///
+/// A scan skips the picker and takes the balance's top token — the person
+/// never chose it — so the only way to a different asset was Back, and Back
+/// threw the scanned address away. They scanned again, landed on the same
+/// token, and read it as "the asset cannot be changed". Now the address
+/// survives and the second token is one tap from the first.
+#[test]
+fn a_scanned_recipient_can_change_its_asset_without_being_scanned_again() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        prefilled_recipient: Some(RECIPIENT.to_owned()),
+        ..SendOpenParams::default()
+    }));
+    // Two tokens, ETH worth more: the quick-send path picks it for the person.
+    sut.resolve(loaded(vec![eth("2"), usdc("5")]));
+    sut.drop_matching(|op| {
+        matches!(
+            op,
+            Op::ResolveIdentity { .. } | Op::LoadAccountCredential { .. }
+        )
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.stage,
+        SendStage::EnterDetails,
+        "the picker was skipped"
+    );
+    assert_eq!(view.recipient, RECIPIENT);
+
+    sut.dispatch(Event::Back);
+    let view = sut.view();
+    assert_eq!(
+        view.stage,
+        SendStage::SelectToken,
+        "the picker is reachable"
+    );
+    assert_eq!(
+        view.recipient, RECIPIENT,
+        "and the scan is still in hand — changing the asset costs nothing"
+    );
+}
+
 #[test]
 fn an_unlocked_prefill_still_carries_its_recipient_across_a_token_change() {
-    // The recovery path the lock must not eat: a contact tapped "Send" prefills
-    // the recipient WITHOUT locking, and `changeToken` = Back (which clears the
-    // recipient) + SetRecipient (which puts it back).
+    // The recovery path the lock must not eat: a contact tapped "Send"
+    // prefills the recipient WITHOUT locking, and the field stays re-settable.
+    //
+    // Back used to CLEAR it, and the web shell put it back by hand
+    // (`changeToken` = Back + SetRecipient) — a dance the native shells never
+    // learned, which is why a scanned address could not change its asset
+    // (owner, 2026-09-23). Back now keeps a handed-in recipient, and this test
+    // keeps its own subject: re-setting it still works.
     let mut sut = Sut::new();
     sut.dispatch(open_event(SendOpenParams {
         prefilled_recipient: Some(RECIPIENT.to_owned()),
@@ -3993,7 +4042,11 @@ fn an_unlocked_prefill_still_carries_its_recipient_across_a_token_change() {
     });
     select_eth(&mut sut);
     sut.dispatch(Event::Back);
-    assert_eq!(sut.view().recipient, "");
+    assert_eq!(
+        sut.view().recipient,
+        RECIPIENT,
+        "a recipient handed in from outside survives the trip to the picker"
+    );
     sut.dispatch(Event::SetRecipient {
         recipient: RECIPIENT.to_owned(),
     });
