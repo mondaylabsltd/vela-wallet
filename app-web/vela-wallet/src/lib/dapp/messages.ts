@@ -18,22 +18,4 @@ export interface RequestMessages {
 	connect: string;
 	cancel: string;
 	preparing: string;
-	/**
-	 * Spec 077: the landing a signed transaction shows, in the SEND receipt's
-	 * own words. Borrowed rather than written again so the two surfaces cannot
-	 * drift into saying different things about the same moment — which is what
-	 * the owner asked for ("UI 要保持一致性").
-	 */
-	receipt: {
-		confirming: string;
-		confirmingHint: string;
-		submitted: string;
-		confirmed: string;
-		failed: string;
-		failedHint: string;
-		opHashLabel: string;
-		txHashLabel: string;
-		explorer: string;
-		done: string;
-	};
 }

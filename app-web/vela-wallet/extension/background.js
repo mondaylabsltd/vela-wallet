@@ -222,20 +222,14 @@ async function openRequestWindow(rid) {
 	entry.windowId = created.id;
 }
 
-/** Close the side panel of a tab that has nothing more to show. */
-function closePanel(tabId) {
-	const panel = chrome.sidePanel;
-	if (!panel) return;
-	if (typeof panel.close === 'function') {
-		Promise.resolve(panel.close({ tabId })).catch(() => {});
-		return;
-	}
-	// Older Chrome: disabling the panel for the tab dismisses it; re-enabling
-	// makes the next request able to open it again, without opening it now.
-	Promise.resolve(panel.setOptions({ tabId, enabled: false }))
-		.then(() => panel.setOptions({ tabId, enabled: true }))
-		.catch(() => {});
-}
+/*
+ * There used to be a `closePanel` here, and a `panelDone` message the page sent
+ * when the tab owed nothing more.
+ *
+ * Spec 077 FR-001 retired both: the panel is the WALLET now, not one request, so
+ * "nothing more to show" is no longer a thing that happens — there is always the
+ * wallet. It is dismissed by the person, like any side panel.
+ */
 
 /** The oldest request a panel on `tabId` still owes an answer for. */
 function nextForPanel(tabId) {
@@ -633,17 +627,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	}
 
 	if (message.type === 'requestCurrent') {
-		// The side panel of a tab, asking what it owes. Nothing → `null`, and
-		// the panel closes itself.
+		// The side panel of a tab, asking what it owes. Nothing → `null`, and the
+		// panel stays as it is: since spec 077 the panel is the wallet, and a
+		// wallet with no pending request is simply a wallet.
 		sendResponse(nextForPanel(typeof message.tabId === 'number' ? message.tabId : undefined));
-		return false;
-	}
-
-	if (message.type === 'panelDone') {
-		if (typeof message.tabId === 'number' && !nextForPanel(message.tabId)) {
-			closePanel(message.tabId);
-		}
-		sendResponse({ ok: true });
 		return false;
 	}
 

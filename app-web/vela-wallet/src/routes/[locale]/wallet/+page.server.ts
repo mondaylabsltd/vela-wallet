@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import {
+	resolveRequestMessages,
 	resolveSettingsMessages,
 	resolveSigningMessages,
 	resolveWalletFlowMessages,
@@ -79,6 +80,11 @@ export const load: PageServerLoad = ({ params }) => {
 		rescueMessages: pickRescueMessages(settingsMessages),
 		// The account switcher behind the header's name (founder call,
 		// 2026-09-05) is the settings sheet, so it speaks that corpus too.
-		accountsMessages: settingsMessages.accounts
+		accountsMessages: settingsMessages.accounts,
+		// Spec 077 FR-001: in the extension's side panel this page answers dApp
+		// requests over the wallet, so it carries the consent card's words. They
+		// are the in-app browser's connect copy (spec 022) — one corpus, which is
+		// why the panel and the request window cannot word it differently.
+		requestMessages: resolveRequestMessages(locale)
 	};
 };
