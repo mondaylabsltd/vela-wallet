@@ -389,7 +389,8 @@ struct ContactPickRowView: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: Tokens.Space.s12) {
-                IdenticonAvatar(seed: contact.identiconSeed, size: WalletGeometry.rowIcon)
+                IdenticonAvatar(seed: contact.identiconSeed, size: WalletGeometry.rowIcon,
+                                tappable: false)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     HStack(spacing: Tokens.Space.s4) {
                         Text(verbatim: contact.name)

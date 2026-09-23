@@ -977,154 +977,160 @@ struct RootView: View {
                     if drawn == .sd2e { contacts.open(myAddress: session.view.address) }
                 }
             } else {
-                switch section {
-                case .wallet:
-                    WalletScreen(
-                        model: walletModel,
-                        loc: loc,
-                        onSelectTab: selectTab,
-                        onFlow: { flows.enter($0) },
-                        onToggleBalance: { wallet.togglePrivacy() },
-                        onStatusTap: { openRescue() },
-                        // The name line's chevron has drawn a disclosure since
-                        // spec 015 and led nowhere on this screen until now.
-                        onOpenAccounts: {
-                            openAccountSwitcher()
-                            homeSwitcherOpen = true
-                        },
-                        onRefresh: RefreshAction {
-                            // `pull: true` is carried so the core can tell a
-                            // person's own gesture from the 30-second tick and
-                            // answer it differently.
-                            wallet.refresh(pull: true)
-                            activity.focusTick()
-                            await wallet.settled()
-                        }
-                    )
-                    // The hero's status line, as a sheet over the wallet —
-                    // which is what SR2 and SR3 are drawn as. The settings
-                    // route would put the settings list behind a sentence
-                    // about the screen somebody was actually on.
-                    .sheet(item: $rescue) { overlay in
-                        SettingsSheet(
-                            model: rescueModel(overlay),
-                            overlay: overlay,
-                            onDismiss: { rescue = nil },
-                            onSignOut: {},
-                            rpcDraft: $rpcDraft,
-                            onCommitRpc: { commitRescueRpc() },
-                            onRetryChain: { _ in wallet.refresh(pull: true) }
-                        )
-                        .themed(scheme)
-                    }
-                    // ONE switcher, wherever it is opened from: the same
-                    // sheet the settings page shows, over the same live model,
-                    // so the two can never drift into showing different
-                    // accounts.
-                    .sheet(isPresented: $homeSwitcherOpen) {
-                        SettingsSheet(
-                            model: settingsModel(.st1),
-                            overlay: .accounts,
-                            onDismiss: { closeHomeSwitcher() },
-                            onSignOut: {},
-                            onSelectAccount: { address in
-                                switchToAccount(address)
-                                closeHomeSwitcher()
+                Group {
+                    switch section {
+                    case .wallet:
+                        WalletScreen(
+                            model: walletModel,
+                            loc: loc,
+                            onSelectTab: selectTab,
+                            onFlow: { flows.enter($0) },
+                            onToggleBalance: { wallet.togglePrivacy() },
+                            onStatusTap: { openRescue() },
+                            // The name line's chevron has drawn a disclosure since
+                            // spec 015 and led nowhere on this screen until now.
+                            onOpenAccounts: {
+                                openAccountSwitcher()
+                                homeSwitcherOpen = true
                             },
-                            onAccountCreate: {
-                                closeHomeSwitcher()
-                                router.path.append(.create)
-                            },
-                            onAccountSignIn: {
-                                closeHomeSwitcher()
-                                onboarding.showSignInMethods = true
+                            onRefresh: RefreshAction {
+                                // `pull: true` is carried so the core can tell a
+                                // person's own gesture from the 30-second tick and
+                                // answer it differently.
+                                wallet.refresh(pull: true)
+                                activity.focusTick()
+                                await wallet.settled()
                             }
                         )
-                        .themed(scheme)
-                    }
-                    // The two machines have to agree about hiding: the balance
-                    // core owns the state, and the feed core suppresses its
-                    // receipt toast on it. Forwarding the COMMITTED value
-                    // rather than a guess made at tap time is what keeps them
-                    // from disagreeing by one tap.
-                    .onChange(of: wallet.balance?.hidden ?? false) { _, hidden in
-                        activity.privacyChanged(hidden: hidden)
-                    }
-                    .task {
-                        pool.boot()
-                        activity.open(address: session.view.address,
-                                      hidden: wallet.balance?.hidden ?? false)
-                        // The display currency is app-wide: the hero is the
-                        // figure it matters most on, and it must not wait for a
-                        // visit to 设置 to learn the person chose CNY.
-                        settings.openCurrency()
-                        // …and so is the default speed (spec 069): the send
-                        // form's folded control shows it from the first open.
-                        settings.openFeeTier()
-                        // So is the NETWORK list, and for a sharper reason: the
-                        // send machine resolves every holding against it, so a
-                        // `network_admin` that had not been opened yet made the
-                        // token picker EMPTY — device-found, and the same shape
-                        // as Android's contact picker, which was empty because
-                        // its machine only booted on the contacts page.
-                        settings.open()
-                        wallet.open(address: session.view.address)
-                    }
-                    // The 10-minute balance refresh runs exactly while this
-                    // screen is showing and the app is active (the web's
-                    // aggregate poll). A flow opening over the home takes it
-                    // off screen; closing it brings it back — one timer, never
-                    // two.
-                    .onAppear {
-                        wallet.homePoller.sceneActive(scenePhase == .active)
-                        wallet.homePoller.homeVisible(true)
-                    }
-                    .onDisappear { wallet.homePoller.homeVisible(false) }
-                case .contacts:
-                    contactsSection
-                case .explore:
-                    // Spec 053: 探索 is a browser. Its start page is this
-                    // person's own favourites, groups and recents, its tab
-                    // strip is the core's, and its pages are real. The
-                    // account a site is shown is the REAL one — a connection
-                    // panel naming a stranger's account would be the wallet
-                    // lying about what it just granted.
-                    exploreSection
-                    .onChange(of: signing?.closed) { _, closed in
-                        // The page has its answer and the core cleared the
-                        // sheet. Dropping the controller is what makes the
-                        // next request start from nothing rather than
-                        // inheriting a decoded intent or a half-edited cap.
-                        if closed == true { signing = nil }
-                    }
-                    .onDisappear {
-                        // Leaving 探索 settles every request the page left
-                        // hanging — as **unknown-pending**, never as a
-                        // refusal: nobody declined anything, and a page told
-                        // 4001 would show its user "you rejected this" when
-                        // they did not.
-                        //
-                        // On the section change rather than on a view's
-                        // `onDisappear` alone would be safer still; this one
-                        // fires for the tab switch and nothing else, because
-                        // the signing sheet is presented OVER this screen and
-                        // leaves the section where it is.
-                        browser.close()
-                    }
-                    .task {
-                        browser.ports.onSignRequest = { request in
-                            openSigning(request)
+                        // The hero's status line, as a sheet over the wallet —
+                        // which is what SR2 and SR3 are drawn as. The settings
+                        // route would put the settings list behind a sentence
+                        // about the screen somebody was actually on.
+                        .sheet(item: $rescue) { overlay in
+                            SettingsSheet(
+                                model: rescueModel(overlay),
+                                overlay: overlay,
+                                onDismiss: { rescue = nil },
+                                onSignOut: {},
+                                rpcDraft: $rpcDraft,
+                                onCommitRpc: { commitRescueRpc() },
+                                onRetryChain: { _ in wallet.refresh(pull: true) }
+                            )
+                            .themed(scheme)
                         }
-                        browser.start()
-                        browser.accountsChanged(
-                            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
-                            active: session.view.address
-                        )
-                        // The device harness opens its own page. Not a product
-                        // affordance: a browser that launched a URL somebody
-                        // else chose is a browser nobody should install.
-                        if let url = PageOverride.browserURL { browser.open(url) }
+                        // The two machines have to agree about hiding: the balance
+                        // core owns the state, and the feed core suppresses its
+                        // receipt toast on it. Forwarding the COMMITTED value
+                        // rather than a guess made at tap time is what keeps them
+                        // from disagreeing by one tap.
+                        .onChange(of: wallet.balance?.hidden ?? false) { _, hidden in
+                            activity.privacyChanged(hidden: hidden)
+                        }
+                        .task {
+                            pool.boot()
+                            activity.open(address: session.view.address,
+                                          hidden: wallet.balance?.hidden ?? false)
+                            // The display currency is app-wide: the hero is the
+                            // figure it matters most on, and it must not wait for a
+                            // visit to 设置 to learn the person chose CNY.
+                            settings.openCurrency()
+                            // …and so is the default speed (spec 069): the send
+                            // form's folded control shows it from the first open.
+                            settings.openFeeTier()
+                            // So is the NETWORK list, and for a sharper reason: the
+                            // send machine resolves every holding against it, so a
+                            // `network_admin` that had not been opened yet made the
+                            // token picker EMPTY — device-found, and the same shape
+                            // as Android's contact picker, which was empty because
+                            // its machine only booted on the contacts page.
+                            settings.open()
+                            wallet.open(address: session.view.address)
+                        }
+                        // The 10-minute balance refresh runs exactly while this
+                        // screen is showing and the app is active (the web's
+                        // aggregate poll). A flow opening over the home takes it
+                        // off screen; closing it brings it back — one timer, never
+                        // two.
+                        .onAppear {
+                            wallet.homePoller.sceneActive(scenePhase == .active)
+                            wallet.homePoller.homeVisible(true)
+                        }
+                        .onDisappear { wallet.homePoller.homeVisible(false) }
+                    case .contacts:
+                        contactsSection
+                    case .explore:
+                        // Spec 053: 探索 is a browser. Its start page is this
+                        // person's own favourites, groups and recents, its tab
+                        // strip is the core's, and its pages are real. The
+                        // account a site is shown is the REAL one — a connection
+                        // panel naming a stranger's account would be the wallet
+                        // lying about what it just granted.
+                        exploreSection
+                        .onChange(of: signing?.closed) { _, closed in
+                            // The page has its answer and the core cleared the
+                            // sheet. Dropping the controller is what makes the
+                            // next request start from nothing rather than
+                            // inheriting a decoded intent or a half-edited cap.
+                            if closed == true { signing = nil }
+                        }
+                        .onDisappear {
+                            // Leaving 探索 settles every request the page left
+                            // hanging — as **unknown-pending**, never as a
+                            // refusal: nobody declined anything, and a page told
+                            // 4001 would show its user "you rejected this" when
+                            // they did not.
+                            //
+                            // On the section change rather than on a view's
+                            // `onDisappear` alone would be safer still; this one
+                            // fires for the tab switch and nothing else, because
+                            // the signing sheet is presented OVER this screen and
+                            // leaves the section where it is.
+                            browser.close()
+                        }
+                        .task {
+                            browser.ports.onSignRequest = { request in
+                                openSigning(request)
+                            }
+                            browser.start()
+                            browser.accountsChanged(
+                                addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
+                                active: session.view.address
+                            )
+                            // The device harness opens its own page. Not a product
+                            // affordance: a browser that launched a URL somebody
+                            // else chose is a browser nobody should install.
+                            if let url = PageOverride.browserURL { browser.open(url) }
+                        }
                     }
+                }
+                // ONE switcher, wherever it is opened from — the wallet home,
+                // settings, and the dApp connection panel on 探索. It hung off
+                // `WalletScreen` until 2026-09-23, so the connection panel set
+                // the flag and NOTHING opened: the presenter was not mounted on
+                // the section the person was looking at. A device found it.
+                // sheet the settings page shows, over the same live model,
+                // so the two can never drift into showing different
+                // accounts.
+                .sheet(isPresented: $homeSwitcherOpen) {
+                    SettingsSheet(
+                        model: settingsModel(.st1),
+                        overlay: .accounts,
+                        onDismiss: { closeHomeSwitcher() },
+                        onSignOut: {},
+                        onSelectAccount: { address in
+                            switchToAccount(address)
+                            closeHomeSwitcher()
+                        },
+                        onAccountCreate: {
+                            closeHomeSwitcher()
+                            router.path.append(.create)
+                        },
+                        onAccountSignIn: {
+                            closeHomeSwitcher()
+                            onboarding.showSignInMethods = true
+                        }
+                    )
+                    .themed(scheme)
                 }
             }
         } else {
@@ -2220,6 +2226,12 @@ struct RootView: View {
                     // iOS the toggle moved and nothing happened.
                     onAddTokenTab: { id in
                         guard id == "native" else { return }
+                        // The sheet goes FIRST. Pushing settings underneath it
+                        // left the person looking at the same add-token sheet,
+                        // unchanged, still on ERC-20, with 添加网络 hidden
+                        // behind it — found on a device, and indistinguishable
+                        // from the tab doing nothing.
+                        flows.close()
                         pendingSettingsPage = .addNetwork
                         router.path.append(.settings)
                     },

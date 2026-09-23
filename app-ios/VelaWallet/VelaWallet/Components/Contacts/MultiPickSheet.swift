@@ -107,7 +107,7 @@ struct MultiPickSheet: View {
     private func pickRow(_ row: MultiPickRowModel) -> some View {
         HStack(spacing: Tokens.Space.s12) {
             if let seed = row.identiconSeed {
-                IdenticonAvatar(seed: seed, size: ContactsGeometry.rowAvatar)
+                IdenticonAvatar(seed: seed, size: ContactsGeometry.rowAvatar, tappable: false)
             } else {
                 Circle()
                     .strokeBorder(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
