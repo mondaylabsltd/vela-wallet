@@ -1089,44 +1089,7 @@ struct RootView: View {
                     // account a site is shown is the REAL one — a connection
                     // panel naming a stranger's account would be the wallet
                     // lying about what it just granted.
-                    ExploreScreen(
-                        model: ExploreLive.home(
-                            explore: browser.explore,
-                            history: browser.history,
-                            permissions: browser.permissions,
-                            engine: browser.current,
-                            identity: (name: session.view.activeName,
-                                       address: session.view.address),
-                            chainId: browser.browserChain,
-                            loc: loc
-                        ),
-                        loc: loc,
-                        signing: SigningFixtures.build(.cs12, loc: loc)
-                            .withIdentity(name: session.view.activeName,
-                                          address: session.view.address),
-                        signingLive: signing.map { signingModel(for: $0) },
-                        onSigningConfirm: { signing?.approve() },
-                        // **Every chip on the editor is a PRESET, 撤销 included.**
-                        //
-                        // The core has a separate `revoke_chosen`, and it
-                        // belongs to the BOOLEAN card — `setApprovalForAll`,
-                        // a DAI permit — where there is no amount to cap and
-                        // the choice is yes or no. Sending it from the amount
-                        // editor's chip is an event the editor does not
-                        // answer, and the chip silently does nothing.
-                        // Device-found: 撤销 was tapped, the sheet kept saying
-                        // 无限额, and the slide stayed shut.
-                        onAllowanceChip: { chip in signing?.guardPreset(chip) },
-                        onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-                        onSignWith: { id in signing?.signWith(id) },
-                        onFee: { signing?.feeTapped() },
-                        onFeePick: { id in signing?.pickFee(id) },
-                        onSpeed: { id in signing?.speed(id) },
-                        onSigningDismissed: { signing?.swipeDismissed() },
-                        controller: browser,
-                        camera: camera,
-                        onSelectTab: selectTab
-                    )
+                    exploreSection
                     .onChange(of: signing?.closed) { _, closed in
                         // The page has its answer and the core cleared the
                         // sheet. Dropping the controller is what makes the
@@ -2661,6 +2624,57 @@ struct RootView: View {
         }
     }
 
+    /// 探索, live.
+    ///
+    /// Pulled out of `signedInOrWelcome` because the Swift type checker
+    /// gives up on it in place — the same trap specs 052, 054 and 055 each
+    /// hit once, and adding one more argument is all it takes. A method body
+    /// is type-checked on its own.
+    @ViewBuilder private var exploreSection: some View {
+        ExploreScreen(
+            model: ExploreLive.home(
+                explore: browser.explore,
+                history: browser.history,
+                permissions: browser.permissions,
+                engine: browser.current,
+                identity: (name: session.view.activeName,
+                           address: session.view.address),
+                chainId: browser.browserChain,
+                loc: loc
+            ),
+            loc: loc,
+            signing: SigningFixtures.build(.cs12, loc: loc)
+                .withIdentity(name: session.view.activeName,
+                              address: session.view.address),
+            signingLive: signing.map { signingModel(for: $0) },
+            onSigningConfirm: { signing?.approve() },
+            // **Every chip on the editor is a PRESET, 撤销 included.**
+            //
+            // The core has a separate `revoke_chosen`, and it
+            // belongs to the BOOLEAN card — `setApprovalForAll`,
+            // a DAI permit — where there is no amount to cap and
+            // the choice is yes or no. Sending it from the amount
+            // editor's chip is an event the editor does not
+            // answer, and the chip silently does nothing.
+            // Device-found: 撤销 was tapped, the sheet kept saying
+            // 无限额, and the slide stayed shut.
+            onAllowanceChip: { chip in signing?.guardPreset(chip) },
+            onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
+            onSignWith: { id in signing?.signWith(id) },
+            onFee: { signing?.feeTapped() },
+            onFeePick: { id in signing?.pickFee(id) },
+            onSpeed: { id in signing?.speed(id) },
+            onSigningDismissed: { signing?.swipeDismissed() },
+            controller: browser,
+            camera: camera,
+            onSelectTab: selectTab,
+            // The connection panel's "Switch account" — the SAME
+            // switcher the wallet home and settings open, so the
+            // three can never show different accounts.
+            onSwitchAccount: { homeSwitcherOpen = true }
+        )
+    }
+
     private func settingsModel(_ state: SettingsStateId) -> SettingsScreenModel {
         let base = SettingsFixtures.build(state, loc: loc)
             .withIdentity(
@@ -2869,6 +2883,17 @@ struct RootView: View {
                 ($0["address"] as? String)?.lowercased() == address.lowercased()
             }) else { return }
             session.switchAccount(index: index)
+            // The browser is told too, and this is not housekeeping. A
+            // connected site holds a grant PINNED to an address; the core
+            // re-pins it on `AccountSwitched`, writes it, and tells the page —
+            // but only if somebody says the switch happened. Until now only
+            // the browser's own first launch did, so switching accounts with a
+            // site connected left the page believing it was still talking to
+            // the account it was granted, while the wallet signed as another.
+            browser.accountsChanged(
+                addresses: records.compactMap { $0["address"] as? String },
+                active: address
+            )
             // Everything account-scoped starts again: the book, the balances,
             // the feed. A switch that left the previous account's money on
             // screen would be the worst thing this control could do.
