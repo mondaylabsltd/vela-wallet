@@ -1423,11 +1423,15 @@ export function ethereumBackupRow(
 				actionable: true
 			};
 		case 'could_not_check':
+			// Tappable, and what it does is ask again — the state a person is
+			// most likely to tap, and the only one where "nothing happened"
+			// was the whole experience.
 			return {
 				title: m.backup.title,
 				subtitle: m.backup.couldNotCheck,
 				tone: 'neutral',
-				actionable: false
+				actionable: true,
+				retry: true
 			};
 		case 'unavailable':
 		case 'not_registered':

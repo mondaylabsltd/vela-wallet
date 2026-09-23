@@ -119,7 +119,9 @@
 						}}
 					>
 						{#snippet trailing()}
-							<button type="button" class="max" onclick={() => onmax?.(i)}>{row.max}</button>
+							{#if row.max !== undefined}
+								<button type="button" class="max" onclick={() => onmax?.(i)}>{row.max}</button>
+							{/if}
 						{/snippet}
 					</AssetRow>
 				</li>

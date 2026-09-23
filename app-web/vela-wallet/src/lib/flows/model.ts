@@ -435,7 +435,18 @@ export interface SweepRowModel {
 	symbol: string;
 	balanceLabel: string;
 	amount: string;
-	max: string;
+	/**
+	 * Absent on the live path, and the drawn board keeps it.
+	 *
+	 * A sweep's amounts ARE every picked token's whole balance, less the
+	 * reserve whichever asset pays the fee needs — the core recomputes them on
+	 * every quote (`multi_token_specs`). The row is a label, so there is no
+	 * per-row figure for a Max to fill. Worse than useless, in fact: the chip
+	 * discarded its row index and the core's `TapMax` then acted on the FIRST
+	 * token of the pick, writing the hidden single amount. iOS and Android
+	 * both dropped the chip; the core refuses `TapMax` in sweep mode now too.
+	 */
+	max?: string;
 }
 
 export interface FeeRowModel {

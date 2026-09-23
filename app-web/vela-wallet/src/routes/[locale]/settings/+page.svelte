@@ -304,6 +304,13 @@
 	onMount(() => () => feeQuote.dispose());
 	let backupOpening = false;
 	function startBackup(): void {
+		// "Could not check" asks again rather than starting a backup: there is
+		// nothing to sign until we know whether it is already backed up, and
+		// the same effect below does the asking.
+		if (backupState === 'could_not_check') {
+			backupAsked += 1;
+			return;
+		}
 		const account = session.view.accounts[session.view.active_index]?.account;
 		if (!account || backupOpening) return;
 		backupOpening = true;

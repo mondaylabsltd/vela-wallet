@@ -570,8 +570,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 				mark: mark(row),
 				symbol: row.symbol,
 				balanceLabel: fill(m['send.balanceLabel'], { amount: trimBalance(row.balance) }),
-				amount: trimBalance(sweepAmount(send, row)),
-				max: m['send.maxBtn']
+				amount: trimBalance(sweepAmount(send, row))
 			})),
 			amount: undefined,
 			addRecipient: undefined,
