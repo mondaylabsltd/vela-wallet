@@ -897,6 +897,15 @@ export interface SendReceiptModel {
 	hash?: { label: string; value: string; copyLabel: string };
 	viewOnExplorer?: string;
 	/**
+	 * Where it leads. Live only, and only once there IS a hash — a receipt for
+	 * an op the chain has not named yet has nothing to link. Until spec 081 no
+	 * builder set `viewOnExplorer` at all, so the one button on the one screen
+	 * that answers "did it really happen" was never drawn on the live path;
+	 * iOS had the button and no handler, which is the same hole from the other
+	 * side.
+	 */
+	explorerUrl?: string;
+	/**
 	 * Spec 038 #D3 — live, while submitted: when the relay accepted the op and
 	 * how long this chain usually takes, so the screen can count rather than
 	 * spin. The screen owns the clock; the sentence is the corpus's.

@@ -376,15 +376,21 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	}
 	const speed = speedModel(inputs);
 	const ofAnotherTier = feeOfAnotherTier(inputs);
+	// Exactly what `SigningHost`'s `onfee` will act on, decided once and drawn:
+	// a failed quote can be asked again, and two or more coins open a list. One
+	// coin and a quote is a fact with nothing behind it, and a row that says
+	// otherwise is the tap that does nothing (spec 081, dead-controls #6).
+	const tappable = fee.failed !== null || fee.options.length > 1;
 	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
 		// own row. A sheet that drew nothing here let a person slide on a
 		// mainnet transaction without ever being told what it costs — and the
 		// slide stays shut in both states, as it does on the phones.
 		if (fee.busy || ofAnotherTier) {
-			return { kind: 'onchain', label: m.feeLabel, value: m.feeEstimating, speed };
+			return { kind: 'onchain', label: m.feeLabel, value: m.feeEstimating, speed, tappable };
 		}
-		if (fee.failed) return { kind: 'onchain', label: m.feeLabel, value: m.feeRetry, speed };
+		if (fee.failed)
+			return { kind: 'onchain', label: m.feeLabel, value: m.feeRetry, speed, tappable };
 		return { kind: 'hidden' };
 	}
 	// The send screens' own line, through the send screens' own formatter: the
@@ -432,7 +438,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		!fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
 			? fill(m.feeShort, { sym: selected.symbol })
 			: undefined;
-	return { kind: 'onchain', label: m.feeLabel, value, selector, speed, warning };
+	return { kind: 'onchain', label: m.feeLabel, value, selector, speed, warning, tappable };
 }
 
 /**

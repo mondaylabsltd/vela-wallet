@@ -22,7 +22,7 @@ import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
 import type { SendSplitRowIssue } from '$lib/core/generated/SendSplitRowIssue';
 import type { SendView } from '$lib/core/generated/SendView';
 import { isStable } from '$lib/services/activity';
-import { chainName, nativeSymbol } from '$lib/services/networks';
+import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
@@ -1137,6 +1137,12 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 						copyLabel: m['componentsUi.identiconViewer.copyAddress']
 					}
 				: undefined,
+			// The chain is the TOKEN's, never whichever one the wallet is
+			// looking at now: a send can confirm after the person has moved on,
+			// and the other chain's explorer would show them a hash that is
+			// not there.
+			viewOnExplorer: send.tx_hash ? m['history.viewOnExplorer'] : undefined,
+			explorerUrl: send.tx_hash ? explorerTxURL(chainId, send.tx_hash) : undefined,
 			cta: m['componentsTx.receipt.done'],
 			ctaAccent: true
 		};
