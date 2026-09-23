@@ -10856,39 +10856,54 @@ impl WalletPage {
     /// boards have no payload of their own, and inventing one would put bytes
     /// on screen that nobody is being asked to sign.
     fn signing_raw_rows(&self, cx: &mut Context<Self>) -> Vec<(SharedString, SharedString)> {
-        let Some(host) = self.signing_host.as_ref() else {
+        // Linux has no in-app browser, so no dApp request ever reaches this
+        // shell there and `signing_host` does not exist — the same cut
+        // `connection_body` makes a few hundred lines down.
+        #[cfg(target_os = "linux")]
+        {
+            let _ = cx;
             return Vec::new();
-        };
-        let host = host.read(cx);
-        let (method, params) = host.raw.clone();
-        let mut rows = vec![(
-            self.signing.tech_function.clone(),
-            SharedString::from(method.clone()),
-        )];
-        match crate::executor::sign_request::calls_of(&method, &params) {
-            // A transaction: each leg's destination and its calldata, which is
-            // what a person compares against the summary above.
-            Some(calls) => {
-                for (i, call) in calls.iter().enumerate() {
-                    let label = if calls.len() > 1 {
-                        SharedString::from(format!("{} {}", self.signing.label_interacting, i + 1))
-                    } else {
-                        self.signing.label_interacting.clone()
-                    };
-                    rows.push((label, SharedString::from(call.to.clone())));
-                    rows.push((
-                        self.signing.tech_raw_data.clone(),
-                        SharedString::from(call.data.clone()),
-                    ));
-                }
-            }
-            // A message or typed data: the payload itself.
-            None => rows.push((
-                self.signing.tech_raw_data.clone(),
-                SharedString::from(params),
-            )),
         }
-        rows
+        #[cfg(not(target_os = "linux"))]
+        {
+            let Some(host) = self.signing_host.as_ref() else {
+                return Vec::new();
+            };
+            let host = host.read(cx);
+            let (method, params) = host.raw.clone();
+            let mut rows = vec![(
+                self.signing.tech_function.clone(),
+                SharedString::from(method.clone()),
+            )];
+            match crate::executor::sign_request::calls_of(&method, &params) {
+                // A transaction: each leg's destination and its calldata, which is
+                // what a person compares against the summary above.
+                Some(calls) => {
+                    for (i, call) in calls.iter().enumerate() {
+                        let label = if calls.len() > 1 {
+                            SharedString::from(format!(
+                                "{} {}",
+                                self.signing.label_interacting,
+                                i + 1
+                            ))
+                        } else {
+                            self.signing.label_interacting.clone()
+                        };
+                        rows.push((label, SharedString::from(call.to.clone())));
+                        rows.push((
+                            self.signing.tech_raw_data.clone(),
+                            SharedString::from(call.data.clone()),
+                        ));
+                    }
+                }
+                // A message or typed data: the payload itself.
+                None => rows.push((
+                    self.signing.tech_raw_data.clone(),
+                    SharedString::from(params),
+                )),
+            }
+            rows
+        }
     }
 
     fn signing_body(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
