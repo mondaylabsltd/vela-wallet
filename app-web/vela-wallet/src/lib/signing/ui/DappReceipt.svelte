@@ -54,6 +54,7 @@
 	{/if}
 
 	{#if model.explorer}
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the chain's own explorer, a URL from the networks table, never an app route -->
 		<a class="explorer" href={model.explorer.url} target="_blank" rel="noopener noreferrer">
 			{model.explorer.label}
 		</a>
