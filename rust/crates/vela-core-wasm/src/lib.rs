@@ -819,6 +819,24 @@ pub fn min_gas_price_wei(chain_id: u32) -> String {
     vela_core::app::fee_policy::min_gas_price_wei(chain_id).to_string()
 }
 
+/// Spec 077: how long a submitted operation usually takes to land on a chain,
+/// in seconds — `0` where Vela ships no estimate for it.
+///
+/// The send receipt has had this number since spec 038 (#D3), through the
+/// core's own `SendReceiptView`. A dApp transaction lands on the SAME receipt
+/// but arrives through `tx_tracker`, whose entries carry no estimate — so the
+/// web shell reads it from the core's table here rather than carrying a second
+/// copy of twenty-four numbers that would quietly drift.
+///
+/// `0` rather than `undefined` because that is what the receipt already does
+/// with "no estimate": the ring circles instead of filling, which is the honest
+/// drawing of a wallet that does not know.
+#[wasm_bindgen(js_name = typicalInclusionSeconds)]
+#[must_use]
+pub fn typical_inclusion_seconds(chain_id: u32) -> u32 {
+    vela_core::app::network_admin::typical_inclusion_s(chain_id).map_or(0, u32::from)
+}
+
 /// Issue 212: how long a chain's fee signals may be held, in ms — the one
 /// number every shell's cache used to carry its own copy of.
 #[wasm_bindgen(js_name = feeSignalsCacheTtlMs)]

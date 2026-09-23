@@ -4454,6 +4454,27 @@ export function toQuantity(value) {
 }
 
 /**
+ * Spec 077: how long a submitted operation usually takes to land on a chain,
+ * in seconds — `0` where Vela ships no estimate for it.
+ *
+ * The send receipt has had this number since spec 038 (#D3), through the
+ * core's own `SendReceiptView`. A dApp transaction lands on the SAME receipt
+ * but arrives through `tx_tracker`, whose entries carry no estimate — so the
+ * web shell reads it from the core's table here rather than carrying a second
+ * copy of twenty-four numbers that would quietly drift.
+ *
+ * `0` rather than `undefined` because that is what the receipt already does
+ * with "no estimate": the ring circles instead of filling, which is the honest
+ * drawing of a wallet that does not know.
+ * @param {number} chain_id
+ * @returns {number}
+ */
+export function typicalInclusionSeconds(chain_id) {
+    const ret = wasm.typicalInclusionSeconds(chain_id);
+    return ret >>> 0;
+}
+
+/**
  * `kind` is `"create"` or `"get"` (anything else errors — the caller is
  * choosing which contract-mirrored rule set applies).
  * @param {string} kind

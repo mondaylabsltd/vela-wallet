@@ -442,6 +442,19 @@ fn builtin(chain_id: u32) -> Option<&'static NetBuiltinChain> {
     BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id)
 }
 
+/// How long a submitted operation USUALLY takes to land on this chain, in
+/// seconds.
+///
+/// `None` for a chain Vela does not ship: the wallet has no number for it, and
+/// a receipt with no number circles rather than drawing a ring that would be an
+/// invented promise (spec 038 #D3, and spec 077 for the dApp receipt, which
+/// reads the same number through the wasm shell rather than carrying a second
+/// copy of this table).
+#[must_use]
+pub fn typical_inclusion_s(chain_id: u32) -> Option<u16> {
+    builtin(chain_id).map(|c| c.typical_inclusion_s)
+}
+
 /// Whether this is a network Vela ships, as opposed to one a person added.
 ///
 /// The distinction decides WHO can fix an out-of-gas relayer. On a network we

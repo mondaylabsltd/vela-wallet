@@ -4929,12 +4929,10 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         amount,
         usd_value: if usd_value.is_nan() { 0.0 } else { usd_value },
         submitted_at_ms: model.submitted_at_ms,
-        typical_inclusion_s: model.selected_token.as_ref().and_then(|token| {
-            super::network_admin::BUILTIN_CHAINS
-                .iter()
-                .find(|chain| chain.chain_id == token.chain_id)
-                .map(|chain| chain.typical_inclusion_s)
-        }),
+        typical_inclusion_s: model
+            .selected_token
+            .as_ref()
+            .and_then(|token| super::network_admin::typical_inclusion_s(token.chain_id)),
     })
 }
 

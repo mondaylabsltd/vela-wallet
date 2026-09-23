@@ -12,8 +12,6 @@
  */
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
-import type { Assertion as AssertionWire } from '$lib/onboarding/generated/Assertion';
-import type { Registration as RegistrationWire } from '$lib/onboarding/generated/Registration';
 
 export {
 	PROXY_CREATION_CODE,
@@ -689,10 +687,7 @@ export function clearSignerRegistryRpId(signerOrigin: string | null): string | n
  * naming the parties found when its members do not agree — refused here rather
  * than written on chain and never provable.
  */
-export function clearSignerUnitRpId(
-	memberOrigins: (string | null)[],
-	walletRpId: string
-): string {
+export function clearSignerUnitRpId(memberOrigins: (string | null)[], walletRpId: string): string {
 	return translated(() => wasm.clearSignerUnitRpId(JSON.stringify(memberOrigins), walletRpId));
 }
 
@@ -723,6 +718,21 @@ export function minGasPriceWei(chainId: number): bigint {
  */
 export function peggedNativeUsd(symbol: string): number | null {
 	return wasm.peggedNativeUsd(symbol) ?? null;
+}
+
+/**
+ * How long a submitted operation usually takes to land on a chain, in seconds.
+ *
+ * `0` where Vela ships no estimate — the receipt's ring then circles instead of
+ * filling, which is the honest drawing of a wallet that does not know.
+ *
+ * The send receipt gets this number inside its own `SendReceiptView`. A dApp
+ * transaction lands on the SAME receipt but arrives through `tx_tracker`, whose
+ * entries carry no estimate, so spec 077's landing asks the core here rather
+ * than the web keeping a second copy of the chain table.
+ */
+export function typicalInclusionSeconds(chainId: number): number {
+	return wasm.typicalInclusionSeconds(chainId);
 }
 
 /**
