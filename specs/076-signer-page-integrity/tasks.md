@@ -1,7 +1,11 @@
 # Tasks — 076 the signer page is checked before it is opened
 
-**Nothing here is started.** The spec is the design; this is what implementing
-it would be.
+**Phase A is done; everything else is not started.** The spec is the design.
+
+Order note: plan.md says "P0 first and alone". Phase A was taken first anyway,
+and deliberately: the DECISION depends on no probe outcome — the probes decide
+whether the verification MECHANISM (FR-004) can keep the browser's fingerprint,
+which is phase C's problem. Nothing in A is built on a guess from the spec.
 
 ## P0 — probes (do these first, and alone)
 - [ ] T001 P1 — `only-if-cached` on WKWebView and Android WebView: does it return the navigation's body?
@@ -9,11 +13,31 @@ it would be.
 - [ ] T003 P3 — a logging server compares the probe's request with a real navigation's (UA, headers, JA4, H2)
 - [ ] T004 Write up all three, with numbers, into spec.md's open questions
 
-## A — core
-- [ ] T010 The allow-set compiled in; the shape that lets it SHRINK between builds
-- [ ] T011 Per-device allow-list and deny-list; **deny outranks both**, with tests for each ordering
-- [ ] T012 The content-addressed URL builder, and the refusal when a hash is unknown
-- [ ] T013 The verdict type the shells render: allowed / unknown-hash / denied / could-not-check
+## A — core  ·  `vela_core::clear_signer::integrity`, 13 tests
+
+- [x] **T010** `BUILD_ALLOWED`, a plain slice so it can SHRINK between builds.
+      「一直累加」is the wrong invariant: a version found compromised must be
+      removable, or every client already shipped accepts a replay of it for
+      ever. **It is empty**, because no page is published under `/b/<sha256>/`
+      yet — and a test asserts that, so filling it is a deliberate act with a
+      failing test attached rather than a quiet edit.
+- [x] **T011** Per-device allow-list and deny-list, with **deny outranking both**
+      — this build's set and the person's own trust alike. Tested in each
+      ordering, including on a custom address with the check turned off.
+- [x] **T012** `content_addressed_url` → `https://sign.getvela.app/b/<sha256>/sign.html`,
+      `None` for a custom address (opened where the person said it is; their
+      bytes are pinned by the hash they trusted, which is the property that
+      matters). `is_official` is host-only and refuses the lookalikes —
+      `sign.getvela.app.evil.test`, `…@evil.test`, `?x=sign.getvela.app`.
+- [x] **T013** `Verdict`: `Open` · `OpenUnverified` · `Denied` · `Refused` ·
+      `AskToTrust` · `CouldNotCheck`. `OpenUnverified` is a separate variant
+      rather than `Open` with a flag, so a shell cannot forget to draw the
+      standing warning (FR-009). The official address has no off switch: that
+      input is deliberately not read on that branch.
+
+**Not wired into the launch path, on purpose.** With `BUILD_ALLOWED` empty,
+enforcing this would open nothing and brick a Clear Signer that works today.
+Phase B publishes the page and fills the set; phase C does the wiring.
 
 ## B — the page
 - [ ] T020 One file: inline CSS and JS, no subresources, and a REPRODUCIBLE build that produces it

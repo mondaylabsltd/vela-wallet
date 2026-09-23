@@ -2,7 +2,10 @@
 
 **Feature Branch**: `076-signer-page-integrity` (on `075-clear-signer-channel`)
 **Created**: 2026-09-23
-**Status**: Not started — **design only**. No code exists for any of this.
+**Status**: Phase A landed (`vela_core::clear_signer::integrity`, 13 tests) —
+the decision, shared by every shell. Phases B–E and the P0 probes are not
+started, and the decision is **not wired into the launch path** until the page
+is published (see tasks.md).
 **Input**: Owner, 2026-09-23, immediately after cutting the Clear Signer's
 cross-device channels:
 

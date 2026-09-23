@@ -37,6 +37,8 @@ use crate::webauthn::{validate_client_data, webauthn_signing_hash};
 
 #[cfg(feature = "crux")]
 pub mod ceremony;
+/// Spec 076: whether the page may be opened at all — one decision, every shell.
+pub mod integrity;
 pub mod ws;
 
 /// The official signer page (spec 071 [D]) — the host PROTOCOL.md names.
