@@ -40,6 +40,9 @@ use crate::executor::storage;
 /// (FR-010). Per device: these never sync, and Settings says so.
 pub const KEY_SIGNER_TRUSTED: &str = "vela.signerPage.trusted";
 pub const KEY_SIGNER_BLOCKED: &str = "vela.signerPage.blocked";
+/// Which version the last check chose, per address. Read by the launch path so
+/// opening the page costs no network round trip.
+pub const KEY_SIGNER_VERSION: &str = "vela.signerPage.version";
 
 /// Where the endpoint lists what it still publishes (FR-002).
 ///
@@ -159,6 +162,9 @@ pub fn check_with(base: &str, trusted: &[String], blocked: &[String]) -> Verdict
     // the order is this client's, so the endpoint cannot steer the choice.
     let available = published(base);
     let wanted = integrity::choose_version(&available, trusted, blocked);
+    if let Ok(hash) = &wanted {
+        remember_version(base, hash);
+    }
 
     let hash = match wanted {
         Ok(hash) => hash,
@@ -200,6 +206,54 @@ fn verdict_for(
         // the check is at its strictest.
         verification_off: false,
     })
+}
+
+/// The URL to actually OPEN, for the address Settings holds.
+///
+/// **The page that is opened must be the page that was checked.** `check()`
+/// fetches `<base>/b/<hash>/sign.html`; if the browser were sent to
+/// `<base>/sign.html` the two would be different bytes, and "verified" would
+/// refer to something the browser never loaded. That was the shape of it
+/// before this existed (owner, 2026-09-23: 「路径缺少了 /b/sha256/」).
+///
+/// Falls back to the address as typed when no version is known for it — a
+/// deployment that serves a single page, or one whose index has not been read
+/// yet. With `ENFORCE` off, refusing to open at all would brick a Clear Signer
+/// that works.
+///
+/// **No network here.** This is called on the path that opens the page, and a
+/// person pressing Sign must not wait on an HTTP round trip — nor should a unit
+/// test of the launch path reach the internet, which is how the first version
+/// of this announced itself: three tests that used to take milliseconds took
+/// five minutes. The version comes from what the background check last chose
+/// (FR-007: the check runs at an unpredictable moment and the result is
+/// cached).
+#[must_use]
+pub fn open_url(base: &str) -> String {
+    match remembered_version(base).and_then(|hash| integrity::content_addressed_url(base, &hash)) {
+        Some(url) => url,
+        None => base.to_owned(),
+    }
+}
+
+/// The version the last check chose for this address, if any.
+fn remembered_version(base: &str) -> Option<String> {
+    let all = storage::read_value(KEY_SIGNER_VERSION).ok().flatten()?;
+    let hash = all.get(base)?.as_str()?;
+    integrity::normalize_hash(hash)
+}
+
+/// Remember which version was chosen for this address, so the launch path can
+/// open it without asking the network.
+fn remember_version(base: &str, hash: &str) {
+    let mut all = storage::read_value(KEY_SIGNER_VERSION)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+    if let Some(object) = all.as_object_mut() {
+        object.insert(base.to_owned(), Value::String(hash.to_owned()));
+    }
+    let _ = storage::write_value(KEY_SIGNER_VERSION, all);
 }
 
 /// One line for the log, saying what was found without claiming more than the
@@ -364,6 +418,27 @@ mod tests {
             Verdict::NoVersionToAsk(NoVersion::EverythingUsableIsBlocked)
         );
         assert!(describe(&denied).contains("block list"));
+    }
+
+    #[test]
+    #[ignore = "needs a dist/ served at $SIGNER_DIST"]
+    fn the_page_opened_is_the_page_that_was_checked() {
+        let Ok(base) = std::env::var("SIGNER_DIST") else {
+            return;
+        };
+        let opened = open_url(&base);
+        println!("open_url({base}) → {opened}");
+        // It must be the content-addressed path of a version this build knows,
+        // not the bare address — otherwise the check and the browser look at
+        // different bytes.
+        assert!(
+            opened.contains("/b/") && opened.ends_with("/sign.html"),
+            "opened the wrong page: {opened}"
+        );
+        assert!(
+            opened.contains(BUILD_ALLOWED[0]),
+            "opened an unknown version: {opened}"
+        );
     }
 
     #[test]

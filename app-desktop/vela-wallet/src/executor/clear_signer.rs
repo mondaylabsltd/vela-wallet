@@ -346,6 +346,17 @@ impl Channel {
             );
             return None;
         }
+        // `cancelled` belongs to ONE attempt, and this is where an attempt
+        // begins. It used to outlive its own: `ask` checks `stopped()` before a
+        // byte goes out — rightly, so that a Cancel pressed in that breath does
+        // not still raise a passkey prompt — but nothing ever cleared the flag,
+        // so one Cancel ended every later attempt before its page could open,
+        // and the screen said "closed without signing" about a page nobody had
+        // seen (owner, 2026-09-23: 「取消后再打开 一直报错」).
+        //
+        // Not `closed`: that means the screen itself is gone, which no new
+        // attempt can undo.
+        self.with(|state| state.cancelled = false);
         Some(Claim(self))
     }
 
@@ -943,11 +954,21 @@ fn signer_page_for(operation: &ShellOperation) -> String {
         _ => None,
     };
     let settings = signer_url();
-    match named.filter(|origin| !origin.is_empty()) {
+    let base = match named.filter(|origin| !origin.is_empty()) {
         None => settings,
         Some(origin) if same_page(&origin, &settings) => settings,
         Some(origin) => origin,
-    }
+    };
+    // Spec 076: open the version that was CHECKED, at its content-addressed
+    // path, not whatever the address's root happens to serve. Opening
+    // `<base>/sign.html` while the check fetched `<base>/b/<hash>/sign.html`
+    // means "verified" would refer to bytes the browser never loaded (owner,
+    // 2026-09-23: 「路径缺少了 /b/sha256/」).
+    //
+    // Falls back to the address as typed when no published version can be
+    // chosen — a deployment that serves a single page, or one that publishes
+    // nothing this build knows.
+    crate::executor::signer_integrity::open_url(&base)
 }
 
 /// Two addresses that reach the same page, as the channel judges it: the
@@ -1577,6 +1598,51 @@ pub(crate) mod tests {
     /// to the core, "closed" to the sheet — and a screen that is gone starts
     /// no attempt at all.
     #[test]
+    /// Cancel, then try again. The second attempt must be a real attempt.
+    ///
+    /// `begin` reset `waiting`, `open` and `ended` but not `cancelled`, and
+    /// `stopped()` reads `cancelled` — so one Cancel ended every later attempt
+    /// before the page could open, and the screen said "closed without
+    /// signing" about a page nobody had seen. Reported from using the app;
+    /// no test here covered a SECOND attempt.
+    #[test]
+    fn a_cancel_does_not_outlive_its_own_attempt() {
+        let (channel, _changed) = Channel::new();
+        let first = {
+            let channel = Arc::clone(&channel);
+            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
+        };
+        page_of_channel(&channel);
+        channel.cancel();
+        assert!(
+            first
+                .join()
+                .unwrap_or_else(|_| unreachable!("panicked"))
+                .is_err()
+        );
+        assert!(channel.stopped(), "the cancelled attempt is stopped");
+        channel.forget();
+
+        // The next one starts clean: it reaches the point of having a page to
+        // open, rather than ending the moment it starts.
+        let second = {
+            let channel = Arc::clone(&channel);
+            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
+        };
+        let page = page_of_channel(&channel);
+        assert!(
+            !page.is_empty(),
+            "the second attempt never got a page to open"
+        );
+        assert!(
+            !channel.stopped(),
+            "a previous cancel is still stopping new attempts"
+        );
+        channel.cancel();
+        let _ = second.join();
+    }
+
+    #[test]
     fn a_cancelled_wait_is_a_cancelled_passkey_and_a_sentence() {
         let (channel, _changed) = Channel::new();
         let ceremony = {
@@ -1679,31 +1745,39 @@ pub(crate) mod tests {
     /// path to `<origin>/sign.html`, which is a 404 and a five-minute wait.
     #[test]
     fn a_proof_goes_to_the_page_its_key_lives_behind() {
-        use vela_core::app::KeyMethod;
-        use vela_core::app::shell::ProofPurpose;
-        let proof = |origin: Option<&str>| ShellOperation::SignProof {
-            credential_id: "aabb".to_owned(),
-            transports: String::new(),
-            method: KeyMethod::ClearSigner,
-            purpose: ProofPurpose::Verify,
-            signer_origin: origin.map(str::to_owned),
-        };
-        // A key behind somebody else's page: all this side knows is the origin.
-        assert_eq!(
-            signer_page_for(&proof(Some("https://sign.example.test"))),
-            "https://sign.example.test"
-        );
-        // A key behind the page Settings names — the ordinary case — is
-        // launched from the Settings URL, which is the one with the path.
-        assert_eq!(
-            signer_page_for(&proof(Some("https://sign.getvela.app"))),
-            signer_url()
-        );
-        assert_eq!(signer_page_for(&proof(None)), signer_url());
-        let anywhere = ShellOperation::AuthenticatePasskey {
-            method: KeyMethod::ClearSigner,
-        };
-        assert_eq!(signer_page_for(&anywhere), signer_url());
+        // Its own store: `signer_url()` reads storage, and another test in this
+        // file installs a temp state with a self-hosted address. Without a
+        // scope of its own this test read whichever store happened to be
+        // installed when it ran — a race that was latent until an unrelated
+        // test changed the timing and made it fail. A test that depends on
+        // ambient state is not testing what it says it is.
+        crate::executor::storage::tests::with_temp_state("clear-signer-proof-page", || {
+            use vela_core::app::KeyMethod;
+            use vela_core::app::shell::ProofPurpose;
+            let proof = |origin: Option<&str>| ShellOperation::SignProof {
+                credential_id: "aabb".to_owned(),
+                transports: String::new(),
+                method: KeyMethod::ClearSigner,
+                purpose: ProofPurpose::Verify,
+                signer_origin: origin.map(str::to_owned),
+            };
+            // A key behind somebody else's page: all this side knows is the origin.
+            assert_eq!(
+                signer_page_for(&proof(Some("https://sign.example.test"))),
+                "https://sign.example.test"
+            );
+            // A key behind the page Settings names — the ordinary case — is
+            // launched from the Settings URL, which is the one with the path.
+            assert_eq!(
+                signer_page_for(&proof(Some("https://sign.getvela.app"))),
+                signer_url()
+            );
+            assert_eq!(signer_page_for(&proof(None)), signer_url());
+            let anywhere = ShellOperation::AuthenticatePasskey {
+                method: KeyMethod::ClearSigner,
+            };
+            assert_eq!(signer_page_for(&anywhere), signer_url());
+        });
     }
 
     /// **A signature is not thrown away because another tab closed.**

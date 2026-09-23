@@ -483,3 +483,201 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
+
+// ---------------------------------------------------------------------------
+// Spec 076: is the signer page the page it is supposed to be?
+// ---------------------------------------------------------------------------
+//
+// The decision is `vela_core::clear_signer::integrity`, and it is the same one
+// the desktop asks — so the three shells cannot come to different conclusions
+// about the same bytes. What a shell does is fetch: the index, then the version
+// it chose, then hand the bytes here to be hashed and ruled on.
+
+use vela_core::clear_signer::integrity;
+
+/// Why a check could not be completed. Every one of these opens nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SignerCheckFailure {
+    /// The page could not be reached: no connection, a timeout, a status that
+    /// was not 200.
+    Unreachable,
+    /// It was reached and its bytes could not be read.
+    NoBytes,
+    /// It has not been checked yet.
+    NotChecked,
+}
+
+impl From<SignerCheckFailure> for integrity::CheckFailure {
+    fn from(value: SignerCheckFailure) -> Self {
+        match value {
+            SignerCheckFailure::Unreachable => Self::Unreachable,
+            SignerCheckFailure::NoBytes => Self::NoCachedBytes,
+            SignerCheckFailure::NotChecked => Self::NotChecked,
+        }
+    }
+}
+
+impl From<integrity::CheckFailure> for SignerCheckFailure {
+    fn from(value: integrity::CheckFailure) -> Self {
+        match value {
+            integrity::CheckFailure::Unreachable => Self::Unreachable,
+            integrity::CheckFailure::NoCachedBytes => Self::NoBytes,
+            integrity::CheckFailure::NotChecked => Self::NotChecked,
+        }
+    }
+}
+
+/// Why there was no version to even ask for. The two need different words: one
+/// sends a person to update the wallet, the other to their own block list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SignerNoVersion {
+    NothingPublishedThisWalletKnows,
+    EverythingUsableIsBlocked,
+}
+
+impl From<integrity::NoVersion> for SignerNoVersion {
+    fn from(value: integrity::NoVersion) -> Self {
+        match value {
+            integrity::NoVersion::NothingPublishedThisWalletKnows => {
+                Self::NothingPublishedThisWalletKnows
+            }
+            integrity::NoVersion::EverythingUsableIsBlocked => Self::EverythingUsableIsBlocked,
+        }
+    }
+}
+
+/// What a shell should do about this page.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum SignerPageVerdict {
+    /// Open it.
+    Open,
+    /// Open it, and carry a STANDING warning that these bytes were not checked.
+    /// Only reachable for a custom address whose owner turned verification off.
+    OpenUnverified,
+    /// Never: this hash is on the person's block list, which outranks
+    /// everything including the build's own set.
+    Denied { hash: String },
+    /// Not a version this build knows, on the official address, where there is
+    /// nobody to ask. The words are about hashes — never "an attack was
+    /// prevented", which this check cannot tell from a wallet that is behind.
+    Refused {
+        actual: String,
+        expected: Vec<String>,
+    },
+    /// A custom address serving a version this device has not decided about.
+    AskToTrust { actual: String },
+    /// The check did not complete. Nothing opens.
+    CouldNotCheck { why: SignerCheckFailure },
+    /// There was nothing to ask for; the check never started.
+    NoVersionToAsk { why: SignerNoVersion },
+}
+
+impl From<integrity::Verdict> for SignerPageVerdict {
+    fn from(value: integrity::Verdict) -> Self {
+        match value {
+            integrity::Verdict::Open => Self::Open,
+            integrity::Verdict::OpenUnverified => Self::OpenUnverified,
+            integrity::Verdict::Denied { hash } => Self::Denied { hash },
+            integrity::Verdict::Refused { actual, expected } => Self::Refused { actual, expected },
+            integrity::Verdict::AskToTrust { actual } => Self::AskToTrust { actual },
+            integrity::Verdict::CouldNotCheck(why) => Self::CouldNotCheck { why: why.into() },
+            integrity::Verdict::NoVersionToAsk(why) => Self::NoVersionToAsk { why: why.into() },
+        }
+    }
+}
+
+/// Everything the decision is made from. A shell already holds all of it by the
+/// time it is about to open the page.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SignerPageCheck {
+    /// The address Settings holds, normalised by `clear_signer::signer_url`.
+    pub url: String,
+    /// The hash of the bytes that came back, or `None` when the fetch failed.
+    pub observed_hash: Option<String>,
+    /// Why, when `observed_hash` is `None`.
+    pub failure: SignerCheckFailure,
+    /// Hashes this person trusted ON THIS DEVICE. These never sync.
+    pub trusted: Vec<String>,
+    /// Hashes this person blocked on this device. Deny outranks everything.
+    pub blocked: Vec<String>,
+    /// Honoured only for a custom address; the core enforces that.
+    pub verification_off: bool,
+}
+
+/// Which version to ask the endpoint for.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum SignerVersionChoice {
+    Ask { hash: String },
+    None { why: SignerNoVersion },
+}
+
+/// The hash of the bytes a page was served as — sha256, no normalisation.
+///
+/// A page IS its bytes: no trimming, no re-encoding, no line-ending fixes.
+/// Anything that tidied them would make the published hash unreproducible.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_hash(bytes: Vec<u8>) -> String {
+    integrity::hash_page(&bytes)
+}
+
+/// Which published version to fetch, given what the endpoint says it has.
+///
+/// The index NARROWS the choice and never makes it: the order is this
+/// client's, so a lying index can only hide versions (a loud refusal) or offer
+/// ones this wallet does not trust (ignored).
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_choose_version(
+    available: Vec<String>,
+    trusted: Vec<String>,
+    blocked: Vec<String>,
+) -> SignerVersionChoice {
+    match integrity::choose_version(&available, &trusted, &blocked) {
+        Ok(hash) => SignerVersionChoice::Ask { hash },
+        Err(why) => SignerVersionChoice::None { why: why.into() },
+    }
+}
+
+/// Where a known version lives, for any deployment of `dist/`.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_url(base: String, hash: String) -> Option<String> {
+    integrity::content_addressed_url(&base, &hash)
+}
+
+/// Whether the page may be opened, and what to say when it may not.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_decide(check: SignerPageCheck) -> SignerPageVerdict {
+    integrity::decide(&integrity::Page {
+        url: &check.url,
+        observed: check.observed_hash.as_deref(),
+        failure: check.failure.into(),
+        trusted: &check.trusted,
+        blocked: &check.blocked,
+        verification_off: check.verification_off,
+    })
+    .into()
+}
+
+/// Whether a shell may REFUSE on the verdict, as opposed to recording it.
+///
+/// Deliberately not "is the allow-set non-empty": listing the first hash must
+/// not, by itself, start refusing pages that are not published yet.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_enforced() -> bool {
+    integrity::ENFORCE
+}
+
+/// The hashes this build accepts. Shown in Settings, so a person can see which
+/// version is in force and block it.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_allowed() -> Vec<String> {
+    integrity::BUILD_ALLOWED
+        .iter()
+        .map(|hash| (*hash).to_owned())
+        .collect()
+}
