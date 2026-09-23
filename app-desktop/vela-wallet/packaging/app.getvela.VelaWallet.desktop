@@ -7,7 +7,11 @@ Version=1.0
 Name=Vela Wallet
 GenericName=Crypto Wallet
 Comment=Self-custodial smart wallet for EVM networks
-Exec=vela-wallet
+Exec=vela-wallet %u
+# Spec 076: the Clear Signer answers by navigating to `velawallet://sign-result`.
+# `%u` above passes that URL to the app; this line is what makes the desktop
+# environment route the scheme here at all.
+MimeType=x-scheme-handler/velawallet;
 Icon=app.getvela.VelaWallet
 Terminal=false
 Categories=Office;Finance;

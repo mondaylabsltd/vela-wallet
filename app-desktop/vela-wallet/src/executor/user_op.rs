@@ -1051,7 +1051,7 @@ mod tests {
     #[test]
     fn the_clear_signers_answer_becomes_the_same_envelope() {
         use crate::executor::clear_signer::tests::{
-            answers_once, page_result, signing_key, wallet_key,
+            answers_once, page_result, refuses_once, signing_key, wallet_key,
         };
         let credential = [0x11_u8, 0x22, 0x33];
         let keys = vec![
@@ -1080,11 +1080,8 @@ mod tests {
         let (channel, _changed) = Channel::new();
         let ask = Ask::own(None);
         let signed_over = digest.clone();
-        let answering = answers_once(&channel, move |intent| {
-            serde_json::json!({
-                "v": 1, "t": "result", "n": 1, "id": intent["id"],
-                "result": page_result(&signing_key(7), &credential, &signed_over),
-            })
+        let answering = answers_once(&channel, move || {
+            page_result(&signing_key(7), &credential, &signed_over)
         });
         let signed = {
             let mut signer = Signer::ClearSigner {
@@ -1110,11 +1107,7 @@ mod tests {
 
         // Closed without signing: the request stays open, as for a
         // dismissed passkey sheet — and the sheet has its sentence.
-        let declining = answers_once(&channel, |intent| {
-            serde_json::json!({
-                "v": 1, "t": "error", "n": 1, "id": intent["id"], "code": "user_rejected",
-            })
-        });
+        let declining = refuses_once(&channel, "user_rejected");
         let declined = {
             let mut signer = Signer::ClearSigner {
                 ask: &ask,
@@ -1158,11 +1151,8 @@ mod tests {
         assert_eq!(request["intent"]["method"], "personal_sign");
         assert!(request["context"].get("operation").is_none());
 
-        let answering = answers_once(&channel, move |intent| {
-            serde_json::json!({
-                "v": 1, "t": "result", "n": 1, "id": intent["id"],
-                "result": page_result(&signing_key(7), &credential, &challenge),
-            })
+        let answering = answers_once(&channel, move || {
+            page_result(&signing_key(7), &credential, &challenge)
         });
         let signed = sign_message(
             100,

@@ -295,6 +295,42 @@ fn main() {
         }
     });
 
+    // Spec 076: the Clear Signer's answer comes back as a navigation to
+    // `velawallet://sign-result`, because the published page carries
+    // `default-src 'none'` in its hashed bytes and cannot open a socket at all.
+    //
+    // It is an EVENT for a pending request, never a navigation of this app: no
+    // route changes, no state changes, and one that arrives with nothing
+    // waiting is dropped in silence rather than raising an error nobody can
+    // act on.
+    // Windows and Linux do not deliver a URL as an event: the scheme handler
+    // starts the app with it as an ARGUMENT (`"%1"`, `%u`). gpui stores an
+    // `on_open_urls` callback on those platforms but never fires it — only
+    // macOS does — so the argument is read here.
+    //
+    // This covers a COLD start. While the wallet is already running — which is
+    // the ordinary case, since the person pressed Sign in it — Windows and
+    // Linux start a SECOND process with the URL, and handing it to the first
+    // needs a single-instance channel this app does not have yet. macOS has no
+    // such gap: the Apple Event goes to the running app. Written down rather
+    // than left to be discovered.
+    for argument in std::env::args().skip(1) {
+        if argument.starts_with(vela_core::clear_signer::CALLBACK_URL) {
+            executor::clear_signer::deliver_callback(&argument);
+        }
+    }
+
+    app.on_open_urls(|urls| {
+        for url in urls {
+            executor::clear_signer::deliver_callback(&url);
+        }
+    });
+
+    // Spec 076: find out which published version of the signer page this build
+    // accepts, before anybody presses Sign. Off the launch path on purpose —
+    // see `prime_in_background`.
+    executor::clear_signer::prime_in_background();
+
     app.run(|cx: &mut App| {
         // Storage is read before the first window opens, so the route guard has
         // a real answer to give on frame one.

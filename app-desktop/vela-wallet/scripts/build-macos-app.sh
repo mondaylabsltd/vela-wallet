@@ -217,7 +217,6 @@ iconutil --convert icns "$iconset" --output "$app/Contents/Resources/AppIcon.icn
 # Apple silicon, so it is the difference between "warns on first launch" and
 # "will not run" — and the entitlement is carried but ignored.
 if command -v codesign >/dev/null 2>&1; then
-  entitlements="$packaging/macos/entitlements.plist"
   # associated-domains is a RESTRICTED entitlement: under a real team signature
   # it only takes effect with a provisioning profile (portal: App ID
   # app.getvela.VelaWallet + Associated Domains capability + a Developer ID
@@ -241,8 +240,19 @@ if command -v codesign >/dev/null 2>&1; then
       --entitlements "$packaging/macos/entitlements-signed.plist" \
       --sign "$VELA_SIGN_IDENTITY" "$app"
   else
+    # NO entitlements on an ad-hoc signature. `associated-domains` is
+    # RESTRICTED, and the premise this used to rest on — "ad-hoc builds carry
+    # the file but the system ignores it" — stopped being true: macOS 26 kills
+    # the process at launch with `Taskgated Invalid Signature`, before a line
+    # of it runs. `codesign --verify --strict` still passes, so the bundle
+    # looks fine right up until it is opened (owner, 2026-09-23: the .app
+    # quit immediately, every time).
+    #
+    # Nothing is lost that was not already lost: the entitlement only ever took
+    # effect under a real team signature, and without one the platform-passkey
+    # rows fail with the system's own "not associated" sentence either way.
     note "ad-hoc code signature (set VELA_SIGN_IDENTITY for platform passkeys)"
-    codesign --force --deep --entitlements "$entitlements" --sign - "$app"
+    codesign --force --deep --sign - "$app"
   fi
   # `|| die`, not `&& echo`: under set -e a failure on the left of && does not
   # abort, and an unverifiable bundle must never reach the .dmg.

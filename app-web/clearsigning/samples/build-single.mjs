@@ -225,6 +225,14 @@ function main() {
 			console.error('build-single --check: dist/index.json does not match what dist/b/ holds');
 			process.exit(1);
 		}
+		const root = join(DIST, 'sign.html');
+		if (!existsSync(root) || readFileSync(root, 'utf8') !== built.html) {
+			console.error(
+				'build-single --check: dist/sign.html is not this build — a client that has ' +
+					'not read the index would be served something else, or nothing'
+			);
+			process.exit(1);
+		}
 		// Reproducible, not merely deterministic-looking.
 		if (build().hash !== built.hash) {
 			console.error('build-single --check: two builds of the same sources disagree');
@@ -241,6 +249,19 @@ function main() {
 	mkdirSync(dirname(pageAt(built.hash)), { recursive: true });
 	writeFileSync(pageAt(built.hash), built.html);
 	writeFileSync(INDEX, wanted);
+	// The root copy, so `<base>/sign.html` is not a 404.
+	//
+	// A client that has not yet read the index has no version to ask for, and
+	// a deployment that served ONLY `b/<hash>/sign.html` gave it nowhere to go
+	// — measured against the real endpoint: the launch URL fell back to the
+	// root and the browser showed "No webpage was found".
+	//
+	// It is the same bytes as this build, written from the same string, so
+	// there is nothing to keep in sync by hand; `--check` re-hashes it. A
+	// client that opens the root gets the current page UNVERIFIED, which is
+	// exactly what every client did before 076 — the check, when it is
+	// enforced, always asks by hash.
+	writeFileSync(join(DIST, 'sign.html'), built.html);
 	console.log(
 		`build-single: ${fresh ? 'published' : 'already published'} ` +
 			`dist/b/${built.hash}/sign.html — ${built.html.length} bytes, ` +

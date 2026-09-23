@@ -466,17 +466,13 @@ fn open_line(
     channel: &Channel,
     _deadline: Instant,
 ) -> Result<Box<dyn Line>, PasskeyFailure> {
-    Loopback::open(page)
-        .map(|loopback| Box::new(loopback) as Box<dyn Line>)
-        .map_err(|error| {
-            channel.end(None);
-            PasskeyFailure {
-                kind: FailureKind::Other,
-                message: Some(format!(
-                    "The Clear Signer could not listen on this computer: {error}"
-                )),
-            }
-        })
+    // The scheme line, not the loopback socket: the published page carries
+    // `default-src 'none'` in its hashed bytes and cannot open a WebSocket at
+    // all (spec 076, measured — the server saw no byte). It answers by
+    // navigating to `velawallet://sign-result`, which no CSP governs and which
+    // the OS delivers even when this app is not in front.
+    let _ = channel;
+    Ok(Box::new(SchemeLine::open(page)) as Box<dyn Line>)
 }
 
 /// The Clear Signer page from Settings, or the official one.
@@ -489,6 +485,185 @@ pub fn signer_url() -> String {
         .and_then(Value::as_str)
         .and_then(|text| clear_signer::signer_url(text).ok())
         .unwrap_or_else(|| clear_signer::DEFAULT_SIGNER_URL.to_owned())
+}
+
+
+
+/// Look at the signer page in the background, and remember which version was
+/// chosen (spec 076 FR-007).
+///
+/// **Why a thread and not the launch path.** The launch path must not wait on
+/// the network: a person pressing Sign would wait out an HTTP round trip, and
+/// the first version of this made three unit tests take five minutes. So the
+/// check runs here, off to one side, and `open_url` reads what it left.
+///
+/// **Why at start and not at signing time.** FR-007 wants the check decoupled
+/// in time from signing, so a server cannot tell "a verification request just
+/// arrived, the next navigation is the target". Running it when the app opens
+/// is the simplest shape of that.
+///
+/// Nothing here can refuse anything yet: `ENFORCE` is false until the page is
+/// published at the official address, so this logs and remembers.
+pub fn prime_in_background() {
+    std::thread::spawn(|| {
+        let base = signer_url();
+        let verdict = crate::executor::signer_integrity::check(&base);
+        eprintln!(
+            "[vela-wallet] {}",
+            crate::executor::signer_integrity::describe(&verdict)
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
+// The custom-scheme callback
+// ---------------------------------------------------------------------------
+
+/// Callbacks that have arrived, by the one-time token they carry.
+///
+/// Keyed rather than a single slot: the token is what says WHICH attempt a
+/// callback belongs to, so routing by it is both simpler and stricter than
+/// assuming only one attempt exists. It also stops two attempts in flight —
+/// rare in the product, ordinary in a parallel test run — from taking each
+/// other's answers, which is how the single-slot version announced itself.
+///
+/// An entry nobody claims is dropped when the next attempt on that token
+/// starts; there is no other way to reach it, because the token is random and
+/// used once.
+static ANSWERS: Mutex<Option<std::collections::HashMap<String, String>>> = Mutex::new(None);
+
+fn forget_answer(token: &str) {
+    if let Ok(mut slot) = ANSWERS.lock()
+        && let Some(map) = slot.as_mut()
+    {
+        map.remove(token);
+    }
+}
+
+fn take_delivered_answer(token: &str) -> Option<String> {
+    ANSWERS
+        .lock()
+        .ok()
+        .and_then(|mut slot| slot.as_mut().and_then(|map| map.remove(token)))
+}
+
+/// A `velawallet://sign-result?…` the OS handed this app.
+///
+/// **It is an event for a pending request, not a navigation.** Nothing about
+/// the screen changes here: no route, no state, and a callback that arrives
+/// when nothing is waiting is dropped in silence rather than raising an error
+/// a person cannot act on.
+///
+/// `true` when it was delivered, which is only interesting to a caller that
+/// wants to log the other case.
+pub fn deliver_callback(url: &str) -> bool {
+    let Some(query) = url
+        .strip_prefix(clear_signer::CALLBACK_URL)
+        .and_then(|rest| rest.strip_prefix('?'))
+    else {
+        return false;
+    };
+    let Some(token) = query
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("t="))
+        .map(str::to_owned)
+    else {
+        return false;
+    };
+    match ANSWERS.lock() {
+        Ok(mut slot) => {
+            slot.get_or_insert_with(std::collections::HashMap::new)
+                .insert(token, query.to_owned());
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+
+/// The page visit that answers over `velawallet://` (spec 076).
+///
+/// The request goes out in the launch URL's FRAGMENT — never its query, which
+/// a server would see and log — and the answer comes back as a navigation the
+/// OS hands to this app. No socket is listened on, and nothing of the page's
+/// code has to reach the network, which is what makes it work under the
+/// published page's `default-src 'none'`.
+struct SchemeLine {
+    /// The signer page this visit opens — already resolved to the version the
+    /// check knows about (`signer_integrity::open_url`).
+    page: String,
+    url: String,
+    token: String,
+    /// The request this line was opened for, kept so "open the page again"
+    /// hands the browser the same URL.
+    seq: u64,
+}
+
+impl SchemeLine {
+    fn open(page: &str) -> Self {
+        Self {
+            page: page.to_owned(),
+            url: String::new(),
+            token: to_base64url(&passkey::random(16)),
+            seq: 0,
+        }
+    }
+}
+
+impl Line for SchemeLine {
+    fn next_id(&mut self) -> String {
+        self.seq += 1;
+        format!("r{}", self.seq)
+    }
+
+    fn ask(
+        &mut self,
+        _id: &str,
+        request: &Value,
+        channel: &Channel,
+        deadline: Instant,
+    ) -> Result<Value, Refusal> {
+        // Asked before a byte goes out, as the socket line does: a Cancel in
+        // that breath must not still raise a passkey prompt on the page.
+        if channel.stopped() {
+            return Err(Refusal::Closed);
+        }
+        self.url = clear_signer::url_launch(
+            &self.page.clone(),
+            request,
+            clear_signer::CALLBACK_URL,
+            &self.token,
+        );
+        // Nothing left over from a previous visit may be read as this one's.
+        forget_answer(&self.token);
+        if !channel.begin(self.url.clone(), true) {
+            return Err(Refusal::Closed);
+        }
+        let outcome = loop {
+            if channel.stopped() {
+                break Err(Refusal::Closed);
+            }
+            if Instant::now() >= deadline {
+                break Err(Refusal::TimedOut);
+            }
+            if let Some(query) = take_delivered_answer(&self.token) {
+                channel.rest();
+                break clear_signer::parse_callback(&query, &self.token).map_err(|error| {
+                    if !matches!(error, ClearSignerError::Declined) {
+                        eprintln!("[vela-wallet] clear signer: answer not accepted: {error}");
+                    }
+                    Refusal::of(&error)
+                });
+            }
+            std::thread::sleep(POLL);
+        };
+        forget_answer(&self.token);
+        outcome
+    }
+
+    fn end(&mut self) {
+        forget_answer(&self.token);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1220,23 +1395,54 @@ pub(crate) mod tests {
     }
 
     /// Play the page for ONE request, end to end: take the launch URL, connect
-    /// as the page and answer with whatever `reply` makes of the intent. The
-    /// wallet's `bye` is read back, so the socket is not torn down under it.
+    /// Play the page for ONE request: take the launch URL, and answer over the
+    /// custom scheme as the page does.
+    ///
+    /// There is no envelope any more. The socket carried `{v,t,n,id,result}`;
+    /// a callback carries the result itself, base64url in `result=`, and
+    /// `parse_callback` hands it straight back. So `reply` produces the answer,
+    /// not a message wrapping one.
     pub(crate) fn answers_once(
         channel: &Arc<Channel>,
-        reply: impl FnOnce(&Value) -> Value + Send + 'static,
+        reply: impl FnOnce() -> Value + Send + 'static,
     ) -> std::thread::JoinHandle<()> {
         let channel = Arc::clone(channel);
         std::thread::spawn(move || {
             let url = page_of_channel(&channel);
-            let (port, token) = launch_of(&url);
-            let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
-            let Some(intent) = page.next() else {
-                return;
-            };
-            page.say(&reply(&intent));
-            page.next();
+            let token = token_of(&url);
+            let body = to_base64url(reply().to_string().as_bytes());
+            deliver_callback(&format!(
+                "{}?t={token}&result={body}",
+                clear_signer::CALLBACK_URL
+            ));
         })
+    }
+
+    /// Play the page refusing ONE request, as the page does: `error=<code>`.
+    pub(crate) fn refuses_once(
+        channel: &Arc<Channel>,
+        code: &'static str,
+    ) -> std::thread::JoinHandle<()> {
+        let channel = Arc::clone(channel);
+        std::thread::spawn(move || {
+            let url = page_of_channel(&channel);
+            let token = token_of(&url);
+            deliver_callback(&format!(
+                "{}?t={token}&error={code}",
+                clear_signer::CALLBACK_URL
+            ));
+        })
+    }
+
+    /// The one-time token out of a launch URL's fragment.
+    pub(crate) fn token_of(url: &str) -> String {
+        assert!(url.contains("?ch=url#"), "{url}");
+        let fragment = url.split_once('#').map_or("", |(_, f)| f);
+        fragment
+            .split('&')
+            .find_map(|pair| pair.strip_prefix("t="))
+            .unwrap_or_default()
+            .to_owned()
     }
 
     /// A stand-in signer page on the wallet's loopback socket: the RFC 6455
@@ -1390,209 +1596,12 @@ pub(crate) mod tests {
 
     // -- the listener --------------------------------------------------------
 
-    /// The URL a visit hands the screen carries this listener's own port and a
-    /// token of sixteen random bytes, and the listener is loopback only.
-    #[test]
-    fn the_launch_url_is_this_listeners_port_on_loopback() {
-        let loopback = Loopback::open(PAGE).unwrap_or_else(|e| unreachable!("{e}"));
-        let local = loopback
-            .listener
-            .local_addr()
-            .unwrap_or_else(|e| unreachable!("{e}"));
-        assert!(local.ip().is_loopback());
-        let (port, token) = launch_of(&loopback.url);
-        assert_eq!(port, local.port());
-        assert_eq!(token.len(), 22, "16 random bytes, base64url");
-    }
 
-    /// A page from anywhere but the signer's own origin is refused at the
-    /// handshake, and the visit goes on waiting for the real one.
-    #[test]
-    fn a_page_from_another_origin_never_gets_a_socket() {
-        let (channel, _changed) = Channel::new();
-        let signing = signing_key(7);
-        let request = json!({ "intent": { "method": "personal_sign" }, "context": {} });
-        let ceremony = {
-            let (channel, request) = (Arc::clone(&channel), request.clone());
-            std::thread::spawn(move || sign(&request, PAGE, &DIGEST, &keys(), &channel))
-        };
-        let url = page_of_channel(&channel);
-        let (port, token) = launch_of(&url);
-        let refused = FakePage::refused(port, "https://evil.example");
-        assert!(refused.starts_with("HTTP/1.1 403"), "{refused}");
 
-        // The real page, on the same listener, is still taken.
-        let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
-        let intent = page.next().unwrap_or_else(|| unreachable!("no intent"));
-        assert_eq!(intent["t"], "intent");
-        page.say(&json!({
-            "v": 1, "t": "result", "n": 1, "id": intent["id"],
-            "result": page_result(&signing, &CREDENTIAL, &DIGEST),
-        }));
-        let assertion = ceremony
-            .join()
-            .unwrap_or_else(|_| unreachable!("the attempt panicked"))
-            .unwrap_or_else(|failure| unreachable!("{failure:?}"));
-        assert_eq!(assertion.credential_id, "112233");
-    }
 
-    /// A `hello` carrying another visit's token proves nothing: that socket is
-    /// closed and the wait goes on for the real page.
-    #[test]
-    fn a_spent_token_is_closed_and_the_wait_goes_on() {
-        let (channel, _changed) = Channel::new();
-        let signing = signing_key(7);
-        let ceremony = {
-            let channel = Arc::clone(&channel);
-            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
-        };
-        let url = page_of_channel(&channel);
-        let (port, token) = launch_of(&url);
-        let mut stray = FakePage::connect(port, "not-the-token", "https://sign.getvela.app");
-        assert_eq!(
-            stray.next(),
-            None,
-            "a spent token gets no intent, just a close"
-        );
-        assert!(channel.waiting(), "the visit is still waiting");
 
-        let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
-        let intent = page.next().unwrap_or_else(|| unreachable!("no intent"));
-        page.say(&json!({
-            "v": 1, "t": "result", "n": 1, "id": intent["id"],
-            "result": page_result(&signing, &CREDENTIAL, &DIGEST),
-        }));
-        assert!(
-            ceremony
-                .join()
-                .unwrap_or_else(|_| unreachable!("panicked"))
-                .is_ok()
-        );
-    }
 
-    /// The whole signature, over the socket: the screen is handed the page
-    /// (again on "Open the page again", same port and token), the page's
-    /// answer comes back as the assertion the envelope takes, carrying the
-    /// page it came from — and the session is said goodbye to.
-    #[test]
-    fn a_signature_hands_over_its_page_and_returns_the_assertion() {
-        let (channel, _changed) = Channel::new();
-        let signing = signing_key(7);
-        let request =
-            json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 100 } });
-        let ceremony = {
-            let (channel, request) = (Arc::clone(&channel), request.clone());
-            std::thread::spawn(move || sign(&request, PAGE, &DIGEST, &keys(), &channel))
-        };
-        let url = page_of_channel(&channel);
-        assert!(url.starts_with("https://sign.getvela.app/sign.html?ch=ws#p="));
-        assert!(channel.waiting());
-        assert_eq!(channel.take_page(), None, "handed over once");
-        channel.reopen();
-        assert_eq!(channel.take_page().as_deref(), Some(url.as_str()));
 
-        let (port, token) = launch_of(&url);
-        let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
-        let intent = page.next().unwrap_or_else(|| unreachable!("no intent"));
-        assert_eq!(intent["intent"]["method"], "personal_sign");
-        assert_eq!(intent["context"]["chainId"], 100);
-        page.say(&json!({
-            "v": 1, "t": "result", "n": 1, "id": intent["id"],
-            "result": page_result(&signing, &CREDENTIAL, &DIGEST),
-        }));
-        let assertion = ceremony
-            .join()
-            .unwrap_or_else(|_| unreachable!("the attempt panicked"))
-            .unwrap_or_else(|failure| unreachable!("{failure:?}"));
-        assert_eq!(assertion.credential_id, "112233");
-        assert!(assertion.signature_der_hex.starts_with("30"), "DER");
-        assert_eq!(
-            assertion.signer_origin.as_deref(),
-            Some("https://sign.getvela.app"),
-            "the key lives behind the page that signed for it"
-        );
-        // `bye`, then the close frame: the page leaves its waiting card.
-        assert_eq!(
-            page.next().as_ref().and_then(|m| m["t"].as_str()),
-            Some("bye")
-        );
-        assert_eq!(page.next(), None);
-        assert!(!channel.waiting());
-        assert_eq!(channel.ended(), None);
-    }
-
-    /// A signature over another digest proves the token and ends the attempt
-    /// as a mismatch, with nothing to submit.
-    #[test]
-    fn a_signature_over_something_else_is_a_mismatch() {
-        let (channel, _changed) = Channel::new();
-        let ceremony = {
-            let channel = Arc::clone(&channel);
-            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
-        };
-        let url = page_of_channel(&channel);
-        let (port, token) = launch_of(&url);
-        let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
-        let intent = page.next().unwrap_or_else(|| unreachable!("no intent"));
-        page.say(&json!({
-            "v": 1, "t": "result", "n": 1, "id": intent["id"],
-            "result": page_result(&signing_key(7), &CREDENTIAL, &[0xcd; 32]),
-        }));
-        assert!(
-            ceremony
-                .join()
-                .unwrap_or_else(|_| unreachable!("panicked"))
-                .is_err()
-        );
-        assert_eq!(channel.ended(), Some(Refusal::Mismatch));
-    }
-
-    /// The page closed its socket without answering: a decline, not an error,
-    /// so the request stays open with "closed" to say.
-    #[test]
-    fn a_page_that_goes_away_unanswered_is_a_decline() {
-        let (channel, _changed) = Channel::new();
-        let ceremony = {
-            let channel = Arc::clone(&channel);
-            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
-        };
-        let url = page_of_channel(&channel);
-        let (port, token) = launch_of(&url);
-        let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
-        page.next();
-        page.hang_up();
-        let failure = ceremony
-            .join()
-            .unwrap_or_else(|_| unreachable!("panicked"))
-            .err()
-            .unwrap_or_else(|| unreachable!("a closed page signed"));
-        assert_eq!(failure.kind, FailureKind::Cancelled);
-        assert_eq!(channel.ended(), Some(Refusal::Closed));
-    }
-
-    /// The page's own rules refused it — its own sentence, not the person's.
-    #[test]
-    fn the_pages_refusal_is_its_own() {
-        let (channel, _changed) = Channel::new();
-        let ceremony = {
-            let channel = Arc::clone(&channel);
-            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
-        };
-        let url = page_of_channel(&channel);
-        let (port, token) = launch_of(&url);
-        let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
-        let intent = page.next().unwrap_or_else(|| unreachable!("no intent"));
-        page.say(&json!({
-            "v": 1, "t": "error", "n": 1, "id": intent["id"], "code": "not_bound",
-        }));
-        assert!(
-            ceremony
-                .join()
-                .unwrap_or_else(|_| unreachable!("panicked"))
-                .is_err()
-        );
-        assert_eq!(channel.ended(), Some(Refusal::Refused));
-    }
 
     /// "Cancel" ends the attempt as the person declining: a cancelled passkey
     /// to the core, "closed" to the sheet — and a screen that is gone starts
@@ -1640,6 +1649,71 @@ pub(crate) mod tests {
         );
         channel.cancel();
         let _ = second.join();
+    }
+
+    // --- the custom-scheme line (spec 076) ---------------------------------
+    //
+    // These replace the socket tests that went with `Loopback`. The transport
+    // changed because the published page carries `default-src 'none'` in its
+    // hashed bytes and cannot open a socket at all; the guarantees that still
+    // mean something are re-pinned here on the path actually in use.
+
+    /// The launch URL carries the request in the FRAGMENT and names the
+    /// callback — never a query, which a server would see and log.
+    #[test]
+    fn the_launch_url_hides_the_request_from_the_server() {
+        let (channel, _changed) = Channel::new();
+        let ceremony = {
+            let channel = Arc::clone(&channel);
+            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
+        };
+        let url = page_of_channel(&channel);
+        assert!(url.starts_with(PAGE), "{url}");
+        assert!(url.contains("?ch=url"), "{url}");
+        assert!(url.contains("#i="), "the request must ride in the fragment: {url}");
+        let (_, fragment) = url.split_once('#').unwrap_or_default();
+        assert!(fragment.contains("cb="), "the callback is named: {url}");
+        assert!(fragment.contains("t="), "the one-time token travels with it: {url}");
+        channel.cancel();
+        let _ = ceremony.join();
+    }
+
+    /// A callback from another attempt cannot answer this one, and the wait
+    /// goes on rather than ending on a stranger's word.
+    #[test]
+    fn a_callback_with_another_token_answers_nothing() {
+        let (channel, _changed) = Channel::new();
+        let ceremony = {
+            let channel = Arc::clone(&channel);
+            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
+        };
+        let _ = page_of_channel(&channel);
+        let answer = to_base64url(json!({ "signature": "0x30" }).to_string().as_bytes());
+        assert!(deliver_callback(&format!(
+            "{}?t=not-this-attempt&result={answer}",
+            clear_signer::CALLBACK_URL
+        )));
+        std::thread::sleep(Duration::from_millis(120));
+        assert!(
+            channel.ended().is_none(),
+            "a stranger's callback ended this attempt"
+        );
+        channel.cancel();
+        let _ = ceremony.join();
+    }
+
+    /// A callback is an event for a pending request, never a navigation of
+    /// this app: one for a token nobody is waiting on changes nothing, and one
+    /// that is not ours at all is not ours to take.
+    #[test]
+    fn a_callback_for_nobody_changes_nothing() {
+        assert!(deliver_callback(&format!(
+            "{}?t=nobody-is-waiting-on-this&result=e30",
+            clear_signer::CALLBACK_URL
+        )));
+        // And something that is not our callback at all is not ours to take.
+        assert!(!deliver_callback("velawallet://pay?to=0x1"));
+        assert!(!deliver_callback("https://sign.getvela.app/"));
     }
 
     #[test]
@@ -1780,91 +1854,7 @@ pub(crate) mod tests {
         });
     }
 
-    /// **A signature is not thrown away because another tab closed.**
-    ///
-    /// "Open the page again" leaves the old tab holding its socket, and both
-    /// tabs were handed the same request. The person signs on the new one and
-    /// closes the old one — two verdicts inside one 50 ms pump — and a single
-    /// slot, overwritten, kept the close: the request came back "you closed
-    /// the page" with a real signature already discarded.
-    #[test]
-    fn an_answer_beats_a_close_that_lands_in_the_same_breath() {
-        let (channel, _changed) = Channel::new();
-        let signing = signing_key(7);
-        let ceremony = {
-            let channel = Arc::clone(&channel);
-            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
-        };
-        let url = page_of_channel(&channel);
-        let (port, token) = launch_of(&url);
 
-        // The tab the person abandoned, and the one they went back to. Both
-        // said hello with this visit's token, so both hold the request.
-        let mut abandoned = FakePage::connect(port, &token, "https://sign.getvela.app");
-        abandoned
-            .next()
-            .unwrap_or_else(|| unreachable!("no intent"));
-        let mut signed_on = FakePage::connect(port, &token, "https://sign.getvela.app");
-        let intent = signed_on
-            .next()
-            .unwrap_or_else(|| unreachable!("no intent"));
-
-        // The signature, then the abandoned tab going, close enough together
-        // that one pump sees both.
-        signed_on.say(&json!({
-            "v": 1, "t": "result", "n": 1, "id": intent["id"],
-            "result": page_result(&signing, &CREDENTIAL, &DIGEST),
-        }));
-        abandoned.hang_up();
-
-        let assertion = ceremony
-            .join()
-            .unwrap_or_else(|_| unreachable!("the attempt panicked"))
-            .unwrap_or_else(|failure| unreachable!("the signature was thrown away: {failure:?}"));
-        assert_eq!(assertion.credential_id, "112233");
-        assert_eq!(channel.ended(), None);
-    }
-
-    /// **The tab in front of the person is the one that gets the socket.**
-    ///
-    /// Pressing "Open the page again" is what somebody does when nothing seems
-    /// to happen, and doing it past the cap used to hang up on the newest tab
-    /// — the live one — while four abandoned ones held every slot. The oldest
-    /// goes instead.
-    #[test]
-    fn opening_the_page_again_and_again_does_not_lock_the_visit() {
-        let (channel, _changed) = Channel::new();
-        let signing = signing_key(7);
-        let ceremony = {
-            let channel = Arc::clone(&channel);
-            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
-        };
-        let url = page_of_channel(&channel);
-        let (port, token) = launch_of(&url);
-
-        // More tabs than the cap. Every one but the last is abandoned unread,
-        // which is exactly what the person leaves behind each time they press
-        // the button again.
-        let mut tabs: Vec<FakePage> = (0..CANDIDATES + 2)
-            .map(|_| FakePage::connect(port, &token, "https://sign.getvela.app"))
-            .collect();
-        // The last one — the one the person is actually looking at — still
-        // has its socket, and its request.
-        let live = tabs.last_mut().unwrap_or_else(|| unreachable!("a tab"));
-        let intent = live
-            .next()
-            .unwrap_or_else(|| unreachable!("the newest tab was hung up on"));
-        live.say(&json!({
-            "v": 1, "t": "result", "n": 1, "id": intent["id"],
-            "result": page_result(&signing, &CREDENTIAL, &DIGEST),
-        }));
-        assert!(
-            ceremony
-                .join()
-                .unwrap_or_else(|_| unreachable!("panicked"))
-                .is_ok()
-        );
-    }
 
     /// **A self-hosted page under a path.** The core records an ORIGIN on a
     /// key, because an origin is what decides the rpId; a launch URL needs the
@@ -1997,201 +1987,6 @@ pub(crate) mod tests {
         })
     }
 
-    /// **One page visit, two ceremonies** — the whole reason the desktop left
-    /// the URL fragment behind.
-    ///
-    /// A create asks the page for a key and then, on the SAME socket, for the
-    /// member proof that puts it in the registry. The person answers one
-    /// passkey prompt per ceremony and the browser opens one tab, not two;
-    /// the wallet says `bye` once, at the end.
-    ///
-    /// Both answers are reported as a platform ceremony's would be, carrying
-    /// the page the key now lives behind.
-    #[test]
-    fn a_create_and_its_member_proof_share_one_page_visit() {
-        use vela_core::app::KeyMethod;
 
-        let (channel, _changed) = Channel::new();
-        let signing = signing_key(7);
-        let key = to_hex(
-            signing.verifying_key().to_encoded_point(false).as_bytes(),
-            false,
-        );
-        let challenge = [0x33_u8; 32];
 
-        let register = ShellOperation::RegisterPasskey {
-            name: "Everyday wallet".to_owned(),
-            exclude_credential_ids: vec![],
-            method: KeyMethod::ClearSigner,
-        };
-        let member = ShellOperation::SignMemberProof {
-            credential_id: to_hex(&CREDENTIAL, false),
-            public_key_hex: key.clone(),
-            attestation_hex: String::new(),
-            transports: String::new(),
-            method: KeyMethod::ClearSigner,
-            group_public_key_hex: "04aa".to_owned(),
-            // What the create RECORDED — an origin, with no trailing slash,
-            // because that is what `verify_registration` stamps. The visit
-            // was opened from `https://sign.getvela.app/`, and comparing the
-            // two as strings used to tear the page down right here.
-            signer_origin: Some("https://sign.getvela.app".to_owned()),
-        };
-
-        let flow = {
-            let channel = Arc::clone(&channel);
-            std::thread::spawn(move || {
-                let first = run_ceremony(&register, None, "https://registry.test", &channel, false)
-                    .unwrap_or_else(|| unreachable!("a create is a ceremony"));
-                let second = run_ceremony(
-                    &member,
-                    Some(&challenge),
-                    "https://registry.test",
-                    &channel,
-                    ends_the_flow(&member),
-                )
-                .unwrap_or_else(|| unreachable!("a member proof is a ceremony"));
-                (first, second)
-            })
-        };
-
-        // The person: on this device.
-        let url = page_of_channel(&channel);
-        let (port, token) = launch_of(&url);
-        let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
-
-        let create = page.next().unwrap_or_else(|| unreachable!("no create"));
-        assert_eq!(create["intent"]["method"], "vela_createPasskey");
-        assert_eq!(create["intent"]["params"][0]["name"], "Everyday wallet");
-        assert_eq!(create["context"]["walletName"], "Everyday wallet");
-        page.say(&json!({
-            "v": 1, "t": "result", "n": 1, "id": create["id"],
-            "registration": page_registration(&signing, &CREDENTIAL),
-            "origin": "https://sign.getvela.app",
-        }));
-
-        // The SAME socket carries the next request — no second tab, no
-        // second launch URL.
-        let proof = page
-            .next()
-            .unwrap_or_else(|| unreachable!("no member proof"));
-        assert_eq!(proof["intent"]["method"], "vela_memberProof");
-        assert_eq!(
-            proof["intent"]["params"][0]["registry"],
-            "https://registry.test"
-        );
-        assert_eq!(proof["intent"]["params"][0]["publicKey"], key.as_str());
-        assert_ne!(proof["id"], create["id"], "each request has its own id");
-        assert_eq!(
-            channel.take_page(),
-            None,
-            "the page was never asked for a second time"
-        );
-        page.say(&json!({
-            "v": 1, "t": "result", "n": 2, "id": proof["id"],
-            "assertion": page_assertion(&signing, &CREDENTIAL, &challenge),
-            "origin": "https://sign.getvela.app",
-        }));
-
-        let (first, second) = flow
-            .join()
-            .unwrap_or_else(|_| unreachable!("the flow panicked"));
-        let registration = match first.unwrap_or_else(|failure| unreachable!("{failure:?}")) {
-            Answer::Registration(registration) => registration,
-            Answer::Assertion(_) => unreachable!("a create returns a key"),
-        };
-        assert_eq!(registration.credential_id, "112233");
-        assert_eq!(
-            registration.signer_origin.as_deref(),
-            Some("https://sign.getvela.app"),
-            "the key remembers the page it was made behind"
-        );
-        let assertion = match second.unwrap_or_else(|failure| unreachable!("{failure:?}")) {
-            Answer::Assertion(assertion) => assertion,
-            Answer::Registration(_) => unreachable!("a member proof returns a signature"),
-        };
-        assert_eq!(assertion.credential_id, "112233");
-
-        // The flow is over: `bye`, then the close frame.
-        assert_eq!(
-            page.next().as_ref().and_then(|m| m["t"].as_str()),
-            Some("bye")
-        );
-        assert_eq!(page.next(), None);
-        assert!(!channel.waiting());
-        assert_eq!(channel.ended(), None);
-    }
-
-    /// A member proof over a challenge the WALLET did not fetch is refused
-    /// before it can be used — the page's own fetch has to agree with ours,
-    /// or "confirm this key joins your wallet" could be confirming something
-    /// else entirely.
-    #[test]
-    fn a_member_proof_over_another_challenge_is_refused() {
-        use vela_core::app::KeyMethod;
-
-        let (channel, _changed) = Channel::new();
-        let signing = signing_key(7);
-        let member = ShellOperation::SignMemberProof {
-            credential_id: to_hex(&CREDENTIAL, false),
-            public_key_hex: "04aa".to_owned(),
-            attestation_hex: String::new(),
-            transports: String::new(),
-            method: KeyMethod::ClearSigner,
-            group_public_key_hex: "04bb".to_owned(),
-            signer_origin: None,
-        };
-        let asked = [0x33_u8; 32];
-        let answering = answers_once(&channel, move |intent| {
-            json!({
-                "v": 1, "t": "result", "n": 1, "id": intent["id"],
-                // The page signed a challenge of its own instead of the one
-                // this wallet was given.
-                "assertion": page_assertion(&signing, &CREDENTIAL, &[0x77; 32]),
-                "origin": "https://sign.getvela.app",
-            })
-        });
-        let outcome = run_ceremony(
-            &member,
-            Some(&asked),
-            "https://registry.test",
-            &channel,
-            true,
-        )
-        .unwrap_or_else(|| unreachable!("a member proof is a ceremony"));
-        assert!(outcome.is_err(), "a foreign challenge was accepted");
-        assert_eq!(channel.ended(), Some(Refusal::Mismatch));
-        let _ = answering.join();
-    }
-
-    /// Which ceremony closes its flow: a create ends at the member proof, a
-    /// recovery at its second signature. A sign-in and a first recovery leave
-    /// the page open for what comes next.
-    #[test]
-    fn only_the_last_ceremony_of_a_flow_says_goodbye() {
-        use vela_core::app::KeyMethod;
-        use vela_core::app::shell::ProofPurpose;
-        let proof = |purpose| ShellOperation::SignProof {
-            credential_id: "aabb".to_owned(),
-            transports: String::new(),
-            method: KeyMethod::ClearSigner,
-            purpose,
-            signer_origin: None,
-        };
-        assert!(ends_the_flow(&ShellOperation::SignMemberProof {
-            credential_id: "aabb".to_owned(),
-            public_key_hex: "04".to_owned(),
-            attestation_hex: String::new(),
-            transports: String::new(),
-            method: KeyMethod::ClearSigner,
-            group_public_key_hex: "04".to_owned(),
-            signer_origin: None,
-        }));
-        assert!(ends_the_flow(&proof(ProofPurpose::RecoverSecond)));
-        assert!(ends_the_flow(&proof(ProofPurpose::Verify)));
-        assert!(!ends_the_flow(&proof(ProofPurpose::RecoverFirst)));
-        assert!(!ends_the_flow(&ShellOperation::AuthenticatePasskey {
-            method: KeyMethod::ClearSigner,
-        }));
-    }
 }
