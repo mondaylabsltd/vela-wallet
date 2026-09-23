@@ -440,7 +440,8 @@ struct ClearSignerRelayTests {
             #expect(handshake.publicKey() == vector.requesterPublicKey)
             #expect(clearSignerKeyFingerprint(publicKey: handshake.publicKey()) == vector.rk)
             // The hello the page reads, field for field.
-            let ours = try CoreJSON.object(handshake.hello(app: vector.app))
+            // The vectors predate the peer's mark (075): no icon, no field.
+            let ours = try CoreJSON.object(handshake.hello(app: vector.app, icon: nil))
             let theirs = try CoreJSON.object(vector.requesterHello)
             #expect(ours["pk"] as? String == theirs["pk"] as? String)
             #expect(ours["nonce"] as? String == theirs["nonce"] as? String)

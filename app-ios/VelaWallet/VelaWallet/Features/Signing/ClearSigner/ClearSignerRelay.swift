@@ -30,6 +30,7 @@
 //
 
 import Foundation
+import UIKit
 import VelaCore
 
 /// A frame on a relay socket. Text carries the relay's own words and the two
@@ -105,6 +106,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
     let roomUrl: String
 
     private let app: String
+    private let icon: String
     private let openSocket: (String) -> ClearSignerSocket?
     /// Each request's id on the wire — a seam, so a test can replay the
     /// shared vectors' own ids.
@@ -123,6 +125,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
         signerUrl: String,
         relay: String,
         app: String = ClearSignerRelayConversation.appName,
+        icon: String = ClearSignerRelayConversation.appIcon,
         random: (Int) -> Data = ClearSignerRelayConversation.randomBytes,
         openSocket: @escaping (String) -> ClearSignerSocket? = { WebSocketRelaySocket(url: $0) },
         nextId: @escaping () -> String = { UUID().uuidString.lowercased() }
@@ -132,6 +135,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
         else { return nil }
         self.signerUrl = signerUrl
         self.app = app
+        self.icon = icon
         self.openSocket = openSocket
         self.nextId = nextId
         self.handshake = handshake
@@ -142,8 +146,39 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
         )
     }
 
-    /// `vela-ios/<version>` — what the page shows as "who is asking".
-    static var appName: String { "vela-ios/\(BuildInfo.version)" }
+    /// What the page shows as "who is asking" — a product name a person
+    /// recognises, not a user-agent string. The page says in as many words
+    /// that this is self-reported, so it may as well be readable.
+    static var appName: String { "Vela Wallet \(BuildInfo.version)" }
+
+    /// The app icon this bundle actually ships, at its largest listed size.
+    ///
+    /// `UIImage(named:)` on an icon file name is the only way to reach it: an
+    /// app cannot load its own icon from the asset catalog by symbol.
+    private static var bundleIcon: UIImage? {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let files = primary["CFBundleIconFiles"] as? [String],
+              let name = files.last
+        else { return nil }
+        return UIImage(named: name)
+    }
+
+    /// This app's own mark, as the small inline PNG the page accepts.
+    ///
+    /// Rendered once and kept: it cannot change while the app is installed,
+    /// and a handshake travels in the clear in 244-byte frames, so the size
+    /// matters more than the fidelity — 64 px is what the page draws. The core
+    /// refuses anything over its cap, so an oversized string is not built.
+    static let appIcon: String = {
+        guard let icon = bundleIcon,
+              let data = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64))
+                  .image(actions: { _ in icon.draw(in: CGRect(x: 0, y: 0, width: 64, height: 64)) })
+                  .pngData()
+        else { return "" }
+        let uri = "data:image/png;base64,\(data.base64EncodedString())"
+        return uri.count <= 6144 ? uri : ""
+    }()
 
     /// The system CSPRNG. `nonisolated` because it is this type's DEFAULT
     /// argument, and a default argument is evaluated outside any actor —
@@ -183,7 +218,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
     /// to derive the same key, and it checks our key against the link's `rk`
     /// before it will talk to us at all.
     private func complete(with pageHello: String) async -> String? {
-        guard let socket, await socket.send(.text(handshake.hello(app: app))),
+        guard let socket, await socket.send(.text(handshake.hello(app: app, icon: icon))),
               let session = try? handshake.complete(peerHello: pageHello, relay: true)
         else { return nil }
         self.session = session

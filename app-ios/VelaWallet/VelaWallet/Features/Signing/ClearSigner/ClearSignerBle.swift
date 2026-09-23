@@ -170,6 +170,7 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
     let localName: String
 
     private let app: String
+    private let icon: String
     private let framer = ClearSignerFramer()
     private let reassembler = ClearSignerReassembler()
     private let handshake: ClearSignerHandshake
@@ -213,6 +214,7 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
     init?(
         signerUrl: String,
         app: String = ClearSignerRelayConversation.appName,
+        icon: String = ClearSignerRelayConversation.appIcon,
         localName: String = ClearSignerBleConversation.deviceName(),
         random: (Int) -> Data = ClearSignerRelayConversation.randomBytes,
         makeRadio: @escaping (CBPeripheralManagerDelegate) -> ClearSignerBleRadio = { LiveBleRadio(delegate: $0) },
@@ -228,6 +230,7 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
         guard uuids.count == 3 else { return nil }
         self.signerUrl = signerUrl
         self.app = app
+        self.icon = icon
         self.localName = localName
         self.handshake = handshake
         self.makeRadio = makeRadio
@@ -443,7 +446,7 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
         guard let json = ClearSignerAnswer.json(text), json["t"] as? String == "hello" else { return }
         // Ours FIRST: `complete` consumes the handshake, and the page cannot
         // derive anything without our key.
-        emit(Data(handshake.hello(app: app).utf8), sealed: false)
+        emit(Data(handshake.hello(app: app, icon: icon).utf8), sealed: false)
         guard let session = try? handshake.complete(peerHello: text, relay: false) else {
             return finishPairing(nil, trouble: .unavailable)
         }

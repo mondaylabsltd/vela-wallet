@@ -267,7 +267,9 @@ struct ClearSignerBleSessionTests {
             secret: vector.requesterSecret, nonce: vector.requesterNonce
         )
         #expect(handshake.publicKey() == vector.requesterPublicKey)
-        let ours = try CoreJSON.object(handshake.hello(app: vector.app))
+        // The vectors predate the peer's mark (spec 075) and carry no icon;
+        // an absent one is a hello without the field, which is what they pin.
+        let ours = try CoreJSON.object(handshake.hello(app: vector.app, icon: nil))
         let theirs = try CoreJSON.object(vector.requesterHello)
         #expect(ours["pk"] as? String == theirs["pk"] as? String)
         #expect(ours["nonce"] as? String == theirs["nonce"] as? String)

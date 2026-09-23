@@ -2597,9 +2597,11 @@ public protocol ClearSignerHandshakeProtocol: AnyObject, Sendable {
     func complete(peerHello: String, relay: Bool) throws  -> ClearSignerSession
     
     /**
-     * This side's hello text frame.
+     * This side's hello text frame. `icon` is an optional mark for the page
+     * to draw beside the name — inline raster `data:` only, small; anything
+     * else is dropped rather than sent to be refused.
      */
-    func hello(app: String?)  -> String
+    func hello(app: String?, icon: String?)  -> String
     
     /**
      * The 65-byte key — hash it into the pairing link's `rk`.
@@ -2690,14 +2692,17 @@ open func complete(peerHello: String, relay: Bool)throws  -> ClearSignerSession 
 }
     
     /**
-     * This side's hello text frame.
+     * This side's hello text frame. `icon` is an optional mark for the page
+     * to draw beside the name — inline raster `data:` only, small; anything
+     * else is dropped rather than sent to be refused.
      */
-open func hello(app: String?) -> String  {
+open func hello(app: String?, icon: String?) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_clearsignerhandshake_hello(
             self.uniffiCloneHandle(),
-        FfiConverterOptionString.lower(app),uniffiCallStatus
+        FfiConverterOptionString.lower(app),
+        FfiConverterOptionString.lower(icon),uniffiCallStatus
     )
 })
 }
@@ -11778,6 +11783,31 @@ fileprivate struct FfiConverterSequenceTypeWalletKeyRecord: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceOptionString: FfiConverterRustBuffer {
+    typealias SwiftType = [String?]
+
+    public static func write(_ value: [String?], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterOptionString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String?] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String?]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterOptionString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
     public static func write(_ value: [String: String], into buf: inout [UInt8]) {
         let len = Int32(value.count)
@@ -12992,6 +13022,18 @@ public func wrappedNativeIsTheNative(chainId: UInt32, address: String) -> Bool  
 })
 }
 /**
+ * Which message a frame belongs to, for a shell's log line. `None` when it is
+ * too short to be a frame. No peripheral reads inside a frame itself.
+ */
+public func clearSignerBlePeekId(frame: Data) -> UInt8?  {
+    return try!  FfiConverterOptionUInt8.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_ble_peek_id(
+        FfiConverterData.lower(frame),uniffiCallStatus
+    )
+})
+}
+/**
  * The GATT identifiers a peripheral serves and advertises. Read from here
  * rather than retyped: a wrong digit is a device that never appears in the
  * page's chooser, which is the hardest way to find a typo.
@@ -13048,6 +13090,20 @@ public func clearSignerKeyFingerprint(publicKey: Data) -> String  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_clear_signer_key_fingerprint(
         FfiConverterData.lower(publicKey),uniffiCallStatus
+    )
+})
+}
+/**
+ * The rpId the registry must be asked for a key that lives behind a page —
+ * the page's own domain, since that is the only one it could have minted the
+ * key for. `None` when the key is on an authenticator this device reaches
+ * itself: the wallet's own rpId, as before.
+ */
+public func clearSignerRegistryRpId(signerOrigin: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_registry_rp_id(
+        FfiConverterOptionString.lower(signerOrigin),uniffiCallStatus
     )
 })
 }
@@ -13110,6 +13166,21 @@ public func clearSignerRequest(input: ClearSignerInput, draft: UserOpDraft?)thro
     uniffi_vela_core_uniffi_fn_func_clear_signer_request(
         FfiConverterTypeClearSignerInput_lower(input),
         FfiConverterOptionTypeUserOpDraft.lower(draft),uniffiCallStatus
+    )
+})
+}
+/**
+ * The relying party a whole unit belongs to, or the several it found — a
+ * wallet's keys must share one, because the contract stores one `rpId` per
+ * unit and every member proves membership under its own authenticator's.
+ * A mixed set can never be proved, so it is refused before it is written.
+ */
+public func clearSignerUnitRpId(memberOrigins: [String?], walletRpId: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_unit_rp_id(
+        FfiConverterSequenceOptionString.lower(memberOrigins),
+        FfiConverterString.lower(walletRpId),uniffiCallStatus
     )
 })
 }
@@ -13815,6 +13886,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_wrapped_native_is_the_native() != 56849) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_ble_peek_id() != 37373) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_ble_uuids() != 31894) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13830,6 +13904,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_key_fingerprint() != 35507) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_registry_rp_id() != 23040) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_relay_link() != 43724) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13843,6 +13920,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_request() != 61569) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_unit_rp_id() != 14302) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_verify() != 26706) {
@@ -14001,7 +14081,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_complete() != 10649) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_hello() != 9842) {
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_hello() != 59234) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_public_key() != 28879) {
