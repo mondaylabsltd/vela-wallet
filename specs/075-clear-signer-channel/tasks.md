@@ -1,21 +1,29 @@
 # Tasks — 075 The Clear Signer as a passkey route
 
+> **Narrowed 2026-09-23.** Phases R (the tunnel) and D (BLE) were built, tested
+> on real hardware, and then CUT — along with the web shell's half of C — on the
+> owner's word: 「客户端支持回环 + 蓝牙就够了，不需要 websocket 隧道」, then
+> 「我确定砍掉蓝牙」, then 「web 就不支持清晰签名器好了」. The reason is in
+> spec.md, "What the owner cut". Their tasks are struck through rather than
+> deleted: what was built and what it cost is the record, and T042's open
+> question is now answered by the cut.
+
 ## A — Core (lead)
 - [x] T001 `KeyMethod::ClearSigner` through the wire (ts-rs, Kotlin, Swift mirrors); create + sign-in machines offer it
 - [x] T002 Key records: `signer_origin`; `auto` routing follows the key; refusal for a foreign-origin key on another route
 - [x] T003 `clear_signer` ceremony requests (create / signIn / proof / memberProof) + `verify_registration` / `verify_ceremony` + tests (each refusal)
 - [x] T004 `ws::Connection`: several requests per session; `bye`; idle timeout
-- [x] T005 `secure_session` (P-256 ECDH, HKDF, AES-GCM; labels `vela-tunnel/1`, `vela-ble/1`) + `tests/clear-signer/secure-session.json`
+- ~~T005 `secure_session` (P-256 ECDH, HKDF, AES-GCM) + vectors~~ — CUT 2026-09-23 with the two channels that used it. The loopback socket is plaintext on `127.0.0.1` behind a one-time token and an `Origin` check.
 - [x] T006 UniFFI + wasm exports; wasm size gate
 
 ## B — Page (agent)
 - [x] T010 Request kinds + cards; create only from wallet requesters
 - [x] T011 Sessions of several requests (loopback WS, postMessage)
-- [x] T012 `secure.js` shared by BLE and tunnel, against the vectors
-- [x] T013 Tunnel transport, `rk` check, code screen
-- [x] T014 Hostile tests: foreign challenge, create from a site, stand-in wallet
+- ~~T012 `secure.js` shared by BLE and tunnel~~ — CUT with T005.
+- ~~T013 Tunnel transport, `rk` check, code screen~~ — CUT.
+- [x] T014 Hostile tests: foreign challenge, create from a site (~~stand-in wallet~~ — that test went with the pairing link)
 
-## R — Tunnel (agent)
+## ~~R — Tunnel (agent)~~ — CUT 2026-09-23
 - [x] T020 `vela-tunnel` rules + unit tests — the room rules as a crate
   (three test modules)
 - [x] T021 `vela-tunnel-server` + Dockerfile — the native host, distroless image
@@ -25,7 +33,7 @@
 - [x] T024 The three hosts move out — owner, 2026-09-23: a service does not live in
   the wallet's tree. `git subtree split` carried each crate's history into the
   **`vela-tunnel`** repository as `crates/vela-tunnel{,-server,-worker}`; the wallet
-  keeps only the contract (contracts/tunnel.md §4) and reaches a tunnel by URL.
+  kept only the contract and reached a tunnel by URL — until the channel itself went, later the same day.
 - [x] T023 Conformance on native, Worker (wrangler dev), Docker — the desktop's
   `tunnel_conformance_against_a_real_tunnel` runs against a real one (`--ignored`)
   **Nothing is deployed**: `sign.getvela.app` and a public tunnel are the owner's
@@ -33,12 +41,12 @@
   that already exists.
 
 ## A+ — after the contracts (lead)
-- [x] T007 `sign_pref`: the tunnel is a preference (`vela.clearSignerTunnel`), with its own rules and refusals
-- [x] T008 i18n: where the signer is, the pairing sheet, the code, the tunnel row — all fifteen locales (pin 1717 → 1733)
+- ~~T007 `sign_pref`: the tunnel is a preference~~ — CUT. Both spellings of the key are now REMOVED by `prefs::migrations`.
+- [x] T008 i18n — and 2026-09-23 took 23 of those strings back out (pin 1745 → 1722): the where-question and its answers, the pairing sheet, the code, the four Bluetooth troubles, the tunnel row.
 - [x] T009 The page's ceremony suite also judged by the real core (`clearSignerVerifyCeremony`), 61/61
 
 ## C — Shells (agents)
-- [x] T030 Web: the fourth route in create / sign-in / backup; postMessage sessions; tunnel pairing sheet
+- ~~T030 Web~~ — CUT 2026-09-23: the web wallet does not offer the Clear Signer at all. 19 files deleted; a key that lives behind a page is named as unreachable from the web rather than silently mis-signed.
   — `AddMethodPicker` lists four (create's first key, "add another", the sign-in
   sheet); the onboarding executor routes `method = clear_signer` to the page and
   reports the core's verdict; one page visit per flow (create → member proof,
@@ -59,7 +67,7 @@
   carries several requests per visit (a create and its member proof cannot use
   one-request-per-visit). 500 → 518 tests, plus 5 Chrome e2e and a real-tunnel case.
 
-## D — BLE
+## ~~D — BLE~~ — CUT 2026-09-23
 
 The framing is the core's (`clear_signer::ble`, commit `8da4384e`): three
 peripherals speak to one page, and three hand-written reassemblers would be
@@ -80,11 +88,8 @@ the page's own code.
   marked in flight *after* its frames went out (an answer that arrived instantly
   was dropped), and a discarded `sweep` result (a lost frame left a spinner with
   no clock behind it — this channel has no socket to die).
-- [ ] T042 desktop (macOS) peripheral — not started. Lower value than it looks:
-  the desktop already reaches the page over the loopback socket on the same
-  machine and over the tunnel across machines, so BLE only adds a third road to
-  the same place, and a peripheral role from Rust needs raw `objc2-core-bluetooth`.
-  Worth a ruling before anyone spends the day on it.
+- ~~T042 desktop (macOS) peripheral~~ — never started, and now never will be.
+  The ruling it asked for arrived: the whole channel went.
 - [x] T043 real-radio pass — **Android, 2026-09-22**: advertise → Chrome's
   chooser → GATT connect → MTU 517 → handshake → matching six digits →
   request → answer → `verdict` → `core.result passkey_registered`. Five
@@ -151,7 +156,7 @@ the page's own code.
   The whole path then completed: key created on the page → member proof signed
   there → published (the mock recorded the unit) → 钱包已创建, address
   `0x57e9498FbEa4406a01142DF6ff2627E468f7912F`, the key row reading 云同步.
-- [ ] T051 SC-003 across devices (tunnel: native + Worker)
+- ~~T051 SC-003 across devices~~ — WITHDRAWN with phase R.
 
 ## F — What the device pass found
 

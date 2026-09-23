@@ -76,14 +76,13 @@ interface KeyValueStore {
         const val SIGN_METHOD = "vela.signMethod"
         const val CLEAR_SIGNER_URL = "vela.clearSignerUrl"
 
-        /** Spec 075: the tunnel a cross-device pairing goes through. Survives sign-out. */
-        const val CLEAR_SIGNER_TUNNEL = "vela.clearSignerTunnel"
-
         /**
-         * What the tunnel was stored under before the 2026-09-23 rename. Only
-         * `Preferences` reads it, to hand it to the core's `prefsMigrations`,
-         * which MOVES the value to [CLEAR_SIGNER_TUNNEL] and removes this key.
+         * Spec 075's cross-device pairing service, RETIRED with the channel
+         * itself on 2026-09-23. Both spellings it ever had are read here only
+         * to hand them to the core's `prefsMigrations`, which REMOVES them:
+         * an address for a service the wallet no longer opens is litter.
          */
+        const val RETIRED_CLEAR_SIGNER_TUNNEL = "vela.clearSignerTunnel"
         const val RETIRED_CLEAR_SIGNER_RELAY = "vela.clearSignerRelay"
         const val CUSTOM_NETWORKS = "vela.customNetworks"
 

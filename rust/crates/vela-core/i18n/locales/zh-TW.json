@@ -67,13 +67,7 @@
       "pageInsecure": "請使用 https 頁面，或這台裝置本機回環位址上的頁面——瀏覽器不會在其他地方簽署。",
       "pageForeign": "你的通行密鑰屬於 getvela.app。其他網域上的頁面可以顯示請求，但無法簽署。",
       "pageReset": "使用官方頁面",
-      "pageSave": "儲存",
-      "tunnelTitle": "隧道",
-      "tunnelSubtitle": "與另一台裝置配對時經由這個隧道。它只轉發加密後的訊息。",
-      "tunnelOfficial": "官方",
-      "tunnelInvalid": "這不是一個隧道位址。",
-      "tunnelInsecure": "請使用 wss:// 位址，或本機回送位址上的 ws://。",
-      "tunnelReset": "使用官方隧道"
+      "pageSave": "儲存"
     },
     "advanced": {
       "networksTitle": "網路",

@@ -54,13 +54,6 @@ pub struct SettingsStrings {
     pub signer_page_foreign: SharedString,
     pub signer_page_reset: SharedString,
     pub signer_page_save: SharedString,
-    /// Spec 075: the tunnel row, beside the page row and shaped like it.
-    pub tunnel_title: SharedString,
-    pub tunnel_subtitle: SharedString,
-    pub tunnel_official: SharedString,
-    pub tunnel_invalid: SharedString,
-    pub tunnel_insecure: SharedString,
-    pub tunnel_reset: SharedString,
     pub nav_about: SharedString,
     // account panel
     /// "Total {{amount}}" — the second half of the summary. The count template
@@ -305,12 +298,6 @@ impl SettingsStrings {
             signer_page_foreign: s("settings.signing.pageForeign"),
             signer_page_reset: s("settings.signing.pageReset"),
             signer_page_save: s("settings.signing.pageSave"),
-            tunnel_title: s("settings.signing.tunnelTitle"),
-            tunnel_subtitle: s("settings.signing.tunnelSubtitle"),
-            tunnel_official: s("settings.signing.tunnelOfficial"),
-            tunnel_invalid: s("settings.signing.tunnelInvalid"),
-            tunnel_insecure: s("settings.signing.tunnelInsecure"),
-            tunnel_reset: s("settings.signing.tunnelReset"),
             nav_about: s("settings.about.title"),
             accounts_total: raw("settingsModals.account.total"),
             accounts_count: raw("home.switcherAccountCount"),
@@ -556,12 +543,6 @@ mod tests {
             (&s.signer_page_foreign, "settings.signing.pageForeign"),
             (&s.signer_page_reset, "settings.signing.pageReset"),
             (&s.signer_page_save, "settings.signing.pageSave"),
-            (&s.tunnel_title, "settings.signing.tunnelTitle"),
-            (&s.tunnel_subtitle, "settings.signing.tunnelSubtitle"),
-            (&s.tunnel_official, "settings.signing.tunnelOfficial"),
-            (&s.tunnel_invalid, "settings.signing.tunnelInvalid"),
-            (&s.tunnel_insecure, "settings.signing.tunnelInsecure"),
-            (&s.tunnel_reset, "settings.signing.tunnelReset"),
         ] {
             assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
             assert!(!value.is_empty(), "`{key}` resolved empty");

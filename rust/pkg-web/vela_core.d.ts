@@ -288,33 +288,6 @@ export class BrowserHistoryCore {
 }
 
 /**
- * One loopback WebSocket connection, exactly as the phones run it.
- */
-export class ClearSignerWs {
-    free(): void;
-    [Symbol.dispose](): void;
-    /**
-     * The socket closed: `"declined"` when a page that had the request went
-     * away, `""` when it never proved itself.
-     */
-    closed(): string;
-    /**
-     * `bye`, then close.
-     */
-    end(): string;
-    /**
-     * `{write: number[], close, outcome?}` — `outcome` as [`clear_signer_verify`].
-     */
-    feed(bytes: Uint8Array): string;
-    constructor(signer_url: string, token: string, id: string, request_json: string, digest: Uint8Array, keys_json: string);
-    /**
-     * The session's next request once the last one is answered (a test
-     * harness drives the page with it; the web wallet itself cannot listen).
-     */
-    send(id: string, request_json: string): string;
-}
-
-/**
  * r" Clear-signing resolution pipeline and message risk verdicts.
  */
 export class ClearSigningCore {
@@ -695,16 +668,6 @@ export function checksumAddress(address_hex: string): string;
 export function chooseNativePrice(dex?: number | null, chainlink_local?: number | null, chainlink_eth?: number | null): NativePriceChoice;
 
 /**
- * The page request for a machine operation's wire JSON with
- * `method = clear_signer`, or `undefined` for anything else.
- */
-export function clearSignerCeremonyRequest(operation_json: string, id: string, wallet_name: string, registry: string): string | undefined;
-
-export function clearSignerDefaultTunnel(): string;
-
-export function clearSignerDefaultUrl(): string;
-
-/**
  * The relying party a key minted behind `signerOrigin` belongs to, or `null`
  * for a key this wallet's own authenticators made (spec 075).
  *
@@ -713,29 +676,6 @@ export function clearSignerDefaultUrl(): string;
  * 「清晰签名器的回复与这笔请求不符」, which is how both phones found this.
  */
 export function clearSignerRegistryRpId(signer_origin?: string | null): string | undefined;
-
-/**
- * `{method, params, origin, chainId, chainName?, nativeSymbol?, account,
- * accountName?, credentialIdsHex, userOp?, calls?}` → the page's `{intent,
- * context}`. As the phones' `clear_signer_request`: `calls` are the
- * operation's legs before its fee leg (so the fee leg is `calls.length`),
- * and an empty `method` — the wallet's own send — makes them the intent.
- */
-export function clearSignerRequest(input_json: string): string;
-
-export function clearSignerTunnelLink(signer_url: string, tunnel: string, room: string, rk: string): string;
-
-/**
- * A room id from 16 random bytes.
- */
-export function clearSignerTunnelRoom(random: Uint8Array): string | undefined;
-
-export function clearSignerTunnelRoomUrl(tunnel: string, room: string): string;
-
-/**
- * A tunnel address, normalised, or `undefined` when it cannot be used.
- */
-export function clearSignerTunnelUrl(input: string): string | undefined;
 
 /**
  * The ONE relying party a unit is filed under, or an error naming the parties
@@ -751,28 +691,15 @@ export function clearSignerTunnelUrl(input: string): string | undefined;
 export function clearSignerUnitRpId(member_origins_json: string, wallet_rp_id: string): string;
 
 /**
- * The address normalised, or throws `"invalid"` / `"insecure"`.
+ * Whether a page at `url` can use this wallet's passkeys (they are
+ * `getvela.app` keys).
+ *
+ * The web wallet cannot OPEN a Clear Signer page, but it still has to decide
+ * whether a key that lives behind one is reachable by a platform sheet: a key
+ * minted on `*.getvela.app` is this app's passkey, and a key minted on
+ * anybody else's page is reachable nowhere but there.
  */
-export function clearSignerUrl(input: string): string;
-
 export function clearSignerUsesWalletPasskeys(url: string): boolean;
-
-/**
- * The page's answer judged against `digest` and the account's keys
- * (`[{credentialId, publicKeyHex}]`): `{accepted: {credentialIdHex,
- * signatureDer, authenticatorData, clientDataJSON}}` or `{refused: {code,
- * detail}}`.
- */
-export function clearSignerVerify(result_json: string, digest: Uint8Array, keys_json: string): string;
-
-/**
- * A ceremony's answer judged: `{registration}` / `{assertion}` (the
- * machine's own wire shapes, ready for `passkey_registered` /
- * `passkey_authenticated` / `proof_signed`) or `{refused: {code, detail}}`.
- * `expected_member_challenge` is the registry challenge the wallet fetched
- * itself, for a member proof.
- */
-export function clearSignerVerifyCeremony(operation_json: string, answer_json: string, signer_origin: string, expected_member_challenge?: Uint8Array | null): string;
 
 export function computeSafeAddress(x: Uint8Array, y: Uint8Array): SafeAddressInfo;
 
@@ -1128,7 +1055,6 @@ export interface InitOutput {
     readonly __wbg_balancedashboardcore_free: (a: number, b: number) => void;
     readonly __wbg_batchimportcore_free: (a: number, b: number) => void;
     readonly __wbg_browserhistorycore_free: (a: number, b: number) => void;
-    readonly __wbg_clearsignerws_free: (a: number, b: number) => void;
     readonly __wbg_clearsigningcore_free: (a: number, b: number) => void;
     readonly __wbg_contactscore_free: (a: number, b: number) => void;
     readonly __wbg_createwalletcore_free: (a: number, b: number) => void;
@@ -1186,25 +1112,9 @@ export interface InitOutput {
     readonly canonicalizeSignature: (a: number, b: number) => [number, number, number, number];
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
-    readonly clearSignerCeremonyRequest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly clearSignerDefaultTunnel: () => [number, number];
-    readonly clearSignerDefaultUrl: () => [number, number];
     readonly clearSignerRegistryRpId: (a: number, b: number) => [number, number];
-    readonly clearSignerRequest: (a: number, b: number) => [number, number, number, number];
-    readonly clearSignerTunnelLink: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly clearSignerTunnelRoom: (a: number, b: number) => [number, number];
-    readonly clearSignerTunnelRoomUrl: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly clearSignerTunnelUrl: (a: number, b: number) => [number, number];
     readonly clearSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly clearSignerUrl: (a: number, b: number) => [number, number, number, number];
     readonly clearSignerUsesWalletPasskeys: (a: number, b: number) => number;
-    readonly clearSignerVerify: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-    readonly clearSignerVerifyCeremony: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly clearsignerws_closed: (a: number) => [number, number];
-    readonly clearsignerws_end: (a: number) => [number, number];
-    readonly clearsignerws_feed: (a: number, b: number, c: number) => [number, number];
-    readonly clearsignerws_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
-    readonly clearsignerws_send: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly clearsigningcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

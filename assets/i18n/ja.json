@@ -67,13 +67,7 @@
    "pageInsecure": "https のページ、またはこの端末のループバック上のページを使ってください。ブラウザはそれ以外の場所では署名しません。",
    "pageForeign": "パスキーは getvela.app のものです。他のドメインのページはリクエストを表示できても、署名はできません。",
    "pageReset": "公式ページを使う",
-   "pageSave": "保存",
-   "tunnelTitle": "トンネル",
-   "tunnelSubtitle": "別のデバイスとのペアリングはこのトンネルを経由します。トンネルが転送するのは暗号化されたメッセージだけです。",
-   "tunnelOfficial": "公式",
-   "tunnelInvalid": "トンネルのアドレスではありません。",
-   "tunnelInsecure": "wss:// のアドレス、またはこのデバイス自身のループバック上の ws:// を使ってください。",
-   "tunnelReset": "公式のトンネルを使う"
+   "pageSave": "保存"
   },
   "advanced": {
    "networksTitle": "ネットワーク",
@@ -1373,24 +1367,7 @@
    "clearSignerReopen": "ページをもう一度開く",
    "clearSignerDoneTab": "署名しました。このタブを閉じて Vela に戻ってください。",
    "viewOnExplorer": "エクスプローラーで表示",
-   "sendingToTokenContract": "トークン自身のコントラクトへの送金",
-   "clearSignerWhere": "Clear Signer はどこにありますか？",
-   "clearSignerThisDevice": "このデバイス",
-   "clearSignerOtherDevice": "別のデバイス",
-   "clearSignerNearby": "近くのデバイス（Bluetooth）",
-   "clearSignerNearbyHint": "ページは Bluetooth でこのデバイスを見つけます。署名の間は Vela を開いたままにしてください。",
-   "clearSignerNearbyName": "別のデバイスのブラウザのデバイス一覧で「{{name}}」を選んでください。",
-   "clearSignerBluetoothNeeded": "署名ページがこのデバイスを見つけられるよう、Vela には Bluetooth の許可が必要です。",
-   "clearSignerBluetoothOff": "この方法でペアリングするには Bluetooth をオンにしてください。",
-   "clearSignerBluetoothUnsupported": "このデバイスはこの方法でペアリングできません。このデバイスの Clear Signer を使うか、別のデバイスをお試しください。",
-   "clearSignerNearbyLost": "署名ページとの接続が切れました。2 台のデバイスを近づけ、Vela を開いたままでもう一度お試しください。",
-   "clearSignerPair": "別のデバイスで Clear Signer を開く",
-   "clearSignerPairHint": "パスキーのあるデバイスでこのコードをスキャンするか、そのデバイスでリンクを開いてください。",
-   "clearSignerPairWaiting": "別のデバイスを待っています…",
-   "clearSignerCode": "別のデバイスに同じコードが表示されていることを確認してください：{{code}}",
-   "clearSignerCodeConfirm": "コードが一致しています",
-   "clearSignerCopyLink": "リンクをコピー",
-   "clearSignerTunnelDown": "トンネルに接続できませんでした。もう一度試すか、このデバイスの Clear Signer を使ってください。"
+   "sendingToTokenContract": "トークン自身のコントラクトへの送金"
   },
   "signingApprove": {
    "resultingTotal": "新しい承認上限",

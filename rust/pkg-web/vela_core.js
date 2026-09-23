@@ -466,133 +466,6 @@ export class BrowserHistoryCore {
 if (Symbol.dispose) BrowserHistoryCore.prototype[Symbol.dispose] = BrowserHistoryCore.prototype.free;
 
 /**
- * One loopback WebSocket connection, exactly as the phones run it.
- */
-export class ClearSignerWs {
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        ClearSignerWsFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_clearsignerws_free(ptr, 0);
-    }
-    /**
-     * The socket closed: `"declined"` when a page that had the request went
-     * away, `""` when it never proved itself.
-     * @returns {string}
-     */
-    closed() {
-        let deferred1_0;
-        let deferred1_1;
-        try {
-            const ret = wasm.clearsignerws_closed(this.__wbg_ptr);
-            deferred1_0 = ret[0];
-            deferred1_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-        }
-    }
-    /**
-     * `bye`, then close.
-     * @returns {string}
-     */
-    end() {
-        let deferred1_0;
-        let deferred1_1;
-        try {
-            const ret = wasm.clearsignerws_end(this.__wbg_ptr);
-            deferred1_0 = ret[0];
-            deferred1_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-        }
-    }
-    /**
-     * `{write: number[], close, outcome?}` — `outcome` as [`clear_signer_verify`].
-     * @param {Uint8Array} bytes
-     * @returns {string}
-     */
-    feed(bytes) {
-        let deferred2_0;
-        let deferred2_1;
-        try {
-            const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
-            const len0 = WASM_VECTOR_LEN;
-            const ret = wasm.clearsignerws_feed(this.__wbg_ptr, ptr0, len0);
-            deferred2_0 = ret[0];
-            deferred2_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-        }
-    }
-    /**
-     * @param {string} signer_url
-     * @param {string} token
-     * @param {string} id
-     * @param {string} request_json
-     * @param {Uint8Array} digest
-     * @param {string} keys_json
-     */
-    constructor(signer_url, token, id, request_json, digest, keys_json) {
-        const ptr0 = passStringToWasm0(signer_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(token, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(request_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ptr4 = passArray8ToWasm0(digest, wasm.__wbindgen_malloc);
-        const len4 = WASM_VECTOR_LEN;
-        const ptr5 = passStringToWasm0(keys_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len5 = WASM_VECTOR_LEN;
-        const ret = wasm.clearsignerws_new(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        this.__wbg_ptr = ret[0];
-        ClearSignerWsFinalization.register(this, this.__wbg_ptr, this);
-        return this;
-    }
-    /**
-     * The session's next request once the last one is answered (a test
-     * harness drives the page with it; the web wallet itself cannot listen).
-     * @param {string} id
-     * @param {string} request_json
-     * @returns {string}
-     */
-    send(id, request_json) {
-        let deferred4_0;
-        let deferred4_1;
-        try {
-            const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-            const len0 = WASM_VECTOR_LEN;
-            const ptr1 = passStringToWasm0(request_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-            const len1 = WASM_VECTOR_LEN;
-            const ret = wasm.clearsignerws_send(this.__wbg_ptr, ptr0, len0, ptr1, len1);
-            var ptr3 = ret[0];
-            var len3 = ret[1];
-            if (ret[3]) {
-                ptr3 = 0; len3 = 0;
-                throw takeFromExternrefTable0(ret[2]);
-            }
-            deferred4_0 = ptr3;
-            deferred4_1 = len3;
-            return getStringFromWasm0(ptr3, len3);
-        } finally {
-            wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-        }
-    }
-}
-if (Symbol.dispose) ClearSignerWs.prototype[Symbol.dispose] = ClearSignerWs.prototype.free;
-
-/**
  * r" Clear-signing resolution pipeline and message risk verdicts.
  */
 export class ClearSigningCore {
@@ -3118,65 +2991,6 @@ export function chooseNativePrice(dex, chainlink_local, chainlink_eth) {
 }
 
 /**
- * The page request for a machine operation's wire JSON with
- * `method = clear_signer`, or `undefined` for anything else.
- * @param {string} operation_json
- * @param {string} id
- * @param {string} wallet_name
- * @param {string} registry
- * @returns {string | undefined}
- */
-export function clearSignerCeremonyRequest(operation_json, id, wallet_name, registry) {
-    const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(wallet_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len2 = WASM_VECTOR_LEN;
-    const ptr3 = passStringToWasm0(registry, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len3 = WASM_VECTOR_LEN;
-    const ret = wasm.clearSignerCeremonyRequest(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-    let v5;
-    if (ret[0] !== 0) {
-        v5 = getStringFromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-    }
-    return v5;
-}
-
-/**
- * @returns {string}
- */
-export function clearSignerDefaultTunnel() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.clearSignerDefaultTunnel();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
-}
-
-/**
- * @returns {string}
- */
-export function clearSignerDefaultUrl() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-        const ret = wasm.clearSignerDefaultUrl();
-        deferred1_0 = ret[0];
-        deferred1_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-    }
-}
-
-/**
  * The relying party a key minted behind `signerOrigin` belongs to, or `null`
  * for a key this wallet's own authenticators made (spec 075).
  *
@@ -3190,120 +3004,6 @@ export function clearSignerRegistryRpId(signer_origin) {
     var ptr0 = isLikeNone(signer_origin) ? 0 : passStringToWasm0(signer_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len0 = WASM_VECTOR_LEN;
     const ret = wasm.clearSignerRegistryRpId(ptr0, len0);
-    let v2;
-    if (ret[0] !== 0) {
-        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-    }
-    return v2;
-}
-
-/**
- * `{method, params, origin, chainId, chainName?, nativeSymbol?, account,
- * accountName?, credentialIdsHex, userOp?, calls?}` → the page's `{intent,
- * context}`. As the phones' `clear_signer_request`: `calls` are the
- * operation's legs before its fee leg (so the fee leg is `calls.length`),
- * and an empty `method` — the wallet's own send — makes them the intent.
- * @param {string} input_json
- * @returns {string}
- */
-export function clearSignerRequest(input_json) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.clearSignerRequest(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * @param {string} signer_url
- * @param {string} tunnel
- * @param {string} room
- * @param {string} rk
- * @returns {string}
- */
-export function clearSignerTunnelLink(signer_url, tunnel, room, rk) {
-    let deferred5_0;
-    let deferred5_1;
-    try {
-        const ptr0 = passStringToWasm0(signer_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(tunnel, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(room, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ptr3 = passStringToWasm0(rk, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len3 = WASM_VECTOR_LEN;
-        const ret = wasm.clearSignerTunnelLink(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-        deferred5_0 = ret[0];
-        deferred5_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-    }
-}
-
-/**
- * A room id from 16 random bytes.
- * @param {Uint8Array} random
- * @returns {string | undefined}
- */
-export function clearSignerTunnelRoom(random) {
-    const ptr0 = passArray8ToWasm0(random, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.clearSignerTunnelRoom(ptr0, len0);
-    let v2;
-    if (ret[0] !== 0) {
-        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-    }
-    return v2;
-}
-
-/**
- * @param {string} tunnel
- * @param {string} room
- * @returns {string}
- */
-export function clearSignerTunnelRoomUrl(tunnel, room) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(tunnel, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(room, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.clearSignerTunnelRoomUrl(ptr0, len0, ptr1, len1);
-        deferred3_0 = ret[0];
-        deferred3_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * A tunnel address, normalised, or `undefined` when it cannot be used.
- * @param {string} input
- * @returns {string | undefined}
- */
-export function clearSignerTunnelUrl(input) {
-    const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.clearSignerTunnelUrl(ptr0, len0);
     let v2;
     if (ret[0] !== 0) {
         v2 = getStringFromWasm0(ret[0], ret[1]).slice();
@@ -3350,32 +3050,13 @@ export function clearSignerUnitRpId(member_origins_json, wallet_rp_id) {
 }
 
 /**
- * The address normalised, or throws `"invalid"` / `"insecure"`.
- * @param {string} input
- * @returns {string}
- */
-export function clearSignerUrl(input) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.clearSignerUrl(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
+ * Whether a page at `url` can use this wallet's passkeys (they are
+ * `getvela.app` keys).
+ *
+ * The web wallet cannot OPEN a Clear Signer page, but it still has to decide
+ * whether a key that lives behind one is reachable by a platform sheet: a key
+ * minted on `*.getvela.app` is this app's passkey, and a key minted on
+ * anybody else's page is reachable nowhere but there.
  * @param {string} url
  * @returns {boolean}
  */
@@ -3384,74 +3065,6 @@ export function clearSignerUsesWalletPasskeys(url) {
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.clearSignerUsesWalletPasskeys(ptr0, len0);
     return ret !== 0;
-}
-
-/**
- * The page's answer judged against `digest` and the account's keys
- * (`[{credentialId, publicKeyHex}]`): `{accepted: {credentialIdHex,
- * signatureDer, authenticatorData, clientDataJSON}}` or `{refused: {code,
- * detail}}`.
- * @param {string} result_json
- * @param {Uint8Array} digest
- * @param {string} keys_json
- * @returns {string}
- */
-export function clearSignerVerify(result_json, digest, keys_json) {
-    let deferred5_0;
-    let deferred5_1;
-    try {
-        const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArray8ToWasm0(digest, wasm.__wbindgen_malloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(keys_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.clearSignerVerify(ptr0, len0, ptr1, len1, ptr2, len2);
-        var ptr4 = ret[0];
-        var len4 = ret[1];
-        if (ret[3]) {
-            ptr4 = 0; len4 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred5_0 = ptr4;
-        deferred5_1 = len4;
-        return getStringFromWasm0(ptr4, len4);
-    } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-    }
-}
-
-/**
- * A ceremony's answer judged: `{registration}` / `{assertion}` (the
- * machine's own wire shapes, ready for `passkey_registered` /
- * `passkey_authenticated` / `proof_signed`) or `{refused: {code, detail}}`.
- * `expected_member_challenge` is the registry challenge the wallet fetched
- * itself, for a member proof.
- * @param {string} operation_json
- * @param {string} answer_json
- * @param {string} signer_origin
- * @param {Uint8Array | null} [expected_member_challenge]
- * @returns {string}
- */
-export function clearSignerVerifyCeremony(operation_json, answer_json, signer_origin, expected_member_challenge) {
-    let deferred5_0;
-    let deferred5_1;
-    try {
-        const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(answer_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(signer_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        var ptr3 = isLikeNone(expected_member_challenge) ? 0 : passArray8ToWasm0(expected_member_challenge, wasm.__wbindgen_malloc);
-        var len3 = WASM_VECTOR_LEN;
-        const ret = wasm.clearSignerVerifyCeremony(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-        deferred5_0 = ret[0];
-        deferred5_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-    }
 }
 
 /**
@@ -5152,9 +4765,6 @@ const BatchImportCoreFinalization = (typeof FinalizationRegistry === 'undefined'
 const BrowserHistoryCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_browserhistorycore_free(ptr, 1));
-const ClearSignerWsFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_clearsignerws_free(ptr, 1));
 const ClearSigningCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_clearsigningcore_free(ptr, 1));

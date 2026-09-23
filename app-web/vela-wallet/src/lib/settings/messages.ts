@@ -114,18 +114,6 @@ export interface SettingsMessages {
 		pageForeign: string;
 		pageReset: string;
 		pageSave: string;
-		/**
-		 * Spec 075: the tunnel a cross-device pairing goes through — the same
-		 * row shape as the page above, because it is the same kind of
-		 * decision: an address of one's own instead of ours. The tunnel never
-		 * sees anything but ciphertext, which is what `tunnelSubtitle` says.
-		 */
-		tunnelTitle: string;
-		tunnelSubtitle: string;
-		tunnelOfficial: string;
-		tunnelInvalid: string;
-		tunnelInsecure: string;
-		tunnelReset: string;
 	};
 	networks: {
 		/** Template with `{{count}}`. */
@@ -491,12 +479,6 @@ export const SETTINGS_KEYS = [
 	'settings.signing.pageForeign',
 	'settings.signing.pageReset',
 	'settings.signing.pageSave',
-	'settings.signing.tunnelTitle',
-	'settings.signing.tunnelSubtitle',
-	'settings.signing.tunnelOfficial',
-	'settings.signing.tunnelInvalid',
-	'settings.signing.tunnelInsecure',
-	'settings.signing.tunnelReset',
 	'settings.networks.count',
 	'settings.networks.custom',
 	'settings.networks.builtinNote',

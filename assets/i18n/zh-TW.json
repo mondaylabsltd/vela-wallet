@@ -67,13 +67,7 @@
    "pageInsecure": "請使用 https 頁面，或這台裝置本機回環位址上的頁面——瀏覽器不會在其他地方簽署。",
    "pageForeign": "你的通行密鑰屬於 getvela.app。其他網域上的頁面可以顯示請求，但無法簽署。",
    "pageReset": "使用官方頁面",
-   "pageSave": "儲存",
-   "tunnelTitle": "隧道",
-   "tunnelSubtitle": "與另一台裝置配對時經由這個隧道。它只轉發加密後的訊息。",
-   "tunnelOfficial": "官方",
-   "tunnelInvalid": "這不是一個隧道位址。",
-   "tunnelInsecure": "請使用 wss:// 位址，或本機回送位址上的 ws://。",
-   "tunnelReset": "使用官方隧道"
+   "pageSave": "儲存"
   },
   "advanced": {
    "networksTitle": "網路",
@@ -1373,24 +1367,7 @@
    "clearSignerReopen": "重新開啟頁面",
    "clearSignerDoneTab": "已簽署。你可以關閉此分頁，回到 Vela。",
    "viewOnExplorer": "在區塊瀏覽器中查看",
-   "sendingToTokenContract": "傳送到代幣自身合約",
-   "clearSignerWhere": "清晰簽署器在哪裡？",
-   "clearSignerThisDevice": "在這台裝置上",
-   "clearSignerOtherDevice": "在另一台裝置上",
-   "clearSignerNearby": "附近裝置，透過藍牙",
-   "clearSignerNearbyHint": "頁面會透過藍牙找到這台裝置。簽署期間請讓 Vela 保持在前景。",
-   "clearSignerNearbyName": "在另一台裝置的瀏覽器裝置清單中，選擇「{{name}}」。",
-   "clearSignerBluetoothNeeded": "Vela 需要藍牙權限，簽署頁面才能找到這台裝置。",
-   "clearSignerBluetoothOff": "請開啟藍牙，才能用這種方式配對。",
-   "clearSignerBluetoothUnsupported": "這台裝置不支援這種配對方式。請在本機使用清晰簽署器，或改用另一台裝置。",
-   "clearSignerNearbyLost": "簽署頁面已中斷連線。請讓兩台裝置保持靠近、Vela 保持在前景，然後重試。",
-   "clearSignerPair": "在另一台裝置上開啟清晰簽署器",
-   "clearSignerPairHint": "用存有你通行金鑰的裝置掃描此碼，或在那台裝置上開啟這個連結。",
-   "clearSignerPairWaiting": "正在等待另一台裝置…",
-   "clearSignerCode": "請確認另一台裝置顯示的是同一個碼：{{code}}",
-   "clearSignerCodeConfirm": "兩邊的碼一致",
-   "clearSignerCopyLink": "複製連結",
-   "clearSignerTunnelDown": "無法連線隧道。請重試，或改用這台裝置上的清晰簽署器。"
+   "sendingToTokenContract": "傳送到代幣自身合約"
   },
   "currency": {
    "title": "顯示貨幣",

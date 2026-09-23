@@ -34,7 +34,6 @@
 	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
 	import IntroCarousel from '$lib/ui/intro/IntroCarousel.svelte';
 	import AddMethodPicker from '$lib/ui/onboarding/v2/AddMethodPicker.svelte';
-	import ClearSignerHost from '$lib/ui/onboarding/ClearSignerHost.svelte';
 	import Sheet from '$lib/ui/onboarding/Sheet.svelte';
 	import SocialMeta from '$lib/ui/SocialMeta.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
@@ -289,7 +288,6 @@
 
 <!-- Spec 075: signing in can run on the Clear Signer's page — here is where
      the person is asked where it is, and where they compare the code. -->
-<ClearSignerHost {strings} />
 
 {#if pending}
 	<PromptSheet

@@ -68,7 +68,6 @@ import type {
 	SelectRowModel,
 	SelectSheetModel,
 	SettingsHomeModel,
-	SignerPageModel,
 	StatusPillModel,
 	UrlFieldModel,
 	AccountsSheetModel
@@ -582,29 +581,17 @@ export function withLiveSigning(
 ): SettingsHomeModel {
 	const rows = liveSignWithRows(model.signWithSheet.rows, view);
 	const method = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
-	const page = view.signer_url_is_default ? m.signing.pageOfficial : hostOf(view.signer_url);
-	const tunnel = view.tunnel_url_is_default ? m.signing.tunnelOfficial : hostOf(view.tunnel_url);
 	return {
 		...model,
 		sections: model.sections.map((section) => ({
 			...section,
-			rows: section.rows.map((row) =>
-				row.id === 'sign-with'
-					? { ...row, value: method }
-					: row.id === 'clear-signer-page'
-						? { ...row, value: page }
-						: row.id === 'clear-signer-tunnel'
-							? { ...row, value: tunnel }
-							: row
-			)
+			rows: section.rows.map((row) => (row.id === 'sign-with' ? { ...row, value: method } : row))
 		})),
-		signWithSheet: { ...model.signWithSheet, rows },
-		signerPage: liveSignerPage(model.signerPage, view, m),
-		tunnelPage: liveTunnelPage(model.tunnelPage, view, m)
+		signWithSheet: { ...model.signWithSheet, rows }
 	};
 }
 
-/** DST's "Sign with" row and the Clear Signer's page, from the phone sheet's own rows. */
+/** DST's "Sign with" row, from the phone sheet's own rows. */
 export function withLiveSigningDesktop(
 	model: SettingsDesktopModel,
 	view: SignPrefView,
@@ -617,9 +604,7 @@ export function withLiveSigningDesktop(
 		...model,
 		signing: {
 			...model.signing,
-			rows: model.signing.rows.map((row) => ({ ...row, value: label, options: rows })),
-			page: liveSignerPage(model.signing.page, view, m),
-			tunnel: liveTunnelPage(model.signing.tunnel, view, m)
+			rows: model.signing.rows.map((row) => ({ ...row, value: label, options: rows }))
 		}
 	};
 }
@@ -629,53 +614,6 @@ function liveSignWithRows(rows: SelectRowModel[], view: SignPrefView): SelectRow
 		const row = rows.find((candidate) => candidate.id === id);
 		return row ? [{ ...row, selected: id === view.method }] : [];
 	});
-}
-
-export function liveSignerPage(
-	page: SignerPageModel,
-	view: SignPrefView,
-	m: SettingsMessages
-): SignerPageModel {
-	const error =
-		view.signer_url_error === 'invalid'
-			? m.signing.pageInvalid
-			: view.signer_url_error === 'insecure'
-				? m.signing.pageInsecure
-				: undefined;
-	return {
-		...page,
-		field: { ...page.field, value: view.signer_url, tone: error ? 'error' : 'default' },
-		reset: view.signer_url_is_default ? undefined : m.signing.pageReset,
-		error,
-		foreign: view.signer_uses_wallet_passkeys ? undefined : m.signing.pageForeign
-	};
-}
-
-/**
- * Spec 075: the tunnel row, shaped exactly as the page row — the address in
- * force, the field to type another over it, and the core's word on the last
- * one submitted (`wss://` anywhere, `ws://` only on this machine's loopback).
- * There is no "foreign" line: a tunnel sees nothing but ciphertext, so where
- * it runs cannot cost anybody their keys.
- */
-export function liveTunnelPage(
-	page: SignerPageModel,
-	view: SignPrefView,
-	m: SettingsMessages
-): SignerPageModel {
-	const error =
-		view.tunnel_url_error === 'invalid'
-			? m.signing.tunnelInvalid
-			: view.tunnel_url_error === 'insecure'
-				? m.signing.tunnelInsecure
-				: undefined;
-	return {
-		...page,
-		field: { ...page.field, value: view.tunnel_url, tone: error ? 'error' : 'default' },
-		reset: view.tunnel_url_is_default ? undefined : m.signing.tunnelReset,
-		error,
-		foreign: undefined
-	};
 }
 
 /** The provider-driven list, when one has answered (spec 028 Phase 9, T491). */

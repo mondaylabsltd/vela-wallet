@@ -250,15 +250,6 @@ object SettingsFixtures {
                     subtitle = s.t("settings.signing.pageSubtitle"),
                     value = s.t("settings.signing.pageOfficial"),
                 ),
-                // Spec 075: the tunnel a cross-device pairing goes through, beside
-                // the page it pairs with.
-                SettingsRowModel(
-                    id = TUNNEL_ROW,
-                    title = s.t("settings.signing.tunnelTitle"),
-                    icon = SettingsIcon.Zap,
-                    subtitle = s.t("settings.signing.tunnelSubtitle"),
-                    value = s.t("settings.signing.tunnelOfficial"),
-                ),
                 SettingsRowModel(
                     id = "storage",
                     title = s.t(I18nKeys.SettingsUi.STORAGE_TITLE),
@@ -701,8 +692,6 @@ object SettingsFixtures {
     const val SIGN_WITH_ROW = "sign-with"
     const val SIGNER_PAGE_ROW = "signer-page"
 
-    /** Spec 075: the Clear Signer tunnel. */
-    const val TUNNEL_ROW = "signer-tunnel"
 
     /**
      * The default speed's sheet: the three speeds, fastest first, each with

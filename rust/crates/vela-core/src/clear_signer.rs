@@ -35,12 +35,8 @@ use crate::types::ClientDataKind;
 use crate::user_op::{UserOperation, WalletKey};
 use crate::webauthn::{validate_client_data, webauthn_signing_hash};
 
-/// The BLE channel's framing — no state machines, so no `crux` needed: three
-/// shells run the peripheral side and must frame it identically.
-pub mod ble;
 #[cfg(feature = "crux")]
 pub mod ceremony;
-pub mod secure;
 pub mod ws;
 
 /// The official signer page (spec 071 [D]) — the host PROTOCOL.md names.
@@ -585,83 +581,6 @@ pub fn parse_callback(query: &str, token: &str) -> Result<Value, ClearSignerErro
 /// `sign.html?ch=ws#p=<port>&t=<token>`.
 pub fn ws_launch(base: &str, port: u16, token: &str) -> String {
     format!("{}#p={port}&t={}", sign_page(base, "ch=ws"), percent(token))
-}
-
-// ---------------------------------------------------------------------------
-// Spec 075: across devices — the tunnel (`contracts/tunnel.md`)
-// ---------------------------------------------------------------------------
-
-/// The tunnel the wallet pairs through unless Settings name another.
-pub const DEFAULT_TUNNEL_URL: &str = "wss://tunnel.getvela.app";
-
-/// A tunnel address the person typed, normalised — or why it cannot be used.
-/// `wss://` anywhere (a bare host gets it); `ws://` only on this device's own
-/// loopback (a tunnel under test). The page and the wallet both connect to it,
-/// and an https page cannot open a plain socket to anywhere else.
-pub fn tunnel_url(input: &str) -> Result<String, SignerUrlError> {
-    let text = input.trim().trim_end_matches('/');
-    if text.is_empty() || text.chars().any(char::is_whitespace) {
-        return Err(SignerUrlError::Invalid);
-    }
-    let text = if text.contains("://") {
-        text.to_owned()
-    } else {
-        format!("wss://{text}")
-    };
-    let (scheme, rest) = text.split_once("://").ok_or(SignerUrlError::Invalid)?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    let host = host_of(authority);
-    if host.is_empty() || authority.contains('@') || rest.contains(['?', '#']) {
-        return Err(SignerUrlError::Invalid);
-    }
-    match scheme.to_ascii_lowercase().as_str() {
-        "wss" => {}
-        "ws" if is_loopback(&host) => {}
-        "ws" | "http" => return Err(SignerUrlError::Insecure),
-        _ => return Err(SignerUrlError::Invalid),
-    }
-    Ok(format!(
-        "{}://{}{}",
-        scheme.to_ascii_lowercase(),
-        authority.to_ascii_lowercase(),
-        &rest[authority.len()..]
-    ))
-}
-
-/// A room id from 16 random bytes (the shell's): 22 characters of base64url.
-#[must_use]
-pub fn tunnel_room(random: &[u8; 16]) -> String {
-    URL_SAFE_NO_PAD.encode(random)
-}
-
-/// The socket an end opens: `<tunnel>/v1/rooms/<room>?role=<requester|signer>`.
-#[must_use]
-pub fn tunnel_room_url(tunnel: &str, room: &str, role: &str) -> String {
-    format!(
-        "{}/v1/rooms/{room}?role={role}",
-        tunnel.trim_end_matches('/')
-    )
-}
-
-/// The pairing link the wallet shows as a QR code and a copyable address:
-/// `<page>sign.html?ch=relay#relay=<tunnel>&room=<room>&rk=<rk>&v=1`. The
-/// fragment never reaches a server; `rk` lets the page refuse a stand-in
-/// wallet ([`secure::key_fingerprint`]).
-///
-/// The channel token and the fragment key are still spelled `relay`. They are
-/// ON THE WIRE — the signer page reads them, and so do the host crates'
-/// `{"v":1,"relay":"joined"}` frames — so the 2026-09-23 rename stops at the
-/// edge of the protocol. Only the HKDF label moved with it (`vela-tunnel/1`),
-/// because both ends of THAT are this repo's and change together.
-#[must_use]
-pub fn tunnel_link(signer_url: &str, tunnel: &str, room: &str, rk: &str) -> String {
-    format!(
-        "{}#relay={}&room={}&rk={}&v=1",
-        sign_page(signer_url, "ch=relay"),
-        percent(tunnel),
-        percent(room),
-        percent(rk)
-    )
 }
 
 /// `user_rejected` (the person) vs everything else (the page's rules).

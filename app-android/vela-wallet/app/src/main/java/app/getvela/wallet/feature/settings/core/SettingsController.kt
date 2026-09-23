@@ -227,11 +227,6 @@ class SettingsController(
 
     fun resetSignerUrl() = signPrefHost.dispatch(SignPrefEvent.SignerUrlReset, SignPrefEvent.serializer())
 
-    /** Spec 075: the tunnel a cross-device pairing goes through. */
-    fun submitTunnelUrl(text: String) =
-        signPrefHost.dispatch(SignPrefEvent.TunnelUrlSubmitted(text), SignPrefEvent.serializer())
-
-    fun resetTunnelUrl() = signPrefHost.dispatch(SignPrefEvent.TunnelUrlReset, SignPrefEvent.serializer())
 
     /** The networks, endpoints and provider keys this device holds. */
     val networks: StateFlow<NetView> = networkHost.view

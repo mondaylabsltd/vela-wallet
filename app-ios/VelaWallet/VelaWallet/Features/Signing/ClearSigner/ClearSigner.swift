@@ -9,17 +9,19 @@
 //  Spec 071 made it a fourth way to SIGN. Spec 075 makes it a fourth **passkey
 //  route**, beside this device, a nearby device and a security key: it creates
 //  keys, signs in, proves and confirms membership, wherever the other three
-//  are offered. So this file now owns four things rather than three:
+//  are offered.
 //
-//  - **where** the signer is — this device, or another one (`clearSignerWhere`);
-//  - on this device, a `ClearSignerChannel` — the loopback listener the page
-//    talks to — and the page in an `SFSafariViewController`. An in-app tab
-//    keeps this app in the foreground, which is what keeps the listener alive
-//    for the whole ceremony (research R2);
-//  - on another device, a `ClearSignerTunnelConversation` — the QR, the link,
-//    and the six digits the person compares before anything is sent;
-//  - the one sheet under all of it (`ClearSignerSheets`), which is also where
-//    "open the page again" and cancel live.
+//  There is ONE channel: a `ClearSignerChannel` — the loopback listener the
+//  page talks to — and the page in an `SFSafariViewController`. An in-app tab
+//  keeps this app in the foreground, which is what keeps the listener alive
+//  for the whole ceremony (research R2). Under it is the one sheet
+//  (`ClearSignerSheets`), which is where "open the page again" and cancel
+//  live.
+//
+//  The cross-device channels went on 2026-09-23 (the owner: "客户端支持回环 +
+//  蓝牙就够了"，then "我确定砍掉蓝牙"): only a page THIS device fetched can be
+//  checked against what it is supposed to be, which is the property the whole
+//  route exists for.
 //
 //  **One session per flow** (contract §1.5). A create is a key and then its
 //  member proof; a recovery is two proofs. The page is opened once, the
@@ -138,19 +140,10 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     /// The page Settings names (`sign_pref`); `nil` before it has said, which
     /// is the official page.
     private let signerUrl: () -> String?
-    /// The tunnel Settings names (`sign_pref`, spec 075).
-    private let tunnelUrl: () -> String?
-    /// The tunnel conversation, as a seam for tests.
-    private let makeTunnel: (_ signerUrl: String, _ tunnel: String) -> ClearSignerTunnelConversation?
-    /// The nearby (BLE) conversation, as a seam for tests.
-    private let makeBle: (_ signerUrl: String) -> ClearSignerBleConversation?
-
     /// The flow's live session, while one is open.
     private var conversation: ClearSignerConversation?
     /// The same session when it is the loopback one — it alone has a tab.
     private var channel: ClearSignerChannel?
-    private var tunnel: ClearSignerTunnelConversation?
-    private var ble: ClearSignerBleConversation?
     /// The page this session is talking to; every answer's origin is checked
     /// against it by the core.
     private var openPage: String?
@@ -158,32 +151,15 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
 
     private var hostSheet: UIViewController?
     private var model: ClearSignerSheetModel?
-    /// The where-choice and the code confirmation, while somebody is looking.
-    private var asking: CheckedContinuation<Bool, Never>?
     /// One request at a time: the sheet is modal, so a second can only come
     /// from a machine, and stacking a page on a page is never the answer.
     private var busy = false
-    /// The person pressed cancel while no question was pending — during the
-    /// pairing wait, say. Without it, a cancelled pairing came back as "the
-    /// tunnel could not be reached", which blames the tunnel for a decision.
+    /// The person pressed cancel while no question was pending.
     private var declined = false
 
-    init(
-        loc: Loc,
-        signerUrl: @escaping () -> String?,
-        tunnelUrl: @escaping () -> String? = { nil },
-        makeTunnel: @escaping (String, String) -> ClearSignerTunnelConversation? = { signer, tunnel in
-            ClearSignerTunnelConversation(signerUrl: signer, tunnel: tunnel)
-        },
-        makeBle: @escaping (String) -> ClearSignerBleConversation? = { signer in
-            ClearSignerBleConversation(signerUrl: signer)
-        }
-    ) {
+    init(loc: Loc, signerUrl: @escaping () -> String?) {
         self.loc = loc
         self.signerUrl = signerUrl
-        self.tunnelUrl = tunnelUrl
-        self.makeTunnel = makeTunnel
-        self.makeBle = makeBle
         super.init()
     }
 
@@ -238,11 +214,8 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         conversation?.end()
         conversation = nil
         channel = nil
-        tunnel = nil
-        ble = nil
         openPage = nil
         launchUrl = nil
-        finishAsk(pick: nil)
         dismiss()
     }
 
@@ -265,50 +238,8 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         let model = ClearSignerSheetModel()
         self.model = model
         model.cancel = { [weak self] in self?.cancelled() }
-        model.pick = { [weak self] route in self?.finishAsk(pick: route) }
-        model.confirmCode = { [weak self] in
-            VelaHaptic.success.play()
-            self?.finishAsk(pick: .agreed)
-        }
-        model.copyLink = { [weak self] in
-            guard let self, let link = self.tunnel?.link else { return }
-            VelaHaptic.select.play()
-            UIPasteboard.general.string = link
-            self.model?.copied = true
-        }
         guard present(model) else { return .unavailable }
-
-        while true {
-            // Where is it? A cancel here is a decline, exactly as a dismissed
-            // passkey sheet is.
-            guard await awaitAnswer(), let route = lastPick else {
-                return .outcome(.refused(refusal: .declined))
-            }
-            switch route {
-            case .thisDevice:
-                return await onThisDevice(ask, page: wanted, model: model)
-            case .otherDevice:
-                if let ending = await onAnotherDevice(ask, page: wanted, model: model) {
-                    return ending
-                }
-                if declined { return .outcome(.refused(refusal: .declined)) }
-                // The tunnel would not come up. The choice is offered again
-                // with the reason under it, rather than dying on a spinner.
-                model.stage = .tunnelDown
-            case .nearby:
-                if let ending = await onNearbyDevice(ask, page: wanted, model: model) {
-                    return ending
-                }
-                if declined { return .outcome(.refused(refusal: .declined)) }
-                // `onNearbyDevice` has already put what is missing on the
-                // sheet, with the other two routes under it.
-            case .agreed:
-                // Only the code screen asks this, and only it reads the
-                // answer; reaching the where-choice with it is a bug, not a
-                // route, and a decline is the safe reading.
-                return .outcome(.refused(refusal: .declined))
-            }
-        }
+        return await onThisDevice(ask, page: wanted, model: model)
     }
 
     /// The loopback channel and the in-app tab (071).
@@ -329,99 +260,10 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         return await channel.ending()
     }
 
-    /// The tunnel: the QR, the link, and the six digits. `nil` when the tunnel
-    /// never came up — the caller offers the choice again.
-    private func onAnotherDevice(
-        _ ask: ClearSignerAsk, page: String, model: ClearSignerSheetModel
-    ) async -> ClearSignerChannel.Ending? {
-        guard let tunnel = makeTunnel(page, tunnelUrl() ?? clearSignerDefaultTunnel()) else { return nil }
-        self.tunnel = tunnel
-        model.link = tunnel.link
-        model.copied = false
-        model.stage = .pairing
-        guard let code = await tunnel.pair() else {
-            tunnel.cancel()
-            self.tunnel = nil
-            return nil
-        }
-        model.stage = .code(code)
-        // NOTHING is sent until the person says both screens show the same
-        // digits: that is the whole defence against a stand-in page.
-        guard await awaitAnswer(), lastPick == .agreed else {
-            tunnel.cancel()
-            self.tunnel = nil
-            return .outcome(.refused(refusal: .declined))
-        }
-        conversation = tunnel
-        model.stage = .waiting
-        return await tunnel.begin(ask)
-    }
-
-    /// Nearby, over Bluetooth (spec 075 T041): this phone advertises as a GATT
-    /// peripheral and the page on a computer in the room connects to it.
-    /// `nil` when the radio cannot carry a session — the sheet then shows what
-    /// is missing and offers the other two routes.
-    private func onNearbyDevice(
-        _ ask: ClearSignerAsk, page: String, model: ClearSignerSheetModel
-    ) async -> ClearSignerChannel.Ending? {
-        guard let ble = makeBle(page) else {
-            model.stage = .bleTrouble(.unavailable)
-            return nil
-        }
-        self.ble = ble
-        model.localName = ble.localName
-        model.offScreen = false
-        model.stage = .nearby
-        ble.onForegroundChanged = { [weak model] away in model?.offScreen = away }
-        guard let code = await ble.advertise() else {
-            let trouble = ble.trouble ?? .unavailable
-            ble.cancel()
-            self.ble = nil
-            model.stage = .bleTrouble(trouble)
-            return nil
-        }
-        model.stage = .code(code)
-        // There is no pairing link on this channel and so no `rk`: proximity
-        // and these six digits are the whole defence. Nothing sealed has left
-        // this phone yet, and `confirm()` below is what lets any of it.
-        guard await awaitAnswer(), lastPick == .agreed else {
-            ble.cancel()
-            self.ble = nil
-            return .outcome(.refused(refusal: .declined))
-        }
-        ble.confirm()
-        conversation = ble
-        model.stage = .waiting
-        return await ble.begin(ask)
-    }
-
     // MARK: - Waiting for the person
-
-    /// What the last answered question picked. `nil` when it was cancelled.
-    private var lastPick: ClearSignerPick?
-
-    /// Suspends until a button on the sheet answers. `false` means the person
-    /// cancelled rather than chose; WHAT they chose is `lastPick`.
-    private func awaitAnswer() async -> Bool {
-        await withCheckedContinuation { continuation in
-            asking?.resume(returning: false)
-            asking = continuation
-        }
-    }
-
-    private func finishAsk(pick: ClearSignerPick?) {
-        guard let continuation = asking else { return }
-        asking = nil
-        lastPick = pick
-        continuation.resume(returning: pick != nil)
-    }
 
     /// The sheet's cancel: the person declined (contract §2).
     private func cancelled() {
-        if asking != nil {
-            finishAsk(pick: nil)
-            return
-        }
         cancel()
     }
 
@@ -429,8 +271,6 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     func cancel() {
         declined = true
         channel?.cancel()
-        tunnel?.cancel()
-        ble?.cancel()
     }
 
     /// The same URL, the same port, the same token: the core accepts a new

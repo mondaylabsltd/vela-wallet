@@ -28,12 +28,6 @@ data class SignPrefView(
     val signer_url_error: String? = null,
     /** A page off `getvela.app` can show a request but cannot use this wallet's passkeys. */
     val signer_uses_wallet_passkeys: Boolean = true,
-    /** Spec 075: the tunnel a cross-device pairing goes through. Always usable. */
-    val tunnel_url: String = "wss://tunnel.getvela.app",
-    /** `true` ⇒ the official tunnel. */
-    val tunnel_url_is_default: Boolean = true,
-    /** `invalid` | `insecure`: the last tunnel typed was refused, nothing stored. */
-    val tunnel_url_error: String? = null,
 )
 
 @Serializable
@@ -54,21 +48,11 @@ sealed class SignPrefEvent {
     @Serializable
     @SerialName("signer_url_reset")
     data object SignerUrlReset : SignPrefEvent()
-
-    /** Spec 075 — Settings: the tunnel a pairing goes through, as typed. */
-    @Serializable
-    @SerialName("tunnel_url_submitted")
-    data class TunnelUrlSubmitted(val text: String) : SignPrefEvent()
-
-    /** Spec 075 — Settings: back to the official tunnel. */
-    @Serializable
-    @SerialName("tunnel_url_reset")
-    data object TunnelUrlReset : SignPrefEvent()
 }
 
 @Serializable
 sealed class SignPrefOperation {
-    /** Read `vela.signMethod`, `vela.clearSignerUrl` and `vela.clearSignerTunnel`, raw. */
+    /** Read `vela.signMethod` and `vela.clearSignerUrl`, raw. */
     @Serializable
     @SerialName("read_stored")
     data object ReadStored : SignPrefOperation()
@@ -81,11 +65,6 @@ sealed class SignPrefOperation {
     @Serializable
     @SerialName("write_signer_url")
     data class WriteSignerUrl(val url: String? = null) : SignPrefOperation()
-
-    /** Spec 075: `null` removes the key — the official tunnel. */
-    @Serializable
-    @SerialName("write_tunnel_url")
-    data class WriteTunnelUrl(val url: String? = null) : SignPrefOperation()
 }
 
 /** Stored values go back RAW — whether they are usable is the core's call. */
@@ -96,8 +75,6 @@ sealed class SignPrefShellResult {
     data class Stored(
         val method: String? = null,
         val signer_url: String? = null,
-        /** Spec 075; absent from a shell that predates the tunnel. */
-        val tunnel_url: String? = null,
     ) : SignPrefShellResult()
 
     @Serializable

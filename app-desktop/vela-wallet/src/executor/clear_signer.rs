@@ -1,5 +1,5 @@
-//! The Clear Signer on the desktop: a **loopback WebSocket** on this device,
-//! a **tunnel** to another (specs 071 and 075).
+//! The Clear Signer on the desktop: a **loopback WebSocket** on this device
+//! (specs 071 and 075).
 //!
 //! The fourth passkey route is a page, not a key. `app-web/clearsigning`,
 //! opened in the person's default browser, is told a request, derives what it
@@ -9,7 +9,7 @@
 //! - the request is the core's (`clear_signer::request` for a signature,
 //!   `clear_signer::ceremony::request` for a create / sign-in / proof);
 //! - the wire is the core's too — [`ws::Connection`] frames every byte of the
-//!   loopback socket, `secure::Session` seals every byte of the tunnel;
+//!   loopback socket;
 //! - whether an answer is this wallet's signature over this request
 //!   (`clear_signer::verify`) or a ceremony the page was allowed to run
 //!   (`ceremony::verify`) is the core's.
@@ -70,7 +70,6 @@ use vela_core::clear_signer::{
 use vela_core::primitives::{to_base64url, to_hex};
 use vela_core::user_op::{MultiSendCall, UserOperation, WalletKey};
 
-use crate::executor::clear_signer_tunnel as tunnel;
 use crate::executor::passkey::{self, PasskeyFailure};
 
 /// How long a page has to answer one request. The core has no clock; this is
@@ -101,8 +100,6 @@ pub enum Refusal {
     Mismatch,
     /// Nothing came back in time.
     TimedOut,
-    /// Spec 075: the tunnel could not be reached, or dropped the pairing.
-    Unreachable,
 }
 
 impl Refusal {
@@ -129,33 +126,8 @@ impl Refusal {
             Self::Refused => "componentsUi.signing.clearSignerRefused",
             Self::Mismatch => "componentsUi.signing.clearSignerMismatch",
             Self::TimedOut => "componentsUi.signing.clearSignerTimeout",
-            Self::Unreachable => "componentsUi.signing.clearSignerTunnelDown",
         }
     }
-}
-
-/// Where the person keeps their Clear Signer (contract §2). Asked whenever the
-/// route is chosen, because both are possible on every desktop.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Place {
-    /// This computer's own browser, over the loopback socket.
-    ThisDevice,
-    /// Another device, paired through the tunnel.
-    OtherDevice,
-}
-
-/// A cross-device pairing, while one is on screen: the link the QR carries,
-/// the six digits once both ends have derived them, and whether the person has
-/// said they match.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Pairing {
-    /// `<page>sign.html?ch=relay#relay=…&room=…&rk=…&v=1` — the link's two
-    /// keys keep their pre-rename spelling (they are the wire).
-    pub link: String,
-    /// The six digits both screens show. `None` until the page has said hello.
-    pub code: Option<String>,
-    /// The person pressed "the codes match".
-    pub confirmed: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -169,17 +141,10 @@ struct State {
     chosen: Option<String>,
     /// The wallet's name, for the page's `context.walletName`.
     wallet_name: Option<String>,
-    /// "Where is your Clear Signer?" is on screen, and a ceremony is blocked
-    /// on the answer.
-    asking_place: bool,
-    /// The answer, until the ceremony takes it.
-    place: Option<Place>,
-    /// The URL a same-device attempt is waiting on — `Some` while one waits.
+    /// The URL this attempt is waiting on — `Some` while one waits.
     waiting: Option<String>,
     /// That URL is to be handed to the browser (again).
     open: bool,
-    /// The cross-device pairing, while one is up.
-    pairing: Option<Pairing>,
     /// The person stopped this wait.
     cancelled: bool,
     /// The screen is gone: no wait continues, none starts.
@@ -187,8 +152,8 @@ struct State {
     /// How the last attempt ended without an answer, until the person has read
     /// it.
     ended: Option<Refusal>,
-    /// An attempt owns this channel's surfaces from the moment it asks where
-    /// the signer is until it is done.
+    /// An attempt owns this channel's surfaces from the moment it opens a
+    /// page until it is done.
     claimed: bool,
 }
 
@@ -257,31 +222,10 @@ impl Channel {
         self.with(|state| state.wallet_name = wallet_name);
     }
 
-    /// A page is being waited on — either way.
+    /// A page is being waited on.
     #[must_use]
     pub fn waiting(&self) -> bool {
-        self.with(|state| state.waiting.is_some() || state.pairing.is_some())
-    }
-
-    /// "Where is your Clear Signer?" is on screen.
-    #[must_use]
-    pub fn asking_place(&self) -> bool {
-        self.with(|state| state.asking_place)
-    }
-
-    /// The person answered it. `None` is a dismissal, which stops the attempt.
-    pub fn answer_place(&self, place: Option<Place>) {
-        self.with(|state| match place {
-            Some(place) => {
-                state.place = Some(place);
-                state.asking_place = false;
-            }
-            None => {
-                state.cancelled = true;
-                state.asking_place = false;
-            }
-        });
-        self.announce();
+        self.with(|state| state.waiting.is_some())
     }
 
     /// The URL to hand the browser, once per ask.
@@ -303,29 +247,9 @@ impl Channel {
         self.announce();
     }
 
-    /// The pairing on screen, if one is up.
-    #[must_use]
-    pub fn pairing(&self) -> Option<Pairing> {
-        self.with(|state| state.pairing.clone())
-    }
-
-    /// "The codes match" — the one gate before anything is sent over a tunnel
-    /// (tunnel.md §2.4).
-    pub fn confirm_code(&self) {
-        self.with(|state| {
-            if let Some(pairing) = state.pairing.as_mut() {
-                pairing.confirmed = pairing.code.is_some();
-            }
-        });
-        self.announce();
-    }
-
     /// "Cancel" on a waiting sheet: the person declined.
     pub fn cancel(&self) {
-        self.with(|state| {
-            state.cancelled = true;
-            state.asking_place = false;
-        });
+        self.with(|state| state.cancelled = true);
         self.announce();
     }
 
@@ -342,21 +266,17 @@ impl Channel {
     }
 
     /// The screen that owned this channel is gone: a wait stops now, and none
-    /// starts — an attempt nobody can see must not hold a port, or somebody
-    /// else's tunnel room, for minutes. Any page visit a flow was holding open
-    /// is ended too.
+    /// starts — an attempt nobody can see must not hold a port for minutes.
+    /// Any page visit a flow was holding open is ended too.
     pub fn close(&self) {
-        self.with(|state| {
-            state.closed = true;
-            state.asking_place = false;
-        });
+        self.with(|state| state.closed = true);
         self.end_flow();
         self.announce();
     }
 
     /// End the page visit this channel's flow was holding open, if any — the
-    /// page leaves its waiting card for its done card and the port, or the
-    /// tunnel room, goes. Called when a flow finishes, when anything refuses,
+    /// page leaves its waiting card for its done card and the port goes.
+    /// Called when a flow finishes, when anything refuses,
     /// and when the screen goes away.
     ///
     /// **Safe to call from the screen while a ceremony runs**, because a
@@ -365,7 +285,7 @@ impl Channel {
     /// thread and that one could both be writing one socket.
     ///
     /// **And safe to call from the main thread**, because saying goodbye is
-    /// socket I/O — a `bye` and a close frame, over TLS on the tunnel — and
+    /// socket I/O — a `bye` and a close frame — and
     /// every caller but the ceremony itself is a `Drop` on the thread that
     /// draws the window. It goes on a thread of its own, which is allowed to
     /// outlive this call by the second or two a dead peer costs.
@@ -412,14 +332,11 @@ impl Channel {
     /// Take this channel's surfaces for one attempt, or `None` when another
     /// already has them.
     ///
-    /// **One screen, one attempt.** `pairing`, `waiting` and the confirmed
-    /// code are one slot each, and they have to be: they are what one person
-    /// is looking at. Two attempts sharing them is one attempt's six digits
-    /// painted on the other's card, and one press of "the codes match"
-    /// releasing both — the second having sent its intents to whoever joined
-    /// its room without anybody ever having compared anything. A channel
-    /// belongs to one screen, so this cannot happen in any flow this app
-    /// offers; it is refused rather than left to be true by luck.
+    /// **One screen, one attempt.** `waiting` is one slot, and it has to be:
+    /// it is what one person is looking at. Two attempts sharing it is one
+    /// attempt's page named on the other's card. A channel belongs to one
+    /// screen, so this cannot happen in any flow this app offers; it is
+    /// refused rather than left to be true by luck.
     fn claim(&self) -> Option<Claim<'_>> {
         let taken = self.with(|state| std::mem::replace(&mut state.claimed, true));
         if taken {
@@ -434,37 +351,6 @@ impl Channel {
 
     fn release(&self) {
         self.with(|state| state.claimed = false);
-    }
-
-    /// Ask the person where their Clear Signer is, and block until they say.
-    ///
-    /// Polled rather than parked on a condvar, like every other wait in this
-    /// file: the same loop has to watch the clock and the "Cancel" anyway.
-    fn ask_place(&self, deadline: Instant) -> Result<Place, Refusal> {
-        if self.with(|state| state.closed) {
-            return Err(Refusal::Closed);
-        }
-        self.with(|state| {
-            state.asking_place = true;
-            state.place = None;
-            state.cancelled = false;
-            state.ended = None;
-        });
-        self.announce();
-        loop {
-            if let Some(place) = self.with(|state| state.place.take()) {
-                return Ok(place);
-            }
-            if self.stopped() {
-                self.with(|state| state.asking_place = false);
-                return Err(Refusal::Closed);
-            }
-            if Instant::now() >= deadline {
-                self.with(|state| state.asking_place = false);
-                return Err(Refusal::TimedOut);
-            }
-            std::thread::sleep(POLL);
-        }
     }
 
     /// An attempt starts waiting on `url`; `open` hands it to the browser.
@@ -483,38 +369,6 @@ impl Channel {
         began
     }
 
-    /// A pairing starts: the link on screen as a QR and a copyable address.
-    pub(crate) fn pair(&self, link: String) -> bool {
-        let began = self.with(|state| {
-            if state.closed {
-                return false;
-            }
-            state.pairing = Some(Pairing {
-                link,
-                code: None,
-                confirmed: false,
-            });
-            state.ended = None;
-            true
-        });
-        self.announce();
-        began
-    }
-
-    /// Both ends derived the same six digits; the person is asked to check them.
-    pub(crate) fn show_code(&self, code: &str) {
-        self.with(|state| {
-            if let Some(pairing) = state.pairing.as_mut() {
-                pairing.code = Some(code.to_owned());
-            }
-        });
-        self.announce();
-    }
-
-    pub(crate) fn code_confirmed(&self) -> bool {
-        self.with(|state| state.pairing.as_ref().is_some_and(|p| p.confirmed))
-    }
-
     pub(crate) fn stopped(&self) -> bool {
         self.with(|state| state.cancelled || state.closed)
     }
@@ -529,7 +383,6 @@ impl Channel {
         self.with(|state| {
             state.waiting = None;
             state.open = false;
-            state.pairing = None;
             state.ended = ended;
         });
         self.announce();
@@ -547,8 +400,8 @@ impl Channel {
 // The line to the page
 // ---------------------------------------------------------------------------
 
-/// One page visit, whichever way it runs: the loopback socket on this device,
-/// or the tunnel to another. A visit carries **several requests in order** —
+/// One page visit over the loopback socket on this device. A visit carries
+/// **several requests in order** —
 /// create then member proof, sign-in then recovery's two proofs — and ends on
 /// `bye` (contract §1.5).
 pub trait Line: Send {
@@ -591,55 +444,28 @@ fn busy() -> PasskeyFailure {
     }
 }
 
-/// Open a line to `page`, asking the person where their Clear Signer is first.
+/// Open a line to `page` on this computer's own loopback.
 ///
 /// Every refusal is told to the screen and answered as a cancelled passkey —
 /// the request stays open to be answered another way. A **listener the OS will
-/// not give** is the one real failure: it is not the person refusing and it is
-/// not a tunnel being unreachable, so it carries its own words into the bug
-/// report rather than borrowing either sentence.
+/// not give** is the one real failure: it is not the person refusing, so it
+/// carries its own words into the bug report rather than borrowing one.
 fn open_line(
     page: &str,
     channel: &Channel,
-    deadline: Instant,
+    _deadline: Instant,
 ) -> Result<Box<dyn Line>, PasskeyFailure> {
-    let place = channel
-        .ask_place(deadline)
-        .map_err(|refusal| gave_up(channel, refusal))?;
-    match place {
-        Place::ThisDevice => Loopback::open(page)
-            .map(|loopback| Box::new(loopback) as Box<dyn Line>)
-            .map_err(|error| {
-                channel.end(None);
-                PasskeyFailure {
-                    kind: FailureKind::Other,
-                    message: Some(format!(
-                        "The Clear Signer could not listen on this computer: {error}"
-                    )),
-                }
-            }),
-        Place::OtherDevice => tunnel::open(
-            page,
-            &tunnel_url(),
-            tunnel::Seed::random(),
-            channel,
-            deadline,
-        )
-        .map(|line| Box::new(line) as Box<dyn Line>)
-        .map_err(|refusal| gave_up(channel, refusal)),
-    }
-}
-
-/// The tunnel from Settings, or the official one.
-#[must_use]
-pub fn tunnel_url() -> String {
-    crate::executor::storage::read_value(crate::executor::storage::KEY_CLEAR_SIGNER_TUNNEL)
-        .ok()
-        .flatten()
-        .as_ref()
-        .and_then(Value::as_str)
-        .and_then(|text| clear_signer::tunnel_url(text).ok())
-        .unwrap_or_else(|| clear_signer::DEFAULT_TUNNEL_URL.to_owned())
+    Loopback::open(page)
+        .map(|loopback| Box::new(loopback) as Box<dyn Line>)
+        .map_err(|error| {
+            channel.end(None);
+            PasskeyFailure {
+                kind: FailureKind::Other,
+                message: Some(format!(
+                    "The Clear Signer could not listen on this computer: {error}"
+                )),
+            }
+        })
 }
 
 /// The Clear Signer page from Settings, or the official one.
@@ -1372,37 +1198,15 @@ pub(crate) mod tests {
         unreachable!("the attempt never asked for its page")
     }
 
-    /// Answer the "where is it?" question the way the page's own device would.
-    pub(crate) fn here(channel: &Arc<Channel>) -> std::thread::JoinHandle<()> {
-        let channel = Arc::clone(channel);
-        std::thread::spawn(move || {
-            for _ in 0..600 {
-                if channel.asking_place() {
-                    channel.answer_place(Some(Place::ThisDevice));
-                    return;
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-        })
-    }
-
-    /// Play the page for ONE request, end to end: say the Clear Signer is on
-    /// this device, take the launch URL, connect as the page and answer with
-    /// whatever `reply` makes of the intent. The wallet's `bye` is read back,
-    /// so the socket is not torn down under it.
+    /// Play the page for ONE request, end to end: take the launch URL, connect
+    /// as the page and answer with whatever `reply` makes of the intent. The
+    /// wallet's `bye` is read back, so the socket is not torn down under it.
     pub(crate) fn answers_once(
         channel: &Arc<Channel>,
         reply: impl FnOnce(&Value) -> Value + Send + 'static,
     ) -> std::thread::JoinHandle<()> {
         let channel = Arc::clone(channel);
         std::thread::spawn(move || {
-            for _ in 0..1200 {
-                if channel.asking_place() {
-                    channel.answer_place(Some(Place::ThisDevice));
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(5));
-            }
             let url = page_of_channel(&channel);
             let (port, token) = launch_of(&url);
             let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
@@ -1585,7 +1389,6 @@ pub(crate) mod tests {
     #[test]
     fn a_page_from_another_origin_never_gets_a_socket() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let signing = signing_key(7);
         let request = json!({ "intent": { "method": "personal_sign" }, "context": {} });
         let ceremony = {
@@ -1610,7 +1413,6 @@ pub(crate) mod tests {
             .unwrap_or_else(|_| unreachable!("the attempt panicked"))
             .unwrap_or_else(|failure| unreachable!("{failure:?}"));
         assert_eq!(assertion.credential_id, "112233");
-        let _ = answered.join();
     }
 
     /// A `hello` carrying another visit's token proves nothing: that socket is
@@ -1618,7 +1420,6 @@ pub(crate) mod tests {
     #[test]
     fn a_spent_token_is_closed_and_the_wait_goes_on() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let signing = signing_key(7);
         let ceremony = {
             let channel = Arc::clone(&channel);
@@ -1646,7 +1447,6 @@ pub(crate) mod tests {
                 .unwrap_or_else(|_| unreachable!("panicked"))
                 .is_ok()
         );
-        let _ = answered.join();
     }
 
     /// The whole signature, over the socket: the screen is handed the page
@@ -1656,7 +1456,6 @@ pub(crate) mod tests {
     #[test]
     fn a_signature_hands_over_its_page_and_returns_the_assertion() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let signing = signing_key(7);
         let request =
             json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 100 } });
@@ -1699,7 +1498,6 @@ pub(crate) mod tests {
         assert_eq!(page.next(), None);
         assert!(!channel.waiting());
         assert_eq!(channel.ended(), None);
-        let _ = answered.join();
     }
 
     /// A signature over another digest proves the token and ends the attempt
@@ -1707,7 +1505,6 @@ pub(crate) mod tests {
     #[test]
     fn a_signature_over_something_else_is_a_mismatch() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let ceremony = {
             let channel = Arc::clone(&channel);
             std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
@@ -1727,7 +1524,6 @@ pub(crate) mod tests {
                 .is_err()
         );
         assert_eq!(channel.ended(), Some(Refusal::Mismatch));
-        let _ = answered.join();
     }
 
     /// The page closed its socket without answering: a decline, not an error,
@@ -1735,7 +1531,6 @@ pub(crate) mod tests {
     #[test]
     fn a_page_that_goes_away_unanswered_is_a_decline() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let ceremony = {
             let channel = Arc::clone(&channel);
             std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
@@ -1752,14 +1547,12 @@ pub(crate) mod tests {
             .unwrap_or_else(|| unreachable!("a closed page signed"));
         assert_eq!(failure.kind, FailureKind::Cancelled);
         assert_eq!(channel.ended(), Some(Refusal::Closed));
-        let _ = answered.join();
     }
 
     /// The page's own rules refused it — its own sentence, not the person's.
     #[test]
     fn the_pages_refusal_is_its_own() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let ceremony = {
             let channel = Arc::clone(&channel);
             std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
@@ -1778,7 +1571,6 @@ pub(crate) mod tests {
                 .is_err()
         );
         assert_eq!(channel.ended(), Some(Refusal::Refused));
-        let _ = answered.join();
     }
 
     /// "Cancel" ends the attempt as the person declining: a cancelled passkey
@@ -1787,7 +1579,6 @@ pub(crate) mod tests {
     #[test]
     fn a_cancelled_wait_is_a_cancelled_passkey_and_a_sentence() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let ceremony = {
             let channel = Arc::clone(&channel);
             std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
@@ -1803,7 +1594,6 @@ pub(crate) mod tests {
         assert_eq!(channel.ended(), Some(Refusal::Closed));
         channel.forget();
         assert_eq!(channel.ended(), None);
-        let _ = answered.join();
 
         channel.close();
         let refused = sign(&json!({}), PAGE, &DIGEST, &keys(), &channel);
@@ -1819,33 +1609,6 @@ pub(crate) mod tests {
             None,
             "no page for a screen that is gone"
         );
-    }
-
-    /// Dismissing "where is your Clear Signer?" stops the attempt before a
-    /// port is bound or a room is taken.
-    #[test]
-    fn dismissing_the_where_question_stops_the_attempt() {
-        let (channel, _changed) = Channel::new();
-        let ceremony = {
-            let channel = Arc::clone(&channel);
-            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
-        };
-        for _ in 0..600 {
-            if channel.asking_place() {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(channel.asking_place(), "the person was never asked");
-        channel.answer_place(None);
-        assert!(
-            ceremony
-                .join()
-                .unwrap_or_else(|_| unreachable!("panicked"))
-                .is_err()
-        );
-        assert!(!channel.asking_place());
-        assert_eq!(channel.ended(), Some(Refusal::Closed));
     }
 
     /// The wallet's own send is told to the page as `wallet_sendCalls` of the
@@ -1953,7 +1716,6 @@ pub(crate) mod tests {
     #[test]
     fn an_answer_beats_a_close_that_lands_in_the_same_breath() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let signing = signing_key(7);
         let ceremony = {
             let channel = Arc::clone(&channel);
@@ -1987,7 +1749,6 @@ pub(crate) mod tests {
             .unwrap_or_else(|failure| unreachable!("the signature was thrown away: {failure:?}"));
         assert_eq!(assertion.credential_id, "112233");
         assert_eq!(channel.ended(), None);
-        let _ = answered.join();
     }
 
     /// **The tab in front of the person is the one that gets the socket.**
@@ -1999,7 +1760,6 @@ pub(crate) mod tests {
     #[test]
     fn opening_the_page_again_and_again_does_not_lock_the_visit() {
         let (channel, _changed) = Channel::new();
-        let answered = here(&channel);
         let signing = signing_key(7);
         let ceremony = {
             let channel = Arc::clone(&channel);
@@ -2030,7 +1790,6 @@ pub(crate) mod tests {
                 .unwrap_or_else(|_| unreachable!("panicked"))
                 .is_ok()
         );
-        let _ = answered.join();
     }
 
     /// **A self-hosted page under a path.** The core records an ORIGIN on a
@@ -2223,7 +1982,6 @@ pub(crate) mod tests {
         };
 
         // The person: on this device.
-        let answered = here(&channel);
         let url = page_of_channel(&channel);
         let (port, token) = launch_of(&url);
         let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
@@ -2288,7 +2046,6 @@ pub(crate) mod tests {
         assert_eq!(page.next(), None);
         assert!(!channel.waiting());
         assert_eq!(channel.ended(), None);
-        let _ = answered.join();
     }
 
     /// A member proof over a challenge the WALLET did not fetch is refused

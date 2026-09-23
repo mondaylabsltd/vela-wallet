@@ -79,13 +79,10 @@ struct VelaStore {
         static let signMethod = "vela.signMethod"
         /// The Clear Signer page; absent is the official one.
         static let clearSignerUrl = "vela.clearSignerUrl"
-        /// Spec 075: the tunnel a cross-device pairing goes through; absent is
-        /// the official one.
-        static let clearSignerTunnel = "vela.clearSignerTunnel"
-
-        /// What the tunnel was stored under before the 2026-09-23 rename.
-        /// Only `Preferences` reads it, to hand it to the core's
-        /// `prefsMigrations`, which MOVES the value and removes this key.
+        /// Spec 075's cross-device pairing service, RETIRED with the channel
+        /// itself on 2026-09-23. Both spellings it ever had are read only to
+        /// hand them to the core's `prefsMigrations`, which REMOVES them.
+        static let retiredClearSignerTunnel = "vela.clearSignerTunnel"
         static let retiredClearSignerRelay = "vela.clearSignerRelay"
 
         // Owned by the read path (spec 051).

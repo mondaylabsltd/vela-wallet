@@ -86,25 +86,7 @@ class MainActivity : ComponentActivity() {
     private var locationSettingsAnswer:
         kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
-    /**
-     * The app went to the background.
-     *
-     * A Clear Signer flow over BLE stops advertising here: PROTOCOL §1 wants
-     * the peripheral in the foreground for the length of a session, and an
-     * advert this app has forgotten about is one a stranger can still connect
-     * to. The loopback route is deliberately untouched — its page is a Custom
-     * Tab, so being backgrounded is that flow's normal state.
-     */
-    override fun onStop() {
-        super.onStop()
-        (application as VelaWalletApplication).container.clearSigner.leftForeground()
-    }
-
     override fun onDestroy() {
-        // The host holds this activity's permission launchers; an app-scoped
-        // container holding a dead activity's is a leak and a crash in waiting.
-        val container = (application as VelaWalletApplication).container
-        if (isFinishing) container.clearSignerBleHost = null
         super.onDestroy()
     }
 
@@ -301,15 +283,6 @@ class MainActivity : ComponentActivity() {
             locationSettingsAnswer?.complete(Unit)
             locationSettingsAnswer = null
         }
-        // Spec 075 T040: the Clear Signer's Bluetooth route. Attached after the
-        // launchers above, because that is all it needs from an activity — the
-        // GATT server itself holds the application context.
-        (application as VelaWalletApplication).container.clearSignerBleHost =
-            app.getvela.wallet.feature.signing.clearsigner.AndroidClearSignerBleHost(
-                context = applicationContext,
-                askPermissions = { permissions -> requestPermissions(permissions) },
-                enableAdapter = { requestEnableBluetooth() },
-            )
         enableEdgeToEdge()
 
         val container = (application as VelaWalletApplication).container

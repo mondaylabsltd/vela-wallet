@@ -167,39 +167,6 @@ export interface SigningMessages {
 	signWithPlatform: string;
 	signWithHybrid: string;
 	signWithSecurityKey: string;
-	/** Spec 071: the fourth "Sign with", and the one line saying what it is. */
-	signWithClearSigner: string;
-	signWithClearSignerBody: string;
-	/**
-	 * The Clear Signer's waiting sheet and the sentence each ending gets
-	 * (contract §5): the person closed the page, the page refused, what came
-	 * back does not match this request, or nothing came back in time.
-	 */
-	clearSignerWaiting: string;
-	clearSignerWaitingHint: string;
-	clearSignerReopen: string;
-	clearSignerCancel: string;
-	clearSignerClosed: string;
-	clearSignerRefused: string;
-	clearSignerMismatch: string;
-	clearSignerTimeout: string;
-	/**
-	 * Spec 075: the Clear Signer is a passkey route, so the sheet first asks
-	 * WHERE it is, and pairing with another device has words of its own — the
-	 * link to scan or copy, the wait, and the six digits the person confirms
-	 * here before anything is sent.
-	 */
-	clearSignerWhere: string;
-	clearSignerThisDevice: string;
-	clearSignerOtherDevice: string;
-	clearSignerPair: string;
-	clearSignerPairHint: string;
-	clearSignerPairWaiting: string;
-	clearSignerCopyLink: string;
-	/** `{{code}}` — the six digits. */
-	clearSignerCode: string;
-	clearSignerCodeConfirm: string;
-	clearSignerTunnelDown: string;
 	viewOnExplorer: string;
 	byteSize: string;
 	safeInnerCall: string;
@@ -208,35 +175,3 @@ export interface SigningMessages {
 	sentToTokenContract: string;
 }
 
-/**
- * The words the Clear Signer's own sheet reads, and nothing else.
- *
- * The sheet is drawn over the signing surfaces AND over the onboarding
- * screens (spec 075: creating a wallet and signing in can run on the page
- * too), and those two places resolve their copy differently — the signing
- * surfaces hold a whole `SigningMessages`, the onboarding screens a flat map
- * of corpus keys. One narrow shape lets both build the same model without
- * either pretending to be the other.
- */
-export type ClearSignerWords = Pick<
-	SigningMessages,
-	| 'close'
-	| 'clearSignerWaiting'
-	| 'clearSignerWaitingHint'
-	| 'clearSignerReopen'
-	| 'clearSignerCancel'
-	| 'clearSignerClosed'
-	| 'clearSignerRefused'
-	| 'clearSignerMismatch'
-	| 'clearSignerTimeout'
-	| 'clearSignerWhere'
-	| 'clearSignerThisDevice'
-	| 'clearSignerOtherDevice'
-	| 'clearSignerPair'
-	| 'clearSignerPairHint'
-	| 'clearSignerPairWaiting'
-	| 'clearSignerCopyLink'
-	| 'clearSignerCode'
-	| 'clearSignerCodeConfirm'
-	| 'clearSignerTunnelDown'
->;

@@ -67,13 +67,7 @@
    "pageInsecure": "Gunakan halaman https, atau halaman di loopback perangkat ini sendiri — browser tidak akan menandatangani di tempat lain.",
    "pageForeign": "Passkey Anda milik getvela.app. Halaman di domain lain dapat menampilkan permintaan tetapi tidak dapat menandatanganinya.",
    "pageReset": "Gunakan halaman resmi",
-   "pageSave": "Simpan",
-   "tunnelTitle": "Tunnel",
-   "tunnelSubtitle": "Penyandingan dengan perangkat lain melewati tunnel ini. Tunnel hanya meneruskan pesan yang terenkripsi.",
-   "tunnelOfficial": "Resmi",
-   "tunnelInvalid": "Itu bukan alamat tunnel.",
-   "tunnelInsecure": "Gunakan alamat wss://, atau ws:// di loopback perangkat ini sendiri.",
-   "tunnelReset": "Gunakan tunnel resmi"
+   "pageSave": "Simpan"
   },
   "advanced": {
    "networksTitle": "Jaringan",
@@ -1373,24 +1367,7 @@
    "clearSignerReopen": "Buka halaman lagi",
    "clearSignerDoneTab": "Sudah ditandatangani. Anda dapat menutup tab ini dan kembali ke Vela.",
    "viewOnExplorer": "Lihat di explorer",
-   "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri",
-   "clearSignerWhere": "Di mana Clear Signer Anda?",
-   "clearSignerThisDevice": "Di perangkat ini",
-   "clearSignerOtherDevice": "Di perangkat lain",
-   "clearSignerNearby": "Perangkat terdekat, lewat Bluetooth",
-   "clearSignerNearbyHint": "Halaman menemukan perangkat ini lewat Bluetooth. Biarkan Vela tetap terbuka saat menandatangani.",
-   "clearSignerNearbyName": "Pilih \"{{name}}\" di daftar perangkat browser pada perangkat lain Anda.",
-   "clearSignerBluetoothNeeded": "Vela memerlukan izin Bluetooth agar halaman penandatanganan dapat menemukan perangkat ini.",
-   "clearSignerBluetoothOff": "Aktifkan Bluetooth untuk memasangkan dengan cara ini.",
-   "clearSignerBluetoothUnsupported": "Perangkat ini tidak bisa dipasangkan dengan cara ini. Gunakan Clear Signer di perangkat ini, atau perangkat lain.",
-   "clearSignerNearbyLost": "Halaman penandatanganan terputus. Dekatkan kedua perangkat dan biarkan Vela terbuka, lalu coba lagi.",
-   "clearSignerPair": "Buka Clear Signer di perangkat Anda yang lain",
-   "clearSignerPairHint": "Pindai kode ini dengan perangkat yang menyimpan kunci sandi Anda, atau buka tautannya di sana.",
-   "clearSignerPairWaiting": "Menunggu perangkat lain…",
-   "clearSignerCode": "Pastikan perangkat lain menampilkan kode yang sama: {{code}}",
-   "clearSignerCodeConfirm": "Kodenya cocok",
-   "clearSignerCopyLink": "Salin tautan",
-   "clearSignerTunnelDown": "Tunnel tidak dapat dijangkau. Coba lagi, atau gunakan Clear Signer di perangkat ini."
+   "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri"
   },
   "signingApprove": {
    "resultingTotal": "Total izin belanja baru",

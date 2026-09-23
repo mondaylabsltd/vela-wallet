@@ -41,7 +41,6 @@ import type {
 	SettingsOverlayId,
 	SettingsPageId,
 	SettingsSectionModel,
-	SignerPageModel,
 	StorageModel
 } from './model';
 
@@ -333,24 +332,6 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					icon: 'pencil',
 					title: m.signing.title,
 					value: m.signing.methods.auto,
-					trailing: 'chevron'
-				},
-				{
-					id: 'clear-signer-page',
-					icon: 'link-2',
-					title: m.signing.pageTitle,
-					value: m.signing.pageOfficial,
-					trailing: 'chevron'
-				},
-				// Spec 075: how the Clear Signer is reached when it is on
-				// ANOTHER device. The tunnel only ever passes on ciphertext,
-				// which is why naming one's own is a preference and not a fork.
-				{
-					id: 'clear-signer-tunnel',
-					// A server the person can point elsewhere, as the RPC row is.
-					icon: 'server',
-					title: m.signing.tunnelTitle,
-					value: m.signing.tunnelOfficial,
 					trailing: 'chevron'
 				},
 				{
@@ -787,14 +768,10 @@ function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
 	};
 }
 
-/** The official Clear Signer page (`clear_signer::DEFAULT_SIGNER_URL`). */
-const OFFICIAL_SIGNER_URL = 'https://sign.getvela.app/';
-/** Spec 075: the official tunnel, as `clear_signer::DEFAULT_TUNNEL_URL` names it. */
-const OFFICIAL_TUNNEL_URL = 'wss://tunnel.getvela.app';
-
 /**
- * The default "Sign with" (spec 071): the five the core offers, in its order,
- * named as the signing sheet names them. The subtitle is load-bearing, as the
+ * The default "Sign with" (spec 071): the four this shell offers, in the
+ * core's order, named as the signing sheet names them. The core's fifth, the
+ * Clear Signer, is not one of them — the web wallet has none. The subtitle is load-bearing, as the
  * speed sheet's is: this is where every signature STARTS, and a single one
  * can still be signed another way.
  */
@@ -806,43 +783,8 @@ function signWithSheet(m: SettingsMessages): SelectSheetModel {
 			{ id: 'auto', label: m.signing.methods.auto, selected: true },
 			{ id: 'platform', label: m.signing.methods.platform },
 			{ id: 'hybrid', label: m.signing.methods.hybrid },
-			{ id: 'security_key', label: m.signing.methods.security_key },
-			{
-				id: 'clear_signer',
-				label: m.signing.methods.clear_signer,
-				detail: m.signing.clearSignerBody
-			}
+			{ id: 'security_key', label: m.signing.methods.security_key }
 		]
-	};
-}
-
-/** The tunnel, official — what a device that never chose pairs through. */
-function tunnelPage(m: SettingsMessages): SignerPageModel {
-	return {
-		title: m.signing.tunnelTitle,
-		subtitle: m.signing.tunnelSubtitle,
-		field: {
-			id: 'tunnel-url',
-			label: m.signing.tunnelTitle,
-			value: OFFICIAL_TUNNEL_URL,
-			placeholder: OFFICIAL_TUNNEL_URL
-		},
-		save: m.signing.pageSave
-	};
-}
-
-/** The Clear Signer's page, official — what a device that never chose opens. */
-function signerPage(m: SettingsMessages): SignerPageModel {
-	return {
-		title: m.signing.pageTitle,
-		subtitle: m.signing.pageSubtitle,
-		field: {
-			id: 'signer-url',
-			label: m.signing.pageTitle,
-			value: OFFICIAL_SIGNER_URL,
-			placeholder: OFFICIAL_SIGNER_URL
-		},
-		save: m.signing.pageSave
 	};
 }
 
@@ -1174,8 +1116,6 @@ export function buildMobileState(
 		currencySheet: currencySheet(m),
 		feeSpeedSheet: feeSpeedSheet(m),
 		signWithSheet: signWithSheet(m),
-		signerPage: signerPage(m),
-		tunnelPage: tunnelPage(m),
 		numberSheet: formatSheet(
 			m,
 			m.localization.numberTitle,
@@ -1342,8 +1282,6 @@ export function buildDesktopState(
 					value: m.signing.methods.auto
 				}
 			],
-			page: signerPage(m),
-			tunnel: tunnelPage(m)
 		},
 		networks: {
 			title: m.advanced.networksTitle,

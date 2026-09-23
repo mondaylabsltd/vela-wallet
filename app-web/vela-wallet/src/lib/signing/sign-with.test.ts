@@ -1,92 +1,63 @@
 /**
- * "Sign with" on the signing sheet, and the Clear Signer's own sheet (spec
- * 071, contract §5–6): the picker lists what the core offers, a request
- * starts at Settings' default — not always `auto` — and a pick lies over it
- * for that request alone; every ending of the Clear Signer's wait gets its
- * own sentence.
+ * "Sign with" on the signing sheet (spec 071, contract §6): the picker lists
+ * what the core offers AND this shell has words for, a request starts at
+ * Settings' default — not always `auto` — and a pick lies over it for that
+ * request alone.
+ *
+ * The core offers `clear_signer` to every shell; this one has no Clear Signer
+ * at all (owner, 2026-09-23), so it is never drawn and never in force. That is
+ * the same rule an unknown name from a newer build already met.
  */
 import { describe, expect, it } from 'vitest';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
-import { clearSignerModel, signWithModel } from './live';
+import { signWithModel } from './live';
 
 const m = resolveSigningMessages('en');
-const OFFERED = ['auto', 'platform', 'hybrid', 'security_key', 'clear_signer'];
+const CORE_OFFERS = ['auto', 'platform', 'hybrid', 'security_key', 'clear_signer'];
+const DRAWN = ['auto', 'platform', 'hybrid', 'security_key'];
 
-const row = (defaultMethod: string, picked: string | null = null, offered = OFFERED) =>
+const row = (defaultMethod: string, picked: string | null = null, offered = CORE_OFFERS) =>
 	signWithModel({ offered, defaultMethod, picked, open: true, m });
 
-describe('the sheet’s "Sign with"', () => {
-	it('lists the five the core offers, in its order, by the words each is known by', () => {
+describe('the sheet\u2019s "Sign with"', () => {
+	it('lists the four it has words for, in the core\u2019s order', () => {
 		const { row: model } = row('auto');
-		expect(model.options.map((option) => option.id)).toEqual(OFFERED);
+		expect(model.options.map((option) => option.id)).toEqual(DRAWN);
 		expect(model.options.map((option) => option.title)).toEqual([
 			m.signWithAuto,
 			m.signWithPlatform,
 			m.signWithHybrid,
-			m.signWithSecurityKey,
-			m.signWithClearSigner
+			m.signWithSecurityKey
 		]);
-		expect(m.signWithClearSigner).toBe('Clear Signer');
-		// Only the Clear Signer says what it is: the others are places a passkey is.
-		expect(model.options.filter((option) => option.detail).map((option) => option.id)).toEqual([
-			'clear_signer'
-		]);
-		expect(model.options.at(-1)?.detail).toBe(m.signWithClearSignerBody);
+	});
+
+	it('the Clear Signer is never drawn here, and never in force', () => {
+		const { row: model, method } = row('clear_signer');
+		expect(model.options.map((option) => option.id)).not.toContain('clear_signer');
+		// A stored default this shell cannot honour falls back rather than
+		// selecting a row that is not there.
+		expect(method).toBe('auto');
+		expect(model.value).toBe(m.signWithAuto);
 	});
 
 	it('a request starts at the stored default, not at `auto`', () => {
-		const started = row('clear_signer');
-		expect(started.method).toBe('clear_signer');
-		expect(started.row.value).toBe(m.signWithClearSigner);
+		const started = row('hybrid');
+		expect(started.method).toBe('hybrid');
+		expect(started.row.value).toBe(m.signWithHybrid);
 		expect(started.row.options.filter((option) => option.selected).map((o) => o.id)).toEqual([
-			'clear_signer'
+			'hybrid'
 		]);
 	});
 
 	it('a pick for this request lies over the default', () => {
-		const picked = row('clear_signer', 'hybrid');
+		const picked = row('security_key', 'hybrid');
 		expect(picked.method).toBe('hybrid');
 		expect(picked.row.value).toBe(m.signWithHybrid);
 	});
 
-	it('a name this build has no words for is neither drawn nor in force', () => {
-		const future = row('carrier_pigeon', 'carrier_pigeon', [...OFFERED, 'carrier_pigeon']);
-		expect(future.method).toBe('auto');
-		expect(future.row.options.map((option) => option.id)).toEqual(OFFERED);
-	});
-});
-
-describe('the Clear Signer’s sheet', () => {
-	it('while the page is open: waiting, the hint, open it again, cancel', () => {
-		expect(clearSignerModel({ waiting: true, notice: null }, m)).toEqual({
-			waiting: true,
-			title: m.clearSignerWaiting,
-			hint: m.clearSignerWaitingHint,
-			reopen: m.clearSignerReopen,
-			dismiss: m.clearSignerCancel
-		});
-	});
-
-	it('each ending gets its own sentence, and a way to close it', () => {
-		const said = (notice: 'closed' | 'refused' | 'mismatch' | 'timeout') =>
-			clearSignerModel({ waiting: false, notice }, m);
-		expect(said('closed')).toEqual({
-			waiting: false,
-			title: m.clearSignerClosed,
-			dismiss: m.close
-		});
-		expect(said('refused')?.title).toBe(m.clearSignerRefused);
-		expect(said('mismatch')?.title).toBe(m.clearSignerMismatch);
-		expect(said('timeout')?.title).toBe(m.clearSignerTimeout);
-		// Four different sentences: a refusal is not the person's cancel.
-		expect(
-			new Set(
-				[said('closed'), said('refused'), said('mismatch'), said('timeout')].map((s) => s?.title)
-			).size
-		).toBe(4);
-	});
-
-	it('nothing open and nothing to say draws nothing', () => {
-		expect(clearSignerModel({ waiting: false, notice: null }, m)).toBeNull();
+	it('a name this build has no words for is not drawn, and is not in force', () => {
+		const { row: model, method } = row('auto', null, [...CORE_OFFERS, 'from_the_future']);
+		expect(model.options.map((option) => option.id)).toEqual(DRAWN);
+		expect(method).toBe('auto');
 	});
 });

@@ -34,7 +34,6 @@ final class SignPrefExecutor {
                 "type": "stored",
                 "method": store.readString(VelaStore.Key.signMethod) ?? NSNull(),
                 "signer_url": store.readString(VelaStore.Key.clearSignerUrl) ?? NSNull(),
-                "tunnel_url": store.readString(VelaStore.Key.clearSignerTunnel) ?? NSNull(),
             ])
         // Best effort: the committed choice stays on screen either way.
         case "write_method":
@@ -45,16 +44,10 @@ final class SignPrefExecutor {
         case "write_signer_url":
             store.writeString(VelaStore.Key.clearSignerUrl, operation["url"] as? String)
             return CoreJSON.string(["type": "written"])
-        // Spec 075: the tunnel, under the same rule — `null` is the official
-        // one, and the key goes rather than pinning a copy of a default that
-        // may move.
-        case "write_tunnel_url":
-            store.writeString(VelaStore.Key.clearSignerTunnel, operation["url"] as? String)
-            return CoreJSON.string(["type": "written"])
         default:
             print("[vela-wallet] sign_pref: unhandled operation \(operation["type"] ?? "?")")
             return CoreJSON.string([
-                "type": "stored", "method": NSNull(), "signer_url": NSNull(), "tunnel_url": NSNull(),
+                "type": "stored", "method": NSNull(), "signer_url": NSNull(),
             ])
         }
     }

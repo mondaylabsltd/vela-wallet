@@ -67,13 +67,7 @@
       "pageInsecure": "https 페이지나 이 기기의 루프백 주소에 있는 페이지를 사용하세요. 브라우저는 그 밖의 곳에서는 서명하지 않습니다.",
       "pageForeign": "패스키는 getvela.app에 속합니다. 다른 도메인의 페이지는 요청을 보여줄 수는 있어도 서명할 수는 없습니다.",
       "pageReset": "공식 페이지 사용",
-      "pageSave": "저장",
-      "tunnelTitle": "터널",
-      "tunnelSubtitle": "다른 기기와의 페어링은 이 터널을 거칩니다. 터널은 암호화된 메시지만 전달합니다.",
-      "tunnelOfficial": "공식",
-      "tunnelInvalid": "터널 주소가 아닙니다.",
-      "tunnelInsecure": "wss:// 주소나 이 기기 자체 루프백의 ws:// 주소를 사용하세요.",
-      "tunnelReset": "공식 터널 사용"
+      "pageSave": "저장"
     },
     "advanced": {
       "networksTitle": "네트워크",

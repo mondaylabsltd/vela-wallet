@@ -667,28 +667,6 @@ export type ClearSignerVerdict =
 	  }
 	| { refused: { code: string; detail: string } };
 
-export function clearSignerRequest(input: ClearSignerInput): ClearSignerRequest {
-	return JSON.parse(translated(() => wasm.clearSignerRequest(JSON.stringify(input))));
-}
-
-/** `result` is the page's answer as it arrived; anything unreadable is refused, never thrown. */
-export function clearSignerVerify(
-	result: unknown,
-	digest: Uint8Array,
-	keys: ClearSignerKey[]
-): ClearSignerVerdict {
-	return JSON.parse(
-		translated(() =>
-			wasm.clearSignerVerify(JSON.stringify(result ?? null), digest, JSON.stringify(keys))
-		)
-	);
-}
-
-/** The official page, `https://sign.getvela.app/`. */
-export function clearSignerDefaultUrl(): string {
-	return wasm.clearSignerDefaultUrl();
-}
-
 /** Whether a page at `url` can use this wallet's passkeys (they are `getvela.app` keys). */
 export function clearSignerUsesWalletPasskeys(url: string): boolean {
 	return wasm.clearSignerUsesWalletPasskeys(url);
@@ -716,94 +694,6 @@ export function clearSignerUnitRpId(
 	walletRpId: string
 ): string {
 	return translated(() => wasm.clearSignerUnitRpId(JSON.stringify(memberOrigins), walletRpId));
-}
-
-// ---------------------------------------------------------------------------
-// The Clear Signer across devices (spec 075, contracts/tunnel.md) — the room,
-// its address and the pairing link are the core's; the session inside the room
-// is `$lib/signing/tunnel/secure-session.ts`, because the Rust one does not fit
-// in this wasm module.
-// ---------------------------------------------------------------------------
-
-/** The official tunnel, `wss://tunnel.getvela.app`. */
-export function clearSignerDefaultTunnel(): string {
-	return wasm.clearSignerDefaultTunnel();
-}
-
-/** A tunnel address normalised (wss anywhere, ws on loopback), or `undefined`. */
-export function clearSignerTunnelUrl(input: string): string | undefined {
-	return wasm.clearSignerTunnelUrl(input);
-}
-
-/** A room id — 22 base64url characters — from 16 random bytes. */
-export function clearSignerTunnelRoom(random: Uint8Array): string | undefined {
-	return wasm.clearSignerTunnelRoom(random);
-}
-
-/** The requester's socket address for a room. */
-export function clearSignerTunnelRoomUrl(tunnel: string, room: string): string {
-	return wasm.clearSignerTunnelRoomUrl(tunnel, room);
-}
-
-/** The pairing link the wallet shows as a QR: the page, the tunnel, the room, `rk`. */
-export function clearSignerTunnelLink(
-	signerUrl: string,
-	tunnel: string,
-	room: string,
-	rk: string
-): string {
-	return wasm.clearSignerTunnelLink(signerUrl, tunnel, room, rk);
-}
-
-// ---------------------------------------------------------------------------
-// The Clear Signer as a passkey route (spec 075): the key ceremonies, not a
-// signature. The request is built from the machine operation's own wire JSON,
-// and the answer is judged back into the machine's own `Registration` /
-// `Assertion`.
-// ---------------------------------------------------------------------------
-
-/**
- * The page request for a passkey operation with `method = clear_signer`, or
- * `undefined` for any other operation. `operationJson` is the operation
- * exactly as the executor received it.
- */
-export function clearSignerCeremonyRequest(
-	operationJson: string,
-	id: string,
-	walletName: string,
-	registry: string
-): ClearSignerRequest | undefined {
-	const built = wasm.clearSignerCeremonyRequest(operationJson, id, walletName, registry);
-	return built === undefined ? undefined : (JSON.parse(built) as ClearSignerRequest);
-}
-
-/** What the core made of a ceremony's answer — the machine's own wire shapes. */
-export type ClearSignerCeremonyVerdict =
-	| { registration: RegistrationWire }
-	| { assertion: AssertionWire }
-	| { refused: { code: string; detail: string } };
-
-/**
- * A ceremony's answer judged against the operation that asked for it: the
- * signed origin, user verification, and a challenge the page derived itself
- * (or, for a member proof, the one the WALLET fetched from the registry).
- */
-export function clearSignerVerifyCeremony(
-	operationJson: string,
-	answer: unknown,
-	signerOrigin: string,
-	expectedMemberChallenge?: Uint8Array
-): ClearSignerCeremonyVerdict {
-	return JSON.parse(
-		translated(() =>
-			wasm.clearSignerVerifyCeremony(
-				operationJson,
-				JSON.stringify(answer ?? null),
-				signerOrigin,
-				expectedMemberChallenge ?? null
-			)
-		)
-	) as ClearSignerCeremonyVerdict;
 }
 
 // ---------------------------------------------------------------------------

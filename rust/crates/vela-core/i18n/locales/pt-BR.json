@@ -67,13 +67,7 @@
       "pageInsecure": "Use uma página https ou uma no loopback deste aparelho — o navegador não assina em nenhum outro lugar.",
       "pageForeign": "Suas passkeys pertencem a getvela.app. Uma página em outro domínio pode mostrar uma solicitação, mas não consegue assiná-la.",
       "pageReset": "Usar a página oficial",
-      "pageSave": "Salvar",
-      "tunnelTitle": "Túnel",
-      "tunnelSubtitle": "O pareamento com outro dispositivo passa por este túnel. Ele só repassa mensagens criptografadas.",
-      "tunnelOfficial": "Oficial",
-      "tunnelInvalid": "Isso não é um endereço de túnel.",
-      "tunnelInsecure": "Use um endereço wss://, ou ws:// no loopback deste dispositivo.",
-      "tunnelReset": "Usar o túnel oficial"
+      "pageSave": "Salvar"
     },
     "advanced": {
       "networksTitle": "Redes",

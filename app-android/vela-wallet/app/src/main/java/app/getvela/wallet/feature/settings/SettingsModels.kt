@@ -52,8 +52,6 @@ enum class SettingsOverlay {
     /** Spec 071: which Clear Signer page the wallet opens. */
     SignerPage,
 
-    /** Spec 075: which tunnel a cross-device pairing goes through. */
-    SignerTunnel,
 
     /** Spec 072: removing a custom network asks first. */
     RemoveNetwork,
@@ -553,8 +551,6 @@ data class SettingsScreenModel(
     /** Spec 071: the default "Sign with" sheet, and the Clear Signer page's. */
     val signWithSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
     val signerPage: SignerPageModel = SignerPageModel(),
-    /** Spec 075: the tunnel row's sheet, shaped exactly like the page's. */
-    val signerTunnel: SignerPageModel = SignerPageModel(),
     val numberSheet: SelectSheetModel,
     val dateSheet: SelectSheetModel,
     val timeSheet: SelectSheetModel,

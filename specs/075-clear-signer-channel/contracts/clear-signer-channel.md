@@ -1,7 +1,11 @@
 # Contract — the Clear Signer as a passkey route
 
 Extends `specs/071-clear-signer/contracts/clear-signer.md`; everything there stands unless
-changed here. The tunnel's wire is `tunnel.md`; BLE's is `app-web/clearsigning/PROTOCOL.md`
+changed here.
+
+> **Narrowed 2026-09-23.** The cross-device channels — the tunnel and BLE — were cut, with
+> the web shell's Clear Signer. `tunnel.md` is gone; PROTOCOL.md's BLE sections are marked
+> historical. See spec.md, "What the owner cut".
 §1–4.
 
 ## 1. The core
@@ -82,16 +86,14 @@ the page once per flow, not once per ceremony.
 |---|---|---|
 | Android / iOS / desktop | same device | loopback WebSocket (071 §2). The desktop moves off fragment + callback. |
 | Web | same browser | postMessage (071 §4) |
-| any shell, web included | another device | tunnel (`tunnel.md`): QR + link, 6-digit code confirmed on the wallet |
-| Android / iOS / desktop (macOS) | Chrome on another device | BLE GATT (PROTOCOL.md §1–4), same code check |
+| ~~any shell~~ | ~~another device~~ | ~~tunnel~~ — CUT 2026-09-23 |
+| ~~Android / iOS / desktop~~ | ~~Chrome on another device~~ | ~~BLE GATT~~ — CUT 2026-09-23 |
 
-The tunnel and BLE share one session implementation:
-- the core's `secure_session` (Rust: P-256 ECDH, HKDF-SHA256, AES-GCM), exported to UniFFI and
-  wasm;
-- the page's `lib/transport/secure.js`.
+The web row went too: the web wallet offers no Clear Signer at all.
 
-The label (`vela-tunnel/1`, `vela-ble/1`) is a parameter. Shared vectors in
-`rust/crates/vela-core/tests/clear-signer/secure-session.json` pin both sides.
+The end-to-end session (`secure_session`, `lib/transport/secure.js`) existed for the two
+cut channels and went with them. The loopback socket is plaintext JSON on `127.0.0.1`,
+behind a one-time token and an `Origin` check (071 §2).
 
 ## 3. Words
 Reuse:
@@ -102,11 +104,8 @@ New corpus keys (all fifteen locales):
 
 | Key | Where |
 |---|---|
-| `componentsUi.signing.clearSignerPair` | the pairing sheet's title ("在另一台设备上打开清晰签名器") |
-| `componentsUi.signing.clearSignerPairHint` | "scan this code or open the link on the device that has your passkey" |
-| `componentsUi.signing.clearSignerCode` | "check that the other device shows the same code: {{code}}" |
-| `componentsUi.signing.clearSignerCodeConfirm` | the confirm button |
-| `componentsUi.signing.clearSignerCopyLink` | the copy button |
-| `componentsUi.signing.clearSignerThisDevice` / `clearSignerOtherDevice` | the choice between the two, when both are possible |
-| `settings.signing.tunnelTitle`, `tunnelSubtitle`, `tunnelInvalid`, `tunnelReset` | the Settings row, as the page row |
 | `componentsUi.signing.clearSignerCreate`, `clearSignerSignIn`, `clearSignerProof` | the page's card titles (the page carries its own zh/en copies in `lib/locales`) |
+
+The pairing sheet's words, the six-digit code, the where-question and the Settings tunnel
+row were added here and REMOVED on 2026-09-23 with the channels that drew them — 23 keys
+across fifteen locales (`scripts/gen-i18n.mjs`, pin 1745 → 1722).

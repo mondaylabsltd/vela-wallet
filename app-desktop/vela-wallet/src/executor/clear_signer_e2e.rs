@@ -50,7 +50,7 @@ use vela_core::app::KeyMethod;
 use vela_core::app::shell::ShellOperation;
 use vela_core::clear_signer::ceremony::Answer;
 
-use crate::executor::clear_signer::tests::{here, page_of_channel, signing_key};
+use crate::executor::clear_signer::tests::{page_of_channel, signing_key};
 use crate::executor::clear_signer::{self, Ask, Channel, Refusal};
 use crate::executor::user_op::{self, Signer};
 
@@ -348,18 +348,6 @@ struct Rig {
     credential: Vec<u8>,
     keys: Vec<WalletKey>,
     channel: Arc<Channel>,
-    /// The person, answering "where is your Clear Signer?" with "on this
-    /// device" — the one question spec 075 added in front of every attempt.
-    /// Held rather than detached so it is joined when the rig goes.
-    place: Option<std::thread::JoinHandle<()>>,
-}
-
-impl Drop for Rig {
-    fn drop(&mut self) {
-        if let Some(answering) = self.place.take() {
-            let _ = answering.join();
-        }
-    }
 }
 
 impl Rig {
@@ -377,7 +365,6 @@ impl Rig {
             crate::executor::clear_signer::tests::wallet_key(&key, &credential),
         ];
         let channel = Channel::new().0;
-        let place = Some(here(&channel));
         Some(Self {
             browser,
             page: format!("http://localhost:{}/", serve_page()),
@@ -385,7 +372,6 @@ impl Rig {
             credential,
             keys,
             channel,
-            place,
         })
     }
 

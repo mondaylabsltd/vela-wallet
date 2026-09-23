@@ -35,9 +35,8 @@ final class ClearSignerChooserDeviceTests: XCTestCase {
         static let create = "创建钱包"
         static let signIn = "我已有钱包"
         static let clearSigner = "清晰签名器"
-        static let whereIsIt = "清晰签名器在哪里？"
-        static let thisDevice = "在这台设备上"
-        static let otherDevice = "在另一台设备上"
+        static let waiting = "正在等待清晰签名器…"
+        static let done = "完成"
         static let thisOne = "这台设备"
         static let phone = "手机或平板"
         static let securityKey = "USB 安全密钥"
@@ -52,7 +51,7 @@ final class ClearSignerChooserDeviceTests: XCTestCase {
 
     /// 我已有钱包 → the method sheet lists FOUR routes, the fourth is the Clear
     /// Signer, and tapping it asks where the signer is.
-    func testTheSignInChooserOffersTheClearSignerAndAsksWhere() throws {
+    func testTheSignInChooserOffersTheClearSignerAndOpensItsPage() throws {
         let app = launch()
         XCTAssertTrue(app.buttons[Words.signIn].waitForExistence(timeout: 30),
                       "Welcome did not appear — is a session left over from another class?")
@@ -65,14 +64,14 @@ final class ClearSignerChooserDeviceTests: XCTestCase {
         attach(XCUIScreen.main.screenshot(), named: "sign-in-chooser")
 
         app.staticTexts[Words.clearSigner].firstMatch.tap()
-        assertWhereChoice(in: app, named: "sign-in-where")
+        assertWaitsOnThePage(in: app, named: "sign-in-waiting")
         cancel(app)
         app.terminate()
     }
 
     /// 创建钱包 → name → the key list's picker lists FOUR routes, and choosing
     /// the Clear Signer asks where it is rather than opening the OS sheet.
-    func testTheCreateChooserOffersTheClearSignerAndAsksWhere() throws {
+    func testTheCreateChooserOffersTheClearSignerAndOpensItsPage() throws {
         let app = launch()
         XCTAssertTrue(app.buttons[Words.create].waitForExistence(timeout: 30),
                       "Welcome did not appear — is a session left over from another class?")
@@ -108,7 +107,7 @@ final class ClearSignerChooserDeviceTests: XCTestCase {
         attach(XCUIScreen.main.screenshot(), named: "create-chooser")
 
         app.staticTexts[Words.clearSigner].firstMatch.tap()
-        assertWhereChoice(in: app, named: "create-where")
+        assertWaitsOnThePage(in: app, named: "create-waiting")
         cancel(app)
         app.terminate()
     }
@@ -133,14 +132,31 @@ final class ClearSignerChooserDeviceTests: XCTestCase {
         return app
     }
 
-    /// The Clear Signer's own sheet: where is it — this device, or another one.
-    /// No OS passkey sheet, and nothing signed.
-    private func assertWhereChoice(in app: XCUIApplication, named: String) {
-        XCTAssertTrue(app.staticTexts[Words.whereIsIt].waitForExistence(timeout: 20),
-                      "choosing the Clear Signer did not ask where it is")
-        XCTAssertTrue(app.staticTexts[Words.thisDevice].exists, "no \(Words.thisDevice)")
-        XCTAssertTrue(app.staticTexts[Words.otherDevice].exists, "no \(Words.otherDevice)")
+    /// Choosing the Clear Signer opens ITS page and nothing else.
+    ///
+    /// There is nothing to choose any more — one channel since 2026-09-23 — so
+    /// the tab opens straight away. What is then on screen is `SFSafariView`'s,
+    /// not this app's, and the waiting sheet is BEHIND it; either one proves
+    /// the Clear Signer took the tap, and that no OS passkey sheet did.
+    private func assertWaitsOnThePage(in app: XCUIApplication, named: String) {
+        let deadline = Date().addingTimeInterval(20)
+        var opened = false
+        while Date() < deadline {
+            if app.staticTexts[Words.waiting].exists
+                || app.buttons[Words.done].exists
+                || app.otherElements["TopBrowserBar"].exists
+                || app.otherElements["SFSafariView"].exists
+            {
+                opened = true
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
         attach(XCUIScreen.main.screenshot(), named: named)
+        XCTAssertTrue(opened, "choosing the Clear Signer did not open its page")
+        // …and the chooser is gone: the tap went somewhere.
+        XCTAssertFalse(app.staticTexts[Words.securityKey].exists,
+                       "the chooser is still up, so nothing opened")
     }
 
     private func cancel(_ app: XCUIApplication) {

@@ -67,13 +67,7 @@
       "pageInsecure": "请使用 https 页面，或本机回环地址上的页面——浏览器不会在其他地方签名。",
       "pageForeign": "你的通行密钥属于 getvela.app。其他域名上的页面可以显示请求，但无法签名。",
       "pageReset": "使用官方页面",
-      "pageSave": "保存",
-      "tunnelTitle": "隧道",
-      "tunnelSubtitle": "与另一台设备配对时经由这个隧道。它只转发加密后的消息。",
-      "tunnelOfficial": "官方",
-      "tunnelInvalid": "这不是一个隧道地址。",
-      "tunnelInsecure": "请使用 wss:// 地址，或本机回环地址上的 ws://。",
-      "tunnelReset": "使用官方隧道"
+      "pageSave": "保存"
     },
     "advanced": {
       "networksTitle": "网络",

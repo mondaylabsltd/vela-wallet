@@ -119,8 +119,9 @@ final class Preferences {
         let keys = [
             VelaStore.Key.theme, VelaStore.Key.language, VelaStore.Key.localePrefs,
             VelaStore.Key.retiredAvatarStyle, VelaStore.Key.textScale, VelaStore.Key.legacyFormats,
-            // Spec 075, renamed 2026-09-23: the core MOVES this to
-            // `vela.clearSignerTunnel`, so the migration has to see it.
+            // Spec 075's pairing service, retired 2026-09-23: the core
+            // REMOVES both spellings, so the migration has to see them.
+            VelaStore.Key.retiredClearSignerTunnel,
             VelaStore.Key.retiredClearSignerRelay,
         ]
         return keys.reduce(into: [:]) { entries, key in

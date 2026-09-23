@@ -67,13 +67,7 @@
       "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
       "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
       "pageReset": "Dùng trang chính thức",
-      "pageSave": "Lưu",
-      "tunnelTitle": "Đường hầm",
-      "tunnelSubtitle": "Ghép nối với thiết bị khác đi qua đường hầm này. Nó chỉ chuyển tiếp tin nhắn đã mã hóa.",
-      "tunnelOfficial": "Chính thức",
-      "tunnelInvalid": "Đây không phải địa chỉ đường hầm.",
-      "tunnelInsecure": "Dùng địa chỉ wss://, hoặc ws:// trên loopback của chính thiết bị này.",
-      "tunnelReset": "Dùng đường hầm chính thức"
+      "pageSave": "Lưu"
     },
     "advanced": {
       "networksTitle": "Mạng lưới",

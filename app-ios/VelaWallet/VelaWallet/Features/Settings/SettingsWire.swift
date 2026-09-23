@@ -319,32 +319,21 @@ struct SignPrefViewWire: Decodable, Equatable {
     let signerUrlError: String?
     /// Whether a page there can use this wallet's `getvela.app` passkeys.
     let signerUsesWalletPasskeys: Bool
-    /// Spec 075: the tunnel a cross-device pairing goes through. Always
-    /// usable — the core normalises whatever was typed, or keeps the last
-    /// good one.
-    let tunnelUrl: String
-    let tunnelUrlIsDefault: Bool
-    /// `invalid` | `insecure`, as `signerUrlError`.
-    let tunnelUrlError: String?
-
     /// Spelled out because a hand-written `init(from:)` suppresses the
     /// synthesized set; the names are the decoder's post-`convertFromSnakeCase`
     /// ones.
     private enum CodingKeys: String, CodingKey {
         case method, methodCommitted, offered, signerUrl, signerUrlIsDefault
         case signerUrlError, signerUsesWalletPasskeys
-        case tunnelUrl, tunnelUrlIsDefault, tunnelUrlError
     }
 
-    /// `decodeIfPresent` for the 075 fields, with the core's own defaults
-    /// behind them.
+    /// `decodeIfPresent` throughout, with the core's own defaults behind it.
     ///
-    /// The three tunnel fields did not exist before this spec, and this app
-    /// is not the only thing that writes this view's JSON — the fixtures and
-    /// the gallery do too. A mirror that hard-required a field the wire
-    /// grew would refuse to decode the whole view and leave Settings with no
-    /// signing section at all, which is the failure this file exists to stop
-    /// rather than cause.
+    /// This app is not the only thing that writes this view's JSON — the
+    /// fixtures and the gallery do too. A mirror that hard-required a field
+    /// the wire grew (or dropped) would refuse to decode the whole view and
+    /// leave Settings with no signing section at all, which is the failure
+    /// this file exists to stop rather than cause.
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         method = try values.decodeIfPresent(String.self, forKey: .method) ?? "auto"
@@ -355,10 +344,6 @@ struct SignPrefViewWire: Decodable, Equatable {
         signerUrlError = try values.decodeIfPresent(String.self, forKey: .signerUrlError)
         signerUsesWalletPasskeys =
             try values.decodeIfPresent(Bool.self, forKey: .signerUsesWalletPasskeys) ?? true
-        // `clearSignerDefaultTunnel()` answers `wss://tunnel.getvela.app`.
-        tunnelUrl = try values.decodeIfPresent(String.self, forKey: .tunnelUrl) ?? clearSignerDefaultTunnel()
-        tunnelUrlIsDefault = try values.decodeIfPresent(Bool.self, forKey: .tunnelUrlIsDefault) ?? true
-        tunnelUrlError = try values.decodeIfPresent(String.self, forKey: .tunnelUrlError)
     }
 
     /// What the machine says before it has read anything: `auto`, the

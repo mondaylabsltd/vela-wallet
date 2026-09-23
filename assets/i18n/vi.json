@@ -67,13 +67,7 @@
    "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
    "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
    "pageReset": "Dùng trang chính thức",
-   "pageSave": "Lưu",
-   "tunnelTitle": "Đường hầm",
-   "tunnelSubtitle": "Ghép nối với thiết bị khác đi qua đường hầm này. Nó chỉ chuyển tiếp tin nhắn đã mã hóa.",
-   "tunnelOfficial": "Chính thức",
-   "tunnelInvalid": "Đây không phải địa chỉ đường hầm.",
-   "tunnelInsecure": "Dùng địa chỉ wss://, hoặc ws:// trên loopback của chính thiết bị này.",
-   "tunnelReset": "Dùng đường hầm chính thức"
+   "pageSave": "Lưu"
   },
   "advanced": {
    "networksTitle": "Mạng lưới",
@@ -1373,24 +1367,7 @@
    "clearSignerReopen": "Mở lại trang",
    "clearSignerDoneTab": "Đã ký. Bạn có thể đóng thẻ này và quay lại Vela.",
    "viewOnExplorer": "Xem trên explorer",
-   "sendingToTokenContract": "Gửi tới chính hợp đồng của token",
-   "clearSignerWhere": "Clear Signer của bạn ở đâu?",
-   "clearSignerThisDevice": "Trên thiết bị này",
-   "clearSignerOtherDevice": "Trên thiết bị khác",
-   "clearSignerNearby": "Thiết bị gần đây, qua Bluetooth",
-   "clearSignerNearbyHint": "Trang sẽ tìm thiết bị này qua Bluetooth. Hãy để Vela mở trong lúc ký.",
-   "clearSignerNearbyName": "Chọn \"{{name}}\" trong danh sách thiết bị của trình duyệt trên thiết bị kia.",
-   "clearSignerBluetoothNeeded": "Vela cần quyền Bluetooth để trang ký có thể tìm thấy thiết bị này.",
-   "clearSignerBluetoothOff": "Hãy bật Bluetooth để ghép nối theo cách này.",
-   "clearSignerBluetoothUnsupported": "Thiết bị này không ghép nối được theo cách này. Hãy dùng Clear Signer trên thiết bị này, hoặc một thiết bị khác.",
-   "clearSignerNearbyLost": "Trang ký đã ngắt kết nối. Hãy để hai thiết bị ở gần nhau và giữ Vela mở, rồi thử lại.",
-   "clearSignerPair": "Mở Clear Signer trên thiết bị kia của bạn",
-   "clearSignerPairHint": "Quét mã này bằng thiết bị có khóa truy cập của bạn, hoặc mở liên kết trên thiết bị đó.",
-   "clearSignerPairWaiting": "Đang chờ thiết bị kia…",
-   "clearSignerCode": "Kiểm tra thiết bị kia hiển thị cùng một mã: {{code}}",
-   "clearSignerCodeConfirm": "Hai mã khớp nhau",
-   "clearSignerCopyLink": "Sao chép liên kết",
-   "clearSignerTunnelDown": "Không kết nối được đường hầm. Hãy thử lại hoặc dùng Clear Signer trên thiết bị này."
+   "sendingToTokenContract": "Gửi tới chính hợp đồng của token"
   },
   "signingApprove": {
    "resultingTotal": "Tổng hạn mức mới",

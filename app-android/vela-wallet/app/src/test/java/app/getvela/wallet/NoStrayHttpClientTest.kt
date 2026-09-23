@@ -44,7 +44,6 @@ class NoStrayHttpClientTest {
         // socket in the app that must NOT be pooled or retried elsewhere: a
         // second connection in the same role is closed with 4409 by the tunnel
         // itself (contracts/tunnel.md §1).
-        "feature/signing/clearsigner/TunnelSocket.kt",
     )
 
     private val clientMarkers = listOf(

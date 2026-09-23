@@ -67,13 +67,7 @@
    "pageInsecure": "Use uma página https ou uma no loopback deste aparelho — o navegador não assina em nenhum outro lugar.",
    "pageForeign": "Suas passkeys pertencem a getvela.app. Uma página em outro domínio pode mostrar uma solicitação, mas não consegue assiná-la.",
    "pageReset": "Usar a página oficial",
-   "pageSave": "Salvar",
-   "tunnelTitle": "Túnel",
-   "tunnelSubtitle": "O pareamento com outro dispositivo passa por este túnel. Ele só repassa mensagens criptografadas.",
-   "tunnelOfficial": "Oficial",
-   "tunnelInvalid": "Isso não é um endereço de túnel.",
-   "tunnelInsecure": "Use um endereço wss://, ou ws:// no loopback deste dispositivo.",
-   "tunnelReset": "Usar o túnel oficial"
+   "pageSave": "Salvar"
   },
   "advanced": {
    "networksTitle": "Redes",
@@ -1376,24 +1370,7 @@
    "clearSignerReopen": "Abrir a página de novo",
    "clearSignerDoneTab": "Assinado. Você pode fechar esta aba e voltar ao Vela.",
    "viewOnExplorer": "Ver no explorador",
-   "sendingToTokenContract": "Enviado ao contrato do próprio token",
-   "clearSignerWhere": "Onde está o seu Clear Signer?",
-   "clearSignerThisDevice": "Neste dispositivo",
-   "clearSignerOtherDevice": "Em outro dispositivo",
-   "clearSignerNearby": "Dispositivo próximo, por Bluetooth",
-   "clearSignerNearbyHint": "A página encontra este dispositivo por Bluetooth. Mantenha o Vela aberto enquanto assina.",
-   "clearSignerNearbyName": "Escolha \"{{name}}\" na lista de dispositivos do navegador no seu outro dispositivo.",
-   "clearSignerBluetoothNeeded": "O Vela precisa da permissão de Bluetooth para que a página de assinatura encontre este dispositivo.",
-   "clearSignerBluetoothOff": "Ative o Bluetooth para parear desta forma.",
-   "clearSignerBluetoothUnsupported": "Este dispositivo não pode parear desta forma. Use o Clear Signer neste dispositivo, ou em outro.",
-   "clearSignerNearbyLost": "A página de assinatura se desconectou. Mantenha os dois dispositivos por perto e o Vela aberto, e tente de novo.",
-   "clearSignerPair": "Abra o Clear Signer no seu outro dispositivo",
-   "clearSignerPairHint": "Escaneie este código com o dispositivo que tem sua chave de acesso, ou abra o link nele.",
-   "clearSignerPairWaiting": "Aguardando o outro dispositivo…",
-   "clearSignerCode": "Confira se o outro dispositivo mostra o mesmo código: {{code}}",
-   "clearSignerCodeConfirm": "Os códigos são iguais",
-   "clearSignerCopyLink": "Copiar link",
-   "clearSignerTunnelDown": "Não foi possível alcançar o túnel. Tente de novo ou use o Clear Signer deste dispositivo."
+   "sendingToTokenContract": "Enviado ao contrato do próprio token"
   },
   "signingApprove": {
    "resultingTotal": "Novo limite total",

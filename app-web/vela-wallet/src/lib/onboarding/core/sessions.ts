@@ -19,7 +19,6 @@ import {
 	type ExecutorDeps,
 	type OnboardingEffect
 } from './executor';
-import { endCeremonyFlow } from './clear-signer-ceremony';
 
 import type { CreateView } from '../generated/CreateView';
 import type { CreateWalletEvent } from '../generated/CreateWalletEvent';
@@ -41,44 +40,24 @@ export type SessionOptions<View> = {
 export function createCreateWalletSession(
 	options: SessionOptions<CreateView>
 ): CreateWalletSession {
-	return endingTheClearSigner(
-		createJsonWasmShell<CreateView, CreateWalletEvent, OnboardingEffect, ShellResult>(
-			new CreateWalletCore(),
-			{
-				onView: options.onView,
-				execute: createOnboardingExecutor(options.deps),
-				toFailure: operationFailure,
-				// Never silent (spec 048): a caller that passes no handler still gets the fault reported.
-				onError: options.onError ?? ((error) => console.error('[onboarding] core fault:', error))
-			}
-		)
-	);
-}
-
-export function createLoginSession(options: SessionOptions<LoginView>): LoginSession {
-	return endingTheClearSigner(
-		createJsonWasmShell<LoginView, LoginEvent, OnboardingEffect, ShellResult>(new LoginCore(), {
+	return createJsonWasmShell<CreateView, CreateWalletEvent, OnboardingEffect, ShellResult>(
+		new CreateWalletCore(),
+		{
 			onView: options.onView,
 			execute: createOnboardingExecutor(options.deps),
 			toFailure: operationFailure,
 			// Never silent (spec 048): a caller that passes no handler still gets the fault reported.
 			onError: options.onError ?? ((error) => console.error('[onboarding] core fault:', error))
-		})
+		}
 	);
 }
 
-/**
- * Spec 075: a flow's Clear Signer page is let go when the flow is (the screen
- * was left, the person went back, the tab is closing). Disposal is the one
- * moment every one of those reaches, which is why the goodbye is tied to it
- * rather than to any screen.
- */
-function endingTheClearSigner<Event>(loop: EffectLoop<Event>): EffectLoop<Event> {
-	return {
-		...loop,
-		dispose() {
-			endCeremonyFlow();
-			loop.dispose();
-		}
-	};
+export function createLoginSession(options: SessionOptions<LoginView>): LoginSession {
+	return createJsonWasmShell<LoginView, LoginEvent, OnboardingEffect, ShellResult>(new LoginCore(), {
+		onView: options.onView,
+		execute: createOnboardingExecutor(options.deps),
+		toFailure: operationFailure,
+		// Never silent (spec 048): a caller that passes no handler still gets the fault reported.
+		onError: options.onError ?? ((error) => console.error('[onboarding] core fault:', error))
+	});
 }

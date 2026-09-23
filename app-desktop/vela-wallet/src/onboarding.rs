@@ -846,36 +846,10 @@ impl OnboardingPage {
     /// same moment.
     fn clear_signer_prompt(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let channel = self.channel.clear_signer();
-        if !(channel.asking_place() || channel.waiting() || channel.ended().is_some()) {
+        if !(channel.waiting() || channel.ended().is_some()) {
             return None;
         }
-        let card = if channel.asking_place() {
-            let answering = Arc::clone(&channel);
-            let cancel = Arc::clone(&channel);
-            clear_signer_cards::where_card(
-                theme,
-                &self.loc,
-                Arc::new(move |place, _window: &mut Window, _cx: &mut App| {
-                    answering.answer_place(Some(place));
-                }),
-                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| {
-                    cancel.answer_place(None);
-                },
-            )
-        } else if let Some(pairing) = channel.pairing() {
-            let (confirm, cancel) = (Arc::clone(&channel), Arc::clone(&channel));
-            let link = pairing.link.clone();
-            clear_signer_cards::pair_card(
-                theme,
-                &self.loc,
-                &pairing,
-                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
-                },
-                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| confirm.confirm_code(),
-                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| cancel.cancel(),
-            )
-        } else if channel.waiting() {
+        let card = if channel.waiting() {
             let (reopen, cancel) = (Arc::clone(&channel), Arc::clone(&channel));
             clear_signer_cards::waiting_card(
                 theme,

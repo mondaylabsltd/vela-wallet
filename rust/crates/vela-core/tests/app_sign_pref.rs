@@ -10,7 +10,7 @@ use support::DomainDriver;
 use vela_core::app::sign_pref::{
     Event, SignPref, SignPrefOperation as Op, SignPrefShellResult as Res,
 };
-use vela_core::clear_signer::{DEFAULT_SIGNER_URL, DEFAULT_TUNNEL_URL};
+use vela_core::clear_signer::DEFAULT_SIGNER_URL;
 
 type Sut = DomainDriver<SignPref>;
 
@@ -18,7 +18,6 @@ fn stored(method: Option<&str>, url: Option<&str>) -> Res {
     Res::Stored {
         method: method.map(str::to_owned),
         signer_url: url.map(str::to_owned),
-        tunnel_url: None,
     }
 }
 
@@ -168,60 +167,4 @@ fn a_read_that_lands_after_a_choice_is_dropped() {
         stored(Some("platform"), None),
     );
     assert_eq!(sut.view().method, "hybrid");
-}
-
-/// Spec 075: the tunnel a cross-device pairing goes through — the official
-/// one unless a person names their own, and only an address both ends can
-/// open (wss, or ws on this device's loopback).
-#[test]
-fn the_tunnel_is_official_until_a_usable_one_is_named() {
-    let mut sut = loaded(None, None);
-    assert_eq!(sut.view().tunnel_url, DEFAULT_TUNNEL_URL);
-    assert!(sut.view().tunnel_url_is_default);
-
-    assert!(sut
-        .dispatch(Event::TunnelUrlSubmitted {
-            text: "ws://192.168.1.4:8787".to_owned(),
-        })
-        .is_empty());
-    assert_eq!(sut.view().tunnel_url_error.as_deref(), Some("insecure"));
-    assert_eq!(sut.view().tunnel_url, DEFAULT_TUNNEL_URL, "nothing stored");
-
-    assert_eq!(
-        sut.dispatch(Event::TunnelUrlSubmitted {
-            text: "tunnel.example.org".to_owned(),
-        }),
-        vec![Op::WriteTunnelUrl {
-            url: Some("wss://tunnel.example.org".to_owned()),
-        }]
-    );
-    assert_eq!(sut.view().tunnel_url, "wss://tunnel.example.org");
-    assert_eq!(sut.view().tunnel_url_error, None);
-
-    assert_eq!(
-        sut.dispatch(Event::TunnelUrlReset),
-        vec![Op::WriteTunnelUrl { url: None }]
-    );
-    assert!(sut.view().tunnel_url_is_default);
-}
-
-#[test]
-fn a_stored_tunnel_is_read_back_and_a_bad_one_reads_as_official() {
-    let mut sut = Sut::new();
-    sut.dispatch(Event::Refresh);
-    sut.resolve(Res::Stored {
-        method: None,
-        signer_url: None,
-        tunnel_url: Some("wss://tunnel.example.org".to_owned()),
-    });
-    assert_eq!(sut.view().tunnel_url, "wss://tunnel.example.org");
-
-    let mut sut = Sut::new();
-    sut.dispatch(Event::Refresh);
-    sut.resolve(Res::Stored {
-        method: None,
-        signer_url: None,
-        tunnel_url: Some("http://tunnel.example.org".to_owned()),
-    });
-    assert!(sut.view().tunnel_url_is_default);
 }

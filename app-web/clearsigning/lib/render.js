@@ -386,26 +386,18 @@ window.VelaCS = window.VelaCS || {};
     return name.length > 12 ? t('ui.confirm') : name;
   }
 
-  // The six digits both screens show on a cross-device channel. Drawn on
-  // every card of the session, so the person can compare them at any moment.
-  function pairingCode(code) {
-    var box = el('div', 'pairing-code');
-    box.appendChild(el('span', null, t('ui.comparisonCode')));
-    box.appendChild(el('b', null, code));
-    return box;
-  }
 
   /**
-   * The calm screen between requests: who this page is talking to, and — on a
-   * cross-device channel — the code. `state` = { titleKey, noteKey, code,
-   * originKey | origin }. Nothing here can be confirmed; there is no slider.
+   * The calm screen between requests: who this page is talking to.
+   * `state` = { titleKey, noteKey, originKey | origin }. Nothing here can be
+   * confirmed; there is no slider.
    */
   function renderWaiting(state) {
     var sheet = el('article', 'sheet sheet-waiting');
     sheet.appendChild(el('div', 'grabber'));
     var head = el('header', 'sheet-head');
-    // Only a channel that vouches for the peer gets Vela's mark; over a radio
-    // or a tunnel this is whatever connected, and it is drawn as that.
+    // Only a channel that vouches for the peer gets Vela's mark; over a
+    // loopback socket this is whatever connected, and it is drawn as that.
     var named = state.requesterApp || '';
     head.appendChild(
       state.requesterVerified
@@ -427,7 +419,6 @@ window.VelaCS = window.VelaCS || {};
     }
     head.appendChild(identity);
     sheet.appendChild(head);
-    if (state.code) sheet.appendChild(pairingCode(state.code));
     sheet.appendChild(el('div', 'waiting-title', t(state.titleKey)));
     if (state.noteKey) sheet.appendChild(el('p', 'sentence waiting-note', t(state.noteKey, state.noteParams)));
     return sheet;
@@ -450,7 +441,6 @@ window.VelaCS = window.VelaCS || {};
     head.appendChild(identity);
     sheet.appendChild(head);
 
-    if (view.pairing) sheet.appendChild(pairingCode(view.pairing));
 
     var label = el('div', 'intent-label tone-' + view.risk, t(view.intentKey));
     if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
@@ -497,7 +487,6 @@ window.VelaCS = window.VelaCS || {};
     if (view.chainClaimed) chain.appendChild(el('span', 'tag', t('tag.claimed')));
     head.appendChild(chain);
     sheet.appendChild(head);
-    if (view.pairing) sheet.appendChild(pairingCode(view.pairing));
 
     var label = el('div', 'intent-label tone-' + view.risk, t(view.intentKey));
     if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));

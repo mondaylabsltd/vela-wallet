@@ -9,9 +9,6 @@
 //
 //  - a session of several requests on one page visit — create, then that
 //    key's member proof, then `bye` — spoken to the way the page speaks to it;
-//  - the tunnel requester, against the shared vectors
-//    (`rust/crates/vela-core/tests/clear-signer/secure-session.json`) and
-//    against a fake tunnel;
 //  - the create and sign-in choosers listing four routes, and the signing
 //    sheet five;
 //  - `signer_origin` round-tripping through the account record and taking the
@@ -344,240 +341,6 @@ struct ClearSignerSessionTests {
     }
 }
 
-// MARK: - The tunnel requester
-
-/// A tunnel socket that plays a script: what it hands the wallet, and what the
-/// wallet handed it.
-final class FakeTunnelSocket: ClearSignerSocket {
-    private var inbound: [ClearSignerFrame]
-    private(set) var sent: [ClearSignerFrame] = []
-    private(set) var closed = false
-
-    init(_ inbound: [ClearSignerFrame]) {
-        self.inbound = inbound
-    }
-
-    func send(_ frame: ClearSignerFrame) async -> Bool {
-        sent.append(frame)
-        return true
-    }
-
-    /// Runs out rather than hanging: a conversation that could not open a
-    /// frame must say `unavailable`, not wait forever inside a test.
-    func receive() async -> ClearSignerFrame? {
-        inbound.isEmpty ? nil : inbound.removeFirst()
-    }
-
-    func close() { closed = true }
-}
-
-@MainActor
-struct ClearSignerTunnelTests {
-
-    /// One case of the shared session vectors.
-    struct Vector {
-        let code: String
-        let rk: String
-        let signerHello: String
-        let requesterHello: String
-        let requesterSecret: Data
-        let requesterNonce: Data
-        let requesterPublicKey: Data
-        let app: String
-        /// `(fromRequester, plaintext, sealed)` in session order.
-        let messages: [(fromRequester: Bool, plaintext: Data, sealed: Data)]
-    }
-
-    static let vectors: [Vector] = {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("rust/crates/vela-core/tests/clear-signer/secure-session.json")
-        let json = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url))) as? [String: Any]
-        let cases = (json?["cases"] as? [[String: Any]] ?? []).filter {
-            $0["label"] as? String == "vela-tunnel/1"
-        }
-        return cases.map { item in
-            let requester = item["requester"] as? [String: Any] ?? [:]
-            let signer = item["signer"] as? [String: Any] ?? [:]
-            return Vector(
-                code: item["code"] as? String ?? "",
-                rk: item["rk"] as? String ?? "",
-                signerHello: signer["hello"] as? String ?? "",
-                requesterHello: requester["hello"] as? String ?? "",
-                requesterSecret: unhex(requester["secretHex"] as? String ?? ""),
-                requesterNonce: unhex(requester["nonceHex"] as? String ?? ""),
-                requesterPublicKey: unhex(requester["publicKeyHex"] as? String ?? ""),
-                app: requester["app"] as? String ?? "",
-                messages: (item["messages"] as? [[String: Any]] ?? []).map { message in
-                    (
-                        fromRequester: message["from"] as? String == "requester",
-                        plaintext: Data((message["plaintext"] as? String ?? "").utf8),
-                        sealed: unhex(message["sealedHex"] as? String ?? "")
-                    )
-                }
-            )
-        }
-    }()
-
-    static func unhex(_ text: String) -> Data { UserOpSpine.unhex(text) }
-
-    /// The wallet's side of the tunnel session, byte for byte against the
-    /// vectors the page is pinned to: the requester's key, the `rk` its link
-    /// carries, the six digits both screens show, and every message sealed and
-    /// opened in order.
-    ///
-    /// The session itself is the core's — which is exactly why this is worth
-    /// pinning here: the shell drives it, and a shell that drove it in the
-    /// wrong ROLE, with the wrong label, or without the counter would still
-    /// compile and would quietly produce a channel the page cannot read.
-    @Test func theRequesterSideMatchesTheSharedVectors() throws {
-        #expect(!Self.vectors.isEmpty, "the shared session vectors did not load")
-        for vector in Self.vectors {
-            let handshake = try ClearSignerHandshake(
-                secret: vector.requesterSecret, nonce: vector.requesterNonce
-            )
-            #expect(handshake.publicKey() == vector.requesterPublicKey)
-            #expect(clearSignerKeyFingerprint(publicKey: handshake.publicKey()) == vector.rk)
-            // The hello the page reads, field for field.
-            // The vectors predate the peer's mark (075): no icon, no field.
-            let ours = try CoreJSON.object(handshake.hello(app: vector.app, icon: nil))
-            let theirs = try CoreJSON.object(vector.requesterHello)
-            #expect(ours["pk"] as? String == theirs["pk"] as? String)
-            #expect(ours["nonce"] as? String == theirs["nonce"] as? String)
-            #expect(ours["role"] as? String == "requester")
-            #expect(ours["app"] as? String == vector.app)
-
-            let session = try handshake.complete(peerHello: vector.signerHello, tunnel: true)
-            #expect(session.code() == vector.code, "the two screens would show different digits")
-            for message in vector.messages {
-                if message.fromRequester {
-                    #expect(session.seal(plaintext: message.plaintext, msgId: nil) == message.sealed)
-                } else {
-                    #expect(try session.open(sealed: message.sealed, msgId: nil) == message.plaintext)
-                }
-            }
-        }
-    }
-
-    /// The pairing link the QR carries: the page's own address, the tunnel, the
-    /// room, and the `rk` that lets the PAGE refuse a stand-in wallet.
-    @Test func thePairingLinkCarriesTheRoomAndTheRequestersFingerprint() throws {
-        let vector = try #require(Self.vectors.first)
-        var draws = [Data(repeating: 0x07, count: 16), vector.requesterSecret, vector.requesterNonce]
-        let conversation = try #require(ClearSignerTunnelConversation(
-            signerUrl: "https://sign.getvela.app/",
-            tunnel: "wss://tunnel.getvela.app",
-            app: vector.app,
-            random: { _ in draws.removeFirst() },
-            openSocket: { _ in nil }
-        ))
-        #expect(conversation.link.hasPrefix("https://sign.getvela.app/"))
-        #expect(conversation.link.contains("rk=\(vector.rk)"))
-        #expect(conversation.link.contains("&v=1"))
-        let room = try #require(clearSignerTunnelRoom(random: Data(repeating: 0x07, count: 16)))
-        #expect(conversation.link.contains("room=\(room)"))
-        #expect(conversation.roomUrl == "wss://tunnel.getvela.app/v1/rooms/\(room)?role=requester")
-    }
-
-    /// Against a tunnel that only forwards frames: the wallet waits for
-    /// `joined`, answers the page's hello with its own, shows the code the
-    /// vectors pin — and then seals its request as a BINARY frame in the
-    /// requester's direction, so nothing readable ever reaches the tunnel.
-    @Test func theWalletPairsThroughATunnelAndSealsEverythingAfterTheHandshake() async throws {
-        let vector = try #require(Self.vectors.first)
-        var draws = [Data(repeating: 0x07, count: 16), vector.requesterSecret, vector.requesterNonce]
-        let socket = FakeTunnelSocket([
-            .text(#"{"v":1,"relay":"joined"}"#),
-            .text(vector.signerHello),
-            // The vectors' first signer message, under the same key: opening
-            // it is the proof that this end derived the session correctly.
-            .binary(vector.messages.first { !$0.fromRequester }?.sealed ?? Data()),
-        ])
-        let conversation = try #require(ClearSignerTunnelConversation(
-            signerUrl: "https://sign.getvela.app/",
-            tunnel: "wss://tunnel.getvela.app",
-            app: vector.app,
-            random: { _ in draws.removeFirst() },
-            openSocket: { _ in socket },
-            // The vectors' own request id, so the vectors' own answer is the
-            // one this request is waiting for.
-            nextId: { "e6f3" }
-        ))
-
-        #expect(await conversation.pair() == vector.code)
-        // Our hello went out as TEXT, and it is the one the vectors pin.
-        guard case .text(let hello) = try #require(socket.sent.first) else {
-            Issue.record("the wallet's hello was not a text frame")
-            return
-        }
-        let ourKey = try CoreJSON.object(hello)["pk"] as? String
-        let vectorKey = try CoreJSON.object(vector.requesterHello)["pk"] as? String
-        #expect(ourKey == vectorKey)
-
-        // The request. The tunnel sees a binary frame whose IV says "requester
-        // → signer, message 1" and nothing else.
-        let ending = await conversation.send(.signature(
-            request: #"{"id":"e6f3","intent":{"method":"personal_sign","params":[],"origin":""},"context":{}}"#,
-            digest: Data(repeating: 9, count: 32),
-            keys: [WalletKeyRecord(credentialId: "aa", publicKeyHex: "04" + String(repeating: "11", count: 64))]
-        ))
-        guard case .binary(let sealed) = try #require(socket.sent.last) else {
-            Issue.record("the intent was not sealed into a binary frame")
-            return
-        }
-        #expect(sealed.prefix(4) == Data("P2C.".utf8))
-        #expect(sealed.count > 12 + 16, "IV, ciphertext and tag")
-        #expect(!ClearSignerFixture.hex(sealed).contains("706572736f6e616c5f7369676e"),
-                "the tunnel must never see `personal_sign` in the clear")
-
-        // The answer opened — and then the core refused it, because the
-        // vectors' `result` carries no signature. What matters here is that it
-        // was OPENED at all: a wrong key, label, direction or counter would
-        // have left the conversation waiting and answered `unavailable`.
-        guard case .outcome(.refused(let refusal)) = ending else {
-            Issue.record("the page's sealed answer did not reach the core: \(ending)")
-            return
-        }
-        #expect(ClearSignerNotice(refusal) == .mismatch)
-
-        // `bye` is sealed too, in the same direction and the next counter.
-        conversation.end()
-        await Task.yield()
-        guard case .binary(let farewell) = try #require(socket.sent.last) else {
-            Issue.record("the bye was not sealed")
-            return
-        }
-        #expect(farewell.prefix(4) == Data("P2C.".utf8))
-    }
-
-    /// A tunnel that never pairs the two ends: no code, and the wallet says so
-    /// rather than sitting on a spinner — the sheet offers "this device" again.
-    @Test func aTunnelThatNeverPairsAnswersNothing() async throws {
-        let vector = try #require(Self.vectors.first)
-        var draws = [Data(repeating: 0x07, count: 16), vector.requesterSecret, vector.requesterNonce]
-        let conversation = try #require(ClearSignerTunnelConversation(
-            signerUrl: "https://sign.getvela.app/",
-            tunnel: "wss://tunnel.getvela.app",
-            app: vector.app,
-            random: { _ in draws.removeFirst() },
-            openSocket: { _ in FakeTunnelSocket([.text(#"{"v":1,"relay":"joined"}"#)]) }
-        ))
-        #expect(await conversation.pair() == nil)
-    }
-
-    /// The page's refusal codes, in the core's own vocabulary: a person who
-    /// did not slide is a decline (never an error), and everything else keeps
-    /// the page's reason.
-    @Test func thePagesRefusalCodesKeepTheirMeaning() {
-        #expect(ClearSignerTunnelConversation.refusal(code: "user_rejected") == .declined)
-        #expect(ClearSignerTunnelConversation.refusal(code: "") == .declined)
-        #expect(ClearSignerTunnelConversation.refusal(code: "refused") == .pageRefused(code: "refused"))
-        #expect(ClearSignerNotice(ClearSignerTunnelConversation.refusal(code: "refused")) == .refused)
-        #expect(ClearSignerNotice(ClearSignerTunnelConversation.refusal(code: "")) == .closed)
-    }
-}
-
 // MARK: - The choosers
 
 @MainActor
@@ -611,42 +374,17 @@ struct ClearSignerChooserTests {
         #expect(offered.dropLast().allSatisfy { SigningLive.signMethodDetail($0, loc: loc) == nil })
     }
 
-    /// Settings' tunnel row, beside the page row: the value is "official" or
-    /// the host, and every verdict under the field is the core's.
-    @Test func settingsShowsTheTunnelBesideTheSignerPage() throws {
+    /// Settings has no pairing-service row at all: the channel went on
+    /// 2026-09-23 and its address went with it. A row left behind would be a
+    /// setting for something the wallet no longer opens.
+    @Test func settingsHasNoPairingServiceRow() throws {
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         let executor = SignPrefExecutor(store: store)
-        let core = SignPrefCore()
-        let base = SettingsFixtures.build(.st1, loc: loc)
-
-        var view = try Self.run(core, executor, ["type": "refresh"])
-        #expect(view.tunnelUrlIsDefault && view.tunnelUrl == clearSignerDefaultTunnel())
-        var model = SettingsLive.withSignPref(view, on: base, loc: loc)
-        #expect(model.sections.flatMap(\.rows).first { $0.id == SettingsFixtures.tunnelRow }?.value == "官方")
-        #expect(model.tunnel?.reset == nil, "nothing to put back while it is the official one")
-
-        // Refused: nothing stored, and the sheet says why.
-        view = try Self.run(core, executor, ["type": "tunnel_url_submitted", "text": "ws://192.168.1.4/"])
-        #expect(view.tunnelUrlError == "insecure")
-        #expect(store.readString(VelaStore.Key.clearSignerTunnel) == nil)
-        model = SettingsLive.withSignPref(view, on: base, loc: loc)
-        #expect(model.tunnel?.error == "请使用 wss:// 地址，或本机回环地址上的 ws://。")
-
-        view = try Self.run(core, executor, ["type": "tunnel_url_submitted", "text": "wss://tunnel.example/"])
-        #expect(view.tunnelUrlError == nil && !view.tunnelUrlIsDefault)
-        #expect(store.readString(VelaStore.Key.clearSignerTunnel) == "wss://tunnel.example")
-        model = SettingsLive.withSignPref(view, on: base, loc: loc)
-        #expect(model.sections.flatMap(\.rows)
-            .first { $0.id == SettingsFixtures.tunnelRow }?.value == "tunnel.example")
-        #expect(model.tunnel?.reset == "使用官方隧道")
-
-        // A second launch reads it back under its own key.
-        let again = try Self.run(SignPrefCore(), SignPrefExecutor(store: store), ["type": "refresh"])
-        #expect(again.tunnelUrl == "wss://tunnel.example" && !again.tunnelUrlIsDefault)
-
-        view = try Self.run(core, executor, ["type": "tunnel_url_reset"])
-        #expect(view.tunnelUrlIsDefault)
-        #expect(store.readString(VelaStore.Key.clearSignerTunnel) == nil)
+        let view = try Self.run(SignPrefCore(), executor, ["type": "refresh"])
+        let model = SettingsLive.withSignPref(view, on: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+        let ids = model.sections.flatMap(\.rows).map(\.id)
+        #expect(!ids.contains { $0.localizedCaseInsensitiveContains("tunnel") })
+        #expect(!ids.contains { $0.localizedCaseInsensitiveContains("relay") })
     }
 
     /// Drives the machine the way `CoreStore` does — dispatch, perform each

@@ -17,26 +17,20 @@ use vela_core::i18n::{Catalog, I18n};
 
 /// The pre-feature cost: every locale resident on every device.
 const CORPUS_BYTES: usize = 990_499;
-/// The bloat guard for `ja` + `en`, doubled from spec 004's measurement
-/// (owner, 2026-09-23).
+/// The bloat guard for `ja` + `en`.
 ///
 /// What SC-005 REQUIRES is the sentence, not the number: "cold start in any
 /// single language loads at most that language plus the `en` fallback". The
-/// 135,345 beside it was the corpus the day it was written, quoted as evidence
-/// of a >=86% reduction from 990,499 — and by 2026-09-23 it had no headroom
-/// left: three sentences for "remove one wallet from this device" went over it
-/// while still a 86.3% reduction.
+/// number is an early warning that the corpus is growing, and it is only worth
+/// having while it sits close to today's measurement.
 ///
-/// So this is now a guard against BLOAT rather than a restatement of the
-/// claim. At 270,690 a locale pair may be 72.7% smaller than the old
-/// everything-resident corpus instead of 86%, and the architecture that
-/// delivers SC-005 — one language plus `en`, never fifteen — is unchanged and
-/// still tested by `resident_bytes_track_the_active_language` below.
-///
-/// The cost, stated plainly: this will not fire until the corpus DOUBLES, so
-/// it is no longer an early warning. If one is wanted again, the number to
-/// keep is roughly today's plus a few KB, not this one.
-const SC005_BUDGET: usize = 270_690;
+/// It was doubled to 270,690 on the owner's word that morning, because three
+/// sentences for "remove one wallet from this device" had gone over it. Later
+/// the same day the Clear Signer's two cross-device channels were cut and 23
+/// strings went with them, which put `ja` + `en` back at 128,800 — under the
+/// original figure. A budget at twice the measurement would not fire until the
+/// corpus DOUBLED, which is not a warning, so it goes back to where it warns.
+const SC005_BUDGET: usize = 135_345;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {

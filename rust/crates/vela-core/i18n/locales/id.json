@@ -67,13 +67,7 @@
       "pageInsecure": "Gunakan halaman https, atau halaman di loopback perangkat ini sendiri — browser tidak akan menandatangani di tempat lain.",
       "pageForeign": "Passkey Anda milik getvela.app. Halaman di domain lain dapat menampilkan permintaan tetapi tidak dapat menandatanganinya.",
       "pageReset": "Gunakan halaman resmi",
-      "pageSave": "Simpan",
-      "tunnelTitle": "Tunnel",
-      "tunnelSubtitle": "Penyandingan dengan perangkat lain melewati tunnel ini. Tunnel hanya meneruskan pesan yang terenkripsi.",
-      "tunnelOfficial": "Resmi",
-      "tunnelInvalid": "Itu bukan alamat tunnel.",
-      "tunnelInsecure": "Gunakan alamat wss://, atau ws:// di loopback perangkat ini sendiri.",
-      "tunnelReset": "Gunakan tunnel resmi"
+      "pageSave": "Simpan"
     },
     "advanced": {
       "networksTitle": "Jaringan",

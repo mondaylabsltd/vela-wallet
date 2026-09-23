@@ -43,7 +43,6 @@
 	import RpcProvidersPanel from './ui/RpcProvidersPanel.svelte';
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SettingsNavList from './ui/SettingsNavList.svelte';
-	import SignerPageBody from './ui/SignerPageBody.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -330,25 +329,6 @@
 						/>
 					</FormRow>
 				{/each}
-				<section class="signer-page" aria-label={model.signing.page.title}>
-					<h2>{model.signing.page.title}</h2>
-					<p>{model.signing.page.subtitle}</p>
-					<SignerPageBody
-						page={model.signing.page}
-						onsave={(text) => onprefevent?.({ kind: 'signer-page', text })}
-						onreset={() => onprefevent?.({ kind: 'signer-page-reset' })}
-					/>
-				</section>
-				<!-- Spec 075: and the tunnel under it, the same row in both layouts. -->
-				<section class="signer-page" aria-label={model.signing.tunnel.title}>
-					<h2>{model.signing.tunnel.title}</h2>
-					<p>{model.signing.tunnel.subtitle}</p>
-					<SignerPageBody
-						page={model.signing.tunnel}
-						onsave={(text) => onprefevent?.({ kind: 'tunnel-page', text })}
-						onreset={() => onprefevent?.({ kind: 'tunnel-page-reset' })}
-					/>
-				</section>
 			{:else if page === 'networks'}
 				<NetworksPanel
 					rows={model.networks.rows}

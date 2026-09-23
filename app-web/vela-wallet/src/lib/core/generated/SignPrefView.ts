@@ -31,16 +31,4 @@ signer_url_error: string | null,
  * `getvela.app` keys). A page elsewhere can show a request but not sign
  * it, and Settings says so beside the address.
  */
-signer_uses_wallet_passkeys: boolean, 
-/**
- * Spec 075: the tunnel a cross-device pairing goes through. Always usable.
- */
-tunnel_url: string, 
-/**
- * `true` ⇒ the official tunnel.
- */
-tunnel_url_is_default: boolean, 
-/**
- * `"invalid"` | `"insecure"` — the last submitted tunnel was refused.
- */
-tunnel_url_error: string | null, };
+signer_uses_wallet_passkeys: boolean, };

@@ -578,7 +578,6 @@ pub struct WalletPage {
     signer_page_focus: Option<gpui::FocusHandle>,
     /// Spec 075: the tunnel, the same way — typed until Save, and the core
     /// says whether it is one (https/wss only, loopback allowed).
-    tunnel_draft: Option<String>,
     tunnel_focus: Option<gpui::FocusHandle>,
     /// Which network card's probes have been asked for, so opening one asks
     /// once rather than on every frame.
@@ -972,7 +971,6 @@ impl WalletPage {
             endpoint_focuses: Vec::new(),
             signer_page_draft: None,
             signer_page_focus: None,
-            tunnel_draft: None,
             tunnel_focus: None,
             settings_probed_network: None,
             settings_probed_panel: None,
@@ -4155,40 +4153,10 @@ impl WalletPage {
         if let Some(host) = self.send_host.as_ref() {
             channels.push(host.read(cx).clear_signer());
         }
-        let channel = channels.into_iter().find(|channel| {
-            channel.asking_place() || channel.waiting() || channel.ended().is_some()
-        })?;
-        let card = if channel.asking_place() {
-            // Asked before a port is bound or a tunnel room is taken: the
-            // answer decides which of the two even starts.
-            let answering = Arc::clone(&channel);
-            let cancel = Arc::clone(&channel);
-            signing_clear_signer::where_card(
-                theme,
-                &self.loc,
-                Arc::new(move |place, _window: &mut Window, _cx: &mut gpui::App| {
-                    answering.answer_place(Some(place));
-                }),
-                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
-                    cancel.answer_place(None);
-                },
-            )
-        } else if let Some(pairing) = channel.pairing() {
-            let (confirm, cancel) = (Arc::clone(&channel), Arc::clone(&channel));
-            let link = pairing.link.clone();
-            signing_clear_signer::pair_card(
-                theme,
-                &self.loc,
-                &pairing,
-                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
-                },
-                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
-                    confirm.confirm_code()
-                },
-                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel(),
-            )
-        } else if channel.waiting() {
+        let channel = channels
+            .into_iter()
+            .find(|channel| channel.waiting() || channel.ended().is_some())?;
+        let card = if channel.waiting() {
             let (reopen, cancel) = (Arc::clone(&channel), channel);
             signing_clear_signer::waiting_card(
                 theme,
@@ -8562,7 +8530,6 @@ impl WalletPage {
                     ),
             );
         }
-        let tunnel = self.settings_tunnel_row(theme, &view, window, cx);
         div()
             .flex()
             .flex_col()
@@ -8570,146 +8537,6 @@ impl WalletPage {
             .max_w(px(560.))
             .child(list)
             .child(section.child(actions))
-            .child(tunnel)
-    }
-
-    /// Spec 075: the tunnel a cross-device pairing goes through — the Clear
-    /// Signer page row's twin, and deliberately so.
-    ///
-    /// They are two addresses with one rule (https/wss, or this device's own
-    /// loopback), one badge ("Official", or the host a person named), one
-    /// field, one Save that asks the core and one reset that appears only once
-    /// the value is not the default. A person who has moved one has not moved
-    /// the other: the page is where they read a request, the tunnel is only
-    /// what carries the sealed bytes to it, and it never sees either.
-    fn settings_tunnel_row(
-        &mut self,
-        theme: &Theme,
-        view: &vela_core::app::sign_pref::SignPrefView,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> Div {
-        use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
-        let s = &self.settings;
-        let badge = pill(
-            Tone::Neutral,
-            if view.tunnel_url_is_default {
-                s.tunnel_official.clone()
-            } else {
-                SharedString::from(page_host(&view.tunnel_url))
-            },
-        );
-        let refused = match view.tunnel_url_error.as_deref() {
-            Some("insecure") => Some(s.tunnel_insecure.clone()),
-            Some(_) => Some(s.tunnel_invalid.clone()),
-            None => None,
-        };
-        let (title, subtitle, save, reset) = (
-            s.tunnel_title.clone(),
-            s.tunnel_subtitle.clone(),
-            s.signer_page_save.clone(),
-            s.tunnel_reset.clone(),
-        );
-        let focus = self
-            .tunnel_focus
-            .get_or_insert_with(|| cx.focus_handle())
-            .clone();
-        let typed = self
-            .tunnel_draft
-            .clone()
-            .unwrap_or_else(|| view.tunnel_url.clone());
-        let page = cx.entity();
-        let mut section = div()
-            .flex()
-            .flex_col()
-            .gap(px(12.))
-            .child(editable_url_field(
-                "settings-signer-tunnel",
-                theme,
-                Some(title),
-                &typed,
-                SharedString::from(vela_core::clear_signer::DEFAULT_TUNNEL_URL),
-                Some(&badge),
-                Some(subtitle),
-                refused.is_some().then_some(Tone::Error),
-                &focus,
-                window,
-                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
-                    page.update(cx, |page, cx| {
-                        page.tunnel_draft = Some(text);
-                        cx.notify();
-                    });
-                },
-                |_, _| {},
-            ));
-        if let Some(refused) = refused {
-            section = section.child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.error_base)
-                    .child(refused),
-            );
-        }
-        let mut actions = div().flex().items_center().gap(px(16.)).child(
-            div()
-                .id("settings-signer-tunnel-save")
-                .h(px(36.))
-                .px(px(16.))
-                .rounded(px(10.))
-                .flex()
-                .flex_none()
-                .items_center()
-                .cursor_pointer()
-                .bg(theme.bg_raised)
-                .border_1()
-                .border_color(theme.divider)
-                .hover(|el| el.bg(theme.bg_sunken))
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_base)
-                .child(save)
-                .on_click(cx.listener(move |page, _, _, cx| {
-                    let text = page.tunnel_draft.clone().unwrap_or_else(|| typed.clone());
-                    let stored = resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                        pref.dispatch(SignPrefEvent::TunnelUrlSubmitted { text }, cx);
-                        pref.view().tunnel_url_error.is_none()
-                    });
-                    if stored {
-                        page.tunnel_draft = None;
-                    }
-                    cx.notify();
-                })),
-        );
-        if !view.tunnel_url_is_default {
-            actions = actions.child(
-                div()
-                    .id("settings-signer-tunnel-reset")
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .cursor_pointer()
-                    .on_click(cx.listener(|page, _, _, cx| {
-                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                            pref.dispatch(SignPrefEvent::TunnelUrlReset, cx);
-                        });
-                        page.tunnel_draft = None;
-                        cx.notify();
-                    }))
-                    .child(icon_img(
-                        &mut self.icons,
-                        Icon::RefreshCw,
-                        false,
-                        theme.accent,
-                        14.,
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.accent)
-                            .child(reset),
-                    ),
-            );
-        }
-        section.child(actions)
     }
 
     fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {

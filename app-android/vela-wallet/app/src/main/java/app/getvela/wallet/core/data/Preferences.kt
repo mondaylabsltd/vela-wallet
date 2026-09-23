@@ -114,8 +114,9 @@ class Preferences(
             KEY_TEXT_SCALE,
             "vela.formats",
             RETIRED_AVATAR_STYLE,
-            // Spec 075, renamed 2026-09-23: the core MOVES this to
-            // `vela.clearSignerTunnel`, so the migration has to see it.
+            // Spec 075's pairing service, retired 2026-09-23: the core REMOVES
+            // both spellings, so the migration has to see them.
+            KeyValueStore.Keys.RETIRED_CLEAR_SIGNER_TUNNEL,
             KeyValueStore.Keys.RETIRED_CLEAR_SIGNER_RELAY,
         )
     }

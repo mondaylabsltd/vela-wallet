@@ -1,16 +1,19 @@
 // Where requests come in, and where the answers go back.
 //
-// Six channels, one shape. Every channel opens a SESSION (spec 075 §1.5):
+// Four channels, one shape. Every channel opens a SESSION (spec 075 §1.5):
 //
 //   session.next()      → Promise<request | null>   null: the session is over,
 //                                                    and session.endReason says why
 //   session.end(reason)   the page ends it (says `bye` where the channel can)
 //   session.persistent    true when it carries several requests in order
-//                         (loopback WebSocket, postMessage, tunnel, BLE); the
-//                         URL fragment and the extension carry exactly one
-//   session.channel       'post' | 'url' | 'ws' | 'ext' | 'ble' | 'relay'
-//                         ('relay' is the tunnel: the `?ch=` token is protocol,
-//                          and the 2026-09-23 rename stopped at the wire)
+//                         (loopback WebSocket, postMessage); the URL fragment
+//                         and the extension carry exactly one
+//   session.channel       'post' | 'url' | 'ws' | 'ext'
+//
+// The two CROSS-DEVICE channels — a WebSocket tunnel and a BLE link — were
+// retired on 2026-09-23. The wallet's owner cut them because only a page the
+// signing device fetched itself can be checked against what it is supposed to
+// be, which is the property the Clear Signer exists for.
 //   session.answered      how many requests have been answered
 //
 // and every request has one shape:
@@ -24,8 +27,8 @@
 //
 // `originVerified` is the only claim this layer makes that the sheet acts on:
 // it is true ONLY where the browser itself vouches for the sender (postMessage,
-// extension messaging). A URL, a QR or a radio link carries whatever the
-// requester typed, and the sheet says so out loud. `channel` is the other fact
+// extension messaging). A URL carries whatever the requester typed, and the
+// sheet says so out loud. `channel` is the other fact
 // resolve.js uses: only an app channel or a verified Vela origin may ask for a
 // key to be created.
 //
@@ -430,117 +433,9 @@ window.VelaCS = window.VelaCS || {};
     });
   }
 
-  // --- 4. cross-device: BLE ---------------------------------------------------
-
-  function fromBle(options) {
-    return ns.transport.ble.connect(options).then(function (channel) {
-      var session = new Session('ble', true, options);
-      session.comparisonCode = channel.session.code;
-      // What the peer calls itself, from its hello. Nothing verifies it on
-      // this channel, so it travels as a claim and is drawn as one.
-      session.requesterApp = channel.session.peerApp || '';
-      session.requesterIcon = channel.session.peerIcon || '';
-      channel.onMessage(function (message) {
-        if (message.t === 'bye') {
-          session.finish('bye');
-          channel.disconnect();
-          return;
-        }
-        if (message.t !== 'intent') return;
-        var id = message.id;
-        session.push({
-          id: id,
-          intent: message.intent,
-          context: message.context || {},
-          channel: 'ble',
-          originVerified: false, // proximity is proven, identity is not
-          requester: message.intent && message.intent.origin,
-        }, function (kind, body) {
-          return channel.send(Object.assign({ t: kind, id: id }, body));
-        });
-      });
-      if (channel.device && channel.device.addEventListener) {
-        channel.device.addEventListener('gattserverdisconnected', function () { session.finish('closed'); });
-      }
-      session.close = function (reason) {
-        channel.send({ t: 'bye', reason: reason || 'done' })
-          .then(function () { channel.disconnect(); }, function () { channel.disconnect(); });
-      };
-      return session;
-    });
-  }
-
-  // --- 5. cross-device: the tunnel ---------------------------------------------
-
-  function fromTunnel(options) {
-    var link = ns.transport.tunnel.parseLink(location.hash);
-    if (!link) return null;
-    scrubFragment();
-
-    var session = new Session('relay', true, options);
-    if (!link.valid) {
-      session.finish('error', 'ui.tunnelBadLink');
-      return Promise.resolve(session);
-    }
-    var ENDS = {
-      foreign: 'ui.tunnelForeign',
-      expired: 'ui.tunnelExpired',
-      taken: 'ui.tunnelTaken',
-      bad: 'ui.tunnelBadLink',
-      closed: 'ui.tunnelClosed',
-    };
-    var channel = ns.transport.tunnel.connect(link, {
-      onOpen: function () { session.emit('onState', 'tunnelWaiting'); },
-      onJoined: function () { session.emit('onState', 'tunnelJoined'); },
-      onCode: function (code) {
-        session.comparisonCode = code;
-        session.emit('onCode', code);
-      },
-      onLeft: function () {
-        // The keys that request was sealed under are gone with the wallet.
-        session.comparisonCode = null;
-        session.lose();
-        session.emit('onState', 'tunnelLeft');
-      },
-      onMessage: function (message) {
-        if (message.t === 'bye') {
-          session.finish('bye');
-          channel.close('done');
-          return;
-        }
-        if (message.t !== 'intent') return;
-        var id = message.id;
-        var epoch = channel.epoch;
-        session.push({
-          id: id,
-          intent: message.intent,
-          context: message.context || {},
-          channel: 'relay',
-          // The wallet's key matched the link and the person compared the
-          // code — but the site a wallet names is still its own word.
-          originVerified: false,
-          requester: message.intent && message.intent.origin,
-        }, function (kind, body) {
-          // An answer sealed for a session the wallet has since left would
-          // reach nobody who asked for it.
-          if (channel.epoch !== epoch) return Promise.resolve();
-          return channel.send(Object.assign({ t: kind, id: id }, body));
-        });
-      },
-      onEnd: function (reason) {
-        if (reason === 'closed' && session.received) session.finish('closed');
-        else session.finish('error', ENDS[reason] || 'ui.tunnelClosed');
-      },
-    }, options.tunnel || {});
-    session.close = function (reason) { channel.close(reason || 'done'); };
-    session.tunnel = channel;
-    return Promise.resolve(session);
-  }
-
   /**
    * Open a session. `?ch=` forces a channel; otherwise the first that
-   * recognises the situation wins. BLE is never automatic: it needs a user
-   * gesture. `options` carries the page's callbacks: onCode(code),
+   * recognises the situation wins. `options` carries the page's callbacks:
    * onGone(request), onWaiting(), onState(name), onEnd(session).
    */
   function open(options) {
@@ -551,8 +446,6 @@ window.VelaCS = window.VelaCS || {};
       url: function () { return fromUrlFragment(options); },
       ws: function () { return fromWebSocket(options); },
       ext: function () { return fromExtension(options); },
-      ble: function () { return fromBle(options); },
-      relay: function () { return fromTunnel(options); },
     };
 
     if (forced) {
@@ -562,7 +455,7 @@ window.VelaCS = window.VelaCS || {};
       return forcedResult || Promise.reject(new Error('channel ' + forced + ' found no request'));
     }
 
-    var order = ['ext', 'relay', 'url', 'post'];
+    var order = ['ext', 'url', 'post'];
     for (var i = 0; i < order.length; i++) {
       var attempt = adapters[order[i]]();
       if (attempt) return attempt;
@@ -588,7 +481,5 @@ window.VelaCS = window.VelaCS || {};
     fromUrlFragment: fromUrlFragment,
     fromWebSocket: fromWebSocket,
     fromExtension: fromExtension,
-    fromBle: fromBle,
-    fromTunnel: fromTunnel,
   };
 })(window.VelaCS);

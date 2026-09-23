@@ -109,16 +109,9 @@
 
   function waiting(update) {
     waitingState = Object.assign({}, waitingState || {}, update || {});
-    // `state.code` first: the handshake derives the six digits BEFORE
-    // `intake.open()` resolves, so `session` is still null the first time this
-    // draws. Reading only the session meant the page showed nothing to compare
-    // until a request arrived — which is after the person has already
-    // confirmed on the other device, i.e. after the only moment the comparison
-    // was for (found on the radio, spec 075 T043).
-    waitingState.code = state.code || (session && session.comparisonCode);
     // Who is on the other end, and whether anything vouches for it. The
     // postMessage and extension channels are verified by the browser itself;
-    // a socket, a radio and a tunnel are not.
+    // a loopback socket and a URL fragment are not.
     waitingState.requesterApp = (session && session.requesterApp) || '';
     waitingState.requesterIcon = (session && session.requesterIcon) || '';
     waitingState.requesterVerified = !!(session && session.channel === 'post')
@@ -129,7 +122,7 @@
   }
 
   function channelLine() {
-    return session && { ws: 'value.viaApp', relay: 'value.viaTunnel', ble: 'value.viaBle' }[session.channel];
+    return session && { ws: 'value.viaApp' }[session.channel];
   }
 
   // A request was answered. A session that carries more goes back to a calm
@@ -354,7 +347,6 @@
       rpId: ns.signer.relyingPartyId(),
     });
     var view = ns.resolve(request.intent, context);
-    view.pairing = session.comparisonCode || null;
     state.kind = view.kind === 'ceremony' ? view.ceremony.kind : 'sign';
     if (view.kind === 'ceremony') showCeremony(request, view, context);
     else showSigning(request, view, context);
@@ -433,24 +425,6 @@
   function startSession() {
     ns.intake
       .open({
-      onCode: function (code) {
-        state.code = code;
-        if (!current) {
-          waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.tunnelConfirm', originKey: channelLine() });
-          say('ui.tunnelConfirm');
-        } else {
-          var codes = slot.querySelectorAll('.pairing-code b');
-          for (var i = 0; i < codes.length; i++) codes[i].textContent = code;
-        }
-      },
-      onState: function (name) {
-        if (current) return;
-        var notes = { tunnelWaiting: 'ui.tunnelWaiting', tunnelJoined: 'ui.tunnelJoined', tunnelLeft: 'ui.tunnelLeft' };
-        if (notes[name]) {
-          waiting({ titleKey: 'ui.waitingForWallet', noteKey: notes[name], originKey: 'value.viaTunnel' });
-          say(notes[name]);
-        }
-      },
       // The loopback socket is slow to open only when the browser is asking
       // the person first (Local Network Access).
       onWaiting: function () { say('ui.waitingWallet'); },
@@ -463,63 +437,22 @@
         var slider = slot.querySelector('.slide');
         if (slider) slider.classList.add('slide-off');
         window.__slider = null;
-        say(session && session.channel === 'relay' && !session.ended ? 'ui.tunnelLeft' : 'ui.walletGone');
+        say('ui.walletGone');
         phase('gone');
-        // The session may carry on (a tunnel wallet coming back); listen again.
-        // `lose()` runs before a session is marked ended, so wait a tick.
+        // The session may carry on; listen again. `lose()` runs before a
+        // session is marked ended, so wait a tick.
         setTimeout(loop, 0);
       },
     })
       .then(function (opened) {
         session = opened;
         state.channel = opened.channel;
-        if (opened.channel === 'relay' && !opened.ended) {
-          waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.tunnelConnecting', originKey: 'value.viaTunnel' });
-          say('ui.tunnelConnecting');
-        }
         loop();
       })
       .catch(function (error) {
-        // A person cannot act on "Failed to execute 'requestDevice' on
-        // 'Bluetooth'". Say what happened and leave the way back.
-        if (nearby) {
-          phase('waiting');
-          say(/gesture/i.test(String(error && error.message)) ? 'ui.bleNeedsPress' : 'ui.bleNoDevice');
-          offerToConnect();
-          return;
-        }
         say(String(error.message || error));
       });
   }
 
-  // `?ch=ble` is the wallet saying "I am advertising" — the page answers with
-  // the one affordance Web Bluetooth requires.
-  var nearby = new URLSearchParams(location.search).get('ch') === 'ble';
-
-  function offerToConnect() {
-    var existing = document.getElementById('ble-connect');
-    if (existing) existing.remove();
-    var button = document.createElement('button');
-    button.id = 'ble-connect';
-    button.type = 'button';
-    button.className = 'primary';
-    button.textContent = t('ui.bleConnect');
-    button.addEventListener('click', function () {
-      button.disabled = true;
-      say('ui.bleConnecting');
-      startSession();
-    });
-    slot.appendChild(button);
-    // The tests press this the way a person does.
-    window.__bleConnect = button;
-  }
-
-  if (nearby) {
-    phase('waiting');
-    say('ui.blePress');
-    waiting({ titleKey: 'ui.bleTitle', noteKey: 'ui.blePress', originKey: 'value.viaBle' });
-    offerToConnect();
-  } else {
-    startSession();
-  }
+  startSession();
 })(window.VelaCS);

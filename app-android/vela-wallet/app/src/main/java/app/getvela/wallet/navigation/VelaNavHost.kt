@@ -113,7 +113,6 @@ import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionRoute
 import app.getvela.wallet.feature.onboarding.flow.CableQrSheet
 import app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel
-import app.getvela.wallet.feature.signing.clearsigner.ClearSignerSheets
 import app.getvela.wallet.feature.onboarding.flow.CreateFlowScreen
 import app.getvela.wallet.feature.onboarding.flow.EndpointSheet
 import app.getvela.wallet.feature.onboarding.flow.FlowSheet
@@ -1923,8 +1922,6 @@ fun VelaNavHost(
                         },
                         onSignerUrlSave = settings::submitSignerUrl,
                         onSignerUrlReset = settings::resetSignerUrl,
-                        onTunnelUrlSave = settings::submitTunnelUrl,
-                        onTunnelUrlReset = settings::resetTunnelUrl,
                         // Spec 072: the providers page loads the saved keys and
                         // tests them; the endpoints page probes; the wizard starts
                         // clean — the phone web's own open events.
@@ -2028,15 +2025,6 @@ fun VelaNavHost(
                 )
             }
         }
-        // Where the signer is, the pairing code for another device, and the
-        // six digits — every one of them BEFORE anything is sent.
-        ClearSignerSheets(
-            state = clearSignerSheet,
-            onWhere = { route -> clearSignerHost.chooseWhere(route) },
-            onConfirmCode = clearSignerHost::confirmCode,
-            onCancel = clearSignerHost::cancel,
-            onGrantBluetooth = clearSignerHost::retryBluetooth,
-        )
     }
     // The scan method's "Location needs to be on" explainer (API ≤30) — ABOVE
     // the QR sheet, since the ceremony that raised it is the one showing the QR.

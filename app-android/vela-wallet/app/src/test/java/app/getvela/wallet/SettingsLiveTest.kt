@@ -30,6 +30,7 @@ import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -688,24 +689,9 @@ class SettingsLiveTest {
 
         fun rowValue(id: String) = model.sections.flatMap { it.rows }.single { it.id == id }.value
         assertEquals(strings.t("settings.signing.pageOfficial"), rowValue(SettingsFixtures.SIGNER_PAGE_ROW))
-        assertEquals(strings.t("settings.signing.tunnelOfficial"), rowValue(SettingsFixtures.TUNNEL_ROW))
-        assertEquals(strings.t("settings.signing.tunnelTitle"), model.signerTunnel.title)
-        // Nothing to reset while it IS the official tunnel.
-        assertNull(model.signerTunnel.reset)
-
-        // A tunnel of the person's own: the row shows its host, and the sheet
-        // offers the way back.
-        val mine = view.copy(
-            tunnel_url = "wss://tunnel.example.test/",
-            tunnel_url_is_default = false,
-            tunnel_url_error = "insecure",
-        )
-        val chosen = SettingsLive.withSignPref(base(), mine, strings)
-        fun chosenValue(id: String) = chosen.sections.flatMap { it.rows }.single { it.id == id }.value
-        assertEquals("tunnel.example.test", chosenValue(SettingsFixtures.TUNNEL_ROW))
-        assertEquals(strings.t("settings.signing.tunnelReset"), chosen.signerTunnel.reset)
-        assertEquals(strings.t("settings.signing.tunnelInsecure"), chosen.signerTunnel.error)
-        // A tunnel is blind, so whose it is says nothing about the passkeys.
-        assertNull(chosen.signerTunnel.foreign)
+        // The pairing service is gone with the channel (owner, 2026-09-23):
+        // no row, no sheet, and nothing in the advanced block that names one.
+        val ids = model.sections.flatMap { it.rows }.map { it.id }
+        assertFalse(ids.any { it.contains("tunnel", ignoreCase = true) })
     }
 }

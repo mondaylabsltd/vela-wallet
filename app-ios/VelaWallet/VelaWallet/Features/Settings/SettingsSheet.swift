@@ -112,21 +112,6 @@ struct SettingsSheet: View {
                             }
                         )
                     }
-                case .signerTunnel:
-                    if let tunnel = model.tunnel {
-                        SignerPageSheetBody(
-                            model: tunnel,
-                            onSave: { text in
-                                if onSaveTunnelUrl?(text) == true { onDismiss() }
-                            },
-                            onReset: onResetTunnelUrl.map { reset in
-                                {
-                                    reset()
-                                    onDismiss()
-                                }
-                            }
-                        )
-                    }
                 case .numberFormat:
                     SelectSheetBody(
                         sheet: model.numberSheet,

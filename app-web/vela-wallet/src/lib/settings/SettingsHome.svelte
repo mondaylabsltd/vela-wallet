@@ -48,7 +48,6 @@
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SelectSheetBody from './ui/SelectSheetBody.svelte';
 	import SettingsRow from './ui/SettingsRow.svelte';
-	import SignerPageBody from './ui/SignerPageBody.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -143,8 +142,6 @@
 		'time-format': 'time-format',
 		'fee-speed': 'fee-speed',
 		'sign-with': 'sign-with',
-		'clear-signer-page': 'signer-page',
-		'clear-signer-tunnel': 'tunnel-page',
 		feedback: 'feedback'
 	};
 
@@ -226,10 +223,6 @@
 				return model.feeSpeedSheet.title;
 			case 'sign-with':
 				return model.signWithSheet.title;
-			case 'signer-page':
-				return model.signerPage.title;
-			case 'tunnel-page':
-				return model.tunnelPage.title;
 			case 'clear-caches':
 				return model.clearCachesSheet.title;
 			// The row being cleared or removed names it: "localhost:8814",
@@ -268,10 +261,6 @@
 				return model.feeSpeedSheet.subtitle;
 			case 'sign-with':
 				return model.signWithSheet.subtitle;
-			case 'signer-page':
-				return model.signerPage.subtitle;
-			case 'tunnel-page':
-				return model.tunnelPage.subtitle;
 			case 'feedback':
 				return model.feedback.subtitle;
 			default:
@@ -519,22 +508,6 @@
 							onprefevent?.({ kind: 'sign-with', id });
 							close();
 						}}
-					/>
-				{:else if overlay === 'signer-page'}
-					<!-- Stays open on Save: a refused address is answered under the
-					     field, and an accepted one shows here as the page in force. -->
-					<SignerPageBody
-						page={model.signerPage}
-						onsave={(text) => onprefevent?.({ kind: 'signer-page', text })}
-						onreset={() => onprefevent?.({ kind: 'signer-page-reset' })}
-					/>
-				{:else if overlay === 'tunnel-page'}
-					<!-- Spec 075: the same body, for the tunnel a pairing with another
-					     device goes through. Same rules, same core, same shape. -->
-					<SignerPageBody
-						page={model.tunnelPage}
-						onsave={(text) => onprefevent?.({ kind: 'tunnel-page', text })}
-						onreset={() => onprefevent?.({ kind: 'tunnel-page-reset' })}
 					/>
 				{:else if overlay === 'clear-storage-item' && pending}
 					<ConfirmSheet

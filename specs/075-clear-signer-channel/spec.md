@@ -2,7 +2,7 @@
 
 **Feature Branch**: `075-clear-signer-channel` (on `074-polish`)
 **Created**: 2026-09-22
-**Status**: In progress
+**Status**: In progress — **narrowed on 2026-09-23**, see "What the owner cut" below
 **Input**: Owner, 2026-09-22, after testing 071:
 
 > 但是我没看到呀 创建/登录/转账/dapp签名/公钥备份 等 都只有 这台设备 手机或平板 USB 安全密钥
@@ -26,9 +26,46 @@ the owner and are rewritten there:
 
 - "签名页永远不创建 passkey" (the signing page never creates a passkey) → it creates one when
   the wallet's CREATE flow asks, as its own request, never inside a signature.
-- "没有服务器。没有中继。跨设备走 BLE。" (no server, no relay; cross-device goes over BLE) →
-  cross-device goes over a **tunnel** (WebSocket) or **BLE**. The tunnel is blind: it only
-  sees ciphertext (contracts/tunnel.md).
+
+The second superseded ruling was itself superseded the next day; see below.
+
+## What the owner cut (2026-09-23)
+
+Everything cross-device is **gone**. The Clear Signer has ONE channel: the page in this
+device's own browser, talking to a socket on this device's own loopback.
+
+> 我觉得客户端支持回环 + 蓝牙就够了，不需要 websocket 隧道
+>
+> 我确定砍掉蓝牙
+>
+> web 就不支持清晰签名器好了
+
+What went, and what it cost:
+
+| Gone | Why |
+|---|---|
+| The WebSocket **tunnel**, its three host crates, the pairing link, the QR, the room | A service the wallet had to reach, for a path only some devices could use. The crates had already left for their own repository; now they have no caller. |
+| **BLE**: both peripherals, the framing, the six-digit comparison code | The signer page needs Web Bluetooth, which Safari and every iPhone lack — and a page on another device is one this device never fetched. |
+| The **end-to-end session** (`secure.rs`, `secure.js`, ECDH + HKDF + AES-GCM) and its vectors | It existed for the two cross-device channels. The loopback socket is plaintext on `127.0.0.1` behind a one-time token and an `Origin` check. |
+| The Clear Signer in the **web wallet**, entirely | It had only `postMessage`; see the note below. |
+
+**The reason, in one line.** Only a page THIS device fetched can be checked against what
+it is supposed to be. That check — hash the bytes, compare against a list compiled into the
+client — is what the Clear Signer's whole premise (you see what you sign) rests on, and it
+is impossible when the page is on somebody else's device. It is specified separately.
+
+**What this costs.** Loopback defends against a compromised *wallet*: the page is a
+different origin the wallet cannot forge, so a compromised wallet still cannot sign by
+itself. It does NOT defend against a compromised *machine* — malware that can drive the
+browser can show one thing and sign another. BLE defended that and no longer does. Stated
+here so nobody rediscovers it as a surprise.
+
+**And on the web.** A wallet whose ONLY key is a Clear Signer key cannot be signed with
+from the web wallet at all. The web says so by name ("this key lives behind X, which only
+the Vela app can open") rather than quietly asking a platform sheet for a key no
+authenticator on that device holds.
+
+## The page's invariant
 
 The page's founding invariant stays and is extended: **it signs only what it derived
 itself.** A sign-in or a proof is a challenge the page generates or fetches from the
@@ -57,19 +94,14 @@ A send, a dApp request and the key backup use the Clear Signer:
 The proofs inside create/recover (verify, recover ×2, member) run on the same route as the
 ceremony that made or found the key.
 
-### US4: Across devices (P2)
-- **Tunnel.** The wallet shows a QR code and a link. Another device opens the signer page
-  from it, and both screens show the same six-digit code; the person confirms it on the
-  wallet, and the request goes through an end-to-end-encrypted tunnel. The tunnel is written
-  in Rust and runs in Docker or as a Cloudflare Worker.
-- **BLE.** A native wallet advertises; a Chrome signer page nearby connects over BLE GATT
-  (PROTOCOL.md §1–4), with the same code check.
+### ~~US4: Across devices (P2)~~ — WITHDRAWN 2026-09-23
+Built, then cut. See "What the owner cut" above.
 
 ### US5: Any shell, same device (P1)
 - Android, iOS and the desktop reach a signer page on the same device over a **loopback
   WebSocket** (the desktop moves off URL fragment + callback onto the phones' channel, the
-  same Rust session).
-- The web wallet uses `postMessage`, since a page cannot listen on a port.
+  same Rust session). This is now the ONLY channel.
+- The web wallet does not offer the Clear Signer at all.
 
 ## Requirements
 
@@ -95,24 +127,21 @@ ceremony that made or found the key.
   - an assertion's clientDataJSON challenge is the one the page declared for that request
     kind, and its origin is the page's;
   - a signing assertion verifies against the key (as 071).
-- **FR-006** Cross-device: the tunnel (contracts/tunnel.md); BLE per PROTOCOL.md §1–4. Both run
-  the same session code in the core (Rust) and in the page (`lib/transport/secure.js`),
-  checked against shared vectors.
-- **FR-007** Settings: "Clear Signer page" (071) plus "Tunnel" (default
-  `wss://tunnel.getvela.app`, same URL rules).
+- **FR-006** ~~Cross-device~~ — WITHDRAWN 2026-09-23. There is one channel: the loopback
+  WebSocket, plaintext on `127.0.0.1` behind a one-time token and an `Origin` check.
+- **FR-007** Settings: "Clear Signer page" (071). ~~plus "Tunnel"~~ — withdrawn with FR-006.
 
 ## Success criteria
 
-- **SC-001** On each of the four shells, the create, sign-in, send, dApp and backup choosers
-  show five routes (auto + four) where they showed four; a test on each shell pins it.
+- **SC-001** On each of the three NATIVE shells, the create, sign-in, send, dApp and backup
+  choosers show five routes (auto + four) where they showed four; a test on each shell pins
+  it. The web wallet shows four, and is pinned to NOT offering the Clear Signer.
 - **SC-002** On the Android phone, a wallet is created through the Clear Signer page, signs
   a send that lands on chain, and signs in again after its local record is removed.
-- **SC-003** A cross-device pass: the phone's wallet and the Mac's Chrome signer page pair
-  through the tunnel (native host and Worker host), and a send signed there lands.
+- ~~**SC-003** A cross-device pass~~ — WITHDRAWN 2026-09-23 with FR-006.
 - **SC-004** The page refuses:
   - a sign-in or proof whose challenge it did not derive;
-  - a create from a non-wallet requester;
-  - a tunnel requester whose key does not match the link.
+  - a create from a non-wallet requester.
 
   Hostile-intent tests cover each refusal.
 
@@ -203,3 +232,34 @@ content pinning is not defending against "somebody distributed a fake page"; it
 defends against "the person's own domain served bad bytes", which is a smaller
 and better-understood problem (a static file, SRI on every script, a strict CSP,
 and a recorded hash as the tripwire).
+
+### Where that argument stands after 2026-09-23
+
+The half of it about cross-device is moot: there is no cross-device channel.
+What is left is the case the owner then pushed on, and pushed correctly — if
+the only channel is this device's own browser, the client can fetch the page
+itself and check it before opening it.
+
+Two of the objections above survive and two do not:
+
+- **"The app serves the page itself" is ruled OUT, definitively.** Serving from
+  loopback moves the origin to `127.0.0.1`, and the keys are bound to the page's
+  origin. A wallet that can serve the page can serve a lying page and sign with
+  the same key — which destroys the property the Clear Signer exists for. This
+  is stronger than "it trades my own deployment for the app I installed": it is
+  not a trade, it is a hole.
+- **"The wallet's fetch is not the browser's fetch" survives, and is the crux.**
+  A discriminating server can serve one thing to the check and another to the
+  navigation.
+- **A page that self-reports its hash is still worthless.** Unchanged.
+- **The check is still worth doing.** The realistic attack is a replaced build
+  served to everyone, which one fetch catches. It must be described as
+  "detects a build that does not match the published list", not "prevents".
+
+What was worked out afterwards, and belongs in its own spec rather than here:
+a hash set compiled into the client (able to shrink, not only grow), a
+content-addressed URL, a per-device allow-list for a self-hosted page and a
+per-device deny-list that outranks everything, a check made from a hidden
+WebView so its request is the browser's own shape, decoupled in TIME from any
+signing so the server cannot correlate, and a Service Worker that pins the page
+after first visit so the server leaves the loop entirely.

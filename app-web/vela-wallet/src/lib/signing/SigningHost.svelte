@@ -19,7 +19,7 @@
 	 * defeated at the last step.
 	 */
 	import SigningSheetView from '$lib/signing/SigningSheet.svelte';
-	import { buildSigningModel, clearSignerModel, signWithModel } from '$lib/signing/live';
+	import { buildSigningModel, signWithModel } from '$lib/signing/live';
 	import { signingSheet } from '$lib/signing/core/sheet.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { session } from '$lib/session/core/session.svelte';
@@ -33,8 +33,6 @@
 	import { onMount } from 'svelte';
 	import { setSignMethod } from '$lib/onboarding/core/passkey';
 	import { signPreference } from '$lib/settings/core/sign-pref.svelte';
-	import { clearSignerSession } from '$lib/signing/core/clear-signer.svelte';
-	import ClearSignerSheet from '$lib/signing/ui/ClearSignerSheet.svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -191,9 +189,6 @@
 		signWithOpen = false;
 	}
 
-	/** The Clear Signer's sheet: waiting on its page, or the sentence it ended with. */
-	const clearSigner = $derived(clearSignerModel(clearSignerSession.view, messages));
-
 	const model = $derived.by(() => {
 		if (!identity) return null;
 		const built = buildSigningModel({
@@ -307,20 +302,3 @@
 	/>
 {/if}
 
-<!--
-	Whichever surface the signature started from — this sheet, the send screen,
-	the key backup — the Clear Signer's waiting and its ending are drawn here,
-	over it, and that surface stays as it was underneath.
--->
-{#if clearSigner}
-	<ClearSignerSheet
-		model={clearSigner}
-		onreopen={() => clearSignerSession.reopen()}
-		onwhere={(where) => clearSignerSession.answerWhere(where)}
-		onconfirmcode={() => clearSignerSession.confirmCode()}
-		ondismiss={() =>
-			clearSigner?.waiting || clearSigner?.where !== undefined || clearSigner?.pair !== undefined
-				? clearSignerSession.cancel()
-				: clearSignerSession.dismiss()}
-	/>
-{/if}

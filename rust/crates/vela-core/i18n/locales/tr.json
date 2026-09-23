@@ -67,13 +67,7 @@
       "pageInsecure": "https bir sayfa ya da bu cihazın kendi loopback adresindeki bir sayfa kullanın — tarayıcı başka hiçbir yerde imzalamaz.",
       "pageForeign": "Geçiş anahtarlarınız getvela.app'e ait. Başka bir alan adındaki sayfa bir isteği gösterebilir ama imzalayamaz.",
       "pageReset": "Resmi sayfayı kullan",
-      "pageSave": "Kaydet",
-      "tunnelTitle": "Tünel",
-      "tunnelSubtitle": "Başka bir cihazla eşleşme bu tünel üzerinden yapılır. Tünel yalnızca şifreli mesajları iletir.",
-      "tunnelOfficial": "Resmi",
-      "tunnelInvalid": "Bu bir tünel adresi değil.",
-      "tunnelInsecure": "Bir wss:// adresi ya da bu cihazın kendi loopback'inde ws:// kullanın.",
-      "tunnelReset": "Resmi tüneli kullan"
+      "pageSave": "Kaydet"
     },
     "advanced": {
       "networksTitle": "Ağlar",

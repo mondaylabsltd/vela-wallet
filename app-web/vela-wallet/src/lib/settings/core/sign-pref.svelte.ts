@@ -36,10 +36,7 @@ const INITIAL: SignPrefView = {
 	signer_url: 'https://sign.getvela.app/',
 	signer_url_is_default: true,
 	signer_url_error: null,
-	signer_uses_wallet_passkeys: true,
-	tunnel_url: 'wss://tunnel.getvela.app',
-	tunnel_url_is_default: true,
-	tunnel_url_error: null
+	signer_uses_wallet_passkeys: true
 };
 
 class SignPreference {
@@ -119,16 +116,6 @@ class SignPreference {
 	/** Settings: back to the official page. */
 	resetSignerUrl(): void {
 		this.#loop?.dispatch({ type: 'signer_url_reset' });
-	}
-
-	/** Spec 075 — Settings: the tunnel, as typed. The core validates it. */
-	submitTunnelUrl(text: string): void {
-		this.#loop?.dispatch({ type: 'tunnel_url_submitted', text });
-	}
-
-	/** Settings: back to the official tunnel. */
-	resetTunnelUrl(): void {
-		this.#loop?.dispatch({ type: 'tunnel_url_reset' });
 	}
 
 	refresh(): void {

@@ -24,7 +24,6 @@ import { chainName, nativeSymbol } from '$lib/services/networks';
 import type { OperationToSign } from '$lib/services/safe-transaction';
 import { signPreference } from '$lib/settings/core/sign-pref.svelte';
 import type { AccountKey } from '$lib/onboarding/generated/AccountKey';
-import { clearSignerSession } from './core/clear-signer.svelte';
 import { signRoute, type DeviceKey } from './sign-route';
 
 export interface ChallengeSigner {
@@ -60,32 +59,16 @@ export async function signChallenge(
 		(record) => record.address.toLowerCase() === signer.account.toLowerCase()
 	);
 	// Spec 075: WHERE the key lives has the last word. A key minted or found
-	// through a Clear Signer page is signed there — by `auto`, and even when
-	// another route was chosen, because no platform sheet can see it.
+	// through a Clear Signer page can only be signed THERE — and the web wallet
+	// has no Clear Signer (owner, 2026-09-23), so it says so instead of asking
+	// a platform sheet for a key no authenticator on this device holds.
 	const route = signRoute(deviceKeysOf(account, signer), method);
-	if (route === null || route.method !== 'clear_signer') {
-		return signWithAny(toHex(challenge), signer.credentials, method);
+	if (route?.method === 'clear_signer') {
+		throw new Error(
+			`this key lives behind ${route.signerOrigin}, which only the Vela app can open`
+		);
 	}
-	const { chainId } = signer.request;
-	const name = account?.name;
-	return clearSignerSession.sign(
-		{
-			method: signer.request.method,
-			params: signer.request.params,
-			origin: signer.request.origin,
-			chainId,
-			chainName: chainName(chainId),
-			nativeSymbol: nativeSymbol(chainId),
-			account: signer.account,
-			accountName: name || undefined,
-			credentialIdsHex: signer.keys.map((key) => key.credentialId),
-			userOp: operation?.userOp,
-			calls: operation?.calls
-		},
-		challenge,
-		signer.keys,
-		route.signerOrigin
-	);
+	return signWithAny(toHex(challenge), signer.credentials, method);
 }
 
 /**
@@ -111,8 +94,7 @@ function deviceKeysOf(
 	}));
 }
 
-/** Abort whatever is signing: the passkey ceremony, or the wait on the Clear Signer. */
+/** Abort whatever is signing. */
 export function cancelChallenge(): void {
 	cancelSign();
-	clearSignerSession.cancel();
 }

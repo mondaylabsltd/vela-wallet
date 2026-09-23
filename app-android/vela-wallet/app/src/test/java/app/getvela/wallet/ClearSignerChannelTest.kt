@@ -75,21 +75,12 @@ class ClearSignerChannelTest {
     )
 
     /**
-     * Spec 075 asks WHERE the signer is before anything opens. Every test that
-     * drives a whole request answers "on this device" the moment the sheet is
-     * up, which is what a person tapping the first row does.
+     * There is ONE channel now (owner, 2026-09-23: the tunnel and Bluetooth
+     * both went), so nothing is asked before a request opens — the page is a
+     * Custom Tab on this phone's own loopback or it is nothing. Kept as a
+     * wrapper so the tests below still say where they are running.
      */
-    private fun <T> onThisDevice(channel: ClearSignerChannel, block: suspend () -> T): T = runBlocking {
-        val answering = launch(Dispatchers.Default) {
-            channel.state.first { it is ClearSignerChannel.State.Where }
-            channel.chooseWhere(thisDevice = true)
-        }
-        try {
-            block()
-        } finally {
-            answering.cancel()
-        }
-    }
+    private fun <T> onThisDevice(block: suspend () -> T): T = runBlocking { block() }
 
     @Test
     fun `a page that proves itself and signs this digest with this wallet's key is accepted`() {
@@ -104,7 +95,7 @@ class ClearSignerChannelTest {
                 page.drain()
             }
         }
-        val assertion = onThisDevice(channel) { channel.sign(request, digest, keys) }
+        val assertion = onThisDevice { channel.sign(request, digest, keys) }
         assertEquals("112233", assertion.credentialIdHex)
         assertTrue("DER, as the Safe envelope takes", assertion.signatureDerHex.startsWith("30"))
     }
@@ -126,7 +117,7 @@ class ClearSignerChannelTest {
                 page.drain()
             }
         }
-        val assertion = onThisDevice(channel) { channel.sign(request, digest, keys) }
+        val assertion = onThisDevice { channel.sign(request, digest, keys) }
         assertEquals("112233", assertion.credentialIdHex)
     }
 
@@ -139,7 +130,7 @@ class ClearSignerChannelTest {
                 page.receive()
             }
         }
-        val failure = failureOf(channel) { channel.sign(request, digest, keys) }
+        val failure = failureOf { channel.sign(request, digest, keys) }
         assertEquals(FailureKind.Cancelled, failure.kind)
         assertEquals("closed", channel.notice.value)
     }
@@ -156,7 +147,7 @@ class ClearSignerChannelTest {
                 page.drain()
             }
         }
-        val failure = failureOf(channel) { channel.sign(request, digest, keys) }
+        val failure = failureOf { channel.sign(request, digest, keys) }
         // The request stays open (contract §5): a cancelled ceremony, the reason on the notice.
         assertEquals(FailureKind.Cancelled, failure.kind)
         assertEquals("mismatch", channel.notice.value)
@@ -173,18 +164,18 @@ class ClearSignerChannelTest {
                 page.drain()
             }
         }
-        assertEquals("refused", failureOf(channel) { channel.sign(request, digest, keys) }.message)
+        assertEquals("refused", failureOf { channel.sign(request, digest, keys) }.message)
     }
 
     @Test
     fun `cancel and the five-minute clock both end the wait`() {
         lateinit var cancelling: ClearSignerChannel
         cancelling = channel { _, _ -> Thread.sleep(200); cancelling.cancel() }
-        assertEquals(FailureKind.Cancelled, failureOf(cancelling) { cancelling.sign(request, digest, keys) }.kind)
+        assertEquals(FailureKind.Cancelled, failureOf { cancelling.sign(request, digest, keys) }.kind)
         assertEquals(ClearSignerChannel.State.Idle, cancelling.state.value)
 
         val waiting = channel(timeoutMs = 300L) { _, _ -> }
-        assertEquals("timeout", failureOf(waiting) { waiting.sign(request, digest, keys) }.message)
+        assertEquals("timeout", failureOf { waiting.sign(request, digest, keys) }.message)
     }
 
     // --- spec 075: one page visit, several requests ---------------------------
@@ -291,26 +282,6 @@ class ClearSignerChannelTest {
         }
         assertEquals(ClearSignerAnswer.Cancelled, answer)
         assertEquals("no page was opened", 0, opened)
-    }
-
-    @Test
-    fun `nothing opens until the person says where the signer is`() {
-        var opened = 0
-        val channel = channel { _, _ -> opened += 1 }
-        val failure = runBlocking {
-            val cancelling = launch(Dispatchers.Default) {
-                channel.state.first { it is ClearSignerChannel.State.Where }
-                channel.cancel()
-            }
-            try {
-                runCatching { channel.sign(request, digest, keys) }.exceptionOrNull()
-            } finally {
-                cancelling.cancel()
-            }
-        }
-        assertEquals(0, opened)
-        assertEquals(FailureKind.Cancelled, (failure as PasskeyFailure).kind)
-        assertEquals(ClearSignerChannel.State.Idle, channel.state.value)
     }
 
     // --- the preference ------------------------------------------------------
@@ -463,9 +434,9 @@ class ClearSignerChannelTest {
         return integer() + integer()
     }
 
-    private fun failureOf(channel: ClearSignerChannel, block: suspend () -> Unit): PasskeyFailure {
+    private fun failureOf(block: suspend () -> Unit): PasskeyFailure {
         try {
-            onThisDevice(channel) { block() }
+            onThisDevice { block() }
         } catch (failure: PasskeyFailure) {
             return failure
         }

@@ -67,13 +67,7 @@
       "pageInsecure": "https のページ、またはこの端末のループバック上のページを使ってください。ブラウザはそれ以外の場所では署名しません。",
       "pageForeign": "パスキーは getvela.app のものです。他のドメインのページはリクエストを表示できても、署名はできません。",
       "pageReset": "公式ページを使う",
-      "pageSave": "保存",
-      "tunnelTitle": "トンネル",
-      "tunnelSubtitle": "別のデバイスとのペアリングはこのトンネルを経由します。トンネルが転送するのは暗号化されたメッセージだけです。",
-      "tunnelOfficial": "公式",
-      "tunnelInvalid": "トンネルのアドレスではありません。",
-      "tunnelInsecure": "wss:// のアドレス、またはこのデバイス自身のループバック上の ws:// を使ってください。",
-      "tunnelReset": "公式のトンネルを使う"
+      "pageSave": "保存"
     },
     "advanced": {
       "networksTitle": "ネットワーク",

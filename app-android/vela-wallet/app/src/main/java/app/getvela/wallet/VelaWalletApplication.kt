@@ -330,14 +330,6 @@ class AppContainer(private val app: Application) {
     var clearSignerTab: ClearSignerTab? = null
 
     /**
-     * Spec 075 T040: the Bluetooth route's platform side, attached by the
-     * activity in `onCreate` and let go in `onDestroy` — it needs the runtime
-     * permission launchers, which only an activity can register.
-     */
-    @Volatile
-    var clearSignerBleHost: app.getvela.wallet.feature.signing.clearsigner.ClearSignerBleHost? = null
-
-    /**
      * Spec 071: the fourth "Sign with" — one channel per process, one ceremony
      * at a time. The page is `sign_pref`'s; the words are the corpus'.
      */
@@ -352,20 +344,8 @@ class AppContainer(private val app: Application) {
                     refused = i18nRuntime.t("componentsUi.signing.clearSignerRefused"),
                     mismatch = i18nRuntime.t("componentsUi.signing.clearSignerMismatch"),
                     timeout = i18nRuntime.t("componentsUi.signing.clearSignerTimeout"),
-                    tunnelDown = i18nRuntime.t("componentsUi.signing.clearSignerTunnelDown"),
-                    bluetoothNeeded = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothNeeded"),
-                    bluetoothOff = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothOff"),
-                    bluetoothUnsupported =
-                        i18nRuntime.t("componentsUi.signing.clearSignerBluetoothUnsupported"),
-                    nearbyLost = i18nRuntime.t("componentsUi.signing.clearSignerNearbyLost"),
                 )
             },
-            // Spec 075 T040: the phone advertises as a GATT peripheral for a
-            // Clear Signer page open in a browser in the same room.
-            bleHost = { clearSignerBleHost },
-            // Spec 075: the tunnel a cross-device pairing goes through, and how
-            // this app names itself to the page.
-            tunnelUrl = { settings.signPref.value.tunnel_url },
             // Read by a person on the signer page, beside "the name and mark
             // it gave for itself" — so both are written for a person, not for
             // a log. Neither is proof of anything and the page says so; what

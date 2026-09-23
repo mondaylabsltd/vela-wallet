@@ -264,36 +264,3 @@ export interface SigningModel {
 	panelTitle: string;
 }
 
-/**
- * The Clear Signer's own sheet (spec 071), over whatever a signature started
- * from: while the page is open, "Waiting…" with its hint, "Open the page
- * again" and Cancel; after, the one sentence the ending gets and a way to
- * close it. Nothing was signed in any ending but one, and that one draws
- * nothing — the signature simply goes on as a passkey's would.
- */
-export interface ClearSignerModel {
-	waiting: boolean;
-	title: string;
-	hint?: string;
-	/** Only while waiting. */
-	reopen?: string;
-	/** Cancel while waiting; close after. */
-	dismiss: string;
-	/**
-	 * Spec 075 — WHERE the person's Clear Signer is: on this device (a window
-	 * this wallet opens) or on another one (the tunnel). Asked before anything
-	 * opens, because the two are different places, not different settings.
-	 */
-	where?: { thisDevice: string; otherDevice: string };
-	/**
-	 * Spec 075 — pairing with another device: the link as a code to scan and as
-	 * text to copy, and the line that says this side is waiting.
-	 */
-	pair?: { hint: string; link: string; qr: QrCode; copy: string; waiting: string };
-	/**
-	 * Spec 075 — the six digits both screens show. The person confirms them
-	 * HERE, and only then is anything sent: it is the one thing standing
-	 * between this wallet and a page that is not the one they opened.
-	 */
-	code?: { text: string; confirm: string };
-}

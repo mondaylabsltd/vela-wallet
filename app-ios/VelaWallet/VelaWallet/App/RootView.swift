@@ -320,8 +320,7 @@ struct RootView: View {
         // be two sheets racing to present over each other.
         let clearSigner = ClearSigner(
             loc: loc,
-            signerUrl: { [settingsStore] in settingsStore.signPref?.signerUrl },
-            tunnelUrl: { [settingsStore] in settingsStore.signPref?.tunnelUrl }
+            signerUrl: { [settingsStore] in settingsStore.signPref?.signerUrl }
         )
         spine.clearSigner = clearSigner
         onboarding.clearSigner = clearSigner
@@ -2880,12 +2879,6 @@ struct RootView: View {
                 return settings.signPref?.signerUrlError == nil
             },
             onResetSignerUrl: { settings.resetSignerUrl() },
-            // The tunnel, under the same rule (spec 075).
-            onSaveTunnelUrl: { text in
-                settings.submitTunnelUrl(text)
-                return settings.signPref?.tunnelUrlError == nil
-            },
-            onResetTunnelUrl: { settings.resetTunnelUrl() },
             onOpenLink: { openExternal($0) }
         )
         // The wallet's own request, over the page that raised it. Settings

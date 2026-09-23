@@ -385,8 +385,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `settings.signOut.descMany`. A device holding six wallets could sign out
 //   of all six or none, and the dialog's copy was true of one and quietly
 //   false of six (owner: 「有时候不想退出所有，只想退出单个」).
-if (PATHS.length !== 1745) fail(`expected 1745 paths (1656 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1656) fail(`expected 1656 leaf paths, got ${leafSet.size}`);
+// 1722 (spec 075, 2026-09-23): −23. The Clear Signer's two CROSS-DEVICE
+//   channels went, and every word they needed went with them: "where is your
+//   Clear Signer?" and its three answers, the pairing link and its code, the
+//   four Bluetooth troubles, and the tunnel's own Settings row. The owner cut
+//   them because only a page THIS device fetched can be checked against what
+//   it is supposed to be — 「客户端支持回环 + 蓝牙就够了」, then 「我确定砍掉
+//   蓝牙」. A shrinking ledger is as load-bearing as a growing one: a string
+//   nothing draws is a string nobody notices going wrong.
+if (PATHS.length !== 1722) fail(`expected 1722 paths (1633 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1633) fail(`expected 1633 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

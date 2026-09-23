@@ -42,9 +42,19 @@
 
 	let { open, allowed, blocked = null, strings, onPick }: Props = $props();
 
-	const METHODS: KeyMethod[] = ['platform', 'hybrid', 'security_key', 'clear_signer'];
+	const METHODS: KeyMethod[] = ['platform', 'hybrid', 'security_key'];
 
-	const offered = $derived(allowed ?? METHODS);
+	/**
+	 * The core offers `clear_signer` to every shell; this one cannot open a
+	 * Clear Signer page at all (owner, 2026-09-23), so it is never drawn here.
+	 *
+	 * Filtered rather than trusted-not-to-appear: `allowed` comes from the
+	 * core, and a wallet whose only key was minted on a page could otherwise be
+	 * created from a browser that can never sign with it again.
+	 */
+	const offered: KeyMethod[] = $derived(
+		(allowed ?? METHODS).filter((m) => m !== 'clear_signer')
+	);
 
 	/**
 	 * What this wallet's keys belong to, and — when the configured Clear Signer

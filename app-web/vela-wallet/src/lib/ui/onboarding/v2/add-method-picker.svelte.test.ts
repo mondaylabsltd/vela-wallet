@@ -3,9 +3,13 @@
  *
  * One list serves three places — the FIRST founding key, "add another key",
  * and the sign-in sheet on Welcome — so what it offers is what every one of
- * them offers. Since 075 that is four routes, not three: the Clear Signer is a
- * passkey route of our own, and the owner's words were that it is a peer of
- * this device / a phone or tablet / a security key, offered wherever they are.
+ * them offers.
+ *
+ * On the WEB that is three routes. 075 made the Clear Signer a fourth, and on
+ * 2026-09-23 the owner took it off this shell entirely ("web 就不支持清晰签名器
+ * 好了"): a browser cannot open the page, so a key minted there would be one
+ * this wallet could never sign with again. The core still offers it — the
+ * native shells have it — so the filter here is the thing under test.
  *
  * A `.svelte.test.ts` because it is about what a person sees, and the strings
  * are the REAL corpus: a chooser that reads well with invented copy proves
@@ -53,24 +57,22 @@ function drawn(narrow?: { allowed: KeyMethod[]; blocked: AddBlocked }) {
 }
 
 describe('the key-method chooser', () => {
-	it('offers four routes, the Clear Signer last, each with its own line', () => {
+	it('offers the three routes a browser can actually take', () => {
 		const view = drawn();
 		expect(view.names).toEqual([
 			strings('onboarding.create.methodPlatformTitle'),
 			strings('onboarding.create.methodHybridTitle'),
-			strings('onboarding.create.methodSecurityKeyTitle'),
-			strings('componentsUi.signing.clearSignerTitle')
+			strings('onboarding.create.methodSecurityKeyTitle')
 		]);
-		expect(view.captions.at(-1)).toBe(strings('componentsUi.signing.clearSignerBody'));
 	});
 
-	it('the Clear Signer wears the glyph of a page you read', () => {
-		const view = drawn();
-		// `eye`, the one route that is not a place a passkey is but a page that
-		// shows what it is about to do.
-		const last = view.buttons.at(-1);
-		expect(last?.querySelector('svg')).not.toBeNull();
-		expect(last?.innerHTML).toContain('circle');
+	it('never draws the Clear Signer, even when the core offers it', () => {
+		const view = drawn({
+			allowed: ['platform', 'hybrid', 'security_key', 'clear_signer'],
+			blocked: null as unknown as AddBlocked
+		});
+		expect(view.names).not.toContain(strings('componentsUi.signing.clearSignerTitle'));
+		expect(view.buttons).toHaveLength(3);
 	});
 
 	it('a route that would mint for another site is off, and says why', () => {
@@ -86,9 +88,7 @@ describe('the key-method chooser', () => {
 				page_relying_party: 'localhost'
 			}
 		});
-		expect(view.buttons.map((button) => button.disabled)).toEqual([false, false, false, true]);
-		view.buttons.at(-1)?.click();
-		expect(view.picked).toEqual([]);
+		expect(view.buttons.map((button) => button.disabled)).toEqual([false, false, false]);
 		// Two paragraphs: what this wallet's keys belong to, then the page to
 		// change — never joined, which would put a space after a full stop
 		// that already ends the line in Chinese.
@@ -106,6 +106,6 @@ describe('the key-method chooser', () => {
 		const view = drawn();
 		view.buttons.at(-1)?.click();
 		view.buttons[0]?.click();
-		expect(view.picked).toEqual(['clear_signer', 'platform']);
+		expect(view.picked).toEqual(['security_key', 'platform']);
 	});
 });

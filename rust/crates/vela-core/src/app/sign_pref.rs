@@ -6,15 +6,13 @@
 //! url_submitted ─┬─ an https / loopback page ─► persist + commit
 //!                └─ anything else ─► refused, nothing stored, the old page stands
 //! url_reset ─► remove + back to the official page
-//! tunnel_submitted / tunnel_reset ─► the same, for the tunnel (spec 075)
 //! ```
 //!
 //! Two preferences that belong together: the "Sign with" a signing sheet
 //! starts at (`auto`, a place a passkey is, or the Clear Signer), and which
 //! Clear Signer page the wallet opens. Shaped on [`super::fee_tier_pref`],
 //! this codebase's committed-preference machine, for the same reasons: the
-//! shell owns the keys (`vela.signMethod`, `vela.clearSignerUrl`, and since
-//! spec 075 `vela.clearSignerTunnel` — the tunnel a pairing goes through — under the
+//! shell owns the keys (`vela.signMethod` and `vela.clearSignerUrl`, under the
 //! `vela.` prefix that survives sign-out — how a person signs belongs to them
 //! and the device, not to one account) and the words; the core decides what
 //! may be stored and what shows when nothing can be.
@@ -55,15 +53,12 @@ pub fn parse_method(raw: &str) -> Option<&'static str> {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignPrefOperation"))]
 pub enum SignPrefOperation {
-    /// Read `vela.signMethod`, `vela.clearSignerUrl` and
-    /// `vela.clearSignerTunnel`, raw.
+    /// Read `vela.signMethod` and `vela.clearSignerUrl`, raw.
     ReadStored,
     /// Persist the default method (best effort).
     WriteMethod { method: String },
     /// Persist the signer page; `None` removes the key — the official page.
     WriteSignerUrl { url: Option<String> },
-    /// Spec 075: persist the tunnel; `None` removes the key — the official one.
-    WriteTunnelUrl { url: Option<String> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,9 +68,6 @@ pub enum SignPrefShellResult {
     Stored {
         method: Option<String>,
         signer_url: Option<String>,
-        /// Spec 075; absent from a shell that predates the tunnel.
-        #[serde(default)]
-        tunnel_url: Option<String>,
     },
     Written,
 }
@@ -103,10 +95,6 @@ pub enum Event {
     SignerUrlSubmitted { text: String },
     /// Settings: back to the official page.
     SignerUrlReset,
-    /// Spec 075 — Settings: the tunnel a pairing goes through, as typed.
-    TunnelUrlSubmitted { text: String },
-    /// Spec 075 — Settings: back to the official tunnel.
-    TunnelUrlReset,
     #[serde(skip)]
     ShellCompleted {
         attempt: u64,
@@ -133,9 +121,6 @@ pub struct Model {
     /// Why the last submitted address was refused, until the next submit or
     /// reset.
     url_error: Option<SignerUrlError>,
-    /// Spec 075: a tunnel the person chose, normalised. `None` ⇒ the official one.
-    tunnel_url: Option<String>,
-    tunnel_error: Option<SignerUrlError>,
     phase: Phase,
     attempt: u64,
 }
@@ -160,12 +145,6 @@ pub struct SignPrefView {
     /// `getvela.app` keys). A page elsewhere can show a request but not sign
     /// it, and Settings says so beside the address.
     pub signer_uses_wallet_passkeys: bool,
-    /// Spec 075: the tunnel a cross-device pairing goes through. Always usable.
-    pub tunnel_url: String,
-    /// `true` ⇒ the official tunnel.
-    pub tunnel_url_is_default: bool,
-    /// `"invalid"` | `"insecure"` — the last submitted tunnel was refused.
-    pub tunnel_url_error: Option<String>,
 }
 
 #[derive(Default)]
@@ -225,41 +204,13 @@ impl App for SignPref {
                 model.signer_url = None;
                 shell(model, SignPrefOperation::WriteSignerUrl { url: None })
             }
-            Event::TunnelUrlSubmitted { text } => match clear_signer::tunnel_url(&text) {
-                Ok(url) => {
-                    model.attempt += 1;
-                    model.phase = Phase::Idle;
-                    model.tunnel_error = None;
-                    let chosen = (url != clear_signer::DEFAULT_TUNNEL_URL).then_some(url);
-                    model.tunnel_url.clone_from(&chosen);
-                    shell(model, SignPrefOperation::WriteTunnelUrl { url: chosen })
-                }
-                Err(error) => {
-                    model.tunnel_error = Some(error);
-                    render()
-                }
-            },
-            Event::TunnelUrlReset => {
-                model.attempt += 1;
-                model.phase = Phase::Idle;
-                model.tunnel_error = None;
-                model.tunnel_url = None;
-                shell(model, SignPrefOperation::WriteTunnelUrl { url: None })
-            }
             Event::ShellCompleted { attempt, result } => {
                 if attempt != model.attempt {
                     // Superseded — a stored value that arrived after a choice.
                     return Command::done();
                 }
                 match (model.phase, result) {
-                    (
-                        Phase::LoadingStored,
-                        SignPrefShellResult::Stored {
-                            method,
-                            signer_url,
-                            tunnel_url,
-                        },
-                    ) => {
+                    (Phase::LoadingStored, SignPrefShellResult::Stored { method, signer_url }) => {
                         model.phase = Phase::Idle;
                         model.method = method.as_deref().and_then(parse_method);
                         // Validated again: a key someone else wrote (or an
@@ -269,10 +220,6 @@ impl App for SignPref {
                             .as_deref()
                             .and_then(|raw| clear_signer::signer_url(raw).ok())
                             .filter(|url| url != clear_signer::DEFAULT_SIGNER_URL);
-                        model.tunnel_url = tunnel_url
-                            .as_deref()
-                            .and_then(|raw| clear_signer::tunnel_url(raw).ok())
-                            .filter(|url| url != clear_signer::DEFAULT_TUNNEL_URL);
                         render()
                     }
                     _ => Command::done(),
@@ -301,12 +248,6 @@ impl App for SignPref {
             signer_url_is_default: model.signer_url.is_none(),
             signer_url,
             signer_url_error: model.url_error.map(error_name),
-            tunnel_url: model
-                .tunnel_url
-                .clone()
-                .unwrap_or_else(|| clear_signer::DEFAULT_TUNNEL_URL.to_owned()),
-            tunnel_url_is_default: model.tunnel_url.is_none(),
-            tunnel_url_error: model.tunnel_error.map(error_name),
         }
     }
 }

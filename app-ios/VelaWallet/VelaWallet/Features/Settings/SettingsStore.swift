@@ -159,18 +159,6 @@ final class SettingsStore {
         signPrefCore.dispatch(CoreJSON.string(["type": "signer_url_reset"]))
     }
 
-    /// Spec 075: the tunnel a cross-device pairing goes through, as typed.
-    /// The core validates (wss anywhere, ws on loopback) and stores nothing
-    /// it refuses.
-    func submitTunnelUrl(_ text: String) {
-        signPrefCore.dispatch(CoreJSON.string(["type": "tunnel_url_submitted", "text": text]))
-    }
-
-    /// Back to the official tunnel.
-    func resetTunnelUrl() {
-        signPrefCore.dispatch(CoreJSON.string(["type": "tunnel_url_reset"]))
-    }
-
     /// USD → that currency, through the display machine's own waterfall.
     ///
     /// The payroll importer's rate port (spec 054 US3). Exposed here rather

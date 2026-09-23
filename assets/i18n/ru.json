@@ -67,13 +67,7 @@
    "pageInsecure": "Используйте страницу по https или на loopback-адресе этого устройства — в других местах браузер не подписывает.",
    "pageForeign": "Ваши passkey принадлежат getvela.app. Страница на другом домене может показать запрос, но не может его подписать.",
    "pageReset": "Использовать официальную страницу",
-   "pageSave": "Сохранить",
-   "tunnelTitle": "Туннель",
-   "tunnelSubtitle": "Сопряжение с другим устройством идёт через этот туннель. Он передаёт только зашифрованные сообщения.",
-   "tunnelOfficial": "Официальный",
-   "tunnelInvalid": "Это не адрес туннеля.",
-   "tunnelInsecure": "Используйте адрес wss:// или ws:// на собственном loopback этого устройства.",
-   "tunnelReset": "Использовать официальный туннель"
+   "pageSave": "Сохранить"
   },
   "advanced": {
    "networksTitle": "Сети",
@@ -1379,24 +1373,7 @@
    "clearSignerReopen": "Открыть страницу снова",
    "clearSignerDoneTab": "Подписано. Можно закрыть эту вкладку и вернуться в Vela.",
    "viewOnExplorer": "Открыть в обозревателе",
-   "sendingToTokenContract": "Отправляется на собственный контракт токена",
-   "clearSignerWhere": "Где ваш Clear Signer?",
-   "clearSignerThisDevice": "На этом устройстве",
-   "clearSignerOtherDevice": "На другом устройстве",
-   "clearSignerNearby": "Устройство рядом, по Bluetooth",
-   "clearSignerNearbyHint": "Страница находит это устройство по Bluetooth. Не закрывайте Vela, пока подписываете.",
-   "clearSignerNearbyName": "Выберите «{{name}}» в списке устройств браузера на другом устройстве.",
-   "clearSignerBluetoothNeeded": "Vela нужно разрешение на Bluetooth, чтобы страница подписи нашла это устройство.",
-   "clearSignerBluetoothOff": "Включите Bluetooth, чтобы связать устройства этим способом.",
-   "clearSignerBluetoothUnsupported": "Это устройство не поддерживает такой способ связи. Используйте Clear Signer на этом устройстве или на другом.",
-   "clearSignerNearbyLost": "Страница подписи отключилась. Держите устройства рядом, не закрывайте Vela и попробуйте снова.",
-   "clearSignerPair": "Откройте Clear Signer на другом устройстве",
-   "clearSignerPairHint": "Отсканируйте этот код устройством, на котором хранится ваш ключ доступа, или откройте ссылку на нём.",
-   "clearSignerPairWaiting": "Ожидание другого устройства…",
-   "clearSignerCode": "Убедитесь, что на другом устройстве тот же код: {{code}}",
-   "clearSignerCodeConfirm": "Коды совпадают",
-   "clearSignerCopyLink": "Скопировать ссылку",
-   "clearSignerTunnelDown": "Не удалось связаться с туннелем. Повторите попытку или используйте Clear Signer на этом устройстве."
+   "sendingToTokenContract": "Отправляется на собственный контракт токена"
   },
   "signingApprove": {
    "resultingTotal": "Новый общий лимит",

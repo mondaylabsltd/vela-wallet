@@ -1,8 +1,11 @@
 /**
- * Settings → "Sign with" and the Clear Signer's page (spec 071, contract §6),
- * over the real `sign_pref` core: which keys it reads and writes, that it —
- * not the shell — refuses an address it would not open, and how the rows and
- * sheets read what it decided.
+ * Settings → "Sign with" (spec 071, contract §6), over the real `sign_pref`
+ * core: which key it reads and writes, and how the row and its sheet read
+ * what the core decided.
+ *
+ * The Clear Signer's own rows are NOT here: the web wallet has no Clear
+ * Signer (owner, 2026-09-23), so the core's `clear_signer` is never drawn and
+ * never in force, which is the one thing this file still asserts about it.
  */
 import '$lib/i18n/wasm-init.server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -38,24 +41,17 @@ const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('the store', () => {
-	it('two keys under the `vela.` prefix that survives sign-out', () => {
+	it('keys under the `vela.` prefix that survives sign-out', () => {
 		expect(SIGN_METHOD_KEY).toBe('vela.signMethod');
 		expect(CLEAR_SIGNER_URL_KEY).toBe('vela.clearSignerUrl');
 	});
 
-	it('an unreadable preference is "never chose": auto, and the official page', () => {
+	it('an unreadable preference is "never chose": auto, and nothing stored', () => {
 		expect(signPrefOperationFailure({ id: 1, operation: { type: 'read_stored' } })).toEqual({
 			type: 'stored',
 			method: null,
-			signer_url: null,
-			tunnel_url: null
+			signer_url: null
 		});
-	});
-
-	it('the official page is stored as NO key, not as a copy of its address', async () => {
-		store.set(CLEAR_SIGNER_URL_KEY, 'https://x.example/');
-		await executeSignPrefOperation({ id: 1, operation: { type: 'write_signer_url', url: null } });
-		expect(store.has(CLEAR_SIGNER_URL_KEY)).toBe(false);
 	});
 });
 
@@ -69,183 +65,83 @@ describe('the preference, live', () => {
 	it('reads what this device stored', () => {
 		expect(signPreference.view.method).toBe('hybrid');
 		expect(signPreference.view.method_committed).toBe(true);
-		expect(signPreference.view.signer_url_is_default).toBe(true);
 	});
 
 	it('a method chosen in Settings is committed and stored', async () => {
-		signPreference.chooseMethod('clear_signer');
-		expect(signPreference.view.method).toBe('clear_signer');
+		signPreference.chooseMethod('security_key');
+		expect(signPreference.view.method).toBe('security_key');
 		await settled();
-		expect(store.get(SIGN_METHOD_KEY)).toBe('clear_signer');
+		expect(store.get(SIGN_METHOD_KEY)).toBe('security_key');
 	});
 
 	it('a name this build does not offer is ignored by the core', async () => {
 		signPreference.chooseMethod('carrier_pigeon');
 		await settled();
-		expect(signPreference.view.method).toBe('clear_signer');
-		expect(store.get(SIGN_METHOD_KEY)).toBe('clear_signer');
-	});
-
-	it('an address the browser would not sign on is refused, and nothing is stored', async () => {
-		signPreference.submitSignerUrl('http://sign.example.org');
-		await settled();
-		expect(signPreference.view.signer_url_error).toBe('insecure');
-		expect(store.has(CLEAR_SIGNER_URL_KEY)).toBe(false);
-		signPreference.submitSignerUrl('not a page');
-		expect(signPreference.view.signer_url_error).toBe('invalid');
-		expect(signPreference.view.signer_url).toBe('https://sign.getvela.app/');
-	});
-
-	it('a page of the person’s own is normalised, stored, and said to be off getvela.app', async () => {
-		signPreference.submitSignerUrl('  sign.example.org ');
-		await settled();
-		expect(signPreference.view.signer_url).toBe('https://sign.example.org/');
-		expect(signPreference.view.signer_url_error).toBeNull();
-		expect(signPreference.view.signer_uses_wallet_passkeys).toBe(false);
-		expect(store.get(CLEAR_SIGNER_URL_KEY)).toBe('https://sign.example.org/');
-	});
-
-	it('"Use the official page" removes the key', async () => {
-		signPreference.resetSignerUrl();
-		await settled();
-		expect(signPreference.view.signer_url_is_default).toBe(true);
-		expect(store.has(CLEAR_SIGNER_URL_KEY)).toBe(false);
+		expect(signPreference.view.method).toBe('security_key');
+		expect(store.get(SIGN_METHOD_KEY)).toBe('security_key');
 	});
 });
 
-describe('the rows and sheets', () => {
+describe('the row and its sheet', () => {
 	const view = (patch: Partial<SignPrefView>): SignPrefView => ({
 		method: 'auto',
 		method_committed: false,
+		// The core offers five to every shell; this one draws four.
 		offered: ['auto', 'platform', 'hybrid', 'security_key', 'clear_signer'],
 		signer_url: 'https://sign.getvela.app/',
 		signer_url_is_default: true,
 		signer_url_error: null,
 		signer_uses_wallet_passkeys: true,
-		tunnel_url: 'wss://tunnel.getvela.app',
-		tunnel_url_is_default: true,
-		tunnel_url_error: null,
 		...patch
 	});
-	const rows = (model: ReturnType<typeof buildMobileState>) =>
-		model.sections.flatMap((section) => section.rows);
 
-	it('sit next to "Transaction speed", in the advanced block', () => {
-		const ids = rows(buildMobileState('st1b', m, IDENTICON)).map((row) => row.id);
-		const speed = ids.indexOf('fee-speed');
-		expect(ids.slice(speed, speed + 4)).toEqual([
-			'fee-speed',
-			'sign-with',
-			'clear-signer-page',
-			// Spec 075: how the Clear Signer is reached on another device.
-			'clear-signer-tunnel'
+	const home = (patch: Partial<SignPrefView> = {}) =>
+		withLiveSigning(buildMobileState('st1', m, IDENTICON), view(patch), m);
+
+	it('sits next to "Transaction speed", in the advanced block', () => {
+		const rows = home().sections.flatMap((section) => section.rows.map((row) => row.id));
+		expect(rows).toContain('sign-with');
+		expect(rows.indexOf('sign-with')).toBe(rows.indexOf('fee-speed') + 1);
+	});
+
+	it('names the method in force, and ticks it in the sheet', () => {
+		const model = home({ method: 'hybrid', method_committed: true });
+		const row = model.sections.flatMap((s) => s.rows).find((r) => r.id === 'sign-with');
+		expect(row?.value).toBe(m.signing.methods.hybrid);
+		expect(model.signWithSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual([
+			'hybrid'
 		]);
 	});
 
-	it('name the method in force and the official page, and tick the method in the sheet', () => {
-		const model = withLiveSigning(
-			buildMobileState('st1', m, IDENTICON),
-			view({ method: 'clear_signer', method_committed: true }),
-			m
-		);
-		const row = (id: string) => rows(model).find((r) => r.id === id);
-		expect(row('sign-with')?.value).toBe(m.signing.methods.clear_signer);
-		expect(row('clear-signer-page')?.value).toBe(m.signing.pageOfficial);
-		expect(model.signWithSheet.title).toBe(m.signing.title);
-		expect(model.signWithSheet.subtitle).toBe(m.signing.subtitle);
+	it('the Clear Signer is never drawn, whatever the core offers', () => {
+		const model = home();
 		expect(model.signWithSheet.rows.map((r) => r.id)).toEqual([
 			'auto',
 			'platform',
 			'hybrid',
-			'security_key',
-			'clear_signer'
-		]);
-		expect(model.signWithSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual([
-			'clear_signer'
-		]);
-		expect(model.signWithSheet.rows.at(-1)?.detail).toBe(m.signing.clearSignerBody);
-		// The official page offers no reset and says nothing about passkeys.
-		expect(model.signerPage.reset).toBeUndefined();
-		expect(model.signerPage.foreign).toBeUndefined();
-		expect(model.signerPage.error).toBeUndefined();
-	});
-
-	it('a page of the person’s own: its host on the row, the reset, and the rpId line', () => {
-		const model = withLiveSigning(
-			buildMobileState('st1', m, IDENTICON),
-			view({
-				signer_url: 'http://127.0.0.1:8137/',
-				signer_url_is_default: false,
-				signer_uses_wallet_passkeys: false
-			}),
-			m
-		);
-		expect(rows(model).find((r) => r.id === 'clear-signer-page')?.value).toBe('127.0.0.1:8137');
-		expect(model.signerPage.field.value).toBe('http://127.0.0.1:8137/');
-		expect(model.signerPage.reset).toBe(m.signing.pageReset);
-		expect(model.signerPage.foreign).toBe(m.signing.pageForeign);
-	});
-
-	it('the core’s refusal is worded under the field', () => {
-		const said = (error: string) =>
-			withLiveSigning(buildMobileState('st1', m, IDENTICON), view({ signer_url_error: error }), m)
-				.signerPage;
-		expect(said('invalid').error).toBe(m.signing.pageInvalid);
-		expect(said('insecure').error).toBe(m.signing.pageInsecure);
-		expect(said('insecure').field.tone).toBe('error');
-	});
-
-	it('the tunnel row (spec 075): official by default, the host and a reset when it is not', () => {
-		const official = withLiveSigning(buildMobileState('st1', m, IDENTICON), view({}), m);
-		expect(rows(official).find((r) => r.id === 'clear-signer-tunnel')?.value).toBe(
-			m.signing.tunnelOfficial
-		);
-		expect(official.tunnelPage.title).toBe(m.signing.tunnelTitle);
-		expect(official.tunnelPage.subtitle).toBe(m.signing.tunnelSubtitle);
-		expect(official.tunnelPage.field.value).toBe('wss://tunnel.getvela.app');
-		expect(official.tunnelPage.reset).toBeUndefined();
-		// A tunnel sees nothing but ciphertext: there is no rpId line to draw.
-		expect(official.tunnelPage.foreign).toBeUndefined();
-
-		const own = withLiveSigning(
-			buildMobileState('st1', m, IDENTICON),
-			view({ tunnel_url: 'ws://127.0.0.1:8787', tunnel_url_is_default: false }),
-			m
-		);
-		expect(rows(own).find((r) => r.id === 'clear-signer-tunnel')?.value).toBe('127.0.0.1:8787');
-		expect(own.tunnelPage.field.value).toBe('ws://127.0.0.1:8787');
-		expect(own.tunnelPage.reset).toBe(m.signing.tunnelReset);
-	});
-
-	it('the tunnel’s own refusals are worded under its field', () => {
-		const said = (error: string) =>
-			withLiveSigning(buildMobileState('st1', m, IDENTICON), view({ tunnel_url_error: error }), m)
-				.tunnelPage;
-		expect(said('invalid').error).toBe(m.signing.tunnelInvalid);
-		expect(said('insecure').error).toBe(m.signing.tunnelInsecure);
-		expect(said('insecure').field.tone).toBe('error');
-	});
-
-	it('the desktop reads the same rows, and the same page', () => {
-		const phone = withLiveSigning(
-			buildMobileState('st1', m, IDENTICON),
-			view({ method: 'security_key' }),
-			m
-		);
-		const desktop = withLiveSigningDesktop(
-			buildDesktopState('dst1', m, IDENTICON),
-			view({ method: 'security_key', signer_url_is_default: false }),
-			phone.signWithSheet,
-			m
-		);
-		expect(desktop.nav.map((n) => n.id)).toContain('signing');
-		expect(desktop.signing.rows[0].value).toBe(m.signing.methods.security_key);
-		expect(desktop.signing.rows[0].options?.filter((r) => r.selected).map((r) => r.id)).toEqual([
 			'security_key'
 		]);
-		expect(desktop.signing.page.reset).toBe(m.signing.pageReset);
-		// Spec 075: and the tunnel section, the same body as the phone's sheet.
-		expect(desktop.signing.tunnel.title).toBe(m.signing.tunnelTitle);
-		expect(desktop.signing.tunnel.field.value).toBe('wss://tunnel.getvela.app');
+	});
+
+	it('the Clear Signer page and the tunnel have no rows here at all', () => {
+		const rows = home().sections.flatMap((section) => section.rows.map((row) => row.id));
+		expect(rows).not.toContain('clear-signer-page');
+		expect(rows).not.toContain('clear-signer-tunnel');
+	});
+
+	it('the desktop reads the same rows', () => {
+		const desktop = withLiveSigningDesktop(
+			buildDesktopState('dst1', m, IDENTICON),
+			view({ method: 'hybrid', method_committed: true }),
+			home().signWithSheet,
+			m
+		);
+		expect(desktop.signing.rows[0]?.value).toBe(m.signing.methods.hybrid);
+		expect(desktop.signing.rows[0]?.options?.map((o) => o.id)).toEqual([
+			'auto',
+			'platform',
+			'hybrid',
+			'security_key'
+		]);
 	});
 });

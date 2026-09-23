@@ -76,8 +76,6 @@ struct SettingsScreen: View {
     var onResetSignerUrl: (() -> Void)?
     /// The relay's Save and reset (spec 075) — the same pair against the
     /// other key.
-    var onSaveTunnelUrl: ((String) -> Bool)?
-    var onResetTunnelUrl: (() -> Void)?
     /// A link on the page — About's three, the language sheet's "suggest a
     /// fix", a provider's "Get a key". Absent in the gallery, where a link is
     /// drawn and goes nowhere on purpose.
@@ -124,8 +122,6 @@ struct SettingsScreen: View {
         onEthereumBackup: (() -> Void)? = nil,
         onSaveSignerUrl: ((String) -> Bool)? = nil,
         onResetSignerUrl: (() -> Void)? = nil,
-        onSaveTunnelUrl: ((String) -> Bool)? = nil,
-        onResetTunnelUrl: (() -> Void)? = nil,
         onOpenLink: ((String) -> Void)? = nil
     ) {
         self.model = model
@@ -148,8 +144,6 @@ struct SettingsScreen: View {
         self.onEthereumBackup = onEthereumBackup
         self.onSaveSignerUrl = onSaveSignerUrl
         self.onResetSignerUrl = onResetSignerUrl
-        self.onSaveTunnelUrl = onSaveTunnelUrl
-        self.onResetTunnelUrl = onResetTunnelUrl
         self.onOpenLink = onOpenLink
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
@@ -241,8 +235,6 @@ struct SettingsScreen: View {
                     },
                     onSaveSignerUrl: onSaveSignerUrl,
                     onResetSignerUrl: onResetSignerUrl,
-                    onSaveTunnelUrl: onSaveTunnelUrl,
-                    onResetTunnelUrl: onResetTunnelUrl,
                     onOpenLink: onOpenLink
                 )
                     .themed(theme.scheme)
@@ -502,7 +494,6 @@ struct SettingsScreen: View {
         case SettingsFixtures.feeSpeedRow: overlay = .feeSpeed
         case SettingsFixtures.signWithRow: overlay = .signWith
         case SettingsFixtures.signerPageRow: if model.signerPage != nil { overlay = .signerPage }
-        case SettingsFixtures.tunnelRow: if model.tunnel != nil { overlay = .signerTunnel }
         case "number-format": overlay = .numberFormat
         case "date-format": overlay = .dateFormat
         case "time-format": overlay = .timeFormat

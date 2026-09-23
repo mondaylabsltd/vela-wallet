@@ -67,13 +67,7 @@
       "pageInsecure": "Utilisez une page https, ou une page sur la boucle locale de cet appareil — un navigateur ne signera nulle part ailleurs.",
       "pageForeign": "Vos clés d'accès appartiennent à getvela.app. Une page sur un autre domaine peut afficher une demande, mais pas la signer.",
       "pageReset": "Utiliser la page officielle",
-      "pageSave": "Enregistrer",
-      "tunnelTitle": "Tunnel",
-      "tunnelSubtitle": "L'appairage avec un autre appareil passe par ce tunnel. Il ne transmet que des messages chiffrés.",
-      "tunnelOfficial": "Officiel",
-      "tunnelInvalid": "Ce n'est pas une adresse de tunnel.",
-      "tunnelInsecure": "Utilisez une adresse wss://, ou ws:// sur la boucle locale de cet appareil.",
-      "tunnelReset": "Utiliser le tunnel officiel"
+      "pageSave": "Enregistrer"
     },
     "advanced": {
       "networksTitle": "Réseaux",

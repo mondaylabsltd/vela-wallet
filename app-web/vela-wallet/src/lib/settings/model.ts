@@ -263,24 +263,6 @@ export interface SelectRowModel {
 	mono?: boolean;
 }
 
-/**
- * The Clear Signer's page (spec 071): the address in force, a field to type
- * another over it, and what the core said about the last one submitted.
- */
-export interface SignerPageModel {
-	title: string;
-	subtitle: string;
-	/** The page in force; typed over and submitted with `save`. */
-	field: UrlFieldModel;
-	save: string;
-	/** "Use the official page" — only while a page of the person's own is in force. */
-	reset?: string;
-	/** Why the last address was refused (`pageInvalid` / `pageInsecure`); nothing was stored. */
-	error?: string;
-	/** A page off `getvela.app` can show a request but not sign it — said beside the address. */
-	foreign?: string;
-}
-
 export interface SelectSheetModel {
 	title: string;
 	subtitle?: string;
@@ -645,12 +627,8 @@ export interface SettingsHomeModel {
 	timeSheet: SelectSheetModel;
 	/** Spec 068 — the default transaction speed, three rows named by what they buy. */
 	feeSpeedSheet: SelectSheetModel;
-	/** Spec 071 — the default "Sign with", the five the core offers. */
+	/** Spec 071 — the default "Sign with", the four this shell offers. */
 	signWithSheet: SelectSheetModel;
-	/** Spec 071 — the Clear Signer's page. */
-	signerPage: SignerPageModel;
-	/** Spec 075 — the tunnel a cross-device pairing goes through. */
-	tunnelPage: SignerPageModel;
 	clearCachesSheet: ConfirmSheetModel;
 	eraseSheet: ConfirmSheetModel;
 	feedback: FeedbackModel;
@@ -798,17 +776,11 @@ export interface SettingsDesktopModel {
 		description: string;
 		rows: FormRowModel[];
 	};
-	/**
-	 * Spec 071 — the default "Sign with" as the desktop's usual dropdown row,
-	 * and under it the Clear Signer's page, the phone sheet's own body.
-	 */
+	/** Spec 071 — the default "Sign with" as the desktop's usual dropdown row. */
 	signing: {
 		title: string;
 		description: string;
 		rows: FormRowModel[];
-		page: SignerPageModel;
-		/** Spec 075 — the tunnel, under the page. */
-		tunnel: SignerPageModel;
 	};
 	networks: {
 		title: string;

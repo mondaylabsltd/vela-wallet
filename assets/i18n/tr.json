@@ -67,13 +67,7 @@
    "pageInsecure": "https bir sayfa ya da bu cihazın kendi loopback adresindeki bir sayfa kullanın — tarayıcı başka hiçbir yerde imzalamaz.",
    "pageForeign": "Geçiş anahtarlarınız getvela.app'e ait. Başka bir alan adındaki sayfa bir isteği gösterebilir ama imzalayamaz.",
    "pageReset": "Resmi sayfayı kullan",
-   "pageSave": "Kaydet",
-   "tunnelTitle": "Tünel",
-   "tunnelSubtitle": "Başka bir cihazla eşleşme bu tünel üzerinden yapılır. Tünel yalnızca şifreli mesajları iletir.",
-   "tunnelOfficial": "Resmi",
-   "tunnelInvalid": "Bu bir tünel adresi değil.",
-   "tunnelInsecure": "Bir wss:// adresi ya da bu cihazın kendi loopback'inde ws:// kullanın.",
-   "tunnelReset": "Resmi tüneli kullan"
+   "pageSave": "Kaydet"
   },
   "advanced": {
    "networksTitle": "Ağlar",
@@ -1373,24 +1367,7 @@
    "clearSignerReopen": "Sayfayı yeniden aç",
    "clearSignerDoneTab": "İmzalandı. Bu sekmeyi kapatıp Vela'ya dönebilirsiniz.",
    "viewOnExplorer": "Gezginde görüntüle",
-   "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor",
-   "clearSignerWhere": "Clear Signer'ınız nerede?",
-   "clearSignerThisDevice": "Bu cihazda",
-   "clearSignerOtherDevice": "Başka bir cihazda",
-   "clearSignerNearby": "Yakındaki cihaz, Bluetooth ile",
-   "clearSignerNearbyHint": "Sayfa bu cihazı Bluetooth ile bulur. İmzalarken Vela açık kalsın.",
-   "clearSignerNearbyName": "Diğer cihazınızdaki tarayıcının cihaz listesinden \"{{name}}\" seçin.",
-   "clearSignerBluetoothNeeded": "İmza sayfasının bu cihazı bulabilmesi için Vela'nın Bluetooth iznine ihtiyacı var.",
-   "clearSignerBluetoothOff": "Bu şekilde eşleştirmek için Bluetooth'u açın.",
-   "clearSignerBluetoothUnsupported": "Bu cihaz bu şekilde eşleştirilemiyor. Clear Signer'ı bu cihazda kullanın veya başka bir cihaz deneyin.",
-   "clearSignerNearbyLost": "İmza sayfasının bağlantısı kesildi. İki cihazı yakın tutun ve Vela açık kalsın, sonra tekrar deneyin.",
-   "clearSignerPair": "Clear Signer'ı diğer cihazınızda açın",
-   "clearSignerPairHint": "Bu kodu geçiş anahtarınızın bulunduğu cihazla tarayın veya bağlantıyı orada açın.",
-   "clearSignerPairWaiting": "Diğer cihaz bekleniyor…",
-   "clearSignerCode": "Diğer cihazda aynı kodun göründüğünü kontrol edin: {{code}}",
-   "clearSignerCodeConfirm": "Kodlar eşleşiyor",
-   "clearSignerCopyLink": "Bağlantıyı kopyala",
-   "clearSignerTunnelDown": "Tünele ulaşılamadı. Tekrar deneyin ya da bu cihazdaki Clear Signer'ı kullanın."
+   "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor"
   },
   "signingApprove": {
    "resultingTotal": "Yeni toplam izin",
