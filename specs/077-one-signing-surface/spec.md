@@ -40,18 +40,49 @@ same surface and are already fixed (`fee-calls.ts`, commit c2b0c5e4).
 ## What changes
 
 ### FR-001 · The side panel IS the wallet
-Today `extension/panel.js` sends the panel to `request.html?rid=…`, a page whose
-whole job is one request. The wallet is not beneath it; it was replaced.
 
-The panel opens the WALLET, and a pending request raises the signing sheet over
-it — as on Android and iOS, where the wallet never goes away.
+Today `extension/panel.js` is three lines: negotiate a locale and
+`location.replace(requestPage(locale))` — the request page with no `?rid=`,
+which then asks the worker what this tab owes. So the panel is not the wallet
+with a request over it; **the request page IS the whole panel.** Measured
+2026-09-23 in the packaged extension: the panel is 360×771 and holds the sheet
+alone, nothing behind it.
+
+The panel opens the WALLET (`walletPage(locale)`, which already exists and
+already mounts the same `SigningHost`), and a pending request raises the sheet
+over it — as on Android and iOS, where the wallet never goes away.
+
+**Why this is the surface worth moving, and not merely the prettier one:** it is
+the only one where a transaction can be watched. `settle()` removes a dedicated
+window (FR-003); the panel has no window id, so nothing removes it, and the
+panel dismisses only when the page itself sends `panelDone`. Proven end to end
+on 2026-09-23 — slid in the panel, `Submitted` at t+6s with the operation hash,
+`Confirmed` at t+18s with the transaction hash and an explorer link, the panel
+still standing.
 
 **This does not weaken the rule it looks like it might.** `request/+page.svelte`
 says the surface must not be "an in-page sheet the site could style, cover or
 scroll". That is about a sheet inside the DAPP's page. The side panel is the
 extension's own origin: the site cannot reach it, style it or scroll it.
 
-### FR-002 · A dApp transaction lands where a send lands
+**What must move with it.** The request page does more than draw a sheet, and
+each piece needs a home on the wallet page: asking the worker what this tab owes
+(`requestCurrent`), the connect/consent step for an origin with no grant,
+handing the request to `sign_request` on a transport that answers this panel,
+the `pagehide` settlement that owes the core's 4900 rather than a made-up 4001,
+and `panelDone` when the tab owes nothing more. None of those may become
+optional: a request that reaches a surface must leave it answered exactly once.
+
+### FR-002 · A transaction lands where a send lands, on EVERY surface
+
+**The landing belongs to the SHEET, not to any one page.** The first version put
+it in the request window, and Settings' backup to Ethereum still had none — it
+posts into the same seam deliberately (so as not to build "a second, lesser copy
+of the most dangerous screen there is") and so it inherits whatever that seam
+has. One sheet, one landing: `SigningHost` owns it, and every surface that
+mounts the sheet gets it — a dApp request, the backup, a payment request.
+
+#### What it shows
 After the signature, the surface shows the send flow's own treatment —
 submitting, submitted with the chain's clock, confirmed — not a closing window.
 
@@ -59,18 +90,32 @@ The dApp already has its answer (the operation hash) the moment it is submitted;
 what is being watched afterwards is the chain, and that is the person's business,
 not the request's.
 
-### FR-003 · The dedicated window lands too
-A request a page fired with no user gesture still opens in its own window
-(`?rid=`). It was going to keep today's ending — close on `done` — on the
-reasoning that there is no wallet under it to return to.
+### FR-003 · The dedicated window cannot land, and that is not the page's choice
 
-**Driving the packaged extension changed that.** A window that shuts itself
-about twenty seconds after the slide, with no word about what happened, is the
-complaint whatever surface it is. The receipt is drawn in both, and "Done"
-closes the window as before.
+A request a page fired with no user gesture opens in its own window (`?rid=`).
+I tried to give it the receipt too, and the packaged extension said no —
+twice, the same way: the receipt drew, and about ten seconds later the window
+vanished around it.
 
-What the window does NOT get is a wallet behind it; that is FR-001's, and it is
-why the panel is still worth moving.
+The reason is in `extension/background.js`:
+
+```js
+function settle(rid, payload) {
+  …
+  entry.reply(payload);
+  if (entry.windowId !== undefined) chrome.windows.remove(entry.windowId);
+}
+```
+
+**The worker closes the window the moment the answer goes out.** A page has no
+say in that, and the backstop is there on purpose — a surface that owes an
+answer must not be able to linger.
+
+Note the condition: `entry.windowId !== undefined`. **The PANEL path has no
+window id, so nothing removes it.** Which makes FR-001 not a nicety but the
+thing that lets a dApp transaction be watched at all. The dedicated window keeps
+today's ending until the worker is taught otherwise, and that is a separate
+change to the machinery that guarantees an answer.
 
 ### FR-004 · One pipeline, said as a rule
 A transaction signed anywhere in the web shell — a send, a dApp request, the
