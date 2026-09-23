@@ -767,8 +767,11 @@ enum SigningLive {
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
         }
+        // The same condition `SigningController.feeTapped` acts on, decided
+        // once here so the chevron and the handler cannot disagree.
+        let tappable = fee?.failed != nil || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
-                        selector: selector, warning: warning)
+                        selector: selector, warning: warning, tappable: tappable)
     }
 
     /// The slide's verb: the core's intent id, **in the corpus's words**.

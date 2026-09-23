@@ -171,8 +171,15 @@ struct FeeTokenOption: Identifiable {
 enum FeeModel {
     /// `warning` says why the slide is shut when the coin that pays is not
     /// there (issue #262); it sits under the row, where the other coins are.
+    /// `tappable` is whether the row can DO anything: ask a failed quote
+    /// again, or open a list with more than one coin in it. With one coin and
+    /// a good quote there is nothing to choose, and the row is a statement —
+    /// drawn without a chevron, because a control that cannot act is not
+    /// dressed as one. Android has decided this in its builder since 046; web
+    /// followed in spec 081. It defaults to `true` so the drawn boards, which
+    /// are pictures of the tappable state, are unchanged.
     case onchain(label: String, value: String, selector: (title: String, options: [FeeTokenOption])?,
-                 warning: String? = nil)
+                 warning: String? = nil, tappable: Bool = true)
     /// Off-chain signature: the ✓ line, in place of a fee row.
     case offchain(note: String)
     /// Nothing at all — cs20–cs22, where there is no fee and no reassurance.

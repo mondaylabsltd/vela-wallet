@@ -29,9 +29,9 @@ struct SigningFeeView: View {
             EmptyView()
         case .offchain(let note):
             SigningPositive(text: note, quiet: true)
-        case .onchain(let label, let value, let selector, let warning):
+        case .onchain(let label, let value, let selector, let warning, let tappable):
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-                onchainBody(label: label, value: value, selector: selector)
+                onchainBody(label: label, value: value, selector: selector, tappable: tappable)
                 // Issue #262: the reason the slide below is shut, said where the fix is.
                 if let warning {
                     Text(verbatim: warning)
@@ -45,7 +45,8 @@ struct SigningFeeView: View {
 
     @ViewBuilder
     private func onchainBody(
-        label: String, value: String, selector: (title: String, options: [FeeTokenOption])?
+        label: String, value: String, selector: (title: String, options: [FeeTokenOption])?,
+        tappable: Bool
     ) -> some View {
         if let selector {
             VStack(alignment: .leading, spacing: Tokens.Space.s4) {
@@ -101,7 +102,7 @@ struct SigningFeeView: View {
             .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
         } else if let speed {
             VStack(alignment: .leading, spacing: 0) {
-                feeRow(label: label, value: value)
+                feeRow(label: label, value: value, tappable: tappable)
                 // The control pads its rows by 12; the row above by 16.
                 FeeSpeedControlView(speed: speed, onToggle: { onSpeed(nil) },
                                     onPick: { onSpeed($0) })
@@ -110,30 +111,41 @@ struct SigningFeeView: View {
             }
             .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
         } else {
-            feeRow(label: label, value: value)
+            feeRow(label: label, value: value, tappable: tappable)
                 .background(theme.bgSunken,
                             in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
         }
     }
 
-    private func feeRow(label: String, value: String) -> some View {
-        Button(action: onToggle) {
-            HStack(spacing: Tokens.Space.s8) {
-                Text(verbatim: label)
-                    .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-                Spacer()
-                Text(verbatim: value)
-                    .typeRole(Typography.label.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
+    private func feeRow(label: String, value: String, tappable: Bool) -> some View {
+        let row = HStack(spacing: Tokens.Space.s8) {
+            Text(verbatim: label)
+                .typeRole(Typography.rowSub.scaled(textScale))
+                .foregroundStyle(theme.fgMuted)
+            Spacer()
+            Text(verbatim: value)
+                .typeRole(Typography.label.scaled(textScale))
+                .foregroundStyle(theme.fgBase)
+            // The chevron belongs to the tap. One coin and a good quote is a
+            // statement, not a control.
+            if tappable {
                 LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
                     .foregroundStyle(theme.fgMuted)
             }
-            .padding(.horizontal, Tokens.Space.s16)
-            .padding(.vertical, Tokens.Space.s12)
-            .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, Tokens.Space.s16)
+        .padding(.vertical, Tokens.Space.s12)
+
+        return Group {
+            if tappable {
+                Button(action: onToggle) {
+                    row.contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                }
+                .buttonStyle(.plain)
+            } else {
+                row
+            }
+        }
     }
 }
 
