@@ -167,11 +167,19 @@ final class OnboardingExecutor {
             // exists before the rest of the set does), sign against exactly this
             // credential, assemble the proof in the core. The publish later
             // replays it without another prompt.
+            // Spec 075: a key minted on a Clear Signer page belongs to THAT
+            // page's domain, and its authenticator signs `sha256(rpId)` of it.
+            // A challenge fetched under the wallet's own party would be signed
+            // under the page's and the two would not match — which the person
+            // reads as 「清晰签名器的回复与这笔请求不符」. Found on the Android
+            // phone 2026-09-22, and again here 2026-09-23; the rule is the
+            // core's, so no shell reads it differently.
             let challenge = try await registry.memberChallenge(
                 groupPublicKey: operation["group_public_key_hex"] as? String ?? "",
                 publicKey: operation["public_key_hex"] as? String ?? "",
                 attestation: operation["attestation_hex"] as? String ?? "",
-                rpId: passkey.relyingPartyId
+                rpId: clearSignerRegistryRpId(signerOrigin: operation["signer_origin"] as? String)
+                    ?? passkey.relyingPartyId
             )
             // Spec 075: the page fetches its own challenge for the same
             // inputs and the core demands the two be EQUAL — which is why
@@ -311,11 +319,29 @@ final class OnboardingExecutor {
         }
 
         let metadataHex = operation["metadata_hex"] as? String ?? ""
+        // One relying party for the whole unit (ruling, 2026-09-23). The
+        // contract stores a single `rpId` per unit and every member's proof
+        // carries `sha256(rpId)` from its OWN authenticator, so a set spread
+        // across sites could never be proved. The core decides it, and refuses
+        // a mixed set here rather than writing a unit nobody can prove.
+        let unitRpId: String
+        do {
+            unitRpId = try clearSignerUnitRpId(
+                memberOrigins: members.map { $0.signerOrigin.isEmpty ? nil : $0.signerOrigin },
+                walletRpId: passkey.relyingPartyId
+            )
+        } catch {
+            throw RegistryFailure(
+                message: (error as? LocalizedError)?.errorDescription
+                    ?? "these keys belong to different sites",
+                network: false
+            )
+        }
         let challenge = try await registry.groupChallenge(
             metadataHex: metadataHex,
             groupPublicKey: groupPublicKey,
             members: members,
-            rpId: passkey.relyingPartyId
+            rpId: unitRpId
         )
 
         var proven: [ProvenMember] = []
@@ -355,7 +381,7 @@ final class OnboardingExecutor {
         // The group key silently closes over the content hash.
         let groupJSON = try registryBuildGroupProof(
             seedHex: seedHex,
-            rpId: passkey.relyingPartyId,
+            rpId: unitRpId,
             challengeHex: challenge.groupChallenge
         )
         guard let group = try? CoreJSON.object(groupJSON),
@@ -369,7 +395,7 @@ final class OnboardingExecutor {
             groupPublicKey: groupPublicKey,
             groupProof: groupProof,
             members: proven,
-            rpId: passkey.relyingPartyId
+            rpId: unitRpId
         )
 
         // `done` up front means the identical group was already on-chain —
