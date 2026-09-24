@@ -209,3 +209,47 @@ different).
   `amountToInput`).
 - Verified correct: 1× native / 1.5× ERC-20 fee coin / 0 when another coin
   pays (`send.rs:2981-2997`, tests `tests/app_send.rs:1357-1622`).
+
+## Core wiring (W) — is every desktop feature driven by vela-core?
+
+Two further audits (2026-09-24) listed, per core machine, every `Event` the
+web dispatches and the desktop does not, and every operation the desktop
+answers with a stub. Session, login, create_wallet, clear_signing,
+approval_guard, sign_pref, fee_speed, fee_tier_pref, display_currency,
+batch_import, rpc_pool, token_trust, tx_tracker, browser_history and
+dapp_browser are fully wired. The gaps:
+
+- **W-01 P1 · Deposit watching dies after 5 min.** `receive_watch` runs once
+  by design; the web starts a session per receive visit, the desktop keeps
+  one resident and never sends `Start` again. `SignalDeposit` refreshes
+  nothing on the desktop (web: balance + feed nudge).
+- **W-02 P1 · The balance does not refresh when money moves** — the web
+  forces one on a confirmed send (`tracker-resident.ts:179`), a new incoming
+  feed item and a deposit; the desktop waits for its 10-minute tick or focus.
+- **W-03 P1 · send `SimulateCalls` is a stub** (`executor/send.rs:577`, "no
+  simulation engine yet") though `executor::sim::simulate` exists and signs
+  dApp requests with it: own sends show no balance-change preview.
+- **W-04 P1 · send `AddNetwork` always errors** (`executor/send.rs:445`);
+  network_admin's `AddByChainIdRequested` is never dispatched: a payment
+  link on an unknown chain can never add it.
+- **W-05 P1 · sign_request `CheckBundlerFunding` / `AttemptSponsorship` are
+  stubs** (`executor/sign_request.rs:215-243`): no funding pre-check, no
+  sponsorship for dApp transactions.
+- **W-06 P1 · Contacts search** never dispatches `query`; **per-group import
+  and export** exist in the core (`ImportFile { into_group }`,
+  `ContactExportScope::Group`) but the desktop leaves them `None`.
+- **W-07 P1 · Signing for another of the person's wallets**: the desktop
+  mirrors only the active account into `sign_request`; `SwitchActiveAccount`
+  never tells the session.
+- **W-08 P2 · Rate-limited chains reported as broken** —
+  `rate_limited_chain_ids` always empty (`executor/balance_dashboard.rs`).
+- **W-09 P2 · Feed polls every 30 s** (web 10 s while visible).
+- **W-10 P2 · manage_tokens** resident keeps the last Add Token state across
+  visits (web starts a session per open); no native-network tab.
+- **W-11 P2 · Explore**: `explore_sites` group rename/delete/hide/member
+  removal never dispatched; site menu Share / Add to favourites / Open in
+  new tab `None`; favourites "Edit" inert; fixture tabs and host shown until
+  the first live tab exists.
+- **W-12 · Linux** has no in-app browser and no signing host at all (by
+  design since spec 032; out of scope here). **Windows** had one that could
+  not be seen or opened — fixed in `f4334ffd`.

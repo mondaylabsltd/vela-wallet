@@ -13,12 +13,12 @@ screenshot checked against the web.
 - [x] T002 spec.md, research.md (four audits), plan.md, tasks.md.
 
 ## Phase 1 — foundations (X)
-- [ ] T010 X-01 theme: `border_strong`, `accent_soft`; dark `bg_sunken`
+- [x] T010 X-01 theme: `border_strong`, `accent_soft`; dark `bg_sunken`
       #0F0F0D; check every dark use of the old value.
-- [ ] T011 X-02 buttons: primary / secondary / danger at the web's 52 / 17
+- [x] T011 X-02 buttons: primary / secondary / danger at the web's 52 / 17
       semibold / 8·24 / r12, `border_strong` outline; replace
       `ghost_button` / `accent_button` call sites.
-- [ ] T012 X-03 third column: header 16/24, close 36 with a 20 icon, content
+- [x] T012 X-03 third column: header 16/24, close 36 with a 20 icon, content
       0/24/24, scrolls with the bar, scroll reset on a new subject.
 - [ ] T013 X-04 dialog primitive: 520 / 24 / r16 / hairline / shadow-lg /
       scrim .35 / Escape + scrim close; move settings, contact, QR and
@@ -29,12 +29,12 @@ screenshot checked against the web.
       network rows, key rows (reset after 1.2 s), contacts.
 
 ## Phase 2 — P0 behaviour
-- [ ] T020 G-01 slide to confirm: drag, commit ≥ 88 %, spring back,
+- [x] T020 G-01 (keyboard path still open) slide to confirm: drag, commit ≥ 88 %, spring back,
       Enter/Space, `accent_soft` fill, label fades.
-- [ ] T021 G-03 refused request: one full-width Close, raw data hidden.
-- [ ] T022 C-01 delete contact / group asks first (danger button).
+- [x] T021 G-03 refused request: one full-width Close, raw data hidden.
+- [x] T022 C-01 delete contact / group asks first (danger button).
 - [ ] T023 E-02 custom-group rows open their own site; unique ids.
-- [ ] T024 H-07 hero decimals split on the person's decimal mark.
+- [x] T024 H-07 hero decimals split on the person's decimal mark.
 - [ ] T025 M-01 core: Max during the fee check or the credential load does not
       strand Continue; test in `tests/app_send.rs`.
 
@@ -56,6 +56,18 @@ screenshot checked against the web.
 - [ ] T042 E-01, E-03 explore features; G-05 technical details.
 - [ ] T043 M-02, M-03 core Max estimates the real transfer; a fee-coin switch
       re-quotes before Max uses it; M-04 decimal mark.
+
+## Phase 3b — core wiring (W, research.md)
+- [x] T044 W-12 Windows Explore: page visible (HWND swap chain, 8 MB stack) and
+      built outside gpui's borrow (was: abort on opening a page).
+- [ ] T045 W-01 receive watcher per visit; W-02 balance refresh on confirmed
+      send, incoming item, deposit.
+- [ ] T046 W-03 send simulation via `executor::sim`; W-04 AddNetwork via
+      network_admin `AddByChainIdRequested`.
+- [ ] T047 W-05 bundler funding pre-check and sponsorship for dApp requests.
+- [ ] T048 W-06 contacts search + per-group import/export; W-07 signing for
+      another wallet.
+- [ ] T049 W-08…W-11.
 
 ## Phase 4 — P2 visuals, surface by surface (screenshot each)
 - [ ] T050 Wallet home H-08…H-12.
