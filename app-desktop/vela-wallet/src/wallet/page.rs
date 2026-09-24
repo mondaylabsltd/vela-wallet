@@ -561,6 +561,9 @@ pub struct WalletPage {
     address_focus: gpui::FocusHandle,
     /// The Wallet column's scroll position, for the bar drawn beside it.
     content_scroll: gpui::ScrollHandle,
+    /// The third column's body, and which subject it last scrolled for.
+    panel_scroll: gpui::ScrollHandle,
+    panel_scroll_subject: String,
     /// The sidebar's network list — twenty-odd chains outgrow a short window.
     networks_scroll: gpui::ScrollHandle,
     /// The settings panel's, for the same bar.
@@ -988,6 +991,8 @@ impl WalletPage {
             address_selected: false,
             address_focus: cx.focus_handle(),
             content_scroll: gpui::ScrollHandle::new(),
+            panel_scroll: gpui::ScrollHandle::new(),
+            panel_scroll_subject: String::new(),
             networks_scroll: gpui::ScrollHandle::new(),
             settings_scroll: gpui::ScrollHandle::new(),
             site_networks: Vec::new(),
@@ -4244,7 +4249,18 @@ impl WalletPage {
         body: Div,
         cx: &mut Context<Self>,
     ) -> Div {
-        let mut heading = div().flex().items_center().gap(px(6.));
+        // The web's `ThirdPanel` (`wallet/ui/ThirdPanel.svelte`): header
+        // 16/24 with a gap of 8 — its top here is the caption strip's
+        // clearance, which the browser does not have — a 36px close with a
+        // 20px icon, and content that SCROLLS, padded 0/24/24. It was
+        // `overflow_hidden`: a long asset history, the signing column's
+        // slider and every long flow were cut off at the bottom.
+        let mut heading = div()
+            .flex_1()
+            .min_w(px(0.))
+            .flex()
+            .items_center()
+            .gap(px(8.));
         if let Some(lead) = lead {
             heading = heading.child(lead);
         }
@@ -4258,10 +4274,10 @@ impl WalletPage {
         let mut bar = div()
             .flex()
             .items_center()
-            .justify_between()
-            .px(px(20.))
+            .gap(px(8.))
+            .px(px(24.))
             .pt(px(SIDEBAR_TOP))
-            .pb(px(8.));
+            .pb(px(16.));
         if underline {
             bar = bar.border_b_1().border_color(theme.divider);
         }
@@ -4278,9 +4294,9 @@ impl WalletPage {
                 bar.child(heading).child(
                     div()
                         .id("panel-close")
-                        .w(px(32.))
-                        .h(px(32.))
-                        .rounded(px(16.))
+                        .flex_none()
+                        .size(px(36.))
+                        .rounded_full()
                         .flex()
                         .items_center()
                         .justify_center()
@@ -4315,15 +4331,35 @@ impl WalletPage {
                         })),
                 ),
             )
-            .child(
+            .child({
+                // A new subject starts at its top: the scroll of the last
+                // asset, flow step or request is not this one's.
+                let subject = format!(
+                    "{:?}{:?}{:?}",
+                    self.panel,
+                    self.flows.last(),
+                    self.asset_detail
+                );
+                if self.panel_scroll_subject != subject {
+                    self.panel_scroll_subject = subject;
+                    self.panel_scroll.set_offset(gpui::point(px(0.), px(0.)));
+                }
                 div()
+                    .relative()
                     .flex_1()
                     .min_h(px(0.))
-                    .overflow_hidden()
-                    .px(px(20.))
-                    .pb(px(20.))
-                    .child(body),
-            )
+                    .child(
+                        div()
+                            .id("panel-body")
+                            .track_scroll(&self.panel_scroll)
+                            .size_full()
+                            .overflow_y_scroll()
+                            .px(px(24.))
+                            .pb(px(24.))
+                            .child(body),
+                    )
+                    .children(crate::ui::vertical_scrollbar(theme, &self.panel_scroll))
+            })
     }
 
     /// The flow column: spec 015's panel scaffold plus the back chevron the

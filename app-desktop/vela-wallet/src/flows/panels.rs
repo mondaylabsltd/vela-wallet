@@ -1371,37 +1371,83 @@ fn send_form(
                 .flex_col()
                 .gap(px(4.))
                 .child(
+                    // `--text-sm`, as the web's `RecipientField` label.
                     div()
-                        .text_size(theme::text_row_sub())
+                        .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
                         .child(label),
                 )
                 .child(card),
         );
     } else if let Some((label, lines, seed)) = &model.recipient {
-        col = col
+        // The drawn form: the same raised card as the live one, holding the
+        // address it was given. Clicking it opens the book, as the mock does.
+        let line = |text: SharedString| {
+            div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .whitespace_nowrap()
+                .child(text)
+        };
+        let card = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .p(px(12.))
+            .rounded(px(12.))
+            .bg(theme.bg_raised)
             .child(
                 div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(label.clone()),
+                    .flex_none()
+                    .child(crate::wallet::components::identicon_avatar(
+                        identicons,
+                        seed.as_ref(),
+                        36.,
+                    )),
             )
-            .child(clickable(
-                "flow-recipient",
-                actions.open_contact_pick.take(),
-                address_card(
-                    theme,
-                    icons,
-                    identicons,
-                    lines.0.clone(),
-                    seed.as_ref(),
-                    (lines.1.clone(), SharedString::default()),
-                    // The send form's recipient row: the whole card OPENS the
-                    // contact picker, so a copy click inside it would fight the
-                    // row it sits in.
-                    None,
-                ),
-            ));
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .flex()
+                    .flex_col()
+                    .overflow_hidden()
+                    .child(line(lines.0.clone()))
+                    .child(line(lines.1.clone())),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .size(px(36.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon_img(
+                        icons,
+                        Icon::NavContacts,
+                        false,
+                        theme.fg_muted,
+                        18.,
+                    )),
+            );
+        col = col.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(label.clone()),
+                )
+                .child(clickable(
+                    "flow-recipient",
+                    actions.open_contact_pick.take(),
+                    card,
+                )),
+        );
     }
 
     if let Some(add) = &model.add_recipient {

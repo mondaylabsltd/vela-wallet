@@ -953,10 +953,15 @@ pub fn token_header_card(
                         .text_color(theme.fg_base)
                         .child(symbol),
                 )
+                .gap(px(2.))
                 .child(
+                    // `--text-sm`, as the web's `TokenHeaderCard` detail.
                     div()
-                        .text_size(theme::text_row_sub())
+                        .text_size(theme::text_label())
                         .text_color(theme.fg_muted)
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .text_ellipsis()
                         .child(detail),
                 ),
         );

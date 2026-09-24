@@ -42,7 +42,8 @@ pub(crate) fn icon_img(
 
 /// Small tinted glyphs the page composes into its own rows.
 pub fn close_icon(theme: &Theme, icons: &mut IconCache) -> impl IntoElement {
-    icon_img(icons, Icon::X, false, theme.fg_muted, 18.)
+    // `--icon-lg`, as every close on the web.
+    icon_img(icons, Icon::X, false, theme.fg_muted, 20.)
 }
 pub fn copy_icon(theme: &Theme, icons: &mut IconCache) -> impl IntoElement {
     icon_img(icons, Icon::Copy, false, theme.fg_base, 16.)
