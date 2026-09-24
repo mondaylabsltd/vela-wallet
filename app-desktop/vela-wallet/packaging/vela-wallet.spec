@@ -87,6 +87,12 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Thu Sep 24 2026 Monday Labs <hello@getvela.app> - 0.9.5-1
+- Pre-release: a dApp transaction now lands on a receipt instead of closing on you,
+  and the browser extension's side panel is the wallet itself; the Clear Signer
+  shows what you are signing on this device's own browser and answers back over
+  velawallet://; and the Trusted Signer lets a key you trust sign for you.
+
 * Mon Sep 21 2026 Monday Labs <hello@getvela.app> - 0.9.4-1
 - Pre-release: a passkey says where it lives (cloud-synced or on this device);
   sign-in checks what an index tells it against the chain; the fee can be
