@@ -1,0 +1,6 @@
+# These bytes are addressed by their SHA-256 (spec 076): a page lives at
+# b/<hash>/sign.html and the wallet refuses one whose bytes hash to anything
+# else. A checkout with core.autocrlf=true (the Windows default) rewrote LF to
+# CRLF here, and every page stopped matching its own name. Nothing in dist/ is
+# text to git.
+* -text
