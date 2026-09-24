@@ -14,6 +14,9 @@
 //!
 //! This is not scaffolding for a future Linux browser. When Linux gets one it
 //! is `webview.rs` that grows a third arm and this file that goes away.
+//!
+//! Nor is there anything to reach it: Linux's sidebar has no Explore
+//! (`Section::available`, owner call 2026-09-24), as the web has none.
 
 /// A message for a page. No page is listening.
 pub fn deliver(_tab: &str, _message_json: &str) {}

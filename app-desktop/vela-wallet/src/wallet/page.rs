@@ -168,6 +168,32 @@ pub enum Section {
     Settings,
 }
 
+impl Section {
+    /// Whether THIS build has the destination — the web's rule
+    /// (`app-web/.../wallet/destinations.ts`), for the same reason.
+    ///
+    /// Linux has no in-app dApp browser (owner call, 2026-09-24). gpui runs as
+    /// a native Wayland client, and Wayland lets no program place another's
+    /// page inside its window, so the site could only open in a window of its
+    /// own — built, and parked on the local branch `linux-dapp-browser-wip`,
+    /// because a connect or a signature then had to be answered back in this
+    /// one. Three destinations, rather than a fourth that opens a picture.
+    pub const fn available(self) -> bool {
+        !(cfg!(target_os = "linux") && matches!(self, Section::Explore))
+    }
+
+    /// A place this build cannot show — a pinned or restored Explore on
+    /// Linux — opens the wallet instead.
+    #[must_use]
+    pub const fn or_wallet(self) -> Self {
+        if self.available() {
+            self
+        } else {
+            Section::Wallet
+        }
+    }
+}
+
 /// The two anchored menus DC5/DC6 define. Both render through one
 /// `menu_card` — the difference is which fixture feeds it and where it hangs.
 /// The two centred dialogs the settings section can raise (spec 023).
@@ -877,7 +903,8 @@ impl WalletPage {
             Ok("contacts") => Section::Contacts,
             Ok("explore") => Section::Explore,
             _ => Section::Wallet,
-        };
+        }
+        .or_wallet();
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
         // Money in flight outlives every screen: the tracker runs from the
@@ -2180,7 +2207,7 @@ impl WalletPage {
     /// A page built for another account opens where the last one was left —
     /// a switch from Settings stays on Settings.
     pub fn restore_place(&mut self, (section, settings_page): (Section, SettingsPage)) {
-        self.section = section;
+        self.section = section.or_wallet();
         self.settings_page = settings_page;
     }
 
@@ -2648,7 +2675,10 @@ impl WalletPage {
             ),
         ];
         let mut nav_col = div().flex().flex_col().gap(px(2.));
-        for (i, (icon, label, destination)) in nav.into_iter().enumerate() {
+        let nav = nav
+            .into_iter()
+            .filter(|(_, _, destination)| destination.is_none_or(Section::available));
+        for (i, (icon, label, destination)) in nav.enumerate() {
             let row = nav_row(
                 ElementId::from(("nav", i)),
                 theme,
@@ -15121,6 +15151,20 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **Linux has three destinations, as the web does** (owner call,
+    /// 2026-09-24): no in-app browser, so no Explore — not in the sidebar, and
+    /// not through a pinned or restored place. Everywhere else, four.
+    #[test]
+    fn explore_is_a_destination_only_where_there_is_a_browser() {
+        let linux = cfg!(target_os = "linux");
+        assert_eq!(Section::Explore.available(), !linux);
+        assert_eq!(Section::Explore.or_wallet() == Section::Wallet, linux);
+        for section in [Section::Wallet, Section::Contacts, Section::Settings] {
+            assert!(section.available());
+            assert_eq!(section.or_wallet(), section);
+        }
+    }
 
     /// **A key minted on a Trusted Signer page is captioned as the page, and says
     /// which page** (spec 075, the Android device pass of 2026-09-22).

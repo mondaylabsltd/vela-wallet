@@ -11,6 +11,13 @@ screenshot checked against the web.
       "Done on this branch").
 - [x] T001 S-01 / G-02 Close closes the signing column; Escape dismisses it.
 - [x] T002 spec.md, research.md (four audits), plan.md, tasks.md.
+- [x] T003 (owner call, 2026-09-24) Linux has no Explore, as the web has
+      none: the sidebar shows three destinations (`Section::available`), and a
+      pinned or restored Explore opens the wallet. A real browser was built —
+      WebKitGTK in a window of its own, since a Wayland client cannot host
+      another program's page — and parked on the local branch
+      `linux-dapp-browser-wip`: a connect or signature still had to be
+      answered back in the wallet window.
 
 ## Phase 1 — foundations (X)
 - [x] T010 X-01 theme: `border_strong`, `accent_soft`; dark `bg_sunken`
