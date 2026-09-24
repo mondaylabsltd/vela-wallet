@@ -109,7 +109,7 @@ use super::WalletStrings;
 use super::components::{
     action_pill, activity_row, asset_row, balance_display, chain_row, empty_state, icon_img,
     identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
-    section_header_row, sidebar_search, skeleton_row, token_icon, token_icon_logos, wallet_header,
+    section_header_row, skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
 use crate::flows::components::mono_field;
@@ -1034,35 +1034,6 @@ impl WalletPage {
             loc,
             crash: None,
         }
-    }
-
-    /// The way out.
-    ///
-    /// Session state is app-resident and `allowed_route` decides the screen, so
-    /// without this row a signed-in desktop has no path back to Welcome at all
-    /// — the route guard is a one-way door. It renders only for a REAL session:
-    /// the fixture identity (`VELA_PAGE=wallet`) is a design surface with no
-    /// session behind it, and offering to sign out of nothing would be a button
-    /// that cannot work.
-    fn sign_out_row(&self, theme: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
-        if self.identity.is_none() {
-            return div().into_any_element();
-        }
-        let hover = theme.bg_sunken;
-        div()
-            .id("sign-out")
-            .mt(px(4.))
-            .px(px(12.))
-            .py(px(8.))
-            .rounded(px(8.))
-            .flex_none()
-            .cursor_pointer()
-            .text_size(theme::text_row_sub())
-            .text_color(theme.fg_muted)
-            .hover(move |style| style.bg(hover).text_color(theme.error_base))
-            .on_click(cx.listener(|_, _, _, cx| session::sign_out(cx)))
-            .child(self.strings.sign_out_button.clone())
-            .into_any_element()
     }
 
     /// The confirmation the core opens, with the warning it decided on.
@@ -2775,12 +2746,6 @@ impl WalletPage {
                     .child(self.strings.networks_title.clone()),
             )
             .child(networks)
-            .child(self.sign_out_row(theme, cx))
-            .child(sidebar_search(
-                theme,
-                &mut self.icons,
-                self.strings.search_placeholder.clone(),
-            ))
     }
 
     // -- column 2: content ---------------------------------------------------
@@ -7942,10 +7907,9 @@ impl WalletPage {
     /// What the 货币 row shows — the core's committed currency for a real
     /// session, the mock's literal for the design surfaces.
     ///
-    /// Gated on `identity` for the same reason `sign_out_row` is: `VELA_PAGE=
-    /// settings` and the gallery are design surfaces with no session behind
-    /// them, and a fixture screen quietly reading live state is how a gallery
-    /// stops being reviewable.
+    /// Gated on `identity`: `VELA_PAGE=settings` and the gallery are design
+    /// surfaces with no session behind them, and a fixture screen quietly
+    /// reading live state is how a gallery stops being reviewable.
     /// The currency this screen's money is drawn in.
     ///
     /// Signed out there is no committed pair and nothing to convert, so it is

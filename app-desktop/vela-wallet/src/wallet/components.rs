@@ -11,8 +11,7 @@ use gpui::{
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{
-    self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_CONTROL_H, WALLET_NAV_ROW_H, WALLET_ROW_ICON,
-    WALLET_TOAST_DISC,
+    self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_NAV_ROW_H, WALLET_ROW_ICON, WALLET_TOAST_DISC,
 };
 
 use super::fixtures::{
@@ -243,30 +242,6 @@ pub fn chain_row(
             .text_color(theme.fg_subtle)
             .child(SharedString::from(row.count.to_string())),
     )
-}
-
-/// The pinned ⌘K search affordance (visual only in this feature).
-pub fn sidebar_search(theme: &Theme, icons: &mut IconCache, placeholder: SharedString) -> Div {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(8.))
-        .h(px(WALLET_CONTROL_H))
-        .px(px(12.))
-        .rounded(px(10.))
-        .bg(theme.bg_raised)
-        .border_1()
-        .border_color(theme.divider)
-        .text_size(theme::text_row_sub())
-        .text_color(theme.fg_subtle)
-        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
-        .child(div().flex_1().min_w(px(0.)).truncate().child(placeholder))
-        .child(
-            div()
-                .font_family(theme::font_mono())
-                .text_size(theme::text_label())
-                .child("⌘K"),
-        )
 }
 
 /// Hero balance with its four states and optional status line (spec FR-008:
