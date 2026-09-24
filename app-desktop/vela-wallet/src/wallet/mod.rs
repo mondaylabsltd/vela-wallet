@@ -91,6 +91,11 @@ pub struct WalletStrings {
     /// 关闭 — for a dialog that is only ever LOOKED at. "取消" would be wrong:
     /// nothing is being cancelled by closing a picture.
     pub close_viewer: SharedString,
+    /// The identicon viewer (078 H-02): the artwork, big, beside the address
+    /// that drew it.
+    pub viewer_title: SharedString,
+    pub viewer_caption: SharedString,
+    pub viewer_copied: SharedString,
     pub warning_title: SharedString,
     pub warning_reminder: SharedString,
     /// Template carrying `{{count}}`.
@@ -165,6 +170,9 @@ impl WalletStrings {
             address_label: s("receive.addressLabel"),
             copy_address: s("componentsUi.identiconViewer.copyAddress"),
             close_viewer: s("componentsUi.identiconViewer.close"),
+            viewer_title: s("componentsUi.identiconViewer.title"),
+            viewer_caption: s("componentsUi.identiconViewer.caption"),
+            viewer_copied: s("componentsUi.identiconViewer.copied"),
             qr_caption: s("componentsUi.qrPlaceholder.caption"),
             warning_title: s("receive.warningTitle"),
             warning_reminder: s("receive.warningReminder"),

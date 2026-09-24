@@ -62,6 +62,8 @@ pub struct SettingsStrings {
     /// balances nobody had asked the core for.
     pub accounts_total: String,
     pub accounts_count: String,
+    /// The account switcher's title (078 H-01), as the web's dialog names it.
+    pub accounts_title: SharedString,
     pub account_create: SharedString,
     pub account_sign_in: SharedString,
     pub sign_out_button: SharedString,
@@ -311,6 +313,7 @@ impl SettingsStrings {
             nav_about: s("settings.about.title"),
             accounts_total: raw("settingsModals.account.total"),
             accounts_count: raw("home.switcherAccountCount"),
+            accounts_title: s("settingsModals.account.modalTitle"),
             account_create: s("settingsModals.account.createNew"),
             account_sign_in: s("settingsModals.account.signInExisting"),
             sign_out_button: s("settings.signOut.button"),

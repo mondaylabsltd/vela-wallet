@@ -3,6 +3,7 @@
 
 mod ack_row;
 mod button;
+pub mod dialog;
 mod launch_animation;
 mod logo;
 mod name_field;

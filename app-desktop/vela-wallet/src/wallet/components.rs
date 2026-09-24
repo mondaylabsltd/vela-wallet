@@ -114,7 +114,17 @@ pub fn passkey_fallback_mark(
     )
 }
 
+/// A click on one of the header's two targets.
+pub type HeaderClick = Box<dyn Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App)>;
+
 /// Sidebar header: avatar + name + chevron + mono address.
+///
+/// Two targets side by side, as the web's `WalletHeader`: the artwork opens
+/// the identicon viewer on this address (078 H-02), the name-and-chevron
+/// opens the account switcher (078 H-01). The chevron promised a disclosure
+/// for as long as the desktop drew it, and nothing was listening. `None`
+/// leaves that half a picture — the gallery's header, or no account yet.
+#[allow(clippy::too_many_arguments, reason = "the header and its two targets")]
 pub fn wallet_header(
     theme: &Theme,
     icons: &mut IconCache,
@@ -122,47 +132,66 @@ pub fn wallet_header(
     seed: &str,
     name: SharedString,
     address: SharedString,
+    on_identicon: Option<HeaderClick>,
+    on_account: Option<HeaderClick>,
 ) -> Div {
+    let mut avatar = div()
+        .id("wallet-header-identicon")
+        .flex_none()
+        .rounded_full()
+        .child(identicon_avatar(identicons, seed, WALLET_AVATAR));
+    if let Some(on_identicon) = on_identicon {
+        avatar = avatar
+            .cursor_pointer()
+            .active(|el| el.opacity(0.85))
+            .on_click(on_identicon);
+    }
+    let mut account = div()
+        .id("wallet-header-account")
+        .flex()
+        .flex_col()
+        .min_w(px(0.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .min_w(px(0.))
+                .child(
+                    div()
+                        .min_w(px(0.))
+                        .text_size(theme::text_section())
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_color(theme.fg_base)
+                        .whitespace_nowrap()
+                        .truncate()
+                        .child(name),
+                )
+                .child(icon_img(
+                    icons,
+                    Icon::ChevronDown,
+                    false,
+                    theme.fg_subtle,
+                    14.,
+                )),
+        )
+        .child(
+            div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_label())
+                .text_color(theme.fg_subtle)
+                .child(address),
+        );
+    if let Some(on_account) = on_account {
+        account = account.cursor_pointer().on_click(on_account);
+    }
     div()
         .flex()
         .items_center()
         .gap(px(10.))
-        .child(identicon_avatar(identicons, seed, WALLET_AVATAR))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .min_w(px(0.))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(4.))
-                        .child(
-                            div()
-                                .text_size(theme::text_section())
-                                .font_weight(gpui::FontWeight::BOLD)
-                                .text_color(theme.fg_base)
-                                .whitespace_nowrap()
-                                .truncate()
-                                .child(name),
-                        )
-                        .child(icon_img(
-                            icons,
-                            Icon::ChevronDown,
-                            false,
-                            theme.fg_subtle,
-                            14.,
-                        )),
-                )
-                .child(
-                    div()
-                        .font_family(theme::font_mono())
-                        .text_size(theme::text_label())
-                        .text_color(theme.fg_subtle)
-                        .child(address),
-                ),
-        )
+        .min_w(px(0.))
+        .child(avatar)
+        .child(account)
 }
 
 /// One sidebar nav row: solid icon + raised wash when selected, outline

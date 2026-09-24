@@ -143,6 +143,12 @@ pub enum PanelId {
 /// ~7px of clearance the 34px strip needs, with a little room to spare.
 const CONTACTS_HEADER_CAPTION_PAD: f32 = 16.;
 
+/// A switcher row's artwork (`size="row"`, `--icon-2xl`).
+const SWITCHER_IDENTICON: f32 = 30.;
+/// The identicon viewer's artwork (`--size-identiconViewer`): big enough to
+/// read as a picture rather than an avatar.
+const VIEWER_IDENTICON: f32 = 160.;
+
 /// What the gallery chip strip adds on top for the same reason. It is not
 /// centred, so this is the clearance itself, less the 8 the bar already had.
 fn gallery_bar_caption_pad(caption: bool) -> f32 {
@@ -237,6 +243,18 @@ enum ContactsMenu {
     /// Spec 070 — which network the site on screen is on, ticked; picking
     /// one moves THAT site (`site_chain_picked`) and no other.
     SiteNetwork,
+}
+
+/// The identicon, big, beside the address that drew it (078 H-02, the web's
+/// `IdenticonViewer`).
+#[derive(Clone, Debug)]
+struct IdenticonViewer {
+    /// The seed, verbatim: what the artwork was drawn from.
+    address: String,
+    /// "Copied" is showing for this press. A number and not a flag, so an
+    /// earlier press's timer cannot take down a later press's tick.
+    copied: Option<u64>,
+    presses: u64,
 }
 
 /// What the explore name dialog is asking for.
@@ -710,7 +728,14 @@ pub struct WalletPage {
     switcher_addresses: Option<Vec<String>>,
     /// The switcher row a "remove this wallet" confirmation is open for
     /// (2026-09-23). A position in the ORIGINAL list, as the core removes by.
+    /// Asked inline, under the row, as the web's `AccountsSheetBody` asks it.
     removing_account: Option<usize>,
+    /// 078 H-01 — the account switcher, opened from the sidebar header's
+    /// name, over whichever section is on screen.
+    account_switcher: bool,
+    switcher_scroll: gpui::ScrollHandle,
+    /// 078 H-02 — the identicon viewer, over everything, switcher included.
+    identicon_viewer: Option<IdenticonViewer>,
     /// DC3: the fixture roster is empty.
     contacts_empty: bool,
     /// Open anchored menu: which fixture feeds it, the window-coordinate
@@ -1045,6 +1070,9 @@ impl WalletPage {
             inspected_contact: None,
             switcher_addresses: None,
             removing_account: None,
+            account_switcher: false,
+            switcher_scroll: gpui::ScrollHandle::new(),
+            identicon_viewer: None,
             contacts_empty: false,
             menu: None,
             tab: match section {
@@ -2107,111 +2135,147 @@ impl WalletPage {
         )
     }
 
-    /// "Remove from this device?" — one wallet leaving, the others staying
-    /// (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+    /// 078 H-01 — the account switcher, from the sidebar header: the web's
+    /// `AccountSwitcher` in its desktop dress, a centred dialog. Every account
+    /// on this device, the active one checked, and the two ways to add one.
+    fn account_switcher_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.account_switcher {
+            return None;
+        }
+        let session = session::view(cx);
+        // Signed out under it, or the last one removed: nothing to switch.
+        if session.accounts.is_empty() {
+            self.account_switcher = false;
+            self.removing_account = None;
+            return None;
+        }
+        let title = self.settings.accounts_title.clone();
+        let body = self.accounts_body(theme, &session, true, cx);
+        let close_icon = icon_img(&mut self.icons, Icon::X, false, theme.fg_muted, 18.);
+        Some(
+            crate::ui::dialog::dialog(
+                "account-switcher",
+                theme,
+                window,
+                title,
+                close_icon,
+                body,
+                &self.switcher_scroll,
+                cx.listener(|this, _, _, cx| this.close_account_switcher(cx)),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// 078 H-02 — the identicon, big, next to the address that drew it: the
+    /// web's `IdenticonViewer`. The artwork is a fingerprint of the address,
+    /// which only becomes useful once a person has seen the two together
+    /// often enough to recognise one from the other; a 40px avatar in a
+    /// header never teaches that.
     ///
-    /// Asked, like every other destructive row in this shell: the affordance
-    /// sits in a list whose whole purpose is switching, one press away from a
-    /// row somebody meant to land on. The words are the corpus's own, and the
-    /// wallet's NAME says which row the dialog is about.
-    fn account_remove_dialog(
+    /// As on the web, Escape and Close close it and a click beside the card
+    /// does not: it sits over the switcher, and a stray click there would be
+    /// read as meant for the list.
+    fn identicon_viewer_dialog(
         &mut self,
         theme: &Theme,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
-        let index = self.removing_account?;
-        let view = session::view(cx);
-        let row = view.accounts.get(index)?;
-        let name: SharedString = if row.account.name.is_empty() {
-            row.account.address.clone().into()
-        } else {
-            row.account.name.clone().into()
-        };
+        let viewer = self.identicon_viewer.clone()?;
         let s = &self.strings;
-        let hover_confirm = theme.error_base;
-        let hover_cancel = theme.bg_sunken;
-        let card = div()
-            .w(px(400.))
+        let title = s.viewer_title.clone();
+        let caption = s.viewer_caption.clone();
+        let close = s.close_viewer.clone();
+        let copy = if viewer.copied.is_some() {
+            s.viewer_copied.clone()
+        } else {
+            s.copy_address.clone()
+        };
+        let body = div()
             .flex()
             .flex_col()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
+            .items_center()
+            .gap(px(12.))
+            .text_center()
             .child(
                 div()
-                    .text_size(theme::text_panel_title())
+                    .mb(px(8.))
+                    .child(crate::wallet::components::identicon_avatar(
+                        &mut self.identicons,
+                        &viewer.address,
+                        VIEWER_IDENTICON,
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_section())
                     .font_weight(gpui::FontWeight::BOLD)
+                    .line_height(gpui::relative(1.2))
                     .text_color(theme.fg_base)
-                    .child(name),
+                    .child(title),
             )
             .child(
                 div()
                     .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
+                    .line_height(gpui::relative(1.6))
                     .text_color(theme.fg_muted)
-                    .child(s.account_remove_body.clone()),
+                    .child(caption),
+            )
+            // The whole address, never shortened: a fingerprint you can only
+            // see half of teaches half a habit.
+            .child(
+                div()
+                    .w_full()
+                    .p(px(12.))
+                    .rounded(px(12.))
+                    .bg(theme.bg_sunken)
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_label())
+                    .line_height(gpui::relative(1.6))
+                    .text_color(theme.fg_base)
+                    .child(SharedString::from(viewer.address.clone())),
             )
             .child(
                 div()
+                    .w_full()
+                    .mt(px(8.))
                     .flex()
                     .flex_col()
-                    .gap(px(8.))
+                    .gap(px(12.))
                     .child(
-                        div()
-                            .id("account-remove-confirm")
-                            .h(px(44.))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
+                        crate::flows::components::accent_button(theme, copy)
+                            .id("identicon-viewer-copy")
                             .cursor_pointer()
-                            .bg(theme.error_soft)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.error_base)
-                            .hover(move |style| {
-                                style.bg(hover_confirm).text_color(theme.fg_inverse)
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.removing_account = None;
-                                session::remove_account(index, cx);
-                                cx.notify();
-                            }))
-                            .child(s.account_remove.clone()),
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.copy_viewer_address(cx);
+                            })),
                     )
                     .child(
-                        div()
-                            .id("account-remove-cancel")
-                            .h(px(44.))
+                        crate::flows::components::ghost_button(theme, close)
                             .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
+                            .id("identicon-viewer-close")
                             .cursor_pointer()
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .hover(move |style| style.bg(hover_cancel))
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.removing_account = None;
+                                this.identicon_viewer = None;
                                 cx.notify();
-                            }))
-                            .child(s.sign_out_cancel.clone()),
+                            })),
                     ),
             );
-
         Some(
-            div()
-                .id("account-remove-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.backdrop)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
+            crate::ui::dialog::scrim("identicon-viewer-scrim", theme)
+                .child(
+                    crate::ui::dialog::card(
+                        "identicon-viewer-card",
+                        theme,
+                        crate::ui::dialog::PROMPT_CARD_W,
+                    )
+                    .child(body),
+                )
                 .into_any_element(),
         )
     }
@@ -2803,6 +2867,24 @@ impl WalletPage {
             .gap(px(16.))
             .child({
                 let identity = self.identity();
+                // Both halves answer only for a real account: the gallery's
+                // header is a picture, as the web's is.
+                let (on_identicon, on_account): (
+                    Option<crate::wallet::components::HeaderClick>,
+                    Option<crate::wallet::components::HeaderClick>,
+                ) = if live {
+                    let address = identity.address.clone();
+                    (
+                        Some(Box::new(cx.listener(move |this, _, _, cx| {
+                            this.open_identicon_viewer(address.clone(), cx);
+                        }))),
+                        Some(Box::new(cx.listener(|this, _, _, cx| {
+                            this.open_account_switcher(cx);
+                        }))),
+                    )
+                } else {
+                    (None, None)
+                };
                 wallet_header(
                     theme,
                     &mut self.icons,
@@ -2810,6 +2892,8 @@ impl WalletPage {
                     &identity.address,
                     identity.name.clone(),
                     identity.display(),
+                    on_identicon,
+                    on_account,
                 )
             })
             .child(nav_col)
@@ -3512,6 +3596,79 @@ impl WalletPage {
             vela_core::app::balance_dashboard::Event::SwitcherOpened { addresses },
             cx,
         );
+    }
+
+    /// 078 H-01 — the header's name opens the switcher, over whatever
+    /// section is on screen. Its first frame tells the core, as the settings
+    /// panel's does (`sync_switcher`).
+    fn open_account_switcher(&mut self, cx: &mut Context<Self>) {
+        self.account_switcher = true;
+        self.removing_account = None;
+        self.menu = None;
+        self.switcher_scroll = gpui::ScrollHandle::new();
+        cx.notify();
+    }
+
+    /// The switcher dialog goes. The core's subscription goes with it unless
+    /// the settings panel it sits over is the same list, still on screen —
+    /// which would otherwise re-announce itself on its next frame, and every
+    /// account's balance would be fetched again for nothing.
+    fn close_account_switcher(&mut self, cx: &mut Context<Self>) {
+        if !self.account_switcher {
+            return;
+        }
+        self.account_switcher = false;
+        self.removing_account = None;
+        if !(self.section == Section::Settings && self.settings_page == SettingsPage::Account) {
+            self.close_switcher(cx);
+        }
+        cx.notify();
+    }
+
+    /// One of the header's dialogs is up (078 H-01, H-02). The sidebar is on
+    /// screen while a site is, so either can open over the browser column —
+    /// and the webview is a NATIVE view that paints over anything gpui draws,
+    /// dialog included. While one is up the page is taken off the screen, not
+    /// closed (spec 070): the scrim covers where it was.
+    #[cfg(not(target_os = "linux"))]
+    fn dialog_over_browser(&self) -> bool {
+        self.account_switcher || self.identicon_viewer.is_some()
+    }
+
+    /// 078 H-02 — every artwork with an address behind it opens this.
+    fn open_identicon_viewer(&mut self, address: String, cx: &mut Context<Self>) {
+        self.identicon_viewer = Some(IdenticonViewer {
+            address,
+            copied: None,
+            presses: 0,
+        });
+        cx.notify();
+    }
+
+    /// "Copy address", then "Copied" for 1.5 s, as the web's viewer does.
+    fn copy_viewer_address(&mut self, cx: &mut Context<Self>) {
+        let Some(viewer) = self.identicon_viewer.as_mut() else {
+            return;
+        };
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(viewer.address.clone()));
+        viewer.presses += 1;
+        let press = viewer.presses;
+        viewer.copied = Some(press);
+        cx.notify();
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(1500))
+                .await;
+            let _ = page.update(cx, |this, cx| {
+                if let Some(viewer) = this.identicon_viewer.as_mut()
+                    && viewer.copied == Some(press)
+                {
+                    viewer.copied = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     /// The switcher left the screen. Idempotent, and called from every path
@@ -6948,40 +7105,65 @@ impl WalletPage {
     /// DST1 — the accounts, the way out, and the one irreversible button.
     /// DST1, live: every account this person has, with the active one marked.
     ///
-    /// Clicking another row switches to it. `SwitchAccount` has existed since
-    /// 019 with nothing to trigger it — "an event with no control is dead
-    /// code", as `session.rs` put it about this very event — and the control
-    /// was drawn all along.
+    /// The list is the switcher's (`accounts_body`), as the web's settings
+    /// page draws the same `AccountsSheetBody` its switcher dialog does.
     fn settings_account_live(
         &mut self,
         theme: &Theme,
         session: &vela_core::app::session::SessionView,
         cx: &mut Context<Self>,
     ) -> Div {
-        let accounts_count = self.settings.accounts_count.clone();
-        let accounts_total = self.settings.accounts_total.clone();
-        self.sync_switcher(session, cx);
         self.ensure_backup_check(cx);
         let s = &self.settings;
-        // The COUNT is real; the total beside it is not stated at all, because
-        // the switcher's cached per-account totals are a `balance_dashboard`
-        // read this panel does not do. A figure that covers one account and is
-        // labelled "total" would be worse than no figure.
-        // Opening this panel IS the switcher opening: the core refreshes every
-        // listed account's total while it is up and answers in
-        // `switcher.balances`. Nobody ever told it, so this panel could only
-        // say how MANY accounts there were — and its sentence ended on a
-        // dangling "·" waiting for the half this adds.
-        let summary_count = crate::wallet::fill(
-            &accounts_count,
-            "count",
-            &session.accounts.len().to_string(),
-        );
         let sign_out = s.sign_out_button.clone();
         let sign_out_desc = s.sign_out_desc.clone();
         let erase_title = s.erase_title.clone();
         let erase_subtitle = s.erase_subtitle.clone();
         let erase_confirm = s.erase_confirm.clone();
+        div()
+            .flex()
+            .flex_col()
+            .child(self.accounts_body(theme, session, false, cx))
+            .child(self.settings_account_footer(
+                theme,
+                sign_out,
+                sign_out_desc,
+                erase_title,
+                erase_subtitle,
+                erase_confirm,
+                cx,
+            ))
+    }
+
+    /// The web's `AccountsSheetBody` (078 H-01): a summary, one row per
+    /// account, and the two ways to add one. Drawn by the header's switcher
+    /// dialog and by Settings → Account, as the web draws the one component in
+    /// both — `in_dialog` is the switcher, whose every answer also closes it.
+    ///
+    /// Clicking another row switches to it. `SwitchAccount` has existed since
+    /// 019 with nothing to trigger it — "an event with no control is dead
+    /// code", as `session.rs` put it about this very event — and the control
+    /// was drawn all along.
+    fn accounts_body(
+        &mut self,
+        theme: &Theme,
+        session: &vela_core::app::session::SessionView,
+        in_dialog: bool,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let accounts_count = self.settings.accounts_count.clone();
+        let accounts_total = self.settings.accounts_total.clone();
+        // Drawing this list IS the switcher opening: the core refreshes every
+        // listed account's total while it is up and answers in
+        // `switcher.balances`. Nobody ever told it, so the panel could only
+        // say how MANY accounts there were — and its sentence ended on a
+        // dangling "·" waiting for the half this adds.
+        self.sync_switcher(session, cx);
+        let summary_count = crate::wallet::fill(
+            &accounts_count,
+            "count",
+            &session.accounts.len().to_string(),
+        );
 
         let switcher = resident::resident::<BalanceDashboard>(cx)
             .read(cx)
@@ -7012,6 +7194,36 @@ impl WalletPage {
                 &settings_live::account_total(known_total, Some(&currency), &self.locale),
             )
         ));
+        // Two copies of this list can be on screen at once — the dialog over
+        // the settings panel — so each names its own rows.
+        let (art_id, row_id, remove_id, confirm_id, cancel_id) = if in_dialog {
+            (
+                "switcher-art",
+                "switcher-account",
+                "switcher-remove",
+                "switcher-remove-confirm",
+                "switcher-remove-cancel",
+            )
+        } else {
+            (
+                "settings-art",
+                "settings-account",
+                "settings-remove",
+                "settings-remove-confirm",
+                "settings-remove-cancel",
+            )
+        };
+        // The inline question belongs to the surface on top: with the dialog
+        // up, the panel behind it does not ask as well.
+        let asking = if in_dialog == self.account_switcher {
+            self.removing_account
+        } else {
+            None
+        };
+        let remove_label = self.strings.account_remove.clone();
+        let remove_body = self.strings.account_remove_body.clone();
+        let cancel_label = self.strings.sign_out_cancel.clone();
+
         let mut list = div().flex().flex_col();
         for row in &session.accounts {
             let active = row.index == session.active_index;
@@ -7024,98 +7236,193 @@ impl WalletPage {
                 .find(|entry| entry.address.eq_ignore_ascii_case(&row.account.address))
                 .map(|entry| {
                     // In the chosen currency, like every other total this
-                    // shell prints. The comment here used to justify dollars
-                    // by saying a converted figure "would be the one place in
-                    // the app that guessed" — true when nothing else
-                    // converted, and obsolete since `Money` made the rule
-                    // explicit: it converts only when the endpoint priced the
-                    // code, and draws USD when it could not. No guess.
-                    gpui::SharedString::from(settings_live::account_total(
-                        entry.usd,
-                        Some(&currency),
-                        &self.locale,
-                    ))
+                    // shell prints: `Money` converts only when the endpoint
+                    // priced the code, and draws USD when it could not.
+                    settings_live::account_total(entry.usd, Some(&currency), &self.locale)
                 });
             // The core's own index, not the loop's: it survives a display
             // reorder, which is exactly what invariant ⑦ is about.
             let index = row.index;
             let address = row.account.address.clone();
             let display = crate::wallet::live::shorten_address(&address);
-            let mut card = div()
-                .id(ElementId::from(("settings-account", index)))
+
+            // The artwork sits BESIDE the row's button, as on the web: it
+            // opens the identicon viewer on this account's address, and
+            // answers a different question from the row.
+            let artwork = div()
+                .id(ElementId::from((art_id, index)))
+                .flex_none()
+                .rounded_full()
+                .cursor_pointer()
+                .active(|el| el.opacity(0.85))
+                .child(crate::wallet::components::identicon_avatar(
+                    &mut self.identicons,
+                    &address,
+                    SWITCHER_IDENTICON,
+                ))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.open_identicon_viewer(address.clone(), cx);
+                }));
+
+            let name_colour = if active { theme.accent } else { theme.fg_base };
+            let mut pick = div()
+                .id(ElementId::from((row_id, index)))
+                .flex_1()
+                .min_w(px(0.))
                 .flex()
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
-                .child(crate::wallet::components::identicon_avatar(
-                    &mut self.identicons,
-                    &address,
-                    40.,
-                ))
                 .child(
                     div()
                         .flex_1()
                         .min_w(px(0.))
                         .flex()
                         .flex_col()
+                        .gap(px(2.))
                         .child(
                             div()
                                 .text_size(theme::text_row_title())
-                                .text_color(theme.fg_base)
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(name_colour)
+                                .truncate()
                                 .child(gpui::SharedString::from(row.account.name.clone())),
                         )
                         .child(
                             div()
                                 .font_family(theme::font_mono())
-                                .text_size(theme::text_row_sub())
+                                .text_size(theme::text_label())
                                 .text_color(theme.fg_subtle)
                                 .child(gpui::SharedString::from(display)),
                         ),
-                );
-            if let Some(total) = total {
-                card = card.child(
+                )
+                .children(total.map(|total| {
                     div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(total),
-                );
-            }
+                        .flex_none()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(total)
+                }));
             if active {
-                card = card.child(icon_img(
+                pick = pick.child(icon_img(
                     &mut self.icons,
                     Icon::Check,
                     false,
                     theme.accent,
                     18.,
                 ));
-            } else {
-                // Only the OTHER rows are a switch. Clicking the one you are
-                // already on should do nothing, not re-run a switch.
-                card = card
+            }
+            // In the dialog every row answers, and every answer closes it —
+            // the one you are on included, which is how the web's does it. On
+            // the settings page only the OTHER rows are a switch: clicking the
+            // one you are already on should do nothing, not re-run a switch.
+            if in_dialog || !active {
+                pick = pick
                     .cursor_pointer()
-                    .hover(|el| el.bg(theme.bg_sunken))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        session::switch_account(index, cx);
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if !active {
+                            session::switch_account(index, cx);
+                        }
+                        if in_dialog {
+                            this.close_account_switcher(cx);
+                        }
                         cx.notify();
                     }));
             }
+
             // Taking ONE wallet off this device (2026-09-23). Its own click
             // target, so it cannot be hit by somebody aiming at the row.
-            card = card.child(
+            let remove = div()
+                .id(ElementId::from((remove_id, index)))
+                .flex_none()
+                .p(px(2.))
+                .rounded(px(6.))
+                .cursor_pointer()
+                .hover(|el| el.bg(theme.bg_sunken))
+                .child(icon_img(
+                    &mut self.icons,
+                    Icon::X,
+                    false,
+                    theme.fg_subtle,
+                    18.,
+                ))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.removing_account = Some(index);
+                    cx.notify();
+                }));
+
+            list = list.child(
                 div()
-                    .id(("switcher-remove", index as u64))
-                    .px(px(6.))
-                    .cursor_pointer()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .hover(|el| el.text_color(theme.fg_base))
-                    .child(self.strings.account_remove.clone())
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.removing_account = Some(index);
-                        cx.notify();
-                    })),
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .border_b_1()
+                    .border_color(theme.divider)
+                    .child(artwork)
+                    .child(pick)
+                    .child(remove),
             );
-            list = list.child(card).child(div().h(px(1.)).bg(theme.divider));
+
+            // Asked before it happens, under the row it is about: the
+            // affordance sits in a list whose whole purpose is switching, one
+            // press from a row somebody meant to land on.
+            if asking == Some(index) {
+                list = list.child(
+                    div()
+                        .pt(px(8.))
+                        .pb(px(12.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .child(
+                            div()
+                                .text_size(theme::text_label())
+                                .text_color(theme.fg_muted)
+                                .child(remove_body.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .gap(px(4.))
+                                .child(
+                                    crate::flows::components::danger_button(
+                                        theme,
+                                        remove_label.clone(),
+                                    )
+                                    .id(ElementId::from((confirm_id, index)))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        move |this, _, _, cx| {
+                                            this.removing_account = None;
+                                            session::remove_account(index, cx);
+                                            // The list under the switcher just
+                                            // changed: leaving it open would put
+                                            // the next row where the pointer is.
+                                            if in_dialog {
+                                                this.close_account_switcher(cx);
+                                            }
+                                            cx.notify();
+                                        },
+                                    )),
+                                )
+                                .child(
+                                    crate::flows::components::ghost_button(
+                                        theme,
+                                        cancel_label.clone(),
+                                    )
+                                    .rounded(px(12.))
+                                    .id(ElementId::from((cancel_id, index)))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            this.removing_account = None;
+                                            cx.notify();
+                                        },
+                                    )),
+                                ),
+                        ),
+                );
+            }
         }
 
         div()
@@ -7133,15 +7440,6 @@ impl WalletPage {
             // the session says an account is being added, and a new account
             // established — or "back" — returns here.
             .child(self.account_buttons(theme, true, cx))
-            .child(self.settings_account_footer(
-                theme,
-                sign_out,
-                sign_out_desc,
-                erase_title,
-                erase_subtitle,
-                erase_confirm,
-                cx,
-            ))
     }
 
     fn settings_account(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -7851,47 +8149,39 @@ impl WalletPage {
     /// "Create a new account" / "Sign in to an existing account". Live, they
     /// open onboarding over this wallet; on the design surfaces they are the
     /// mock's picture.
+    /// Create, or sign in to one you already have — the web's `Button`
+    /// pair, side by side at their labels' width (`layout="inline"`,
+    /// padding-inline 32), not the 40px rows the settings panel drew.
     fn account_buttons(&mut self, theme: &Theme, live: bool, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
-        let hover_accent = theme.accent_hover;
-        let hover_outline = theme.bg_sunken;
-        let create = div()
+        // At their labels' width, but allowed to give way: two English
+        // labels at padding 32 already fill the 472px a dialog leaves, and
+        // a longer locale wraps inside its button rather than running out of
+        // the card.
+        let create = crate::flows::components::accent_button(theme, s.account_create.clone())
+            .w_auto()
+            .flex_initial()
+            .min_w(px(0.))
+            .px(px(32.))
             .id("settings-create-account")
-            .h(px(CONTACTS_BUTTON_H))
-            .px(px(32.))
+            .cursor_pointer();
+        let sign_in = crate::flows::components::ghost_button(theme, s.account_sign_in.clone())
             .rounded(px(12.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .bg(theme.accent)
-            .hover(move |el| el.bg(hover_accent))
-            .text_size(theme::text_row_title())
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(theme.fg_inverse)
-            .child(s.account_create.clone());
-        let sign_in = div()
+            .w_auto()
+            .flex_initial()
+            .min_w(px(0.))
+            .px(px(32.))
             .id("settings-sign-in-account")
-            .h(px(CONTACTS_BUTTON_H))
-            .px(px(32.))
-            .rounded(px(12.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .border_1()
-            .border_color(theme.outline_strong)
-            .hover(move |el| el.bg(hover_outline))
-            .text_size(theme::text_row_title())
-            .text_color(theme.fg_base)
-            .child(s.account_sign_in.clone());
+            .cursor_pointer();
         let (create, sign_in) = if live {
             (
                 create.on_click(cx.listener(|this, _, _, cx| {
+                    this.close_account_switcher(cx);
                     this.close_switcher(cx);
                     session::add_account(session::AddAccount::Create, cx);
                 })),
                 sign_in.on_click(cx.listener(|this, _, _, cx| {
+                    this.close_account_switcher(cx);
                     this.close_switcher(cx);
                     session::add_account(session::AddAccount::SignIn, cx);
                 })),
@@ -10903,6 +11193,7 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             {
                 let home = self.browser_home.clone();
+                let covered = self.dialog_over_browser();
                 self.arm_dapp_requests(cx);
                 gpui::canvas(
                     |_, _, _| (),
@@ -10910,8 +11201,11 @@ impl WalletPage {
                         // Placed from the PAINT pass of the element that owns
                         // this rectangle, so the webview follows the column
                         // through a resize and through the signing panel
-                        // opening beside it.
-                        crate::webview::place(bounds, window, &home, cx);
+                        // opening beside it. Not while a dialog is up over it:
+                        // render took it off the screen for that.
+                        if !covered {
+                            crate::webview::place(bounds, window, &home, cx);
+                        }
                     },
                 )
                 .size_full()
@@ -14027,7 +14321,9 @@ impl Render for WalletPage {
         // in the middle of. Only closing the tab or the page going away
         // settles its requests.
         #[cfg(not(target_os = "linux"))]
-        if !(self.section == Section::Explore && self.browsing && self.identity.is_some()) {
+        if !(self.section == Section::Explore && self.browsing && self.identity.is_some())
+            || self.dialog_over_browser()
+        {
             crate::webview::hide();
         }
         // Typing stops when the address bar loses the keyboard.
@@ -14083,7 +14379,8 @@ impl Render for WalletPage {
         let menu = self.menu_overlay(&theme, cx);
         let sign_out = self.sign_out_dialog(&theme, cx);
         let network_remove = self.network_remove_dialog(&theme, cx);
-        let account_remove = self.account_remove_dialog(&theme, cx);
+        let account_switcher = self.account_switcher_dialog(&theme, window, cx);
+        let identicon_viewer = self.identicon_viewer_dialog(&theme, cx);
         let confirm = self.confirm_dialog(&theme, cx);
         let settings_dialog = self.settings_dialog_overlay(&theme, window, cx);
         let import_result = self.import_result_dialog(&theme, cx);
@@ -14144,11 +14441,17 @@ impl Render for WalletPage {
         if let Some(network_remove) = network_remove {
             root = root.child(network_remove);
         }
-        if let Some(account_remove) = account_remove {
-            root = root.child(account_remove);
-        }
         if let Some(confirm) = confirm {
             root = root.child(confirm);
+        }
+        if let Some(account_switcher) = account_switcher {
+            root = root.child(account_switcher);
+        }
+        // Over everything, the switcher included: its rows' artwork opens it,
+        // and a viewer under the surface that opened it is a click that did
+        // nothing.
+        if let Some(identicon_viewer) = identicon_viewer {
+            root = root.child(identicon_viewer);
         }
         if let Some(prompt) = &self.crash {
             let entity = cx.entity();
@@ -14185,9 +14488,19 @@ impl Render for WalletPage {
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
-                // Esc peels one layer at a time: the sign-out dialog first (it
-                // is on top), then the anchored menu, then the third column
-                // (desktop SPEC keyboard map).
+                // Esc peels one layer at a time: the identicon viewer first
+                // (it is over everything), then the switcher, then the
+                // sign-out dialog, then the anchored menu, then the third
+                // column (desktop SPEC keyboard map).
+                if ks.key == "escape" && this.identicon_viewer.is_some() {
+                    this.identicon_viewer = None;
+                    cx.notify();
+                    return;
+                }
+                if ks.key == "escape" && this.account_switcher {
+                    this.close_account_switcher(cx);
+                    return;
+                }
                 if ks.key == "escape" && session::view(cx).sign_out.is_some() {
                     session::sign_out_dismissed(cx);
                     cx.notify();

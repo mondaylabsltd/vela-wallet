@@ -20,9 +20,11 @@ screenshot checked against the web.
       `ghost_button` / `accent_button` call sites.
 - [x] T012 X-03 third column: header 16/24, close 36 with a 20 icon, content
       0/24/24, scrolls with the bar, scroll reset on a new subject.
-- [ ] T013 X-04 dialog primitive: 520 / 24 / r16 / hairline / shadow-lg /
-      scrim .35 / Escape + scrim close; move settings, contact, QR and
-      remove dialogs onto it.
+- [ ] T013 X-04 (primitive landed in `ui/dialog.rs`, used by the switcher
+      and the identicon viewer; the remove dialog is now inline; settings,
+      contact and QR dialogs not moved yet) dialog primitive: 520 / 24 / r16 /
+      hairline / shadow-lg / scrim .35 / Escape + scrim close; move settings,
+      contact, QR and remove dialogs onto it.
 - [ ] T014 X-05 search field as a real input that filters: token pick,
       contact pick, receive list, contacts (with ✕), empty-result line.
 - [ ] T015 X-06 copy button with tick feedback; wire fact rows, receive
@@ -39,8 +41,10 @@ screenshot checked against the web.
       strand Continue; test in `tests/app_send.rs`.
 
 ## Phase 3 — P1 features
-- [ ] T030 H-01 account switcher dialog from the sidebar header.
-- [ ] T031 H-02 identicon viewer from every addressed identicon.
+- [x] T030 H-01 account switcher dialog from the sidebar header.
+- [ ] T031 H-02 (header and switcher rows done; contact rows, recipient
+      cards, the signer line open) identicon viewer from every addressed
+      identicon.
 - [ ] T032 H-03 balance status line: RPC-fix dialog / balance breakdown; the
       web's text order and colours.
 - [ ] T033 F-01 scan from the send form (recipient card button, contact
