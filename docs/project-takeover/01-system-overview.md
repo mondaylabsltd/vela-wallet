@@ -37,7 +37,7 @@ rust/                共享核心:crates/vela-core(状态机、原语、i18n 语
                      pkg-web/(提交的 wasm 产物)
 app-web/vela-wallet/ Web 壳(SvelteKit,生产 Web 钱包;extension/ 为 Chrome 扩展构建)
 app-web/getvela.app/ 官网 + API 代理(bundler/bug-report/exchange-rate/…)+ .well-known
-app-web/clearsigning/ 零构建的清晰签名静态页(见其 HANDOVER.md)
+app-web/trusted-signer/ 零构建的清晰签名静态页(见其 HANDOVER.md)
 app-desktop/vela-wallet/  桌面壳(gpui)
 app-ios/             iOS 壳(VelaWallet 工程 + VelaCoreKit SPM 包)
 app-android/         Android 壳

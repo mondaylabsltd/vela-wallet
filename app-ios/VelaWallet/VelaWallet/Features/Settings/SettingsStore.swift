@@ -25,6 +25,7 @@ import VelaCore
 extension NetworkAdminCore: CoreBridge {}
 extension DisplayCurrencyCore: CoreBridge {}
 extension FeeTierPrefCore: CoreBridge {}
+extension SignPrefCore: CoreBridge {}
 
 /// Which of a network's two editable endpoints an `override_field_edited`
 /// names (`NetOverrideField` in the core).
@@ -66,6 +67,12 @@ final class SettingsStore {
     /// Settings shows it and every send starts at it.
     private(set) var feeTier: FeeTierPrefViewWire?
 
+    /// How this device signs by default, and which Trusted Signer page it opens
+    /// (spec 071) — app-wide like the speed: every signing sheet starts at it.
+    /// Seeded with the machine's own first view, so a sheet raised before the
+    /// stored values land still lists what the core offers.
+    private(set) var signPref: SignPrefViewWire?
+
     /// `true` once the core has read all four stores. Mutations sent before it
     /// are dropped by the core.
     var isLoaded: Bool { networkAdmin?.loaded == true }
@@ -75,11 +82,22 @@ final class SettingsStore {
     private var core: CoreStore<NetViewWire>!
     private var currencyCore: CoreStore<CurrencyViewWire>!
     private var feeTierCore: CoreStore<FeeTierPrefViewWire>!
+    private var signPrefCore: CoreStore<SignPrefViewWire>!
 
     /// `pool` is the app's one `rpc_pool` session (FR-002). The currency
     /// machine needs it because its first rate rung is Chainlink's fiat feeds
     /// on Ethereum mainnet — a chain read, and therefore a routed one.
-    init(store: VelaStore, accounts: AccountStore, pool: RpcPool) {
+    ///
+    /// `networkPerform` answers the networks machine instead of its executor —
+    /// the hermetic tests' door (spec 072): every event this class sends is put
+    /// to the REAL machine there, with no network behind it, so a spelling the
+    /// core cannot read fails a test rather than a person's screen.
+    init(
+        store: VelaStore,
+        accounts: AccountStore,
+        pool: RpcPool,
+        networkPerform: (([String: Any]) async -> String)? = nil
+    ) {
         // The pool travels with the networks machine too (spec 081 FR-001).
         // Without it `invalidate_pools` — the operation the core emits on
         // EVERY endpoint save, because invariant ⑤ says a changed endpoint
@@ -90,7 +108,7 @@ final class SettingsStore {
         self.currencyExecutor = DisplayCurrencyExecutor(store: store, accounts: accounts, pool: pool)
         self.core = CoreStore(
             bridge: NetworkAdminCore(),
-            perform: { [executor] operation in await executor.perform(operation) },
+            perform: networkPerform ?? { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.networkAdmin = view },
             // A shell fault here is a malformed event or a view this build
             // cannot read — never a person's mistake. Swallowing it silently is
@@ -110,6 +128,14 @@ final class SettingsStore {
             onView: { [weak self] view in self?.feeTier = view },
             onFault: { print("[vela-wallet] fee_tier_pref fault: \($0)") }
         )
+        self.signPref = SignPrefViewWire.initial
+        let signPrefExecutor = SignPrefExecutor(store: store)
+        self.signPrefCore = CoreStore(
+            bridge: SignPrefCore(),
+            perform: { operation in signPrefExecutor.perform(operation) },
+            onView: { [weak self] view in self?.signPref = view },
+            onFault: { print("[vela-wallet] sign_pref fault: \($0)") }
+        )
     }
 
     /// Boot the default-speed machine. App-wide and idempotent, like the
@@ -125,6 +151,30 @@ final class SettingsStore {
         feeTierCore.dispatch(CoreJSON.string(["type": "user_chose", "tier": tier]))
     }
 
+    /// Boot the signing-preferences machine. App-wide and idempotent: the
+    /// first signing sheet starts at what it read, whether or not anybody has
+    /// opened Settings.
+    func openSignPref() {
+        signPrefCore.boot(CoreJSON.string(["type": "refresh"]))
+    }
+
+    /// Settings' "Sign with" — the default, and only from there: a sheet's own
+    /// pick is one request's and never comes here.
+    func chooseSignMethod(_ method: String) {
+        signPrefCore.dispatch(CoreJSON.string(["type": "method_chosen", "method": method]))
+    }
+
+    /// The Trusted Signer page, as typed. The core validates, and stores
+    /// nothing it refuses.
+    func submitSignerUrl(_ text: String) {
+        signPrefCore.dispatch(CoreJSON.string(["type": "signer_url_submitted", "text": text]))
+    }
+
+    /// Back to the official page.
+    func resetSignerUrl() {
+        signPrefCore.dispatch(CoreJSON.string(["type": "signer_url_reset"]))
+    }
+
     /// USD → that currency, through the display machine's own waterfall.
     ///
     /// The payroll importer's rate port (spec 054 US3). Exposed here rather
@@ -137,8 +187,17 @@ final class SettingsStore {
     /// Called from the settings route's `.task`. Idempotent: the machines read
     /// their stores once and keep them.
     func open() {
-        core.boot(CoreJSON.string(["type": "started"]))
+        openNetworks()
         openCurrency()
+        // The page's two signing rows read what is stored, however Settings
+        // was reached (spec 071).
+        openSignPref()
+    }
+
+    /// Boot the networks machine alone — it reads its four stores once and
+    /// keeps them. Idempotent, like `open()`.
+    func openNetworks() {
+        core.boot(CoreJSON.string(["type": "started"]))
     }
 
     /// Boot the currency machine alone.
@@ -246,7 +305,7 @@ final class SettingsStore {
         ])
     }
 
-    /// ST12 opened. The core reads what is stored and projects the fields.
+    /// ST12 opened. The core probes all four fields.
     func openEndpoints() { dispatch(["type": "endpoints_opened"]) }
 
     /// One endpoint field, as it is typed and when it is left.
@@ -277,7 +336,8 @@ final class SettingsStore {
 
     func resetEndpoints() { dispatch(["type": "reset_endpoints_to_defaults"]) }
 
-    /// ST11 opened.
+    /// ST11 opened. The core seeds the drafts from the saved keys and tests
+    /// every configured provider.
     func openProviders() { dispatch(["type": "providers_opened"]) }
 
     func editProviderKey(id: String, value: String) {
@@ -336,6 +396,16 @@ final class SettingsStore {
 
     func blurOverride(chainId: Int) {
         dispatch(["type": "override_blurred", "chain_id": chainId])
+    }
+
+    /// 用此 RPC 重新检查 — the wizard's chain again, through the RPC typed.
+    ///
+    /// It used to send only the RPC, which the core stores and does nothing
+    /// else with: the link took the tap and re-checked nothing.
+    func recheck(customRpc: String) {
+        guard let chainId = networkAdmin?.wizard.chainInfo?.chainId else { return }
+        editCustomRpc(customRpc)
+        selectChain(chainId, keepCustomRpc: true)
     }
 
     func network(id: String) -> NetNetworkRowWire? {

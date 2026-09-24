@@ -19,7 +19,7 @@ use crate::theme::{
     self, CONTACTS_BUTTON_H, CONTACTS_MENU_ROW_H, CONTACTS_MENU_W, CONTACTS_RAIL_LABEL_H,
     CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme, WALLET_CONTROL_H,
 };
-use crate::wallet::components::{empty_state, icon_img, person_avatar};
+use crate::wallet::components::{empty_state, icon_img, identicon_avatar};
 
 use super::fixtures::MenuModel;
 
@@ -54,11 +54,9 @@ pub fn contact_row(
         .mx(px(-8.))
         .rounded(px(10.))
         .cursor_pointer()
-        .child(person_avatar(
-            theme,
+        .child(identicon_avatar(
             identicons,
             &contact.address_full,
-            &contact.name,
             CONTACTS_ROW_AVATAR,
         ))
         .child(

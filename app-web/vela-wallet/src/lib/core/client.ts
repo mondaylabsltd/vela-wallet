@@ -39,6 +39,7 @@ import init, {
 	CreateWalletCore,
 	DappPermissionsCore,
 	DappSessionCore,
+	dpermSettleOnClose,
 	DisplayCurrencyCore,
 	ExtCacheCore,
 	FeePolicyCore,
@@ -58,6 +59,8 @@ import init, {
 	passkeyProviderIconDataUri,
 	PaymentRequestCore,
 	peggedNativeUsd,
+	prefsMigrations,
+	prefsRead,
 	ReceiveWatchCore,
 	registryBackupStep,
 	registryChainKeyPlan,
@@ -70,7 +73,14 @@ import init, {
 	RpcPoolCore,
 	SendCore,
 	SessionCore,
+	SignPrefCore,
 	SignRequestCore,
+	storageIsCacheKey,
+	storageIsErasableKey,
+	storageIsOurs,
+	storageItemOfKey,
+	storageItems,
+	storageRecordsIn,
 	toHex,
 	TokenTrustCore,
 	TxTrackerCore,
@@ -102,6 +112,7 @@ export {
 	RpcPoolCore,
 	SendCore,
 	SessionCore,
+	SignPrefCore,
 	SignRequestCore,
 	TokenTrustCore,
 	TxTrackerCore
@@ -120,8 +131,23 @@ export { identiconNormalizeSeed, identiconSvgCircular };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
 export { registryBackupStep, registryNameStep, walletKeysStep };
+// How a pending request is settled when the request window goes away: 4900,
+// never 4001 (spec 070 T063). The window asks rather than restating it.
+export { dpermSettleOnClose };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 export { registryResolveKeyStep, registryResolveUnitStep };
+// Settings' shared rules (spec 072): how every shell's preference spellings
+// read, and what each stored key IS — its storage row, whether "clear all
+// caches" takes it, whether an erase does. JSON in and out, like the machines.
+export { prefsMigrations, prefsRead };
+export {
+	storageIsCacheKey,
+	storageIsErasableKey,
+	storageIsOurs,
+	storageItemOfKey,
+	storageItems,
+	storageRecordsIn
+};
 
 /**
  * The in-flight (or settled) initialization. Held as a promise rather than a

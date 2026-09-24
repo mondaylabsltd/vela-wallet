@@ -40,6 +40,21 @@ struct SplitRowsTests {
         #expect(SplitRows.amountEdited(rows(), id: "rcpt_9", amount: "5") == rows())
     }
 
+    /// **A share is cleaned by the core's amount rule** (spec 073).
+    ///
+    /// A decimal-comma pad's comma reached the core raw, and "1,5" was
+    /// refused only when the call was built. The cases below read the same
+    /// under every number preset, so the global preset is left alone.
+    @Test func aSharesEditRunsTheCoresAmountRule() {
+        // One typed comma into a figure with no point is the decimal mark.
+        #expect(SplitRows.amountEdited(rows(), id: "rcpt_0", amount: "1,")[0].amount == "1.")
+        // A paste with no reading as one figure changes nothing — 1.57 is
+        // not what "1.5e-7" meant.
+        #expect(SplitRows.amountEdited(rows(), id: "rcpt_0", amount: "1.5e-7") == rows())
+        // A pasted grouped figure is read for what it is.
+        #expect(SplitRows.amountEdited(rows(), id: "rcpt_1", amount: "1.234,56")[1].amount == "1234.56")
+    }
+
     /// **A new address means the name is gone.**
     ///
     /// The name belonged to the old address. Keeping it puts somebody's name

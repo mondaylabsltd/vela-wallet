@@ -56,7 +56,8 @@ pub fn chevron_icon(theme: &Theme, icons: &mut IconCache) -> impl IntoElement {
 }
 
 /// Circular identicon avatar (US3) — the PNG is square; the corner radius on
-/// the image quad is what crops it round.
+/// the image quad is what crops it round. Every account and contact avatar is
+/// this artwork: spec 074 retired the initials style (`vela.avatarStyle`).
 pub fn identicon_avatar(
     identicons: &mut IdenticonCache,
     seed: &str,
@@ -67,37 +68,6 @@ pub fn identicon_avatar(
         .h(px(size))
         .rounded(px(size / 2.))
         .flex_none()
-}
-
-/// The avatar for a NAMED person — this wallet's owner, or a contact.
-///
-/// Which picture that is, is the person's choice (Settings → Appearance).
-/// `identicon` is the address's own artwork and the default: the receive card
-/// leans on it as an anti-forgery mark, so it is the one people learn to read.
-/// `initials` is a letter on an accent wash, the same shape the explore rows
-/// use for a site.
-///
-/// A name is required rather than optional on purpose. Where there is only an
-/// address — a recipient nobody has named — the identicon is drawn whatever
-/// the setting says: a disc reading "V" for every unnamed address tells you
-/// less than nothing, and the web falls back to exactly that letter because
-/// its avatar takes an optional name. This call site cannot make that mistake.
-pub fn person_avatar(
-    theme: &Theme,
-    identicons: &mut IdenticonCache,
-    seed: &str,
-    name: &str,
-    size: f32,
-) -> gpui::AnyElement {
-    let letter = crate::settings::model::lettermark(name);
-    if crate::executor::appearance_prefs::avatar_style()
-        == crate::executor::appearance_prefs::AvatarStyle::Initials
-        && !letter.is_empty()
-    {
-        return crate::explore::components::letter_avatar(letter, theme.accent, size)
-            .into_any_element();
-    }
-    identicon_avatar(identicons, seed, size).into_any_element()
 }
 
 /// A passkey provider's mark, or nothing when the catalog does not know the
@@ -157,7 +127,7 @@ pub fn wallet_header(
         .flex()
         .items_center()
         .gap(px(10.))
-        .child(person_avatar(theme, identicons, seed, &name, WALLET_AVATAR))
+        .child(identicon_avatar(identicons, seed, WALLET_AVATAR))
         .child(
             div()
                 .flex()

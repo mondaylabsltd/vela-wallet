@@ -14,7 +14,7 @@
  * MV3 evicts an idle worker, and a page promise that never settles is the worst
  * thing this extension can produce — a dApp spinner that spins forever while
  * the person cannot tell whether their money moved. So a request is written
- * down the moment it arrives, a window closed without a decision answers 4001,
+ * down the moment it arrives, a window closed without a decision answers 4900,
  * and content.js has its own deadline on top (spec 027 D37).
  *
  * What this file does hold — and why it is not "state" in the sense above:
@@ -222,20 +222,14 @@ async function openRequestWindow(rid) {
 	entry.windowId = created.id;
 }
 
-/** Close the side panel of a tab that has nothing more to show. */
-function closePanel(tabId) {
-	const panel = chrome.sidePanel;
-	if (!panel) return;
-	if (typeof panel.close === 'function') {
-		Promise.resolve(panel.close({ tabId })).catch(() => {});
-		return;
-	}
-	// Older Chrome: disabling the panel for the tab dismisses it; re-enabling
-	// makes the next request able to open it again, without opening it now.
-	Promise.resolve(panel.setOptions({ tabId, enabled: false }))
-		.then(() => panel.setOptions({ tabId, enabled: true }))
-		.catch(() => {});
-}
+/*
+ * There used to be a `closePanel` here, and a `panelDone` message the page sent
+ * when the tab owed nothing more.
+ *
+ * Spec 077 FR-001 retired both: the panel is the WALLET now, not one request, so
+ * "nothing more to show" is no longer a thing that happens — there is always the
+ * wallet. It is dismissed by the person, like any side panel.
+ */
 
 /** The oldest request a panel on `tabId` still owes an answer for. */
 function nextForPanel(tabId) {
@@ -345,6 +339,8 @@ async function answerFromSnapshot(method, origin) {
 			// `[]` for an ungranted origin is the honest answer, and the one
 			// EIP-1193 asks for: a disconnected wallet, with no prompt.
 			return { result: accounts };
+		case 'eth_coinbase':
+			return { result: accounts[0] ?? null };
 		case 'eth_chainId':
 			return chainId > 0 ? { result: toHexChainId(chainId) } : { error: NOT_OPENED() };
 		case 'net_version':
@@ -561,6 +557,15 @@ function route(request, sender, reply) {
 		case 'addChain':
 			void switchChain(request.method, request.params, origin).then(reply);
 			return;
+		case 'revoke':
+			// The site disconnects itself (EIP-2255 `wallet_revokePermissions`).
+			// Removing the grant is the whole act: the storage listener below
+			// tells every tab of the origin `accountsChanged([])` + `disconnect`.
+			void chrome.storage.local
+				.remove(PERM_PREFIX + origin)
+				.then(() => reply({ result: null }))
+				.catch(() => reply({ error: rpcError(ERR.INTERNAL, 'Could not record the disconnect') }));
+			return;
 		case 'watchAsset':
 			// EIP-747: `false` is "not added". Tokens are added in the wallet, where
 			// the person can see what they are adding.
@@ -622,17 +627,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	}
 
 	if (message.type === 'requestCurrent') {
-		// The side panel of a tab, asking what it owes. Nothing → `null`, and
-		// the panel closes itself.
+		// The side panel of a tab, asking what it owes. Nothing → `null`, and the
+		// panel stays as it is: since spec 077 the panel is the wallet, and a
+		// wallet with no pending request is simply a wallet.
 		sendResponse(nextForPanel(typeof message.tabId === 'number' ? message.tabId : undefined));
-		return false;
-	}
-
-	if (message.type === 'panelDone') {
-		if (typeof message.tabId === 'number' && !nextForPanel(message.tabId)) {
-			closePanel(message.tabId);
-		}
-		sendResponse({ ok: true });
 		return false;
 	}
 

@@ -9,9 +9,6 @@
 //
 
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct AddressStrip: View {
     @Environment(\.theme) private var theme
@@ -60,9 +57,7 @@ struct AddressStrip: View {
     }
 
     private func copy() {
-        #if canImport(UIKit)
-        UIPasteboard.general.string = address
-        #endif
+        velaCopy(address)
         onCopy()
         copied = true
         Task {

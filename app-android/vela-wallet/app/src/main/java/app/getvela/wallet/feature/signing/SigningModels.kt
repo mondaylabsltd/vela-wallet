@@ -204,7 +204,25 @@ data class SignWithModel(
 )
 
 @Immutable
-data class SignWithOption(val id: String, val title: String, val selected: Boolean)
+data class SignWithOption(
+    val id: String,
+    val title: String,
+    val selected: Boolean,
+    /** A line under the title — the Trusted Signer's promise (spec 071). */
+    val line: String? = null,
+)
+
+/**
+ * The Trusted Signer's page is open (spec 071): the sheet says so instead of
+ * offering the slide, with a way back to the page and a way out.
+ */
+@Immutable
+data class TrustedSignerWaitModel(
+    val title: String,
+    val hint: String,
+    val reopen: String,
+    val cancel: String,
+)
 
 @Immutable
 data class SigningScreenModel(
@@ -226,6 +244,10 @@ data class SigningScreenModel(
     val networkLogoUrl: String? = null,
     /** "Sign with · Automatic ›" — where the passkey that signs this is. Live only. */
     val signWith: SignWithModel? = null,
+    /** Spec 071: the Trusted Signer is open; the slide gives way to this. */
+    val trustedSignerWait: TrustedSignerWaitModel? = null,
+    /** Spec 071: why the last Trusted Signer attempt did not sign. */
+    val trustedSignerNotice: String? = null,
     val blocks: List<SigningBlock>,
     val tech: TechModel,
     /** cs29 ships the disclosure open — the whole point of that mock. */

@@ -15,18 +15,6 @@ bisa menampilkan satu hal dan menandatangani hal lain. Persis itulah yang terjad
 Halaman tanda tangan ada untuk memisahkan keduanya: transaksinya datang dari satu tempat,
 sedangkan pemeriksaan dan tanda tangannya terjadi di tempat yang Anda kendalikan.
 
-**Status:** sudah dibuat dan diuji secara lokal; **belum dipublikasikan**, dan **belum
-ada aplikasi Vela yang mengirim permintaan ke sana**. Saat ini halaman ini bisa dibaca,
-dijalankan, dan dicoba dengan contoh peminta di folder `samples/`. Memakainya untuk tanda
-tangan sungguhan membutuhkan aplikasi yang meneruskan permintaannya ke halaman ini, dan
-bagian itu belum dibangun.
-
-## Apa itu
-
-Satu folder — `app-web/clearsigning` di repositori — yang sekaligus merupakan halaman
-web dan ekstensi Chrome. Murni HTML, CSS, dan JavaScript: tanpa framework, tanpa bundler,
-tanpa langkah build, tanpa dependensi, dan tanpa data yang diambil dari server —
-satu-satunya permintaannya adalah untuk logo token sebagai hiasan.
 
 Saat menerima permintaan tanda tangan, halaman ini tidak memercayai ringkasan yang ikut
 datang bersamanya. Halaman ini mendekode calldata mentah sendiri, menghitung digest-nya
@@ -44,18 +32,6 @@ di bawah `getvela.app`, dan browser hanya akan menawarkannya ke halaman yang rel
 party-nya adalah `getvela.app`. Satu aturan itulah yang menentukan cara menjalankan
 salinan sendiri mana yang berguna bagi Anda.
 
-**Sebagai ekstensi Chrome — cara memakainya dengan kunci yang sudah Anda punya.** Relying
-party ekstensi ini adalah `getvela.app`, dari mana pun folder itu berasal, jadi kunci
-yang sudah Anda punya bisa menandatangani di dalamnya, sementara kodenya adalah folder
-yang Anda muat dan periksa sendiri.
-
-1. Ambil foldernya: `git clone https://github.com/mondaylabsltd/vela-wallet`
-   (letaknya di `app-web/clearsigning`).
-2. Buka `chrome://extensions` dan aktifkan **Mode developer**.
-3. Klik **Muat yang belum dibuka** (*Load unpacked*), lalu pilih folder
-   `app-web/clearsigning`.
-4. Ikon di bilah alat membuka halaman itu di sebuah tab.
-
 **Sebagai halaman di domain Anda sendiri, atau di localhost.** Kalau disajikan lewat
 HTTPS (atau dari localhost), relying party halaman itu adalah nama host-nya sendiri —
 jadi halaman itu bisa menandatangani dengan kunci yang terdaftar di bawah nama host
@@ -65,7 +41,7 @@ desktop, dan menandatangani untuk dompet yang kuncinya dibuat di domain Anda sen
 Cara ini bukan cara untuk menandatangani bagi dompet `getvela.app` yang sudah ada.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

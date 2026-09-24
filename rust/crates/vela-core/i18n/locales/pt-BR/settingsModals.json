@@ -42,7 +42,11 @@
       "fiatLabel": "COTAÇÕES FIAT",
       "fiatHint": "Taxas de câmbio baseadas em USD que definem a lista de moedas — substituível por uma cobertura mais ampla.",
       "resetToDefaults": "Restaurar os quatro",
-      "selfHostGuide": "Guia de auto-hospedagem →"
+      "selfHostGuide": "Guia de auto-hospedagem →",
+      "resetTitle": "Restaurar os endpoints de serviço?",
+      "resetBody": "Os quatro serviços voltam aos endereços da Vela. Os endereços que você inseriu aqui serão descartados.",
+      "resetConfirm": "Restaurar",
+      "resetCancel": "Cancelar"
     },
     "addNetwork": {
       "modalTitle": "Adicionar rede",
@@ -60,7 +64,6 @@
       "retry": "Tentar de novo",
       "addNetworkBtn": "Adicionar rede",
       "incompatibleHint": "Alguns contratos necessários ainda não foram implantados nesta chain.\nUse a ferramenta Vela Wallet Chain Setup para implantá-los e depois volte para verificar de novo.",
-      "singleKeyOnly": "Uma carteira com mais de uma passkey não pode ser criada nesta rede: a fábrica de signatários de passkeys da Safe não está implantada aqui.\nUma carteira com uma única passkey funciona normalmente.",
       "openChainSetupTool": "Abrir ferramenta de Chain Setup",
       "recheck": "Verificar de novo",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -70,7 +73,8 @@
       "incompatible": "Incompatível",
       "checkSafe": "Contratos Safe L2",
       "checkSigner": "Pré-compilado P-256",
-      "checkRemaining": "outros {{count}} contratos"
+      "checkRemaining": "outros {{count}} contratos",
+      "singleKeyOnly": "Uma carteira com mais de uma passkey não pode ser criada nesta rede: a fábrica de signatários de passkeys da Safe não está implantada aqui.\nUma carteira com uma única passkey funciona normalmente."
     },
     "treasury": {
       "modalTitle": "Tesouraria",

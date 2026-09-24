@@ -1,8 +1,8 @@
 package app.getvela.wallet.feature.signing.core
 
 import app.getvela.wallet.core.diagnostics.VelaLog
-import app.getvela.wallet.feature.browser.core.BrowserExecutor
 import app.getvela.wallet.feature.send.core.SendExecutor
+import app.getvela.wallet.feature.send.core.TrustedSignerIntent
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.withTimeoutOrNull
@@ -40,13 +40,19 @@ class SignExecutor(
     /** How long the final answer waits for the receipt (the desktop's `await_receipt`); then the op hash answers. */
     private val receiptWaitMs: Long = 120_000L,
     private val receiptPollMs: Long = 3_000L,
+    /** The asking site's origin — what the Trusted Signer names as the requester (spec 071). */
+    private val origin: () -> String = { "" },
 ) {
     /** User-op hashes whose pending record has been written — the response never precedes the record. */
     private val persisted = MutableStateFlow<Set<String>>(emptySet())
 
     interface Ports {
-        /** The answer, to the transport (tab) that owns the request. */
-        fun respond(transportId: String, id: String, json: JSONObject)
+        /**
+         * The answer, to the transport (tab) that owns the request. The core's
+         * typed payload: a page's words and wire shape are `dapp_browser`'s
+         * (spec 070), not this executor's.
+         */
+        fun respond(transportId: String, id: String, payload: SignResponsePayload)
 
         /** The relay accepted: the core must hear this BEFORE the submit resolves. */
         fun opSubmitted(id: String, userOpHash: String)
@@ -82,7 +88,7 @@ class SignExecutor(
 
     suspend fun perform(operation: SignOperation): SignShellResult = when (operation) {
         is SignOperation.SendResponse -> {
-            ports.respond(operation.transport_id, operation.id, responseJson(operation.id, operation.payload))
+            ports.respond(operation.transport_id, operation.id, operation.payload)
             SignShellResult.Responded
         }
         // `null` means "proceed to submit" — including when a check itself
@@ -162,6 +168,7 @@ class SignExecutor(
                 gasFeeToken = op.gas_fee_token,
                 quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
                 signingStarted = { ports.signingStarted() },
+                intent = TrustedSignerIntent(op.method, op.params_json, origin()),
             )
             ports.opSubmitted(op.id, hash)
             // §4: the durable record precedes anything the dApp could poll —
@@ -188,7 +195,13 @@ class SignExecutor(
         val original = messageHash(op.method, op.params_json)
             ?: return SignSubmitOutcome.Failed("${op.method} carried nothing this wallet could sign")
         return try {
-            SignSubmitOutcome.Succeeded(spine.signMessage(op.chain_id, op.address, original, signingStarted = { ports.signingStarted() }))
+            SignSubmitOutcome.Succeeded(
+                spine.signMessage(
+                    op.chain_id, op.address, original,
+                    signingStarted = { ports.signingStarted() },
+                    intent = TrustedSignerIntent(op.method, op.params_json, origin()),
+                ),
+            )
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
@@ -223,60 +236,15 @@ class SignExecutor(
          * EIP-191 prefix over the bytes (hex or text, the web's rule); typed
          * data is its EIP-712 digest, computed by the core.
          */
-        fun messageHash(method: String, paramsJson: String): ByteArray? {
-            val params = runCatching { JSONArray(paramsJson) }.getOrNull() ?: return null
-            // Spec 046 US2: `eth_sign` is `[address, data]` — the same EIP-191
-            // envelope over `data` (EIP-1474's rule), the params swapped. The
-            // sheet has already shown it as the danger it is (ClearSignMethod::EthSign).
-            return if (method == "personal_sign" || method == "eth_sign") {
-                val payload = params.optString(if (method == "eth_sign") 1 else 0).ifBlank { return null }
-                val bytes = if (isHexPayload(payload)) SendExecutor.unhex(payload) else payload.toByteArray(Charsets.UTF_8)
-                val prefix = "\u0019Ethereum Signed Message:\n${bytes.size}".toByteArray(Charsets.UTF_8)
-                uniffi.vela_core_uniffi.keccak256(prefix + bytes)
-            } else {
-                val typed = params.opt(1)?.let { if (it is String) it else it.toString() } ?: return null
-                runCatching { uniffi.vela_core_uniffi.hashTypedData(typed) }.getOrNull()
-            }
-        }
-
-        private fun isHexPayload(payload: String): Boolean =
-            payload.startsWith("0x") && payload.length % 2 == 0 && payload.drop(2).all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
-
-        /** The page's answer in the wire's shape; the core chose `ok`/`err` and the code. */
-        fun responseJson(id: String, payload: SignResponsePayload): JSONObject = when (payload) {
-            is SignResponsePayload.Ok -> BrowserExecutor.resultJson(id, payload.result)
-            is SignResponsePayload.Err -> BrowserExecutor.errorJson(
-                id,
-                payload.code,
-                // A refusal's `message` is the refused FUNCTION name, which on
-                // its own reads as a label rather than an answer. Say what
-                // happened, then name it (spec 081, device-found).
-                when {
-                    payload.kind == SignErrorKind.SelfCallBlocked && payload.message != null ->
-                        "${defaultMessage(payload.kind)} (${payload.message})"
-                    else -> payload.message ?: defaultMessage(payload.kind)
-                },
-                kindWireName(payload.kind),
-            )
-        }
-
-        /** The core's snake_case name for a kind — what `@SerialName` writes. */
-        fun kindWireName(kind: SignErrorKind): String =
-            SignErrorKind.serializer().descriptor.getElementName(kind.ordinal)
-
-        fun defaultMessage(kind: SignErrorKind): String = when (kind) {
-            SignErrorKind.UserRejected -> "User rejected the request"
-            SignErrorKind.WalletSwitchedChains -> "The wallet switched chains"
-            SignErrorKind.UnsupportedChain -> "Unsupported chain"
-            SignErrorKind.UnauthorizedAccount -> "Unauthorized account"
-            SignErrorKind.InvalidParams -> "Invalid params"
-            SignErrorKind.UnsupportedCapability -> "Unsupported capability"
-            SignErrorKind.UnlimitedApproval -> "Unlimited approvals are disabled"
-            SignErrorKind.SelfCallBlocked -> "This request would change who controls the wallet"
-            SignErrorKind.FundingCancelled -> "Funding cancelled"
-            SignErrorKind.SubmitFailed -> "The transaction could not be submitted"
-            SignErrorKind.StaleFeeQuote -> "The fee quote expired"
-        }
+        /**
+         * What the site asked to sign, before the Safe's wrap — the core's one
+         * rule (`sign_message::original_hash`), which the desktop and the
+         * Trusted Signer's page share. It used to be copied here, reading typed
+         * data from `params[1]` even for `eth_signTypedData`, which carries it
+         * first.
+         */
+        fun messageHash(method: String, paramsJson: String): ByteArray? =
+            uniffi.vela_core_uniffi.signMessageHash(method, paramsJson)
 
         /**
          * The calls a request carries (the desktop's `calls_of`): one for

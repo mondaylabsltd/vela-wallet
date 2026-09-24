@@ -4,9 +4,18 @@
  * The core parses a fiat figure the way `parseFloat` does, so "4,5" is 4 and a
  * different sum goes out. These are the cases where cleaning the text could
  * itself move a figure — which is the only kind of bug worth having here.
+ *
+ * The rule is the core's since spec 073 (`l10n::amount_text`, which carries
+ * the same cases); this suite runs them through the wasm the web ships, with
+ * the web's own arguments — the preset key and `inputType`'s paste flag.
  */
+import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
-import { caretAfterClean, cleanAmountText } from './amount-text';
+import { amountTextCaret as caretAfterClean, amountTextClean } from '$lib/core/kernels';
+
+/** The suite's old spelling: the preset's decimal mark. */
+const cleanAmountText = (raw: string, decimal: string, pasted = false, previous?: string) =>
+	amountTextClean(raw, decimal === ',' ? 'dot_comma' : 'comma_dot', pasted, previous);
 
 describe('a decimal-comma preset', () => {
 	const clean = (raw: string, pasted = false) => cleanAmountText(raw, ',', pasted);

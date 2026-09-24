@@ -20,22 +20,41 @@ struct SettingsSheet: View {
     /// A row picked in one of the five select sheets. Absent in the gallery,
     /// where the sheets are pictures of a choice already made.
     var onPick: ((SettingsOverlay, String) -> Void)?
-    /// 全部清除, and the erase this app will not run without a person.
+    /// 全部清除, and the erase this app will not run without a person. The
+    /// erase answers whether it happened: `false` keeps this sheet up, its
+    /// callout saying what did not go (spec 072).
     var onClearCaches: (() -> Void)?
     var onErase: (() -> Void)?
     /// An account row tapped in the switcher.
     var onSelectAccount: ((String) -> Void)?
     var onAccountCreate: (() -> Void)?
     var onAccountSignIn: (() -> Void)?
+    /// Taking ONE wallet off this device (2026-09-23), by its position in the
+    /// session's own list.
+    var onRemoveAccount: ((Int) -> Void)?
     /// SR2's field and its commit (058). Absent in the gallery, where the
     /// endpoint is a picture of one already typed.
     var rpcDraft: Binding<String>?
     var onCommitRpc: (() -> Void)?
     /// SR3's 立即重试, per chain id.
     var onRetryChain: ((String) -> Void)?
-    /// The storage row waiting on an answer, and what 清除 does to it.
-    var storageConfirm: ConfirmSheetModel?
-    var onConfirmStorage: (() -> Void)?
+    /// The destructive action waiting on an answer — a storage row's 清除, a
+    /// network's bin, "reset to defaults" — and its "yes".
+    var pendingConfirm: ConfirmSheetModel?
+    var onConfirmPending: (() -> Void)?
+    /// The Trusted Signer page's Save (spec 071): `true` when the core took the
+    /// address, which is what closes the sheet. Absent in the gallery.
+    var onSaveSignerUrl: ((String) -> Bool)?
+    var onResetSignerUrl: (() -> Void)?
+    /// The relay's Save and reset (spec 075) — the same pair, the other key.
+    var onSaveTunnelUrl: ((String) -> Bool)?
+    var onResetTunnelUrl: (() -> Void)?
+    /// The language sheet's "suggest a fix". Absent in the gallery.
+    var onOpenLink: ((String) -> Void)?
+
+    /// Where "suggest a fix" goes — the issue tracker the web links (its
+    /// `SelectSheetBody`), since the corpus lives in that repository.
+    static let contributeUrl = "https://github.com/mondaylabsltd/vela-wallet/issues"
 
     var body: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
@@ -51,7 +70,8 @@ struct SettingsSheet: View {
                         sheet: model.accountsSheet,
                         onSelect: { address in onSelectAccount?(address) },
                         onCreate: onAccountCreate,
-                        onSignIn: onAccountSignIn
+                        onSignIn: onAccountSignIn,
+                        onRemove: onRemoveAccount
                     )
                 case .signOut:
                     ConfirmSheetBody(sheet: model.signOutSheet,
@@ -59,7 +79,8 @@ struct SettingsSheet: View {
                 case .language:
                     SelectSheetBody(
                         sheet: model.languageSheet,
-                        onPick: { id in onPick?(.language, id) }
+                        onPick: { id in onPick?(.language, id) },
+                        onFooterLink: onOpenLink.map { open in { open(Self.contributeUrl) } }
                     )
                 case .currency:
                     SelectSheetBody(
@@ -71,6 +92,26 @@ struct SettingsSheet: View {
                         sheet: model.feeSpeedSheet,
                         onPick: { id in onPick?(.feeSpeed, id) }
                     )
+                case .signWith:
+                    SelectSheetBody(
+                        sheet: model.signWithSheet,
+                        onPick: { id in onPick?(.signWith, id) }
+                    )
+                case .signerPage:
+                    if let page = model.signerPage {
+                        SignerPageSheetBody(
+                            model: page,
+                            onSave: { text in
+                                if onSaveSignerUrl?(text) == true { onDismiss() }
+                            },
+                            onReset: onResetSignerUrl.map { reset in
+                                {
+                                    reset()
+                                    onDismiss()
+                                }
+                            }
+                        )
+                    }
                 case .numberFormat:
                     SelectSheetBody(
                         sheet: model.numberSheet,
@@ -86,14 +127,15 @@ struct SettingsSheet: View {
                         sheet: model.timeSheet,
                         onPick: { id in onPick?(.timeFormat, id) }
                     )
-                case .clearStorageItem:
-                    // Built from what the row already says — its own label, its
-                    // group's warning, its own action word. No new sentence is
-                    // invented for a question the page can already ask.
-                    if let confirm = storageConfirm {
+                case .clearStorageItem, .removeNetwork, .resetEndpoints:
+                    // Built from what the page already says — a row's own
+                    // label and action word, the network's name, the fields
+                    // "reset" replaces. The screen holds the question and what
+                    // "yes" does; this only asks it.
+                    if let confirm = pendingConfirm {
                         ConfirmSheetBody(
                             sheet: confirm,
-                            onConfirm: { onConfirmStorage?(); onDismiss() },
+                            onConfirm: { onConfirmPending?(); onDismiss() },
                             onCancel: onDismiss
                         )
                     }
@@ -186,6 +228,8 @@ private struct SelectSheetBody: View {
     @Environment(\.theme) private var theme
     let sheet: SelectSheetModel
     var onPick: ((String) -> Void)?
+    /// The footer link's destination. `nil` draws it as the label it was.
+    var onFooterLink: (() -> Void)?
 
     var body: some View {
         SheetTitle(title: sheet.title, subtitle: sheet.subtitle)
@@ -208,11 +252,66 @@ private struct SelectSheetBody: View {
                 .foregroundStyle(theme.fgSubtle)
                 .padding(.top, Tokens.Space.s16)
         }
-        if let link = sheet.footerLink {
+        if let link = sheet.footerLink, let onFooterLink {
+            Button(action: onFooterLink) {
+                Text(link)
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.infoBase)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isLink)
+            .padding(.top, Tokens.Space.s8)
+        } else if let link = sheet.footerLink {
             Text(link)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.infoBase)
                 .padding(.top, Tokens.Space.s8)
+        }
+    }
+}
+
+/// The Trusted Signer page (spec 071): the address, Save, and the way back to
+/// the official page. What is under the field is the core's to say — a refused
+/// address, and that a page off `getvela.app` cannot use this wallet's
+/// passkeys.
+private struct SignerPageSheetBody: View {
+    @Environment(\.theme) private var theme
+    let model: SignerPageModel
+    let onSave: (String) -> Void
+    var onReset: (() -> Void)?
+
+    /// Local, seeded from the address in force: what is half-typed is nobody
+    /// else's business until Save hands it to the core.
+    @State private var text: String
+
+    init(model: SignerPageModel, onSave: @escaping (String) -> Void, onReset: (() -> Void)?) {
+        self.model = model
+        self.onSave = onSave
+        self.onReset = onReset
+        _text = State(initialValue: model.field.value)
+    }
+
+    var body: some View {
+        SheetTitle(title: model.title, subtitle: model.subtitle)
+        SettingsUrlField(field: model.field, text: $text, onCommit: { onSave(text) })
+            .padding(.bottom, Tokens.Space.s8)
+        if let error = model.error {
+            Text(error)
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(theme.errorBase)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, Tokens.Space.s8)
+        }
+        if let foreign = model.foreign {
+            SettingsCallout(callout: CalloutModel(tone: .warning, text: foreign))
+                .padding(.vertical, Tokens.Space.s8)
+        }
+        VelaButton(title: model.save, kind: .primary) { onSave(text) }
+            .padding(.top, Tokens.Space.s8)
+            .padding(.bottom, Tokens.Space.s12)
+        if let reset = model.reset, let onReset {
+            VelaButton(title: reset, kind: .secondary, action: onReset)
         }
     }
 }
@@ -256,6 +355,13 @@ private struct AccountsSheetBody: View {
     /// nothing on purpose; present = the live screen, where they must.
     var onCreate: (() -> Void)?
     var onSignIn: (() -> Void)?
+    /// Taking ONE wallet off this device (2026-09-23); absent draws nothing.
+    /// The index is the position in the ORIGINAL list, which is what the core
+    /// removes by — never the address, which two records can share.
+    var onRemove: ((Int) -> Void)?
+
+    /// The row a confirmation is open for.
+    @State private var removing: Int?
 
     var body: some View {
         SheetTitle(title: sheet.title)
@@ -269,12 +375,11 @@ private struct AccountsSheetBody: View {
         // `ForEach` a duplicate id — the web's switcher threw outright on that
         // pair (issue 214 follow-up). The core refuses to hold the pair now,
         // and this stops the shell from depending on it.
-        ForEach(Array(sheet.rows.enumerated()), id: \.offset) { _, row in
+        ForEach(Array(sheet.rows.enumerated()), id: \.offset) { offset, row in
             Button { onSelect?(row.addressFull) } label: {
             VStack(spacing: 0) {
                 HStack(spacing: Tokens.Space.s12) {
-                    IdenticonAvatar(seed: row.addressFull, size: 40, name: row.name,
-                                    tappable: false)
+                    IdenticonAvatar(seed: row.addressFull, size: 40, tappable: false)
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         Text(row.name)
                             .typeRole(Typography.fieldLabel)
@@ -292,6 +397,14 @@ private struct AccountsSheetBody: View {
                         LucideIcon(.check, size: LucideIconSize.action)
                             .foregroundStyle(theme.accentBase)
                     }
+                    if onRemove != nil, !sheet.remove.isEmpty {
+                        Button { removing = offset } label: {
+                            LucideIcon(.close, size: LucideIconSize.action)
+                                .foregroundStyle(theme.fgSubtle)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(sheet.remove)
+                    }
                 }
                 .padding(.vertical, Tokens.Space.s12)
                 SettingsDivider()
@@ -308,6 +421,24 @@ private struct AccountsSheetBody: View {
             .padding(.top, Tokens.Space.s24)
             .padding(.bottom, Tokens.Space.s12)
         VelaButton(title: sheet.secondary, kind: .secondary) { onSignIn?() }
+            // Asked before it happens: the row it takes is the one under a
+            // finger that was aiming to switch.
+            .alert(
+                removing.flatMap { sheet.rows[safe: $0]?.name } ?? "",
+                isPresented: Binding(
+                    get: { removing != nil },
+                    set: { open in if !open { removing = nil } }
+                ),
+                presenting: removing
+            ) { index in
+                Button(sheet.remove, role: .destructive) {
+                    removing = nil
+                    onRemove?(index)
+                }
+                Button(sheet.removeCancel, role: .cancel) { removing = nil }
+            } message: { _ in
+                Text(sheet.removeBody)
+            }
     }
 }
 

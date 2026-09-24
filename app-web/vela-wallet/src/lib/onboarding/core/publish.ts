@@ -87,6 +87,17 @@ export async function publish(args: PublishArgs): Promise<void> {
 			if (!derived) {
 				throw new Error(`registry challenge is missing member ${member.public_key_hex}`);
 			}
+			// Spec 075: a member that lives behind a Trusted Signer page signs
+			// THERE, and the web wallet has no Trusted Signer (owner, 2026-09-23).
+			// No platform sheet can see that key — asking the OS would find
+			// nothing, and signing with the wallet's own rpId would produce an
+			// assertion the registry can never verify. So it stops here, named.
+			const behindPage = member.signer_origin ?? '';
+			if (behindPage !== '') {
+				throw new Error(
+					`this key lives behind ${behindPage}, which only the Vela app can open`
+				);
+			}
 			const assertion = await Passkey.sign(stripHex(derived.challenge), member.credential_id);
 			proof = buildMemberProof(
 				assertion.authenticatorDataHex,

@@ -109,16 +109,17 @@ struct SettingsLiveTests {
         #expect(open.primary != nil)
     }
 
-    /// An incompatible chain gets the outline pair, never a greyed accent CTA:
-    /// an action you cannot take should not be dressed as the action you came
-    /// for.
+    /// An incompatible chain gets the re-check, never a greyed accent CTA: an
+    /// action you cannot take should not be dressed as the action you came
+    /// for. And no "Open Chain Setup Tool" — no client has a page for it to
+    /// open, and a button that goes nowhere is an inert control (072 SC-001).
     @Test func anIncompatibleChainOffersTheOutlinePairInstead() {
         let model = SettingsLive.wizard(
             wizardView(chainInfo: zora, compat: compat(compatible: false), canAdd: false),
             loc: loc, fallback: fallback()
         )
         #expect(model.primary == nil)
-        #expect(model.secondary != nil)
+        #expect(model.secondary == nil)
         #expect(model.recheck != nil)
         #expect(model.callout != nil)
     }

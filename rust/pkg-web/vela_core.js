@@ -2354,6 +2354,100 @@ export class SessionCore {
 if (Symbol.dispose) SessionCore.prototype[Symbol.dispose] = SessionCore.prototype.free;
 
 /**
+ * r#" How this device signs by default (spec 071): the "Sign with" every"#
+ * r" signing sheet starts at, and which Trusted Signer page it opens.
+ */
+export class SignPrefCore {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        SignPrefCoreFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_signprefcore_free(ptr, 0);
+    }
+    /**
+     * @param {string} event_json
+     * @returns {string}
+     */
+    dispatch(event_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(event_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.signprefcore_dispatch(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    constructor() {
+        const ret = wasm.signprefcore_new();
+        this.__wbg_ptr = ret;
+        SignPrefCoreFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {bigint} effect_id
+     * @param {string} result_json
+     * @returns {string}
+     */
+    resolve_effect(effect_id, result_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.signprefcore_resolve_effect(this.__wbg_ptr, effect_id, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * @returns {string}
+     */
+    view() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.signprefcore_view(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) SignPrefCore.prototype[Symbol.dispose] = SignPrefCore.prototype.free;
+
+/**
  * r" The dApp signing approval lifecycle.
  */
 export class SignRequestCore {
@@ -2682,6 +2776,48 @@ export function abiEncodeUint256(value_hex) {
 }
 
 /**
+ * Where the caret belongs in `clean`, having been at `caret` in `raw`
+ * (UTF-16 units, as `selectionStart` counts).
+ * @param {string} raw
+ * @param {string} clean
+ * @param {number} caret
+ * @returns {number}
+ */
+export function amountTextCaret(raw, clean, caret) {
+    const ptr0 = passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(clean, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.amountTextCaret(ptr0, len0, ptr1, len1, caret);
+    return ret >>> 0;
+}
+
+/**
+ * An amount field's text as the core reads it, or `undefined` for a paste
+ * with no reading as one figure (spec 073; `l10n::amount_text`).
+ * @param {string} raw
+ * @param {string} number
+ * @param {string | null} [previous]
+ * @param {boolean | null} [pasted]
+ * @returns {string | undefined}
+ */
+export function amountTextClean(raw, number, previous, pasted) {
+    const ptr0 = passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(number, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(previous) ? 0 : passStringToWasm0(previous, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.amountTextClean(ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(pasted) ? 0xFFFFFF : pasted ? 1 : 0);
+    let v4;
+    if (ret[0] !== 0) {
+        v4 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v4;
+}
+
+/**
  * The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
  * under the Safe's own domain) — the core's reading, for comparison.
  * @param {Uint8Array} original_hash
@@ -3001,6 +3137,48 @@ export function create2Address(deployer_hex, salt, init_code_hash) {
 }
 
 /**
+ * The document-start script an in-app browser injects, for `host`
+ * (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
+ * the real bridge in a real browser.
+ * @param {string} host
+ * @returns {string}
+ */
+export function dappProviderScript(host) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(host, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.dappProviderScript(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
+ * @param {string} method
+ * @returns {string}
+ */
+export function dappRpcClassify(method) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcClassify(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * @param {string} sig
  * @param {Uint8Array} calldata
  * @returns {AbiValue}
@@ -3031,6 +3209,28 @@ export function derSignatureToRawLowS(der) {
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
+}
+
+/**
+ * How a request still pending when the request window goes away is settled,
+ * as JSON (`{"code":4900,"reason":"browser_closed"}`) — spec 070 T063.
+ *
+ * 4900, never 4001: a dApp treats an explicit "user rejected" as safe to
+ * retry, which double-spends a request that may already have landed. The
+ * window asks rather than restating it.
+ * @returns {string}
+ */
+export function dpermSettleOnClose() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.dpermSettleOnClose();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
 }
 
 /**
@@ -3689,6 +3889,48 @@ export function peggedNativeUsd(symbol) {
 }
 
 /**
+ * `{key: rawValue}` → `[{key, value | null}]`, the writes that bring an
+ * older spelling to the shared record.
+ * @param {string} entries_json
+ * @returns {string}
+ */
+export function prefsMigrations(entries_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(entries_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.prefsMigrations(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * `{key: rawValue}` → `{theme, language, textScale, textScaleFactor,
+ * numberFormat, dateFormat, timeFormat}`.
+ * @param {string} entries_json
+ * @returns {string}
+ */
+export function prefsRead(entries_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(entries_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.prefsRead(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Returns `null` when the two assertions do not pin down exactly one key
  * (different credentials, or the same signature twice) — that is a legitimate
  * outcome, not an error.
@@ -3951,6 +4193,126 @@ export function sha256(data) {
 }
 
 /**
+ * What a site's message request asks the account to sign, before the
+ * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
+ * @param {string} method
+ * @param {string} params_json
+ * @returns {Uint8Array | undefined}
+ */
+export function signMessageHash(method, params_json) {
+    const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.signMessageHash(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * `{value, unit}` — a byte count in 1024s, for the shell to format in the
+ * person's numbers.
+ * @param {number} bytes
+ * @returns {string}
+ */
+export function storageBytesDisplay(bytes) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.storageBytesDisplay(bytes);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function storageIsCacheKey(key) {
+    const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageIsCacheKey(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function storageIsErasableKey(key) {
+    const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageIsErasableKey(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * Is this key the wallet's at all (counted in the storage total)?
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function storageIsOurs(key) {
+    const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageIsOurs(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * The row a key belongs to, or `undefined`.
+ * @param {string} key
+ * @returns {string | undefined}
+ */
+export function storageItemOfKey(key) {
+    const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageItemOfKey(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * `[{id, group}]`, in the order the page draws them.
+ * @returns {string}
+ */
+export function storageItems() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.storageItems();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * Records in a stored list value; `undefined` when it is not a list.
+ * @param {string} value
+ * @returns {number | undefined}
+ */
+export function storageRecordsIn(value) {
+    const ptr0 = passStringToWasm0(value, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageRecordsIn(ptr0, len0);
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {string}
  */
@@ -4012,6 +4374,104 @@ export function toQuantity(value) {
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
+}
+
+/**
+ * The relying party a key minted behind `signerOrigin` belongs to, or `null`
+ * for a key this wallet's own authenticators made (spec 075).
+ *
+ * A key made on a Trusted Signer page is signed under THAT page's domain, so a
+ * challenge fetched under the wallet's own would never match the answer —
+ * 「可信签名器的回复与这笔请求不符」, which is how both phones found this.
+ * @param {string | null} [signer_origin]
+ * @returns {string | undefined}
+ */
+export function trustedSignerRegistryRpId(signer_origin) {
+    var ptr0 = isLikeNone(signer_origin) ? 0 : passStringToWasm0(signer_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len0 = WASM_VECTOR_LEN;
+    const ret = wasm.trustedSignerRegistryRpId(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * The ONE relying party a unit is filed under, or an error naming the parties
+ * found when its members do not agree (ruling, 2026-09-23).
+ *
+ * The registry stores a single `rpId` per unit and every member proves under
+ * its own, so a mixed set is refused here rather than written and never
+ * provable.
+ * `member_origins_json` is a JSON array of each member's signer origin, with
+ * `null` for a key the wallet's own authenticators made — wasm-bindgen has no
+ * `Vec<Option<String>>`, and the phones pass the same shape.
+ * @param {string} member_origins_json
+ * @param {string} wallet_rp_id
+ * @returns {string}
+ */
+export function trustedSignerUnitRpId(member_origins_json, wallet_rp_id) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(member_origins_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(wallet_rp_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerUnitRpId(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Whether a page at `url` can use this wallet's passkeys (they are
+ * `getvela.app` keys).
+ *
+ * The web wallet cannot OPEN a Trusted Signer page, but it still has to decide
+ * whether a key that lives behind one is reachable by a platform sheet: a key
+ * minted on `*.getvela.app` is this app's passkey, and a key minted on
+ * anybody else's page is reachable nowhere but there.
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function trustedSignerUsesWalletPasskeys(url) {
+    const ptr0 = passStringToWasm0(url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.trustedSignerUsesWalletPasskeys(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * Spec 077: how long a submitted operation usually takes to land on a chain,
+ * in seconds — `0` where Vela ships no estimate for it.
+ *
+ * The send receipt has had this number since spec 038 (#D3), through the
+ * core's own `SendReceiptView`. A dApp transaction lands on the SAME receipt
+ * but arrives through `tx_tracker`, whose entries carry no estimate — so the
+ * web shell reads it from the core's table here rather than carrying a second
+ * copy of twenty-four numbers that would quietly drift.
+ *
+ * `0` rather than `undefined` because that is what the receipt already does
+ * with "no estimate": the ring circles instead of filling, which is the honest
+ * drawing of a wallet that does not know.
+ * @param {number} chain_id
+ * @returns {number}
+ */
+export function typicalInclusionSeconds(chain_id) {
+    const ret = wasm.typicalInclusionSeconds(chain_id);
+    return ret >>> 0;
 }
 
 /**
@@ -4425,6 +4885,9 @@ const SendCoreFinalization = (typeof FinalizationRegistry === 'undefined')
 const SessionCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_sessioncore_free(ptr, 1));
+const SignPrefCoreFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_signprefcore_free(ptr, 1));
 const SignRequestCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_signrequestcore_free(ptr, 1));

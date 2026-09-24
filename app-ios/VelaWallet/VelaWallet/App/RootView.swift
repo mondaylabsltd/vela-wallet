@@ -18,7 +18,11 @@ final class Router {
 }
 
 struct RootView: View {
-    @Environment(\.colorScheme) private var systemScheme
+    /// The scheme the WINDOW is in. Read only so that a change to it
+    /// invalidates this view — never as the answer to "what is the device set
+    /// to", because this app sets `preferredColorScheme` on the very window it
+    /// would be reading back. See `deviceScheme`.
+    @Environment(\.colorScheme) private var windowScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let loc: Loc
     /// The `vela.*` shelf, for the reads that are not a machine's — the
@@ -33,6 +37,11 @@ struct RootView: View {
     /// The account list, kept rather than passed and forgotten: the parallel
     /// space's door needs it at `.task` time, after `init` has finished.
     private let accounts: AccountStore
+    /// A completed erase (spec 072). The app answers with a NEW root — every
+    /// machine built again from the emptied store, which is the first run,
+    /// as the web's reload is. Nothing that held the erased wallet in memory
+    /// survives to write it back.
+    private let onErased: () -> Void
     @State private var router: Router
     @State private var model: WelcomeModel
     @State private var session: SessionController
@@ -133,6 +142,16 @@ struct RootView: View {
     /// and dropped when the page has its answer — four machines that must not
     /// outlive the question they were asked.
     @State private var signing: SigningController?
+    /// The browser core's next request, forwarded while the last one's sheet
+    /// was still closing (spec 070: the core queues, one sheet at a time). It
+    /// opens the moment that sheet is gone.
+    @State private var pendingBrowserSigning: DbrForward?
+    /// Requests whose page went away after the ceremony began. Not shown:
+    /// kept alive only so an operation that may still land gets its record
+    /// written, and dropped once it has answered (`closed`).
+    @State private var retiredSigning: [SigningController] = []
+    /// The account switcher, opened from the browser's connection panel.
+    @State private var exploreSwitcherOpen = false
     /// Whether this wallet's founding keys are on Ethereum too (spec 062),
     /// and for WHICH wallet that was asked — an answer about the previous
     /// account must not be drawn under the next one's name.
@@ -168,8 +187,10 @@ struct RootView: View {
     @State private var sendClassFilter = "all"
     @State private var sendAlert: (title: String, body: String)?
     @State private var flows: FlowNav
-    /// Which section of the signed-in shell is showing (spec 050).
-    @State private var section: WalletSection = .wallet
+    /// Which section of the signed-in shell is showing (spec 050). A debug
+    /// launch that names a page (`VELA_URL`) starts where that page opens, so
+    /// a device pass can reach it through Web Inspector without a tap.
+    @State private var section: WalletSection = PageOverride.browserURL == nil ? .wallet : .explore
     /// Where the contacts section is, inside itself.
     @State private var contactsRoute: ContactsRoute?
     /// The add/edit form, while it is open. `nil` means no form — the presence
@@ -215,12 +236,17 @@ struct RootView: View {
     /// redraw when the door opens during `.task`.
     @Environment(\.scenePhase) private var scenePhase
     @State private var parallelSpace = false
-    @State private var launching = !LaunchAnimation.isDisabled
+    /// Seeded in `init`: only a cold start plays the lockup.
+    @State private var launching: Bool
     /// Welcome content fades IN as the launch lockup fades OUT (FR-012).
-    @State private var pageOpacity: Double = LaunchAnimation.isDisabled ? 1 : 0
+    @State private var pageOpacity: Double
 
-    init(loc: Loc) {
+    /// `firstLaunch` is `false` for the root an erase rebuilt: no launch
+    /// lockup, and no DEBUG account seed writing a wallet back into the store
+    /// the person just emptied.
+    init(loc: Loc, firstLaunch: Bool = true, onErased: @escaping () -> Void = {}) {
         self.loc = loc
+        self.onErased = onErased
         let router = Router()
         _router = State(initialValue: router)
         let flowNav = FlowNav()
@@ -234,7 +260,11 @@ struct RootView: View {
         // Before the session machine boots: it reads `vela.accounts` on its
         // first event, and a record written after that is not seen until a
         // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
-        DevAccountSeed.applyIfRequested(store: shelf)
+        if firstLaunch { DevAccountSeed.applyIfRequested(store: shelf) }
+        // An older shell's spellings of the five preferences, brought to the
+        // shared record before anything reads them (spec 072). Nothing to do
+        // for a store that already agrees, so this is safe every launch.
+        Preferences.migrate(shelf)
         // One pool, built before anything that reads a chain — the settings
         // machines included, since spec 051 put the fiat feeds behind it.
         let pool = RpcPool(store: shelf, accounts: store)
@@ -287,6 +317,25 @@ struct RootView: View {
         // survives a settings write (data-model §5).
         let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
         _settings = State(initialValue: settingsStore)
+        // How a signature is made where no signing sheet asks (Send): the
+        // stored "Sign with" — and the Trusted Signer, on the page Settings
+        // names (spec 071).
+        spine.signMethod = { [settingsStore] in settingsStore.signPref?.method ?? "auto" }
+        // ONE Trusted Signer for the whole app (spec 075). It is a passkey
+        // route now, not only a way to sign: onboarding's ceremonies and the
+        // money path's signatures go through the same object, which is what
+        // keeps "one page, one session, one sheet" true — two instances would
+        // be two sheets racing to present over each other.
+        let trustedSigner = TrustedSigner(
+            loc: loc,
+            signerUrl: { [settingsStore] in settingsStore.signPref?.signerUrl }
+        )
+        spine.trustedSigner = trustedSigner
+        onboarding.trustedSigner = trustedSigner
+        // Spec 075: the founding-key picker needs the page's DOMAIN, not the
+        // page — a key minted there belongs to it, and a wallet's keys all
+        // belong to one relying party.
+        onboarding.signerPage = { [settingsStore] in settingsStore.signPref?.signerUrl }
         // The balance read publishes what it found here, and the receipt scan
         // reads it: which chains this account uses, which tokens it holds, and
         // what they were worth. Web gets the same three facts from its
@@ -333,9 +382,6 @@ struct RootView: View {
         // bans and their cooldowns — never an endpoint the page named.
         let browserController = BrowserController(store: shelf)
         browserController.ports = BrowserController.Ports(
-            knownChains: { [weak settingsStore] in
-                settingsStore?.networkAdmin?.networks.map(\.chainId) ?? []
-            },
             poolCall: { [weak pool] chainId, method, params, bundler in
                 guard let pool else { return nil }
                 switch await pool.call(
@@ -352,6 +398,16 @@ struct RootView: View {
                 default:
                     return nil
                 }
+            },
+            // A page answered with a user-operation hash polls for its receipt
+            // by that hash; the core asks here which transaction carried it —
+            // the relay's own `eth_getUserOperationReceipt`, the lookup the
+            // tracker and Android's `RelayClient.userOpReceipt` use.
+            resolveUserOp: { [relay] chainId, userOpHash in
+                guard case .resolved(_, let txHash, _, _) = await relay.userOpReceipt(
+                    chainId: chainId, userOpHash: userOpHash
+                ), !txHash.isEmpty else { return nil }
+                return txHash
             },
             writeRecords: { [weak activityStore] rows in
                 TxRecords.writeRecords(rows, store: shelf)
@@ -376,6 +432,10 @@ struct RootView: View {
                     notify?.askOnceIfNeeded()
                     trackerStore?.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
                 },
+                // The core's `haptic { kind }`: money left, or a refusal the
+                // person should feel. Unwired until 074, so an iPhone sent in
+                // silence where Android buzzed.
+                haptic: { kind in VelaHaptic(sendKind: kind).play() },
                 // The core's own exit. `Done` on a receipt, and `close` on any
                 // refusal that ends the attempt, both land here.
                 closed: { [weak flowNav] in flowNav?.close() },
@@ -412,6 +472,8 @@ struct RootView: View {
         _paymentRequest = State(initialValue: PaymentRequestStore(
             executor: PaymentRequestExecutor(store: shelf)
         ))
+        _launching = State(initialValue: firstLaunch && !LaunchAnimation.isDisabled)
+        _pageOpacity = State(initialValue: firstLaunch && !LaunchAnimation.isDisabled ? 0 : 1)
         let prefs = Preferences(store: shelf)
         prefs.boot()
         // Before the first frame, and before the welcome model is built from
@@ -424,7 +486,6 @@ struct RootView: View {
         Marks.adopt(accounts.loadServiceEndpoints())
         Formats.apply(prefs)
         UiScale.apply(prefs)
-        AvatarPreference.apply(prefs)
         _preferences = State(initialValue: prefs)
         _batch = State(initialValue: BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
@@ -456,7 +517,34 @@ struct RootView: View {
         // person's own choice; then the OS. `system` pins NOTHING — that is the
         // whole meaning of the choice, and a resolved "dark" would stop
         // following an OS that changes at sunset.
-        ThemeOverride.launchScheme ?? chosenScheme ?? systemScheme
+        ThemeOverride.launchScheme ?? chosenScheme ?? deviceScheme(whenWindowIs: windowScheme)
+    }
+
+    /// What the DEVICE is set to — the honest answer to 跟随系统.
+    ///
+    /// It cannot be `@Environment(\.colorScheme)`. This view SETS
+    /// `preferredColorScheme` below; SwiftUI carries that down to the window,
+    /// and reading the scheme back here then returns the app's own choice
+    /// dressed as the system's. So picking 深色 and then 跟随系统 left the app
+    /// reading its own dark back, for ever: the segment moved, the page stayed
+    /// dark. Spec 072's device test said so from the day it was written; the
+    /// traits behind it, measured on a LIGHT simulator on 2026-09-23, were
+    ///
+    ///     scene = dark   window = dark   window.override = unspecified
+    ///     screen = light
+    ///
+    /// — nothing had overridden the window, and the window was still dark,
+    /// because it was following the app. Only the SCREEN was telling the truth,
+    /// and it is the one thing here the app cannot paint. (Taken from the
+    /// scene's own `screen`, not `UIScreen.main`, which iOS 16 retired.)
+    ///
+    /// `whenWindowIs` is taken and not used: it is the dependency that makes
+    /// SwiftUI re-evaluate this when the appearance changes, which is what
+    /// keeps 跟随系统 following an OS that flips at sunset.
+    private func deviceScheme(whenWindowIs _: ColorScheme) -> ColorScheme {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        return scene?.screen.traitCollection.userInterfaceStyle == .dark ? .dark : .light
     }
 
     private var chosenScheme: ColorScheme? {
@@ -546,9 +634,16 @@ struct RootView: View {
             #endif
         }
         .themed(scheme)
-        // Every avatar in the app draws from here, so a change to the choice
-        // invalidates them — the static alone changed nothing on screen.
-        .environment(\.avatarStyle, preferences.avatarStyle)
+        // 设置 → 字号, for the whole tree (spec 056 FR-011).
+        //
+        // Every screen used to have to opt in, and most never did: 228 of the
+        // app's 494 text sites — all of Settings, all of onboarding, the Clear
+        // Signer's sheets — drew at a fixed size whatever was chosen. Now the
+        // root states it once, `typeRole` reads it, and a screen with its own
+        // scale still overrides it for its subtree. Taken from the preference
+        // rather than `UiScale.factor` so the dependency is the observation,
+        // not the order two statements ran in.
+        .environment(\.walletTextScale, preferences.textScale.factor)
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }
@@ -566,8 +661,8 @@ struct RootView: View {
         // callback threaded through twelve call sites, is how the viewer came
         // to open from the wallet header and nowhere else: eleven sites had
         // nothing to thread.
-        .environment(\.identiconViewer, { seed, name in
-            identiconViewer = IdenticonSubject(seed: seed, name: name)
+        .environment(\.identiconViewer, { seed in
+            identiconViewer = IdenticonSubject(seed: seed)
         })
         // 新建分组 / 重命名分组.
         .alert(groupNaming?.title ?? "", isPresented: Binding(
@@ -584,6 +679,7 @@ struct RootView: View {
                 // An empty name is not a group. The core would refuse it, and
                 // asking it to is how a blank row appears in a list.
                 guard !name.isEmpty else { return }
+                VelaHaptic.select.play()
                 contacts.saveGroup(id: target?.id, name: name)
             }
         }
@@ -591,7 +687,6 @@ struct RootView: View {
             IdenticonViewerSheet(
                 loc: loc,
                 address: subject.seed,
-                name: subject.name,
                 onClose: { identiconViewer = nil }
             )
             // `.large`, not `.medium`: the content is a big circle, a
@@ -617,7 +712,6 @@ struct RootView: View {
     /// so `sheet(item:)` can key the presentation on it.
     struct IdenticonSubject: Identifiable, Equatable {
         let seed: String
-        let name: String?
         var id: String { seed }
     }
 
@@ -629,6 +723,11 @@ struct RootView: View {
     /// showed an error for a link it does not handle would be an app that can
     /// be made to say things by anybody with a URL.
     private func openLink(_ url: URL) {
+        // Spec 076: the Trusted Signer's answer. It is an EVENT for a request
+        // that is already waiting — no route change, no state change — and a
+        // callback nothing is waiting for is dropped here in silence. Every
+        // other URL is routed exactly as before.
+        if TrustedSignerCallbacks.deliver(url) { return }
         switch PayLink.parse(url.absoluteString) {
         case .pay:
             guard let event = PayLink.parse(url.absoluteString)?.linkOpened else { return }
@@ -777,6 +876,7 @@ struct RootView: View {
                 SignOutSheet(
                     loc: loc,
                     pendingUploadWarning: sheet.pendingUploadWarning,
+                    accountCount: sheet.accountCount,
                     onConfirm: { session.signOutConfirmed() },
                     onDismiss: { session.signOutDismissed() }
                 )
@@ -800,6 +900,11 @@ struct RootView: View {
                 await ParallelSpaceHook.applyIfRequested(store: shelf, accounts: accounts)
                 parallelSpace = ParallelSpaceHook.isActive
                 session.boot()
+                // The endpoint pool too: the wallet is not the only screen that
+                // reads a chain. A launch that opens on 探索 (a link, a restored
+                // tab) and booted the pool with the wallet screen answered every
+                // page read "No endpoint answered" — device-found (spec 070).
+                pool.boot()
                 // At LAUNCH, not with a screen: what the tracker follows
                 // outlives every screen. The pending set is derived from the
                 // transaction store, so a force-quit mid-send loses nothing —
@@ -867,7 +972,21 @@ struct RootView: View {
                     if value != batchRate { batchRate = value }
                 }
                 .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
-                .onChange(of: amountDraft) { _, value in send.setAmount(value) }
+                // Spec 073: cleaned by the core's rule before the machine
+                // sees it; a cleaned figure is written back and sent by the
+                // change that write raises, a refused paste puts back what the
+                // field had.
+                .onChange(of: amountDraft) { old, value in
+                    guard let clean = AmountText.clean(value, previous: old) else {
+                        amountDraft = old
+                        return
+                    }
+                    if clean != value {
+                        amountDraft = clean
+                        return
+                    }
+                    send.setAmount(clean)
+                }
                 .onChange(of: send.view?.amount) { _, value in
                     if let value, value != amountDraft { amountDraft = value }
                 }
@@ -977,160 +1096,239 @@ struct RootView: View {
                     if drawn == .sd2e { contacts.open(myAddress: session.view.address) }
                 }
             } else {
-                Group {
-                    switch section {
-                    case .wallet:
-                        WalletScreen(
-                            model: walletModel,
-                            loc: loc,
-                            onSelectTab: selectTab,
-                            onFlow: { flows.enter($0) },
-                            onToggleBalance: { wallet.togglePrivacy() },
-                            onStatusTap: { openRescue() },
-                            // The name line's chevron has drawn a disclosure since
-                            // spec 015 and led nowhere on this screen until now.
-                            onOpenAccounts: {
-                                openAccountSwitcher()
-                                homeSwitcherOpen = true
-                            },
-                            onRefresh: RefreshAction {
-                                // `pull: true` is carried so the core can tell a
-                                // person's own gesture from the 30-second tick and
-                                // answer it differently.
-                                wallet.refresh(pull: true)
-                                activity.focusTick()
-                                await wallet.settled()
-                            }
-                        )
-                        // The hero's status line, as a sheet over the wallet —
-                        // which is what SR2 and SR3 are drawn as. The settings
-                        // route would put the settings list behind a sentence
-                        // about the screen somebody was actually on.
-                        .sheet(item: $rescue) { overlay in
-                            SettingsSheet(
-                                model: rescueModel(overlay),
-                                overlay: overlay,
-                                onDismiss: { rescue = nil },
-                                onSignOut: {},
-                                rpcDraft: $rpcDraft,
-                                onCommitRpc: { commitRescueRpc() },
-                                onRetryChain: { _ in wallet.refresh(pull: true) }
-                            )
-                            .themed(scheme)
-                        }
-                        // The two machines have to agree about hiding: the balance
-                        // core owns the state, and the feed core suppresses its
-                        // receipt toast on it. Forwarding the COMMITTED value
-                        // rather than a guess made at tap time is what keeps them
-                        // from disagreeing by one tap.
-                        .onChange(of: wallet.balance?.hidden ?? false) { _, hidden in
-                            activity.privacyChanged(hidden: hidden)
-                        }
-                        .task {
-                            pool.boot()
-                            activity.open(address: session.view.address,
-                                          hidden: wallet.balance?.hidden ?? false)
-                            // The display currency is app-wide: the hero is the
-                            // figure it matters most on, and it must not wait for a
-                            // visit to 设置 to learn the person chose CNY.
-                            settings.openCurrency()
-                            // …and so is the default speed (spec 069): the send
-                            // form's folded control shows it from the first open.
-                            settings.openFeeTier()
-                            // So is the NETWORK list, and for a sharper reason: the
-                            // send machine resolves every holding against it, so a
-                            // `network_admin` that had not been opened yet made the
-                            // token picker EMPTY — device-found, and the same shape
-                            // as Android's contact picker, which was empty because
-                            // its machine only booted on the contacts page.
-                            settings.open()
-                            wallet.open(address: session.view.address)
-                        }
-                        // The 10-minute balance refresh runs exactly while this
-                        // screen is showing and the app is active (the web's
-                        // aggregate poll). A flow opening over the home takes it
-                        // off screen; closing it brings it back — one timer, never
-                        // two.
-                        .onAppear {
-                            wallet.homePoller.sceneActive(scenePhase == .active)
-                            wallet.homePoller.homeVisible(true)
-                        }
-                        .onDisappear { wallet.homePoller.homeVisible(false) }
-                    case .contacts:
-                        contactsSection
-                    case .explore:
-                        // Spec 053: 探索 is a browser. Its start page is this
-                        // person's own favourites, groups and recents, its tab
-                        // strip is the core's, and its pages are real. The
-                        // account a site is shown is the REAL one — a connection
-                        // panel naming a stranger's account would be the wallet
-                        // lying about what it just granted.
-                        exploreSection
-                        .onChange(of: signing?.closed) { _, closed in
-                            // The page has its answer and the core cleared the
-                            // sheet. Dropping the controller is what makes the
-                            // next request start from nothing rather than
-                            // inheriting a decoded intent or a half-edited cap.
-                            if closed == true { signing = nil }
-                        }
-                        .onDisappear {
-                            // Leaving 探索 settles every request the page left
-                            // hanging — as **unknown-pending**, never as a
-                            // refusal: nobody declined anything, and a page told
-                            // 4001 would show its user "you rejected this" when
-                            // they did not.
-                            //
-                            // On the section change rather than on a view's
-                            // `onDisappear` alone would be safer still; this one
-                            // fires for the tab switch and nothing else, because
-                            // the signing sheet is presented OVER this screen and
-                            // leaves the section where it is.
-                            browser.close()
-                        }
-                        .task {
-                            browser.ports.onSignRequest = { request in
-                                openSigning(request)
-                            }
-                            browser.start()
-                            browser.accountsChanged(
-                                addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
-                                active: session.view.address
-                            )
-                            // The device harness opens its own page. Not a product
-                            // affordance: a browser that launched a URL somebody
-                            // else chose is a browser nobody should install.
-                            if let url = PageOverride.browserURL { browser.open(url) }
-                        }
-                    }
-                }
-                // ONE switcher, wherever it is opened from — the wallet home,
-                // settings, and the dApp connection panel on 探索. It hung off
-                // `WalletScreen` until 2026-09-23, so the connection panel set
-                // the flag and NOTHING opened: the presenter was not mounted on
-                // the section the person was looking at. A device found it.
-                // sheet the settings page shows, over the same live model,
-                // so the two can never drift into showing different
-                // accounts.
-                .sheet(isPresented: $homeSwitcherOpen) {
-                    SettingsSheet(
-                        model: settingsModel(.st1),
-                        overlay: .accounts,
-                        onDismiss: { closeHomeSwitcher() },
-                        onSignOut: {},
-                        onSelectAccount: { address in
-                            switchToAccount(address)
-                            closeHomeSwitcher()
+                switch section {
+                case .wallet:
+                    WalletScreen(
+                        model: walletModel,
+                        loc: loc,
+                        onSelectTab: selectTab,
+                        onFlow: { flows.enter($0) },
+                        onToggleBalance: { wallet.togglePrivacy() },
+                        onStatusTap: { openRescue() },
+                        // The name line's chevron has drawn a disclosure since
+                        // spec 015 and led nowhere on this screen until now.
+                        onOpenAccounts: {
+                            openAccountSwitcher()
+                            homeSwitcherOpen = true
                         },
-                        onAccountCreate: {
-                            closeHomeSwitcher()
-                            router.path.append(.create)
-                        },
-                        onAccountSignIn: {
-                            closeHomeSwitcher()
-                            onboarding.showSignInMethods = true
+                        onRefresh: RefreshAction {
+                            // `pull: true` is carried so the core can tell a
+                            // person's own gesture from the 30-second tick and
+                            // answer it differently.
+                            wallet.refresh(pull: true)
+                            activity.focusTick()
+                            await wallet.settled()
                         }
                     )
-                    .themed(scheme)
+                    // The hero's status line, as a sheet over the wallet —
+                    // which is what SR2 and SR3 are drawn as. The settings
+                    // route would put the settings list behind a sentence
+                    // about the screen somebody was actually on.
+                    .sheet(item: $rescue) { overlay in
+                        SettingsSheet(
+                            model: rescueModel(overlay),
+                            overlay: overlay,
+                            onDismiss: { rescue = nil },
+                            onSignOut: {},
+                            rpcDraft: $rpcDraft,
+                            onCommitRpc: { commitRescueRpc() },
+                            onRetryChain: { _ in wallet.refresh(pull: true) }
+                        )
+                        .themed(scheme)
+                    }
+                    // ONE switcher, wherever it is opened from: the same
+                    // sheet the settings page shows, over the same live model,
+                    // so the two can never drift into showing different
+                    // accounts.
+                    .sheet(isPresented: $homeSwitcherOpen) {
+                        SettingsSheet(
+                            model: settingsModel(.st1),
+                            overlay: .accounts,
+                            onDismiss: { closeHomeSwitcher() },
+                            onSignOut: {},
+                            onSelectAccount: { address in
+                                switchToAccount(address)
+                                closeHomeSwitcher()
+                            },
+                            onAccountCreate: {
+                                closeHomeSwitcher()
+                                router.path.append(.create)
+                            },
+                            onAccountSignIn: {
+                                closeHomeSwitcher()
+                                onboarding.showSignInMethods = true
+                            },
+                            // One wallet leaves, the others stay (2026-09-23).
+                            // The sheet closes because the list under it just
+                            // changed: leaving it open would put the next row
+                            // where the finger already is.
+                            onRemoveAccount: { index in
+                                closeHomeSwitcher()
+                                session.removeAccount(index: index)
+                            }
+                        )
+                        .themed(scheme)
+                    }
+                    // The two machines have to agree about hiding: the balance
+                    // core owns the state, and the feed core suppresses its
+                    // receipt toast on it. Forwarding the COMMITTED value
+                    // rather than a guess made at tap time is what keeps them
+                    // from disagreeing by one tap.
+                    .onChange(of: wallet.balance?.hidden ?? false) { _, hidden in
+                        activity.privacyChanged(hidden: hidden)
+                    }
+                    .task {
+                        activity.open(address: session.view.address,
+                                      hidden: wallet.balance?.hidden ?? false)
+                        // The display currency is app-wide: the hero is the
+                        // figure it matters most on, and it must not wait for a
+                        // visit to 设置 to learn the person chose CNY.
+                        settings.openCurrency()
+                        // …and so is the default speed (spec 069): the send
+                        // form's folded control shows it from the first open.
+                        settings.openFeeTier()
+                        // …and how this device signs (spec 071): every signing
+                        // sheet, and Send, start at it.
+                        settings.openSignPref()
+                        // So is the NETWORK list, and for a sharper reason: the
+                        // send machine resolves every holding against it, so a
+                        // `network_admin` that had not been opened yet made the
+                        // token picker EMPTY — device-found, and the same shape
+                        // as Android's contact picker, which was empty because
+                        // its machine only booted on the contacts page.
+                        settings.open()
+                        wallet.open(address: session.view.address)
+                    }
+                    // The 10-minute balance refresh runs exactly while this
+                    // screen is showing and the app is active (the web's
+                    // aggregate poll). A flow opening over the home takes it
+                    // off screen; closing it brings it back — one timer, never
+                    // two.
+                    .onAppear {
+                        wallet.homePoller.sceneActive(scenePhase == .active)
+                        wallet.homePoller.homeVisible(true)
+                    }
+                    .onDisappear { wallet.homePoller.homeVisible(false) }
+                case .contacts:
+                    contactsSection
+                case .explore:
+                    // Spec 053: 探索 is a browser. Its start page is this
+                    // person's own favourites, groups and recents, its tab
+                    // strip is the core's, and its pages are real. The
+                    // account a site is shown is the REAL one — a connection
+                    // panel naming a stranger's account would be the wallet
+                    // lying about what it just granted.
+                    ExploreScreen(
+                        model: ExploreLive.home(
+                            explore: browser.explore,
+                            history: browser.history,
+                            dbr: browser.dbr,
+                            engine: browser.current,
+                            identity: (name: session.view.activeName,
+                                       address: session.view.address),
+                            chainIds: browser.chainIds,
+                            loc: loc
+                        ),
+                        loc: loc,
+                        signing: SigningFixtures.build(.cs12, loc: loc)
+                            .withIdentity(name: session.view.activeName,
+                                          address: session.view.address),
+                        signingLive: signing.map { signingModel(for: $0) },
+                        onSigningConfirm: { signing?.approve() },
+                        // **Every chip on the editor is a PRESET, 撤销 included.**
+                        //
+                        // The core has a separate `revoke_chosen`, and it
+                        // belongs to the BOOLEAN card — `setApprovalForAll`,
+                        // a DAI permit — where there is no amount to cap and
+                        // the choice is yes or no. Sending it from the amount
+                        // editor's chip is an event the editor does not
+                        // answer, and the chip silently does nothing.
+                        // Device-found: 撤销 was tapped, the sheet kept saying
+                        // 无限额, and the slide stayed shut.
+                        onAllowanceChip: { chip in signing?.guardPreset(chip) },
+                        onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
+                        onSignWith: { id in signing?.signWith(id) },
+                        onFee: { signing?.feeTapped() },
+                        onFeePick: { id in signing?.pickFee(id) },
+                        onSpeed: { id in signing?.speed(id) },
+                        onSigningDismissed: { signing?.swipeDismissed() },
+                        controller: browser,
+                        camera: camera,
+                        onSelectTab: selectTab,
+                        onScanPayment: { payment in sendFromScan(payment) },
+                        onSwitchAccount: {
+                            openAccountSwitcher()
+                            exploreSwitcherOpen = true
+                        },
+                        accountSwitcherOpen: exploreSwitcherOpen
+                    )
+                    .onChange(of: signing?.closed) { _, closed in
+                        // The page has its answer and the core cleared the
+                        // sheet. Dropping the controller is what makes the
+                        // next request start from nothing rather than
+                        // inheriting a decoded intent or a half-edited cap.
+                        if closed == true { signingClosed() }
+                    }
+                    // ONE switcher, the wallet header's: a site's grant
+                    // follows the active account (spec 070), so this is also
+                    // how a person shows a site a different account.
+                    .sheet(isPresented: $exploreSwitcherOpen, onDismiss: {
+                        wallet.switcherClosed()
+                    }) {
+                        SettingsSheet(
+                            model: settingsModel(.st1),
+                            overlay: .accounts,
+                            onDismiss: { exploreSwitcherOpen = false },
+                            onSignOut: {},
+                            onSelectAccount: { address in
+                                switchToAccount(address)
+                                exploreSwitcherOpen = false
+                            },
+                            onAccountCreate: {
+                                exploreSwitcherOpen = false
+                                router.path.append(.create)
+                            },
+                            onAccountSignIn: {
+                                exploreSwitcherOpen = false
+                                onboarding.showSignInMethods = true
+                            }
+                        )
+                        .themed(scheme)
+                    }
+                    // Leaving 探索 settles NOTHING (spec 070): the pages keep
+                    // running, their requests stay open, and their
+                    // connections stay drawn. Only closing a tab, navigating
+                    // or a renderer dying settles a page — the core's rule.
+                    .onChange(of: session.view.address) { _, _ in tellBrowserAboutAccounts() }
+                    .onChange(of: settings.networkAdmin?.networks.map(\.chainId) ?? []) { _, chains in
+                        if !chains.isEmpty { browser.networksChanged(chains) }
+                    }
+                    .task {
+                        // A sheet that finished while 探索 was not on screen
+                        // is dropped now — and whatever was waiting opens.
+                        if signing?.closed == true { signingClosed() }
+                        browser.ports.onForwardToSigning = { forward in
+                            openBrowserSigning(forward)
+                        }
+                        browser.ports.onCancelSigning = { tab, id in
+                            cancelBrowserSigning(tab: tab, id: id)
+                        }
+                        browser.start()
+                        // Idempotent: the network list must be read before a
+                        // page asks to switch, even on a cold deep link here.
+                        settings.open()
+                        // The chains a site may switch to are the wallet's own.
+                        // The settings machine may not have read them yet; the
+                        // catalogue stands in until it has, and the change
+                        // handler above replaces it the moment it does.
+                        let chains = settings.networkAdmin?.networks.map(\.chainId) ?? []
+                        browser.networksChanged(chains.isEmpty ? ChainCatalog.chains.map(\.chainId) : chains)
+                        tellBrowserAboutAccounts()
+                        // The device harness opens its own page. Not a product
+                        // affordance: a browser that launched a URL somebody
+                        // else chose is a browser nobody should install.
+                        if let url = PageOverride.browserURL { browser.open(url) }
+                    }
                 }
             }
         } else {
@@ -1149,25 +1347,97 @@ struct RootView: View {
     /// drawn, tappable, and did nothing at all. 探索 opens the browser's
     /// fixture layer (spec 022/029) over the real identity; its machines are
     /// not wired yet.
-    /// A page asked for a signature.
+    /// The browser core forwarded a request to the signing sheet (spec 070).
     ///
-    /// A **second** request while one is open is refused rather than queued —
-    /// the permissions machine's `consent_busy` rule, applied to signing. Two
-    /// sheets over one page is a person answering the wrong question.
-    private func openSigning(_ request: BrowserController.SignRequest) {
+    /// The core queues requests itself — one sheet at a time, the rest in
+    /// order — so a second forward only ever arrives once the first has its
+    /// answer. Its sheet may still be closing then (a submitted state waiting
+    /// to be dismissed): the next request waits for it rather than being
+    /// refused. A sheet that is up for something else — the wallet's own
+    /// backup request — is a genuinely busy wallet, and the page is told so
+    /// (-32002) rather than left waiting.
+    private func openBrowserSigning(_ forward: DbrForward) {
+        // A sheet that finished while its screen was not mounted is over,
+        // whether or not anything was watching it close.
+        if signing?.closed == true { signing = nil }
+        if let current = signing {
+            if current.hasAnswered {
+                pendingBrowserSigning = forward
+            } else {
+                browser.signingAnswered(
+                    tab: forward.tab, id: forward.id,
+                    payload: BrowserController.busyPayload(), userOpHash: nil
+                )
+            }
+            return
+        }
         openSigningRequest(
             SigningController.Incoming(
-                id: request.id,
-                method: request.method,
-                paramsJson: request.paramsJson,
-                origin: request.origin,
-                transportId: request.transportId,
-                chainId: request.chainId
+                id: forward.id,
+                method: forward.method,
+                paramsJson: forward.paramsJson,
+                origin: forward.origin,
+                transportId: forward.tab,
+                chainId: forward.chainId,
+                grantedAddress: forward.grantedAddress
             ),
-            respond: { [browser] transportId, id, json in
-                browser.answerFromSigning(transportId: transportId, id: id, json: json)
+            respond: { [browser] transportId, id, payload, userOpHash in
+                // The core builds the page's message, and delivers it to the
+                // tab and DOCUMENT that asked — or to nobody, if that page
+                // has gone.
+                browser.signingAnswered(tab: transportId, id: id, payload: payload, userOpHash: userOpHash)
             }
         )
+    }
+
+    /// The page behind a forwarded request is gone; the core has already
+    /// answered it (4900). Its sheet closes without a word to anyone.
+    private func cancelBrowserSigning(tab: String, id: String) {
+        if let pending = pendingBrowserSigning, pending.tab == tab, pending.id == id {
+            pendingBrowserSigning = nil
+            return
+        }
+        guard let current = signing, let request = current.request,
+              request.transportId == tab, request.id == id
+        else { return }
+        let committed = current.committed
+        current.transportDropped()
+        if committed {
+            // A ceremony or a submit is under way and may land: the record
+            // must still be written. Kept out of sight until it answers.
+            retiredSigning.append(current)
+        }
+        signingClosed()
+    }
+
+    /// The sheet's request is over. Drop it, and open the one waiting.
+    private func signingClosed() {
+        signing = nil
+        retiredSigning.removeAll { $0.closed || $0.hasAnswered }
+        if let next = pendingBrowserSigning {
+            pendingBrowserSigning = nil
+            openBrowserSigning(next)
+        }
+    }
+
+    /// Every account, then the active one — so every grant follows it and the
+    /// pages of re-pinned sites hear `accountsChanged` (spec 070).
+    private func tellBrowserAboutAccounts() {
+        browser.accountsChanged(
+            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
+            active: session.view.address
+        )
+    }
+
+    /// A payment code scanned in 探索: 发送, through the same door a contact
+    /// and the home scanner use — the core's `scan_resolved`.
+    private func sendFromScan(_ payload: String) {
+        section = .wallet
+        flows.enter(.send)
+        Task {
+            await openSend()
+            send.scanned(payload)
+        }
     }
 
     /// The transport of a request the WALLET made of itself. Nothing is
@@ -1192,21 +1462,16 @@ struct RootView: View {
                 transportId: Self.walletTransport,
                 chainId: call.chainId
             ),
-            respond: { _, _, _ in }
+            respond: { _, _, _, _ in }
         )
     }
 
     private func openSigningRequest(
         _ incoming: SigningController.Incoming,
-        respond: @escaping (String, String, [String: Any]) -> Void
+        respond: @escaping (String, String, [String: Any], String?) -> Void
     ) {
         guard signing == nil else {
-            respond(
-                incoming.transportId, incoming.id,
-                BrowserExecutor.errorJson(
-                    id: incoming.id, code: -32002, message: "Another request is open"
-                )
-            )
+            respond(incoming.transportId, incoming.id, BrowserController.busyPayload(), nil)
             return
         }
         let record = accounts.loadAccounts().first {
@@ -1224,6 +1489,10 @@ struct RootView: View {
             pool: pool,
             preferredTier: { [settings] in settings.feeTier?.tier ?? "fast" },
             numberPreset: { Formats.resolve(Formats.current.number).rawValue },
+            // Every request starts at the stored "Sign with" (spec 071); the
+            // sheet's own pick is that request's alone.
+            preferredSignMethod: { [settings] in settings.signPref?.method ?? "auto" },
+            offeredSignMethods: { [settings] in settings.signPref?.offered ?? ["auto"] },
             ports: SigningController.Ports(
                 respond: respond,
                 trackSubmitted: { [tracker, notifier] hash, ids, chain in
@@ -1253,8 +1522,11 @@ struct RootView: View {
             )
         )
         // The spine is shared with Send; it reads THIS request's "Sign with"
-        // choice, and goes back to `auto` the moment the controller is dropped.
-        userOpSpine.signMethod = { [weak controller] in controller?.signMethod ?? "auto" }
+        // choice, and goes back to the stored default the moment the
+        // controller is dropped.
+        userOpSpine.signMethod = { [weak controller, settings] in
+            controller?.signMethod ?? settings.signPref?.method ?? "auto"
+        }
         signing = controller
         controller.open(incoming)
     }
@@ -1368,7 +1640,10 @@ struct RootView: View {
                                     address: contactAddress
                                 )
                             },
-                            onFavourite: { contacts.toggleFavorite(address: contact.address) },
+                            onFavourite: {
+                                VelaHaptic.select.play()
+                                contacts.toggleFavorite(address: contact.address)
+                            },
                             // 删除联系人 at the foot of the page shipped doing
                             // nothing too — the row swipe was the only way out.
                             onDelete: {
@@ -1419,11 +1694,11 @@ struct RootView: View {
                         .task(id: contact.address) {
                             contacts.inspect(
                                 address: contact.address,
-                                // The chain the browser is on, because that is
-                                // the chain a page would be paying on. With no
-                                // page open it is Gnosis — recorded as a
+                                // The chain the page in front is on, because
+                                // that is the chain it would be paying on. With
+                                // no page open it is Gnosis — recorded as a
                                 // choice, not a fact about the address.
-                                chainId: browser.browserChain
+                                chainId: browser.currentTab?.chainId ?? 100
                             )
                         }
                     } else {
@@ -1635,6 +1910,10 @@ struct RootView: View {
             // what failed is a chain number.
             rpcDraft = settings.networkAdmin?.networks
                 .first { $0.chainId == chainId }?.rpcUrl ?? ""
+            // The chain's card, opened in the core — its edit and its save
+            // act on an open card only, so without this the sheet's 保存
+            // reached nothing.
+            settings.expandNetwork(chainId: chainId)
             rescue = .rpcFix
         } else {
             rescueChain = nil
@@ -1885,10 +2164,17 @@ struct RootView: View {
                 ))
             }
             if case .sendConfirm(let confirm) = model.base {
-                model.base = .sendConfirm(SendLive.confirm(
+                var live = SendLive.confirm(
                     view, from: (session.view.address, session.view.activeName),
                     display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed
-                ))
+                )
+                // The Trusted Signer's ending (spec 071): the core heard a
+                // cancelled ceremony and kept the confirmation up; this says
+                // why nothing was sent. The core's own notice goes first.
+                if live.notice == nil, let notice = send.trustedSignerNotice {
+                    live.notice = loc.t(notice.key)
+                }
+                model.base = .sendConfirm(live)
             }
             if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
                 model.sheet = .feeToken(SendLive.feeSheet(fee, on: sheet, loc: loc))
@@ -2007,6 +2293,7 @@ struct RootView: View {
         // A coin that cannot pay is not a choice — the row is disabled, and
         // this holds the same rule for any path that reaches here without it.
         guard let option = fees.view?.options[safe: index], !option.insufficient else { return }
+        VelaHaptic.select.play()
         let contract = option.contract
         fees.selectAsset(contract)
         send.chooseFeeToken(contract)
@@ -2108,7 +2395,7 @@ struct RootView: View {
         // The REQUEST's chain. The browser's was right for a page's request and
         // wrong for the wallet's own: the key backup is on Ethereum whatever
         // chain the last tab was on.
-        let chain = live.request?.chainId ?? browser.browserChain
+        let chain = live.request?.chainId ?? browser.currentTab?.chainId ?? 100
         let request = live.request ?? SigningController.Incoming(
             id: "", method: "", paramsJson: "[]", origin: "",
             transportId: "", chainId: chain
@@ -2128,7 +2415,10 @@ struct RootView: View {
             simulation: live.simulation,
             signMethod: live.signMethod,
             signWithOpen: live.signWithOpen,
-            feeOpen: live.feeOpen
+            feeOpen: live.feeOpen,
+            signMethods: live.offeredSignMethods(),
+            trustedSignerNotice: live.trustedSignerNotice,
+            parallelSpace: parallelSpace
         )
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
@@ -2189,6 +2479,7 @@ struct RootView: View {
                     onDeleteTx: { deleteOpenTransaction() },
                     chainSheet: chainSheet(for: state),
                     onPickChain: { chainId in
+                        VelaHaptic.select.play()
                         chainFilter = chainId
                         activity.chainFilter(chainId)
                     },
@@ -2216,7 +2507,10 @@ struct RootView: View {
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
                     onSelectAllTokens: { visible in selectAllValuable(visible) },
-                    onSendFilter: { id in sendClassFilter = id },
+                    onSendFilter: { id in
+                        VelaHaptic.select.play()
+                        sendClassFilter = id
+                    },
                     onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
                     onDenom: { send.toggleFiatInput() },
@@ -2326,7 +2620,9 @@ struct RootView: View {
     private func scanTool(_ tool: ScanTool) {
         switch tool {
         case .torch: camera.toggleTorch()
-        case .flip: camera.flip()
+        case .flip:
+            camera.flip()
+            VelaHaptic.select.play()
         case .gallery: pickCodeFromLibrary()
         }
     }
@@ -2525,29 +2821,42 @@ struct RootView: View {
         SettingsScreen(
             model: settingsModel(state),
             loc: loc,
+            // Every tab leaves Settings for its own section — only 钱包
+            // answered before (spec 072), so 通讯录 and 探索 took the tap and
+            // stayed here.
             onSelectTab: { tab in
-                if tab == .wallet { router.path.removeLast() }
+                guard tab != .settings else { return }
+                selectTab(tab)
+                if !router.path.isEmpty { router.path.removeLast() }
             },
             // The way out of a signed-in wallet, on the row a person would
             // look for it.
             onSignOut: { session.signOut() },
             networkActions: SettingsNetworkActions(
                 onOpenNetwork: { settings.expandNetwork(chainId: $0) },
+                onEditOverride: { chainId, field, value in
+                    guard let field = NetOverrideFieldWire(rawValue: field) else { return }
+                    settings.editOverride(chainId: chainId, field: field, value: value)
+                },
+                onCommitOverride: { settings.blurOverride(chainId: $0) },
+                onRemoveNetwork: { settings.deleteNetwork(id: $0) },
+                onOpenAddNetwork: { settings.resetWizard() },
                 onSearch: { settings.search($0) },
-                onSelectChain: { settings.selectChain($0) },
+                onSelectChain: { chainId in
+                    VelaHaptic.select.play()
+                    settings.selectChain(chainId)
+                },
                 onEditCustomRpc: { settings.editCustomRpc($0) },
+                onRecheck: { settings.recheck(customRpc: $0) },
                 onConfirmAdd: { settings.confirmAdd() },
                 isLive: true
             ),
             appearance: SettingsAppearanceActions(
+                // `auto` is the drawn "follow the system"; `system` is what is
+                // stored and what stops pinning a scheme (spec 072).
                 onTheme: { id in
-                    guard let choice = ThemeChoice(rawValue: id) else { return }
+                    guard let choice = SettingsLive.themeChoice(segment: id) else { return }
                     preferences.setTheme(choice)
-                },
-                onAvatar: { id in
-                    guard let style = AvatarStyle(rawValue: id) else { return }
-                    preferences.setAvatarStyle(style)
-                    AvatarPreference.apply(preferences)
                 },
                 onTextScale: { index in
                     guard let level = TextScaleLevel.allCases[safe: index] else { return }
@@ -2558,7 +2867,18 @@ struct RootView: View {
             onPick: { overlay, id in settingsPicked(overlay, id) },
             onClearCaches: { clearSettingsCaches() },
             onClearStorageItem: { id in
+                // A connected site's own row: disconnect that ONE site, in
+                // the live browser — its open tabs hear it at once.
+                if SettingsLive.isConnectionRow(id) {
+                    browser.revoke(origin: id)
+                    storageTick += 1
+                    return
+                }
                 DeviceStorage.clear(shelf, item: id)
+                // "dApp permissions" clears the keys AND the browser's live
+                // copy of them (spec 070 FR-017): before, the core kept every
+                // grant in memory until the next launch.
+                if id == "dapps" { browser.revokeAll() }
                 storageTick += 1
                 // What was cleared is what the rest of the app was showing:
                 // balances re-read, the feed and the address book re-read
@@ -2573,13 +2893,20 @@ struct RootView: View {
             // from Welcome.
             onAccountCreate: { router.path.append(.create) },
             onAccountSignIn: { onboarding.showSignInMethods = true },
+            onRemoveAccount: { index in session.removeAccount(index: index) },
+            // The rows' ids ARE the core's field and provider names (the
+            // pages are built from its view), so each maps back one to one.
             endpointActions: SettingsEndpointActions(
-                onEditEndpoint: { id, value in settings.editEndpoint(id: id, value: value) },
-                onBlurEndpoint: { id in settings.blurEndpoint(id: id) },
+                onEditEndpoint: { id, value in
+                    NetEndpointFieldWire(rawValue: id).map { settings.editEndpoint(field: $0, value: value) }
+                },
+                onBlurEndpoint: { id in NetEndpointFieldWire(rawValue: id).map { settings.blurEndpoint(field: $0) } },
                 onResetEndpoints: { settings.resetEndpoints() },
-                onEditProvider: { id, value in settings.editProviderKey(id: id, value: value) },
-                onBlurProvider: { id in settings.blurProviderKey(id: id) },
-                onTestProvider: { id in settings.testProvider(id: id) },
+                onEditProvider: { id, value in
+                    NetProviderIdWire(rawValue: id).map { settings.editProviderKey(provider: $0, value: value) }
+                },
+                onBlurProvider: { id in NetProviderIdWire(rawValue: id).map { settings.blurProviderKey(id: $0.rawValue) } },
+                onTestProvider: { id in NetProviderIdWire(rawValue: id).map { settings.testProvider(id: $0.rawValue) } },
                 onOpenEndpoints: { settings.openEndpoints() },
                 onOpenProviders: { settings.openProviders() }
             ),
@@ -2592,7 +2919,16 @@ struct RootView: View {
                       let call = asked.check.call
                 else { return }
                 openEthereumBackup(call)
-            }
+            },
+            // The core validates the address and stores only what it accepts;
+            // the sheet closes on its verdict, and keeps the refusal on screen
+            // otherwise (spec 071).
+            onSaveSignerUrl: { text in
+                settings.submitSignerUrl(text)
+                return settings.signPref?.signerUrlError == nil
+            },
+            onResetSignerUrl: { settings.resetSignerUrl() },
+            onOpenLink: { openExternal($0) }
         )
         // The wallet's own request, over the page that raised it. Settings
         // keeps its pickers on a sheet of its own INSIDE the screen; the row
@@ -2620,7 +2956,7 @@ struct RootView: View {
         }
         .onChange(of: signing?.closed) { _, closed in
             guard closed == true else { return }
-            signing = nil
+            signingClosed()
             // Landed, rejected or dismissed — the chain is what knows.
             Task { await checkEthereumBackup() }
         }
@@ -2628,63 +2964,23 @@ struct RootView: View {
         .task(id: session.view.address) { await readWalletKeys() }
         .task {
             settings.open()
-            // Both pages ask the core to read what is stored when they open.
-            // Until 056 nothing sent either event, so two live pages rendered
-            // whatever the machine happened to be holding.
-            settings.openEndpoints()
-            settings.openProviders()
+            // The connected sites are the browser core's to list; reading
+            // them does not need a page open (idempotent).
+            browser.startConnections()
+            tellBrowserAboutAccounts()
+            // The endpoints and providers pages send their own `…_opened`
+            // when they are SHOWN (spec 072) — probing four services and
+            // every saved key each time Settings opened was asking about
+            // pages nobody was looking at.
         }
     }
 
-    /// 探索, live.
-    ///
-    /// Pulled out of `signedInOrWelcome` because the Swift type checker
-    /// gives up on it in place — the same trap specs 052, 054 and 055 each
-    /// hit once, and adding one more argument is all it takes. A method body
-    /// is type-checked on its own.
-    @ViewBuilder private var exploreSection: some View {
-        ExploreScreen(
-            model: ExploreLive.home(
-                explore: browser.explore,
-                history: browser.history,
-                permissions: browser.permissions,
-                engine: browser.current,
-                identity: (name: session.view.activeName,
-                           address: session.view.address),
-                chainId: browser.browserChain,
-                loc: loc
-            ),
-            loc: loc,
-            signing: SigningFixtures.build(.cs12, loc: loc)
-                .withIdentity(name: session.view.activeName,
-                              address: session.view.address),
-            signingLive: signing.map { signingModel(for: $0) },
-            onSigningConfirm: { signing?.approve() },
-            // **Every chip on the editor is a PRESET, 撤销 included.**
-            //
-            // The core has a separate `revoke_chosen`, and it
-            // belongs to the BOOLEAN card — `setApprovalForAll`,
-            // a DAI permit — where there is no amount to cap and
-            // the choice is yes or no. Sending it from the amount
-            // editor's chip is an event the editor does not
-            // answer, and the chip silently does nothing.
-            // Device-found: 撤销 was tapped, the sheet kept saying
-            // 无限额, and the slide stayed shut.
-            onAllowanceChip: { chip in signing?.guardPreset(chip) },
-            onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-            onSignWith: { id in signing?.signWith(id) },
-            onFee: { signing?.feeTapped() },
-            onFeePick: { id in signing?.pickFee(id) },
-            onSpeed: { id in signing?.speed(id) },
-            onSigningDismissed: { signing?.swipeDismissed() },
-            controller: browser,
-            camera: camera,
-            onSelectTab: selectTab,
-            // The connection panel's "Switch account" — the SAME
-            // switcher the wallet home and settings open, so the
-            // three can never show different accounts.
-            onSwitchAccount: { homeSwitcherOpen = true }
-        )
+    /// A link out of the app — About's rows, "suggest a fix", "Get a key".
+    /// A bare host ("getvela.app") is read as https, as Android reads it.
+    private func openExternal(_ value: String) {
+        let text = value.hasPrefix("http") ? value : "https://\(value)"
+        guard let url = URL(string: text) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func settingsModel(_ state: SettingsStateId) -> SettingsScreenModel {
@@ -2714,6 +3010,9 @@ struct RootView: View {
         if let view = settings.feeTier {
             model = SettingsLive.withFeeTier(view, on: model, loc: loc)
         }
+        if let view = settings.signPref {
+            model = SettingsLive.withSignPref(view, on: model, loc: loc)
+        }
         // The switcher's rows are the SESSION's, with the balance core's
         // cached totals — after the currency, because the figures it writes
         // wear that currency's glyph and rate.
@@ -2741,6 +3040,7 @@ struct RootView: View {
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
+        model = SettingsLive.withEraseFailure(eraseFailed, on: model, loc: loc)
         model = SettingsLive.withProviderTests(on: model, loc: loc)
         // Somebody was sent here for one page in particular. `SettingsScreen`
         // seeds its own state from this once, at init, and owns it from then
@@ -2754,6 +3054,10 @@ struct RootView: View {
         // again after keys are removed.
         _ = storageTick
         model = SettingsLive.withStorage(DeviceStorage.measure(shelf), on: model, loc: loc)
+        // Every connected site, as the browser core holds them — after the
+        // measurement, whose numbers the rows would otherwise be overwritten
+        // by.
+        model = SettingsLive.withConnections(browser.dbr.sites, on: model, loc: loc)
         model = SettingsLive.withAbout(
             version: BuildInfo.version,
             commit: BuildInfo.commit,
@@ -2846,49 +3150,59 @@ struct RootView: View {
     }
 
     /// 抹除此设备 — everything this device holds, and then the door
-    /// (spec 081 FR-017, `contracts/erase-device.md`).
+    /// (spec 072 FR-011 and spec 081 FR-017, `contracts/erase-device.md`).
     ///
     /// **Never run on the founder's phone.** It is wired because a drawn
     /// destructive action that does nothing is worse than one that works;
-    /// verifying it means reading this code, not erasing a device with a real
-    /// wallet on it.
+    /// verifying it means reading this code and the simulator, not erasing a
+    /// device with a real wallet on it.
     ///
-    /// ## What this replaced, and why the replacement is a different shape
+    /// ## The order is the rule
     ///
-    /// The old body was eighteen hand-written key names. It missed about
-    /// fourteen groups — the account records, the pending uploads, the service
-    /// endpoints, the fee tier, the hidden-balance flag, the banned endpoints,
-    /// the receive watches, the trust marks, the browsing history, every
-    /// `vela.perm.*` grant — and it never touched `WKWebsiteDataStore`, so
-    /// every dApp the person had browsed kept its cookies and localStorage on
-    /// a phone they had just been told was wiped. It also called
-    /// `session.signOut()`, which only OPENS the confirmation: the erase ended
-    /// with a wiped phone sitting under a modal asking whether to sign out.
+    /// 1. The live dApp sessions are cut first (`revoke_all`), so an open page
+    ///    hears it is disconnected rather than keeping a grant nobody holds.
+    /// 2. Everything this device holds goes — the store SCANNED against the
+    ///    core's own `is_erasable_key` (no hand-kept list: the old one had
+    ///    eighteen names and missed about fourteen groups), and with it the
+    ///    three stores that are not `UserDefaults`: `WKWebsiteDataStore`, the
+    ///    shared URL cache and the logo store's own. A phone that kept a
+    ///    browsed site's cookies after being called wiped was the worst of
+    ///    them.
+    /// 3. Then it is looked at AGAIN. The sweep is not evidence.
+    /// 4. On a clean verification the session ends properly — `signOut` **and**
+    ///    `signOutConfirmed`, because `signOut` alone only opens the
+    ///    confirmation, and the old path therefore ended with a wiped phone
+    ///    sitting under a modal asking whether to sign out. On failure the
+    ///    person stays signed in with what survived named in the sheet itself.
     ///
-    /// Four steps now, in the contract's order: sweep, verify, and only on a
-    /// clean verification end the session — `signOut` **and**
-    /// `signOutConfirmed`, so the app restarts as new. On failure the person
-    /// stays signed in with what survived named in the sheet itself.
+    /// The account records are gone by then, so `clearSignedInWallet` is
+    /// awaited before the session machine is told: `AccountStore` is an actor,
+    /// and a sign-out that read a list the sweep had already emptied would
+    /// disagree with the store.
     private func eraseThisDevice() {
+        browser.revokeAll()
         Task { @MainActor in
-            let survivors = await DeviceStorage.eraseDevice(shelf)
+            let survivors = await DeviceStorage.erase(shelf)
             guard survivors.isEmpty else {
+                print("[vela-wallet] erase incomplete: \(survivors.count) key(s) survived")
                 eraseFailed = survivors
+                storageTick += 1
                 return
             }
             eraseFailed = nil
             storageTick += 1
-            // Awaited now that the erase is a task: `AccountStore` is an actor,
-            // and the two keys it owns must be gone before the session machine
-            // is told, or the sign-out reads an account list the sweep left.
+            relayClient.clearCaches()
             await accounts.clearSignedInWallet()
             session.signOut()
             session.signOutConfirmed()
+            onErased()
         }
     }
 
-    /// An account row in the switcher.
+    /// An account row in the switcher — from the wallet header, Explore or
+    /// Settings, every one a pick that takes effect.
     private func switchToAccount(_ address: String) {
+        VelaHaptic.select.play()
         Task {
             let records = await accounts.loadAccounts()
             guard let index = records.firstIndex(where: {
@@ -2950,6 +3264,10 @@ struct RootView: View {
             // The core validates and persists; a pick here is the ONE place
             // the stored default changes (the send screen's is one-shot).
             if ["fast", "standard", "slow"].contains(id) { settings.chooseFeeTier(id) }
+        case .signWith:
+            // The same rule for "Sign with" (spec 071); a name the core does
+            // not offer is ignored by the core.
+            settings.chooseSignMethod(id)
         case .language:
             // `system` is the drawn id; `auto` is what every client STORES.
             let tag = id == "system" ? "auto" : id

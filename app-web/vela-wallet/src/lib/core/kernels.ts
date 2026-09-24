@@ -609,6 +609,89 @@ export function attestSafeMessageHash(
 }
 
 // ---------------------------------------------------------------------------
+// The Trusted Signer (spec 071) — what its page receives, and the verdict on
+// what it answers. The web builds and judges nothing itself.
+// ---------------------------------------------------------------------------
+
+/** One leg of an operation as the request takes it: `value` in base units, decimal. */
+export interface TrustedSignerCall {
+	to: string;
+	value: string;
+	data: string;
+}
+
+/**
+ * What the shell already holds when it would sign (contract §1). A dApp's
+ * own `method` / `params` / `origin`; the wallet's own send says `''` for
+ * both and the core makes `calls` the intent. `userOp` is the ASSEMBLED
+ * operation in the page's field names, for a transaction only; `calls` are
+ * its legs before the fee leg.
+ */
+export interface TrustedSignerInput {
+	method: string;
+	params: unknown;
+	origin: string;
+	chainId: number;
+	chainName?: string;
+	nativeSymbol?: string;
+	account: string;
+	accountName?: string;
+	credentialIdsHex: string[];
+	userOp?: Record<string, string>;
+	calls?: TrustedSignerCall[];
+}
+
+/** The page's `{intent, context}`, as the core built it. */
+export interface TrustedSignerRequest {
+	intent: unknown;
+	context: unknown;
+}
+
+/** One of the account's keys, as the verdict checks the answer against them. */
+export interface TrustedSignerKey {
+	credentialId: string;
+	publicKeyHex: string;
+}
+
+/** The core's verdict: hex fields with `0x`, the credential id bare. */
+export type TrustedSignerVerdict =
+	| {
+			accepted: {
+				credentialIdHex: string;
+				signatureDer: string;
+				authenticatorData: string;
+				clientDataJSON: string;
+			};
+	  }
+	| { refused: { code: string; detail: string } };
+
+/** Whether a page at `url` can use this wallet's passkeys (they are `getvela.app` keys). */
+export function trustedSignerUsesWalletPasskeys(url: string): boolean {
+	return wasm.trustedSignerUsesWalletPasskeys(url);
+}
+
+/**
+ * The relying party a key minted behind `signerOrigin` belongs to, `null` for
+ * a key this wallet's own authenticators made (spec 075).
+ *
+ * A key made on a page is signed under THAT page's domain, so a challenge
+ * fetched under the wallet's own could never match the answer — which is what
+ * 「可信签名器的回复与这笔请求不符」 means, and how both phones found it.
+ */
+export function trustedSignerRegistryRpId(signerOrigin: string | null): string | null {
+	return wasm.trustedSignerRegistryRpId(signerOrigin ?? undefined) ?? null;
+}
+
+/**
+ * The ONE relying party a unit is filed under (ruling, 2026-09-23), or a throw
+ * naming the parties found when its members do not agree — refused here rather
+ * than written on chain and never provable.
+ */
+export function trustedSignerUnitRpId(memberOrigins: (string | null)[], walletRpId: string): string {
+	return translated(() => wasm.trustedSignerUnitRpId(JSON.stringify(memberOrigins), walletRpId));
+}
+
+// ---------------------------------------------------------------------------
 // Chain gas floor (spec 060)
 // ---------------------------------------------------------------------------
 
@@ -638,6 +721,21 @@ export function peggedNativeUsd(symbol: string): number | null {
 }
 
 /**
+ * How long a submitted operation usually takes to land on a chain, in seconds.
+ *
+ * `0` where Vela ships no estimate — the receipt's ring then circles instead of
+ * filling, which is the honest drawing of a wallet that does not know.
+ *
+ * The send receipt gets this number inside its own `SendReceiptView`. A dApp
+ * transaction lands on the SAME receipt but arrives through `tx_tracker`, whose
+ * entries carry no estimate, so spec 077's landing asks the core here rather
+ * than the web keeping a second copy of the chain table.
+ */
+export function typicalInclusionSeconds(chainId: number): number {
+	return wasm.typicalInclusionSeconds(chainId);
+}
+
+/**
  * Issue 212's fee-signal cache is a SHELL cache with core rules: how long a
  * chain's gas signals and the relay's quote may be held, and which readings
  * may be held at all (`fee_policy::FEE_SIGNALS_CACHE_TTL_MS`,
@@ -661,4 +759,29 @@ export function gasSignalsCacheable(
 /** The relay's gas quote for one tier may be held only when its cap is real. */
 export function bundlerQuoteCacheable(maxFeePerGas: string): boolean {
 	return wasm.bundlerQuoteCacheable(maxFeePerGas);
+}
+
+/**
+ * Spec 073: an amount field's text as the core reads it — ASCII digits and one
+ * `.` — or `null` for a paste with no reading as one figure, which the field
+ * refuses whole (`l10n::amount_text` says why; issue 231). `preset` is the
+ * resolved number preset (`resolvedFormatKeys().number`); `previous` the
+ * field's text before this edit, which is how one keystroke is told from a
+ * paste or an autofill.
+ */
+export function amountTextClean(
+	raw: string,
+	preset: string,
+	pasted: boolean,
+	previous?: string
+): string | null {
+	return wasm.amountTextClean(raw, preset, previous, pasted) ?? null;
+}
+
+/**
+ * Where the caret belongs in `clean`, having been at `caret` in `raw`: after as
+ * many KEPT characters as stood before it (UTF-16 units, as `selectionStart`).
+ */
+export function amountTextCaret(raw: string, clean: string, caret: number): number {
+	return wasm.amountTextCaret(raw, clean, caret);
 }

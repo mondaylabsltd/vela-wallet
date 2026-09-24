@@ -6,6 +6,7 @@ import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.feature.send.core.TrustedSigner
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeCall
 import app.getvela.wallet.feature.send.core.FeeSpeedView
@@ -38,6 +39,12 @@ data class IncomingRequest(
     /** The tab that asked; the answer goes there and nowhere else. */
     val transportId: String,
     val chainId: Int,
+    /**
+     * The address the site was shown (spec 070): the signer is pinned to it,
+     * and `sign_request` refuses (4100) rather than sign as anyone else.
+     * `null` for the wallet's own requests.
+     */
+    val grantedAddress: String? = null,
 )
 
 /**
@@ -79,6 +86,9 @@ class SigningController(
     private val numberPreset: () -> String = { "comma_dot" },
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
+    /** Spec 071: the "Sign with" this sheet starts at (Settings' default), and the Trusted Signer. */
+    defaultMethod: () -> String = { "auto" },
+    trustedSigner: () -> TrustedSigner? = { null },
 ) {
     /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
     private val signers = listOf(wallet)
@@ -128,7 +138,7 @@ class SigningController(
     val sim: StateFlow<SimOutcome?> = _sim
 
     private val signExecutor = SignExecutor(
-        spine = UserOpSpine(relay, accounts, signer, measureCall, signMethod = { signMethod.value }),
+        spine = UserOpSpine(relay, accounts, signer, measureCall, signMethod = { signMethod.value }, trustedSigner = trustedSigner),
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
@@ -143,8 +153,8 @@ class SigningController(
                 tryHandoff()
             }
 
-            override fun respond(transportId: String, id: String, json: org.json.JSONObject) {
-                ports.respond(transportId, id, json)
+            override fun respond(transportId: String, id: String, payload: SignResponsePayload) {
+                ports.respond(transportId, id, payload)
                 // The page has its answer: once the core has cleared the sheet
                 // this controller may go.
                 markAnswered()
@@ -159,6 +169,7 @@ class SigningController(
         now = now,
         receiptWaitMs = receiptWaitMs,
         receiptPollMs = receiptPollMs,
+        origin = { _request.value?.origin.orEmpty() },
     )
     private val clearExecutor = ClearExecutor(dataBase = { ports.dataBase() }, ethCall = { c, to, d -> ports.ethCall(c, to, d) })
     private val guardExecutor = GuardExecutor(ethCall = { c, to, d -> ports.ethCall(c, to, d).first })
@@ -205,12 +216,14 @@ class SigningController(
     val request: StateFlow<IncomingRequest?> = _request
 
     /**
-     * "Sign with": WHERE the passkey that signs this request is. This controller
-     * lives for one request, so the choice cannot outlive the question it was
-     * made for. `auto` is the wallet's stored route, untouched.
+     * "Sign with": WHERE the passkey that signs this request is — or the Clear
+     * Signer (spec 071). This controller lives for one request, so the choice
+     * cannot outlive the question it was made for; it starts at Settings'
+     * default. `auto` is the wallet's stored route, untouched.
      */
-    val signMethod = MutableStateFlow("auto")
+    val signMethod = MutableStateFlow(defaultMethod())
     val signWithOpen = MutableStateFlow(false)
+
 
     /** `null` toggles the list; an id picks a method and closes it. */
     fun signWith(id: String?) {
@@ -218,7 +231,7 @@ class SigningController(
             signWithOpen.value = !signWithOpen.value
             return
         }
-        if (id in setOf("auto", "platform", "hybrid", "security_key")) signMethod.value = id
+        if (id in SIGN_METHODS) signMethod.value = id
         signWithOpen.value = false
     }
 
@@ -270,7 +283,7 @@ class SigningController(
             SignEvent.RequestArrived(
                 id = request.id, method = request.method, params_json = request.paramsJson, origin = request.origin,
                 transport_id = request.transportId, dedicated_transport = true, per_request_chain = request.chainId,
-                dapp = null, granted_address = null, requested_address = null, request_ts_ms = null, now_ms = now(),
+                dapp = null, granted_address = request.grantedAddress, requested_address = null, request_ts_ms = null, now_ms = now(),
             ),
         )
         // What it does. A transaction decodes from its call; typed data and a
@@ -326,6 +339,17 @@ class SigningController(
     /** Called by the container's response port so the sheet closes only once the page has its answer. */
     fun markAnswered() { answered = true; if (sign.value.surface == SignSurface.Hidden) _closed.value = true }
 
+    /**
+     * The page that asked is gone (spec 070): it already holds its 4900 from
+     * the browser core. The sheet closes without answering anybody; an
+     * operation already at the relay keeps its record and its tracker.
+     */
+    fun cancel() {
+        _request.value?.let { dispatchSign(SignEvent.TransportDropped(it.transportId)) }
+        answered = true
+        _closed.value = true
+    }
+
     init {
         // One request, one controller: its fee sessions end with it.
         scope.launch { closed.first { it }; speedControl.dispose() }
@@ -356,6 +380,12 @@ class SigningController(
     fun guardGrant() = guardHost.dispatch(GuardEvent.GrantDeliberatelyChosen, GuardEvent.serializer())
 
     companion object {
+        /**
+         * `wallet_keys::SIGN_METHODS` — every value the picker may set. Pinned
+         * to the core's own list (`SignPrefView.offered`) by a JVM test.
+         */
+        val SIGN_METHODS = listOf("auto", "platform", "hybrid", "security_key", "trusted_signer")
+
         /** What the confirm slides into: the fee as quoted, the guard's rewrite, the intent (the desktop's `approve_opts`). */
         fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,

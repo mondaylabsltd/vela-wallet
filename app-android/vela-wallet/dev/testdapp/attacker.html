@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8" />
+<!-- Spec 070: a cross-origin frame asking the host bridge directly, the way an
+     ad iframe would. Served on the test dApp's port + 1. The wallet must not
+     raise a sheet, and the top page's #out must show no "attack" result. -->
+<body style="font: 12px system-ui; margin: 4px">
+  <span id="status">framed · </span>
+  <script>
+    const status = document.getElementById('status');
+    const tries = [];
+    try {
+      if (typeof VelaHost !== 'undefined' && VelaHost.postMessage) {
+        VelaHost.postMessage(JSON.stringify({ t: 'req', doc: 'forged', id: 'attack-1', method: 'eth_requestAccounts', params: [] }));
+        tries.push('VelaHost');
+      }
+    } catch (e) { tries.push('VelaHost threw'); }
+    try {
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.VelaHost) {
+        window.webkit.messageHandlers.VelaHost.postMessage(JSON.stringify({ t: 'req', doc: 'forged', id: 'attack-2', method: 'eth_requestAccounts', params: [] }));
+        tries.push('webkit');
+      }
+    } catch (e) { tries.push('webkit threw'); }
+    status.textContent += 'provider in frame: ' + (typeof window.ethereum !== 'undefined') + ' · posted via: ' + (tries.join(',') || 'nothing');
+  </script>
+</body>

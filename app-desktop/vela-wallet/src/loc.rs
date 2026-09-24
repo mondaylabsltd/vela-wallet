@@ -13,9 +13,10 @@ pub struct Loc {
 }
 
 impl Loc {
-    /// Build the engine for the launch locale: `VELA_LANG` → `LC_ALL` →
-    /// `LC_MESSAGES` → `LANG` → `en` (spec 007 FR-007), resolved through the
-    /// same ladder i18next uses (`resolve_language`).
+    /// Build the engine for the language in force: the `VELA_LANG` pin, the
+    /// language chosen in Settings (spec 072), else `LC_ALL` → `LC_MESSAGES`
+    /// → `LANG` → `en` (spec 007 FR-007) — resolved through the same ladder
+    /// i18next uses (`resolve_language`).
     pub fn from_env() -> Self {
         let requested = requested_tag();
 
@@ -94,27 +95,69 @@ impl Loc {
             .into()
     }
 
+    /// `t` with SEVERAL text variables.
+    ///
+    /// [`Self::t_text`]'s reason for existing — text variables name hardware,
+    /// and only one at a time — stopped being the whole truth in spec 075: the
+    /// sentence under a narrowed key picker names a page, that page's relying
+    /// party and the wallet's, and they are three facts of one sentence. Still
+    /// no `count` option, so this stays pure text substitution.
+    pub fn t_texts(&self, key: &str, vars: &[(&str, &str)]) -> SharedString {
+        let vars: Vec<(&str, Var<'_>)> = vars.iter().map(|(k, v)| (*k, Var::Str(v))).collect();
+        let opts = Options {
+            vars: &vars,
+            ..Options::default()
+        };
+        self.engine
+            .t(key, &opts)
+            .unwrap_or_else(|_| key.to_owned())
+            .into()
+    }
+
     /// The BCP-47 tag actually resolved (used only for logging).
     pub fn language(&self) -> &str {
         self.engine.language()
     }
 }
 
+/// The tag the strings resolve from: the `VELA_LANG` pin, else the language
+/// the person chose in Settings (spec 072: `vela.language`), else the
+/// machine's own ([`system_tag`]).
+pub(crate) fn requested_tag() -> String {
+    pick_tag(
+        env_tag(&["VELA_LANG"]),
+        crate::executor::preferences::pinned_language(),
+        system_tag,
+    )
+}
+
+/// The machine's locale: `VELA_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` →
+/// `en`, as a BCP-47-shaped tag (`zh_CN.UTF-8` → `zh-CN`). What "follow the
+/// system" follows, and what the format presets' "Automatic" means (spec 038
+/// #E3) — the web's `auto` formats read the platform too, never the app's
+/// chosen language.
+pub(crate) fn system_tag() -> String {
+    env_tag(&["VELA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]).unwrap_or_else(|| "en".to_owned())
+}
+
+fn env_tag(keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
+        .map(|raw| normalize_posix_tag(&raw))
+}
+
+/// A developer's pin, then the person's choice, then the machine.
+fn pick_tag(
+    pin: Option<String>,
+    chosen: Option<String>,
+    system: impl FnOnce() -> String,
+) -> String {
+    pin.or(chosen).unwrap_or_else(system)
+}
+
 /// `zh_CN.UTF-8` → `zh-CN`; strips the encoding suffix and maps `_` → `-`.
 /// `resolve_language` takes it from there (including `C`/`POSIX` → `en` via
 /// its unsupported-tag fallback).
-/// The tag the launch locale is resolved from: `VELA_LANG` → `LC_ALL` →
-/// `LC_MESSAGES` → `LANG` → `en`, as a BCP-47-shaped tag (`zh_CN.UTF-8` →
-/// `zh-CN`). Shared with the format presets (spec 038 #E3), so "Automatic"
-/// there means the same machine the strings mean.
-pub(crate) fn requested_tag() -> String {
-    ["VELA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]
-        .iter()
-        .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
-        .map(|raw| normalize_posix_tag(&raw))
-        .unwrap_or_else(|| "en".to_owned())
-}
-
 fn normalize_posix_tag(raw: &str) -> String {
     let no_encoding = raw.split('.').next().unwrap_or(raw);
     no_encoding.replace('_', "-")
@@ -157,7 +200,7 @@ mod tests {
     /// Var-bearing keys (`{{seconds}}` …) resolve with the placeholder left in
     /// place under default options — still a non-echo, non-empty value, which
     /// is all this sweep asserts about them.
-    const FLOW_KEYS: [&str; 120] = [
+    const FLOW_KEYS: [&str; 122] = [
         "common.cancel",
         "onboarding.create.keyUnreadableTitle",
         "onboarding.create.keyUnreadableBody",
@@ -228,6 +271,8 @@ mod tests {
         "onboarding.create.keysSubtitleFull",
         "onboarding.create.keysTitle",
         "onboarding.create.keysTitleBlocked",
+        "onboarding.create.methodBlockedHint",
+        "onboarding.create.methodBlockedSigner",
         "onboarding.create.methodHybridTitle",
         "onboarding.create.methodHybridUnavailable",
         "onboarding.create.methodPlatformTitle",
@@ -442,6 +487,20 @@ mod tests {
             zh.t("onboarding.welcome.featureNoMnemonicTitle", &opts)
                 .unwrap(),
             "不用助记词"
+        );
+    }
+
+    /// Spec 072: a language chosen in Settings outranks the machine, and the
+    /// developer's `VELA_LANG` pin outranks both — the same order `VELA_THEME`
+    /// takes over the stored theme.
+    #[test]
+    fn a_chosen_language_outranks_the_machine_and_the_pin_outranks_both() {
+        let system = || "de".to_owned();
+        assert_eq!(pick_tag(None, None, system), "de");
+        assert_eq!(pick_tag(None, Some("zh-TW".to_owned()), system), "zh-TW");
+        assert_eq!(
+            pick_tag(Some("ja".to_owned()), Some("zh-TW".to_owned()), system),
+            "ja"
         );
     }
 

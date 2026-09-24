@@ -101,6 +101,17 @@ class Session {
 		this.#loop?.dispatch({ type: 'switch_account', index });
 	}
 
+	/**
+	 * Drop ONE wallet from this device and stay on the others (2026-09-23).
+	 *
+	 * `index` is a position in the ORIGINAL list, as `switchAccount` takes —
+	 * the rows carry it so a balance-sorted display cannot remove a stranger.
+	 * Removing the last one signs this browser out, which the core decides.
+	 */
+	removeAccount(index: number): void {
+		this.#loop?.dispatch({ type: 'remove_account', index });
+	}
+
 	signOut(): void {
 		this.#loop?.dispatch({ type: 'sign_out' });
 	}

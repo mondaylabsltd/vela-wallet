@@ -329,6 +329,70 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `send.splitRemaining` is what is left to give out; `send.splitFillEmpty`
 //   puts one amount in every empty row. Everything ELSE those issues needed was
 //   already here, in all fifteen locales, unread. No new branch.
+// 1687 (merge of the two above, 2026-09-21): spec 068 and issue 686 added
+//   +13 leaf and the one `settings.feeSpeed` branch; issues 204-206 added +11
+//   leaf and no branch. The two sets share no path, so they simply add:
+//   1662 + 14 + 11 = 1687 = (1575 + 13 + 11) leaf + (87 + 1) branch.
+// 1692 (spec 070, 2026-09-22): +5 flat explore leaves — the in-app browser
+//   now survives a renderer death and says so (`pageCrashedTitle`,
+//   `pageCrashedBody`), its scan button routes every code and names the two it
+//   cannot use (`walletConnectUnsupported`, `scanUnrecognized`), and "Copy
+//   link" confirms itself (`linkCopied`). Everything else the browser's fixes
+//   needed was already in the corpus (`connect.browser.loadFailed`, `.retry`,
+//   `.a11yInsecure`, `explore.disconnect`). No new branch.
+// 1713 (spec 071, 2026-09-22): the Clear Signer — the fourth "Sign with".
+//   +10 flat `componentsUi.signing.trustedSigner*` leaves (its name, the promise
+//   under it, waiting + the Local Network Access hint, closed / refused /
+//   mismatch / timeout, reopen, the desktop tab's "signed, close me") and the
+//   `settings.signing` branch with 10 leaves (the default "Sign with" row, the
+//   signer page row, its three refusals, reset, save). 1692 + 20 + 1 = 1713.
+// 1717 (spec 072, 2026-09-22): +4 `settingsModals.endpoints.reset*` leaves —
+//   resetting the service endpoints is destructive (FR-010) and asks first on
+//   every shell; the corpus had the button and no question. No new branch.
+// 1733 (spec 075, 2026-09-22): the Clear Signer across devices. +10
+//   `componentsUi.signing.trustedSigner*` leaves (where the signer is — this
+//   device or another — the pairing sheet, its waiting line, the six-digit
+//   code and its confirmation, copy link, the tunnel unreachable) and +6
+//   `settings.signing.tunnel*` (the Settings row, as the page row). No new
+//   branch. (The service was called the relay until 2026-09-23, when the owner
+//   renamed it the tunnel — passkeys' own word for the same thing. The six keys
+//   and `trustedSignerTunnelDown` were renamed with it; the BUNDLER keeps `relay`
+//   in `componentsUi.gas.relayerFee`, `componentsUi.treasuryBootstrap.*` and
+//   `settingsModals.endpoints.bundler*`.)
+// 1738 (spec 075, 2026-09-22): the Bluetooth route. +5
+//   `componentsUi.signing.trustedSigner*` leaves — the third row in "where is
+//   your Clear Signer", what it means (and that the app must stay open), the
+//   NAME to look for in the browser's device list, and the two ways Bluetooth
+//   can be unavailable (permission refused, radio off). The peripherals
+//   shipped borrowing the dApp flow's "Bluetooth permission is needed", which
+//   never said which device to pick. No new branch.
+// 1739 (spec 075, 2026-09-22): +1 `trustedSignerBluetoothUnsupported`. A device
+//   with no peripheral role at all was being told to switch Bluetooth on,
+//   which cannot help it (iOS, T041: `unsupported` and `unavailable` had
+//   nowhere else to go).
+// 1740 (spec 075, 2026-09-22): +1 `trustedSignerNearbyLost`. A pairing that
+//   worked and then dropped was borrowing "this device cannot pair this way",
+//   which is false and sends the person looking for the wrong problem (found
+//   on the radio, T043).
+// 1742 (spec 075, 2026-09-23): +2 `onboarding.create.methodBlocked{Hint,
+//   Signer}`. A wallet's keys all belong to ONE relying party, because the
+//   registry files a unit under one `rpId` — so once the first key is minted
+//   the routes that would mint for a different party are off. They used to be
+//   offered and failed at the publish, with nothing said (owner, 2026-09-23).
+//   Two strings, not three: a dimmed row keeps its own caption, and the third
+//   would have said "off" where the dimming already does (SC-005 budget).
+// 1745 (2026-09-23): +3 — `settings.account.remove{,Body}` and
+//   `settings.signOut.descMany`. A device holding six wallets could sign out
+//   of all six or none, and the dialog's copy was true of one and quietly
+//   false of six (owner: 「有时候不想退出所有，只想退出单个」).
+// 1722 (spec 075, 2026-09-23): −23. The Clear Signer's two CROSS-DEVICE
+//   channels went, and every word they needed went with them: "where is your
+//   Clear Signer?" and its three answers, the pairing link and its code, the
+//   four Bluetooth troubles, and the tunnel's own Settings row. The owner cut
+//   them because only a page THIS device fetched can be checked against what
+//   it is supposed to be — 「客户端支持回环 + 蓝牙就够了」, then 「我确定砍掉
+//   蓝牙」. A shrinking ledger is as load-bearing as a growing one: a string
+//   nothing draws is a string nobody notices going wrong.
 // 1691 (spec 081, 2026-09-22): the self-call guard's blocked sheet needs four
 //   leaves under the existing `componentsUi.signing` branch —
 //   `selfCallBlockedTitle`, `...Body`, `...LegBody` (the batch wording, with
@@ -344,9 +408,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   with nothing having authenticated it. Now only a built-in descriptor — or
 //   a fetched one byte-equal to the built-in copy — earns that word, and this
 //   is the sentence the other case needs. 1692 + 1 = 1693.
-if (PATHS.length !== 1693) fail(`expected 1693 paths (1605 leaf + 88 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1605) fail(`expected 1605 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 88) fail(`expected 88 branch paths, got ${branchSet.size}`);
+// MERGE (2026-09-24): main and 075 both counted up from 1687 and arrived at
+//   different totals — main at 1693 (spec 081's four blocked-sheet leaves, the
+//   single-key network sentence, the fetched-descriptor warning), 075 at 1722
+//   (the Trusted Signer, then −23 as its cross-device channels went). The
+//   corpus is the UNION of both, so the total is neither, and the number below
+//   is the merged corpus's own — not a guess, and not either side's.
+if (PATHS.length !== 1728) fail(`expected 1728 paths (1639 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1639) fail(`expected 1639 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

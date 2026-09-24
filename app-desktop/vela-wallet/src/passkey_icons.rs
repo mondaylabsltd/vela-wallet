@@ -32,6 +32,10 @@ pub enum PasskeyIcon {
     Laptop,
     /// lucide `scan-line` — the camera that scans the code (stroke, 24-unit).
     Scan,
+    /// lucide `eye` — spec 075's Trusted Signer row: a page you READ before you
+    /// sign. Not a lock, not a key: the whole claim of that route is that you
+    /// can see what is being signed. The same glyph the web client draws.
+    Eye,
 }
 
 impl PasskeyIcon {
@@ -45,6 +49,7 @@ impl PasskeyIcon {
             KeyMethod::Platform => Self::Laptop,
             KeyMethod::Hybrid => Self::Scan,
             KeyMethod::SecurityKey => Self::Usb,
+            KeyMethod::TrustedSigner => Self::Eye,
         }
     }
 }
@@ -66,7 +71,7 @@ struct IconDef {
 fn def(icon: PasskeyIcon) -> IconDef {
     match icon {
         // Never reached: `svg_document` draws these before asking.
-        PasskeyIcon::Laptop | PasskeyIcon::Scan => IconDef {
+        PasskeyIcon::Laptop | PasskeyIcon::Scan | PasskeyIcon::Eye => IconDef {
             view: 24.,
             elements: &[],
         },
@@ -130,6 +135,9 @@ fn svg_document(icon: PasskeyIcon, palette: &Palette) -> String {
         ),
         PasskeyIcon::Scan => Some(
             r##"<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>"##,
+        ),
+        PasskeyIcon::Eye => Some(
+            r##"<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>"##,
         ),
         _ => None,
     };
@@ -239,7 +247,12 @@ mod tests {
             muted: gpui::rgb(0x888888).into(),
             paper: gpui::rgb(0xffffff).into(),
         };
-        for icon in [PasskeyIcon::Usb, PasskeyIcon::Laptop, PasskeyIcon::Scan] {
+        for icon in [
+            PasskeyIcon::Usb,
+            PasskeyIcon::Laptop,
+            PasskeyIcon::Scan,
+            PasskeyIcon::Eye,
+        ] {
             let image = crate::icons::rasterize(&svg_document(icon, &palette), 32);
             assert!(image.is_some(), "{icon:?} did not rasterise");
         }

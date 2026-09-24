@@ -228,9 +228,12 @@ test('a dark Continue names the recipient it waits on, and a wrong field says so
 
 	// "1,5" used to ARM the button (judged by its leading digit) and then do
 	// nothing when pressed. Under this browser's dot preset the comma is not
-	// guessed at: the core refuses the figure, the row says so, the gate stays shut.
+	// guessed at — 15 would be ten times a decimal-comma writer's 1.5 — so the
+	// figure arriving whole is refused, the row keeps what it had, and the gate
+	// stays shut (spec 073, the core's amount rule).
 	await amount(page, 2).fill('1,5');
-	await expect(page.getByText(en('send.badAmount'), { exact: true })).toBeVisible();
+	await expect(amount(page, 2)).toHaveValue('');
+	await expect(page.getByText(needs('send.splitNeedsAmount', 2), { exact: true })).toBeVisible();
 	await expect(advance).toBeDisabled();
 
 	// One amount for every empty row: clear it, and the offer appears.

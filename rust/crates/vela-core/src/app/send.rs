@@ -4257,7 +4257,20 @@ fn handle_back(model: &mut Model) -> Cmd {
             } else {
                 model.selected_token = None;
                 model.amount = DenominatedAmount::token("");
-                model.recipient.clear();
+                // A recipient HANDED IN — a scan, a contact, a payment request
+                // — survives the trip back to the picker (owner, 2026-09-23).
+                // The person never chose that token: the quick-send path took
+                // the balance's top one for them, so the only way to change it
+                // was to go back, and going back threw away the scan. They
+                // scanned again, saw the same token, and read the screen as
+                // "the asset cannot be changed".
+                //
+                // A recipient the person TYPED still goes, because there
+                // starting over is theirs to redo and a stale address in an
+                // empty-looking flow is worse than a cleared field.
+                if model.params.prefilled_recipient.is_none() {
+                    model.recipient.clear();
+                }
                 model.split_mode = false;
                 model.recipients.clear();
                 model.step = SendStep::SelectToken;
@@ -4963,12 +4976,10 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         amount,
         usd_value: if usd_value.is_nan() { 0.0 } else { usd_value },
         submitted_at_ms: model.submitted_at_ms,
-        typical_inclusion_s: model.selected_token.as_ref().and_then(|token| {
-            super::network_admin::BUILTIN_CHAINS
-                .iter()
-                .find(|chain| chain.chain_id == token.chain_id)
-                .map(|chain| chain.typical_inclusion_s)
-        }),
+        typical_inclusion_s: model
+            .selected_token
+            .as_ref()
+            .and_then(|token| super::network_admin::typical_inclusion_s(token.chain_id)),
     })
 }
 

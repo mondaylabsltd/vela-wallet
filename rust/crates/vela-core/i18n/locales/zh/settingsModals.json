@@ -42,7 +42,11 @@
       "fiatLabel": "法币汇率",
       "fiatHint": "以 USD 为基准的汇率，决定可选货币列表——可替换为覆盖范围更广的数据源。",
       "resetToDefaults": "四项全部恢复默认",
-      "selfHostGuide": "自行部署指南 →"
+      "selfHostGuide": "自行部署指南 →",
+      "resetTitle": "恢复默认服务节点？",
+      "resetBody": "四项服务都将改回 Vela 的地址，你在这里填写的地址将被清除。",
+      "resetConfirm": "恢复默认",
+      "resetCancel": "取消"
     },
     "addNetwork": {
       "modalTitle": "添加网络",
@@ -60,7 +64,6 @@
       "retry": "重试",
       "addNetworkBtn": "添加网络",
       "incompatibleHint": "此链上尚未部署所需合约。\n请使用 Vela Wallet 链配置工具进行部署，然后回来重新检查。",
-      "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。",
       "openChainSetupTool": "打开链配置工具",
       "recheck": "重新检查",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -70,7 +73,8 @@
       "incompatible": "不兼容",
       "checkSafe": "Safe L2 合约",
       "checkSigner": "P-256 预编译",
-      "checkRemaining": "其余 {{count}} 项合约"
+      "checkRemaining": "其余 {{count}} 项合约",
+      "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。"
     },
     "treasury": {
       "modalTitle": "金库",

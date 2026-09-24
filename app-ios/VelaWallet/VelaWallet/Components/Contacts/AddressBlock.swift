@@ -11,9 +11,6 @@
 //
 
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 struct AddressBlock: View {
     @Environment(\.theme) private var theme
@@ -71,9 +68,7 @@ struct AddressBlock: View {
     }
 
     private func copy() {
-        #if canImport(UIKit)
-        UIPasteboard.general.string = fullAddress
-        #endif
+        velaCopy(fullAddress)
         onCopy()
         copied = true
         Task {

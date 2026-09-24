@@ -6,6 +6,7 @@
  * browser would read each other), and `system` UNPINS the theme rather than
  * writing out a resolved one.
  */
+import '$lib/i18n/wasm-init.server';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -61,7 +62,6 @@ describe('what is read back', () => {
 			'localStorage',
 			fakeLocalStorage({
 				[PREF_KEYS.theme]: 'dark',
-				[PREF_KEYS.avatarStyle]: 'initials',
 				[PREF_KEYS.language]: 'ja',
 				[PREF_KEYS.localePrefs]: JSON.stringify({
 					numberFormat: 'dot_comma',
@@ -73,7 +73,6 @@ describe('what is read back', () => {
 		vi.stubGlobal('document', fakeDocument());
 		preferences.boot();
 		expect(preferences.theme).toBe('dark');
-		expect(preferences.avatarStyle).toBe('initials');
 		expect(preferences.language).toBe('ja');
 		expect(preferences.numberFormat).toBe('dot_comma');
 		expect(preferences.dateFormat).toBe('iso');
@@ -87,14 +86,12 @@ describe('what is read back', () => {
 			'localStorage',
 			fakeLocalStorage({
 				[PREF_KEYS.theme]: 'sepia',
-				[PREF_KEYS.avatarStyle]: 'photo',
 				[PREF_KEYS.localePrefs]: JSON.stringify({ numberFormat: 'roman' })
 			})
 		);
 		vi.stubGlobal('document', fakeDocument());
 		preferences.boot();
 		expect(preferences.theme).toBe('system');
-		expect(preferences.avatarStyle).toBe('identicon');
 		expect(preferences.numberFormat).toBe('auto');
 	});
 
@@ -188,8 +185,116 @@ describe('what is written', () => {
 		vi.stubGlobal('localStorage', denied);
 		vi.stubGlobal('document', fakeDocument());
 		preferences.boot();
-		expect(() => preferences.setAvatarStyle('initials')).not.toThrow();
-		expect(preferences.avatarStyle).toBe('initials');
+		expect(() => preferences.setTheme('dark')).not.toThrow();
+		expect(preferences.theme).toBe('dark');
+	});
+});
+
+describe("every shell's spelling reads the same (spec 072)", () => {
+	// Four shells wrote these preferences four ways. The core reads them
+	// all and rewrites the older ones once; the store reads through it as soon
+	// as it is up, which is what `ready` waits for.
+
+	it('reads and rewrites what Android writes', async () => {
+		const store = fakeLocalStorage({
+			[PREF_KEYS.theme]: 'auto',
+			[PREF_KEYS.language]: 'system',
+			[PREF_KEYS.localePrefs]: JSON.stringify({
+				numberFormat: 'space_comma',
+				dateFormat: 'ymd_slash',
+				timeFormat: 'h24',
+				textScale: 4
+			})
+		});
+		const doc = fakeDocument();
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', doc);
+		preferences.boot();
+		await preferences.ready;
+
+		// `system` is Android's word for following the device, not a language.
+		expect(preferences.language).toBe('auto');
+		expect(preferences.theme).toBe('system');
+		// The text size Android kept inside the locale record is the person's.
+		expect(preferences.textScale).toBe('large');
+		expect(doc.documentElement.style.getPropertyValue('--text-scale')).toBe('1.22');
+		expect(preferences.numberFormat).toBe('space_comma');
+
+		// …and the store now holds the shared spelling, so the next read (and
+		// the pre-paint script, which reads `vela.textScale`) agrees.
+		const stored = store.snapshot();
+		expect(stored[PREF_KEYS.language]).toBe('auto');
+		expect(stored[PREF_KEYS.theme]).toBe('system');
+		expect(stored[PREF_KEYS.textScale]).toBe('large');
+		expect(JSON.parse(stored[PREF_KEYS.localePrefs])).toEqual({
+			numberFormat: 'space_comma',
+			dateFormat: 'ymd_slash',
+			timeFormat: 'h24'
+		});
+	});
+
+	it("reads and rewrites the desktop's formats record", async () => {
+		const store = fakeLocalStorage({
+			'vela.formats': JSON.stringify({ number: 'dot_comma', date: 'iso', time: 'h12' })
+		});
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', fakeDocument());
+		preferences.boot();
+		await preferences.ready;
+
+		expect(preferences.numberFormat).toBe('dot_comma');
+		expect(preferences.dateFormat).toBe('iso');
+		expect(preferences.timeFormat).toBe('h12');
+		const stored = store.snapshot();
+		expect(stored['vela.formats']).toBeUndefined();
+		expect(JSON.parse(stored[PREF_KEYS.localePrefs])).toEqual({
+			numberFormat: 'dot_comma',
+			dateFormat: 'iso',
+			timeFormat: 'h12'
+		});
+	});
+
+	it('leaves a value this build does not ship where it is', async () => {
+		// A newer build's choice reads as the default here, and survives the
+		// trip: only the KNOWN older spellings are rewritten.
+		const store = fakeLocalStorage({ [PREF_KEYS.theme]: 'sepia' });
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', fakeDocument());
+		preferences.boot();
+		await preferences.ready;
+		expect(preferences.theme).toBe('system');
+		expect(store.getItem(PREF_KEYS.theme)).toBe('sepia');
+	});
+
+	it('does not undo a choice made while the core was loading', async () => {
+		const store = fakeLocalStorage({ [PREF_KEYS.language]: 'system' });
+		store.setItem = () => {
+			throw new Error('QuotaExceededError');
+		};
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', fakeDocument());
+		preferences.boot();
+		// Stored nowhere (the store refuses writes), so a re-read would lose it.
+		preferences.setTheme('dark');
+		await preferences.ready;
+		expect(preferences.theme).toBe('dark');
+	});
+
+	it('removes a stored avatar style, which nothing reads any more (spec 074)', async () => {
+		// Every avatar is the identicon now; the choice an older build stored
+		// between it and initials is cleaned out once, and changes nothing.
+		const store = fakeLocalStorage({
+			'vela.avatarStyle': 'initials',
+			[PREF_KEYS.theme]: 'dark'
+		});
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', fakeDocument());
+		preferences.boot();
+		await preferences.ready;
+		expect(store.getItem('vela.avatarStyle')).toBeNull();
+		expect(store.getItem(PREF_KEYS.theme)).toBe('dark');
+		expect(preferences.theme).toBe('dark');
+		expect('avatarStyle' in preferences).toBe(false);
 	});
 });
 

@@ -14,18 +14,295 @@ use crate::settings::model::{NetworkRowModel, chain_tint, lettermark};
 
 use vela_core::app::display_currency::CurrencyView;
 use vela_core::app::network_admin::{
-    NetCompatibility, NetNetworkRow, NetProbeHealth, NetProviderId, NetServiceHealth, NetView,
-    NetWizardErrorKind, NetWizardPhase, NetWizardView,
+    Event as NetEvent, NetCompatibility, NetEndpointField, NetNetworkRow, NetOverrideField,
+    NetProbeHealth, NetProviderId, NetServiceHealth, NetView, NetWizardErrorKind, NetWizardPhase,
+    NetWizardView,
 };
 use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::datetime::{Civil, DatePreset, TimePreset, format_date, format_time};
-use vela_core::l10n::number::{NumberPreset, format_token_amount};
+use vela_core::l10n::number::{FractionDigits, NumberPreset, format_number, format_token_amount};
+use vela_core::storage_catalog::StorageGroup as CatalogGroup;
+
+use crate::executor::device_storage::{Report, Usage};
+use crate::settings::fixtures::{StorageGroup, StorageItem};
 
 use crate::executor::format_prefs::{self, Choice, Formats};
 use crate::settings::components::MenuRow;
 
 /// The sample figure the 本地化 mock prints beside the currency code.
 const SAMPLE: f64 = 1234.56;
+
+// ---------------------------------------------------------------------------
+// Appearance and the account panel (spec 072)
+// ---------------------------------------------------------------------------
+
+/// The theme control's cells, in the order DST2 draws them: Light, Dark,
+/// Follow System. The words are the stored ones (`vela.theme`).
+pub const THEME_SEGMENTS: [&str; 3] = ["light", "dark", "system"];
+
+/// Which cell a stored word selects — the first when the word is not one of
+/// them, which the core's reader never hands out.
+#[must_use]
+pub fn segment_of(cells: &[&str], word: &str) -> usize {
+    cells.iter().position(|cell| *cell == word).unwrap_or(0)
+}
+
+/// The text-size stop a level sits on (`vela.textScale`).
+#[must_use]
+pub fn text_scale_index(level: &str) -> usize {
+    vela_core::prefs::TEXT_SCALE_LEVELS
+        .iter()
+        .position(|(name, _)| *name == level)
+        .unwrap_or(2)
+}
+
+fn endonym(tag: &str) -> SharedString {
+    SharedString::from(
+        crate::settings::fixtures::LOCALE_ENDONYMS
+            .iter()
+            .find(|(id, _)| *id == tag)
+            .map_or(tag, |(_, name)| *name)
+            .to_owned(),
+    )
+}
+
+/// The language row: the chosen language by its own name, or — following the
+/// system — the language the system resolves to, "· System" beside it. The
+/// web's `languageValue`.
+#[must_use]
+pub fn language_value(
+    pinned: Option<&str>,
+    system_language: &str,
+    s: &SettingsStrings,
+) -> SharedString {
+    match pinned {
+        Some(tag) => endonym(tag),
+        None => SharedString::from(format!("{} · {}", endonym(system_language), s.note_system)),
+    }
+}
+
+/// The language menu: "Follow System" first, with what it currently resolves
+/// to, then every shipped locale by its endonym. The web's `languageRows`.
+#[must_use]
+pub fn language_menu(
+    pinned: Option<&str>,
+    system_language: &str,
+    s: &SettingsStrings,
+) -> Vec<MenuRow> {
+    let mut rows = vec![(
+        s.language_follow_system.clone(),
+        Some(SharedString::from(format!(
+            "{} · {}",
+            s.note_system,
+            endonym(system_language)
+        ))),
+        pinned.is_none(),
+    )];
+    rows.extend(
+        crate::settings::fixtures::LOCALE_ENDONYMS
+            .iter()
+            .map(|(id, name)| (SharedString::from(*name), None, pinned == Some(*id))),
+    );
+    rows
+}
+
+/// A language-menu index back to the stored word: row 0 is `auto`.
+#[must_use]
+pub fn picked_language(index: usize) -> Option<&'static str> {
+    match index {
+        0 => Some(vela_core::prefs::AUTO_LANGUAGE),
+        _ => crate::settings::fixtures::LOCALE_ENDONYMS
+            .get(index - 1)
+            .map(|(id, _)| *id),
+    }
+}
+
+/// One account's total in the display currency (spec 072).
+///
+/// Converted only when the core priced the currency: `rate: None` is not 1,
+/// so an unpriced choice prints the USD figure the core does have rather than
+/// dressing it in another currency's symbol.
+#[must_use]
+pub fn account_total(usd: f64, currency: Option<&CurrencyView>, locale: &str) -> SharedString {
+    let options = crate::executor::format_prefs::fiat_options();
+    SharedString::from(match currency {
+        Some(CurrencyView {
+            code,
+            rate: Some(rate),
+            ..
+        }) => format_fiat(usd * rate, code, symbol_for(code), locale, options),
+        _ => format_fiat(usd, "USD", "$", locale, options),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Device storage (spec 072) — the rows are the core's catalog, the numbers
+// this device's own
+// ---------------------------------------------------------------------------
+
+/// A byte count as the figure and the unit: in 1024s (the core's
+/// `bytes_display`), the figure in the person's number format — none below a
+/// kilobyte, where "512 B" is exact and "0.5 KB" is noise, one above.
+#[must_use]
+pub fn bytes_text(bytes: u64, preset: NumberPreset) -> (SharedString, SharedString) {
+    let (value, unit) = vela_core::storage_catalog::bytes_display(bytes);
+    let places = usize::from(unit != "B");
+    (
+        SharedString::from(format_number(
+            value,
+            preset,
+            FractionDigits {
+                min: places,
+                max: places,
+            },
+        )),
+        SharedString::from(unit),
+    )
+}
+
+fn size_text(bytes: u64, preset: NumberPreset) -> String {
+    let (amount, unit) = bytes_text(bytes, preset);
+    format!("{amount} {unit}")
+}
+
+/// A catalog row's drawn name.
+#[must_use]
+pub fn storage_item_label(id: &str, s: &SettingsStrings) -> SharedString {
+    match id {
+        "transactions" => s.item_transactions.clone(),
+        "contacts" => s.item_contacts.clone(),
+        "custom" => s.item_custom.clone(),
+        "browsing" => s.item_browsing.clone(),
+        "balances" => s.item_balances.clone(),
+        "rates" => s.item_rates.clone(),
+        "scan" => s.item_scan.clone(),
+        _ => s.item_dapps.clone(),
+    }
+}
+
+/// A row's meta line, in the row's own unit — the web's `storageItemMeta`.
+#[must_use]
+pub fn storage_item_meta(
+    id: &str,
+    usage: Usage,
+    s: &SettingsStrings,
+    preset: NumberPreset,
+) -> SharedString {
+    let count = |template: &str| crate::wallet::fill(template, "count", &usage.count.to_string());
+    let size = size_text(usage.bytes, preset);
+    SharedString::from(match id {
+        "transactions" | "browsing" => format!("{} · {size}", count(&s.count_records)),
+        "contacts" => format!("{} · {size}", count(&s.count_contacts)),
+        "custom" => format!("{} · {size}", count(&s.count_items)),
+        "dapps" => count(&s.count_sites),
+        _ => size,
+    })
+}
+
+/// DST7's two measured groups — your data, then the caches — one row per
+/// catalog item, in the catalog's order. The connections group is the
+/// browser machine's list and is drawn from it, not from here.
+#[must_use]
+pub fn storage_groups(
+    report: &Report,
+    s: &SettingsStrings,
+    preset: NumberPreset,
+) -> Vec<StorageGroup> {
+    [
+        (CatalogGroup::User, s.storage_user_data.clone(), None),
+        (
+            CatalogGroup::Cache,
+            s.storage_caches.clone(),
+            Some(s.storage_clear_all.clone()),
+        ),
+    ]
+    .into_iter()
+    .map(|(group, label, action)| StorageGroup {
+        label,
+        action,
+        items: vela_core::storage_catalog::ITEMS
+            .iter()
+            .filter(|item| item.group == group)
+            .map(|item| StorageItem {
+                id: item.id,
+                label: storage_item_label(item.id, s),
+                meta: storage_item_meta(item.id, report.item(item.id), s, preset),
+                action: s.storage_clear.clone(),
+                // Red where it cannot come back; plain where it rebuilds.
+                destructive: group == CatalogGroup::User,
+            })
+            .collect(),
+    })
+    .collect()
+}
+
+/// The bar's three shares, from the measured bytes, in the drawn colours.
+#[must_use]
+pub fn storage_segments(report: &Report) -> [(f32, u32); 3] {
+    let colors = crate::settings::fixtures::STORAGE_SEGMENTS;
+    let share = |group| {
+        if report.total_bytes == 0 {
+            0.
+        } else {
+            #[allow(clippy::cast_precision_loss, reason = "a share of a byte count")]
+            let share = report.group(group) as f32 / report.total_bytes as f32;
+            share
+        }
+    };
+    [
+        (share(CatalogGroup::User), colors[0].1),
+        (share(CatalogGroup::Cache), colors[1].1),
+        (share(CatalogGroup::Sessions), colors[2].1),
+    ]
+}
+
+// ---------------------------------------------------------------------------
+// Save on blur or Enter (spec 072)
+// ---------------------------------------------------------------------------
+
+/// An editable settings field whose value the core persists only when the
+/// person is done with it.
+///
+/// Each keystroke is an EDIT — a draft, re-probed where the core re-probes —
+/// and leaving the field (or pressing Enter) is the COMMIT. The desktop used
+/// to send both on every keystroke, so an override was saved, and the
+/// wrong-chain refusal was run, against `https://ma` on the way to typing
+/// `https://mainnet…`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FieldCommit {
+    Endpoint(NetEndpointField),
+    ProviderKey(NetProviderId),
+    Override {
+        chain_id: u32,
+        field: NetOverrideField,
+    },
+}
+
+impl FieldCommit {
+    /// What one keystroke tells the core.
+    #[must_use]
+    pub fn edited(self, value: String) -> NetEvent {
+        match self {
+            FieldCommit::Endpoint(field) => NetEvent::EndpointEdited { field, value },
+            FieldCommit::ProviderKey(provider) => NetEvent::ProviderKeyEdited { provider, value },
+            FieldCommit::Override { chain_id, field } => NetEvent::OverrideFieldEdited {
+                chain_id,
+                field,
+                value,
+            },
+        }
+    }
+
+    /// What leaving the field tells it — the event that persists.
+    #[must_use]
+    pub fn committed(self) -> NetEvent {
+        match self {
+            FieldCommit::Endpoint(field) => NetEvent::EndpointBlurred { field },
+            FieldCommit::ProviderKey(provider) => NetEvent::ProviderKeyBlurred { provider },
+            FieldCommit::Override { chain_id, .. } => NetEvent::OverrideBlurred { chain_id },
+        }
+    }
+}
 
 /// Symbols for the codes a person can actually reach today.
 ///
@@ -43,6 +320,7 @@ pub fn symbol_for(code: &str) -> &str {
         "KRW" => "₩",
         "VND" => "₫",
         "INR" => "₹",
+        "HKD" => "HK$",
         other => other,
     }
 }
@@ -71,45 +349,6 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
         }
         None => SharedString::from(view.code.clone()),
     }
-}
-
-/// The storage page's rows, measured rather than drawn.
-///
-/// Same labels and same order as the fixture — it is the same page — with the
-/// meta line replaced by what this machine actually holds. A row with no
-/// records shows a size alone: `records_in` answers `None` for a value that is
-/// not a list, and inventing "1 record" for a cache blob would be a number
-/// somebody might act on.
-#[must_use]
-pub fn storage_groups(
-    s: &SettingsStrings,
-    report: &crate::executor::device_storage::Report,
-) -> Vec<crate::settings::fixtures::StorageGroup> {
-    let mut groups = crate::settings::fixtures::storage_groups(s);
-    for group in &mut groups {
-        for item in &mut group.items {
-            let Some(measured) = report.item(item.id) else {
-                continue;
-            };
-            let size = human_size(measured.bytes);
-            item.meta = SharedString::from(match (measured.records, item.id) {
-                (Some(count), "contacts") => format!(
-                    "{} · {size}",
-                    crate::wallet::fill(&s.count_contacts, "count", &count.to_string())
-                ),
-                (Some(count), "custom") => format!(
-                    "{} · {size}",
-                    crate::wallet::fill(&s.count_items, "count", &count.to_string())
-                ),
-                (Some(count), _) => format!(
-                    "{} · {size}",
-                    crate::wallet::fill(&s.count_records, "count", &count.to_string())
-                ),
-                (None, _) => size,
-            });
-        }
-    }
-    groups
 }
 
 /// `1.0 MB`, `42 KB`, `0 KB`. The page's other figure (`human_bytes`) splits
@@ -142,7 +381,7 @@ fn human_size(bytes: usize) -> String {
 /// nothing could price it.
 #[must_use]
 pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> Vec<MenuRow> {
-    priced
+    let mut rows: Vec<MenuRow> = priced
         .iter()
         .map(|(code, rate)| {
             let sample = format_fiat(
@@ -158,7 +397,15 @@ pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> 
                 code.eq_ignore_ascii_case(selected),
             )
         })
-        .collect()
+        .collect();
+    // A code the person committed stays on the list even when nothing could
+    // price it — with no sample beside it, because there is none. Dropping it
+    // would take their own choice off the picker that is supposed to show it,
+    // and leave nothing ticked.
+    if !selected.is_empty() && !rows.iter().any(|row| row.0.eq_ignore_ascii_case(selected)) {
+        rows.push((SharedString::from(selected.to_uppercase()), None, true));
+    }
+    rows
 }
 
 #[cfg(test)]
@@ -490,6 +737,16 @@ pub fn provider_name(provider: NetProviderId) -> SharedString {
         NetProviderId::Drpc => "dRPC",
         NetProviderId::Ankr => "Ankr",
     })
+}
+
+/// Where a provider's key is got — the web's `PROVIDER_KEY_URLS`.
+#[must_use]
+pub fn provider_key_url(provider: NetProviderId) -> &'static str {
+    match provider {
+        NetProviderId::Alchemy => "https://dashboard.alchemy.com/",
+        NetProviderId::Drpc => "https://drpc.org/",
+        NetProviderId::Ankr => "https://www.ankr.com/rpc/",
+    }
 }
 
 /// How many networks this provider's key actually reached, once tested.
@@ -1337,5 +1594,274 @@ mod format_tests {
         assert_eq!(picked_date(9), None);
         assert_eq!(picked_time(2), Some(TimePreset::H12));
         assert_eq!(picked_number(3), Some(NumberPreset::SpaceComma));
+    }
+}
+
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+
+    use crate::core_host::{CoreHost, Pending};
+    use crate::executor::device_storage::measure_entries;
+    use vela_core::app::network_admin::{
+        NetOperation, NetProviderKeys, NetShellResult, NetStoredEndpoints, NetworkAdmin,
+    };
+
+    fn strings() -> SettingsStrings {
+        SettingsStrings::resolve(&crate::loc::Loc::from_env())
+    }
+
+    fn entries(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+        pairs
+            .iter()
+            .map(|(key, raw)| ((*key).to_owned(), (*raw).to_owned()))
+            .collect()
+    }
+
+    /// The storage page's rows are the catalog's, in its order and groups: the
+    /// four your-data rows in red, the three caches plain with "clear all"
+    /// under them, each meta line in its own unit.
+    #[test]
+    fn the_storage_rows_are_the_catalogs() {
+        let s = strings();
+        let report = measure_entries(&entries(&[
+            ("vela.transactionHistory", r#"[{"a":1},{"a":2}]"#),
+            ("vela.contacts", r#"[{"a":1}]"#),
+            ("vela.balanceCache", r#"{"x":1}"#),
+        ]));
+        let groups = storage_groups(&report, &s, NumberPreset::CommaDot);
+        assert_eq!(groups.len(), 2, "connections are the browser machine's");
+        let ids = |group: &StorageGroup| group.items.iter().map(|item| item.id).collect::<Vec<_>>();
+        assert_eq!(
+            ids(&groups[0]),
+            ["transactions", "contacts", "custom", "browsing"]
+        );
+        assert_eq!(ids(&groups[1]), ["balances", "rates", "scan"]);
+        assert!(groups[0].items.iter().all(|item| item.destructive));
+        assert!(groups[1].items.iter().all(|item| !item.destructive));
+        assert_eq!(groups[0].label, s.storage_user_data);
+        assert_eq!(groups[1].action.as_ref(), Some(&s.storage_clear_all));
+        assert_eq!(groups[0].items[0].label, s.item_transactions);
+
+        let transactions = &groups[0].items[0].meta;
+        assert!(transactions.contains('2'), "two records: {transactions}");
+        assert!(transactions.ends_with(" B"), "{transactions}");
+        // A cache row states its size and nothing else; an empty row says 0.
+        assert_eq!(groups[1].items[2].meta.as_ref(), "0 B");
+    }
+
+    /// Sizes are 1024s — what the operating system says beside them — and the
+    /// figure is in the person's own number format.
+    #[test]
+    fn a_size_is_in_1024s_and_the_persons_number_format() {
+        let text = |bytes, preset| {
+            let (amount, unit) = bytes_text(bytes, preset);
+            format!("{amount} {unit}")
+        };
+        assert_eq!(text(512, NumberPreset::CommaDot), "512 B");
+        assert_eq!(text(0, NumberPreset::CommaDot), "0 B");
+        assert_eq!(text(1536, NumberPreset::CommaDot), "1.5 KB");
+        assert_eq!(text(1536, NumberPreset::DotComma), "1,5 KB");
+        assert_eq!(text(3 * 1024 * 1024 / 2, NumberPreset::CommaDot), "1.5 MB");
+    }
+
+    /// The bar is the measured shares, not the mock's 50/30/20.
+    #[test]
+    fn the_bar_is_the_measured_shares() {
+        let report = measure_entries(&entries(&[
+            ("vela.contacts", "xxxxxxxx"),
+            ("vela.balanceCache", "xxxxxxxx"),
+        ]));
+        let [user, cache, sessions] = storage_segments(&report);
+        assert!(user.0 > 0. && cache.0 > 0.);
+        assert!((user.0 + cache.0 - 1.).abs() < 1e-6);
+        assert_eq!(sessions.0, 0.);
+        let empty = storage_segments(&measure_entries(&[]));
+        assert!(
+            empty.iter().all(|(share, _)| *share == 0.),
+            "nothing to share"
+        );
+    }
+
+    /// The language menu: follow the system first, naming what it resolves to,
+    /// then every shipped locale by its own name — and a pick is the stored
+    /// word, `auto` or a supported tag.
+    #[test]
+    fn the_language_menu_is_follow_system_then_every_locale() {
+        let s = strings();
+        let rows = language_menu(None, "de", &s);
+        assert_eq!(rows.len(), 1 + vela_core::i18n::SUPPORTED.len());
+        assert_eq!(rows[0].0, s.language_follow_system);
+        assert!(
+            rows[0]
+                .1
+                .as_ref()
+                .is_some_and(|note| note.contains("Deutsch"))
+        );
+        assert!(rows[0].2, "nothing pinned: following the system is ticked");
+        let ids: Vec<&str> = crate::settings::fixtures::LOCALE_ENDONYMS
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        assert_eq!(
+            ids,
+            vela_core::i18n::SUPPORTED,
+            "every shipped locale, in order"
+        );
+
+        let pinned = language_menu(Some("ja"), "de", &s);
+        assert!(!pinned[0].2);
+        let ticked: Vec<&str> = pinned
+            .iter()
+            .filter(|row| row.2)
+            .map(|row| row.0.as_ref())
+            .collect();
+        assert_eq!(ticked, ["日本語"]);
+
+        assert_eq!(picked_language(0), Some("auto"));
+        assert_eq!(picked_language(2), Some("zh"));
+        assert_eq!(picked_language(99), None);
+        assert_eq!(language_value(Some("fr"), "de", &s).as_ref(), "Français");
+        assert!(language_value(None, "de", &s).starts_with("Deutsch · "));
+    }
+
+    fn currency(code: &str, rate: Option<f64>) -> CurrencyView {
+        CurrencyView {
+            code: code.to_owned(),
+            rate,
+            committed: true,
+        }
+    }
+
+    /// An account's total is in the display currency when the core priced it,
+    /// and in USD when it could not — `None` is not a rate of 1.
+    #[test]
+    fn an_account_total_is_in_the_display_currency_only_when_priced() {
+        assert_eq!(
+            account_total(10.0, Some(&currency("EUR", Some(0.5))), "en").as_ref(),
+            "€5.00"
+        );
+        let unpriced = account_total(10.0, Some(&currency("JPY", None)), "en");
+        assert_eq!(unpriced.as_ref(), "$10.00", "no rate, no conversion");
+        assert!(!unpriced.contains('¥'));
+    }
+
+    /// The picker ticks the committed code, and a committed code outside the
+    /// eight is still on the list that shows it.
+    #[test]
+    fn the_currency_menu_ticks_the_committed_code_and_keeps_it() {
+        let priced = [("USD".to_owned(), 1.0), ("JPY".to_owned(), 150.0)];
+        let rows = currency_menu(&priced, "JPY", "en");
+        let ticked: Vec<&str> = rows
+            .iter()
+            .filter(|row| row.2)
+            .map(|row| row.0.as_ref())
+            .collect();
+        assert_eq!(ticked, ["JPY"]);
+        // …and a committed code nothing could price is still on the list that
+        // shows it, ticked, with no sample beside it.
+        let rows = currency_menu(&priced, "CHF", "en");
+        let last = rows.last().expect("the committed code is kept");
+        assert_eq!(last.0.as_ref(), "CHF");
+        assert!(last.1.is_none(), "nothing priced it, so there is no sample");
+        assert!(last.2, "the person's own choice is what is ticked");
+    }
+
+    /// The stored words and the drawn cells agree.
+    #[test]
+    fn the_theme_cells_are_the_stored_words() {
+        assert_eq!(segment_of(&THEME_SEGMENTS, "system"), 2);
+        assert_eq!(segment_of(&THEME_SEGMENTS, "light"), 0);
+        for word in THEME_SEGMENTS {
+            assert!(vela_core::prefs::THEMES.contains(&word));
+        }
+        assert_eq!(text_scale_index("standard"), 2);
+        assert_eq!(text_scale_index("xlarge"), 5);
+    }
+
+    /// A network-admin core with its store read, and the operations each
+    /// event asks the shell for.
+    fn loaded() -> CoreHost<NetworkAdmin> {
+        let mut host = CoreHost::<NetworkAdmin>::new();
+        for Pending { id, operation } in host.dispatch(NetEvent::Started) {
+            if matches!(operation, NetOperation::ReadStore) {
+                host.resolve(
+                    id,
+                    NetShellResult::StoreLoaded {
+                        custom_networks: Vec::new(),
+                        network_configs: Vec::new(),
+                        endpoints: NetStoredEndpoints::default(),
+                        provider_keys: NetProviderKeys::default(),
+                    },
+                );
+            }
+        }
+        host
+    }
+
+    fn writes(pending: &[Pending<NetOperation>]) -> usize {
+        pending
+            .iter()
+            .filter(|next| {
+                matches!(
+                    next.operation,
+                    NetOperation::WriteServiceEndpoints { .. }
+                        | NetOperation::WriteRpcProviders { .. }
+                        | NetOperation::WriteNetworkConfigs { .. }
+                )
+            })
+            .count()
+    }
+
+    /// Typing saves nothing; leaving the field (or Enter) saves once — for an
+    /// endpoint and a provider key alike. Before 072 every keystroke also
+    /// sent the blur, so each prefix of a URL was persisted on the way.
+    #[test]
+    fn a_keystroke_saves_nothing_and_leaving_the_field_saves() {
+        let mut host = loaded();
+        for field in [
+            FieldCommit::Endpoint(NetEndpointField::FiatRates),
+            FieldCommit::ProviderKey(NetProviderId::Alchemy),
+        ] {
+            for typed in ["h", "ht", "https://rates.example"] {
+                let pending = host.dispatch(field.edited(typed.to_owned()));
+                assert_eq!(writes(&pending), 0, "{field:?} saved on a keystroke");
+            }
+            let pending = host.dispatch(field.committed());
+            assert_eq!(writes(&pending), 1, "{field:?} not saved on leaving");
+        }
+    }
+
+    /// An override is where it mattered most: the chain-id refusal ran
+    /// against half a URL. Typing now only drafts and probes — no verdict, no
+    /// write — and leaving the field is what asks the gate.
+    #[test]
+    fn an_override_is_judged_when_left_not_while_typed() {
+        let mut host = loaded();
+        let chain_id = 100;
+        let _ = host.dispatch(NetEvent::OverrideExpanded { chain_id });
+        let field = FieldCommit::Override {
+            chain_id,
+            field: NetOverrideField::Rpc,
+        };
+        let row = |host: &CoreHost<NetworkAdmin>| {
+            host.view()
+                .networks
+                .into_iter()
+                .find(|row| row.chain_id == chain_id)
+                .unwrap_or_else(|| unreachable!("Gnosis is built in"))
+        };
+        for typed in ["https://ma", "https://mainnet.example"] {
+            let pending = host.dispatch(field.edited(typed.to_owned()));
+            assert_eq!(writes(&pending), 0);
+            let typing = row(&host);
+            assert!(typing.rpc_chain_mismatch.is_none());
+            assert!(!typing.rpc_save_deferred, "no save is pending while typing");
+        }
+        let _ = host.dispatch(field.committed());
+        assert!(
+            row(&host).rpc_save_deferred,
+            "leaving the field asks for the save, held for the chain-id verdict"
+        );
     }
 }

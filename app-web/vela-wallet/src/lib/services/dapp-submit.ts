@@ -4,8 +4,9 @@
  * Ported from src/hooks/use-dapp-signing.ts @ f9bcb278 (a hook in name only:
  * it never used React). Web deltas: the kernels import replaces the vela-core
  * facade (static — the Expo dynamic imports were a bundle-splitting hedge),
- * the passkey call goes through `signWithAny` (every founding credential in
- * the allow-list), the stored account comes from onboarding storage, and the
+ * the passkey call goes through `signChallenge` (every founding credential in
+ * the allow-list, or the Trusted Signer when that is the request's "Sign with",
+ * spec 071), the stored account comes from onboarding storage, and the
  * public-key-index fallback for an UNKNOWN account is gone: a web session is
  * always a stored account, so a missing one is an error, not a lookup.
  * `guardOwner` semantics are unchanged: on the core-driven path the core has
@@ -27,7 +28,8 @@ export interface SigningAccount {
 	id: string;
 }
 
-import { signWithAny, type Assertion } from '$lib/onboarding/core/passkey';
+import type { Assertion } from '$lib/onboarding/core/passkey';
+import { signChallenge, type ChallengeSigner } from '$lib/signing/sign-challenge';
 import { rpcCall } from './rpc-adapter';
 import {
 	sendBatchCalls,
@@ -75,6 +77,32 @@ export interface DAppRequest {
 	method: string;
 	params: unknown[];
 	origin?: string;
+}
+
+/**
+ * Who signs for `safeAddress` and what was asked — the question
+ * {@link signChallenge} answers. The request's own method, (final) params and
+ * origin are what the Trusted Signer's page is shown (spec 071); the passkey
+ * ceremony reads only `credentials`, exactly as it always did.
+ */
+function challengeSigner(
+	request: DAppRequest,
+	stored: SignerAccount | undefined,
+	credentials: { id: string }[],
+	safeAddress: string,
+	chainId: number
+): ChallengeSigner {
+	return {
+		account: safeAddress,
+		keys: stored ? keySetOf(stored).keys : [],
+		credentials,
+		request: {
+			method: request.method,
+			params: request.params,
+			origin: request.origin ?? '',
+			chainId
+		}
+	};
 }
 
 // ── Chain ID resolution & validation ──────────────────────────────────────
@@ -244,22 +272,24 @@ function buildContractSignature(assertion: Assertion, signerAddress?: string): s
  * Legacy single-key accounts keep the exact historical path.
  */
 async function signSafeMessage(
+	request: DAppRequest,
 	account: SigningAccount,
 	safeAddress: string,
-	safeHashHex: string
+	chainId: number,
+	safeHash: Uint8Array
 ): Promise<{ assertion: Assertion; signerAddress?: string }> {
 	const stored = storedWalletFor(account, safeAddress);
 	const keySet = stored?.keys && stored.keys.length > 1 ? keySetOf(stored) : null;
 	const credentials = keySet
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
-	const assertion = await signWithAny(safeHashHex, credentials);
+	const assertion = await signChallenge(
+		safeHash,
+		challengeSigner(request, stored, credentials, safeAddress, chainId)
+	);
 	// The authenticator signed the hash that was asked for, and nothing else
 	// (spec 028 Phase 8).
-	assertChallengeSigned(
-		fromHex(stripHexPrefix(assertion.clientDataJSONHex)),
-		fromHex(stripHexPrefix(safeHashHex))
-	);
+	assertChallengeSigned(fromHex(stripHexPrefix(assertion.clientDataJSONHex)), safeHash);
 	const signerAddress = keySet ? signerAddressFor(keySet, assertion.credentialId) : undefined;
 	return { assertion, signerAddress };
 }
@@ -327,7 +357,13 @@ export async function handlePersonalSign(
 	const originalHash = keccak256(combined);
 
 	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(account, safeAddress, toHex(safeHash));
+	const { assertion, signerAddress } = await signSafeMessage(
+		request,
+		account,
+		safeAddress,
+		chainId,
+		safeHash
+	);
 	return buildContractSignature(assertion, signerAddress);
 }
 
@@ -353,7 +389,13 @@ export async function handleSignTypedData(
 
 	const originalHash = hashTypedData(typedData);
 	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(account, safeAddress, toHex(safeHash));
+	const { assertion, signerAddress } = await signSafeMessage(
+		request,
+		account,
+		safeAddress,
+		effectiveChainId,
+		safeHash
+	);
 	return buildContractSignature(assertion, signerAddress);
 }
 
@@ -399,8 +441,9 @@ export async function handleSendTransaction(
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
 
+	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
 	const signFn = async (challenge: Uint8Array) => {
-		const assertion = await signWithAny(toHex(challenge), credentials);
+		const assertion = await signChallenge(challenge, signer);
 
 		const compat = verifySafeWebAuthn(assertion);
 		if (!compat.ok) {
@@ -506,7 +549,13 @@ export async function handleGenericSign(
 	const originalHash = keccak256(jsonBytes);
 
 	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(account, safeAddress, toHex(safeHash));
+	const { assertion, signerAddress } = await signSafeMessage(
+		request,
+		account,
+		safeAddress,
+		chainId,
+		safeHash
+	);
 	return buildContractSignature(assertion, signerAddress);
 }
 
@@ -660,8 +709,9 @@ export async function handleSendCalls(
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
 
+	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
 	const signFn = async (challenge: Uint8Array) => {
-		const assertion = await signWithAny(toHex(challenge), credentials);
+		const assertion = await signChallenge(challenge, signer);
 
 		const compat = verifySafeWebAuthn(assertion);
 		if (!compat.ok) {

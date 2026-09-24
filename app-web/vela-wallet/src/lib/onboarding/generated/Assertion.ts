@@ -11,4 +11,10 @@ export type Assertion = { credential_id: string, signature_der_hex: string, auth
  * response — this IS exposed on an assertion, so a recovered/logged-in
  * key can still record it. Store-only display; never signed.
  */
-authenticator_attachment: string, };
+authenticator_attachment: string, 
+/**
+ * Spec 075: the Trusted Signer page's origin when the ceremony ran there
+ * (a sign-in found the key behind that page). `None` for every other
+ * route.
+ */
+signer_origin?: string | null, };

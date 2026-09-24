@@ -260,7 +260,8 @@ export interface SigningModel {
 		label: string;
 		value: string;
 		open: boolean;
-		options: { id: string; title: string; selected: boolean }[];
+		/** `detail`: a second line saying what a choice is — the Trusted Signer's (spec 071). */
+		options: { id: string; title: string; detail?: string; selected: boolean }[];
 	};
 	/**
 	 * The slide. There is no reject button anywhere in this vocabulary:

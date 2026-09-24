@@ -124,8 +124,13 @@ class DappSignMachineTest {
             wallet = SignAccountRef(address = safe, credential_id = credential),
             receiptWaitMs = receiptWaitMs, receiptPollMs = 100L,
             ports = object : SigningController.Ports {
-                override fun respond(transportId: String, id: String, json: JSONObject) {
+                override fun respond(transportId: String, id: String, payload: app.getvela.wallet.feature.signing.core.SignResponsePayload) {
                     events += "respond"
+                    // The page's shape, as the browser core renders it (spec 070).
+                    val json = when (payload) {
+                        is app.getvela.wallet.feature.signing.core.SignResponsePayload.Ok -> JSONObject().put("result", payload.result ?: JSONObject.NULL)
+                        is app.getvela.wallet.feature.signing.core.SignResponsePayload.Err -> JSONObject().put("error", JSONObject().put("code", payload.code).put("message", payload.message.orEmpty()))
+                    }
                     answers += "$transportId/$id" to json
                 }
                 override fun opSubmitted(id: String, userOpHash: String) { events += "op:$userOpHash" }

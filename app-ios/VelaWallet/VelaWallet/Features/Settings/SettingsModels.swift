@@ -44,6 +44,16 @@ enum SettingsOverlay: Equatable, Identifiable {
     /// The default transaction speed (spec 069): three speeds, each with what
     /// it buys.
     case feeSpeed
+    /// The default "Sign with" (spec 071): every method the core offers.
+    case signWith
+    /// The Trusted Signer page (spec 071): an address, saved or refused.
+    case signerPage
+    /// A custom network's bin, asked before it happens (spec 072 FR-010): the
+    /// tap used to be a drawing of a bin, and the other shells removed on it.
+    case removeNetwork
+    /// "Reset to defaults" on the endpoints page, asked first — it replaces
+    /// every address somebody typed there.
+    case resetEndpoints
 
     var id: String { String(describing: self) }
 }
@@ -169,6 +179,28 @@ struct AccountsSheetModel {
     var rows: [AccountsSheetRowModel]
     let primary: String
     let secondary: String
+    /// The words for taking ONE wallet off this device (2026-09-23). Empty
+    /// leaves the affordance undrawn, which is what a fixture board wants —
+    /// the sheet resolves no strings of its own.
+    var remove: String = ""
+    var removeBody: String = ""
+    var removeCancel: String = ""
+}
+
+/// The Trusted Signer page's sheet (spec 071): the address in force, what the
+/// core said about the last one typed, and — whenever it is not a
+/// `getvela.app` page — that this wallet's passkeys will not sign there.
+struct SignerPageModel {
+    let title: String
+    let subtitle: String
+    let field: UrlFieldModel
+    /// `settings.signing.pageInvalid` / `pageInsecure`: nothing was stored.
+    let error: String?
+    /// `settings.signing.pageForeign`.
+    let foreign: String?
+    let save: String
+    /// "Use the official page" — only when another one is chosen.
+    let reset: String?
 }
 
 /// ST3 / ST13b / ST16 share this; only the tone and the callout differ.
@@ -252,6 +284,9 @@ struct AddNetworkModel {
     var primary: String?
     var secondary: String?
     var recheck: String?
+    /// "Retry" — a primary that checks again rather than adds, for a chain
+    /// the probes could not reach (never worded "incompatible").
+    var retry: String?
 }
 
 struct ProviderCardModel: Identifiable {
@@ -494,7 +529,6 @@ struct SettingsScreenModel {
     var keys: WalletKeysModel?
     var sections: [SettingsSectionModel]
     var theme: SegmentedModel
-    var avatar: SegmentedModel
     var textScale: TextScaleModel
     let signOutLabel: String
     let eraseTitle: String
@@ -526,6 +560,9 @@ struct SettingsScreenModel {
     var currencySheet: SelectSheetModel
     /// Spec 069: the default transaction speed's sheet.
     var feeSpeedSheet = SelectSheetModel(title: "", rows: [])
+    /// Spec 071: the default "Sign with" and the Trusted Signer page.
+    var signWithSheet = SelectSheetModel(title: "", rows: [])
+    var signerPage: SignerPageModel?
     var numberSheet: SelectSheetModel
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel

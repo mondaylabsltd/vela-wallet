@@ -91,10 +91,16 @@ data class BrowserModel(
     val canBack: Boolean,
     val canForward: Boolean,
     val bookmarked: Boolean,
-    val accountName: String,
     val accountSeed: String,
     val tabCount: Int,
     val page: DemoPageModel,
+    /** Spec 070: a live page's load, 0–100; drawn as a hairline under the address bar while `loading`. */
+    val loading: Boolean = false,
+    val progress: Int = 100,
+    /** The main frame could not load (network, certificate): the retry panel stands where the page is. */
+    val failed: Boolean = false,
+    /** The page's renderer died: the tab shows the reload panel until the person asks. */
+    val crashed: Boolean = false,
 )
 
 @Immutable
@@ -130,6 +136,8 @@ data class ConnectionModel(
     val explainer: String,
     val disconnect: String,
     val footnote: String,
+    /** Spec 070: the lock tells the truth — `false` draws the warning, never a green padlock. */
+    val secure: Boolean = true,
 )
 
 @Immutable
@@ -144,6 +152,7 @@ sealed interface ExploreSheet {
         val site: SiteModel,
         val statusLine: String,
         val items: List<SiteMenuItem>,
+        val secure: Boolean = true,
     ) : ExploreSheet
 
     data class Connection(val connection: ConnectionModel) : ExploreSheet

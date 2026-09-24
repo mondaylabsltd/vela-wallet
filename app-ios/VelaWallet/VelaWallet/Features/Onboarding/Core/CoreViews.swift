@@ -49,10 +49,18 @@ enum SubmitLabel: String, Decodable, CaseIterable {
 /// The CHOICE, not the report: `CreateKeyRow` separately carries what the
 /// authenticator said about itself, and the two can legitimately disagree. The
 /// ceremony follows the choice; the row's provider line shows the report.
+///
+/// Spec 075 adds a FOURTH, and it is a peer of the other three rather than a
+/// special case: the Trusted Signer is our own passkey route — a page that shows
+/// what is being signed and runs the ceremony itself — offered wherever "this
+/// device", "a nearby device" and "a security key" are. `allCases` is what the
+/// create and sign-in choosers list, so it is also what makes it appear on
+/// both of them.
 enum KeyMethod: String, Decodable, CaseIterable {
     case platform
     case hybrid
     case securityKey = "security_key"
+    case trustedSigner = "trusted_signer"
 }
 
 /// `SessionRoute` — where the app is allowed to be.
@@ -91,6 +99,19 @@ struct CreateKeyRow: Decodable, Equatable, Identifiable {
     var id: String { "\(name)-\(aaguid)-\(method.rawValue)" }
 }
 
+/// `AddBlocked` — why a key route is not on offer (spec 075).
+///
+/// A wallet's keys all belong to ONE relying party, because the registry files
+/// a unit under one `rpId`. Once the first key is minted, a route that would
+/// mint for a different party cannot add to the set — and the row says so,
+/// naming both sides, because the Trusted Signer's page is a setting the person
+/// can change.
+struct AddBlocked: Decodable, Equatable {
+    let relyingParty: String
+    let page: String?
+    let pageRelyingParty: String?
+}
+
 /// `CreateView`.
 struct CreateView: Decodable, Equatable {
     let stage: CreateStage
@@ -110,6 +131,10 @@ struct CreateView: Decodable, Equatable {
     let canGoBack: Bool
     let address: String?
     let syncErrorDetail: String?
+    /// Spec 075: the routes that may still mint a key for THIS set.
+    let addMethods: [KeyMethod]
+    /// Why the others may not, when some may not.
+    let addBlocked: AddBlocked?
 }
 
 /// `LoginView` — two booleans, and it stays that way (data-model §4).
@@ -140,6 +165,10 @@ struct SessionAccountRow: Decodable, Equatable {
 /// second source of truth for a fact the core already owns.
 struct SessionSignOutView: Decodable, Equatable, Identifiable {
     let pendingUploadWarning: Bool
+    /// How many wallets this device is signed into — the sheet says so when it
+    /// is more than one, because "nothing is deleted, it all comes back" says
+    /// nothing about signing in six times (2026-09-23).
+    let accountCount: Int
 
     var id: Bool { pendingUploadWarning }
 }

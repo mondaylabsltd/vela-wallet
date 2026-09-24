@@ -42,7 +42,11 @@
       "fiatLabel": "TỶ GIÁ FIAT",
       "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
       "resetToDefaults": "Đặt lại cả bốn về mặc định",
-      "selfHostGuide": "Hướng dẫn tự triển khai →"
+      "selfHostGuide": "Hướng dẫn tự triển khai →",
+      "resetTitle": "Khôi phục điểm cuối dịch vụ?",
+      "resetBody": "Cả bốn dịch vụ sẽ quay về địa chỉ của Vela. Các địa chỉ bạn đã nhập ở đây sẽ bị xóa.",
+      "resetConfirm": "Khôi phục",
+      "resetCancel": "Hủy"
     },
     "addNetwork": {
       "modalTitle": "Thêm mạng",
@@ -60,7 +64,6 @@
       "retry": "Thử lại",
       "addNetworkBtn": "Thêm mạng",
       "incompatibleHint": "Một số hợp đồng bắt buộc chưa được triển khai trên chain này.\nDùng công cụ Vela Wallet Chain Setup để triển khai, sau đó quay lại và kiểm tra lại.",
-      "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường.",
       "openChainSetupTool": "Mở công cụ Chain Setup",
       "recheck": "Kiểm tra lại",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -70,7 +73,8 @@
       "incompatible": "Không tương thích",
       "checkSafe": "Hợp đồng Safe L2",
       "checkSigner": "Precompile P-256",
-      "checkRemaining": "{{count}} hợp đồng còn lại"
+      "checkRemaining": "{{count}} hợp đồng còn lại",
+      "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường."
     },
     "treasury": {
       "modalTitle": "Ngân quỹ",

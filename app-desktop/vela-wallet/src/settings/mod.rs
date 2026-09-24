@@ -39,6 +39,21 @@ pub struct SettingsStrings {
     pub nav_fee_speed: SharedString,
     pub fee_speed_title: SharedString,
     pub fee_speed_subtitle: SharedString,
+    /// "Sign with" (spec 071): the nav row is the page's title; the sentence
+    /// under it; the choices in the core's order with the Trusted Signer's
+    /// line; and the Trusted Signer page's section.
+    pub nav_signing: SharedString,
+    pub signing_subtitle: SharedString,
+    pub sign_with_options: Vec<(&'static str, SharedString)>,
+    pub trusted_signer_body: SharedString,
+    pub signer_page_title: SharedString,
+    pub signer_page_subtitle: SharedString,
+    pub signer_page_official: SharedString,
+    pub signer_page_invalid: SharedString,
+    pub signer_page_insecure: SharedString,
+    pub signer_page_foreign: SharedString,
+    pub signer_page_reset: SharedString,
+    pub signer_page_save: SharedString,
     pub nav_about: SharedString,
     // account panel
     /// "Total {{amount}}" — the second half of the summary. The count template
@@ -80,26 +95,23 @@ pub struct SettingsStrings {
     pub erase_title: SharedString,
     pub erase_subtitle: SharedString,
     pub erase_confirm: SharedString,
-    /// The confirmation's own four lines (spec 081 FR-017). Until this feature
-    /// the desktop read only the title, the subtitle and the button — so the
-    /// one irreversible control on the screen had no sentence saying what it
-    /// destroys, and none saying what it does NOT: the passkey stays with the
-    /// person's passkey provider and is untouched by anything here.
+    /// The erase's question (spec 072): what goes, what does not, and the
+    /// line it says instead of leaving when something survived.
     pub erase_desc: SharedString,
-    pub erase_keeps: SharedString,
     pub erase_loses: SharedString,
+    pub erase_keeps: SharedString,
     pub erase_cancel: SharedString,
-    /// The erase ran and something survived — said, never swallowed.
     pub erase_failed: SharedString,
+    /// Every other question's way out.
+    pub cancel: SharedString,
     // appearance panel
     pub language: SharedString,
+    /// The language menu's first row: `auto`.
+    pub language_follow_system: SharedString,
     pub theme_title: SharedString,
     pub theme_light: SharedString,
     pub theme_dark: SharedString,
     pub theme_auto: SharedString,
-    pub avatar_title: SharedString,
-    pub avatar_initials: SharedString,
-    pub avatar_identicon: SharedString,
     pub text_scale: SharedString,
     // localization panel
     pub currency: SharedString,
@@ -199,6 +211,11 @@ pub struct SettingsStrings {
     /// Spec 038 #E1: the probes failed — not a verdict.
     pub wizard_unable_to_verify: SharedString,
     pub endpoints_reset: SharedString,
+    /// Spec 072 (FR-010): the question the reset asks first.
+    pub endpoints_reset_title: SharedString,
+    pub endpoints_reset_body: SharedString,
+    pub endpoints_reset_confirm: SharedString,
+    pub endpoints_reset_cancel: SharedString,
     pub endpoints_guide: SharedString,
     // storage panel
     pub storage_subtitle: SharedString,
@@ -221,6 +238,10 @@ pub struct SettingsStrings {
     pub storage_clear: SharedString,
     pub storage_clear_all: SharedString,
     pub storage_disconnect_all: SharedString,
+    /// "Clear all caches?" — the question before it happens.
+    pub storage_clear_title: SharedString,
+    pub storage_clear_body: SharedString,
+    pub storage_clear_confirm: SharedString,
     // about panel
     pub about_tagline: SharedString,
     pub about_version: String,
@@ -272,6 +293,21 @@ impl SettingsStrings {
             nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
             fee_speed_title: s("settings.feeSpeed.title"),
             fee_speed_subtitle: s("settings.feeSpeed.subtitle"),
+            nav_signing: s("settings.signing.title"),
+            signing_subtitle: s("settings.signing.subtitle"),
+            sign_with_options: vela_core::wallet_keys::SIGN_METHODS
+                .iter()
+                .map(|method| (*method, s(crate::signing::sign_method_key(method))))
+                .collect(),
+            trusted_signer_body: s("componentsUi.signing.trustedSignerBody"),
+            signer_page_title: s("settings.signing.pageTitle"),
+            signer_page_subtitle: s("settings.signing.pageSubtitle"),
+            signer_page_official: s("settings.signing.pageOfficial"),
+            signer_page_invalid: s("settings.signing.pageInvalid"),
+            signer_page_insecure: s("settings.signing.pageInsecure"),
+            signer_page_foreign: s("settings.signing.pageForeign"),
+            signer_page_reset: s("settings.signing.pageReset"),
+            signer_page_save: s("settings.signing.pageSave"),
             nav_about: s("settings.about.title"),
             accounts_total: raw("settingsModals.account.total"),
             accounts_count: raw("home.switcherAccountCount"),
@@ -305,18 +341,17 @@ impl SettingsStrings {
             erase_subtitle: s("settings.eraseDevice.subtitle"),
             erase_confirm: s("settings.eraseDevice.confirm"),
             erase_desc: s("settings.eraseDevice.desc"),
-            erase_keeps: s("settings.eraseDevice.keeps"),
             erase_loses: s("settings.eraseDevice.loses"),
+            erase_keeps: s("settings.eraseDevice.keeps"),
             erase_cancel: s("settings.eraseDevice.cancel"),
             erase_failed: s("settings.eraseDevice.failed"),
+            cancel: s("common.cancel"),
             language: s("language.title"),
+            language_follow_system: s("language.followSystem"),
             theme_title: s("settings.appearance.themeTitle"),
             theme_light: s("settings.appearance.themeLight"),
             theme_dark: s("settings.appearance.themeDark"),
             theme_auto: s("settings.appearance.themeAuto"),
-            avatar_title: s("settings.appearance.avatarTitle"),
-            avatar_initials: s("settings.appearance.avatarInitials"),
-            avatar_identicon: s("settings.appearance.avatarIdenticon"),
             text_scale: s("settings.appearance.textScale"),
             currency: s("settings.localization.currencyTitle"),
             number_format: s("settings.localization.numberTitle"),
@@ -381,6 +416,10 @@ impl SettingsStrings {
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
+            endpoints_reset_title: s("settingsModals.endpoints.resetTitle"),
+            endpoints_reset_body: s("settingsModals.endpoints.resetBody"),
+            endpoints_reset_confirm: s("settingsModals.endpoints.resetConfirm"),
+            endpoints_reset_cancel: s("settingsModals.endpoints.resetCancel"),
             endpoints_guide: s("settingsModals.endpoints.selfHostGuide"),
             storage_subtitle: s("settings.storage.subtitle"),
             storage_summary: raw("settings.storage.summary"),
@@ -402,6 +441,9 @@ impl SettingsStrings {
             storage_clear: s("settings.storage.clear"),
             storage_clear_all: s("settings.storage.clearAllCaches"),
             storage_disconnect_all: s("settings.storage.disconnectAll"),
+            storage_clear_title: s("settings.storage.clearTitle"),
+            storage_clear_body: s("settings.storage.clearBody"),
+            storage_clear_confirm: s("settings.storage.clearConfirm"),
             about_tagline: s("about.tagline"),
             about_version: raw("about.version"),
             about_section_technical: s("about.sectionTechnical"),
@@ -472,5 +514,56 @@ mod tests {
                 assert!(!value.is_empty(), "`{key}` resolved empty");
             }
         }
+    }
+
+    /// The words spec 072's questions and menus read — every one already in
+    /// the corpus in fifteen languages, so the desktop's half costs no key.
+    #[test]
+    fn the_settings_parity_words_resolve() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        for (value, key) in [
+            (&s.erase_desc, "settings.eraseDevice.desc"),
+            (&s.erase_loses, "settings.eraseDevice.loses"),
+            (&s.erase_keeps, "settings.eraseDevice.keeps"),
+            (&s.erase_cancel, "settings.eraseDevice.cancel"),
+            (&s.erase_failed, "settings.eraseDevice.failed"),
+            (&s.cancel, "common.cancel"),
+            (&s.language_follow_system, "language.followSystem"),
+            (&s.storage_clear_title, "settings.storage.clearTitle"),
+            (&s.storage_clear_body, "settings.storage.clearBody"),
+            (&s.storage_clear_confirm, "settings.storage.clearConfirm"),
+        ] {
+            assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
+            assert!(!value.is_empty(), "`{key}` resolved empty");
+        }
+    }
+
+    /// The "Sign with" page's words (spec 071), every one of them a key the
+    /// corpus already carries in fifteen languages — and its choices are the
+    /// core's five, in the core's order.
+    #[test]
+    fn the_sign_with_words_resolve() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        for (value, key) in [
+            (&s.nav_signing, "settings.signing.title"),
+            (&s.signing_subtitle, "settings.signing.subtitle"),
+            (
+                &s.trusted_signer_body,
+                "componentsUi.signing.trustedSignerBody",
+            ),
+            (&s.signer_page_title, "settings.signing.pageTitle"),
+            (&s.signer_page_subtitle, "settings.signing.pageSubtitle"),
+            (&s.signer_page_official, "settings.signing.pageOfficial"),
+            (&s.signer_page_invalid, "settings.signing.pageInvalid"),
+            (&s.signer_page_insecure, "settings.signing.pageInsecure"),
+            (&s.signer_page_foreign, "settings.signing.pageForeign"),
+            (&s.signer_page_reset, "settings.signing.pageReset"),
+            (&s.signer_page_save, "settings.signing.pageSave"),
+        ] {
+            assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
+            assert!(!value.is_empty(), "`{key}` resolved empty");
+        }
+        let ids: Vec<&str> = s.sign_with_options.iter().map(|(id, _)| *id).collect();
+        assert_eq!(ids, vela_core::wallet_keys::SIGN_METHODS);
     }
 }

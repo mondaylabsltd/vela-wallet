@@ -141,6 +141,18 @@ pub enum SessionOperation {
     /// rule). Best effort, like every other write here: a storage failure
     /// leaves the session signed out in memory regardless.
     ClearSignedInWallet,
+    /// Drop ONE account from the stored list, keyed by its address — the
+    /// identity a row has (invariant ⑨), never its position, which a
+    /// balance-sorted display can reorder under a slow write.
+    ///
+    /// This is the narrow half of signing out, and it exists because the wide
+    /// half was the only thing a person could reach: a device holding six
+    /// wallets could sign out of all six or none (owner, 2026-09-23). Removing
+    /// an account is NOT deleting a wallet — the passkey still opens it, and
+    /// signing in again brings the row back with its address, history and
+    /// settings intact, for the same reason [`Self::ClearSignedInWallet`]
+    /// gives.
+    RemoveAccount { address: String },
     /// Drop the Safari extension's account snapshot (`vela.ext.account.json`).
     /// Same scope as [`Self::ClearSignedInWallet`] and for the same reason: the
     /// snapshot mirrors the signed-in account, so leaving it behind would let
@@ -171,6 +183,8 @@ pub enum SessionShellResult {
     },
     /// Best-effort write acknowledged (see [`SessionOperation::SaveAccount`]).
     AccountSaved,
+    /// The row is gone from storage (best effort, like every write here).
+    AccountRemoved,
     ActiveIndexSaved,
     PendingUploads {
         has_pending: bool,
@@ -215,6 +229,14 @@ pub enum Event {
     /// login machines) — ADD_ACCOUNT and SET_WALLET unified behind the one
     /// [`CompletionMode`] both machines already speak.
     AccountEstablished { mode: CompletionMode },
+    /// Drop ONE account from this device, by its position in the original
+    /// list (invariant ⑦, as [`Self::SwitchAccount`]).
+    ///
+    /// Sometimes a person wants out of one wallet and not the other five
+    /// (owner, 2026-09-23). Removing the last one signs the device out, which
+    /// is the same end state as [`Self::SignOutConfirmed`] and reached the
+    /// same way, so there is one definition of "not signed in".
+    RemoveAccount { index: usize },
     /// The settings row: open the sign-out confirmation. Triggers the
     /// pending-upload check first (invariant ⑤).
     SignOut,
@@ -307,6 +329,13 @@ pub struct SessionSignOutView {
     /// Un-synced pending uploads exist — the dialog must show the warning and
     /// relabel the button ("Sign out anyway").
     pub pending_upload_warning: bool,
+    /// How many wallets this device is signed into, so the dialog can say so.
+    ///
+    /// The copy was true of one wallet and quietly false of six: "the wallet
+    /// is not deleted, everything comes back when you sign in again" says
+    /// nothing about signing in SIX times (owner, 2026-09-23). The number is
+    /// here rather than counted in each shell so all four say the same one.
+    pub account_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -370,6 +399,7 @@ impl App for Session {
                 model.attempt += 1;
                 requests(model, vec![SessionOperation::CheckPendingUploads])
             }
+            Event::RemoveAccount { index } => remove_account(model, index),
             Event::SignOutConfirmed => sign_out_confirmed(model),
             Event::SignOutDismissed => {
                 if model.sign_out_warning.take().is_none() {
@@ -421,6 +451,7 @@ impl App for Session {
                 .sign_out_warning
                 .map(|pending_upload_warning| SessionSignOutView {
                     pending_upload_warning,
+                    account_count: model.accounts.len(),
                 }),
         }
     }
@@ -447,6 +478,67 @@ fn switch_account(model: &mut Model, index: usize) -> Command<SessionEffect, Eve
     }
     model.active_index = index;
     requests(model, vec![SessionOperation::SaveActiveIndex { index }])
+}
+
+/// Drop one wallet from this device and stay on the others.
+///
+/// The wide half — [`sign_out_confirmed`] — takes every row, which on a device
+/// holding six was all a person could reach (owner, 2026-09-23). This is the
+/// narrow half, and it is NOT deletion: the passkey still opens that wallet,
+/// and signing in again brings the row back with everything keyed to its
+/// address, exactly as the module doc says of signing out.
+///
+/// Removing the LAST row is being signed out, so it ends where
+/// [`sign_out_confirmed`] does rather than leaving a wallet-less `Active`
+/// phase that invariant ① forbids.
+fn remove_account(model: &mut Model, index: usize) -> Command<SessionEffect, Event> {
+    // Out of range is the whole action's no-op, as in `switch_account`: a
+    // display that reordered under a slow write must not remove a stranger.
+    if index >= model.accounts.len() {
+        return Command::done();
+    }
+    let removed = model.accounts.remove(index);
+    // The row that was active either went, or moved down one.
+    let was_active = index == model.active_index;
+    if index < model.active_index {
+        model.active_index -= 1;
+    }
+
+    if model.accounts.is_empty() {
+        // The same end state as a confirmed sign-out, reached the same way, so
+        // there is one definition of "this device is not signed in".
+        model.attempt += 1;
+        model.sign_out_warning = None;
+        model.checking_uploads = false;
+        model.active_index = 0;
+        model.phase = Phase::SignedOut;
+        return requests(
+            model,
+            vec![
+                SessionOperation::ClearSignedInWallet,
+                SessionOperation::ClearExtensionCache,
+            ],
+        );
+    }
+
+    // Another wallet is in front of the person now. `active_index` can be past
+    // the end when the last row was the active one.
+    model.active_index = model.active_index.min(model.accounts.len() - 1);
+    let mut operations = vec![
+        SessionOperation::RemoveAccount {
+            address: removed.address,
+        },
+        SessionOperation::SaveActiveIndex {
+            index: model.active_index,
+        },
+    ];
+    if was_active {
+        // The extension's snapshot mirrors the ACTIVE account, so leaving it
+        // behind would let it keep answering as a wallet this device just put
+        // away — the reason `ClearExtensionCache` exists at all.
+        operations.push(SessionOperation::ClearExtensionCache);
+    }
+    requests(model, operations)
 }
 
 fn establish(model: &mut Model, mode: CompletionMode) -> Command<SessionEffect, Event> {

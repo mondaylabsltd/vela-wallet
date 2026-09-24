@@ -32,6 +32,14 @@ final class WalletKeys {
         let publicKeyHex: String
         let name: String
         let transports: String
+        /// Spec 075: the Trusted Signer page this key lives behind; empty when it
+        /// lives behind none. The core needs it to caption the row at all — a
+        /// page runs its ceremony in a browser, so the authenticator reports
+        /// `platform`, and a row that believed the report said "this device"
+        /// about the one side of the page this wallet cannot reach (found by
+        /// the Android device pass, 2026-09-22). Only the record knows it; the
+        /// registry stores no page.
+        var signerOrigin = ""
     }
 
     struct Row: Equatable {
@@ -46,6 +54,11 @@ final class WalletKeys {
         var attestationHex = ""
         /// The authenticator verified the person at registration; `nil` = nobody can vouch.
         var userVerified: Bool?
+        /// Spec 075: the Trusted Signer page this key lives behind, as the core
+        /// returned it; empty when the row is not behind one (the field is
+        /// absent on the wire then). The row's method already says `trustedSigner`
+        /// in that case — this says WHICH page.
+        var signerOrigin = ""
     }
 
     struct Result: Equatable {
@@ -72,18 +85,51 @@ final class WalletKeys {
     /// The record's keys as the walk wants them. The record keeps no per-key
     /// label, so only key 0 — whose name IS the wallet's — arrives named; the
     /// registry's metadata names the rest.
+    ///
+    /// Each key's Trusted Signer page comes along (spec 075). It is read through
+    /// `keyRoutesJson`, which already lifts `signer_origin` off the same record
+    /// for the signing route: one reader of the record means the row and the
+    /// ceremony cannot disagree about where a key lives.
     static func deviceKeys(
         of address: String, walletName: String, in accounts: UserOpSpine.AccountPort
     ) async -> [DeviceKey] {
-        await accounts.keys(of: address).enumerated().map { index, key in
-            DeviceKey(publicKeyHex: key.publicKeyHex, name: index == 0 ? walletName : "", transports: "")
+        let pages = await signerOrigins(of: address, in: accounts)
+        return await accounts.keys(of: address).enumerated().map { index, key in
+            DeviceKey(
+                publicKeyHex: key.publicKeyHex,
+                name: index == 0 ? walletName : "",
+                transports: "",
+                signerOrigin: pages[key.credentialId] ?? ""
+            )
+        }
+    }
+
+    /// Each founding key's Trusted Signer page, by credential id; a key behind no
+    /// page is simply absent. Keyed rather than positional — the route list and
+    /// the key list come off one record but not through one filter, and a
+    /// mismatch by one would hand a key somebody else's page.
+    private static func signerOrigins(
+        of address: String, in accounts: UserOpSpine.AccountPort
+    ) async -> [String: String] {
+        let json = await accounts.keyRoutesJson(of: address)
+        let routes = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [[String: Any]] ?? []
+        return routes.reduce(into: [:]) { pages, route in
+            guard let id = route["credential_id"] as? String, !id.isEmpty,
+                  let page = route["signer_origin"] as? String, !page.isEmpty
+            else { return }
+            pages[id] = page
         }
     }
 
     func read(address: String, device: [DeviceKey]) async -> Result {
         let empty = Result(source: .device, rows: [])
         let deviceJson = Self.json(device.map {
-            ["public_key_hex": $0.publicKeyHex, "name": $0.name, "transports": $0.transports]
+            [
+                "public_key_hex": $0.publicKeyHex, "name": $0.name, "transports": $0.transports,
+                // Spec 075: the core reads the empty string as "behind no page",
+                // so it goes out on every key rather than only on some.
+                "signer_origin": $0.signerOrigin,
+            ]
         })
         var answers: [[String: Any]] = []
         for _ in 0..<Self.maxRounds {
@@ -142,7 +188,9 @@ final class WalletKeys {
                 publicKeyHex: text("public_key_hex"),
                 credentialId: text("credential_id"),
                 attestationHex: text("attestation_hex"),
-                userVerified: (key["user_verified"] as? NSNumber)?.boolValue
+                userVerified: (key["user_verified"] as? NSNumber)?.boolValue,
+                // Absent on the wire for every row but a Trusted Signer's.
+                signerOrigin: text("signer_origin")
             )
         }
         return Result(source: source, rows: rows)

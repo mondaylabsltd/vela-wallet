@@ -71,6 +71,15 @@ final class SessionController {
         driver.dispatch(CoreJSON.string(["type": "switch_account", "index": index]))
     }
 
+    /// Drop ONE wallet from this device and stay on the others (2026-09-23).
+    ///
+    /// `index` is the position in the ORIGINAL list, as `switchAccount` takes
+    /// — the rows carry it so a balance-sorted sheet cannot remove a stranger.
+    /// Removing the last one signs this device out, which the core decides.
+    func removeAccount(index: Int) {
+        driver.dispatch(CoreJSON.string(["type": "remove_account", "index": index]))
+    }
+
     func signOut() { driver.dispatch(Self.event("sign_out")) }
     func signOutConfirmed() { driver.dispatch(Self.event("sign_out_confirmed")) }
     func signOutDismissed() { driver.dispatch(Self.event("sign_out_dismissed")) }

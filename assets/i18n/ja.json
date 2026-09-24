@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "アカウントを切り替える",
-   "contactsSubtitle": "保存済みのアドレスと最近の送金先"
+   "contactsSubtitle": "保存済みのアドレスと最近の送金先",
+   "remove": "この端末から削除",
+   "removeBody": "このウォレットだけが離れ、ほかは残ります。"
   },
   "appearance": {
    "themeLight": "ライト",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "取引の速度",
    "subtitle": "Vela から始める送金はすべてここから始まります。送金時に一回だけ変えることもできます。"
+  },
+  "signing": {
+   "title": "署名方法",
+   "subtitle": "Vela で始めるすべての署名はここから始まります。1 回ごとに別の方法を選ぶこともできます。",
+   "pageTitle": "Trusted Signer のページ",
+   "pageSubtitle": "Trusted Signer が開くページ:公式ページ、またはご自身でデプロイした依存関係ゼロの署名ページ。",
+   "pageOfficial": "公式",
+   "pageInvalid": "Web アドレスではありません。",
+   "pageInsecure": "https のページ、またはこの端末のループバック上のページを使ってください。ブラウザはそれ以外の場所では署名しません。",
+   "pageForeign": "パスキーは getvela.app のものです。他のドメインのページはリクエストを表示できても、署名はできません。",
+   "pageReset": "公式ページを使う",
+   "pageSave": "保存"
   },
   "advanced": {
    "networksTitle": "ネットワーク",
@@ -88,7 +102,8 @@
    "keeps": "「すでにウォレットを持っています」から同じパスキーでサインインし直せば、同じアドレスに戻れます。取引履歴、連絡先、トークン、各種設定もそのまま残っています。",
    "warning": "公開鍵がまだ同期サーバーに届いていません。次回起動時に自動で再送されますが、成功するまでは他の端末でサインインできない場合があります。このアプリを削除した場合も同様です。",
    "anyway": "それでもサインアウト",
-   "cancel": "キャンセル"
+   "cancel": "キャンセル",
+   "descMany": "この端末の {{count}} 個すべてがログアウトします。何も削除されません。"
   },
   "eraseDevice": {
    "title": "この端末のデータを消去",
@@ -748,6 +763,8 @@
    "keysSubtitleFull": "上限の 7 本に達しました。",
    "keysTitle": "パスキーを追加",
    "keysTitleBlocked": "作成にはもう 1 本必要です",
+   "methodBlockedHint": "このウォレットの鍵はすべて {{party}} のものです。",
+   "methodBlockedSigner": "Trusted Signer のページは {{page}} で、その鍵は {{pageParty}} のものです。設定で {{party}} のページに変えると追加できます。",
    "methodHybridBody": "コードを読み取り、近くの端末で作成",
    "methodHybridTitle": "スマホまたはタブレット",
    "methodHybridUnavailable": "近日対応",
@@ -1340,6 +1357,16 @@
    "techIdentityRecipient": "受取人",
    "copyValue": "コピー",
    "signWith": "署名方法",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "別のページで内容を確認して署名します — 見たものが、署名するものです。",
+   "trustedSignerWaiting": "Trusted Signer を待っています…",
+   "trustedSignerWaitingHint": "開いたページでリクエストを確認し、そこで署名してください。このページがこの端末の他のアプリにアクセスしてよいかブラウザに聞かれたら、許可してください。",
+   "trustedSignerClosed": "Trusted Signer は署名せずに閉じられました。",
+   "trustedSignerRefused": "Trusted Signer はこのリクエストへの署名を拒否しました。理由はそのページに表示されています。",
+   "trustedSignerMismatch": "Trusted Signer の応答がこのリクエストと一致しないため、何も送信していません。",
+   "trustedSignerTimeout": "Trusted Signer から時間内に応答がありませんでした。",
+   "trustedSignerReopen": "ページをもう一度開く",
+   "trustedSignerDoneTab": "署名しました。このタブを閉じて Vela に戻ってください。",
    "viewOnExplorer": "エクスプローラーで表示",
    "sendingToTokenContract": "トークン自身のコントラクトへの送金",
    "selfCallBlockedTitle": "Vela はこの要求に署名しません",
@@ -1557,7 +1584,11 @@
    "fiatLabel": "法定通貨レート",
    "fiatHint": "USD ベースの為替レート。通貨リストを構成します — より広いカバレッジのソースに差し替え可能。",
    "resetToDefaults": "4 つすべてを既定値に戻す",
-   "selfHostGuide": "セルフホスティング手順 →"
+   "selfHostGuide": "セルフホスティング手順 →",
+   "resetTitle": "サービスエンドポイントをリセットしますか？",
+   "resetBody": "4 つのサービスはすべて Vela のアドレスに戻ります。ここで入力したアドレスは破棄されます。",
+   "resetConfirm": "リセット",
+   "resetCancel": "キャンセル"
   },
   "addNetwork": {
    "modalTitle": "ネットワークを追加",
@@ -1575,7 +1606,6 @@
    "retry": "再試行",
    "addNetworkBtn": "ネットワークを追加",
    "incompatibleHint": "このチェーンには必要なコントラクトの一部がまだデプロイされていません。\nVela Wallet のチェーンセットアップツールでデプロイしてから、戻って再確認してください。",
-   "singleKeyOnly": "このネットワークでは、パスキーが2つ以上のウォレットは作成できません。Safe のパスキー署名者ファクトリーがデプロイされていないためです。\nパスキーが1つのウォレットは通常どおり使えます。",
    "openChainSetupTool": "チェーンセットアップツールを開く",
    "recheck": "再確認",
    "chainIdLabel": "チェーン ID: {{chainId}}",
@@ -1585,7 +1615,8 @@
    "incompatible": "非対応",
    "checkSafe": "Safe L2 コントラクト",
    "checkSigner": "P-256 プリコンパイル",
-   "checkRemaining": "その他 {{count}} 件のコントラクト"
+   "checkRemaining": "その他 {{count}} 件のコントラクト",
+   "singleKeyOnly": "このネットワークでは、パスキーが2つ以上のウォレットは作成できません。Safe のパスキー署名者ファクトリーがデプロイされていないためです。\nパスキーが1つのウォレットは通常どおり使えます。"
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1756,6 +1787,11 @@
   "siteMenu": "サイトメニュー",
   "account": "アカウント",
   "addressBar": "アドレスバー",
-  "close": "閉じる"
+  "close": "閉じる",
+  "pageCrashedTitle": "このページは動作を停止しました",
+  "pageCrashedBody": "ページが予期せず終了しました。ウォレットには影響ありません。再読み込みして続けてください。",
+  "walletConnectUnsupported": "WalletConnect のリンクには対応していません。「探索」で dApp を開き、ページから接続してください。",
+  "scanUnrecognized": "このコードはウェブアドレスでもウォレットアドレスでもありません。",
+  "linkCopied": "リンクをコピーしました"
  }
 }

@@ -1,49 +1,39 @@
 /**
- * The request window's approve half — and the CORE's answer (spec 027 T330).
+ * The request window's approve half — and the CORE's answer (spec 027 T330,
+ * re-pointed by spec 070 T063).
  *
- * Ported from src/services/wallet-state-core/dperm-connect.ts @ 52ad8fa9, which
- * exists because the shell had drifted from the core that owns this:
- * `consent_approved` authors `WriteGrant` + `SaveConnectionRecord` + `Respond`,
- * and the shell was performing the first and the third. The missing one is not
- * cosmetic — without it a dApp connected through this window leaves NO
- * "Connected to <app>" row anywhere: no trail, and no way for the person to see
- * or revisit a connection they made.
- *
- * So the shell does not author the approve. It seeds the core with the facts it
- * observed and reads the operations back as the verdict — "the operation IS the
- * answer" — on a throwaway core, constructed and freed inside one call:
+ * The shell does not author a connection. It states what happened and reads
+ * the operations back as the verdict — "the operation IS the answer" — on a
+ * throwaway core, constructed and freed inside one call:
  *
  * ```text
- *   accounts_updated ─► account_switched ─► chain_changed   (facts, no ops)
- *        └─► provider_request ─► read_grant ─┐
- *                                            └─► consent sheet OPEN for this origin
- *        └─► consent_approved ─► write_grant + save_connection_record + respond
+ *   popup_approved       ─► write_grant + save_connection_record + respond
+ *   popup_account_switch ─► write_grant (re-pinned) | remove_grant | nothing
  * ```
  *
- * Two things this deliberately does NOT do:
+ * Until T063 each of these drove the machine's BROWSER half instead: a
+ * `provider_request` and a grant read to reach a consent sheet, a
+ * `navigation_started` to make a grant-store machine notice an origin, a
+ * `browser_closed` to read a constant back. The window has no tab, no document
+ * and no navigation; every real in-app browser is on `dapp_browser` since 070,
+ * and the impersonation went with it.
  *
- * **It does not re-decide whether to connect.** `decide_popup_request` already
- * said `consent`; this replays the same inputs to reach the sheet the core
- * itself opens, and if the core does not end up with a sheet open for exactly
- * this origin it refuses to author anything (fail closed) rather than mint a
- * grant the machine never sanctioned.
+ * What is deliberately NOT done here:
  *
- * **It does not execute the page events.** `consent_approved` also emits
- * `accountsChanged` / `chainChanged`, which exist for a live document. This
- * window answers ONE request and closes — the `Respond` IS the accounts
- * announcement — so those two operations are read and dropped here, on purpose,
- * in one place.
+ * **The page events.** The browser path's approve also emits `accountsChanged`
+ * / `chainChanged`, which exist for a live document. This window answers ONE
+ * request and closes — the `Respond` IS the accounts announcement — so the
+ * core does not author them on this entry at all.
  *
  * **`loadCore()` must have resolved before this is called** (026's rule: no
  * kernel call at import time).
  */
 
-import { DappPermissionsCore } from '$lib/core/client';
+import { DappPermissionsCore, dpermSettleOnClose } from '$lib/core/client';
 
 import type { DpermEvent } from '$lib/core/generated/DpermEvent';
 import type { DpermGrant } from '$lib/core/generated/DpermGrant';
 import type { DpermOperation } from '$lib/core/generated/DpermOperation';
-import type { DpermShellResult } from '$lib/core/generated/DpermShellResult';
 import type { DpermView } from '$lib/core/generated/DpermView';
 import type {
 	PopupConnectPlan,
@@ -68,61 +58,35 @@ interface DispatchResult {
 export function planPopupConnect(question: PopupConnectQuestion): PopupConnectPlan {
 	const core = new DappPermissionsCore();
 	try {
-		const dispatch = (event: DpermEvent): DispatchResult =>
-			JSON.parse(core.dispatch(JSON.stringify(event))) as DispatchResult;
-		const resolve = (effectId: number, result: DpermShellResult): DispatchResult =>
-			JSON.parse(core.resolve_effect(BigInt(effectId), JSON.stringify(result))) as DispatchResult;
-
-		// The facts, in the order the core documents them: the full address set
-		// before anything judges a grant against it, the active account, then the
-		// chain this popup session is for. None of the three asks for an operation
-		// on a model with no connected origin.
-		dispatch({ type: 'accounts_updated', addresses: question.currentAddresses });
-		dispatch({ type: 'account_switched', address: question.activeAddress, now_ms: question.nowMs });
-		dispatch({ type: 'chain_changed', chain_id: question.chainId });
-
-		// The request itself. The core parks it on a grant read; answer every read
-		// it asks for with the value the shell already has in hand.
-		const queue = dispatch({
-			type: 'provider_request',
-			id: question.requestId,
-			method: question.method,
-			// The connect methods take no params, and this core never
-			// interprets them anyway — it forwards them verbatim on the signing path,
-			// which a connect never takes.
-			params_json: '[]',
-			origin: question.origin,
-			is_main_frame: true
-		}).effects;
-
-		while (queue.length > 0) {
-			const { id, operation } = queue.shift()!;
-			// `remove_grant` is the core physically cleaning up a grant whose account
-			// left the wallet. Harmless to skip here: the write below replaces that
-			// key outright, and the popup's read already treated it as no grant.
-			if (operation.type !== 'read_grant') continue;
-			queue.push(
-				...resolve(id, {
-					type: 'grant_read',
-					origin: operation.origin,
-					grant: question.storedGrant
-				}).effects
-			);
-		}
-
-		const view = JSON.parse(core.view()) as DpermView;
-		if (view.consent?.origin !== question.origin) {
-			// The core did not open a consent sheet for this origin — it answered the
-			// request, refused it, or was asked about something else. Authoring a
-			// grant on top of that would be the shell overruling the machine.
-			throw new Error('dapp_permissions opened no consent for this origin');
-		}
+		// One event, because one thing happened: the person pressed Connect.
+		//
+		// This used to seed three facts, dispatch `provider_request`, drain the
+		// grant read it parked on, assert that a consent sheet had opened for
+		// this origin, and only then approve — the window impersonating an
+		// in-app browser to reach an approve that was written for one. Spec 070
+		// moved every real browser onto `dapp_browser`, and T063 took the
+		// browser half of `dapp_permissions` away; `popup_approved` is what the
+		// window was always asking for.
+		const effects = (
+			JSON.parse(
+				core.dispatch(
+					JSON.stringify({
+						type: 'popup_approved',
+						origin: question.origin,
+						request_id: question.requestId,
+						method: question.method,
+						address: question.activeAddress,
+						chain_id: question.chainId,
+						now_ms: question.nowMs
+					} satisfies DpermEvent)
+				)
+			) as DispatchResult
+		).effects;
 
 		let grant: PopupConnectPlan['grant'] | null = null;
 		let record: PopupConnectRecord | null = null;
 		let respond: PopupConnectPlan['respond'] | null = null;
-		for (const { operation } of dispatch({ type: 'consent_approved', now_ms: question.nowMs })
-			.effects) {
+		for (const { operation } of effects) {
 			switch (operation.type) {
 				case 'write_grant':
 					grant = operation.grant;
@@ -140,7 +104,6 @@ export function planPopupConnect(question: PopupConnectQuestion): PopupConnectPl
 					if (operation.id === question.requestId) respond = operation.payload;
 					break;
 				default:
-					// `emit_event` — no document to push into. See the module note.
 					break;
 			}
 		}
@@ -194,54 +157,29 @@ export type AccountSwitchPlan =
 export function planAccountSwitch(question: AccountSwitchQuestion): AccountSwitchPlan {
 	const core = new DappPermissionsCore();
 	try {
-		const dispatch = (event: DpermEvent): DispatchResult =>
-			JSON.parse(core.dispatch(JSON.stringify(event))) as DispatchResult;
-		const resolve = (effectId: number, result: DpermShellResult): DispatchResult =>
-			JSON.parse(core.resolve_effect(BigInt(effectId), JSON.stringify(result))) as DispatchResult;
+		// One event, because one thing happened: the wallet switched account.
+		//
+		// This used to replay a navigation and the page's first `eth_accounts`
+		// — a browser's opening moves — to make a grant-store machine re-pin
+		// one row. `popup_account_switch` asks the question directly; the two
+		// rules behind it (`should_drop_grant`, and the chain being an audit
+		// fact a switch must not rewrite) are unchanged and still the core's.
+		const effects = (
+			JSON.parse(
+				core.dispatch(
+					JSON.stringify({
+						type: 'popup_account_switch',
+						origin: question.origin,
+						grant: question.storedGrant,
+						current_addresses: question.currentAddresses,
+						active_address: question.activeAddress,
+						now_ms: question.nowMs
+					} satisfies DpermEvent)
+				)
+			) as DispatchResult
+		).effects;
 
-		dispatch({ type: 'accounts_updated', addresses: question.currentAddresses });
-		// The chain the grant records is the chain the site CONNECTED on — an
-		// audit fact — and a switch of account must not rewrite it.
-		dispatch({ type: 'chain_changed', chain_id: question.storedGrant.chain_id });
-
-		// A navigation to the origin: the core reads the grant and, finding one
-		// for a present address, holds the site as connected.
-		const queue = dispatch({
-			type: 'navigation_started',
-			url: `${question.origin}/`
-		}).effects;
-		while (queue.length > 0) {
-			const { id, operation } = queue.shift()!;
-			if (operation.type !== 'read_grant') continue;
-			queue.push(
-				...resolve(id, {
-					type: 'grant_read',
-					origin: operation.origin,
-					grant: question.storedGrant
-				}).effects
-			);
-		}
-
-		// The site's own first question after a load. This is where the core
-		// physically drops a grant whose account LEFT the wallet
-		// (`should_drop_grant`, on the decision path) — and answers `[]` or the
-		// address otherwise, an answer nobody here is waiting for.
-		for (const { operation } of dispatch({
-			type: 'provider_request',
-			id: 'follow',
-			method: 'eth_accounts',
-			params_json: '[]',
-			origin: question.origin,
-			is_main_frame: true
-		}).effects) {
-			if (operation.type === 'remove_grant') return { kind: 'remove' };
-		}
-
-		for (const { operation } of dispatch({
-			type: 'account_switched',
-			address: question.activeAddress,
-			now_ms: question.nowMs
-		}).effects) {
+		for (const { operation } of effects) {
 			if (operation.type === 'write_grant') return { kind: 'repin', grant: operation.grant };
 			if (operation.type === 'remove_grant') return { kind: 'remove' };
 		}
@@ -259,19 +197,8 @@ export function planAccountSwitch(question: AccountSwitchQuestion): AccountSwitc
  * carries a code at all.
  */
 export function popupCloseSettlement(): PopupSettlement {
-	const core = new DappPermissionsCore();
-	try {
-		const closed = JSON.parse(
-			core.dispatch(JSON.stringify({ type: 'browser_closed' } satisfies DpermEvent))
-		) as DispatchResult;
-		for (const { operation } of closed.effects) {
-			if (operation.type === 'settle_forwarded') {
-				return { code: operation.code, reason: operation.reason };
-			}
-		}
-		// Unreachable: `browser_closed` always names a settlement.
-		throw new Error('dapp_permissions named no settlement for a closed window');
-	} finally {
-		core.free();
-	}
+	// The core names it; this reads it. `browser_closed` used to be dispatched
+	// into a throwaway core purely to read the operation it authored back —
+	// which is a long way round to a constant the core can simply state.
+	return JSON.parse(dpermSettleOnClose()) as PopupSettlement;
 }

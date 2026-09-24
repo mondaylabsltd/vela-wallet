@@ -34,6 +34,7 @@ alloy-primitives = { version = "1.6.1", default-features = false, features = ["s
 alloy-dyn-abi = { version = "1.6.1", default-features = false, features = ["std", "eip712"] }
 alloy-json-abi = { version = "1.6.1", default-features = false, features = ["std"] }
 sha2 = "0.11.0"
+sha1 = { version = "0.11.0", default-features = false }
 p256 = { version = "0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
 ecdsa = { version = "0.17.0", default-features = false, features = ["der", "alloc"] }
 # CTAP2's PIN/UV auth protocols (spec 019, research.md D4). Same RustCrypto
@@ -52,6 +53,10 @@ ciborium = { version = "0.2.2", default-features = false }
 ciborium-io = { version = "0.2.2", default-features = false }
 coset = { version = "0.4.2", default-features = false }
 base64 = "0.22"
+# raw DEFLATE for the Clear Signer's URL fragment (spec 071) — the page
+# inflates it with the browser's own DecompressionStream("deflate-raw").
+# Pure Rust, already in the lock through the PNG encoder.
+miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
 # ECMAScript-compliant f64 -> string (Boa's formatter). The identicon hash slices
 # the DECIMAL STRING of a chaotic double, so Number::toString semantics — including
 # its tie-break rule — are part of the algorithm. std's formatter disagrees with V8

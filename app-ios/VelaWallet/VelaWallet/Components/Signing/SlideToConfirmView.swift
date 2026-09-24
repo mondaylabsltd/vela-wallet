@@ -30,6 +30,16 @@ struct SlideToConfirmView: View {
 
     private var label: String { "\(hint) · \(action)" }
 
+    /// The finger lifted at `progress`. Past the threshold that is a
+    /// signature, and the threshold is a detent the finger feels (spec 048) —
+    /// played at the release that confirms, as Android's `SlideToConfirm`
+    /// does. Short of it the knob springs back in silence.
+    static func released(at progress: CGFloat) -> Bool {
+        guard progress >= ExploreGeometry.slideCommit else { return false }
+        VelaHaptic.detent.play()
+        return true
+    }
+
     var body: some View {
         GeometryReader { geo in
             let travel = max(1, geo.size.width - ExploreGeometry.slideKnob - Tokens.Space.s8)
@@ -63,7 +73,7 @@ struct SlideToConfirmView: View {
                     .onEnded { _ in
                         guard enabled, !done else { return }
                         dragging = false
-                        if progress >= ExploreGeometry.slideCommit {
+                        if Self.released(at: progress) {
                             progress = 1
                             done = true
                             onConfirm()
@@ -74,6 +84,15 @@ struct SlideToConfirmView: View {
             )
         }
         .frame(height: ExploreGeometry.slideTrack)
+        // Opened again after a slide: the ceremony ended with nothing signed
+        // (a cancelled passkey sheet, a closed Trusted Signer page) and the
+        // request stayed open, so the slide is back at rest — a knob left at
+        // the far end is a request nobody can sign another way (spec 071).
+        .onChange(of: enabled) { _, open in
+            guard open, done else { return }
+            done = false
+            progress = 0
+        }
         .opacity(enabled ? 1 : Tokens.Opacity.disabled)
         .allowsHitTesting(enabled)
         // VoiceOver and Switch Control confirm by activating, not dragging.
@@ -91,6 +110,7 @@ struct SlideToConfirmView: View {
             guard enabled, !done else { return }
             progress = 1
             done = true
+            VelaHaptic.detent.play()
             onConfirm()
         }
     }

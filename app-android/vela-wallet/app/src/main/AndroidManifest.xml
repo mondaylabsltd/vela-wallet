@@ -70,6 +70,24 @@
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
 
+    <!--
+        Spec 071: the Trusted Signer opens its page in a Custom Tab. Which
+        browsers can host one is a package query, and Android 11+ answers it
+        only for what the manifest declares — without this the list is empty
+        and the page falls to the system chooser, where apps that merely claim
+        https links (a chat app, another wallet) sit beside the browsers.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:name=".VelaWalletApplication"
         android:allowBackup="false"
@@ -143,12 +161,15 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Spec 047 D8: the wallet's own scheme, and the pay links the receive flow shares. -->
+            <!-- Spec 047 D8: the wallet's own scheme, and the pay links the receive flow shares.
+                 Named hosts, not the bare scheme: `sign-result` belongs to SignResultActivity
+                 (spec 076), and two activities claiming one URL is a chooser in the person's face. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="velawallet" />
+                <data android:scheme="velawallet" android:host="pay" />
+                <data android:scheme="velawallet" android:host="open" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -156,6 +177,23 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="wallet.getvela.app" android:pathPrefix="/pay" />
                 <data android:scheme="https" android:host="getvela.app" android:pathPrefix="/pay" />
+            </intent-filter>
+        </activity>
+        <!-- Spec 076: the Trusted Signer's answer. Transparent, out of recents,
+             and gone the moment it has handed the URL to the request waiting
+             for it — so the wallet's own screen is never entered. -->
+        <activity
+            android:name=".SignResultActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="velawallet" android:host="sign-result" />
             </intent-filter>
         </activity>
         <provider

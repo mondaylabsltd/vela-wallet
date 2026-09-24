@@ -2,7 +2,8 @@
 //  SettingsWire.swift
 //  VelaWallet
 //
-//  The `network_admin` machine's view model, in Swift.
+//  The `network_admin` machine's view model, in Swift — and, since spec 071,
+//  `sign_pref`'s.
 //
 //  Same rule as `CoreViews.swift` and `ContactsWire.swift`: views are
 //  `Decodable` through `CoreJSON.decoder` (`.convertFromSnakeCase`); operations
@@ -23,6 +24,7 @@
 //
 
 import Foundation
+import VelaCore
 
 // MARK: - Health
 
@@ -180,12 +182,17 @@ struct NetCompatibilityWire: Decodable, Equatable {
     let rpcFailure: NetRpcFailureKindWire?
 }
 
-/// Why the wizard cannot proceed. Tagged, with a chain id on three of four.
+/// Why the wizard cannot proceed. Tagged, with a chain id on four of five.
 enum NetWizardErrorWire: Decodable, Equatable {
     case alreadyAdded(chainId: Int)
     case notFound(chainId: Int)
     case noRpcEndpoint
     case notCompatible(chainId: Int)
+    /// The probes failed, so nothing was learned about the chain (spec 038
+    /// #E1). Not a verdict: worded "unable to verify", never "incompatible".
+    /// Missing here, a view carrying it failed to decode and the whole
+    /// settings screen stopped hearing the core.
+    case checkFailed(chainId: Int)
 
     private enum Keys: String, CodingKey { case type, chainId }
 
@@ -197,6 +204,7 @@ enum NetWizardErrorWire: Decodable, Equatable {
         case "not_found": self = .notFound(chainId: chainId() ?? 0)
         case "no_rpc_endpoint": self = .noRpcEndpoint
         case "not_compatible": self = .notCompatible(chainId: chainId() ?? 0)
+        case "check_failed": self = .checkFailed(chainId: chainId() ?? 0)
         case let other:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: container,
@@ -222,7 +230,9 @@ struct NetWizardViewWire: Decodable, Equatable {
 
 // MARK: - Endpoints and providers
 
-enum NetEndpointFieldWire: String, Decodable {
+/// The four service endpoints, spelled as the core's `NetEndpointField` —
+/// the same raw values go back out in `endpoint_edited` / `endpoint_blurred`.
+enum NetEndpointFieldWire: String, Decodable, CaseIterable {
     case ethereumData = "ethereum_data"
     case passkeyIndex = "passkey_index"
     case bundlerService = "bundler_service"
@@ -236,7 +246,8 @@ struct NetEndpointViewWire: Decodable, Equatable {
     let health: NetServiceHealthWire
 }
 
-enum NetProviderIdWire: String, Decodable {
+/// `NetProviderId` — the view's spelling and the events' `provider`.
+enum NetProviderIdWire: String, Decodable, CaseIterable {
     case alchemy, drpc, ankr
 }
 
@@ -288,4 +299,58 @@ struct NetViewWire: Decodable, Equatable {
     let endpoints: [NetEndpointViewWire]
     let providers: [NetProviderViewWire]
     let lastAddedChainId: Int?
+}
+
+// MARK: - sign_pref (spec 071)
+
+/// `sign_pref`'s view (spec 071): the "Sign with" every signing sheet starts
+/// at, and the Trusted Signer page. Every judgement in it is the core's.
+struct SignPrefViewWire: Decodable, Equatable {
+    /// Always an offered name; `auto` when nothing was chosen.
+    let method: String
+    let methodCommitted: Bool
+    /// Every "Sign with" value, in the order a picker lists them.
+    let offered: [String]
+    /// The page the Trusted Signer opens. Always usable.
+    let signerUrl: String
+    let signerUrlIsDefault: Bool
+    /// `invalid` | `insecure` — the last address typed was refused and
+    /// nothing was stored.
+    let signerUrlError: String?
+    /// Whether a page there can use this wallet's `getvela.app` passkeys.
+    let signerUsesWalletPasskeys: Bool
+    /// Spelled out because a hand-written `init(from:)` suppresses the
+    /// synthesized set; the names are the decoder's post-`convertFromSnakeCase`
+    /// ones.
+    private enum CodingKeys: String, CodingKey {
+        case method, methodCommitted, offered, signerUrl, signerUrlIsDefault
+        case signerUrlError, signerUsesWalletPasskeys
+    }
+
+    /// `decodeIfPresent` throughout, with the core's own defaults behind it.
+    ///
+    /// This app is not the only thing that writes this view's JSON — the
+    /// fixtures and the gallery do too. A mirror that hard-required a field
+    /// the wire grew (or dropped) would refuse to decode the whole view and
+    /// leave Settings with no signing section at all, which is the failure
+    /// this file exists to stop rather than cause.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        method = try values.decodeIfPresent(String.self, forKey: .method) ?? "auto"
+        methodCommitted = try values.decodeIfPresent(Bool.self, forKey: .methodCommitted) ?? false
+        offered = try values.decodeIfPresent([String].self, forKey: .offered) ?? []
+        signerUrl = try values.decodeIfPresent(String.self, forKey: .signerUrl) ?? trustedSignerDefaultUrl()
+        signerUrlIsDefault = try values.decodeIfPresent(Bool.self, forKey: .signerUrlIsDefault) ?? true
+        signerUrlError = try values.decodeIfPresent(String.self, forKey: .signerUrlError)
+        signerUsesWalletPasskeys =
+            try values.decodeIfPresent(Bool.self, forKey: .signerUsesWalletPasskeys) ?? true
+    }
+
+    /// What the machine says before it has read anything: `auto`, the
+    /// official page, and everything it offers.
+    static var initial: SignPrefViewWire? {
+        (try? SignPrefCore().view()).flatMap {
+            try? CoreJSON.decode(SignPrefViewWire.self, from: CoreJSON.object($0))
+        }
+    }
 }

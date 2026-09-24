@@ -54,7 +54,9 @@ enum FlowFixtures {
         needsSecondKey: Bool = false,
         canGoBack: Bool = true,
         address: String? = nil,
-        syncErrorDetail: String? = nil
+        syncErrorDetail: String? = nil,
+        addMethods: [KeyMethod] = KeyMethod.allCases,
+        addBlocked: AddBlocked? = nil
     ) -> CreateView {
         CreateView(
             stage: stage,
@@ -73,7 +75,9 @@ enum FlowFixtures {
             needsSecondKey: needsSecondKey,
             canGoBack: canGoBack,
             address: address,
-            syncErrorDetail: syncErrorDetail
+            syncErrorDetail: syncErrorDetail,
+            addMethods: addMethods,
+            addBlocked: addBlocked
         )
     }
 
@@ -86,11 +90,14 @@ enum FlowFixtures {
         confirmed: Bool = true,
         synced: Bool = true
     ) -> CreateKeyRow {
-        let platformKey = method != .securityKey
+        // A page's key reports `platform` too — the ceremony ran in a browser —
+        // but the vault holding it is not this device's, and the row must not
+        // claim one (spec 075).
+        let platformKey = method == .platform || method == .hybrid
         return CreateKeyRow(
             name: name,
-            authenticatorAttachment: platformKey ? "platform" : "cross-platform",
-            transports: platformKey ? "internal,hybrid" : "usb,nfc",
+            authenticatorAttachment: method == .securityKey ? "cross-platform" : "platform",
+            transports: method == .securityKey ? "usb,nfc" : "internal,hybrid",
             confirmed: confirmed,
             synced: synced,
             syncedKnown: true,
@@ -141,6 +148,27 @@ enum FlowFixtures {
             stage: .addKeys,
             keys: [key("Everyday wallet", synced: false), key("Key 2")],
             canFinish: true
+        ))
+        // Spec 075: a wallet's keys all belong to one relying party. Both ways
+        // the picker narrows — the sentence under the list is the only thing
+        // that tells a person what to do about it.
+        flow("keys · signer page elsewhere", base(
+            stage: .addKeys,
+            keys: [key("Everyday wallet", synced: false)],
+            needsSecondKey: true,
+            addMethods: [.platform, .hybrid, .securityKey],
+            addBlocked: AddBlocked(
+                relyingParty: "getvela.app",
+                page: "http://localhost:8140/sign.html",
+                pageRelyingParty: "localhost"
+            )
+        ))
+        flow("keys · a page's own set", base(
+            stage: .addKeys,
+            keys: [key("Everyday wallet", method: .trustedSigner, synced: false)],
+            needsSecondKey: true,
+            addMethods: [.trustedSigner],
+            addBlocked: AddBlocked(relyingParty: "sign.example.com", page: nil, pageRelyingParty: nil)
         ))
         flow("keys · unconfirmed row", base(
             stage: .addKeys,

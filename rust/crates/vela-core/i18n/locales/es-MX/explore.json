@@ -53,6 +53,11 @@
     "siteMenu": "Menú del sitio",
     "account": "Cuenta",
     "addressBar": "Barra de direcciones",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "pageCrashedTitle": "Esta página dejó de funcionar",
+    "pageCrashedBody": "La página se cerró de forma inesperada. Tu billetera no se vio afectada: recarga para continuar.",
+    "walletConnectUnsupported": "Los enlaces de WalletConnect no son compatibles. Abre la dApp en Explorar y conéctate desde ahí.",
+    "scanUnrecognized": "Este código no es una dirección web ni una dirección de billetera.",
+    "linkCopied": "Enlace copiado"
   }
 }

@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Chuyển tài khoản",
-   "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây"
+   "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây",
+   "remove": "Gỡ khỏi thiết bị này",
+   "removeBody": "Chỉ ví này rời đi; các ví khác vẫn còn."
   },
   "appearance": {
    "themeLight": "Sáng",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "Tốc độ giao dịch",
    "subtitle": "Mọi lượt gửi bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể đổi riêng từng lần gửi."
+  },
+  "signing": {
+   "title": "Ký bằng",
+   "subtitle": "Mọi chữ ký bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể chọn cách khác cho từng lần ký.",
+   "pageTitle": "Trang Trusted Signer",
+   "pageSubtitle": "Trang mà Trusted Signer mở: trang chính thức, hoặc bản sao trang không phụ thuộc do bạn tự triển khai.",
+   "pageOfficial": "Chính thức",
+   "pageInvalid": "Đây không phải là địa chỉ web.",
+   "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
+   "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
+   "pageReset": "Dùng trang chính thức",
+   "pageSave": "Lưu"
   },
   "advanced": {
    "networksTitle": "Mạng lưới",
@@ -88,7 +102,8 @@
    "keeps": "Chọn “Tôi đã có ví” để đăng nhập lại bằng chính passkey đó: địa chỉ vẫn như cũ, và lịch sử giao dịch, danh bạ, token cùng các cài đặt vẫn còn nguyên.",
    "warning": "Khóa công khai của bạn chưa tới được máy chủ đồng bộ. Ứng dụng sẽ thử lại ở lần mở kế tiếp, nhưng cho tới khi thành công, bạn có thể không đăng nhập được trên thiết bị khác — và cả trên máy này nếu bạn gỡ ứng dụng.",
    "anyway": "Vẫn đăng xuất",
-   "cancel": "Hủy"
+   "cancel": "Hủy",
+   "descMany": "Cả {{count}} ví trên thiết bị này sẽ đăng xuất. Không xoá gì cả."
   },
   "eraseDevice": {
    "title": "Xoá sạch thiết bị này",
@@ -748,6 +763,8 @@
    "keysSubtitleFull": "Đã đạt giới hạn 7 khoá.",
    "keysTitle": "Thêm passkey",
    "keysTitleBlocked": "Cần thêm một khoá nữa mới tạo được",
+   "methodBlockedHint": "Mọi khoá của ví này đều thuộc {{party}}.",
+   "methodBlockedSigner": "Trang Trusted Signer của bạn là {{page}}, khoá của nó thuộc {{pageParty}}. Đổi sang trang {{party}} trong Cài đặt để thêm ở đây.",
    "methodHybridBody": "Quét mã và tạo trên thiết bị gần đó",
    "methodHybridTitle": "Điện thoại hoặc máy tính bảng",
    "methodHybridUnavailable": "Sắp có",
@@ -1340,6 +1357,16 @@
    "techIdentityRecipient": "Người nhận",
    "copyValue": "Sao chép",
    "signWith": "Ký bằng",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "Kiểm tra và ký trên một trang riêng — thấy gì thì ký nấy.",
+   "trustedSignerWaiting": "Đang chờ Trusted Signer…",
+   "trustedSignerWaitingHint": "Hãy kiểm tra yêu cầu trên trang vừa mở và ký ở đó. Nếu trình duyệt hỏi có cho phép trang truy cập các ứng dụng khác trên thiết bị này không, hãy cho phép.",
+   "trustedSignerClosed": "Trusted Signer đã đóng mà không ký.",
+   "trustedSignerRefused": "Trusted Signer không ký yêu cầu này. Trang của nó có ghi lý do.",
+   "trustedSignerMismatch": "Phản hồi của Trusted Signer không khớp với yêu cầu này nên không có gì được gửi đi.",
+   "trustedSignerTimeout": "Trusted Signer không phản hồi kịp.",
+   "trustedSignerReopen": "Mở lại trang",
+   "trustedSignerDoneTab": "Đã ký. Bạn có thể đóng thẻ này và quay lại Vela.",
    "viewOnExplorer": "Xem trên explorer",
    "sendingToTokenContract": "Gửi tới chính hợp đồng của token",
    "selfCallBlockedTitle": "Vela không ký yêu cầu này",
@@ -1557,7 +1584,11 @@
    "fiatLabel": "TỶ GIÁ FIAT",
    "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
    "resetToDefaults": "Đặt lại cả bốn về mặc định",
-   "selfHostGuide": "Hướng dẫn tự triển khai →"
+   "selfHostGuide": "Hướng dẫn tự triển khai →",
+   "resetTitle": "Khôi phục điểm cuối dịch vụ?",
+   "resetBody": "Cả bốn dịch vụ sẽ quay về địa chỉ của Vela. Các địa chỉ bạn đã nhập ở đây sẽ bị xóa.",
+   "resetConfirm": "Khôi phục",
+   "resetCancel": "Hủy"
   },
   "addNetwork": {
    "modalTitle": "Thêm mạng",
@@ -1575,7 +1606,6 @@
    "retry": "Thử lại",
    "addNetworkBtn": "Thêm mạng",
    "incompatibleHint": "Một số hợp đồng bắt buộc chưa được triển khai trên chain này.\nDùng công cụ Vela Wallet Chain Setup để triển khai, sau đó quay lại và kiểm tra lại.",
-   "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường.",
    "openChainSetupTool": "Mở công cụ Chain Setup",
    "recheck": "Kiểm tra lại",
    "chainIdLabel": "Chain ID: {{chainId}}",
@@ -1585,7 +1615,8 @@
    "incompatible": "Không tương thích",
    "checkSafe": "Hợp đồng Safe L2",
    "checkSigner": "Precompile P-256",
-   "checkRemaining": "{{count}} hợp đồng còn lại"
+   "checkRemaining": "{{count}} hợp đồng còn lại",
+   "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường."
   },
   "treasury": {
    "modalTitle": "Ngân quỹ",
@@ -1756,6 +1787,11 @@
   "siteMenu": "Menu trang",
   "account": "Tài khoản",
   "addressBar": "Thanh địa chỉ",
-  "close": "Đóng"
+  "close": "Đóng",
+  "pageCrashedTitle": "Trang này đã ngừng hoạt động",
+  "pageCrashedBody": "Trang đã đóng đột ngột. Ví của bạn không bị ảnh hưởng — tải lại để tiếp tục.",
+  "walletConnectUnsupported": "Không hỗ trợ liên kết WalletConnect. Hãy mở dApp trong Khám phá và kết nối từ đó.",
+  "scanUnrecognized": "Mã này không phải địa chỉ web hay địa chỉ ví.",
+  "linkCopied": "Đã sao chép liên kết"
  }
 }

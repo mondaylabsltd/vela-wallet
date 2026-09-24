@@ -60,6 +60,9 @@ class SendController(
     /** Spec 069: the stored default speed, and the resolved number preset its gas bids are written in. */
     private val preferredTier: () -> FeeTier = { FeeTier.Fast },
     private val numberPreset: () -> String = { "comma_dot" },
+    /** Spec 071: the stored default "Sign with" — a send has no picker of its own — and the Trusted Signer. */
+    signMethod: () -> String = { "auto" },
+    trustedSigner: () -> TrustedSigner? = { null },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -148,6 +151,8 @@ class SendController(
             ): SendFeeOutcome = requestQuote(chainId, account, calls, gasFeeToken, publicKeyAvailable)
         },
         ports = ports,        identity = identity,
+        signMethod = signMethod,
+        trustedSigner = trustedSigner,
     )
 
     private val sendHost = CoreHost(
@@ -532,6 +537,24 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
         }
     }
 
+    /**
+     * Spec 075: the Trusted Signer page each key lives behind, by public key
+     * (lowercase, `0x`-less). The keys view needs it to say where a key lives;
+     * [keysOf] speaks the core's `WalletKeyRecord`, which has no room for it.
+     */
+    suspend fun pagesOf(address: String): Map<String, String> {
+        val record = record { it.optString("address").equals(address, ignoreCase = true) } ?: return emptyMap()
+        val keys = record.optJSONArray("keys") ?: return emptyMap()
+        val out = mutableMapOf<String, String>()
+        for (index in 0 until keys.length()) {
+            val key = keys.optJSONObject(index) ?: continue
+            val origin = key.optString("signer_origin").ifBlank { continue }
+            val pk = key.optString("public_key_hex").removePrefix("0x").lowercase().ifBlank { continue }
+            out[pk] = origin
+        }
+        return out
+    }
+
     override suspend fun routingOf(address: String): Pair<String, KeyMethod> {
         val record = record { it.optString("address").equals(address, ignoreCase = true) }
         val transports = record?.optJSONArray("keys")?.optJSONObject(0)?.optString("transports").orEmpty()
@@ -549,7 +572,15 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
         val out = org.json.JSONArray()
         for (index in 0 until keys.length()) {
             val key = keys.optJSONObject(index) ?: continue
-            out.put(org.json.JSONObject().put("credential_id", key.optString("credential_id")).put("transports", key.optString("transports")))
+            out.put(
+                org.json.JSONObject()
+                    .put("credential_id", key.optString("credential_id"))
+                    .put("transports", key.optString("transports"))
+                    // Spec 075: the Trusted Signer page this key lives behind.
+                    // Dropping it would make `signRoute` route a key that only
+                    // one page can reach to the platform sheet instead.
+                    .put("signer_origin", key.optString("signer_origin")),
+            )
         }
         return out.toString()
     }

@@ -426,9 +426,6 @@
 		<div class="cell" id="gallery-settings-theme">
 			<SegmentedControl model={st.appearance.theme} />
 		</div>
-		<div class="cell" id="gallery-settings-avatar">
-			<SegmentedControl model={st.appearance.avatar} />
-		</div>
 		<div class="cell" id="gallery-settings-textscale">
 			<TextScaleSlider model={st.appearance.textScale} />
 		</div>

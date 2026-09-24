@@ -1,5 +1,5 @@
 // Ported from src/services/wallet-state-core/send-executor.ts @ f9bcb278 — RN
-// seams rewritten to the web modules (passkey `signWithAny`, synchronous
+// seams rewritten to the web modules (passkey `signChallenge`, synchronous
 // account finders over localStorage, the kernels import made static); every
 // rule, every regex and every ordering verbatim.
 /**
@@ -23,7 +23,10 @@
  *   displayed and signing a different one.
  * - **The passkey ceremony.** `SubmitUserOp` is one sentence to the core; here it
  *   is the `signFn` closure `sendNative`/`sendERC20`/`sendBatchCalls` invoke,
- *   including the identity-provider compatibility check.
+ *   including the identity-provider compatibility check. When Settings' "Sign
+ *   with" is the Trusted Signer (spec 071) the same closure takes the send to its
+ *   page instead: no site asked, so the request names none and the send's own
+ *   calls are its intent.
  * - **`prefetchForSend` cache warming** is the shell's (the core says so); it
  *   runs from the controller on token selection, not from an operation.
  * - **The `tx_tracker` seam.** `TrackSubmitted` is the hand-off point, and on web
@@ -36,9 +39,10 @@
  * converted into the result variant that operation answers with.
  */
 
-import { fromHex, toHex, verifySafeWebAuthn } from '$lib/core/kernels';
+import { fromHex, verifySafeWebAuthn } from '$lib/core/kernels';
 import { getAllNetworksSync, networkId, nativeSymbol } from '$lib/services/networks';
-import { PasskeyError, cancelSign, signWithAny } from '$lib/onboarding/core/passkey';
+import { PasskeyError } from '$lib/onboarding/core/passkey';
+import { cancelChallenge, signChallenge } from '$lib/signing/sign-challenge';
 import { addCustomNetworkByChainId } from '$lib/services/add-network.svelte';
 import { parseBundlerUnderfunded, probeTreasury } from '$lib/services/bundler-service';
 import { hapticError, hapticSuccess } from '$lib/services/platform';
@@ -321,11 +325,20 @@ export function createSendExecutor(ports: SendShellPorts) {
 					const credentials = keySet
 						? keySet.keys.map((key) => ({ id: key.credentialId }))
 						: [{ id: credentialId }];
+					const signer = {
+						account: operation.account,
+						keys: stored
+							? keySetOf(stored).keys
+							: [{ credentialId, publicKeyHex: operation.public_key_hex }],
+						credentials,
+						// The wallet's own send: no method, no site (contract §1).
+						request: { method: '', params: [], origin: '', chainId: operation.chain_id }
+					};
 					const signFn = async (challenge: Uint8Array) => {
 						// The passkey sheet is opening — the core moves to 'signing' here,
 						// exactly where `setTxStatus('signing')` sat.
 						ports.signingStarted();
-						const assertion = await signWithAny(toHex(challenge), credentials);
+						const assertion = await signChallenge(challenge, signer);
 						const compat = verifySafeWebAuthn(assertion);
 						if (!compat.ok) {
 							throw new Error(
@@ -375,7 +388,7 @@ export function createSendExecutor(ports: SendShellPorts) {
 			}
 
 			case 'cancel_passkey_sign': {
-				cancelSign();
+				cancelChallenge();
 				return { type: 'passkey_cancel_acknowledged' };
 			}
 

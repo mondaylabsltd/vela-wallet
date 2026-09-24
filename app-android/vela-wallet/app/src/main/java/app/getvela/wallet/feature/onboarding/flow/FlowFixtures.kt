@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import app.getvela.wallet.feature.onboarding.core.AddBlocked
 import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.feature.onboarding.core.CreateStage
 import app.getvela.wallet.feature.onboarding.core.CreateView
@@ -75,16 +76,24 @@ object FlowFixtures {
         confirmed: Boolean = true,
         synced: Boolean = true,
     ): CreateKeyRow {
-        val platformKey = method != KeyMethod.SecurityKey
+        // A page's key reports `platform` too — the ceremony ran in a browser —
+        // but the vault holding it is not this device's, and the row must not
+        // claim one (spec 075).
+        val platformKey = method == KeyMethod.Platform || method == KeyMethod.Hybrid
         return CreateKeyRow(
             name = name,
-            authenticatorAttachment = if (platformKey) "platform" else "cross-platform",
-            transports = if (platformKey) "internal,hybrid" else "usb,nfc",
+            authenticatorAttachment = if (method == KeyMethod.SecurityKey) {
+                "cross-platform"
+            } else {
+                "platform"
+            },
+            transports = if (method == KeyMethod.SecurityKey) "usb,nfc" else "internal,hybrid",
             confirmed = confirmed,
             synced = synced,
             aaguid = if (platformKey) "fbfc3007-154e-4ecc-8c0b-6e020557d7bd" else "",
             providerName = if (platformKey) "Apple Passwords" else "",
             method = method,
+            kind = method,
         )
     }
 
@@ -141,6 +150,33 @@ object FlowFixtures {
             base().copy(
                 stage = CreateStage.AddKeys,
                 keys = listOf(key("Everyday wallet"), key("Key 2", confirmed = false)),
+            ),
+        )
+        // Spec 075: a wallet's keys all belong to one relying party. Both ways
+        // the picker narrows, because both are a dimmed row plus a sentence —
+        // and the sentence is the only thing that tells a person what to do.
+        flow(
+            "keys · signer page elsewhere",
+            base().copy(
+                stage = CreateStage.AddKeys,
+                keys = listOf(key("Everyday wallet", synced = false)),
+                needsSecondKey = true,
+                addMethods = listOf(KeyMethod.Platform, KeyMethod.Hybrid, KeyMethod.SecurityKey),
+                addBlocked = AddBlocked(
+                    relyingParty = "getvela.app",
+                    page = "http://localhost:8140/sign.html",
+                    pageRelyingParty = "localhost",
+                ),
+            ),
+        )
+        flow(
+            "keys · a page's own set",
+            base().copy(
+                stage = CreateStage.AddKeys,
+                keys = listOf(key("Everyday wallet", method = KeyMethod.TrustedSigner, synced = false)),
+                needsSecondKey = true,
+                addMethods = listOf(KeyMethod.TrustedSigner),
+                addBlocked = AddBlocked(relyingParty = "sign.example.com", page = null, pageRelyingParty = null),
             ),
         )
         flow(

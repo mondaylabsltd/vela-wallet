@@ -12,6 +12,7 @@
 //!    date and time format explicitly in Settings. CLDR governs currency *fraction
 //!    digits and symbol placement* (FR-020); it does **not** get to override the
 //!    separators the user chose. The currency path composes the two.
+pub mod amount_text;
 pub mod bidi;
 pub mod currency;
 pub mod datetime;

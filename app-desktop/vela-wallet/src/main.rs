@@ -66,7 +66,10 @@ use wallet::page::{Identity, WalletPage};
 /// somebody who already has a wallet.
 struct Root {
     onboarding: Option<gpui::Entity<OnboardingPage>>,
-    wallet: Option<gpui::Entity<WalletPage>>,
+    /// The wallet page, and the address it was built for.
+    wallet: Option<(gpui::Entity<WalletPage>, String)>,
+    /// The onboarding on screen was opened over the wallet to add an account.
+    adding: bool,
 }
 
 impl Root {
@@ -79,6 +82,7 @@ impl Root {
         Self {
             onboarding: None,
             wallet: None,
+            adding: false,
         }
     }
 }
@@ -97,6 +101,7 @@ impl Render for Root {
                 // Dropped on the way out, so a second sign-in starts from a
                 // fresh machine rather than resuming a finished one.
                 self.wallet = None;
+                self.adding = false;
                 // And so do the resident machines. Contacts, networks and the
                 // chosen currency belong to the ACCOUNT; a resident that
                 // outlived a sign-out would show the previous person's address
@@ -108,8 +113,41 @@ impl Render for Root {
                     .clone();
                 root.child(page)
             }
+            // Another account is being added (spec 072): onboarding OVER the
+            // wallet rather than instead of it, so going back finds the page
+            // exactly as it was left.
+            SessionRoute::Wallet if let Some(entry) = session::adding_account(cx) => {
+                if !self.adding {
+                    self.onboarding = None;
+                }
+                self.adding = true;
+                let page = self
+                    .onboarding
+                    .get_or_insert_with(|| cx.new(|cx| OnboardingPage::adding(entry, window, cx)))
+                    .clone();
+                root.child(page)
+            }
             SessionRoute::Wallet => {
                 self.onboarding = None;
+                let added = std::mem::take(&mut self.adding);
+                // The active account changed under the page — one was added,
+                // or the switcher picked another. Everything the page and the
+                // resident machines hold was booted for the previous address
+                // (its name in the header, its hero, its address book), so
+                // they go, exactly as a sign-out drops them. A switch keeps
+                // the person where they were; a new account opens on its
+                // wallet.
+                let mut place = None;
+                if let Some((page, address)) = self.wallet.take() {
+                    if *address == view.address {
+                        self.wallet = Some((page, address));
+                    } else {
+                        if !added {
+                            place = Some(page.read(cx).place());
+                        }
+                        resident::drop_all(cx);
+                    }
+                }
                 let identity = Identity {
                     name: view
                         .accounts
@@ -117,11 +155,18 @@ impl Render for Root {
                         .map_or_else(|| "".into(), |row| row.account.name.clone().into()),
                     address: view.address.clone(),
                 };
-                let page = self
-                    .wallet
-                    .get_or_insert_with(|| cx.new(|cx| WalletPage::signed_in(identity, window, cx)))
-                    .clone();
-                root.child(page)
+                let address = view.address.clone();
+                let (page, _) = self.wallet.get_or_insert_with(|| {
+                    let page = cx.new(|cx| {
+                        let mut page = WalletPage::signed_in(identity, window, cx);
+                        if let Some(place) = place {
+                            page.restore_place(place);
+                        }
+                        page
+                    });
+                    (page, address)
+                });
+                root.child(page.clone())
             }
         };
         // The parallel space's marker, over whichever screen is up. It renders
@@ -250,6 +295,42 @@ fn main() {
         }
     });
 
+    // Spec 076: the Trusted Signer's answer comes back as a navigation to
+    // `velawallet://sign-result`, because the published page carries
+    // `default-src 'none'` in its hashed bytes and cannot open a socket at all.
+    //
+    // It is an EVENT for a pending request, never a navigation of this app: no
+    // route changes, no state changes, and one that arrives with nothing
+    // waiting is dropped in silence rather than raising an error nobody can
+    // act on.
+    // Windows and Linux do not deliver a URL as an event: the scheme handler
+    // starts the app with it as an ARGUMENT (`"%1"`, `%u`). gpui stores an
+    // `on_open_urls` callback on those platforms but never fires it — only
+    // macOS does — so the argument is read here.
+    //
+    // This covers a COLD start. While the wallet is already running — which is
+    // the ordinary case, since the person pressed Sign in it — Windows and
+    // Linux start a SECOND process with the URL, and handing it to the first
+    // needs a single-instance channel this app does not have yet. macOS has no
+    // such gap: the Apple Event goes to the running app. Written down rather
+    // than left to be discovered.
+    for argument in std::env::args().skip(1) {
+        if argument.starts_with(vela_core::trusted_signer::CALLBACK_URL) {
+            executor::trusted_signer::deliver_callback(&argument);
+        }
+    }
+
+    app.on_open_urls(|urls| {
+        for url in urls {
+            executor::trusted_signer::deliver_callback(&url);
+        }
+    });
+
+    // Spec 076: find out which published version of the signer page this build
+    // accepts, before anybody presses Sign. Off the launch path on purpose —
+    // see `prime_in_background`.
+    executor::trusted_signer::prime_in_background();
+
     app.run(|cx: &mut App| {
         // Storage is read before the first window opens, so the route guard has
         // a real answer to give on frame one.
@@ -267,6 +348,11 @@ fn main() {
         // through this: its default client answers nothing, which is why the
         // desktop drew lettermarks where every other shell draws logos.
         cx.set_http_client(crate::executor::gpui_http::AppHttpClient::shared());
+        // The person's preferences (spec 072), before anything is drawn: an
+        // older build's spellings are rewritten once (and a retired avatar
+        // style removed), then the theme, the language and the text size are
+        // in force for the first frame rather than the second.
+        crate::executor::preferences::boot();
         // Spec 081 FR-002: the person's own public-key index, applied before
         // anything asks one a question. This used to happen inside
         // `OnboardingPage::new`, so a session that started already signed in —

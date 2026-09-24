@@ -483,7 +483,7 @@ where a reader who has decided they want it asks who they are trusting.
 - *What happens if Vela shuts down?* offered "the open-source recovery extension"
   as the way to use an existing passkey elsewhere. That extension was deleted in
   spec [039](../039-retire-expo-tree/spec.md). The replacement is real and is
-  documented: `app-web/clearsigning` loaded as a Chrome extension, whose relying
+  documented: `app-web/trusted-signer` loaded as a Chrome extension, whose relying
   party stays `getvela.app`, so an existing key signs in code the owner read.
 
 **Structural notes:**
@@ -516,7 +516,7 @@ promise moved to the two routes that do not depend on it:
 | route | why it survives the domain |
 |---|---|
 | the Vela browser extension | a Chrome extension asserts `getvela.app` as its relying party through `host_permissions`, not by fetching anything from the domain |
-| `app-web/clearsigning` as an extension | same rule, and the folder is dependency-free, so what you load is what you read |
+| `app-web/trusted-signer` as an extension | same rule, and the folder is dependency-free, so what you load is what you read |
 
 And the key itself need not be the platform passkey on the machine in front of
 you: a **USB/NFC security key**, or a **nearby phone reached by QR code** (the

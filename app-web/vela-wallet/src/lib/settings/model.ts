@@ -116,6 +116,10 @@ export type SettingsPageId =
 	/** Spec 068 — the stored default transaction speed (desktop page; on the
 	 *  phone the same preference is a row that opens a sheet). */
 	| 'fee-speed'
+	/** Spec 071 — the default "Sign with" and the Trusted Signer's page (desktop
+	 *  page; on the phone, two rows beside the speed, each opening a sheet). */
+	| 'signing'
+
 	/**
 	 * Spec 081 FR-016 — the report, as a desktop panel. The phone opens the
 	 * same body in a sheet; a wide layout has no sheets (founder, 2026-09-05),
@@ -140,9 +144,18 @@ export type SettingsOverlayId =
 	| 'time-format'
 	/** Spec 068: the stored default transaction speed. */
 	| 'fee-speed'
+	/** Spec 071: the default "Sign with", and the Trusted Signer's page. */
+	| 'sign-with'
+	| 'signer-page'
+	/** Spec 075: the tunnel a cross-device pairing goes through. */
+	| 'tunnel-page'
 	| 'clear-caches'
 	/** Spec 058: one storage row's Clear, asked before it happens. */
 	| 'clear-storage-item'
+	/** Spec 072: removing a custom network, asked before it happens. */
+	| 'remove-network'
+	/** Spec 072: resetting the service endpoints, asked before it happens. */
+	| 'reset-endpoints'
 	| 'erase-device'
 	| 'feedback'
 	| 'add-network'
@@ -283,6 +296,13 @@ export interface AccountsSheetModel {
 	}[];
 	primary: string;
 	secondary: string;
+	/**
+	 * The words for taking ONE wallet off this device (2026-09-23). Empty
+	 * leaves the affordance undrawn, which is what a fixture board wants.
+	 */
+	remove?: string;
+	removeBody?: string;
+	removeCancel?: string;
 }
 
 /** ST3/ST13b/ST16 all share this shape; only the tone and the callout differ. */
@@ -382,6 +402,11 @@ export interface ProviderCardModel {
 	field: UrlFieldModel;
 	/** The blue trailing action inside the field — 检查密钥 / 获取密钥. */
 	action: string;
+	/**
+	 * Where the action GOES, when it is a link: "Get key" opens the
+	 * provider's key page. Absent, the action is the key test.
+	 */
+	actionUrl?: string;
 	/** "支持 12 个网络，共 12 个 · 平均 112ms". */
 	support?: string;
 	/** The "获取密钥 →" link under an unset provider. */
@@ -402,6 +427,8 @@ export interface EndpointsModel {
 	description: string;
 	fields: UrlFieldModel[];
 	reset: string;
+	/** Spec 072 (FR-010): what Reset asks before every field goes back. */
+	resetSheet: ConfirmSheetModel;
 	/** Desktop-only trailing link (DST6). */
 	guide?: string;
 }
@@ -443,12 +470,16 @@ export interface StorageModel {
 }
 
 export interface KeyValueRowModel {
+	/** Names a row a live overlay rewrites (the network count). */
+	id?: string;
 	label: string;
 	value: string;
 	/** Values in the mono face — every technical detail is. */
 	mono?: boolean;
 	/** Link rows carry the external glyph. */
 	external?: boolean;
+	/** Where a link row goes. A row that draws the glyph opens something. */
+	href?: string;
 }
 
 export interface AboutModel {
@@ -604,7 +635,7 @@ export interface SettingsHomeModel {
 	/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
 	keys?: WalletKeysModel;
 	sections: SettingsSectionModel[];
-	appearance: { theme: SegmentedModel; avatar: SegmentedModel; textScale: TextScaleModel };
+	appearance: { theme: SegmentedModel; textScale: TextScaleModel };
 	signOut: { label: string };
 	erase: { title: string; subtitle: string };
 	/** Pages, all pre-built so the state switcher is a pure choice. */
@@ -615,6 +646,8 @@ export interface SettingsHomeModel {
 		addLabel: string;
 		/** The custom row's delete control (spec 028 Phase 8) — it used to borrow `addLabel`. */
 		removeLabel: string;
+		/** The question the delete control asks first (spec 072); its title is the network's name. */
+		removeSheet: ConfirmSheetModel;
 	};
 	networkDetail: NetworkDetailModel;
 	addNetwork: AddNetworkModel;
@@ -632,6 +665,8 @@ export interface SettingsHomeModel {
 	timeSheet: SelectSheetModel;
 	/** Spec 068 — the default transaction speed, three rows named by what they buy. */
 	feeSpeedSheet: SelectSheetModel;
+	/** Spec 071 — the default "Sign with", the four this shell offers. */
+	signWithSheet: SelectSheetModel;
 	clearCachesSheet: ConfirmSheetModel;
 	eraseSheet: ConfirmSheetModel;
 	feedback: FeedbackModel;
@@ -721,6 +756,17 @@ export interface WalletKeyRowModel {
 	name: string;
 	/** Who holds it when the core's catalog knows; else the method's generic line. */
 	holderFallback: string;
+	/**
+	 * Spec 075: the holder line already SETTLED — drawn as it stands, and the
+	 * AAGUID catalog is not asked.
+	 *
+	 * Set for a key behind a Trusted Signer page. The vault on the page's far side
+	 * is the one thing this wallet cannot reach, so letting the catalog name it
+	 * ("Apple Passwords", "Built-in passkey") points the person away from where
+	 * the key is — which is the page. The device pass of 2026-09-22 found
+	 * exactly that row.
+	 */
+	holder?: string;
 	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
 	fingerprint: string;
 	/** "Verify to use", "Cloud-synced" / "Device-bound" — drawn as pills, the explorer's way. */
@@ -759,7 +805,6 @@ export interface SettingsDesktopModel {
 		language: FormRowModel;
 		textScale: FormRowModel & { scale: TextScaleModel };
 		theme: FormRowModel & { segmented: SegmentedModel };
-		avatar: FormRowModel & { segmented: SegmentedModel };
 	};
 	localization: {
 		title: string;
@@ -776,11 +821,18 @@ export interface SettingsDesktopModel {
 		description: string;
 		rows: FormRowModel[];
 	};
+	/** Spec 071 — the default "Sign with" as the desktop's usual dropdown row. */
+	signing: {
+		title: string;
+		description: string;
+		rows: FormRowModel[];
+	};
 	networks: {
 		title: string;
 		subtitle: string;
 		addLabel: string;
 		removeLabel: string;
+		removeSheet: ConfirmSheetModel;
 		rows: NetworkRowModel[];
 		detail: NetworkDetailModel;
 	};
@@ -790,10 +842,12 @@ export interface SettingsDesktopModel {
 	/** The desktop's clear-all-caches confirm, as a dialog (spec 028 Phase 8). */
 	clearCachesSheet: ConfirmSheetModel;
 	/**
-	 * The erase confirm, as a dialog (spec 081 FR-017). The wide layout drew
-	 * the danger card from the first day and had nowhere to go from it: the
-	 * card had no handler and the model had no sheet, so the one irreversible
-	 * control on the screen was a picture.
+	 * The phone's erase sheet, as a dialog (specs 072 and 081 FR-017) — the same
+	 * words and the same failure, because it is the same sheet.
+	 *
+	 * The wide layout drew the danger card from the first day and had nowhere to
+	 * go from it: the card had no handler and the model had no sheet, so the one
+	 * irreversible control on the screen was a picture.
 	 */
 	eraseSheet: ConfirmSheetModel;
 	/** The report panel (spec 081 FR-016) — the phone's sheet, as a page. */

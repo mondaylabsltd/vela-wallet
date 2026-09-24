@@ -14,6 +14,8 @@ mod ctap_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
 mod onboarding_bridge;
+mod settings_bridge;
+mod trusted_signer_bridge;
 
 pub use onboarding_bridge::{CreateWalletCore, LoginCore, SessionCore};
 
@@ -298,6 +300,16 @@ pub fn decode_calldata(sig: String, calldata: Vec<u8>) -> Result<AbiValue, CoreE
 // ---------------------------------------------------------------------------
 // eip712
 // ---------------------------------------------------------------------------
+
+/// What a site's message request asks the account to sign, before the
+/// Safe's `SafeMessage` wrap: EIP-191 for `personal_sign` / `eth_sign`, the
+/// EIP-712 digest for typed data, picked where each method carries it.
+/// `None` when there is nothing to sign. One rule for every shell and the
+/// Trusted Signer's page.
+#[uniffi::export]
+pub fn sign_message_hash(method: String, params_json: String) -> Option<Vec<u8>> {
+    vela_core::sign_message::original_hash(&method, &params_json)
+}
 
 #[uniffi::export]
 pub fn hash_typed_data(typed_data_json: String) -> Result<Vec<u8>, CoreError> {
@@ -948,6 +960,37 @@ pub fn i18n_text_direction(lng: String) -> String {
     vela_core::l10n::text_direction(&lng).as_str().to_owned()
 }
 
+// -- amount fields (spec 073) --------------------------------------------------
+
+/// An amount field's text as the core reads it — ASCII digits and one `.` —
+/// or `None` for a paste with no reading as one figure (the field keeps
+/// `previous`). `number` is the resolved preset key (`comma_dot`…);
+/// `previous` the field's text before this edit; `pasted` `None` when the
+/// shell cannot tell (a native field). `vela_core::l10n::amount_text` says why.
+#[uniffi::export]
+pub fn amount_text_clean(
+    raw: String,
+    number: String,
+    previous: Option<String>,
+    pasted: Option<bool>,
+) -> Option<String> {
+    use vela_core::l10n::amount_text;
+    amount_text::clean(
+        &raw,
+        amount_text::preset_of(&number),
+        amount_text::Entry::from_pasted(pasted),
+        previous.as_deref(),
+    )
+}
+
+/// Where the caret belongs in `clean`, having been at `caret` in `raw`
+/// (UTF-16 units).
+#[uniffi::export]
+pub fn amount_text_caret(raw: String, clean: String, caret: u32) -> u32 {
+    let at = vela_core::l10n::amount_text::caret_after_clean(&raw, &clean, caret as usize);
+    u32::try_from(at).unwrap_or(u32::MAX)
+}
+
 // -- registry proofs (spec 019) -----------------------------------------------
 //
 // Returned as JSON strings rather than as uniffi records, deliberately. Both
@@ -1481,6 +1524,28 @@ pub fn dapp_origin_of(url: String) -> Option<String> {
 #[uniffi::export]
 pub fn dapp_is_signing_method(method: String) -> bool {
     vela_core::app::sign_request::is_signing_method(&method)
+}
+
+/// The whole document-start script an in-app browser injects (spec 070):
+/// THE provider (`vela-core/provider/inpage.js`, the extension's too) and
+/// the one bridge. `host` is `"android"`, `"ios"` or `"desktop"` — the only
+/// difference is how the bridge hands a string to native code.
+#[uniffi::export]
+pub fn dapp_provider_script(host: String) -> String {
+    use vela_core::app::dapp_rpc::{provider_script, ProviderHost};
+    provider_script(match host.as_str() {
+        "ios" => ProviderHost::Ios,
+        "desktop" => ProviderHost::Desktop,
+        _ => ProviderHost::Android,
+    })
+}
+
+/// Address-bar text → the URL to load: `https://` for a host, `http://` only
+/// for loopback / private-network hosts, a DuckDuckGo search for anything
+/// else (spec 070 research R6). `None` for blank input.
+#[uniffi::export]
+pub fn dapp_browser_input(text: String) -> Option<String> {
+    vela_core::app::dapp_rpc::browser_input(&text)
 }
 
 /// The Safe message hash a passkey signs for EIP-1271 verification (spec

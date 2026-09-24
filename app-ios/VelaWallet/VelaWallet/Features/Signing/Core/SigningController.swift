@@ -51,10 +51,18 @@ final class SigningController {
         /// The tab that asked. The answer goes there and nowhere else.
         let transportId: String
         let chainId: Int
+        /// The address the site was shown (spec 070). `sign_request` signs
+        /// from it, and never silently from another account.
+        var grantedAddress: String? = nil
     }
 
     struct Ports {
-        var respond: (_ transportId: String, _ id: String, _ json: [String: Any]) -> Void = { _, _, _ in }
+        /// The answer, exactly once: the core's `SignResponsePayload`, and the
+        /// user-operation hash when that hash IS the answer (the receipt did
+        /// not land in time) — so the browser can translate the page's
+        /// receipt polls for it.
+        var respond: (_ transportId: String, _ id: String, _ payload: [String: Any], _ userOpHash: String?) -> Void
+        = { _, _, _, _ in }
         /// The tracker follows the accepted operation to its verdict.
         var trackSubmitted: (_ userOpHash: String, _ recordIds: [String], _ chainId: Int) -> Void
         = { _, _, _ in }
@@ -85,21 +93,32 @@ final class SigningController {
     /// container may drop this controller.
     private(set) var closed = false
 
-    /// "Sign with": WHERE the passkey that signs this request is. This
-    /// controller lives for one request, so the choice cannot outlive the
-    /// question it was made for. `auto` is the wallet's stored route.
+    /// "Sign with": WHERE the passkey that signs this request is — or the
+    /// Trusted Signer (spec 071), which is where the request is CHECKED. Each
+    /// request starts at the stored default (`sign_pref`), and this controller
+    /// lives for one request, so a pick cannot outlive the question it was
+    /// made for. `auto` is the wallet's stored route.
     private(set) var signMethod = "auto"
     private(set) var signWithOpen = false
 
-    /// `nil` toggles the list; an id picks a method and closes it.
+    /// `nil` toggles the list; an id the core offers picks a method and
+    /// closes it. The pick is this request's; the default is Settings'.
     func signWith(_ id: String?) {
         guard let id else {
             signWithOpen.toggle()
             return
         }
-        if ["auto", "platform", "hybrid", "security_key"].contains(id) { signMethod = id }
+        if offeredSignMethods().contains(id) {
+            signMethod = id
+            trustedSignerNotice = nil
+        }
         signWithOpen = false
     }
+
+    /// How the last Trusted Signer ceremony for this request ended without a
+    /// signature. The core heard a cancelled ceremony and kept the request
+    /// open; this is the sentence that says why, until the next slide.
+    private(set) var trustedSignerNotice: TrustedSignerNotice?
 
     /// The fee row's coin list (the web's `feeOpen`). Which coins pay, what
     /// each costs and which cannot are the fee machine's; the pick is a quote
@@ -148,6 +167,17 @@ final class SigningController {
     private var pendingHandoff: SignTrackerHandoffWire?
     private var handedOff = false
     private var answered = false
+    /// The operation the relay accepted for this request, once it has.
+    private var submittedHash: String?
+
+    /// The page has its answer. The sheet may still be up (a submitted state
+    /// waiting to be dismissed), but nothing more will be said to the page.
+    var hasAnswered: Bool { answered }
+
+    /// Past the point of no return: a passkey ceremony or a submit is under
+    /// way. A controller in this state is not dropped when its page goes away
+    /// — the operation may land, and its record must still be written.
+    var committed: Bool { sign.isSigning || sign.isSubmitting || (submittedHash != nil && !answered) }
     /// Where the simulation for the request on screen has got to.
     ///
     /// THREE states, because they are three different sentences and a boolean
@@ -176,6 +206,8 @@ final class SigningController {
         pool: RpcPool,
         preferredTier: @escaping () -> String = { "fast" },
         numberPreset: @escaping () -> String = { "comma_dot" },
+        preferredSignMethod: @escaping () -> String = { "auto" },
+        offeredSignMethods: @escaping () -> [String] = { ["auto"] },
         ports: Ports
     ) {
         self.wallet = wallet
@@ -184,6 +216,8 @@ final class SigningController {
         self.ports = ports
         self.preferredTier = preferredTier
         self.numberPreset = numberPreset
+        self.preferredSignMethod = preferredSignMethod
+        self.offeredSignMethods = offeredSignMethods
         self.fees = FeeStore(
             relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool)
         )
@@ -213,13 +247,15 @@ final class SigningController {
         fees.onInForce = { [weak self] view in self?.commitFee(view) }
 
         signExecutor.ports = SignExecutor.Ports(
-            respond: { [weak self] transportId, id, json in
-                self?.ports.respond(transportId, id, json)
-                // The page has its answer; the sheet may go once the core has
-                // cleared it.
-                self?.markAnswered()
+            respond: { [weak self] transportId, id, payload in
+                guard let self else { return }
+                // Mark first: the answer may make the browser forward its next
+                // request at once, and that request must find this one done.
+                markAnswered()
+                ports.respond(transportId, id, payload, Self.opHashAnswer(payload, submitted: submittedHash))
             },
             opSubmitted: { [weak self] id, hash in
+                self?.submittedHash = hash
                 self?.dispatchSign([
                     "type": "op_submitted", "id": id, "user_op_hash": hash,
                     "now_ms": Date().timeIntervalSince1970 * 1000,
@@ -231,7 +267,15 @@ final class SigningController {
                 self?.recordLanded()
             },
             switchAccount: { _ in true },
-            nativeSymbol: ports.nativeSymbol
+            nativeSymbol: ports.nativeSymbol,
+            // The browser's fact about who asked. The wallet's own request is
+            // not a site, and the page draws an empty origin as the wallet.
+            origin: { [weak self] in
+                guard let request = self?.request, request.transportId != SigningLive.walletTransport
+                else { return "" }
+                return request.origin
+            },
+            trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
         )
     }
 
@@ -240,9 +284,12 @@ final class SigningController {
     func open(_ incoming: Incoming) {
         request = incoming
         let nowMs = Date().timeIntervalSince1970 * 1000
-        // Each request starts at the stored default: a pick is one-shot.
+        // Each request starts at the stored defaults: a pick is one-shot.
         fees.resetSpeed()
         fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
+        let preferred = preferredSignMethod()
+        signMethod = offeredSignMethods().contains(preferred) ? preferred : "auto"
+        trustedSignerNotice = nil
 
         // The world first. A machine told nothing refuses a request that names
         // a chain, and the refusal is indistinguishable from a broken network.
@@ -262,7 +309,7 @@ final class SigningController {
             "dedicated_transport": true,
             "per_request_chain": incoming.chainId,
             "dapp": NSNull(),
-            "granted_address": NSNull(),
+            "granted_address": incoming.grantedAddress.flatMap { $0.isEmpty ? nil : $0 } as Any? ?? NSNull(),
             "requested_address": NSNull(),
             "request_ts_ms": NSNull(),
             "now_ms": nowMs,
@@ -343,6 +390,9 @@ final class SigningController {
     /// speed control picks another. The number preset writes each gas bid.
     private let preferredTier: () -> String
     private let numberPreset: () -> String
+    /// The stored "Sign with" and every value the core offers (spec 071).
+    private let preferredSignMethod: () -> String
+    let offeredSignMethods: () -> [String]
 
     private func requestQuote(chainId: Int) {
         guard !feeCalls.isEmpty else { return }
@@ -377,6 +427,7 @@ final class SigningController {
 
     /// The slide fired.
     func approve() {
+        trustedSignerNotice = nil
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
             fee: fee, clear: clear, guard: guardView
         )])
@@ -392,6 +443,14 @@ final class SigningController {
     /// state means dismiss; anything earlier means refuse. A shell that picked
     /// one itself would answer a page 4001 for a transaction already on chain.
     func swipeDismissed() { dispatchSign(["type": "swipe_dismissed"]) }
+
+    /// The page behind this request is gone and has already been answered
+    /// (4900, by the browser core). The core clears the sheet; a pipeline
+    /// already past the commitment keeps running so its record is written.
+    func transportDropped() {
+        guard let request else { return }
+        dispatchSign(["type": "transport_dropped", "transport_id": request.transportId])
+    }
 
     func fundingCancelled() { dispatchSign(["type": "funding_cancelled"]) }
     func fundingComplete() { dispatchSign(["type": "funding_complete_tapped"]) }
@@ -492,6 +551,18 @@ final class SigningController {
     }
 
     // MARK: - The pure parts
+
+    /// The user-operation hash when it is what the page is being answered
+    /// with — `receipt_pending` answers `ok` with the op hash; a landed one
+    /// answers with the TRANSACTION hash and needs no translation.
+    static func opHashAnswer(_ payload: [String: Any], submitted: String?) -> String? {
+        guard payload["type"] as? String == "ok",
+              let result = payload["result"] as? String,
+              let submitted, !submitted.isEmpty,
+              result.caseInsensitiveCompare(submitted) == .orderedSame
+        else { return nil }
+        return submitted
+    }
 
     /// What the confirm slides into: the fee as quoted, the guard's rewrite,
     /// the intent.

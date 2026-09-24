@@ -11,6 +11,7 @@
  * composed HERE, because composition order is a translation concern and the
  * components must never learn one.
  */
+import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import type { SettingsMessages } from './messages';
 import type {
@@ -323,6 +324,16 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					value: m.feeSpeed.fast,
 					trailing: 'chevron'
 				},
+				// Spec 071, beside the speed: the other thing every signature
+				// starts at. The fixture draws the factory default and the
+				// official page.
+				{
+					id: 'sign-with',
+					icon: 'pencil',
+					title: m.signing.title,
+					value: m.signing.methods.auto,
+					trailing: 'chevron'
+				},
 				{
 					id: 'storage',
 					icon: 'hard-drive',
@@ -458,6 +469,16 @@ function addNetwork(
 	};
 }
 
+/**
+ * Where each provider's API key is made. The panel sent every "Get key →" to
+ * drpc.org, Alchemy's and Ankr's included.
+ */
+export const PROVIDER_KEY_URLS = {
+	alchemy: 'https://dashboard.alchemy.com/',
+	drpc: 'https://drpc.org/',
+	ankr: 'https://www.ankr.com/rpc/'
+} as const;
+
 function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersModel {
 	const support = fill(m.rpcProviders.supportsCount, { count: 12, total: NETWORK_COUNT });
 	return {
@@ -481,8 +502,9 @@ function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersMo
 				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
 				field: { id: 'drpc', label: '', value: '', placeholder: m.rpcProviders.notSet },
 				action: m.rpcProviders.getKey,
+				actionUrl: PROVIDER_KEY_URLS.drpc,
 				link: `${m.rpcProviders.getKey} →`,
-				linkUrl: 'https://drpc.org/'
+				linkUrl: PROVIDER_KEY_URLS.drpc
 			},
 			{
 				id: 'ankr',
@@ -490,6 +512,7 @@ function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersMo
 				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
 				field: { id: 'ankr', label: '', value: '', placeholder: m.rpcProviders.notSet },
 				action: m.rpcProviders.getKey,
+				actionUrl: PROVIDER_KEY_URLS.ankr,
 				support: fill(m.rpcProviders.supportsCount, { count: 8, total: NETWORK_COUNT })
 			}
 		]
@@ -531,6 +554,7 @@ function endpoints(m: SettingsMessages, withGuide: boolean): EndpointsModel {
 			}
 		],
 		reset: m.endpoints.reset,
+		resetSheet: resetEndpointsQuestion(m),
 		guide: withGuide ? m.endpoints.guide : undefined
 	};
 }
@@ -623,20 +647,34 @@ function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
 			{ label: m.about.techAccountTypeLabel, value: m.about.techAccountTypeValue },
 			{ label: m.about.techSignerLabel, value: m.about.techSignerValue },
 			{
+				id: 'networks',
 				label: m.about.techNetworksLabel,
 				value: fill(m.about.techNetworksValue, { count: NETWORK_COUNT })
 			}
 		],
 		sectionLinks: withLinksHeading ? m.about.sectionLinks : undefined,
 		links: [
-			{ label: m.about.linkWebsite, value: 'getvela.app', mono: true, external: true },
+			{
+				label: m.about.linkWebsite,
+				value: 'getvela.app',
+				mono: true,
+				external: true,
+				href: 'https://getvela.app'
+			},
 			{
 				label: m.about.linkGitHub,
 				value: 'github.com/mondaylabsltd/vela-wallet',
 				mono: true,
-				external: true
+				external: true,
+				href: 'https://github.com/mondaylabsltd/vela-wallet'
 			},
-			{ label: m.about.linkSafeWallet, value: 'safe.global', mono: true, external: true }
+			{
+				label: m.about.linkSafeWallet,
+				value: 'safe.global',
+				mono: true,
+				external: true,
+				href: 'https://safe.global'
+			}
 		],
 		footer: m.about.footer
 	};
@@ -713,7 +751,7 @@ function languageSheet(m: SettingsMessages, current: string): SelectSheetModel {
  * that speed buys — the owner's ruling: the heading asks 交易速度, so every
  * option has to be a speed, and the advantage goes on the second line where it
  * is the reason somebody would pick the slow one. `rapid` is not offered — it
- * is a dead variant nothing constructs and the relay refuses on the wire.
+ * is a dead variant nothing constructs and the bundler refuses on the wire.
  * The subtitle is load-bearing: it says that this is where every transaction
  * STARTS, and that a single send can still be changed, so nobody reads the
  * send screen's picker as having quietly rewritten this.
@@ -726,6 +764,26 @@ function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
 			{ id: 'fast', label: m.feeSpeed.fast, detail: m.feeSpeed.fastHint, selected: true },
 			{ id: 'standard', label: m.feeSpeed.standard, detail: m.feeSpeed.standardHint },
 			{ id: 'slow', label: m.feeSpeed.slow, detail: m.feeSpeed.slowHint }
+		]
+	};
+}
+
+/**
+ * The default "Sign with" (spec 071): the four this shell offers, in the
+ * core's order, named as the signing sheet names them. The core's fifth, the
+ * Trusted Signer, is not one of them — the web wallet has none. The subtitle is load-bearing, as the
+ * speed sheet's is: this is where every signature STARTS, and a single one
+ * can still be signed another way.
+ */
+function signWithSheet(m: SettingsMessages): SelectSheetModel {
+	return {
+		title: m.signing.title,
+		subtitle: m.signing.subtitle,
+		rows: [
+			{ id: 'auto', label: m.signing.methods.auto, selected: true },
+			{ id: 'platform', label: m.signing.methods.platform },
+			{ id: 'hybrid', label: m.signing.methods.hybrid },
+			{ id: 'security_key', label: m.signing.methods.security_key }
 		]
 	};
 }
@@ -779,6 +837,17 @@ function clearCachesSheet(m: SettingsMessages): ConfirmSheetModel {
 		confirm: m.storage.clearConfirm,
 		cancel: m.common.cancel,
 		tone: 'accent'
+	};
+}
+
+/** What removing a custom network asks first; the sheet's title is the network's name. */
+function removeNetworkSheet(m: SettingsMessages): ConfirmSheetModel {
+	return {
+		title: m.networks.remove,
+		body: m.networks.removeBody,
+		confirm: m.networks.removeConfirm,
+		cancel: m.networks.removeCancel,
+		tone: 'danger'
 	};
 }
 
@@ -1040,14 +1109,6 @@ export function buildMobileState(
 					{ id: 'auto', label: m.appearance.themeAuto, icon: 'monitor' }
 				]
 			},
-			avatar: {
-				label: m.appearance.avatarTitle,
-				selected: 'identicon',
-				segments: [
-					{ id: 'initials', label: m.appearance.avatarInitials },
-					{ id: 'identicon', label: m.appearance.avatarIdenticon }
-				]
-			},
 			// Six stops, standard in the third — `src/constants/text-scale.ts`, which
 			// the boards had rounded to seven.
 			textScale: { label: m.appearance.textScale, steps: 6, index: 2 }
@@ -1059,7 +1120,8 @@ export function buildMobileState(
 			subtitle: m.advanced.networksSubtitle,
 			rows: networkRows(m),
 			addLabel: m.advanced.addNetworkTitle,
-			removeLabel: m.networks.remove
+			removeLabel: m.networks.remove,
+			removeSheet: removeNetworkSheet(m)
 		},
 		networkDetail: networkDetail(m, state === 'st9b'),
 		addNetwork: addNetwork(m, addMode),
@@ -1072,6 +1134,7 @@ export function buildMobileState(
 		languageSheet: languageSheet(m, 'zh'),
 		currencySheet: currencySheet(m),
 		feeSpeedSheet: feeSpeedSheet(m),
+		signWithSheet: signWithSheet(m),
 		numberSheet: formatSheet(
 			m,
 			m.localization.numberTitle,
@@ -1132,6 +1195,8 @@ export function buildDesktopState(
 		// Spec 068, in the phone's own order: the 高级 section puts 交易速度
 		// between 服务端点 and 存储, and this list mirrors that list.
 		{ id: 'fee-speed', icon: 'clock', label: m.advanced.feeSpeedTitle },
+		// Spec 071, beside the speed as on the phone.
+		{ id: 'signing', icon: 'pencil', label: m.signing.title },
 		{ id: 'storage', icon: 'hard-drive', label: m.storage.title },
 		// Spec 081 FR-016. The wide layout had no way in at all — the report was
 		// reachable only from `/gallery`, which no person who owns this wallet
@@ -1186,19 +1251,6 @@ export function buildDesktopState(
 						{ id: 'auto', label: m.appearance.themeAuto, icon: 'monitor' }
 					]
 				}
-			},
-			avatar: {
-				id: 'avatar',
-				label: m.appearance.avatarTitle,
-				kind: 'segmented',
-				segmented: {
-					label: m.appearance.avatarTitle,
-					selected: 'identicon',
-					segments: [
-						{ id: 'initials', label: m.appearance.avatarInitials },
-						{ id: 'identicon', label: m.appearance.avatarIdenticon }
-					]
-				}
 			}
 		},
 		localization: {
@@ -1243,11 +1295,24 @@ export function buildDesktopState(
 				}
 			]
 		},
+		signing: {
+			title: m.signing.title,
+			description: m.signing.subtitle,
+			rows: [
+				{
+					id: 'sign-with',
+					label: m.signing.title,
+					kind: 'dropdown',
+					value: m.signing.methods.auto
+				}
+			],
+		},
 		networks: {
 			title: m.advanced.networksTitle,
 			subtitle: m.advanced.networksSubtitle,
 			addLabel: m.advanced.addNetworkTitle,
 			removeLabel: m.networks.remove,
+			removeSheet: removeNetworkSheet(m),
 			// DST4 expands Ethereum in place and drops the built-ins below Base
 			// into the custom tail, which is what the mock shows.
 			rows: networkRows(m, 'ethereum').filter((r) => !['gnosis', 'tempo'].includes(r.id)),

@@ -42,7 +42,11 @@
       "fiatLabel": "TAUX FIAT",
       "fiatHint": "Taux de change en USD qui alimentent la liste des devises — remplaçable pour une couverture plus large.",
       "resetToDefaults": "Réinitialiser les quatre",
-      "selfHostGuide": "Guide d’auto-hébergement →"
+      "selfHostGuide": "Guide d’auto-hébergement →",
+      "resetTitle": "Réinitialiser les points d'accès des services ?",
+      "resetBody": "Les quatre services reviennent aux adresses de Vela. Les adresses que vous avez saisies ici sont oubliées.",
+      "resetConfirm": "Réinitialiser",
+      "resetCancel": "Annuler"
     },
     "addNetwork": {
       "modalTitle": "Ajouter un réseau",
@@ -60,7 +64,6 @@
       "retry": "Réessayer",
       "addNetworkBtn": "Ajouter le réseau",
       "incompatibleHint": "Certains contrats requis ne sont pas encore déployés sur cette chaîne.\nUtilisez l'outil Vela Wallet Chain Setup pour les déployer, puis revenez et revérifiez.",
-      "singleKeyOnly": "Un portefeuille avec plusieurs clés d'accès ne peut pas être créé sur ce réseau : la fabrique de signataires de clés d'accès de Safe n'y est pas déployée.\nUn portefeuille avec une seule clé d'accès fonctionne normalement.",
       "openChainSetupTool": "Ouvrir l'outil Chain Setup",
       "recheck": "Revérifier",
       "chainIdLabel": "Chain ID : {{chainId}}",
@@ -70,7 +73,8 @@
       "incompatible": "Incompatible",
       "checkSafe": "Contrats Safe L2",
       "checkSigner": "Précompilé P-256",
-      "checkRemaining": "{{count}} autres contrats"
+      "checkRemaining": "{{count}} autres contrats",
+      "singleKeyOnly": "Un portefeuille avec plusieurs clés d'accès ne peut pas être créé sur ce réseau : la fabrique de signataires de clés d'accès de Safe n'y est pas déployée.\nUn portefeuille avec une seule clé d'accès fonctionne normalement."
     },
     "treasury": {
       "modalTitle": "Trésorerie",

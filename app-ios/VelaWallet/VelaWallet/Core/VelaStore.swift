@@ -73,6 +73,18 @@ struct VelaStore {
         /// tier name, judged by the core. Survives sign-out.
         static let feeTier = "vela.feeTier"
 
+        // Owned by `sign_pref` (spec 071). Raw, judged by the core; both
+        // survive sign-out.
+        /// The "Sign with" every signing sheet starts at.
+        static let signMethod = "vela.signMethod"
+        /// The Trusted Signer page; absent is the official one.
+        static let trustedSignerUrl = "vela.trustedSignerUrl"
+        /// Spec 075's cross-device pairing service, RETIRED with the channel
+        /// itself on 2026-09-23. Both spellings it ever had are read only to
+        /// hand them to the core's `prefsMigrations`, which REMOVES them.
+        static let retiredTrustedSignerTunnel = "vela.clearSignerTunnel"
+        static let retiredTrustedSignerRelay = "vela.clearSignerRelay"
+
         // Owned by the read path (spec 051).
         /// `address → { usd, at }`, 24-hour TTL. The last total the wallet
         /// knew, so a cold start shows a figure instead of a spinner.
@@ -101,8 +113,13 @@ struct VelaStore {
         static let theme = "vela.theme"
         static let language = "vela.language"
         static let localePrefs = "vela.localePrefs"
-        static let avatarStyle = "vela.avatarStyle"
         static let textScale = "vela.textScale"
+        /// The desktop's old spelling of `localePrefs` (`{number,date,time}`).
+        /// Read once, by the core's migration, and removed (spec 072).
+        static let legacyFormats = "vela.formats"
+        /// The avatar style, retired (spec 074: every avatar is the identicon).
+        /// Read once, by the core's migration, and removed.
+        static let retiredAvatarStyle = "vela.avatarStyle"
     }
 
     private let defaults: UserDefaults
@@ -176,6 +193,15 @@ struct VelaStore {
         defaults.dictionaryRepresentation().keys
             .filter { $0.hasPrefix("vela.") }
             .sorted()
+    }
+
+    /// Every key the store holds, ours or not — for the scans that ask the
+    /// core what each key IS (the storage page's rows, "clear all caches",
+    /// the erase). Unfiltered on purpose: `recipient_id:` is ours and outside
+    /// the `vela.` namespace, and deciding that is the catalog's job, not a
+    /// second prefix rule here.
+    func everyKey() -> [String] {
+        Array(defaults.dictionaryRepresentation().keys)
     }
 
     /// The raw stored text, whatever its shape — what the storage page weighs.

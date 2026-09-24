@@ -67,7 +67,7 @@ export const SURFACE_KEY = 'vela.ext.surface';
 
 // ---- EIP-1193 / EIP-1474 error codes ----------------------------------------
 export const ERR = {
-	USER_REJECTED: 4001, // explicit reject, or a window closed without deciding
+	USER_REJECTED: 4001, // an explicit reject — a window closed without deciding is 4900 (CLOSED_WITHOUT_ANSWER)
 	UNAUTHORIZED: 4100, // method needs a prior eth_requestAccounts grant
 	UNSUPPORTED_METHOD: 4200, // e.g. eth_sign — refused by policy
 	/** A distinct non-4001 code for timeout/unknown, so a stuck-but-submitted
@@ -171,9 +171,16 @@ export const READ_PROXY_METHODS = new Set([
  *   'sign'        → the signing sheet, in a window this extension owns
  *   'connect'     → eth_requestAccounts / wallet_requestPermissions
  *   'state'       → the wallet's own answer about accounts/chain/permissions
+ *   'revoke'      → wallet_revokePermissions (the site disconnects itself)
  *   'switch'      → wallet_switchEthereumChain
- *   'addChain'    → wallet_addEthereumChain (acknowledged, no state change)
+ *   'addChain'    → wallet_addEthereumChain (a switch, for a chain the wallet has)
+ *   'watchAsset'  → wallet_watchAsset (`false`: not added)
  *   'read'        → a node or bundler read
+ *
+ * A MIRROR of the core's `dapp_rpc::classify` (spec 070), which the in-app
+ * browsers on desktop, iOS and Android route through. The worker cannot run
+ * the core on every page load, so `protocol.test.ts` replays every method name
+ * either side knows through the real core and demands the same bucket.
  */
 export function classifyMethod(method) {
 	if (method === 'eth_sign') return 'unsupported'; // refused outright
@@ -181,11 +188,13 @@ export function classifyMethod(method) {
 	if (method === 'eth_requestAccounts' || method === 'wallet_requestPermissions') return 'connect';
 	if (
 		method === 'eth_accounts' ||
+		method === 'eth_coinbase' ||
 		method === 'eth_chainId' ||
 		method === 'net_version' ||
 		method === 'wallet_getPermissions'
 	)
 		return 'state';
+	if (method === 'wallet_revokePermissions') return 'revoke';
 	if (method === 'wallet_switchEthereumChain') return 'switch';
 	if (method === 'wallet_addEthereumChain') return 'addChain';
 	if (method === 'wallet_watchAsset') return 'watchAsset';
@@ -302,7 +311,11 @@ export function isWellFormedRequest(value) {
 	if (!v || typeof v !== 'object') return false;
 	if (typeof v.id !== 'string' || v.id.length < 1 || v.id.length > 128) return false;
 	if (typeof v.method !== 'string' || v.method.length < 1 || v.method.length > 100) return false;
-	if (!Array.isArray(v.params)) return false;
+	// An array — or, for EIP-747's `wallet_watchAsset` alone, the object its
+	// params are specified as (the core's `parse_page_message`, spec 070).
+	const objectParams =
+		v.method === 'wallet_watchAsset' && v.params !== null && typeof v.params === 'object';
+	if (!Array.isArray(v.params) && !objectParams) return false;
 	try {
 		return JSON.stringify(v.params).length <= MAX_REQUEST_BYTES;
 	} catch {

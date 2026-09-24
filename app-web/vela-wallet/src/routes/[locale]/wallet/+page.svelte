@@ -49,8 +49,9 @@
 	import { followActiveAccount } from '$lib/dapp/follow';
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
+	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
 	import { amountFromInput } from '$lib/services/locale-format';
-	import { avatarSvgForClient } from '$lib/wallet/identicon';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
@@ -144,10 +145,7 @@
 			? {
 					name: view.accounts[view.active_index]?.account.name ?? '',
 					address: view.address,
-					identiconSvg: avatarSvgForClient(
-						view.address,
-						view.accounts[view.active_index]?.account.name ?? ''
-					)
+					identiconSvg: identiconSvgForClient(view.address)
 				}
 			: null
 	);
@@ -198,7 +196,7 @@
 					hidden: balance.view.hidden,
 					// The record's own lifecycle, not a chip this page assumes.
 					status: feedItemStatus(feed.view, selectedTx),
-					identicon: (seed) => avatarSvgForClient(seed, '')
+					identicon: identiconSvgForClient
 				})
 	);
 
@@ -227,6 +225,18 @@
 	 * operation a half-filled send form is showing a fee for.
 	 */
 	const signingFee = new FeeQuote();
+	/**
+	 * Spec 077 FR-001: this page IS the extension's side panel when the panel's
+	 * doorway sent it here (`extension/panel.js` adds `?panel`). A wallet opened
+	 * in an ordinary tab answers nobody's dApp request, so the marker is what
+	 * decides — not merely "is this the extension", which a tab also is.
+	 */
+	const inPanel =
+		typeof location !== 'undefined' &&
+		inExtension() &&
+		new URLSearchParams(location.search).has('panel');
+	/** The request host, so the ONE sheet can tell it a landing is on screen. */
+	let dappHost = $state<ReturnType<typeof DappRequestHost> | null>(null);
 	/** The fee-coin sheet is a shell surface: the core has no state for it. */
 	let feeSheetOpen = $state(false);
 
@@ -372,7 +382,7 @@
 					m: data.flowMessages,
 					symbol: sendView.selected_token.symbol,
 					balance: sendView.selected_token.balance,
-					identicon: avatarSvgForClient,
+					identicon: identiconSvgForClient,
 					// Whether there is anyone on the form for an import to add to — the
 					// core's own count, read back from the room it reports.
 					formHasRows: (sendView.split_import_room ?? 60) < 60,
@@ -963,7 +973,7 @@
 					m: data.flowMessages,
 					currency: currency.view,
 					identity,
-					identicon: avatarSvgForClient,
+					identicon: identiconSvgForClient,
 					sweepPicking,
 					chainFilter: chainFilter.chainId,
 					classFilter: sendClassFilter,
@@ -1347,7 +1357,7 @@
 		addToken: addTokenInputs,
 		contactPick:
 			contactsView && sendView
-				? { view: contactsView, m: data.flowMessages, identicon: avatarSvgForClient }
+				? { view: contactsView, m: data.flowMessages, identicon: identiconSvgForClient }
 				: undefined
 	});
 
@@ -1637,7 +1647,36 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<SigningHost messages={data.signingMessages} fee={signingFee} />
+<!--
+	Spec 077: a transaction signed from this screen — the in-app browser's
+	dApp requests, a payment request — lands here rather than leaving the
+	person with a sheet that simply went away.
+-->
+<!--
+	Spec 077 FR-001: in the extension's SIDE PANEL, this page is the wallet a
+	dApp's request is answered over — the wallet stays, the request rises as a
+	sheet, and an answered request leaves the wallet standing. In a browser tab
+	there is no panel and nothing mounts.
+
+	It shares this page's ONE sheet and ONE fee session; the request is handed to
+	the same resident signing machine a send uses.
+-->
+{#if inPanel}
+	<DappRequestHost
+		bind:this={dappHost}
+		mode="panel"
+		messages={data.requestMessages}
+		locale={data.locale ?? 'en'}
+	/>
+{/if}
+
+<SigningHost
+	messages={data.signingMessages}
+	fee={signingFee}
+	receipt={data.signingMessages.receipt}
+	onlanding={() => dappHost?.noteLanding()}
+	onreceiptdone={() => dappHost?.noteReceiptDone()}
+/>
 
 <!--
   What fills the scanner's frame. One definition for both layouts — only one of

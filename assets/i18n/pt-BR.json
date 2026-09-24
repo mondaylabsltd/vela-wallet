@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Trocar de conta",
-   "contactsSubtitle": "Endereços salvos e destinatários recentes"
+   "contactsSubtitle": "Endereços salvos e destinatários recentes",
+   "remove": "Remover deste dispositivo",
+   "removeBody": "Só esta carteira sai; as outras ficam."
   },
   "appearance": {
    "themeLight": "Claro",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "Velocidade da transação",
    "subtitle": "Cada envio que você começa no Vela parte daqui. Você ainda pode mudar um envio específico."
+  },
+  "signing": {
+   "title": "Assinar com",
+   "subtitle": "Toda assinatura que você inicia no Vela começa aqui. Ainda dá para escolher outro jeito em uma só.",
+   "pageTitle": "Página do Trusted Signer",
+   "pageSubtitle": "A página que o Trusted Signer abre: a oficial ou a sua própria cópia da página sem dependências.",
+   "pageOfficial": "Oficial",
+   "pageInvalid": "Isso não é um endereço da web.",
+   "pageInsecure": "Use uma página https ou uma no loopback deste aparelho — o navegador não assina em nenhum outro lugar.",
+   "pageForeign": "Suas passkeys pertencem a getvela.app. Uma página em outro domínio pode mostrar uma solicitação, mas não consegue assiná-la.",
+   "pageReset": "Usar a página oficial",
+   "pageSave": "Salvar"
   },
   "advanced": {
    "networksTitle": "Redes",
@@ -88,7 +102,8 @@
    "keeps": "Escolha “Já tenho uma carteira” para entrar de novo com a mesma passkey: o endereço é o mesmo, e seu histórico, contatos, tokens e configurações continuam aqui.",
    "warning": "Sua chave pública ainda não chegou ao servidor de sincronização. O app tentará de novo na próxima abertura, mas até dar certo você pode não conseguir entrar em outro dispositivo — nem aqui, se desinstalar o app.",
    "anyway": "Sair mesmo assim",
-   "cancel": "Cancelar"
+   "cancel": "Cancelar",
+   "descMany": "As {{count}} carteiras deste dispositivo sairão. Nada é apagado."
   },
   "eraseDevice": {
    "title": "Apagar este dispositivo",
@@ -751,6 +766,8 @@
    "keysSubtitleFull": "Você atingiu o limite de 7.",
    "keysTitle": "Adicione passkeys",
    "keysTitleBlocked": "Falta mais uma chave para criar",
+   "methodBlockedHint": "As chaves desta carteira pertencem todas a {{party}}.",
+   "methodBlockedSigner": "Sua página do Trusted Signer é {{page}}, e as chaves dela são de {{pageParty}}. Troque para uma página {{party}} nos ajustes para adicionar aqui.",
    "methodHybridBody": "Escaneie um código e crie num aparelho por perto",
    "methodHybridTitle": "Celular ou tablet",
    "methodHybridUnavailable": "Em breve",
@@ -1343,6 +1360,16 @@
    "techIdentityRecipient": "Destinatário",
    "copyValue": "Copiar",
    "signWith": "Assinar com",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "Confira e assine em uma página separada — o que você vê é o que você assina.",
+   "trustedSignerWaiting": "Aguardando o Trusted Signer…",
+   "trustedSignerWaitingHint": "Confira a solicitação na página que abriu e assine por lá. Se o navegador perguntar se a página pode acessar outros apps deste aparelho, permita.",
+   "trustedSignerClosed": "O Trusted Signer foi fechado sem assinar.",
+   "trustedSignerRefused": "O Trusted Signer não quis assinar esta solicitação. A página dele explica o motivo.",
+   "trustedSignerMismatch": "A resposta do Trusted Signer não corresponde a esta solicitação, então nada foi enviado.",
+   "trustedSignerTimeout": "O Trusted Signer não respondeu a tempo.",
+   "trustedSignerReopen": "Abrir a página de novo",
+   "trustedSignerDoneTab": "Assinado. Você pode fechar esta aba e voltar ao Vela.",
    "viewOnExplorer": "Ver no explorador",
    "sendingToTokenContract": "Enviado ao contrato do próprio token",
    "selfCallBlockedTitle": "A Vela não assina esta solicitação",
@@ -1560,7 +1587,11 @@
    "fiatLabel": "COTAÇÕES FIAT",
    "fiatHint": "Taxas de câmbio baseadas em USD que definem a lista de moedas — substituível por uma cobertura mais ampla.",
    "resetToDefaults": "Restaurar os quatro",
-   "selfHostGuide": "Guia de auto-hospedagem →"
+   "selfHostGuide": "Guia de auto-hospedagem →",
+   "resetTitle": "Restaurar os endpoints de serviço?",
+   "resetBody": "Os quatro serviços voltam aos endereços da Vela. Os endereços que você inseriu aqui serão descartados.",
+   "resetConfirm": "Restaurar",
+   "resetCancel": "Cancelar"
   },
   "addNetwork": {
    "modalTitle": "Adicionar rede",
@@ -1578,7 +1609,6 @@
    "retry": "Tentar de novo",
    "addNetworkBtn": "Adicionar rede",
    "incompatibleHint": "Alguns contratos necessários ainda não foram implantados nesta chain.\nUse a ferramenta Vela Wallet Chain Setup para implantá-los e depois volte para verificar de novo.",
-   "singleKeyOnly": "Uma carteira com mais de uma passkey não pode ser criada nesta rede: a fábrica de signatários de passkeys da Safe não está implantada aqui.\nUma carteira com uma única passkey funciona normalmente.",
    "openChainSetupTool": "Abrir ferramenta de Chain Setup",
    "recheck": "Verificar de novo",
    "chainIdLabel": "Chain ID: {{chainId}}",
@@ -1588,7 +1618,8 @@
    "incompatible": "Incompatível",
    "checkSafe": "Contratos Safe L2",
    "checkSigner": "Pré-compilado P-256",
-   "checkRemaining": "outros {{count}} contratos"
+   "checkRemaining": "outros {{count}} contratos",
+   "singleKeyOnly": "Uma carteira com mais de uma passkey não pode ser criada nesta rede: a fábrica de signatários de passkeys da Safe não está implantada aqui.\nUma carteira com uma única passkey funciona normalmente."
   },
   "treasury": {
    "modalTitle": "Tesouraria",
@@ -1760,6 +1791,11 @@
   "siteMenu": "Menu do site",
   "account": "Conta",
   "addressBar": "Barra de endereço",
-  "close": "Fechar"
+  "close": "Fechar",
+  "pageCrashedTitle": "Esta página parou de funcionar",
+  "pageCrashedBody": "A página foi fechada inesperadamente. Sua carteira não foi afetada — recarregue para continuar.",
+  "walletConnectUnsupported": "Links do WalletConnect não são compatíveis. Abra o dApp em Explorar e conecte-se por lá.",
+  "scanUnrecognized": "Este código não é um endereço web nem um endereço de carteira.",
+  "linkCopied": "Link copiado"
  }
 }

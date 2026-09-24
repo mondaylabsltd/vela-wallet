@@ -72,6 +72,9 @@ pub struct ExploreStrings {
     pub auto_request_hint: SharedString,
     pub disconnect: SharedString,
     pub close: SharedString,
+    /// The page's renderer died (spec 070): said, with a way back.
+    pub page_crashed_title: SharedString,
+    pub page_crashed_body: SharedString,
 }
 
 impl ExploreStrings {
@@ -124,6 +127,8 @@ impl ExploreStrings {
             auto_request_hint: s("explore.autoRequestHint"),
             disconnect: s("explore.disconnect"),
             close: s("explore.close"),
+            page_crashed_title: s("explore.pageCrashedTitle"),
+            page_crashed_body: s("explore.pageCrashedBody"),
         }
     }
 }
@@ -145,6 +150,8 @@ mod tests {
                 "explore.connectionExplainer",
             ),
             (s.close.as_ref(), "explore.close"),
+            (s.page_crashed_title.as_ref(), "explore.pageCrashedTitle"),
+            (s.page_crashed_body.as_ref(), "explore.pageCrashedBody"),
             (s.consent_body.as_ref(), "connect.browser.body"),
             (s.consent_connect.as_ref(), "connect.browser.connect"),
             (s.consent_cancel.as_ref(), "connect.browser.cancel"),

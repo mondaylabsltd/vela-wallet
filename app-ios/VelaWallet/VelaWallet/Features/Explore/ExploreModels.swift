@@ -34,10 +34,14 @@ enum TileModel: Identifiable {
     case site(SiteModel)
     case add(String)
 
+    /// The "+" tile's id. Not a site: a screen that opened it as one loaded
+    /// `https://add`.
+    static let addId = "add"
+
     var id: String {
         switch self {
         case .site(let site): site.id
-        case .add: "add"
+        case .add: Self.addId
         }
     }
 }
@@ -126,6 +130,20 @@ struct ConnectionModel {
     /// — who is asking, which account, which network — and a second sheet
     /// would be a second chance to get one of them wrong.
     var consent: (approve: String, reject: String)?
+    /// The site the panel is about — what Disconnect and the network picker
+    /// act on. `""` in the gallery.
+    var origin: String = ""
+    /// The site's chain, as the core keeps it.
+    var chainId: Int = 0
+    /// The chains the network row offers. Empty draws the row as a label.
+    var networks: [NetworkChoiceModel] = []
+}
+
+/// One network the connection panel's picker offers.
+struct NetworkChoiceModel: Identifiable, Equatable {
+    let id: Int
+    let name: String
+    let dot: Color
 }
 
 /// Which of the three sheets is open.

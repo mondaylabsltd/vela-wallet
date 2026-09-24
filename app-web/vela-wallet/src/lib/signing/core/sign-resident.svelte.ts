@@ -114,6 +114,14 @@ class SignRequest {
 							now_ms: Date.now()
 						}),
 					assetSim: () => this.#assetSim,
+					// The wallet's own request (the key backup) is from this very
+					// origin, and names no site: the Trusted Signer draws an empty
+					// origin as the wallet itself, as the sheet does (spec 071).
+					requestOrigin: (id) => {
+						const request = this.view.request;
+						if (request?.id !== id || request.origin === window.location.origin) return '';
+						return request.origin;
+					},
 					switchActiveAccount: async (index: number) => {
 						const intended = this.view.request?.signer_address ?? null;
 						const rows = session.view.accounts;

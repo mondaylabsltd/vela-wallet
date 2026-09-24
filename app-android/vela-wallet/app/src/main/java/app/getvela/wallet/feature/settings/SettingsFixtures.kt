@@ -235,6 +235,21 @@ object SettingsFixtures {
                     subtitle = s.t(I18nKeys.SettingsUi.FEE_SPEED_SUBTITLE),
                     value = s.t(I18nKeys.Flows.GAS_TIER_FAST),
                 ),
+                // Spec 071: how signatures start, next to how sends are priced.
+                SettingsRowModel(
+                    id = SIGN_WITH_ROW,
+                    title = s.t("settings.signing.title"),
+                    icon = SettingsIcon.Zap,
+                    subtitle = s.t("settings.signing.subtitle"),
+                    value = s.t("common.automatic"),
+                ),
+                SettingsRowModel(
+                    id = SIGNER_PAGE_ROW,
+                    title = s.t("settings.signing.pageTitle"),
+                    icon = SettingsIcon.Globe,
+                    subtitle = s.t("settings.signing.pageSubtitle"),
+                    value = s.t("settings.signing.pageOfficial"),
+                ),
                 SettingsRowModel(
                     id = "storage",
                     title = s.t(I18nKeys.SettingsUi.STORAGE_TITLE),
@@ -657,7 +672,7 @@ object SettingsFixtures {
             rows = buildList {
                 add(
                     SelectRowModel(
-                        id = "system",
+                        id = app.getvela.wallet.core.data.Preferences.AUTO_LANGUAGE,
                         label = s.t(I18nKeys.SettingsUi.LANGUAGE_FOLLOW_SYSTEM),
                         note = "${s.t(I18nKeys.SettingsUi.COMMON_SYSTEM)} · $label",
                         selected = true,
@@ -672,6 +687,11 @@ object SettingsFixtures {
 
     /** The Settings row id of the default speed (spec 069). */
     const val FEE_SPEED_ROW = "fee-speed"
+
+    /** The Settings rows of the default "Sign with" and the Trusted Signer page (spec 071). */
+    const val SIGN_WITH_ROW = "sign-with"
+    const val SIGNER_PAGE_ROW = "signer-page"
+
 
     /**
      * The default speed's sheet: the three speeds, fastest first, each with
@@ -943,14 +963,6 @@ object SettingsFixtures {
                     SegmentModel("auto", s.t(I18nKeys.SettingsUi.THEME_AUTO), SettingsIcon.Monitor),
                 ),
             ),
-            avatar = SegmentedModel(
-                label = s.t(I18nKeys.SettingsUi.AVATAR_TITLE),
-                selected = "identicon",
-                segments = listOf(
-                    SegmentModel("initials", s.t(I18nKeys.SettingsUi.AVATAR_INITIALS)),
-                    SegmentModel("identicon", s.t(I18nKeys.SettingsUi.AVATAR_IDENTICON)),
-                ),
-            ),
             textScale = TextScaleModel(s.t(I18nKeys.SettingsUi.TEXT_SCALE), steps = 7, index = 3),
             signOutLabel = s.t(I18nKeys.SettingsUi.SIGN_OUT_BUTTON),
             eraseTitle = s.t(I18nKeys.SettingsUi.ERASE_TITLE),
@@ -959,6 +971,21 @@ object SettingsFixtures {
             networksSubtitle = s.t(I18nKeys.SettingsUi.NETWORKS_SUBTITLE),
             networks = networks(s),
             addNetworkLabel = s.t(I18nKeys.SettingsUi.ADD_NETWORK_TITLE),
+            removeNetworkLabel = s.t("settingsModals.network.removeTitle"),
+            removeNetworkSheet = ConfirmSheetModel(
+                title = s.t("settingsModals.network.removeTitle"),
+                body = s.t("settingsModals.network.removeBody"),
+                confirm = s.t("settingsModals.network.removeConfirm"),
+                cancel = s.t("settingsModals.network.removeCancel"),
+                danger = true,
+            ),
+            resetEndpointsSheet = ConfirmSheetModel(
+                title = s.t(I18nKeys.SettingsUi.ENDPOINTS_RESET_TITLE),
+                body = s.t(I18nKeys.SettingsUi.ENDPOINTS_RESET_BODY),
+                confirm = s.t(I18nKeys.SettingsUi.ENDPOINTS_RESET_CONFIRM),
+                cancel = s.t(I18nKeys.SettingsUi.ENDPOINTS_RESET_CANCEL),
+                danger = true,
+            ),
             networkDetail = networkDetail(s, mismatch = state == SettingsScreenState.ST9B),
             addNetwork = addNetwork(s, addMode),
             rpcProviders = rpcProviders(s),

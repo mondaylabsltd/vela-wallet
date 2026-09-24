@@ -66,7 +66,7 @@ data class TokenMarkModel(
 sealed interface FactLead {
     data class Dot(val color: Color) : FactLead
     data class Token(val mark: TokenMarkModel) : FactLead
-    data class Identicon(val seed: String, /** Spec 049: the name beside it — the initials style's letter. */ val name: String? = null) : FactLead
+    data class Identicon(val seed: String) : FactLead
 }
 
 /**
@@ -463,8 +463,6 @@ data class RecipientFieldModel(
     val label: String,
     val lines: Pair<String, String>,
     val identiconSeed: String,
-    /** Spec 049: the recipient's name when known — the initials disc's letter. */
-    val name: String? = null,
     val pickLabel: String,
     /** Sweep shows a scan button beside the picker; single does not. */
     val scanLabel: String? = null,

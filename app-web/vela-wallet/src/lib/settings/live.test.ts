@@ -14,8 +14,11 @@ import {
 	liveNetworkRows,
 	liveRelayer,
 	liveRpcProviders,
+	withEraseFailure,
 	withLiveFeeSpeed,
-	withLiveFeeSpeedDesktop
+	withLiveFeeSpeedDesktop,
+	withLiveNetworks,
+	withLiveNetworksDesktop
 } from './live';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
@@ -285,6 +288,54 @@ describe('liveRpcProviders', () => {
 		const all = liveRpcProviders({ ...VIEW, providers: unset }, m).providers;
 		expect(all.find((p) => p.id === 'alchemy')?.linkUrl).toBe('https://dashboard.alchemy.com/');
 		expect(model.providers.find((p) => p.id === 'alchemy')?.linkUrl).toBeUndefined();
+	});
+
+	it('"Get key" opens the key page; only a key is tested (spec 072)', () => {
+		// The in-field "Get key" ran a key TEST on an empty field. Without a key
+		// the action is a link to where one is made; with one it is the test,
+		// and says so.
+		const model = liveRpcProviders(VIEW, m);
+		const drpc = model.providers.find((p) => p.id === 'drpc');
+		expect(drpc).toMatchObject({ action: m.rpcProviders.getKey, actionUrl: 'https://drpc.org/' });
+		const alchemy = model.providers.find((p) => p.id === 'alchemy');
+		expect(alchemy?.action).toBe(m.rpcProviders.checkKey);
+		expect(alchemy?.actionUrl).toBeUndefined();
+	});
+});
+
+describe('the network count (spec 072)', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const aboutCount = (rows: { id?: string; value: string }[]) =>
+		rows.find((row) => row.id === 'networks')?.value;
+	const homeCount = (model: ReturnType<typeof buildMobileState>) =>
+		model.sections.flatMap((section) => section.rows).find((row) => row.id === 'networks')?.value;
+
+	it('is the live list’s, on the Networks row and in About — never the drawn 12', () => {
+		const home = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), VIEW, m);
+		expect(homeCount(home)).toBe(m.networks.count.replace('{{count}}', '2'));
+		expect(aboutCount(home.about.rows)).toBe(m.about.techNetworksValue.replace('{{count}}', '2'));
+
+		const desktop = withLiveNetworksDesktop(buildDesktopState('dst8', m, IDENTICON), VIEW, m);
+		expect(aboutCount(desktop.about.rows)).toBe(
+			m.about.techNetworksValue.replace('{{count}}', '2')
+		);
+	});
+
+	it('says nothing until the ledger has been read', () => {
+		const unread = { ...VIEW, loaded: false, networks: [] };
+		const home = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), unread, m);
+		expect(homeCount(home)).toBeUndefined();
+		expect(aboutCount(home.about.rows)).toBe('');
+	});
+});
+
+describe('withEraseFailure', () => {
+	it('says a failed erase in the sheet, on either layout', () => {
+		const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+		const desktop = withEraseFailure(buildDesktopState('dst1', m, IDENTICON), m, true);
+		expect(desktop.eraseSheet.callout).toEqual({ tone: 'danger', text: m.erase.failed });
+		const home = withEraseFailure(buildMobileState('st16', m, IDENTICON), m, false);
+		expect(home.eraseSheet.callout?.text).toBe(m.erase.loses);
 	});
 });
 

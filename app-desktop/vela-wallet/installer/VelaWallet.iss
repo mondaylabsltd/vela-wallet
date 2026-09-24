@@ -66,6 +66,22 @@ Source: "{#MyVCRedist}"; DestDir: "{tmp}"; DestName: "{#MyVCRedistName}"; Flags:
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
+[Registry]
+; Spec 076: the Trusted Signer's answer comes back as a navigation to
+; `velawallet://sign-result`, because the published signing page carries
+; `default-src 'none'` in its hashed bytes and cannot open a socket at all.
+; Windows routes a scheme by these keys; without them the browser reports the
+; navigation cancelled and the wallet waits out its timeout.
+;
+; Per-user (HKCU), so no elevation is needed and two accounts on one machine
+; keep their own wallet. The same scheme the phones register; it is not
+; exclusive, which is why the callback carries a one-time token and the core
+; verifies the assertion itself.
+Root: HKCU; Subkey: "Software\Classes\velawallet"; ValueType: string; ValueName: ""; ValueData: "URL:Vela Wallet"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\velawallet"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\velawallet\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKCU; Subkey: "Software\Classes\velawallet\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 

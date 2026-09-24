@@ -46,7 +46,9 @@ pub mod contacts;
 pub mod contacts_initials;
 pub mod contacts_io;
 pub mod create_wallet;
+pub mod dapp_browser;
 pub mod dapp_permissions;
+pub mod dapp_rpc;
 pub mod dapp_session;
 pub mod display_currency;
 pub mod explore_sites;
@@ -66,6 +68,7 @@ pub mod self_call_guard;
 pub mod send;
 pub mod session;
 pub mod shell;
+pub mod sign_pref;
 pub mod sign_request;
 pub mod token_trust;
 pub mod tx_tracker;
@@ -109,6 +112,12 @@ pub struct Registration {
     pub authenticator_attachment: String,
     #[serde(default)]
     pub transports: String,
+    /// Spec 075: the Trusted Signer page's origin when the key was minted
+    /// through it — where the key lives from now on. `None` for every other
+    /// route. The shell reports it only after `verify_registration` checked
+    /// the answer came from that origin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_origin: Option<String>,
 }
 
 /// A completed `navigator.credentials.get()`. Mirrors `PasskeyAssertionResult`.
@@ -127,6 +136,11 @@ pub struct Assertion {
     /// key can still record it. Store-only display; never signed.
     #[serde(default)]
     pub authenticator_attachment: String,
+    /// Spec 075: the Trusted Signer page's origin when the ceremony ran there
+    /// (a sign-in found the key behind that page). `None` for every other
+    /// route.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_origin: Option<String>,
 }
 
 /// One passkey of a wallet, in canonical founding order. `keys[0]` is the
@@ -147,6 +161,11 @@ pub struct AccountKey {
     /// guess, which is what this field exists to stop.
     #[serde(default)]
     pub transports: String,
+    /// Spec 075: the Trusted Signer page this key lives behind (its origin, and
+    /// so its rpId). A key with one is signed through that page — `auto`
+    /// routes there — and never through a platform sheet that cannot see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_origin: Option<String>,
 }
 
 /// The persisted wallet. Serialises 1:1 to `StoredAccount`.
@@ -206,6 +225,9 @@ pub struct PendingUploadMember {
     pub authenticator_attachment: String,
     #[serde(default)]
     pub transports: String,
+    /// Spec 075: see [`AccountKey::signer_origin`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_origin: Option<String>,
 }
 
 /// A key set that still owes the index server a successful publish. Written
@@ -269,6 +291,8 @@ impl<'de> Deserialize<'de> for AccountKey {
             name: String,
             #[serde(default)]
             transports: String,
+            #[serde(default)]
+            signer_origin: Option<String>,
         }
         let w = Wire::deserialize(d)?;
         Ok(AccountKey {
@@ -276,6 +300,7 @@ impl<'de> Deserialize<'de> for AccountKey {
             public_key_hex: either(w.public_key_hex, w.public_key_hex_camel, "public_key_hex")?,
             name: w.name,
             transports: w.transports,
+            signer_origin: w.signer_origin.filter(|o| !o.is_empty()),
         })
     }
 }
@@ -330,6 +355,8 @@ impl<'de> Deserialize<'de> for PendingUploadMember {
             authenticator_attachment_camel: String,
             #[serde(default)]
             transports: String,
+            #[serde(default)]
+            signer_origin: Option<String>,
         }
         let w = Wire::deserialize(d)?;
         Ok(PendingUploadMember {
@@ -347,6 +374,7 @@ impl<'de> Deserialize<'de> for PendingUploadMember {
                 w.authenticator_attachment
             },
             transports: w.transports,
+            signer_origin: w.signer_origin.filter(|o| !o.is_empty()),
         })
     }
 }
@@ -418,6 +446,12 @@ pub struct RegistryPublishMember {
     /// on the login re-publish, whose executor signs the member live.
     #[serde(default)]
     pub proof: Option<crate::registry_proof::RegistryProof>,
+    /// Spec 075: the Trusted Signer page this member lives behind, when it does.
+    /// The re-publish signs a member with no replayable proof LIVE, and that
+    /// signature has to reach the page holding the key — not whichever page
+    /// Settings names (Android, 075 phase C, found this missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_origin: Option<String>,
 }
 
 /// One founding member of a registry group (Unit), as fetched back from the
@@ -460,6 +494,12 @@ pub enum KeyMethod {
     Hybrid,
     /// A removable authenticator — a USB/NFC security key.
     SecurityKey,
+    /// Spec 075: the Trusted Signer — our own route to a passkey. A page that
+    /// shows what is being signed runs the ceremony (on this device over a
+    /// loopback socket or `postMessage`, on another over the tunnel or BLE)
+    /// and the answer comes back to be verified here. A peer of the three
+    /// above, offered wherever they are.
+    TrustedSigner,
 }
 
 /// How a ceremony failed. The **shell** reports the raw platform error; the
@@ -638,6 +678,7 @@ mod tests {
             client_data_json_hex: String::new(),
             user_id_hex: Some(primitives::to_hex(text.as_bytes(), false)),
             authenticator_attachment: String::new(),
+            signer_origin: None,
         }
     }
 

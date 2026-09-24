@@ -68,6 +68,18 @@ describe('the signing method', () => {
 		}
 	});
 
+	it('a method handed over explicitly — Settings’ default, for a send with no sheet — routes the same', async () => {
+		setSignMethod(null);
+		await signWithAny('00', CREDENTIALS, 'hybrid').catch(() => {});
+		expect(asked.at(-1)?.hints).toEqual(['hybrid']);
+	});
+
+	it('no sheet and nothing handed over: the request is what it always was', async () => {
+		setSignMethod(null);
+		const request = await attempt();
+		expect('hints' in request).toBe(false);
+	});
+
 	it('the single-credential ceremony obeys it too', async () => {
 		setSignMethod('hybrid');
 		await sign('00', 'aabb', 'internal').catch(() => {});

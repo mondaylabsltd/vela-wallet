@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Hesap değiştir",
-   "contactsSubtitle": "Kayıtlı adresler ve son alıcılar"
+   "contactsSubtitle": "Kayıtlı adresler ve son alıcılar",
+   "remove": "Bu cihazdan kaldır",
+   "removeBody": "Yalnızca bu cüzdan ayrılır, diğerleri kalır."
   },
   "appearance": {
    "themeLight": "Açık",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "İşlem hızı",
    "subtitle": "Vela'da başlattığınız her gönderim burada başlar. Tek bir gönderim için yine de değiştirebilirsiniz."
+  },
+  "signing": {
+   "title": "Şununla imzala",
+   "subtitle": "Vela'da başlattığınız her imza buradan başlar. Tek bir imza için yine de başka bir yol seçebilirsiniz.",
+   "pageTitle": "Trusted Signer sayfası",
+   "pageSubtitle": "Trusted Signer'ın açtığı sayfa: resmi sayfa ya da bağımlılıksız sayfanın kendi kopyanız.",
+   "pageOfficial": "Resmi",
+   "pageInvalid": "Bu bir web adresi değil.",
+   "pageInsecure": "https bir sayfa ya da bu cihazın kendi loopback adresindeki bir sayfa kullanın — tarayıcı başka hiçbir yerde imzalamaz.",
+   "pageForeign": "Geçiş anahtarlarınız getvela.app'e ait. Başka bir alan adındaki sayfa bir isteği gösterebilir ama imzalayamaz.",
+   "pageReset": "Resmi sayfayı kullan",
+   "pageSave": "Kaydet"
   },
   "advanced": {
    "networksTitle": "Ağlar",
@@ -88,7 +102,8 @@
    "keeps": "“Zaten bir cüzdanım var” seçeneğiyle aynı geçiş anahtarını kullanarak yeniden giriş yapın: adres aynı kalır, işlem geçmişiniz, kişileriniz, tokenlarınız ve ayarlarınız da yerinde durur.",
    "warning": "Açık anahtarınız henüz eşitleme sunucusuna ulaşmadı. Uygulama bir sonraki açılışta yeniden deneyecek, ancak başarılı olana kadar başka bir cihazda giriş yapamayabilirsiniz — uygulamayı kaldırırsanız bu cihazda da.",
    "anyway": "Yine de Çıkış Yap",
-   "cancel": "İptal"
+   "cancel": "İptal",
+   "descMany": "Bu cihazdaki {{count}} cüzdanın tamamı oturumu kapatır. Hiçbir şey silinmez."
   },
   "eraseDevice": {
    "title": "Bu Cihazı Temizle",
@@ -748,6 +763,8 @@
    "keysSubtitleFull": "7 anahtar sınırına ulaşıldı.",
    "keysTitle": "Passkey ekleyin",
    "keysTitleBlocked": "Oluşturmak için bir anahtar daha gerekli",
+   "methodBlockedHint": "Bu cüzdanın anahtarlarının tümü {{party}} alanına ait.",
+   "methodBlockedSigner": "Trusted Signer sayfan {{page}}, anahtarları {{pageParty}} alanına ait. Buradan eklemek için Ayarlar'da {{party}} sayfasını seç.",
    "methodHybridBody": "Kodu tarayın, yakındaki cihazda oluşturun",
    "methodHybridTitle": "Telefon veya tablet",
    "methodHybridUnavailable": "Yakında",
@@ -1340,6 +1357,16 @@
    "techIdentityRecipient": "Alıcı",
    "copyValue": "Kopyala",
    "signWith": "Şununla imzala",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "Ayrı bir sayfada kontrol edip imzalayın — ne görüyorsanız onu imzalarsınız.",
+   "trustedSignerWaiting": "Trusted Signer bekleniyor…",
+   "trustedSignerWaitingHint": "Açılan sayfada isteği kontrol edin ve orada imzalayın. Tarayıcı, sayfanın bu cihazdaki diğer uygulamalara erişmesine izin verilip verilmeyeceğini sorarsa izin verin.",
+   "trustedSignerClosed": "Trusted Signer imzalamadan kapatıldı.",
+   "trustedSignerRefused": "Trusted Signer bu isteği imzalamadı. Nedeni kendi sayfasında yazıyor.",
+   "trustedSignerMismatch": "Trusted Signer'ın yanıtı bu istekle eşleşmiyor, bu yüzden hiçbir şey gönderilmedi.",
+   "trustedSignerTimeout": "Trusted Signer zamanında yanıt vermedi.",
+   "trustedSignerReopen": "Sayfayı yeniden aç",
+   "trustedSignerDoneTab": "İmzalandı. Bu sekmeyi kapatıp Vela'ya dönebilirsiniz.",
    "viewOnExplorer": "Gezginde görüntüle",
    "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor",
    "selfCallBlockedTitle": "Vela bu isteği imzalamaz",
@@ -1557,7 +1584,11 @@
    "fiatLabel": "FİAT KURLARI",
    "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
    "resetToDefaults": "Dördünü de varsayılana döndür",
-   "selfHostGuide": "Kendin barındırma kılavuzu →"
+   "selfHostGuide": "Kendin barındırma kılavuzu →",
+   "resetTitle": "Servis uç noktaları sıfırlansın mı?",
+   "resetBody": "Dört servisin tümü Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
+   "resetConfirm": "Sıfırla",
+   "resetCancel": "İptal"
   },
   "addNetwork": {
    "modalTitle": "Ağ Ekle",
@@ -1575,7 +1606,6 @@
    "retry": "Yeniden Dene",
    "addNetworkBtn": "Ağ Ekle",
    "incompatibleHint": "Bu zincirde gerekli bazı sözleşmeler henüz dağıtılmamış.\nBunları dağıtmak için Vela Wallet Chain Setup aracını kullanın, ardından geri dönüp yeniden kontrol edin.",
-   "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır.",
    "openChainSetupTool": "Chain Setup Aracını Aç",
    "recheck": "Yeniden kontrol et",
    "chainIdLabel": "Zincir ID: {{chainId}}",
@@ -1585,7 +1615,8 @@
    "incompatible": "Uyumsuz",
    "checkSafe": "Safe L2 sözleşmeleri",
    "checkSigner": "P-256 ön derlemesi",
-   "checkRemaining": "diğer {{count}} sözleşme"
+   "checkRemaining": "diğer {{count}} sözleşme",
+   "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır."
   },
   "treasury": {
    "modalTitle": "Hazine",
@@ -1756,6 +1787,11 @@
   "siteMenu": "Site menüsü",
   "account": "Hesap",
   "addressBar": "Adres çubuğu",
-  "close": "Kapat"
+  "close": "Kapat",
+  "pageCrashedTitle": "Bu sayfa çalışmayı durdurdu",
+  "pageCrashedBody": "Sayfa beklenmedik şekilde kapandı. Cüzdanın etkilenmedi — devam etmek için yeniden yükle.",
+  "walletConnectUnsupported": "WalletConnect bağlantıları desteklenmiyor. dApp’i Keşfet’te aç ve oradan bağlan.",
+  "scanUnrecognized": "Bu kod bir web adresi ya da cüzdan adresi değil.",
+  "linkCopied": "Bağlantı kopyalandı"
  }
 }

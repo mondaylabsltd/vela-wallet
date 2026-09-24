@@ -19,7 +19,7 @@ use vela_core::app::clear_signing::{
     UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
-use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignSurface, SignView};
+use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignView};
 
 use crate::signing::fixtures::{AllowanceInput, Block, ChipState, FeeModel, FeeTokenOption};
 use crate::signing::{SigningStrings, Tone};
@@ -47,17 +47,21 @@ fn tone_of(risk: ClearRisk) -> Tone {
 /// speed's own figure landing, the core's `confirm_fee_ready` is still true on
 /// the speed just left, and the slide must not sign it. `speed_tier` is the
 /// tier in force; `None` is a sheet with no speed control.
+///
+/// **A signature has no fee to wait for** (the phones' rule, `SigningLive`):
+/// nothing is quoted for a message, so a fee gate over one is a slide that
+/// never opens.
 #[must_use]
 pub fn confirm_enabled(
     sign: &SignView,
     guard: &GuardView,
+    clear: &ClearSigningView,
     fee: &FeeView,
     speed_tier: Option<FeeTier>,
 ) -> bool {
-    sign.confirm_gate_open
-        && guard.confirm_allowed
-        && fee.confirm_fee_ready
-        && !fee_of_another_tier(fee, speed_tier)
+    let fee_ready =
+        off_chain(clear) || (fee.confirm_fee_ready && !fee_of_another_tier(fee, speed_tier));
+    sign.confirm_gate_open && guard.confirm_allowed && fee_ready
 }
 
 /// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
@@ -956,11 +960,19 @@ fn row_of(field: &ClearSignField, s: &SigningStrings) -> crate::signing::fixture
 }
 
 /// A signature that never touches a chain: no fee, and no speed to choose.
+/// A decoded one says so in its result; a message and raw typed data say so
+/// by the surface they are drawn on, decoded or not (the phones' `offChain`).
 #[must_use]
 pub fn off_chain(clear: &ClearSigningView) -> bool {
-    clear.result.as_ref().is_some_and(|result| {
-        result.sign_type != vela_core::app::clear_signing::ClearSignType::Transaction
-    })
+    use vela_core::app::clear_signing::{ClearSignType, ClearSurface};
+    clear
+        .result
+        .as_ref()
+        .is_some_and(|result| result.sign_type != ClearSignType::Transaction)
+        || matches!(
+            clear.surface,
+            ClearSurface::MessageSign | ClearSurface::EthSign | ClearSurface::BlindTypedData
+        )
 }
 
 /// The fee row, or the line that says there is no fee.
@@ -1132,6 +1144,7 @@ pub fn confirm_label(clear: &ClearSigningView, s: &SigningStrings) -> SharedStri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vela_core::app::sign_request::SignSurface;
 
     use vela_core::app::clear_signing::{ClearFieldRole, ClearSignType};
 
@@ -1714,10 +1727,13 @@ mod tests {
         let mut fee =
             crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
 
+        let mut clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+
         sign.confirm_gate_open = true;
         guard.confirm_allowed = true;
         fee.confirm_fee_ready = true;
-        assert!(confirm_enabled(&sign, &guard, &fee, None));
+        assert!(confirm_enabled(&sign, &guard, &clear, &fee, None));
 
         for drop_one in 0..3 {
             let (mut s, mut g, mut f) = (sign.clone(), guard.clone(), fee.clone());
@@ -1727,10 +1743,18 @@ mod tests {
                 _ => f.confirm_fee_ready = false,
             }
             assert!(
-                !confirm_enabled(&s, &g, &f, None),
+                !confirm_enabled(&s, &g, &clear, &f, None),
                 "any one machine withholding shuts the slide ({drop_one})"
             );
         }
+
+        // A message is quoted nothing: the fee has no say over it — and
+        // the other two still do.
+        clear.surface = vela_core::app::clear_signing::ClearSurface::MessageSign;
+        fee.confirm_fee_ready = false;
+        assert!(confirm_enabled(&sign, &guard, &clear, &fee, None));
+        guard.confirm_allowed = false;
+        assert!(!confirm_enabled(&sign, &guard, &clear, &fee, None));
     }
 
     /// Spec 069: between a speed being tapped and its own figure landing, the
@@ -1771,7 +1795,13 @@ mod tests {
             crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
 
         // Picked Slow; the fee in hand is still Fast's.
-        assert!(!confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Slow)));
+        assert!(!confirm_enabled(
+            &sign,
+            &guard,
+            &clear,
+            &fee,
+            Some(FeeTier::Slow)
+        ));
         let FeeModel::OnChain { value, .. } = fee_model(
             &clear,
             &fee,
@@ -1790,7 +1820,13 @@ mod tests {
         if let Some(estimate) = fee.fee.as_mut() {
             estimate.tier = FeeTier::Slow;
         }
-        assert!(confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Slow)));
+        assert!(confirm_enabled(
+            &sign,
+            &guard,
+            &clear,
+            &fee,
+            Some(FeeTier::Slow)
+        ));
         let FeeModel::OnChain { value, .. } = fee_model(
             &clear,
             &fee,
@@ -1808,7 +1844,13 @@ mod tests {
         if let Some(estimate) = fee.fee.as_mut() {
             estimate.tier = FeeTier::Rapid;
         }
-        assert!(confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Fast)));
+        assert!(confirm_enabled(
+            &sign,
+            &guard,
+            &clear,
+            &fee,
+            Some(FeeTier::Fast)
+        ));
     }
 
     /// The detail fields belong to Advanced, not to the summary.

@@ -12,8 +12,10 @@ life apart from app-web. The Safari extension is a genuinely separate artifact �
 it talks to a native iOS app over `nativeMessaging` — and stays where it is.
 
 These files sit outside `src/` on purpose: they are not SvelteKit modules and
-must never be bundled by it. `inpage.js` in particular runs in the page's MAIN
-world, where a bundler's module wrapper would be a bug.
+must never be bundled by it. The page-side provider (`inpage.js` in `dist/`)
+runs in the page's MAIN world; its source is not in this folder but in the
+core crate, `rust/crates/vela-core/provider/inpage.js` (spec 070), because the
+desktop, iOS and Android in-app browsers inject the very same bytes.
 
 ## Five measured constraints this directory has to respect
 
@@ -54,7 +56,7 @@ They are recorded with their evidence in [`research.md`](../../../specs/027-web-
 ```
 manifest.json      the five constraints above, plus a pinned id (`key`)
 icons/             the toolbar and store icons, rendered from docs/design/icon/app-icon.svg
-inpage.js          MAIN world: the provider, its announcement, the legacy shim
+(inpage.js)        MAIN world: the provider — bundled from rust/crates/vela-core/provider/inpage.js
 content.js         isolated world: the page bridge
 background.js      the service worker: routing, the per-site chain, reads
                    forwarded verbatim, and the page events — no authoritative state

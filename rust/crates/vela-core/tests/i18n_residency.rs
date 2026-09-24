@@ -6,8 +6,9 @@
 //!
 //! Baseline to beat: `src/i18n/resources.ts` statically imports all 240 files and
 //! spreads them into one object, so every user carries **990,499 bytes** of strings
-//! regardless of which language they read. SC-005's budget is `ja` + `en` = 135,345
-//! bytes, a >=86% reduction.
+//! regardless of which language they read. SC-005's requirement is that a cold
+//! start loads one language plus `en` — see [`SC005_BUDGET`] for what the
+//! number below guards now, and what it stopped guarding.
 //!
 //! Run with `cargo test -p vela-core --features i18n-all --test i18n_residency -- --nocapture`
 //! to see the numbers rather than just the pass.
@@ -16,7 +17,19 @@ use vela_core::i18n::{Catalog, I18n};
 
 /// The pre-feature cost: every locale resident on every device.
 const CORPUS_BYTES: usize = 990_499;
-/// SC-005's budget for `ja` + `en`.
+/// The bloat guard for `ja` + `en`.
+///
+/// What SC-005 REQUIRES is the sentence, not the number: "cold start in any
+/// single language loads at most that language plus the `en` fallback". The
+/// number is an early warning that the corpus is growing, and it is only worth
+/// having while it sits close to today's measurement.
+///
+/// It was doubled to 270,690 on the owner's word that morning, because three
+/// sentences for "remove one wallet from this device" had gone over it. Later
+/// the same day the Trusted Signer's two cross-device channels were cut and 23
+/// strings went with them, which put `ja` + `en` back at 128,800 — under the
+/// original figure. A budget at twice the measurement would not fire until the
+/// corpus DOUBLED, which is not a warning, so it goes back to where it warns.
 const SC005_BUDGET: usize = 135_345;
 
 fn engine_with(active: &str) -> I18n {

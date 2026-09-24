@@ -143,8 +143,14 @@ const FLOW_KEYS_SCREEN_KEYS = [
 	'onboarding.create.methodHybridTitle',
 	'onboarding.create.methodHybridBody',
 	'onboarding.create.methodHybridUnavailable',
+	// Why a route is not on offer for THIS key set (spec 075, 2026-09-23).
+	'onboarding.create.methodBlockedHint',
+	'onboarding.create.methodBlockedSigner',
 	'onboarding.create.methodSecurityKeyTitle',
-	'onboarding.create.methodSecurityKeyBody'
+	'onboarding.create.methodSecurityKeyBody',
+	// Spec 075: the Trusted Signer, the fourth route beside the three above.
+	'componentsUi.signing.trustedSignerTitle',
+	'componentsUi.signing.trustedSignerBody'
 ] as const;
 
 /** The progress, retry and done screens (spec 019). */
@@ -193,7 +199,11 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.switchDeviceBtn',
 	'onboarding.login.statusCancelledTitle',
 	'onboarding.login.statusCancelledBody',
-	'onboarding.settings.warningText'
+	'onboarding.settings.warningText',
+	'onboarding.storage.unreadableTitle',
+	'onboarding.storage.unreadableBody',
+	'onboarding.storage.signInAgain',
+	'onboarding.storage.resetCopy'
 ] as const;
 
 /** The transient status line the create machine reports. */

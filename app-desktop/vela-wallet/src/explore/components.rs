@@ -323,9 +323,9 @@ pub fn account_chip(
 
 /// The browser toolbar (DE1–DE4). On the start page the address field is the
 /// search box; while browsing it collapses to the domain with its padlock —
-/// one control, two states, never two controls. `trailing` is built by the
-/// page, because its two affordances (⋯ and the account chip) each open a
-/// different thing and the listeners belong to the entity that owns that state.
+/// one control, two states, never two controls. `address` ([`address_field`])
+/// and `trailing` are built by the page, because the field's focus and keys
+/// and the two affordances (⋯ and the account chip) are state the page owns.
 /// Back, forward and reload, in that order. `None` leaves them drawn and
 /// inert, which is what the mocks are — a live browser passes three listeners
 /// and the same three buttons start working.
@@ -334,40 +334,10 @@ pub type NavActions = [crate::flows::panels::Click; 3];
 pub fn toolbar(
     theme: &Theme,
     icons: &mut IconCache,
-    browsing: bool,
-    host: SharedString,
-    search_placeholder: SharedString,
+    address: AnyElement,
     trailing: Div,
     nav: Option<NavActions>,
 ) -> Div {
-    let address = if browsing {
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(px(8.))
-            .child(icon_img(icons, Icon::Lock, false, theme.fg_muted, 12.))
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
-                    .child(host),
-            )
-    } else {
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(px(8.))
-            .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(search_placeholder),
-            )
-    };
-
     div()
         .h(px(TOOLBAR_H))
         .px(px(20.))
@@ -392,6 +362,72 @@ pub fn toolbar(
                 .child(address),
         )
         .child(trailing)
+}
+
+/// What the middle of the toolbar says.
+pub struct AddressBar {
+    /// A page is open: its host and a lock. Otherwise the search box.
+    pub browsing: bool,
+    pub host: SharedString,
+    /// Whether the lock may be drawn. https, or an http host on this machine
+    /// or its network — the core's `secure`, the same judgement that lets a
+    /// site ask for a signature. A public http page gets a warning glyph: a
+    /// padlock beside it would be the chrome vouching for a connection
+    /// anybody on the path can read.
+    pub secure: bool,
+    pub placeholder: SharedString,
+    /// Somebody is typing: the text so far, drawn with a caret.
+    pub draft: Option<SharedString>,
+}
+
+/// The address field's contents, for the page to wrap in whatever makes it
+/// editable — the focus and the keys are the page's state.
+pub fn address_field(theme: &Theme, icons: &mut IconCache, bar: &AddressBar) -> Div {
+    let row = div()
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(px(8.))
+        .min_w(px(0.))
+        .overflow_hidden();
+    if let Some(draft) = &bar.draft {
+        let text = if draft.is_empty() {
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(bar.placeholder.clone())
+        } else {
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .whitespace_nowrap()
+                .child(draft.clone())
+        };
+        return row
+            .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
+            .child(text)
+            .child(div().w(px(1.5)).h(px(14.)).flex_none().bg(theme.accent));
+    }
+    if bar.browsing {
+        let (glyph, tint) = if bar.secure {
+            (Icon::Lock, theme.fg_muted)
+        } else {
+            (Icon::TriangleAlert, theme.warning_base)
+        };
+        return row.child(icon_img(icons, glyph, false, tint, 12.)).child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(bar.host.clone()),
+        );
+    }
+    row.child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(bar.placeholder.clone()),
+        )
 }
 
 /// The three navigation buttons, live or drawn.

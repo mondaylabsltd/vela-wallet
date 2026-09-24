@@ -74,7 +74,11 @@ struct ReceiveListBody: View {
     /// The tick holds and goes back (SPEC 动效 · 收款). Long enough to register,
     /// short enough that copying three networks in a row never leaves a person
     /// wondering which tick is the live one.
+    ///
+    /// The tick used to be all it did: the button turned green and put nothing
+    /// on the clipboard (074 — the defect 058 fixed on the code's buttons).
     private func copy(_ index: Int) {
+        velaCopy(model.address)
         copiedIndex = index
         Task {
             try? await Task.sleep(for: .seconds(Tokens.Motion.fast))
@@ -1306,7 +1310,8 @@ struct SendReceiptBody: View {
                     Text(verbatim: hash.value)
                         .monoRole(Typography.monoAddress.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    Button { copied = true } label: {
+                    // The tick alone copied nothing until 074.
+                    Button { velaCopy(hash.value); copied = true } label: {
                         LucideIcon(copied ? .check : .copy, size: LucideIconSize.checkmark)
                             .foregroundStyle(copied ? theme.successBase : theme.fgSubtle)
                             .contentShape(Rectangle())

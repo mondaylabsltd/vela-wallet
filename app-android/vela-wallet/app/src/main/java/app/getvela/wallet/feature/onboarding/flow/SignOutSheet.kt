@@ -57,6 +57,7 @@ import app.getvela.wallet.core.i18n.LocalVelaStrings
 @Composable
 fun SignOutSheet(
     pendingUploadWarning: Boolean,
+    accountCount: Int = 1,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -80,6 +81,24 @@ fun SignOutSheet(
                 fontWeight = VelaFontWeight.bold,
                 fontSize = VelaTextSize.xl2,
             )
+            // How many wallets this takes, when it is more than one. `keeps`
+            // below is true either way — the address returns, the history is
+            // still there — and on a device holding six it was ALSO how the
+            // sheet managed to say nothing about signing in six times
+            // (owner, 2026-09-23).
+            if (accountCount > 1) {
+                Spacer(modifier = Modifier.height(VelaSpacing.lg))
+                Text(
+                    text = strings.t(
+                        I18nKeys.Settings.SIGN_OUT_DESC_MANY,
+                        mapOf("count" to accountCount.toString()),
+                    ),
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    lineHeight = VelaLeading.normal * VelaTextSize.base,
+                )
+            }
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             Text(
                 text = strings.t(I18nKeys.Settings.SIGN_OUT_KEEPS),

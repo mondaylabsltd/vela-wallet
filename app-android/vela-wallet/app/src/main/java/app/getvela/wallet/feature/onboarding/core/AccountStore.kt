@@ -135,6 +135,31 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
     }
 
     /**
+     * Drop ONE account from the stored list, by ADDRESS — spec 017's narrow
+     * half (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+     *
+     * By address, not by id or position, because a row's identity is its
+     * address (session invariant ⑨): a write that raced a re-sorted display
+     * must not take a stranger. [`removeAccount`] above is a different job —
+     * the parallel space dropping the fixture record it appended, which it
+     * knows by id.
+     *
+     * A row that is no longer there is a no-op, not an error: the person asked
+     * for it to be gone, and it is. The active index is the CORE's to re-state
+     * afterwards; this only edits the list.
+     */
+    suspend fun removeAccountAtAddress(address: String) {
+        val existing = loadAccounts()
+        val kept = JSONArray()
+        for (index in 0 until existing.length()) {
+            val record = existing.optJSONObject(index) ?: continue
+            if (!record.optString("address").equals(address, ignoreCase = true)) kept.put(record)
+        }
+        VelaLog.event("accounts", "remove", "before" to existing.length(), "after" to kept.length())
+        writeRaw(KEY_ACCOUNTS, kept.toString())
+    }
+
+    /**
      * The index to ask, right now: the person's override, or the shipped
      * default when they have not set one (spec 081 FR-002 — the "empty means
      * the default" rule the core states in `NetServiceEndpoints::effective`).

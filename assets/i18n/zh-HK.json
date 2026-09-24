@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "切換帳戶",
-   "contactsSubtitle": "已儲存嘅地址同最近收款人"
+   "contactsSubtitle": "已儲存嘅地址同最近收款人",
+   "remove": "從這部裝置移除",
+   "removeBody": "只有這個錢包離開，其餘的不動。"
   },
   "appearance": {
    "themeLight": "淺色",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "交易速度",
    "subtitle": "喺 Vela 發起嘅每筆轉賬都由呢度開始。發送時仍可單獨調整某一筆。"
+  },
+  "signing": {
+   "title": "簽署方式",
+   "subtitle": "你喺 Vela 發起嘅每次簽署都由呢度開始。單次簽署時仍然可以另揀方式。",
+   "pageTitle": "可信簽署器頁面",
+   "pageSubtitle": "可信簽署器開啟嘅頁面：官方頁面，或者你自己部署嘅零依賴簽署頁。",
+   "pageOfficial": "官方",
+   "pageInvalid": "呢個唔係網址。",
+   "pageInsecure": "請用 https 頁面，或者呢部機本機回環位址上嘅頁面——瀏覽器唔會喺其他地方簽署。",
+   "pageForeign": "你嘅通行密鑰屬於 getvela.app。其他網域上嘅頁面可以顯示請求，但無法簽署。",
+   "pageReset": "使用官方頁面",
+   "pageSave": "儲存"
   },
   "advanced": {
    "networksTitle": "網絡",
@@ -88,7 +102,8 @@
    "keeps": "選擇「我已有錢包」用同一把通行密鑰重新登入：地址不變，交易紀錄、聯絡人、代幣與各項設定亦全部保留。",
    "warning": "你的公鑰尚未同步至伺服器。下次啟動會自動重試，但在成功之前，你可能無法在其他裝置上登入——若移除此 App，這部裝置亦一樣。",
    "anyway": "仍然登出",
-   "cancel": "取消"
+   "cancel": "取消",
+   "descMany": "這部裝置上的 {{count}} 個錢包都會登出。不會刪除任何東西。"
   },
   "eraseDevice": {
    "title": "清除資料",
@@ -748,6 +763,8 @@
    "keysSubtitleFull": "已經去到上限 7 條。",
    "keysTitle": "加通行密鑰",
    "keysTitleBlocked": "再加多一條先建立得到",
+   "methodBlockedHint": "這個錢包的鑰匙都屬於 {{party}}。",
+   "methodBlockedSigner": "你的可信簽署器頁面是 {{page}}，它的鑰匙屬於 {{pageParty}}。在設定裡換成 {{party}} 的頁面才能新增。",
    "methodHybridBody": "掃個碼，用附近部機建立",
    "methodHybridTitle": "手機或者平板",
    "methodHybridUnavailable": "就快得",
@@ -1340,6 +1357,16 @@
    "techIdentityRecipient": "接收方",
    "copyValue": "複製",
    "signWith": "簽署方式",
+   "trustedSignerTitle": "可信簽署器",
+   "trustedSignerBody": "喺獨立嘅頁面上核對並簽署——所見即所簽。",
+   "trustedSignerWaiting": "正在等待可信簽署器…",
+   "trustedSignerWaitingHint": "請喺開啟咗嘅頁面上核對呢筆請求，並喺嗰度簽署。如果瀏覽器問你是否容許該頁面存取呢部機上嘅其他 App，請容許。",
+   "trustedSignerClosed": "可信簽署器已關閉，冇簽署。",
+   "trustedSignerRefused": "可信簽署器拒絕簽署呢筆請求，原因請睇佢嘅頁面。",
+   "trustedSignerMismatch": "可信簽署器嘅回覆同呢筆請求唔相符，所以乜都冇送出。",
+   "trustedSignerTimeout": "可信簽署器冇及時回應。",
+   "trustedSignerReopen": "重新開啟頁面",
+   "trustedSignerDoneTab": "已簽署。你可以關閉呢個分頁，返去 Vela。",
    "viewOnExplorer": "喺區塊瀏覽器睇",
    "sendingToTokenContract": "傳送到代幣自己嘅合約",
    "selfCallBlockedTitle": "Vela 不會簽這筆請求",
@@ -1557,7 +1584,11 @@
    "fiatLabel": "法定貨幣匯率",
    "fiatHint": "以 USD 為基準的匯率，決定可選貨幣列表——可更換為覆蓋更廣的來源。",
    "resetToDefaults": "四項全部還原預設",
-   "selfHostGuide": "自行部署指南 →"
+   "selfHostGuide": "自行部署指南 →",
+   "resetTitle": "重設服務端點？",
+   "resetBody": "四項服務都會改回 Vela 的地址，你在這裡填寫的地址將被清除。",
+   "resetConfirm": "重設",
+   "resetCancel": "取消"
   },
   "addNetwork": {
    "modalTitle": "新增網絡",
@@ -1575,7 +1606,6 @@
    "retry": "重試",
    "addNetworkBtn": "新增網絡",
    "incompatibleHint": "此區塊鏈上尚未部署部分必需的合約。\n請使用 Vela Wallet 區塊鏈設定工具部署，然後返回重新檢查。",
-   "singleKeyOnly": "此網絡上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。",
    "openChainSetupTool": "開啟區塊鏈設定工具",
    "recheck": "重新檢查",
    "chainIdLabel": "Chain ID：{{chainId}}",
@@ -1585,7 +1615,8 @@
    "incompatible": "唔相容",
    "checkSafe": "Safe L2 合約",
    "checkSigner": "P-256 預編譯合約",
-   "checkRemaining": "其餘 {{count}} 項合約"
+   "checkRemaining": "其餘 {{count}} 項合約",
+   "singleKeyOnly": "此網絡上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。"
   },
   "treasury": {
    "modalTitle": "資金庫",
@@ -1756,6 +1787,11 @@
   "siteMenu": "站點選單",
   "account": "帳戶",
   "addressBar": "網址欄",
-  "close": "閂"
+  "close": "閂",
+  "pageCrashedTitle": "此頁面已停止運作",
+  "pageCrashedBody": "頁面意外關閉。你的錢包不受影響——重新載入即可繼續。",
+  "walletConnectUnsupported": "暫不支援 WalletConnect 連結。請在「探索」中開啟該 dApp，並從頁面內連接。",
+  "scanUnrecognized": "此二維碼既不是網址，也不是錢包地址。",
+  "linkCopied": "連結已複製"
  }
 }

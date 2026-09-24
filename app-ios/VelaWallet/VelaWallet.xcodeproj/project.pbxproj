@@ -124,7 +124,6 @@
 				23ED5E343019A42200EA9C55 /* Resources */,
 				AAC0DE00000000000000B001 /* Bundle locale catalogs */,
 				AAC0DE00000000000000C003 /* Bundle launch animations */,
-				AAC0DE00000000000000D005 /* Bundle dApp provider */,
 			);
 			buildRules = (
 			);
@@ -302,26 +301,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
 			shellScript = "\"$SRCROOT/../scripts/bundle-animations.sh\"\n";
-		};
-		AAC0DE00000000000000D005 /* Bundle dApp provider */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"$(SRCROOT)/../scripts/provider-input.xcfilelist",
-			);
-			inputPaths = (
-			);
-			name = "Bundle dApp provider";
-			outputFileListPaths = (
-				"$(SRCROOT)/../scripts/provider-output.xcfilelist",
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "\"$SRCROOT/../scripts/bundle-provider.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

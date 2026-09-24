@@ -23,4 +23,11 @@ authenticator_attachment: string, transports: string,
  * The possession proof collected AT CREATION (interleaved flow). Absent
  * on the login re-publish, whose executor signs the member live.
  */
-proof: RegistryProof | null, };
+proof: RegistryProof | null, 
+/**
+ * Spec 075: the Trusted Signer page this member lives behind, when it does.
+ * The re-publish signs a member with no replayable proof LIVE, and that
+ * signature has to reach the page holding the key — not whichever page
+ * Settings names (Android, 075 phase C, found this missing).
+ */
+signer_origin?: string | null, };

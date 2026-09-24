@@ -15,17 +15,29 @@
 	let { row }: Props = $props();
 </script>
 
-<div class="kv" class:link={row.external}>
+{#snippet content()}
 	<span class="label">{row.label}</span>
 	<span class="value" class:mono={row.mono}>{row.value}</span>
 	{#if row.external}
 		<span class="glyph"><Icon icon={UTILITY_ICONS['external-link']} size="sm" /></span>
 	{/if}
-</div>
+{/snippet}
+
+<!-- A row that draws the external glyph opens its destination (spec 072):
+     the three About links were pictures of links. -->
+{#if row.href !== undefined}
+	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- About's outbound links, not app routes -->
+	<a class="kv" class:link={row.external} href={row.href} target="_blank" rel="noreferrer noopener">
+		{@render content()}
+	</a>
+{:else}
+	<div class="kv" class:link={row.external}>{@render content()}</div>
+{/if}
 
 <style>
 	.kv {
 		display: flex;
+		text-decoration: none;
 		align-items: center;
 		gap: var(--space-lg);
 		min-height: var(--size-control-md);

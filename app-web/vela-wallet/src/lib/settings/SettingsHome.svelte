@@ -13,15 +13,16 @@
 	 * already exist (signing out, and leaving for another tab).
 	 */
 	import { untrack } from 'svelte';
-	import type { OnNetEvent } from './net-events';
+	import { OPENED_EVENT, type OnNetEvent } from './net-events';
+	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 	import type {
+		ConfirmSheetModel,
 		FeedbackResult,
 		SettingsHomeModel,
 		SettingsOverlayId,
-		SettingsPageId,
-		StorageItemModel
+		SettingsPageId
 	} from './model';
 	import type { SettingsPrefEvent } from './pref-events';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
@@ -127,8 +128,8 @@
 	// tapping owns it from then on.
 	let page = $state<SettingsPageId>(untrack(() => model.page));
 	let overlay = $state<SettingsOverlayId>(untrack(() => model.overlay));
-	/** The storage row waiting on an answer, and the warning its group carries. */
-	let pendingStorage = $state<{ item: StorageItemModel; warning: string } | null>(null);
+	/** The storage row or network waiting on an answer, and the question it asks. */
+	let pending = $state<{ id: string; sheet: ConfirmSheetModel } | null>(null);
 	let advancedOpen = $state(untrack(() => model.state === 'st1b'));
 
 	/** ST1's 高级 disclosure, applied over the fixture sections. */
@@ -155,6 +156,7 @@
 		'date-format': 'date-format',
 		'time-format': 'time-format',
 		'fee-speed': 'fee-speed',
+		'sign-with': 'sign-with',
 		feedback: 'feedback'
 	};
 
@@ -166,11 +168,9 @@
 		const next = PAGE_OF[id];
 		if (next !== undefined) {
 			page = next;
-			// Opening these surfaces is itself a core event: the machine probes
-			// what the person is about to look at.
-			if (next === 'endpoints') onnetevent?.({ kind: 'endpoints-open' });
-			if (next === 'rpc-providers') onnetevent?.({ kind: 'providers-open' });
-			if (next === 'add-network') onnetevent?.({ kind: 'open-add' });
+			// Opening these surfaces is itself a core event (`OPENED_EVENT`).
+			const opened = OPENED_EVENT[next];
+			if (opened !== undefined) onnetevent?.(opened);
 			return;
 		}
 		const sheet = OVERLAY_OF[id];
@@ -180,6 +180,14 @@
 	function close() {
 		if (overlay === 'accounts') onaccountsopen?.(false);
 		overlay = 'none';
+		pending = null;
+	}
+
+	/** Put a destructive row's question up; the row acts only on its confirm. */
+	function ask(next: SettingsOverlayId, id: string, sheet: ConfirmSheetModel | undefined) {
+		if (sheet === undefined) return;
+		pending = { id, sheet };
+		overlay = next;
 	}
 
 	function openAccounts() {
@@ -228,8 +236,17 @@
 				return model.timeSheet.title;
 			case 'fee-speed':
 				return model.feeSpeedSheet.title;
+			case 'sign-with':
+				return model.signWithSheet.title;
 			case 'clear-caches':
 				return model.clearCachesSheet.title;
+			// The row being cleared or removed names it: "localhost:8814",
+			// "Contacts and groups", "X Layer". An untitled sheet asked
+			// "Disconnect?" without saying what.
+			case 'clear-storage-item':
+			case 'remove-network':
+			case 'reset-endpoints':
+				return pending?.sheet.title ?? '';
 			case 'erase-device':
 				return model.eraseSheet.title;
 			case 'feedback':
@@ -257,6 +274,8 @@
 				return model.timeSheet.subtitle;
 			case 'fee-speed':
 				return model.feeSpeedSheet.subtitle;
+			case 'sign-with':
+				return model.signWithSheet.subtitle;
 			case 'feedback':
 				return model.feedback.subtitle;
 			default:
@@ -325,7 +344,7 @@
 							{/each}
 						{/if}
 
-						<!-- The three appearance controls are not rows: they are the
+						<!-- The two appearance controls are not rows: they are the
 						     control itself, shown inline under 语言 (ST1). -->
 						{#if section.appearanceControls === true}
 							<TextScaleSlider
@@ -336,12 +355,6 @@
 								<SegmentedControl
 									model={model.appearance.theme}
 									onselect={(id) => onprefevent?.({ kind: 'theme', id })}
-								/>
-							</div>
-							<div class="control">
-								<SegmentedControl
-									model={model.appearance.avatar}
-									onselect={(id) => onprefevent?.({ kind: 'avatar', id })}
 								/>
 							</div>
 						{/if}
@@ -373,7 +386,7 @@
 							onnetevent?.({ kind: 'select-network', id });
 							page = 'network-detail';
 						}}
-						ondelete={(id) => onnetevent?.({ kind: 'delete-network', id })}
+						ondelete={(id) => ask('remove-network', id, removeNetworkQuestion(model.networks, id))}
 						onadd={() => {
 							onnetevent?.({ kind: 'open-add' });
 							page = 'add-network';
@@ -411,26 +424,18 @@
 							onnetevent?.({ kind: 'endpoint', field: id as NetEndpointField, value })}
 						onfieldblur={(id) =>
 							onnetevent?.({ kind: 'endpoint-blur', field: id as NetEndpointField })}
-						onreset={() => onnetevent?.({ kind: 'endpoints-reset' })}
+						onreset={() => ask('reset-endpoints', '', model.endpoints.resetSheet)}
 					/>
 				{:else if page === 'storage'}
 					<StoragePanel
 						panel={model.storage}
-						onclear={(id) => {
-							// Ask first (spec 058, the founder's ruling): "Contacts
-							// and groups · Clear" removed the whole address book on
-							// one click, with nothing in between. The question is
-							// built from what the row already says — its label, its
-							// group's warning, its own action word — so no new
-							// sentence is invented for it.
-							const group = model.storage.groups.find((g) =>
-								g.items.some((item) => item.id === id)
-							);
-							const item = group?.items.find((entry) => entry.id === id);
-							if (!item) return;
-							pendingStorage = { item, warning: group?.label ?? '' };
-							overlay = 'clear-storage-item';
-						}}
+						onclear={(id) =>
+							// Ask first (spec 058, the founder's ruling).
+							ask(
+								'clear-storage-item',
+								id,
+								storageClearQuestion(model.storage, id, model.clearCachesSheet.cancel)
+							)}
 						onclearcaches={() => (overlay = 'clear-caches')}
 					/>
 				{:else if page === 'about'}
@@ -509,25 +514,44 @@
 							close();
 						}}
 					/>
-				{:else if overlay === 'clear-storage-item' && pendingStorage}
+				{:else if overlay === 'sign-with'}
+					<!-- Spec 071: the DEFAULT "Sign with", stored. A signing sheet's
+					     own pick signs that one request and never comes through here. -->
+					<SelectSheetBody
+						sheet={model.signWithSheet}
+						onselect={(id) => {
+							onprefevent?.({ kind: 'sign-with', id });
+							close();
+						}}
+					/>
+				{:else if overlay === 'clear-storage-item' && pending}
 					<ConfirmSheet
-						sheet={{
-							title: pendingStorage.item.label,
-							body: pendingStorage.warning,
-							confirm: pendingStorage.item.action,
-							cancel: model.clearCachesSheet.cancel,
-							tone: pendingStorage.item.destructive === true ? 'danger' : 'accent'
-						}}
+						sheet={pending.sheet}
 						onconfirm={() => {
-							const id = pendingStorage?.item.id;
-							pendingStorage = null;
+							const id = pending?.id;
+							close();
 							if (id !== undefined) onstorageclear?.(id);
-							close();
 						}}
-						oncancel={() => {
-							pendingStorage = null;
+						oncancel={close}
+					/>
+				{:else if overlay === 'remove-network' && pending}
+					<ConfirmSheet
+						sheet={pending.sheet}
+						onconfirm={() => {
+							const id = pending?.id;
 							close();
+							if (id !== undefined) onnetevent?.({ kind: 'delete-network', id });
 						}}
+						oncancel={close}
+					/>
+				{:else if overlay === 'reset-endpoints' && pending}
+					<ConfirmSheet
+						sheet={pending.sheet}
+						onconfirm={() => {
+							close();
+							onnetevent?.({ kind: 'endpoints-reset' });
+						}}
+						oncancel={close}
 					/>
 				{:else if overlay === 'clear-caches'}
 					<ConfirmSheet

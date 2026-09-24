@@ -16,11 +16,16 @@ pub enum ThemeMode {
 }
 
 impl ThemeMode {
-    /// `VELA_THEME` override, else the window's current system appearance.
+    /// `VELA_THEME` override, else the person's stored choice (spec 072:
+    /// `vela.theme`), else — for `system` — the window's current appearance.
     pub fn detect(window: &Window) -> Self {
-        match std::env::var("VELA_THEME").as_deref() {
-            Ok("light") => Self::Light,
-            Ok("dark") => Self::Dark,
+        let pinned = match std::env::var("VELA_THEME").as_deref() {
+            Ok(pin @ ("light" | "dark")) => pin.to_owned(),
+            _ => crate::executor::preferences::theme().to_owned(),
+        };
+        match pinned.as_str() {
+            "light" => Self::Light,
+            "dark" => Self::Dark,
             _ => match window.appearance() {
                 gpui::WindowAppearance::Dark | gpui::WindowAppearance::VibrantDark => Self::Dark,
                 gpui::WindowAppearance::Light | gpui::WindowAppearance::VibrantLight => Self::Light,
@@ -686,7 +691,7 @@ pub fn text_step_ordinal() -> Pixels {
     scaled(104.)
 }
 pub fn line_height_step_ordinal() -> Pixels {
-    px(104. * 0.82)
+    scaled(104. * 0.82)
 }
 /// The `/03` that follows it.
 pub fn text_step_total() -> Pixels {
@@ -707,11 +712,11 @@ pub fn text_rail_tagline() -> Pixels {
     scaled(26.)
 }
 pub fn line_height_rail_tagline() -> Pixels {
-    px(26. * 1.35)
+    scaled(26. * 1.35)
 }
 /// The one sentence under a step's name.
 pub fn line_height_rail_detail() -> Pixels {
-    px(13. * 1.6)
+    scaled(13. * 1.6)
 }
 /// The v2 welcome hero. It carries the screen, so it is nearly twice v1's
 /// tagline; the copy ships its own line break rather than relying on a wrap.
@@ -720,7 +725,7 @@ pub fn text_hero() -> Pixels {
 }
 /// `line-height: 1.25` at the hero size.
 pub fn line_height_hero() -> Pixels {
-    px(46. * 1.25)
+    scaled(46. * 1.25)
 }
 /// One rung down the hero ladder (46/38/31), for a locale whose headline is too
 /// wide for the first. The corpus says which, in `heroTitleFit` — the width is a
@@ -732,7 +737,7 @@ pub fn text_hero_long() -> Pixels {
 }
 /// `line-height: 1.25` at the long-locale hero size.
 pub fn line_height_hero_long() -> Pixels {
-    px(38. * 1.25)
+    scaled(38. * 1.25)
 }
 /// Flow-screen titles (spec 014). Not the welcome hero — that is `text_hero`.
 pub fn text_tagline() -> Pixels {
@@ -758,16 +763,16 @@ pub fn text_flow_sub() -> Pixels {
 }
 /// `line-height: 1.5` at 15.
 pub fn line_height_flow_sub() -> Pixels {
-    px(22.5)
+    scaled(22.5)
 }
 /// `line-height: 1.55` at 13 — the acknowledgement and hint sentences, which
 /// wrap more than anything else on the screen.
 pub fn line_height_ack() -> Pixels {
-    px(13. * 1.55)
+    scaled(13. * 1.55)
 }
 /// `line-height: 1.2` on the 26px flow titles.
 pub fn line_height_title() -> Pixels {
-    px(26. * 1.2)
+    scaled(26. * 1.2)
 }
 /// The uppercase field/section label above an input or a list. Tiny, heavy and
 /// tracked in the design; gpui cannot track, so the case and the weight carry
@@ -785,7 +790,7 @@ pub fn text_row_meta() -> Pixels {
 }
 /// Relaxed body line height (~1.55 at 13 px).
 pub fn line_height_body() -> Pixels {
-    px(20.)
+    scaled(20.)
 }
 
 #[cfg(test)]
@@ -868,6 +873,30 @@ mod tests {
         assert_eq!(CONTACTS_MOTION_PANEL_CLOSE_MS, 200);
         assert_eq!(CONTACTS_MOTION_CROSSFADE_MS, 150);
         assert_eq!(CONTACTS_MOTION_HOVER_MS, 120);
+    }
+
+    /// Spec 072: a text size multiplies the mock-measured token by the core's
+    /// factor for that stop — the smallest stop shrinks, the largest grows,
+    /// and "standard" is the design exactly.
+    #[test]
+    fn a_text_size_multiplies_the_token() {
+        // Through the ONE store the setting lives in (`appearance_prefs`), which
+        // is what `scaled` reads — there is no second copy of the factor to
+        // test against, and that is the point of the merge that unified them.
+        use crate::executor::appearance_prefs::{TextScale, set_text_scale};
+        set_text_scale(TextScale::Standard);
+        assert_eq!(scaled(13.), px(13.));
+        set_text_scale(TextScale::XLarge);
+        assert_eq!(scaled(20.), px((20. * 1.35f32).round()));
+        set_text_scale(TextScale::Compact);
+        assert!(scaled(13.) < px(13.));
+        // …and every size is a whole pixel: a glyph at 13.94px against a
+        // hairline measured in whole pixels is how a row starts looking half a
+        // pixel wrong.
+        set_text_scale(TextScale::Comfortable);
+        let size: f32 = scaled(13.).into();
+        assert_eq!(size, size.round());
+        set_text_scale(TextScale::Standard);
     }
 
     /// The accent is the brand constant and identical across modes (research D3).

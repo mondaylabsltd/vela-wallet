@@ -14,18 +14,6 @@ otra. Eso es exactamente lo que le pasó a [Bybit](/es-MX/docs/bybit-attack).
 La página de firma existe para partir eso en dos: la transacción viene de un lugar,
 y la revisión y la firma ocurren en otro que controlas tú.
 
-**Estado:** construida y probada localmente; **no publicada**, y **ninguna app de
-Vela le envía solicitudes todavía**. Hoy es algo para leer, ejecutar y probar con
-los solicitantes de demostración de su carpeta `samples/`. Usarla para firmas reales
-requiere que las apps le dirijan sus solicitudes, y eso todavía está por
-construirse.
-
-## Qué es
-
-Una carpeta (`app-web/clearsigning` en el repositorio) que es a la vez una página
-web y una extensión de Chrome. HTML, CSS y JavaScript puros: sin framework, sin
-bundler, sin paso de compilación, sin dependencias y sin datos obtenidos de un
-servidor; su única solicitud es para los logos decorativos de los tokens.
 
 Cuando recibe una solicitud de firma, no confía en el resumen que viene con ella.
 Decodifica el calldata crudo por su cuenta, calcula su propio digest, te muestra lo
@@ -42,17 +30,6 @@ registradas bajo `getvela.app`, y un navegador solo las ofrece a una página cuy
 relying party sea `getvela.app`. Esa sola regla decide qué forma de ejecutar tu
 propia copia te sirve.
 
-**Como extensión de Chrome: la forma de usarla con tus llaves existentes.** La
-relying party de la extensión es `getvela.app` sin importar de dónde venga la
-carpeta, así que tus llaves existentes pueden firmar en ella, mientras que el código
-es la carpeta que cargaste y revisaste.
-
-1. Consigue la carpeta: `git clone https://github.com/mondaylabsltd/vela-wallet`
-   (está dentro, en `app-web/clearsigning`).
-2. Abre `chrome://extensions` y activa el **Modo de desarrollador**.
-3. Haz clic en **Cargar descomprimida** y elige la carpeta `app-web/clearsigning`.
-4. El ícono de la barra de herramientas abre la página en una pestaña.
-
 **Como página en tu propio dominio, o en localhost.** Servida por HTTPS (o desde
 localhost), la relying party de la página es su propio nombre de host, así que puede
 firmar con llaves registradas bajo _ese_ nombre de host, no con llaves registradas
@@ -62,7 +39,7 @@ llave se creó en tu propio dominio. No es una forma de firmar para una wallet
 existente de `getvela.app`.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

@@ -104,6 +104,10 @@ pub enum ShellOperation {
         #[serde(default)]
         method: KeyMethod,
         purpose: ProofPurpose,
+        /// Spec 075: with `method = trusted_signer`, the page the key lives
+        /// behind (the sign-in's own). `None` on every other route.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        signer_origin: Option<String>,
     },
     /// Mint the one-time software group key for a wallet's registry group.
     /// All randomness lives in the shell; the seed never touches the core's
@@ -148,6 +152,11 @@ pub enum ShellOperation {
         #[serde(default)]
         method: KeyMethod,
         group_public_key_hex: String,
+        /// Spec 075: with `method = trusted_signer`, the page the key was just
+        /// minted behind — the membership is confirmed there. `None` on every
+        /// other route.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        signer_origin: Option<String>,
     },
     /// The v1 index's display name for a credential — the only place a
     /// v1-era wallet's name survives (v1 stored it server-side; a handle

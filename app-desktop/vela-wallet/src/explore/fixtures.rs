@@ -327,6 +327,23 @@ pub fn group_pick_menu(strings: &ExploreStrings, groups: &[String]) -> MenuModel
     }
 }
 
+/// Which network the site on screen is on (spec 070): the wallet's own
+/// networks, the site's ticked. The tick IS the state, as in the group
+/// pickers — one shape for "which of these".
+pub fn network_pick_menu(networks: &[(SharedString, bool)]) -> MenuModel {
+    MenuModel {
+        divider_after: None,
+        items: networks
+            .iter()
+            .map(|(name, current)| MenuItemModel {
+                icon: if *current { Icon::Check } else { Icon::Network },
+                label: name.clone(),
+                destructive: false,
+            })
+            .collect(),
+    }
+}
+
 /// The menu on a row in Recent (spec 032 phase 40).
 ///
 /// History rows had no menu on any client, so the core's `DeleteOrigin` — one

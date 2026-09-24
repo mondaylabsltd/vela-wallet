@@ -42,7 +42,11 @@
       "fiatLabel": "КУРСЫ ВАЛЮТ",
       "fiatHint": "Курсы валют на основе USD, формирующие список валют — можно заменить для более широкого охвата.",
       "resetToDefaults": "Сбросить все четыре",
-      "selfHostGuide": "Руководство по self-hosting →"
+      "selfHostGuide": "Руководство по self-hosting →",
+      "resetTitle": "Сбросить сервисные эндпоинты?",
+      "resetBody": "Все четыре сервиса вернутся к адресам Vela. Адреса, которые вы ввели здесь, будут забыты.",
+      "resetConfirm": "Сбросить",
+      "resetCancel": "Отмена"
     },
     "addNetwork": {
       "modalTitle": "Добавить сеть",
@@ -60,7 +64,6 @@
       "retry": "Повторить",
       "addNetworkBtn": "Добавить сеть",
       "incompatibleHint": "Некоторые необходимые контракты ещё не развёрнуты в этой сети.\nРазверните их с помощью инструмента Vela Wallet Chain Setup, затем вернитесь и перепроверьте.",
-      "singleKeyOnly": "Кошелёк с несколькими passkey нельзя создать в этой сети: фабрика подписантов passkey от Safe здесь не развёрнута.\nКошелёк с одним passkey работает как обычно.",
       "openChainSetupTool": "Открыть Chain Setup Tool",
       "recheck": "Перепроверить",
       "chainIdLabel": "ID сети: {{chainId}}",
@@ -70,7 +73,8 @@
       "incompatible": "Несовместима",
       "checkSafe": "Контракты Safe L2",
       "checkSigner": "Прекомпайл P-256",
-      "checkRemaining": "ещё контрактов: {{count}}"
+      "checkRemaining": "ещё контрактов: {{count}}",
+      "singleKeyOnly": "Кошелёк с несколькими passkey нельзя создать в этой сети: фабрика подписантов passkey от Safe здесь не развёрнута.\nКошелёк с одним passkey работает как обычно."
     },
     "treasury": {
       "modalTitle": "Treasury",

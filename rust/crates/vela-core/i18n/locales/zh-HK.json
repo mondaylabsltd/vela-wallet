@@ -29,7 +29,9 @@
     },
     "account": {
       "switch": "切換帳戶",
-      "contactsSubtitle": "已儲存嘅地址同最近收款人"
+      "contactsSubtitle": "已儲存嘅地址同最近收款人",
+      "remove": "從這部裝置移除",
+      "removeBody": "只有這個錢包離開，其餘的不動。"
     },
     "appearance": {
       "themeLight": "淺色",
@@ -54,6 +56,18 @@
     "feeSpeed": {
       "title": "交易速度",
       "subtitle": "喺 Vela 發起嘅每筆轉賬都由呢度開始。發送時仍可單獨調整某一筆。"
+    },
+    "signing": {
+      "title": "簽署方式",
+      "subtitle": "你喺 Vela 發起嘅每次簽署都由呢度開始。單次簽署時仍然可以另揀方式。",
+      "pageTitle": "可信簽署器頁面",
+      "pageSubtitle": "可信簽署器開啟嘅頁面：官方頁面，或者你自己部署嘅零依賴簽署頁。",
+      "pageOfficial": "官方",
+      "pageInvalid": "呢個唔係網址。",
+      "pageInsecure": "請用 https 頁面，或者呢部機本機回環位址上嘅頁面——瀏覽器唔會喺其他地方簽署。",
+      "pageForeign": "你嘅通行密鑰屬於 getvela.app。其他網域上嘅頁面可以顯示請求，但無法簽署。",
+      "pageReset": "使用官方頁面",
+      "pageSave": "儲存"
     },
     "advanced": {
       "networksTitle": "網絡",
@@ -88,7 +102,8 @@
       "keeps": "選擇「我已有錢包」用同一把通行密鑰重新登入：地址不變，交易紀錄、聯絡人、代幣與各項設定亦全部保留。",
       "warning": "你的公鑰尚未同步至伺服器。下次啟動會自動重試，但在成功之前，你可能無法在其他裝置上登入——若移除此 App，這部裝置亦一樣。",
       "anyway": "仍然登出",
-      "cancel": "取消"
+      "cancel": "取消",
+      "descMany": "這部裝置上的 {{count}} 個錢包都會登出。不會刪除任何東西。"
     },
     "eraseDevice": {
       "title": "清除資料",

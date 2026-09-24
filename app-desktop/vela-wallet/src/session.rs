@@ -31,6 +31,21 @@ use crate::executor;
 pub struct SessionState {
     host: CoreHost<Session>,
     view: SessionView,
+    /// A signed-in person asked for another account (spec 072): the route
+    /// stays the wallet, and the window shows onboarding over it until the
+    /// new account is established or they go back. A shell flag, not the
+    /// core's: WHETHER a second account may be added is already the create
+    /// and login machines' question — this is only where the window is.
+    adding: Option<AddAccount>,
+}
+
+/// Which way into another account.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddAccount {
+    /// "Create a new account" — straight into the create journey.
+    Create,
+    /// "Sign in to an existing account" — the sign-in methods.
+    SignIn,
 }
 
 impl Global for SessionState {}
@@ -39,7 +54,11 @@ impl SessionState {
     fn new() -> Self {
         let host = CoreHost::<Session>::new();
         let view = host.view();
-        Self { host, view }
+        Self {
+            host,
+            view,
+            adding: None,
+        }
     }
 
     /// Drain the effect queue. Every operation answers immediately, so this
@@ -82,6 +101,43 @@ pub fn account_established(mode: CompletionMode, cx: &mut App) {
         vela_core::app::session::Event::AccountEstablished { mode },
         cx,
     );
+    // Whatever way in it came from, the new account is the answer.
+    set_adding(None, cx);
+}
+
+/// Open onboarding over a signed-in window, to add another account.
+pub fn add_account(entry: AddAccount, cx: &mut App) {
+    set_adding(Some(entry), cx);
+}
+
+/// Back to the wallet without one.
+pub fn add_account_cancelled(cx: &mut App) {
+    set_adding(None, cx);
+}
+
+/// Is another account being added, and which way.
+pub fn adding_account(cx: &App) -> Option<AddAccount> {
+    cx.try_global::<SessionState>()
+        .and_then(|state| state.adding)
+}
+
+fn set_adding(adding: Option<AddAccount>, cx: &mut App) {
+    if !cx.has_global::<SessionState>() {
+        boot(cx);
+    }
+    // Written through `global_mut`, which notifies observers: the root is
+    // one, and this flag is a navigation.
+    cx.global_mut::<SessionState>().adding = adding;
+}
+
+/// Read storage again from nothing — after an erase (spec 072), when there is
+/// no wallet left to be signed into and the next screen is the first run.
+///
+/// A fresh machine rather than an event: `Boot` is single-shot by the core's
+/// own rule, and the machine that was booted remembers accounts that are no
+/// longer on disk.
+pub fn reboot(cx: &mut App) {
+    boot(cx);
 }
 
 /// Open the sign-out confirmation. The core checks the pending-upload outbox
@@ -93,6 +149,14 @@ pub fn account_established(mode: CompletionMode, cx: &mut App) {
 /// carries its own index rather than leaving the shell to count rows.
 pub fn switch_account(index: usize, cx: &mut App) {
     dispatch(vela_core::app::session::Event::SwitchAccount { index }, cx);
+}
+
+/// Drop ONE wallet from this device and stay on the others (2026-09-23).
+///
+/// `index` is a position in the ORIGINAL list, as [`switch_account`] takes.
+/// Removing the last one signs this device out, which the core decides.
+pub fn remove_account(index: usize, cx: &mut App) {
+    dispatch(vela_core::app::session::Event::RemoveAccount { index }, cx);
 }
 
 pub fn sign_out(cx: &mut App) {
@@ -135,6 +199,7 @@ mod tests {
                 public_key_hex: "04aa".to_owned(),
                 name: "Everyday wallet".to_owned(),
                 transports: "usb".to_owned(),
+                signer_origin: None,
             }],
         }
     }

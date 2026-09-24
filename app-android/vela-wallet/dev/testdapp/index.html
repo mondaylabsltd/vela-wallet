@@ -24,8 +24,22 @@
   <button id="siwe" type="button">SIWE</button>
   <button id="siwe-bad" type="button">SIWE (other domain)</button>
   <button id="ethsign" type="button">eth_sign</button>
+  <!-- Spec 070: the answers the core now decides the same way everywhere. -->
+  <button id="add" type="button">Add Base</button>
+  <button id="add-unknown" type="button">Add chain 1337</button>
+  <button id="coinbase" type="button">Coinbase</button>
+  <button id="watch" type="button">Watch asset</button>
+  <button id="revoke" type="button">Revoke</button>
+  <button id="unknown" type="button">Unknown method</button>
+  <button id="alert" type="button">alert()</button>
+  <a href="mailto:test@example.com">mailto link</a>
+  <a href="https://example.com/" target="_blank">target=_blank</a>
+  <!-- A second origin, framed: it calls the host bridge directly, the way an ad
+       iframe would. The wallet must never hear it (spec 070 FR-012). -->
+  <iframe id="attacker" title="attacker" style="width:100%;height:40px;border:1px dashed #999"></iframe>
   <pre id="out">waiting…</pre>
-  <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.9.3/build/sha3.min.js"></script>
+  <!-- Vendored (spec 070): a CDN the phone cannot reach made Verify a dead button. -->
+  <script src="keccak.js"></script>
   <script>
     const out = document.getElementById('out');
     const state = { announced: [], legacy: null, results: {}, events: [] };
@@ -76,13 +90,23 @@
       const msg = new TextEncoder().encode('Hello, Vela');
       const prefix = new TextEncoder().encode('\x19Ethereum Signed Message:\n' + msg.length);
       const bytes = new Uint8Array(prefix.length + msg.length); bytes.set(prefix); bytes.set(msg, prefix.length);
-      const hash = sha3.keccak256(bytes);
+      const hash = Array.from(window.VelaCS.keccak.hash(bytes)).map((b) => b.toString(16).padStart(2, '0')).join('');
       const sigHex = sig.slice(2);
       const data = '0x1626ba7e' + hash + (64).toString(16).padStart(64, '0') + (sigHex.length / 2).toString(16).padStart(64, '0') + sigHex + '0'.repeat((64 - (sigHex.length % 64)) % 64);
       const r = await window.__ask('eth_call', [{ to: me(), data }, 'latest']);
       state.results.verify = { ok: r.ok, magic: r.ok ? String(r.result).slice(0, 10) : null, valid: r.ok && String(r.result).slice(0, 10) === '0x1626ba7e', error: r.ok ? null : r.message };
       show();
     };
+    document.getElementById('add').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0x2105', chainName: 'Base', rpcUrls: ['https://mainnet.base.org'], nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 } }]);
+    document.getElementById('add-unknown').onclick = () => window.__ask('wallet_addEthereumChain', [{ chainId: '0x539', chainName: 'Local 1337' }]);
+    document.getElementById('coinbase').onclick = () => window.__ask('eth_coinbase');
+    document.getElementById('watch').onclick = () => window.__ask('wallet_watchAsset', { type: 'ERC20', options: { address: GNOSIS_USDC, symbol: 'USDC', decimals: 6 } });
+    document.getElementById('revoke').onclick = () => window.__ask('wallet_revokePermissions', [{ eth_accounts: {} }]);
+    document.getElementById('unknown').onclick = () => window.__ask('eth_signTransaction', [{}]);
+    document.getElementById('alert').onclick = () => { window.alert('hello from the page'); state.results.alert = { ok: true }; show(); };
+    // The framed page: the other port of this server, so a different origin.
+    const frameOrigin = location.protocol + '//' + location.hostname + ':' + (Number(location.port || 80) + 1);
+    document.getElementById('attacker').src = frameOrigin + '/attacker.html';
     document.getElementById('approve').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + MAX, value: '0x0' }]);
   
     // Spec 081: the shapes the self-call guard must refuse.

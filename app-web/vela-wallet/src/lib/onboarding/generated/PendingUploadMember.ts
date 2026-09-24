@@ -3,4 +3,8 @@
 /**
  * One draft key inside a multi-member [`PendingUpload`], founding order.
  */
-export type PendingUploadMember = { credential_id: string, name: string, public_key_hex: string, attestation_object_hex: string, authenticator_attachment: string, transports: string, };
+export type PendingUploadMember = { credential_id: string, name: string, public_key_hex: string, attestation_object_hex: string, authenticator_attachment: string, transports: string, 
+/**
+ * Spec 075: see [`AccountKey::signer_origin`].
+ */
+signer_origin?: string | null, };

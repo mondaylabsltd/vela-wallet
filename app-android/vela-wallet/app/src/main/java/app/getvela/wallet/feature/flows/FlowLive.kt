@@ -217,7 +217,7 @@ object FlowLive {
                     label = strings.t(if (received) I18nKeys.Flows.DETAIL_FROM else I18nKeys.Flows.DETAIL_TO),
                     value = item.alias ?: shortAddress(counterparty),
                     copyValue = counterparty,
-                    lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it, item.alias) },
+                    lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
                     mono = item.alias == null,
                     copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
                 ),

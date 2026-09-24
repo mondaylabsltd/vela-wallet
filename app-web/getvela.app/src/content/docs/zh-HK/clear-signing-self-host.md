@@ -12,11 +12,6 @@ App。如果這個 App 或它送到你手上的途徑被人動了手腳，它就
 
 簽名頁的存在，就是要把這件事一分為二：交易從一個地方來，而核對和簽署則在一個由你控制的地方進行。
 
-**狀態：**已完成並在本機測試；**尚未發佈**，而且**目前還沒有任何 Vela App 會向它發送請求**。現階段它可以
-拿來閱讀、運行，並用 `samples/` 資料夾中的示範請求程式試用。要用它進行真正的簽署，需要各個 App 把請求
-轉交給它，而這部分仍有待開發。
-
-## 它是甚麼
 
 一個資料夾——程式碼庫中的 `app-web/clearsigning`——它既是一個網頁，也是一個 Chrome 擴充功能。純 HTML、
 CSS 和 JavaScript：沒有框架、沒有打包工具、沒有建置步驟、沒有依賴，也不會從伺服器取得任何資料——它唯一的
@@ -33,22 +28,13 @@ CSS 和 JavaScript：沒有框架、沒有打包工具、沒有建置步驟、�
 通行密鑰綁定在建立它的域名上。你的 Vela 鑰匙登記在 `getvela.app` 之下，瀏覽器只會把它們提供給依賴方
 （relying party）是 `getvela.app` 的頁面。就是這一條規則，決定了哪一種自行運行副本的方式對你有用。
 
-**作為 Chrome 擴充功能——用你現有鑰匙的方法。**無論資料夾從哪裏來，擴充功能的依賴方都是 `getvela.app`，
-所以你現有的鑰匙可以在其中簽署，而運行的程式碼正是你載入並檢查過的那個資料夾。
-
-1. 取得資料夾：`git clone https://github.com/mondaylabsltd/vela-wallet`
-   （即其中的 `app-web/clearsigning`）。
-2. 打開 `chrome://extensions`，開啟**開發人員模式**。
-3. 按**載入未封裝項目**，然後選擇 `app-web/clearsigning` 資料夾。
-4. 按工具列上的圖示，就會在分頁中打開這個頁面。
-
 **作為你自己域名或 localhost 上的頁面。**以 HTTPS（或從 localhost）提供時，頁面的依賴方就是它自己的主機
 名稱——所以它能用登記在*該*主機名稱下的鑰匙簽署，而不能用登記在 `getvela.app` 下的鑰匙。因此，這種方式
 適合用來端對端試行整個簽署流程、運行桌面版流程，以及為鑰匙建立在你自己域名上的錢包簽署。它並不能為
 現有的 `getvela.app` 錢包簽署。
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

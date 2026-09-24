@@ -23,6 +23,10 @@ final class SendStore {
     private(set) var view: SendViewWire?
     /// The alert the core raised, waiting to be shown. The screen clears it.
     var alert: [String: Any]?
+    /// How the last Trusted Signer ceremony ended without a signature (spec
+    /// 071), for the confirmation's notice. The core only heard "cancelled";
+    /// the sentence is this screen's, until the next attempt or leaving.
+    private(set) var trustedSignerNotice: TrustedSignerNotice?
 
     private var core: CoreStore<SendViewWire>!
     private let executor: SendExecutor
@@ -45,9 +49,11 @@ final class SendStore {
         // attempt. Without it, a cancel has nothing to cancel and the next tap
         // raises a second prompt — the defect FR-009 counts.
         executor.ports.signingStarted = { [weak self] in
+            self?.trustedSignerNotice = nil
             self?.dispatch(["type": "signing_started"])
         }
         executor.ports.alert = { [weak self] kind in self?.alert = kind }
+        executor.ports.trustedSignerEnded = { [weak self] notice in self?.trustedSignerNotice = notice }
         // Leaving re-arms `Open`, and it is the CORE's leaving that counts —
         // not a view disappearing. SwiftUI tears a view down and rebuilds it
         // for reasons that have nothing to do with the journey, and an
@@ -57,6 +63,7 @@ final class SendStore {
         executor.ports.closed = { [weak self] in
             leaving()
             self?.entered = false
+            self?.trustedSignerNotice = nil
         }
     }
 

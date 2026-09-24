@@ -29,7 +29,9 @@
     },
     "account": {
       "switch": "Chuyển tài khoản",
-      "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây"
+      "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây",
+      "remove": "Gỡ khỏi thiết bị này",
+      "removeBody": "Chỉ ví này rời đi; các ví khác vẫn còn."
     },
     "appearance": {
       "themeLight": "Sáng",
@@ -54,6 +56,18 @@
     "feeSpeed": {
       "title": "Tốc độ giao dịch",
       "subtitle": "Mọi lượt gửi bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể đổi riêng từng lần gửi."
+    },
+    "signing": {
+      "title": "Ký bằng",
+      "subtitle": "Mọi chữ ký bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể chọn cách khác cho từng lần ký.",
+      "pageTitle": "Trang Trusted Signer",
+      "pageSubtitle": "Trang mà Trusted Signer mở: trang chính thức, hoặc bản sao trang không phụ thuộc do bạn tự triển khai.",
+      "pageOfficial": "Chính thức",
+      "pageInvalid": "Đây không phải là địa chỉ web.",
+      "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
+      "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
+      "pageReset": "Dùng trang chính thức",
+      "pageSave": "Lưu"
     },
     "advanced": {
       "networksTitle": "Mạng lưới",
@@ -88,7 +102,8 @@
       "keeps": "Chọn “Tôi đã có ví” để đăng nhập lại bằng chính passkey đó: địa chỉ vẫn như cũ, và lịch sử giao dịch, danh bạ, token cùng các cài đặt vẫn còn nguyên.",
       "warning": "Khóa công khai của bạn chưa tới được máy chủ đồng bộ. Ứng dụng sẽ thử lại ở lần mở kế tiếp, nhưng cho tới khi thành công, bạn có thể không đăng nhập được trên thiết bị khác — và cả trên máy này nếu bạn gỡ ứng dụng.",
       "anyway": "Vẫn đăng xuất",
-      "cancel": "Hủy"
+      "cancel": "Hủy",
+      "descMany": "Cả {{count}} ví trên thiết bị này sẽ đăng xuất. Không xoá gì cả."
     },
     "eraseDevice": {
       "title": "Xoá sạch thiết bị này",

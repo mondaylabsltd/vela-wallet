@@ -302,6 +302,13 @@ bridge_object!(
 );
 
 bridge_object!(
+    /// How this device signs by default (spec 071): the "Sign with" every
+    /// signing sheet starts at, and which Trusted Signer page it opens.
+    SignPrefCore,
+    vela_core::app::sign_pref::SignPref
+);
+
+bridge_object!(
     /// The speed control of one send surface (spec 069): the tier in force,
     /// the free upgrade, the one-speed statement and each tier's gas bid.
     FeeSpeedCore,
@@ -350,6 +357,14 @@ bridge_object!(
     /// forwards to signing, the events the page hears.
     DappPermissionsCore,
     vela_core::app::dapp_permissions::DappPermissions
+);
+
+bridge_object!(
+    /// The in-app browser's whole decision half (spec 070): every page
+    /// message, every tab, per-origin chains, the signing line, bounded
+    /// reads — the shell owns the WebViews, posts strings and runs calls.
+    DappBrowserCore,
+    vela_core::app::dapp_browser::DappBrowser
 );
 
 bridge_object!(

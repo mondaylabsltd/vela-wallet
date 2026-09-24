@@ -63,8 +63,15 @@
 	{:else}
 		<ul>
 			{#each model.rows as row, index (index)}
+				<!--
+					`row.holder` is the model's last word — a key behind a Clear
+					Signer page (spec 075), whose holder the AAGUID catalog must not
+					be allowed to rename: that vault sits on the page's far side.
+				-->
 				{@const holder =
-					providerLabel(row.key.provider_name, row.key.aaguid, isDarkTheme()) ?? row.holderFallback}
+					row.holder ??
+					providerLabel(row.key.provider_name, row.key.aaguid, isDarkTheme()) ??
+					row.holderFallback}
 				{@const expandable = row.details.length > 0}
 				<li class="key" class:open={open[index] === true}>
 					<!--

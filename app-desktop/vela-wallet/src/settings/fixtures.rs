@@ -31,6 +31,9 @@ pub enum SettingsPage {
     /// The default transaction speed (spec 069) — between the endpoints and
     /// the storage, as the web's desktop layout places it.
     FeeSpeed,
+    /// How this device signs by default, and the Trusted Signer's page (spec
+    /// 071) — beside the speed, where every shell puts the two.
+    Signing,
     Storage,
     About,
 }
@@ -38,7 +41,7 @@ pub enum SettingsPage {
 impl SettingsPage {
     /// The nav column, in order. One array so the rail and the tests can never
     /// disagree about what the section contains.
-    pub const ALL: [SettingsPage; 9] = [
+    pub const ALL: [SettingsPage; 10] = [
         SettingsPage::Account,
         SettingsPage::Appearance,
         SettingsPage::Localization,
@@ -46,6 +49,7 @@ impl SettingsPage {
         SettingsPage::RpcProviders,
         SettingsPage::Endpoints,
         SettingsPage::FeeSpeed,
+        SettingsPage::Signing,
         SettingsPage::Storage,
         SettingsPage::About,
     ];
@@ -59,6 +63,7 @@ impl SettingsPage {
             SettingsPage::RpcProviders => Icon::Server,
             SettingsPage::Endpoints => Icon::Zap,
             SettingsPage::FeeSpeed => Icon::Clock,
+            SettingsPage::Signing => Icon::Lock,
             SettingsPage::Storage => Icon::HardDrive,
             SettingsPage::About => Icon::Info,
         }
@@ -73,6 +78,7 @@ impl SettingsPage {
             SettingsPage::RpcProviders => s.nav_rpc_providers.clone(),
             SettingsPage::Endpoints => s.nav_endpoints.clone(),
             SettingsPage::FeeSpeed => s.nav_fee_speed.clone(),
+            SettingsPage::Signing => s.nav_signing.clone(),
             SettingsPage::Storage => s.nav_storage.clone(),
             SettingsPage::About => s.nav_about.clone(),
         }
@@ -397,8 +403,8 @@ pub const STORAGE_RECORDS: u32 = 216;
 pub const STORAGE_SEGMENTS: [(f32, u32); 3] = [(0.5, 0x5a7cf6), (0.3, 0x3da872), (0.2, 0x85827a)];
 
 pub struct StorageItem {
-    /// The row's id, shared with the other three shells
-    /// (`executor::device_storage::ITEMS`). What 清除 acts on.
+    /// The catalog's row id (`vela_core::storage_catalog::ITEMS`) — what a
+    /// row's action clears. A connected site's row carries `dapps`.
     pub id: &'static str,
     pub label: SharedString,
     pub meta: SharedString,
@@ -583,6 +589,8 @@ pub fn about_rows_with(
     ]
 }
 
+/// Where each About link goes: its drawn value, over HTTPS.
+#[must_use]
 /// The three places About points at: the label, the host as drawn, and the URL
 /// the row opens. The host is what a person reads; the URL is what the row does,
 /// and they are kept side by side so one cannot drift from the other.
@@ -606,6 +614,29 @@ pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString, Shar
     ]
 }
 
+// -- appearance / localization (spec 072) -------------------------------------
+
+/// Every shipped locale by its own name, in `vela_core::i18n::SUPPORTED`'s
+/// order — the web's `LOCALE_ENDONYMS`. An endonym is not translated: a
+/// person looking for their language looks for it in their language.
+pub const LOCALE_ENDONYMS: [(&str, &str); 15] = [
+    ("en", "English"),
+    ("zh", "简体中文"),
+    ("zh-TW", "繁體中文（台灣）"),
+    ("zh-HK", "繁體中文（香港）"),
+    ("ja", "日本語"),
+    ("ko", "한국어"),
+    ("vi", "Tiếng Việt"),
+    ("id", "Bahasa Indonesia"),
+    ("tr", "Türkçe"),
+    ("es-MX", "Español (México)"),
+    ("pt-BR", "Português (Brasil)"),
+    ("fr", "Français"),
+    ("de", "Deutsch"),
+    ("ru", "Русский"),
+    ("it", "Italiano"),
+];
+
 // -- rescue (DSR1) ------------------------------------------------------------
 
 pub const RPC_FIX_CHAIN: &str = "polygon";
@@ -623,8 +654,16 @@ pub fn banner_text(s: &SettingsStrings) -> SharedString {
     ))
 }
 
-/// The four places SR2/DSR1 point at for a working endpoint.
-pub const RPC_PROVIDER_LINKS: [&str; 4] = ["Alchemy", "QuickNode", "dRPC", "Chainlist"];
+/// The four places SR2/DSR1 point at for a working endpoint, and where each
+/// goes — the web's `rpcFix` providers.
+pub const RPC_PROVIDER_LINKS: [(&str, &str); 4] = [
+    ("Alchemy", "https://alchemy.com"),
+    ("QuickNode", "https://quicknode.com"),
+    ("dRPC", "https://drpc.org"),
+    ("Chainlist", "https://chainlist.org"),
+];
+
+/// Where the endpoints panel's "Self-hosting guide →" goes (the web's).
 
 /// Find a network fixture by id. Panics only on a typo in this file's own
 /// constants, which a test catches before anybody runs the app.

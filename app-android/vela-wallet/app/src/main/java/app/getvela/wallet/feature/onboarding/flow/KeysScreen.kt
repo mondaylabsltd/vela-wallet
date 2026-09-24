@@ -48,6 +48,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import app.getvela.wallet.feature.onboarding.core.AddBlocked
 import app.getvela.wallet.feature.onboarding.core.CreateKeyRow
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 
@@ -70,6 +71,8 @@ fun ColumnScope.KeysScreen(
     canFinish: Boolean,
     needsSecondKey: Boolean,
     busy: Boolean,
+    addMethods: List<KeyMethod> = KeyMethod.entries,
+    addBlocked: AddBlocked? = null,
     onAddKey: (KeyMethod) -> Unit,
     onConfirmKey: (Int) -> Unit,
     onRemoveKey: (Int) -> Unit,
@@ -215,7 +218,7 @@ fun ColumnScope.KeysScreen(
         }
 
         if (pickerShown) {
-            AddMethodPicker { method ->
+            AddMethodPicker(allowed = addMethods, blocked = addBlocked) { method ->
                 pickerOpen = false
                 onAddKey(method)
             }
@@ -269,7 +272,7 @@ private fun KeyRow(
         }
         val drewMark = PasskeyProviderMark(
             key = key,
-            label = holder.ifEmpty { strings.t(providerLineFor(key.method)) },
+            label = holder.ifEmpty { strings.t(providerLineFor(key.kind)) },
             size = VelaSizing.controlSm,
         )
         if (!drewMark) {
@@ -282,8 +285,10 @@ private fun KeyRow(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = when (key.method) {
+                    imageVector = when (key.kind) {
                         KeyMethod.SecurityKey -> VelaIcons.Link2
+                        // Spec 075: a page you read — the web's lucide `eye`.
+                        KeyMethod.TrustedSigner -> VelaIcons.Eye
                         else -> VelaIcons.Wallet
                     },
                     contentDescription = null,
@@ -302,7 +307,7 @@ private fun KeyRow(
                 fontSize = VelaTextSize.lg,
             )
             Text(
-                text = holder.ifEmpty { strings.t(providerLineFor(key.method)) },
+                text = holder.ifEmpty { strings.t(providerLineFor(key.kind)) },
                 color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.sm,
@@ -367,18 +372,30 @@ private fun KeyBadge(synced: Boolean) {
 }
 
 /**
- * The three ways to mint a founding key.
+ * The four ways to mint a founding key.
  *
  * Unlike the browser, this client OWNS the picker — Credential Manager shows the
  * providers it knows about, not a this-device / nearby-device / security-key
  * choice — so the person's selection here is honoured at the ceremony rather
  * than merely recorded.
  *
- * All three routes are live now: platform (this device), scan (mint the key on
- * a phone over caBLE), and a security key.
+ * All four routes are live: platform (this device), scan (mint the key on a
+ * phone over caBLE), a security key, and — spec 075 — the Trusted Signer, a page
+ * the person reads which runs the ceremony itself. The list IS `KeyMethod`, so
+ * a route the core gains appears here without a second list to keep in step.
+ *
+ * [allowed] narrows it once the set has a key: every key in a wallet belongs to
+ * the same relying party, so a route that would mint for a different one cannot
+ * add to THIS set. Such a row stays visible and dimmed, with [blocked]'s
+ * sentence under the list — a row that vanished could not say that the Clear
+ * Signer's page is a setting the person can change.
  */
 @Composable
-private fun AddMethodPicker(onPick: (KeyMethod) -> Unit) {
+private fun AddMethodPicker(
+    allowed: List<KeyMethod>,
+    blocked: AddBlocked?,
+    onPick: (KeyMethod) -> Unit,
+) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = VelaSpacing.md)) {
@@ -391,7 +408,7 @@ private fun AddMethodPicker(onPick: (KeyMethod) -> Unit) {
             modifier = Modifier.padding(vertical = VelaSpacing.md),
         )
         KeyMethod.entries.forEach { method ->
-            val available = true
+            val available = method in allowed
             val (titleKey, bodyKey) = methodCopy(method)
             Row(
                 modifier = Modifier
@@ -411,9 +428,7 @@ private fun AddMethodPicker(onPick: (KeyMethod) -> Unit) {
                         fontSize = VelaTextSize.lg,
                     )
                     Text(
-                        text = strings.t(
-                            if (available) bodyKey else I18nKeys.Create.METHOD_HYBRID_UNAVAILABLE,
-                        ),
+                        text = strings.t(bodyKey),
                         color = colors.fgMuted,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.sm,
@@ -428,6 +443,41 @@ private fun AddMethodPicker(onPick: (KeyMethod) -> Unit) {
                         modifier = Modifier.size(VelaIconSize.lg),
                     )
                 }
+            }
+        }
+        // Two paragraphs, never one joined string: what this wallet's keys
+        // belong to is always the reason; naming the configured page is only
+        // sometimes true, and it is the half a person can act on. Joining them
+        // would also put a space after a full stop that already ends a line in
+        // Chinese (device-found, 2026-09-23).
+        if (blocked != null) {
+            val reason = @Composable { text: String ->
+                Text(
+                    text = text,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaLeading.normal * VelaTextSize.sm,
+                    modifier = Modifier.padding(top = VelaSpacing.sm),
+                )
+            }
+            reason(
+                strings.t(
+                    I18nKeys.Create.METHOD_BLOCKED_HINT,
+                    mapOf("party" to blocked.relyingParty),
+                ),
+            )
+            blocked.page?.let { page ->
+                reason(
+                    strings.t(
+                        I18nKeys.Create.METHOD_BLOCKED_SIGNER,
+                        mapOf(
+                            "page" to page,
+                            "pageParty" to blocked.pageRelyingParty.orEmpty(),
+                            "party" to blocked.relyingParty,
+                        ),
+                    ),
+                )
             }
         }
     }

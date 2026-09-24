@@ -60,7 +60,10 @@ describe('loadAccounts', () => {
 	});
 
 	it('reads the retired client’s spelling and rewrites the list once', () => {
-		storage.setItem(STORAGE_KEYS.accounts, JSON.stringify([EXPO_WITH_KEYS, EXPO_WITHOUT_KEYS, CURRENT]));
+		storage.setItem(
+			STORAGE_KEYS.accounts,
+			JSON.stringify([EXPO_WITH_KEYS, EXPO_WITHOUT_KEYS, CURRENT])
+		);
 		const accounts = loadAccounts();
 		expect(accounts.map((a) => a.public_key_hex)).toEqual(['04ab', '04cd', '04ef']);
 		expect(accounts[0].keys).toEqual([
@@ -91,6 +94,34 @@ describe('loadAccounts', () => {
 describe('normaliseAccount', () => {
 	it('returns the same object when nothing changes', () => {
 		expect(normaliseAccount(CURRENT)).toBe(CURRENT);
+	});
+
+	/**
+	 * Spec 075: a key minted on a Trusted Signer page can be reached ONLY through
+	 * that page. A rewrite that dropped the origin would leave a wallet whose
+	 * key cannot be found anywhere — no error, just a signature that never
+	 * happens — so the field survives every normalisation.
+	 */
+	it('carries the Trusted Signer page a key lives behind through a rewrite', () => {
+		const behind = normaliseAccount({
+			...EXPO_WITH_KEYS,
+			keys: [
+				{
+					credentialId: 'cred-1',
+					publicKeyHex: '04ab',
+					name: 'Ann',
+					signerOrigin: 'https://sign.getvela.app'
+				}
+			]
+		});
+		expect(behind?.keys[0].signer_origin).toBe('https://sign.getvela.app');
+		const already = normaliseAccount({
+			...EXPO_WITH_KEYS,
+			keys: [{ credentialId: 'cred-1', publicKeyHex: '04ab', signer_origin: 'https://me.example' }]
+		});
+		expect(already?.keys[0].signer_origin).toBe('https://me.example');
+		// A key that lives nowhere special carries no field at all.
+		expect('signer_origin' in (normaliseAccount(EXPO_WITH_KEYS)?.keys[0] ?? {})).toBe(false);
 	});
 	it('ignores unknown fields on an old record', () => {
 		const out = normaliseAccount({ ...EXPO_WITHOUT_KEYS, extra: 1 });

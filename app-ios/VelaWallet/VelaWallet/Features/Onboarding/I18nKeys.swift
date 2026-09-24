@@ -83,6 +83,8 @@ enum I18nKeys {
         static let methodHybridTitle = "onboarding.create.methodHybridTitle"
         static let methodHybridBody = "onboarding.create.methodHybridBody"
         static let methodHybridUnavailable = "onboarding.create.methodHybridUnavailable"
+        static let methodBlockedHint = "onboarding.create.methodBlockedHint"
+        static let methodBlockedSigner = "onboarding.create.methodBlockedSigner"
         static let methodSecurityKeyTitle = "onboarding.create.methodSecurityKeyTitle"
         static let methodSecurityKeyBody = "onboarding.create.methodSecurityKeyBody"
         static let providerPlatform = "onboarding.create.providerPlatform"
@@ -164,6 +166,42 @@ enum I18nKeys {
         static let notDiscoverableBody = "onboarding.common.notDiscoverableBody"
     }
 
+    /// Spec 075: the Trusted Signer, where the onboarding surface meets it.
+    ///
+    /// These live under `componentsUi.signing.*` rather than under
+    /// `onboarding.create.*` because they are the SAME sentences the signing
+    /// sheet's "Sign with" row shows — one route, one pair of words, whether
+    /// a person meets it while creating a wallet or while spending from it.
+    enum TrustedSigner {
+        static let title = "componentsUi.signing.trustedSignerTitle"
+        static let body = "componentsUi.signing.trustedSignerBody"
+        static let whereIsIt = "componentsUi.signing.trustedSignerWhere"
+        static let thisDevice = "componentsUi.signing.trustedSignerThisDevice"
+        static let otherDevice = "componentsUi.signing.trustedSignerOtherDevice"
+        static let pair = "componentsUi.signing.trustedSignerPair"
+        static let pairHint = "componentsUi.signing.trustedSignerPairHint"
+        static let pairWaiting = "componentsUi.signing.trustedSignerPairWaiting"
+        static let copyLink = "componentsUi.signing.trustedSignerCopyLink"
+        static let code = "componentsUi.signing.trustedSignerCode"
+        static let codeConfirm = "componentsUi.signing.trustedSignerCodeConfirm"
+        static let tunnelDown = "componentsUi.signing.trustedSignerTunnelDown"
+
+        /// Spec 075 T041, the nearby route. `nearbyHint` carries the
+        /// foreground rule (PROTOCOL.md §1) rather than having a line of its
+        /// own: it is one fact, and it has to be read before the route is
+        /// chosen, not after the page has failed to find the phone.
+        static let nearby = "componentsUi.signing.trustedSignerNearby"
+        static let nearbyHint = "componentsUi.signing.trustedSignerNearbyHint"
+        /// Takes `name` — what the advert is carrying.
+        static let nearbyName = "componentsUi.signing.trustedSignerNearbyName"
+        static let bluetoothNeeded = "componentsUi.signing.trustedSignerBluetoothNeeded"
+        /// The radio is off — the one state where "turn it on" is useful.
+        static let bluetoothOff = "componentsUi.signing.trustedSignerBluetoothOff"
+        /// No peripheral role here, or it would not come up: names the other
+        /// two routes instead of advice that cannot work.
+        static let bluetoothUnsupported = "componentsUi.signing.trustedSignerBluetoothUnsupported"
+    }
+
     enum Settings {
         static let sectionPasskeyIndex = "onboarding.settings.sectionPasskeyIndex"
         static let endpointUrlLabel = "onboarding.settings.endpointUrlLabel"
@@ -197,7 +235,15 @@ enum I18nKeys {
         Create.methodPlatformTitle, Create.methodPlatformBody,
         Create.methodHybridTitle, Create.methodHybridBody, Create.methodHybridUnavailable,
         Create.methodSecurityKeyTitle, Create.methodSecurityKeyBody,
+        Create.methodBlockedHint, Create.methodBlockedSigner,
         Create.providerPlatform, Create.providerGeneric, Create.providerSecurityKey,
+        TrustedSigner.title, TrustedSigner.body, TrustedSigner.whereIsIt,
+        TrustedSigner.thisDevice, TrustedSigner.otherDevice,
+        TrustedSigner.pair, TrustedSigner.pairHint, TrustedSigner.pairWaiting,
+        TrustedSigner.copyLink, TrustedSigner.code, TrustedSigner.codeConfirm,
+        TrustedSigner.tunnelDown, TrustedSigner.nearby, TrustedSigner.nearbyHint,
+        TrustedSigner.nearbyName, TrustedSigner.bluetoothNeeded, TrustedSigner.bluetoothOff,
+        TrustedSigner.bluetoothUnsupported,
         Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,
@@ -238,6 +284,8 @@ enum I18nKeys {
 
             // Home rows.
         static let accountSwitch = "settings.account.switch"
+        static let accountRemove = "settings.account.remove"
+        static let accountRemoveBody = "settings.account.removeBody"
         static let contactsSubtitle = "settings.account.contactsSubtitle"
         static let feedbackTitle = "settings.feedback.title"
         static let feedbackSubtitle = "settings.feedback.subtitle"
@@ -247,9 +295,6 @@ enum I18nKeys {
         static let themeLight = "settings.appearance.themeLight"
         static let themeDark = "settings.appearance.themeDark"
         static let themeAuto = "settings.appearance.themeAuto"
-        static let avatarTitle = "settings.appearance.avatarTitle"
-        static let avatarInitials = "settings.appearance.avatarInitials"
-        static let avatarIdenticon = "settings.appearance.avatarIdenticon"
         static let textScale = "settings.appearance.textScale"
 
             // Language picker.
@@ -326,6 +371,11 @@ enum I18nKeys {
         static let fieldRpcUrl = "settingsModals.network.fieldRpcUrl"
         static let fieldExplorer = "settingsModals.network.fieldExplorer"
         static let rpcChainMismatch = "settingsModals.network.rpcChainMismatch"
+            // Removing a custom network, asked first (spec 072).
+        static let networkRemoveTitle = "settingsModals.network.removeTitle"
+        static let networkRemoveBody = "settingsModals.network.removeBody"
+        static let networkRemoveConfirm = "settingsModals.network.removeConfirm"
+        static let networkRemoveCancel = "settingsModals.network.removeCancel"
 
             // Add network.
         static let addDescription = "settingsModals.addNetwork.description"
@@ -347,6 +397,8 @@ enum I18nKeys {
         static let addRecheckWithRpc = "settingsModals.addNetwork.recheckWithRpc"
         static let addTestnet = "settingsModals.addNetwork.testnet"
         static let addUnableToVerify = "settingsModals.addNetwork.unableToVerify"
+        static let addChecking = "settingsModals.addNetwork.checkingCompatibility"
+        static let addRetry = "settingsModals.addNetwork.retry"
 
             // The wizard's three refusals (spec 050).
             //
@@ -379,6 +431,10 @@ enum I18nKeys {
         static let endpointFiat = "settingsModals.endpoints.fiatLabel"
         static let endpointFiatHint = "settingsModals.endpoints.fiatHint"
         static let endpointsReset = "settingsModals.endpoints.resetToDefaults"
+        static let endpointsResetTitle = "settingsModals.endpoints.resetTitle"
+        static let endpointsResetBody = "settingsModals.endpoints.resetBody"
+        static let endpointsResetConfirm = "settingsModals.endpoints.resetConfirm"
+        static let endpointsResetCancel = "settingsModals.endpoints.resetCancel"
 
             // Device storage.
         static let storageTitle = "settings.storage.title"

@@ -10,6 +10,7 @@
 import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 import type { NetOverrideField } from '$lib/core/generated/NetOverrideField';
 import type { NetProviderId } from '$lib/core/generated/NetProviderId';
+import type { SettingsPageId } from './model';
 
 export type SettingsNetEvent =
 	// Networks list + per-network editor
@@ -36,3 +37,16 @@ export type SettingsNetEvent =
 	| { kind: 'provider-test'; provider: NetProviderId };
 
 export type OnNetEvent = (event: SettingsNetEvent) => void;
+
+/**
+ * The pages whose OPENING is itself a core event: the machine probes what the
+ * person is about to look at, and the providers page seeds its drafts from
+ * the saved keys — a field left without that seed saved an empty draft over
+ * the key it showed (spec 072, P0). One table for both layouts: the wide one
+ * used to keep no list at all.
+ */
+export const OPENED_EVENT: Partial<Record<SettingsPageId, SettingsNetEvent>> = {
+	'rpc-providers': { kind: 'providers-open' },
+	endpoints: { kind: 'endpoints-open' },
+	'add-network': { kind: 'open-add' }
+};

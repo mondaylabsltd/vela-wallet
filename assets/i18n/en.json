@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Switch account",
-   "contactsSubtitle": "Saved addresses and recent payees"
+   "contactsSubtitle": "Saved addresses and recent payees",
+   "remove": "Remove from this device",
+   "removeBody": "Only this wallet leaves; the others stay."
   },
   "appearance": {
    "themeLight": "Light",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "Transaction speed",
    "subtitle": "Every send you start in Vela begins here. You can still change a single one when you send it."
+  },
+  "signing": {
+   "title": "Sign with",
+   "subtitle": "Every signature you start in Vela begins here. You can still choose another way for a single one.",
+   "pageTitle": "Trusted Signer page",
+   "pageSubtitle": "The page the Trusted Signer opens: the official one, or your own copy of the zero-dependency page.",
+   "pageOfficial": "Official",
+   "pageInvalid": "That is not a web address.",
+   "pageInsecure": "Use an https page, or one on this device's own loopback — a browser will not sign anywhere else.",
+   "pageForeign": "Your passkeys belong to getvela.app. A page on another domain can show a request but cannot sign it.",
+   "pageReset": "Use the official page",
+   "pageSave": "Save"
   },
   "advanced": {
    "networksTitle": "Networks",
@@ -88,7 +102,8 @@
    "keeps": "Choose “I already have a wallet” to sign back in with that passkey: the same address returns, and your history, contacts, tokens and settings are still here.",
    "warning": "Your public key has not reached the sync server yet. It will be retried on the next launch, but until it succeeds you may not be able to sign in on another device — or here, if you remove the app.",
    "anyway": "Sign Out Anyway",
-   "cancel": "Cancel"
+   "cancel": "Cancel",
+   "descMany": "All {{count}} wallets on this device sign out. Nothing is deleted."
   },
   "eraseDevice": {
    "title": "Erase This Device",
@@ -755,6 +770,8 @@
    "keysSubtitleFull": "You've reached the limit of 7.",
    "keysTitle": "Add passkeys",
    "keysTitleBlocked": "One more key before you can create",
+   "methodBlockedHint": "This wallet's keys all belong to {{party}}.",
+   "methodBlockedSigner": "Your Trusted Signer page is {{page}}, whose keys belong to {{pageParty}}. Change it in Settings to add one here.",
    "methodHybridBody": "Scan a code and create it on a nearby device",
    "methodHybridTitle": "Phone or tablet",
    "methodHybridUnavailable": "Coming soon",
@@ -1379,6 +1396,16 @@
    "techIdentityRecipient": "Recipient",
    "copyValue": "Copy",
    "signWith": "Sign with",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "Check and sign on a separate page — what you see is what you sign.",
+   "trustedSignerWaiting": "Waiting for the Trusted Signer…",
+   "trustedSignerWaitingHint": "Check the request on the page that opened, and sign it there. If the browser asks to let the page reach other apps on this device, allow it.",
+   "trustedSignerClosed": "The Trusted Signer was closed without signing.",
+   "trustedSignerRefused": "The Trusted Signer would not sign this request. Its page says why.",
+   "trustedSignerMismatch": "The Trusted Signer's answer does not match this request, so nothing was sent.",
+   "trustedSignerTimeout": "The Trusted Signer did not answer in time.",
+   "trustedSignerReopen": "Open the page again",
+   "trustedSignerDoneTab": "Signed. You can close this tab and go back to Vela.",
    "viewOnExplorer": "View on explorer",
    "sendingToTokenContract": "Sent to the token’s own contract",
    "selfCallBlockedTitle": "Vela can’t sign this",
@@ -1567,7 +1594,11 @@
    "fiatLabel": "FIAT RATES",
    "fiatHint": "USD-based exchange rates that drive the currency list — swap for wider coverage.",
    "resetToDefaults": "Reset all four to defaults",
-   "selfHostGuide": "Self-hosting guide →"
+   "selfHostGuide": "Self-hosting guide →",
+   "resetTitle": "Reset the service endpoints?",
+   "resetBody": "All four services go back to Vela's own addresses. The addresses you entered here are forgotten.",
+   "resetConfirm": "Reset",
+   "resetCancel": "Cancel"
   },
   "addNetwork": {
    "modalTitle": "Add Network",
@@ -1585,7 +1616,6 @@
    "retry": "Retry",
    "addNetworkBtn": "Add Network",
    "incompatibleHint": "Some required contracts are not yet deployed on this chain.\nUse the Vela Wallet Chain Setup tool to deploy them, then come back and re-check.",
-   "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally.",
    "openChainSetupTool": "Open Chain Setup Tool",
    "recheck": "Re-check",
    "chainIdLabel": "Chain ID: {{chainId}}",
@@ -1595,7 +1625,8 @@
    "incompatible": "Incompatible",
    "checkSafe": "Safe L2 contracts",
    "checkSigner": "P-256 precompile",
-   "checkRemaining": "{{count}} more contracts"
+   "checkRemaining": "{{count}} more contracts",
+   "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally."
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1766,6 +1797,11 @@
   "siteMenu": "Site menu",
   "account": "Account",
   "addressBar": "Address bar",
-  "close": "Close"
+  "close": "Close",
+  "pageCrashedTitle": "This page stopped working",
+  "pageCrashedBody": "The page closed unexpectedly. Your wallet is not affected — reload to continue.",
+  "walletConnectUnsupported": "WalletConnect links aren’t supported. Open the dApp in Explore and connect from there.",
+  "scanUnrecognized": "This code isn’t a web address or a wallet address.",
+  "linkCopied": "Link copied"
  }
 }

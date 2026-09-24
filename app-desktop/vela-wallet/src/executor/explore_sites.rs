@@ -10,6 +10,7 @@
 //! the whole surface for a field.
 
 use gpui::App;
+#[cfg(test)]
 use serde_json::Value;
 
 use vela_core::app::explore_sites::{

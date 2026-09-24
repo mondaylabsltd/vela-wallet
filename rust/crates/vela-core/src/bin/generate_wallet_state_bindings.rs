@@ -30,6 +30,7 @@ use vela_core::app::clear_signing::{
 use vela_core::app::contacts::{
     ContactOperation, ContactShellResult, ContactsView, Event as ContactEvent,
 };
+use vela_core::app::dapp_browser::{DbrOperation, DbrShellResult, DbrView, Event as DbrEvent};
 use vela_core::app::dapp_permissions::{
     DpermOperation, DpermShellResult, DpermView, Event as DpermEvent,
 };
@@ -65,6 +66,9 @@ use vela_core::app::rpc_pool::{Event as RpcEvent, RpcOperation, RpcPoolView, Rpc
 use vela_core::app::send::{Event as SendEvent, SendOperation, SendShellResult, SendView};
 use vela_core::app::session::{
     Event as SessionEvent, SessionOperation, SessionShellResult, SessionView,
+};
+use vela_core::app::sign_pref::{
+    Event as SignPrefEvent, SignPrefOperation, SignPrefShellResult, SignPrefView,
 };
 use vela_core::app::sign_request::{Event as SignEvent, SignOperation, SignShellResult, SignView};
 use vela_core::app::token_trust::{
@@ -109,6 +113,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     FeeTierPrefOperation::export_all(&config)?;
     FeeTierPrefShellResult::export_all(&config)?;
     FeeTierPrefView::export_all(&config)?;
+    SignPrefEvent::export_all(&config)?;
+    SignPrefOperation::export_all(&config)?;
+    SignPrefShellResult::export_all(&config)?;
+    SignPrefView::export_all(&config)?;
     GuardEvent::export_all(&config)?;
     GuardOperation::export_all(&config)?;
     GuardShellResult::export_all(&config)?;
@@ -154,6 +162,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     SignOperation::export_all(&config)?;
     SignShellResult::export_all(&config)?;
     SignView::export_all(&config)?;
+    DbrEvent::export_all(&config)?;
+    DbrOperation::export_all(&config)?;
+    DbrShellResult::export_all(&config)?;
+    DbrView::export_all(&config)?;
     DpermEvent::export_all(&config)?;
     DpermOperation::export_all(&config)?;
     DpermShellResult::export_all(&config)?;

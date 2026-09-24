@@ -18,14 +18,16 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum SettingsLive {
 
-    /// Swap in the networks the core actually knows about.
+    /// Swap in the networks the core actually knows about — the list, each
+    /// network's page, the wizard, the advanced row's count, and the two pages
+    /// behind the providers and endpoints rows (spec 072).
     ///
-    /// Everything else on the model — the sections, the theme and avatar
-    /// pickers, storage, about, every sheet — is untouched fixture, and stays
-    /// that way until its own machine is wired.
+    /// Everything else on the model — the other rows, the pickers, storage,
+    /// about, every sheet — is left for its own builder below.
     static func withNetworks(
         _ view: NetViewWire,
         on model: SettingsScreenModel,
@@ -46,6 +48,23 @@ enum SettingsLive {
             copy.networkDetail = detail(first, loc: loc, fallback: model.networkDetail)
         }
         copy.addNetwork = wizard(view.wizard, loc: loc, fallback: model.addNetwork)
+        // The advanced row counts THIS device's list, custom chains included —
+        // it read the drawing's twelve on every phone.
+        let count = loc.t(I18nKeys.SettingsUi.networkCount, vars: ["count": String(view.networks.count)])
+        copy.sections = model.sections.map { section in
+            var updated = section
+            updated.rows = section.rows.map { row in
+                guard row.id == "networks" else { return row }
+                var changed = row
+                changed.value = count
+                return changed
+            }
+            return updated
+        }
+        // The two pages behind the advanced rows are the core's view too
+        // (spec 072), and each has a projection of its own now (spec 081
+        // FR-001): `withEndpoints` and `withProviders`, applied beside this one
+        // rather than from inside it.
         return copy
     }
 
@@ -226,14 +245,41 @@ enum SettingsLive {
         }
     }
 
+    /// The confirmation before "Reset to defaults" (FR-010), in the corpus's
+    /// own words — the same question every shell asks.
+    static func resetEndpointsConfirm(loc: Loc) -> ConfirmSheetModel {
+        let k = I18nKeys.SettingsUi.self
+        return ConfirmSheetModel(
+            title: loc.t(k.endpointsResetTitle),
+            body: loc.t(k.endpointsResetBody),
+            confirm: loc.t(k.endpointsResetConfirm),
+            cancel: loc.t(k.endpointsResetCancel),
+            danger: true
+        )
+    }
+
+    /// The confirmation before a custom network goes: its name and chain on
+    /// the sheet, so the question names what it removes.
+    static func removeNetworkConfirm(_ row: SettingsNetworkRowModel, loc: Loc) -> ConfirmSheetModel {
+        let k = I18nKeys.SettingsUi.self
+        return ConfirmSheetModel(
+            title: loc.t(k.networkRemoveTitle),
+            body: loc.t(k.networkRemoveBody),
+            confirm: loc.t(k.networkRemoveConfirm),
+            cancel: loc.t(k.networkRemoveCancel),
+            danger: true,
+            note: "\(row.name) · \(row.meta)"
+        )
+    }
+
     // MARK: - display_currency
 
     /// Swap in the currency the person actually chose.
     ///
     /// Two surfaces: the 货币 row's value on the home page, and which row of the
     /// picker reads as selected.
-    /// The four preference surfaces the settings page draws and has never
-    /// read: language, the three formats, the theme, the avatar and the size.
+    /// The preference surfaces the settings page draws and had never read:
+    /// language, the three formats, the theme and the size.
     ///
     /// Every row's VALUE is what is actually in force, and every sheet's
     /// selection is the same fact — a page that showed one thing in the row and
@@ -252,7 +298,7 @@ enum SettingsLive {
                 var changed = row
                 switch row.id {
                 case "language":
-                    changed.value = languageName(preferences.language, loc: loc)
+                    changed.value = languageValue(preferences.language, loc: loc)
                 case "number-format":
                     changed.value = Formats.example(preferences.numberFormat)
                 case "date-format":
@@ -291,18 +337,23 @@ enum SettingsLive {
         // The drawn sheet calls "follow the device" `system`; the STORED value
         // is `auto`, because that is what web and Android write. One mapping,
         // in one place.
+        //
+        // "Follow system" notes the language it resolves to NOW — the drawing
+        // said 简体中文 on every phone.
+        let resolved = languageName(loc.resolvedLanguage, loc: loc)
         copy.languageSheet = picked(
             model.languageSheet,
             id: preferences.language == "auto" ? "system" : preferences.language
-        ) { $0 }
+        ) { row in
+            guard row.id == "system" else { return row }
+            var changed = row
+            changed.note = "\(loc.t(I18nKeys.SettingsUi.commonSystem)) · \(resolved)"
+            return changed
+        }
 
         copy.theme = SegmentedModel(
             label: model.theme.label, segments: model.theme.segments,
-            selected: preferences.theme.rawValue
-        )
-        copy.avatar = SegmentedModel(
-            label: model.avatar.label, segments: model.avatar.segments,
-            selected: preferences.avatarStyle.rawValue
+            selected: themeSegment(preferences.theme)
         )
         copy.textScale = TextScaleModel(
             label: model.textScale.label,
@@ -358,9 +409,32 @@ enum SettingsLive {
     /// What a language tag is CALLED — in its own language, which is how the
     /// drawn sheet lists them, so the row's value and the sheet's label agree.
     static func languageName(_ tag: String, loc: Loc) -> String {
-        guard tag != "auto" else { return loc.t(I18nKeys.SettingsUi.commonSystem) }
+        if let endonym = SettingsFixtures.localeEndonyms.first(where: { $0.id == tag }) {
+            return endonym.label
+        }
         let locale = Locale(identifier: tag)
         return locale.localizedString(forIdentifier: tag)?.capitalized ?? tag
+    }
+
+    /// The language row's value: the language chosen, or — following the
+    /// device — the one it resolves to, marked as the system's (the web's
+    /// `languageValue`). It said "System" alone, which names no language.
+    static func languageValue(_ stored: String, loc: Loc) -> String {
+        guard stored == "auto" else { return languageName(stored, loc: loc) }
+        return "\(languageName(loc.resolvedLanguage, loc: loc)) · \(loc.t(I18nKeys.SettingsUi.commonSystem))"
+    }
+
+    /// The drawn theme segments call "follow the system" `auto`; what is
+    /// STORED is `system` (`vela.theme`, every shell's spelling). Both
+    /// directions here, once — the tap used to go through
+    /// `ThemeChoice(rawValue: "auto")`, which is nil, so once Light or Dark was
+    /// picked the system's theme could never be chosen again (spec 072).
+    static func themeSegment(_ choice: ThemeChoice) -> String {
+        choice == .system ? "auto" : choice.rawValue
+    }
+
+    static func themeChoice(segment id: String) -> ThemeChoice? {
+        id == "auto" ? .system : ThemeChoice(rawValue: id)
     }
 
     /// 测试 on every provider card, live only.
@@ -411,13 +485,25 @@ enum SettingsLive {
             case .securityKey: k.keysProviderSecurityKey
             case .hybrid: k.keysProviderGeneric
             case .platform: k.keysProviderPlatform
+            // Spec 075: the core now says `trusted_signer` for a key that lives
+            // behind a Trusted Signer page, and where a key lives is the page.
+            // The same sentence the "Sign with" chooser offers the route under,
+            // so a person meets one thing whether creating, spending or looking.
+            case .trustedSigner: I18nKeys.TrustedSigner.title
             }
+            // The vault's name outranks the generic line — EXCEPT behind a page.
+            // A Trusted Signer key's AAGUID is the authenticator on the page's far
+            // side, which this wallet can reach no other way: naming that vault
+            // points past the page exactly as "this device" did (found by the
+            // Android device pass, 2026-09-22).
+            let holder = row.key.method == .trustedSigner || row.key.providerName.isEmpty
+                ? loc.t(line) : row.key.providerName
             return WalletKeyRowModel(
                 id: index,
                 name: row.key.name.isEmpty
                     ? loc.t(k.keysKeyN).replacingOccurrences(of: "{{n}}", with: String(index + 1))
                     : row.key.name,
-                holder: row.key.providerName.isEmpty ? loc.t(line) : row.key.providerName,
+                holder: holder,
                 fingerprint: body.count >= 8 ? "\(body.prefix(4))…\(body.suffix(4))".lowercased() : "",
                 pills: [
                     row.userVerified == true ? KeyPillModel(text: loc.t(k.keysUserVerified), tone: .verified) : nil,
@@ -431,6 +517,13 @@ enum SettingsLive {
                     KeyDetailModel(
                         label: loc.t(k.keysTransport),
                         value: [row.key.authenticatorAttachment, row.key.transports].filter { !$0.isEmpty }.joined(separator: " · "),
+                        mono: false, copy: false
+                    ),
+                    // WHICH page (spec 075). The caption says the route; only
+                    // this says the place. Dropped by the filter below for every
+                    // key that lives behind no page.
+                    KeyDetailModel(
+                        label: loc.t(I18nKeys.TrustedSigner.title), value: row.signerOrigin,
                         mono: false, copy: false
                     ),
                     KeyDetailModel(label: loc.t(k.keysAttestation), value: row.attestationHex, mono: true, copy: false),
@@ -535,6 +628,11 @@ enum SettingsLive {
                 selected: index == session.activeIndex
             )
         }
+        // Taking ONE wallet off this device (2026-09-23), resolved here because
+        // the sheet resolves nothing of its own.
+        copy.accountsSheet.remove = loc.t(I18nKeys.SettingsUi.accountRemove)
+        copy.accountsSheet.removeBody = loc.t(I18nKeys.SettingsUi.accountRemoveBody)
+        copy.accountsSheet.removeCancel = loc.t("settings.signOut.cancel")
         copy.accountsSheet.summary =
             loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
             + loc.t(k.accountsTotal, vars: [
@@ -565,6 +663,60 @@ enum SettingsLive {
         }
         copy.feeSpeedSheet = sheet
         return copy
+    }
+
+    /// How this device signs (spec 071): the two rows' values, the "Sign with"
+    /// sheet's tick and the Trusted Signer page's sheet — every verdict in them
+    /// the `sign_pref` core's, so a row cannot say one thing while a signing
+    /// sheet starts at another.
+    static func withSignPref(
+        _ view: SignPrefViewWire,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        var copy = model
+        let sheet = SettingsFixtures.signWithSheet(loc, offered: view.offered, selected: view.method)
+        copy.sections = model.sections.map { section in
+            var updated = section
+            updated.rows = section.rows.map { row in
+                var changed = row
+                switch row.id {
+                case SettingsFixtures.signWithRow:
+                    changed.value = sheet.rows.first(where: \.selected)?.label ?? row.value
+                case SettingsFixtures.signerPageRow:
+                    changed.value = signerPageValue(view, loc: loc)
+                default:
+                    return row
+                }
+                return changed
+            }
+            return updated
+        }
+        copy.signWithSheet = sheet
+        let error: String? = switch view.signerUrlError {
+        case "invalid": loc.t("settings.signing.pageInvalid")
+        case "insecure": loc.t("settings.signing.pageInsecure")
+        default: nil
+        }
+        copy.signerPage = SignerPageModel(
+            title: loc.t("settings.signing.pageTitle"),
+            subtitle: loc.t("settings.signing.pageSubtitle"),
+            field: UrlFieldModel(
+                id: "signer-url", label: "", value: view.signerUrl,
+                placeholder: trustedSignerDefaultUrl(), tone: error == nil ? nil : .error
+            ),
+            error: error,
+            foreign: view.signerUsesWalletPasskeys ? nil : loc.t("settings.signing.pageForeign"),
+            save: loc.t("settings.signing.pageSave"),
+            reset: view.signerUrlIsDefault ? nil : loc.t("settings.signing.pageReset")
+        )
+        return copy
+    }
+
+    /// "Official", or the host of the page a person chose.
+    static func signerPageValue(_ view: SignPrefViewWire, loc: Loc) -> String {
+        guard !view.signerUrlIsDefault else { return loc.t("settings.signing.pageOfficial") }
+        return URL(string: view.signerUrl)?.host ?? view.signerUrl
     }
 
     static func withCurrency(
@@ -607,24 +759,27 @@ enum SettingsLive {
     /// somebody 1,234.56 dollars is 1,234.56 yuan. The core models that
     /// difference (`rate: null` is not `1`) and this is where the shell honours
     /// it.
+    ///
+    /// **A chosen currency is named even when it cannot be priced.** It used
+    /// to fall back to "USD · $1,234.56" whenever the rate was missing, which
+    /// told somebody who had picked CNY that they had not — the code alone is
+    /// the honest row: their choice, and no figure (spec 072).
     static func currencyRowValue(_ view: CurrencyViewWire) -> String {
         let sample = 1_234.56
-        guard let rate = view.rate, rate > 0, view.committed,
-              let entry = CurrencyCatalog.entry(view.code)
-        else {
-            // Degraded: say USD, show USD.
+        guard view.committed else {
+            // Nothing chosen: the USD placeholder is what is in force.
             let usd = CurrencyCatalog.entry("USD")
             return "USD · \(usd?.glyph ?? "$")\(format(sample))"
+        }
+        guard let rate = view.rate, rate > 0, let entry = CurrencyCatalog.entry(view.code) else {
+            return view.code
         }
         return "\(view.code) · \(entry.glyph)\(format(sample * rate))"
     }
 
+    /// In the person's own number format, as every other figure is.
     private static func format(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+        Formats.number(amount, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
     // MARK: - The add-network wizard
@@ -635,6 +790,12 @@ enum SettingsLive {
     /// verdict — the badge, the checks, whether 添加 is offered at all — is the
     /// core's; **`can_add` is never re-derived here**, because a second opinion
     /// is how a screen offers to add a chain the core will refuse.
+    ///
+    /// Three answers, never two (the web's `liveAddNetwork`): compatible,
+    /// incompatible, and UNVERIFIED — the probes failed, so nothing was learned
+    /// about the chain. That last one is worded "unable to verify" with a
+    /// retry, never "incompatible": a proxy that refused once told the founder
+    /// that Celo was incompatible, and Celo is not (spec 038 #E1).
     static func wizard(
         _ wizard: NetWizardViewWire,
         loc: Loc,
@@ -663,26 +824,70 @@ enum SettingsLive {
         }
 
         model.subtitle = "\(info.name) · \(chainMeta(loc, info.chainId))"
-        model.candidate = SettingsNetworkRowModel(
-            id: String(info.chainId),
-            chainId: info.chainId,
-            mark: mark(chainId: info.chainId, name: info.name),
-            name: info.name,
-            meta: candidateMeta(wizard, loc: loc),
-            badge: verdictBadge(wizard, loc: loc)
-        )
-
-        if let compat = wizard.compat {
-            model.checksTitle = loc.t(k.addCompatibilityCheck)
-            model.checks = checks(compat, loc: loc)
-        }
-
         model.customRpc = UrlFieldModel(
             id: "custom-rpc",
             label: loc.t(k.addCustomRpcTitle),
             value: wizard.customRpc,
             placeholder: loc.t(k.addCustomRpcPlaceholder)
         )
+        func candidate(meta: String, badge: StatusPillModel?) -> SettingsNetworkRowModel {
+            SettingsNetworkRowModel(
+                id: String(info.chainId),
+                chainId: info.chainId,
+                mark: mark(chainId: info.chainId, name: info.name),
+                name: info.name,
+                meta: meta,
+                badge: badge
+            )
+        }
+
+        switch wizard.phase {
+        case .resolving, .checking:
+            // Still asking. A neutral pill, and no list of checks that have not
+            // been made yet.
+            model.candidate = candidate(
+                meta: loc.t(k.addChecking),
+                badge: StatusPillModel(tone: .neutral, label: loc.t(k.addCompatibilityCheck))
+            )
+            return model
+        case .error:
+            model.candidate = candidate(meta: chainMeta(loc, info.chainId), badge: nil)
+            model.callout = errorCallout(wizard.error, loc: loc)
+            // A check that could not run can run again; a refusal cannot.
+            switch wizard.error {
+            case .checkFailed, .noRpcEndpoint: model.recheck = loc.t(k.addRecheckWithRpc)
+            default: break
+            }
+            return model
+        default:
+            break
+        }
+
+        guard let compat = wizard.compat else {
+            model.candidate = candidate(meta: loc.t(k.addCompatibilityCheck), badge: nil)
+            return model
+        }
+        if compat.rpcFailure != nil {
+            // Unverified: nothing was learned, so there is no check list to
+            // show — only the way to ask again.
+            model.candidate = candidate(
+                meta: loc.t(k.addCompatibilityCheck),
+                badge: StatusPillModel(tone: .warn, label: loc.t(k.addUnableToVerify))
+            )
+            model.retry = loc.t(k.addRetry)
+            model.recheck = loc.t(k.addRecheckWithRpc)
+            return model
+        }
+
+        model.candidate = candidate(
+            meta: candidateMeta(wizard, loc: loc),
+            badge: compat.compatible
+                ? StatusPillModel(tone: .ok, label: loc.t(k.addCompatible))
+                : StatusPillModel(tone: .error, label: loc.t(k.addIncompatible))
+        )
+        model.checksTitle = loc.t(k.addCompatibilityCheck)
+        model.checks = checks(compat, loc: loc)
+
         model.callout = errorCallout(wizard.error, loc: loc)
             ?? (wizard.compat?.compatible == false
                 ? CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
@@ -694,13 +899,15 @@ enum SettingsLive {
                 : nil)
 
         // The gate. An accent CTA appears only when the CORE says the chain can
-        // be added; otherwise the drawing's outline-plus-recheck pair, because
-        // an action you cannot take should not be dressed as the action you
-        // came for.
+        // be added; otherwise the re-check, because an action you cannot take
+        // should not be dressed as the action you came for.
         if wizard.canAdd {
             model.primary = loc.t(k.addButton)
         } else if wizard.compat?.compatible == false {
-            model.secondary = loc.t(k.addChainTool)
+            model.callout = CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
+            // The drawing's "Open Chain Setup Tool" is not offered: no client
+            // has a page for it to open, and a button that goes nowhere is the
+            // inert control this spec removes (SC-001).
             model.recheck = loc.t(k.addRecheckWithRpc)
         }
         return model
@@ -750,14 +957,6 @@ enum SettingsLive {
         return loc.t(k.addCompatibilityCheck)
     }
 
-    private static func verdictBadge(_ wizard: NetWizardViewWire, loc: Loc) -> StatusPillModel? {
-        let k = I18nKeys.SettingsUi.self
-        guard let compat = wizard.compat else { return nil }
-        return compat.compatible
-            ? StatusPillModel(tone: .ok, label: loc.t(k.addCompatible))
-            : StatusPillModel(tone: .error, label: loc.t(k.addIncompatible))
-    }
-
     /// The core's refusal, in the words the corpus already has.
     private static func errorCallout(_ error: NetWizardErrorWire?, loc: Loc) -> CalloutModel? {
         let k = I18nKeys.SettingsUi.self
@@ -770,6 +969,8 @@ enum SettingsLive {
         // nothing to verify against. Recorded as a wording gap.
         case .noRpcEndpoint: loc.t(k.addUnableToVerify)
         case .notCompatible: loc.t(k.addNotCompatible)
+        // Not a verdict: the probes failed and nothing was learned.
+        case .checkFailed: loc.t(k.addUnableToVerify)
         }
         return CalloutModel(tone: .warning, text: text)
     }
@@ -802,13 +1003,15 @@ enum SettingsLive {
             subtitle: "\(chainMeta(loc, network.chainId)) · \(network.nativeSymbol)",
             mark: mark(chainId: network.chainId, name: network.displayName),
             name: network.displayName,
-            note: fallback.note,
+            // A custom network is not "built-in · cannot be removed".
+            note: network.isCustom ? loc.t(I18nKeys.SettingsUi.networkCustom) : fallback.note,
             // **Never the fixture's pill.** `?? fallback.badge` used to be here,
             // and on a real phone it painted 在线 · 45ms over an endpoint
             // nothing had probed — the fixture's own constant, presented as a
             // measurement. Unmeasured is neutral and says nothing.
             badge: badge(network.rpcHealth) ?? Self.unmeasured,
-            rpc: field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth),
+            rpc: field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth,
+                       tone: network.rpcChainMismatch == nil ? nil : .error),
             explorer: field(fallback.explorer, value: network.explorerUrl,
                             health: network.explorerHealth),
             // (Both fields drop the fixture's pill for the same reason.)
@@ -861,10 +1064,13 @@ enum SettingsLive {
         )
     }
 
+    /// `tone` is the core's refusal (a red box for the RPC another chain
+    /// answered), never the fixture's.
     private static func field(
         _ fallback: UrlFieldModel,
         value: String,
-        health: NetProbeHealthWire?
+        health: NetProbeHealthWire?,
+        tone: SettingsTone? = nil
     ) -> UrlFieldModel {
         UrlFieldModel(
             id: fallback.id,
@@ -873,7 +1079,7 @@ enum SettingsLive {
             placeholder: fallback.placeholder,
             hint: fallback.hint,
             badge: badge(health),
-            tone: fallback.tone,
+            tone: tone,
             action: fallback.action
         )
     }
@@ -996,6 +1202,74 @@ enum SettingsLive {
     }
 
     // MARK: - 存储 and 关于 (spec 058)
+
+    /// Storage → Connections: one row per connected site (spec 070 FR-017),
+    /// the web's `withLiveConnections`.
+    ///
+    /// The row is the SITE — its host, the account it sees, and Disconnect —
+    /// and its id is the origin, which is what a tap revokes. With nothing
+    /// connected the measured "dApp permissions" row stays, so the page still
+    /// says there is nothing there rather than drawing an empty group.
+    ///
+    /// Runs AFTER `withStorage`: the sizes are that function's, the rows are
+    /// this one's, and the other order would overwrite a site's address with
+    /// "0 B".
+    static func withConnections(
+        _ sites: [DbrSiteViewWire],
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        guard !sites.isEmpty else { return model }
+        let label = loc.t(I18nKeys.SettingsUi.storageConnections)
+        var live = model
+        live.storage = StorageModel(
+            title: model.storage.title,
+            subtitle: model.storage.subtitle,
+            amount: model.storage.amount,
+            unit: model.storage.unit,
+            summary: model.storage.summary,
+            segments: model.storage.segments,
+            groups: model.storage.groups.map { group in
+                guard group.label == label else { return group }
+                return StorageGroupModel(
+                    label: group.label,
+                    items: sites.map { site in
+                        StorageItemModel(
+                            id: site.origin,
+                            label: BrowserEngine.hostOf(origin: site.origin),
+                            meta: AddressText.short(site.address),
+                            // Singular: this row cuts off ONE site.
+                            action: loc.t("explore.disconnect"),
+                            destructive: true
+                        )
+                    },
+                    action: group.action
+                )
+            }
+        )
+        return live
+    }
+
+    /// An erase that ran and left something behind (spec 072 FR-011): the
+    /// sheet stays up with the reason in its own callout, and the person is
+    /// still signed in — never sent to the first run over a partial wipe.
+    static func withEraseFailure(
+        _ survivors: [String]?, on model: SettingsScreenModel, loc: Loc
+    ) -> SettingsScreenModel {
+        guard let survivors, !survivors.isEmpty else { return model }
+        var live = model
+        // Named, as the desktop names them: "something stayed" is not
+        // actionable, and the keys are what a person can report.
+        live.eraseSheet.callout = CalloutModel(
+            tone: .danger,
+            text: "\(loc.t(I18nKeys.SettingsUi.eraseFailed)) (\(survivors.joined(separator: ", ")))"
+        )
+        return live
+    }
+
+    /// Whether a storage row is a connected site (its id an origin) rather
+    /// than one of the measured rows.
+    static func isConnectionRow(_ id: String) -> Bool { id.contains("://") }
 
     /// The storage page, measured.
     ///

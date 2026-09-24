@@ -76,6 +76,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
+import app.getvela.wallet.core.format.cleanAmountEdit
 import app.getvela.wallet.core.identicon.IdenticonImage
 import app.getvela.wallet.feature.flows.AddressCardModel
 import app.getvela.wallet.feature.flows.AmountFieldModel
@@ -115,7 +116,7 @@ fun AddressCard(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = account.identiconSeed, size = VelaSizing.doneAvatar, name = account.name)
+        IdenticonImage(seed = account.identiconSeed, size = VelaSizing.doneAvatar)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -325,10 +326,17 @@ fun AmountInput(
             BasicTextField(
                 value = typed,
                 onValueChange = { next ->
-                    typed = next
-                    sent.addLast(next)
-                    if (sent.size > 256) sent.removeFirst()
-                    onValueChange(next)
+                    // Spec 073: cleaned by the core's rule here, before the
+                    // machine sees it — a decimal-comma pad's "4,5" is 4.5,
+                    // never 4 — and the field holds what was sent on. A paste
+                    // with no reading as one figure keeps what it had.
+                    val clean = cleanAmountEdit(next, typed)
+                    if (clean != null) {
+                        typed = clean
+                        sent.addLast(clean)
+                        if (sent.size > 256) sent.removeFirst()
+                        onValueChange(clean)
+                    }
                 },
                 singleLine = true,
                 textStyle = heroStyle,
@@ -823,7 +831,7 @@ fun RecipientField(
                 .padding(VelaSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IdenticonImage(seed = field.identiconSeed, size = VelaIconSize.xl2, name = field.name)
+            IdenticonImage(seed = field.identiconSeed, size = VelaIconSize.xl2)
             Spacer(modifier = Modifier.width(VelaSpacing.md))
             Column(modifier = Modifier.weight(1f)) {
                 if (onValueChange != null && field.raw != null) {

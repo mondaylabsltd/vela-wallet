@@ -20,6 +20,11 @@ use wasm_bindgen::prelude::*;
 /// cores the web shell drives with events and effect results.
 mod bridge;
 mod onboarding;
+mod settings;
+/// Only the REGISTRY's relying party: the web wallet offers no Trusted Signer
+/// (owner, 2026-09-23), but it can publish a unit whose keys were minted on
+/// one.
+mod trusted_signer;
 mod wallet_state;
 
 // ---------------------------------------------------------------------------
@@ -210,6 +215,13 @@ pub fn decode_calldata(sig: &str, calldata: &[u8]) -> JsResult<AbiValue> {
 #[wasm_bindgen(js_name = hashTypedData)]
 pub fn hash_typed_data(typed_data_json: &str) -> JsResult<Vec<u8>> {
     vela_core::eip712::hash_typed_data(typed_data_json).map_err(err)
+}
+
+/// What a site's message request asks the account to sign, before the
+/// Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
+#[wasm_bindgen(js_name = signMessageHash)]
+pub fn sign_message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
+    vela_core::sign_message::original_hash(method, params_json)
 }
 
 #[wasm_bindgen(js_name = encodeType)]
@@ -832,6 +844,24 @@ pub fn min_gas_price_wei(chain_id: u32) -> String {
     vela_core::app::fee_policy::min_gas_price_wei(chain_id).to_string()
 }
 
+/// Spec 077: how long a submitted operation usually takes to land on a chain,
+/// in seconds — `0` where Vela ships no estimate for it.
+///
+/// The send receipt has had this number since spec 038 (#D3), through the
+/// core's own `SendReceiptView`. A dApp transaction lands on the SAME receipt
+/// but arrives through `tx_tracker`, whose entries carry no estimate — so the
+/// web shell reads it from the core's table here rather than carrying a second
+/// copy of twenty-four numbers that would quietly drift.
+///
+/// `0` rather than `undefined` because that is what the receipt already does
+/// with "no estimate": the ring circles instead of filling, which is the honest
+/// drawing of a wallet that does not know.
+#[wasm_bindgen(js_name = typicalInclusionSeconds)]
+#[must_use]
+pub fn typical_inclusion_seconds(chain_id: u32) -> u32 {
+    vela_core::app::network_admin::typical_inclusion_s(chain_id).map_or(0, u32::from)
+}
+
 /// Issue 212: how long a chain's fee signals may be held, in ms — the one
 /// number every shell's cache used to carry its own copy of.
 #[wasm_bindgen(js_name = feeSignalsCacheTtlMs)]
@@ -1435,6 +1465,32 @@ pub fn i18n_text_direction(lng: &str) -> String {
     vela_core::l10n::text_direction(lng).as_str().to_owned()
 }
 
+/// An amount field's text as the core reads it, or `undefined` for a paste
+/// with no reading as one figure (spec 073; `l10n::amount_text`).
+#[wasm_bindgen(js_name = amountTextClean)]
+pub fn amount_text_clean(
+    raw: &str,
+    number: &str,
+    previous: Option<String>,
+    pasted: Option<bool>,
+) -> Option<String> {
+    use vela_core::l10n::amount_text;
+    amount_text::clean(
+        raw,
+        amount_text::preset_of(number),
+        amount_text::Entry::from_pasted(pasted),
+        previous.as_deref(),
+    )
+}
+
+/// Where the caret belongs in `clean`, having been at `caret` in `raw`
+/// (UTF-16 units, as `selectionStart` counts).
+#[wasm_bindgen(js_name = amountTextCaret)]
+pub fn amount_text_caret(raw: &str, clean: &str, caret: u32) -> u32 {
+    let at = vela_core::l10n::amount_text::caret_after_clean(raw, clean, caret as usize);
+    u32::try_from(at).unwrap_or(u32::MAX)
+}
+
 // ---------------------------------------------------------------------------
 // user_op — the second implementation the shell's assembly is checked against
 // (spec 028 Phase 8). The shell hands over the operation it built and the
@@ -1582,4 +1638,42 @@ pub fn attest_safe_message_hash(
 ) -> JsResult<Vec<u8>> {
     vela_core::user_op::compute_safe_message_hash(original_hash, chain_id, safe_address)
         .map_err(err)
+}
+
+// ---------------------------------------------------------------------------
+// dapp_rpc — the routing table the extension's service worker mirrors (spec
+// 070). The worker cannot run the core on every page load; a web unit test
+// replays its JS table against this one so the two cannot drift.
+// ---------------------------------------------------------------------------
+
+/// How a request still pending when the request window goes away is settled,
+/// as JSON (`{"code":4900,"reason":"browser_closed"}`) — spec 070 T063.
+///
+/// 4900, never 4001: a dApp treats an explicit "user rejected" as safe to
+/// retry, which double-spends a request that may already have landed. The
+/// window asks rather than restating it.
+#[wasm_bindgen(js_name = dpermSettleOnClose)]
+pub fn dperm_settle_on_close() -> String {
+    let (code, reason) = vela_core::app::dapp_permissions::settle_on_close();
+    serde_json::json!({ "code": code, "reason": reason }).to_string()
+}
+
+/// The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
+#[wasm_bindgen(js_name = dappRpcClassify)]
+pub fn dapp_rpc_classify(method: &str) -> String {
+    serde_json::to_string(&vela_core::app::dapp_rpc::classify(method))
+        .unwrap_or_else(|_| "{\"type\":\"unsupported\"}".to_owned())
+}
+
+/// The document-start script an in-app browser injects, for `host`
+/// (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
+/// the real bridge in a real browser.
+#[wasm_bindgen(js_name = dappProviderScript)]
+pub fn dapp_provider_script(host: &str) -> String {
+    use vela_core::app::dapp_rpc::{provider_script, ProviderHost};
+    provider_script(match host {
+        "ios" => ProviderHost::Ios,
+        "desktop" => ProviderHost::Desktop,
+        _ => ProviderHost::Android,
+    })
 }

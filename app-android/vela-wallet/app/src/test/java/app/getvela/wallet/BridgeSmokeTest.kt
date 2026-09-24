@@ -14,10 +14,10 @@ import app.getvela.wallet.feature.send.core.BatchToken
 import app.getvela.wallet.feature.send.core.BatchUnit
 import app.getvela.wallet.feature.send.core.BatchView
 import uniffi.vela_core_uniffi.BatchImportCore
-import app.getvela.wallet.feature.browser.core.DpermEvent
-import app.getvela.wallet.feature.browser.core.DpermOperation
-import app.getvela.wallet.feature.browser.core.DpermShellResult
-import app.getvela.wallet.feature.browser.core.DpermView
+import app.getvela.wallet.feature.browser.core.DbrEvent
+import app.getvela.wallet.feature.browser.core.DbrOperation
+import app.getvela.wallet.feature.browser.core.DbrShellResult
+import app.getvela.wallet.feature.browser.core.DbrView
 import app.getvela.wallet.feature.browser.core.ExploreEvent
 import app.getvela.wallet.feature.browser.core.ExploreOperation
 import app.getvela.wallet.feature.browser.core.ExploreShellResult
@@ -50,7 +50,7 @@ import org.junit.Test
 import uniffi.vela_core_uniffi.ApprovalGuardCore
 import uniffi.vela_core_uniffi.BrowserHistoryCore
 import uniffi.vela_core_uniffi.ClearSigningCore
-import uniffi.vela_core_uniffi.DappPermissionsCore
+import uniffi.vela_core_uniffi.DappBrowserCore
 import uniffi.vela_core_uniffi.ExploreSitesCore
 import uniffi.vela_core_uniffi.SignRequestCore
 import uniffi.vela_core_uniffi.dappOriginOf
@@ -87,7 +87,7 @@ class BridgeSmokeTest {
 
     @Suppress("UNCHECKED_CAST")
     private fun <O : Any> dummyOf(op: KSerializer<O>): O = when (op.descriptor.serialName) {
-        DpermOperation.serializer().descriptor.serialName -> DpermOperation.ReadGrant("") as O
+        DbrOperation.serializer().descriptor.serialName -> DbrOperation.ListSites as O
         ExploreOperation.serializer().descriptor.serialName -> ExploreOperation.ReadExplore as O
         BhistOperation.serializer().descriptor.serialName -> BhistOperation.ReadHistory as O
         SignOperation.serializer().descriptor.serialName -> SignOperation.SwitchActiveAccount(0) as O
@@ -126,15 +126,15 @@ class BridgeSmokeTest {
         val visited = withTimeout(10_000) { bhist.view.first { it.entries.isNotEmpty() } }
         assertEquals("https://app.uniswap.org", visited.entries.single().origin)
 
-        val dperm = host(DappPermissionsCore().asBridge(), DpermView(), DpermView.serializer(), DpermOperation.serializer(), DpermShellResult.serializer()) { op ->
+        val dbr = host(DappBrowserCore().asBridge(), DbrView(), DbrView.serializer(), DbrOperation.serializer(), DbrShellResult.serializer()) { op ->
             when (op) {
-                is DpermOperation.ReadGrant -> DpermShellResult.GrantRead(op.origin, null)
-                else -> DpermShellResult.Ack
+                DbrOperation.ListSites -> DbrShellResult.SitesListed(emptyList())
+                else -> DbrShellResult.Ack
             }
         }
-        dperm.dispatch(DpermEvent.NavigationStarted("https://app.uniswap.org/swap?x=1"), DpermEvent.serializer())
-        val navigated = withTimeout(10_000) { dperm.view.first { it.current_origin != null } }
-        assertEquals("https://app.uniswap.org", navigated.current_origin)
+        dbr.dispatch(DbrEvent.Start, DbrEvent.serializer())
+        val listed = withTimeout(10_000) { dbr.view.first { it.ready } }
+        assertTrue(listed.sites.isEmpty())
 
         val sign = host(SignRequestCore().asBridge(), SignView(), SignView.serializer(), SignOperation.serializer(), SignShellResult.serializer()) { op ->
             when (op) {

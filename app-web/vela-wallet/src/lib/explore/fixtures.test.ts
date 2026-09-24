@@ -33,8 +33,8 @@ describe('explore messages', () => {
 });
 
 describe('state inventory (data-model.md §2)', () => {
-	it('is the seven phone states and the four desktop ones', () => {
-		expect(MOBILE_STATES).toEqual(['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7']);
+	it('is the eight phone states and the four desktop ones', () => {
+		expect(MOBILE_STATES).toEqual(['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8']);
 		expect(DESKTOP_STATES).toEqual(['de1', 'de2', 'de3', 'de4']);
 	});
 
@@ -68,10 +68,18 @@ describe('what each state is FOR', () => {
 		expect(e2.groups.map((g) => g.id)).toEqual(['recent', 'trading', 'prediction']);
 	});
 
-	it('E3/E6/E7 open on a sheet; E1/E2/E4/E5 do not', () => {
+	it('E3/E6/E7/E8 open on a sheet; E1/E2/E4/E5 do not', () => {
 		expect(buildMobileState('e3', messages, IDENTICON_STUB).sheet?.kind).toBe('group-manage');
 		expect(buildMobileState('e6', messages, IDENTICON_STUB).sheet?.kind).toBe('site-menu');
 		expect(buildMobileState('e7', messages, IDENTICON_STUB).sheet?.kind).toBe('connection');
+		// E8 is the history row's menu: the site-menu sheet with its own three items.
+		const e8 = buildMobileState('e8', messages, IDENTICON_STUB).sheet;
+		expect(e8?.kind).toBe('site-menu');
+		expect(e8?.kind === 'site-menu' && e8.items.map((i) => i.id)).toEqual([
+			'new-tab',
+			'favorite',
+			'delete'
+		]);
 		for (const state of ['e1', 'e2', 'e4', 'e5'] as const) {
 			expect(buildMobileState(state, messages, IDENTICON_STUB).sheet).toBeUndefined();
 		}

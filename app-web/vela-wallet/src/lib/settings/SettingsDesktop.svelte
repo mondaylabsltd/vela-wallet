@@ -10,11 +10,13 @@
 	 * reference, and it has none.
 	 */
 	import { untrack } from 'svelte';
-	import type { OnNetEvent } from './net-events';
+	import { OPENED_EVENT, type OnNetEvent } from './net-events';
 	import type { SettingsPrefEvent } from './pref-events';
+	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 	import type {
+		ConfirmSheetModel,
 		FeedbackResult,
 		SettingsDesktopModel,
 		SettingsOverlayId,
@@ -27,6 +29,7 @@
 	import KeysBlock from './ui/KeysBlock.svelte';
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
 	import AddNetworkPanel from './ui/AddNetworkPanel.svelte';
+	import ConfirmSheet from './ui/ConfirmSheet.svelte';
 	import Callout from './ui/Callout.svelte';
 	import DangerCard from './ui/DangerCard.svelte';
 	import Dialog from './ui/Dialog.svelte';
@@ -74,14 +77,6 @@
 		onstorageclear?: (id: string) => void;
 		/** "Clear all caches" was confirmed. Absent in the gallery. */
 		onclearcaches?: () => void;
-		/**
-		 * 抹除此设备 was confirmed (spec 081 FR-017).
-		 *
-		 * The wide layout drew the same danger card the phone does and handed
-		 * it no handler at all, so the one irreversible control on the screen
-		 * was a picture of itself — the exact defect the erase contract names.
-		 */
-		onerase?: () => void;
 		/** 发送 in the report panel (spec 081 FR-016). Absent in the gallery. */
 		onfeedbacksend?: (report: { what: string; steps: string }) => void;
 		feedbackSending?: boolean;
@@ -103,7 +98,6 @@
 		onethereumbackup,
 		onstorageclear,
 		onclearcaches,
-		onerase,
 		onfeedbacksend,
 		feedbackSending = false,
 		feedbackResult
@@ -112,6 +106,8 @@
 	let page = $state<SettingsPageId>(untrack(() => model.page));
 	let overlay = $state<SettingsOverlayId>(untrack(() => model.overlay));
 	let openDropdown = $state<string | undefined>(untrack(() => model.dropdown?.rowId));
+	/** The storage row or network waiting on an answer, and the question it asks. */
+	let pending = $state<{ id: string; sheet: ConfirmSheetModel } | null>(null);
 
 	// The account page has no open/close of its own: showing it IS opening the
 	// switcher, so the balance core hears both edges from the page choice.
@@ -130,6 +126,8 @@
 				return { title: model.localization.title, description: model.localization.description };
 			case 'fee-speed':
 				return { title: model.feeSpeed.title, description: model.feeSpeed.description };
+			case 'signing':
+				return { title: model.signing.title, description: model.signing.description };
 			case 'networks':
 				return { title: model.networks.title, description: model.networks.subtitle };
 			case 'rpc-providers':
@@ -150,21 +148,40 @@
 	function toggleDropdown(id: string) {
 		openDropdown = openDropdown === id ? undefined : id;
 	}
+
+	/**
+	 * Show a panel. Showing the providers or the endpoints IS the core event
+	 * the phone raises when it pushes the same page (`OPENED_EVENT`): without
+	 * it the providers' drafts were never seeded, and leaving a key's field
+	 * saved an empty draft over the key it showed (spec 072, P0).
+	 */
+	function openPage(id: SettingsPageId) {
+		page = id;
+		const opened = OPENED_EVENT[id];
+		if (opened !== undefined) onnetevent?.(opened);
+	}
+
+	function closeOverlay() {
+		overlay = 'none';
+		pending = null;
+	}
+
+	/** Put a destructive row's question up; the row acts only on its confirm. */
+	function ask(next: SettingsOverlayId, id: string, sheet: ConfirmSheetModel | undefined) {
+		if (sheet === undefined) return;
+		pending = { id, sheet };
+		overlay = next;
+	}
 </script>
 
 <div class="desktop">
 	{#if sidebar !== undefined}
 		<!-- The header's name button opens the switcher, which on this screen IS
 		     the account page. -->
-		<Sidebar {sidebar} {onnav} {onchainselect} onaccounts={() => (page = 'account')} />
+		<Sidebar {sidebar} {onnav} {onchainselect} onaccounts={() => openPage('account')} />
 	{/if}
 
-	<SettingsNavList
-		title={model.title}
-		items={model.nav}
-		selected={page}
-		onselect={(id) => (page = id)}
-	/>
+	<SettingsNavList title={model.title} items={model.nav} selected={page} onselect={openPage} />
 
 	<main>
 		<div class="panel">
@@ -234,8 +251,10 @@
 				</button>
 				<p class="sign-out-note">{model.account.signOutNote}</p>
 
-				<!-- Spec 081 FR-017: the card asks, the dialog confirms, the route
-				     erases. It was drawn with no handler from the first day. -->
+				<!-- Spec 081 FR-017 with 072's dialog: the card asks, the dialog
+				     confirms, the route erases — and a failure is said in the
+				     dialog's own callout. It was drawn with no handler from the
+				     first day. -->
 				<DangerCard
 					title={model.account.erase.title}
 					subtitle={model.account.erase.subtitle}
@@ -266,12 +285,6 @@
 					<SegmentedControl
 						model={model.appearance.theme.segmented}
 						onselect={(id) => onprefevent?.({ kind: 'theme', id })}
-					/>
-				</FormRow>
-				<FormRow label={model.appearance.avatar.label}>
-					<SegmentedControl
-						model={model.appearance.avatar.segmented}
-						onselect={(id) => onprefevent?.({ kind: 'avatar', id })}
 					/>
 				</FormRow>
 			{:else if page === 'localization'}
@@ -310,6 +323,25 @@
 						/>
 					</FormRow>
 				{/each}
+			{:else if page === 'signing'}
+				<!-- Spec 071. The default "Sign with" is the desktop's usual
+				     dropdown row; the Trusted Signer's page under it is the phone
+				     sheet's own body, so both layouts say the same about it. -->
+				{#each model.signing.rows as row (row.id)}
+					<FormRow label={row.label}>
+						<Dropdown
+							value={row.value ?? ''}
+							label={row.label}
+							open={openDropdown === row.id}
+							rows={row.options}
+							ontoggle={() => toggleDropdown(row.id)}
+							onselect={(id) => {
+								onprefevent?.({ kind: 'sign-with', id });
+								openDropdown = undefined;
+							}}
+						/>
+					</FormRow>
+				{/each}
 			{:else if page === 'networks'}
 				<NetworksPanel
 					rows={model.networks.rows}
@@ -317,7 +349,7 @@
 					deleteLabel={model.networks.removeLabel}
 					expandable
 					onselect={(id) => onnetevent?.({ kind: 'select-network', id })}
-					ondelete={(id) => onnetevent?.({ kind: 'delete-network', id })}
+					ondelete={(id) => ask('remove-network', id, removeNetworkQuestion(model.networks, id))}
 				>
 					{#snippet detail()}
 						<NetworkDetailPanel
@@ -344,12 +376,19 @@
 						onnetevent?.({ kind: 'endpoint', field: id as NetEndpointField, value })}
 					onfieldblur={(id) =>
 						onnetevent?.({ kind: 'endpoint-blur', field: id as NetEndpointField })}
-					onreset={() => onnetevent?.({ kind: 'endpoints-reset' })}
+					onreset={() => ask('reset-endpoints', '', model.endpoints.resetSheet)}
 				/>
 			{:else if page === 'storage'}
+				<!-- A row's Clear asks first, as on the phone: here it cleared the
+				     whole address book on one click (spec 072). -->
 				<StoragePanel
 					panel={model.storage}
-					onclear={onstorageclear}
+					onclear={(id) =>
+						ask(
+							'clear-storage-item',
+							id,
+							storageClearQuestion(model.storage, id, model.clearCachesSheet.cancel)
+						)}
 					onclearcaches={() => (overlay = 'clear-caches')}
 				/>
 			{:else if page === 'feedback'}
@@ -373,7 +412,7 @@
 			title={model.addNetwork.title}
 			subtitle={model.addNetwork.subtitle}
 			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
+			onclose={closeOverlay}
 		>
 			<AddNetworkPanel
 				panel={model.addNetwork}
@@ -385,19 +424,11 @@
 			/>
 		</Dialog>
 	{:else if overlay === 'rpc-fix'}
-		<Dialog
-			title={model.rpcFix.title}
-			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
-		>
-			<RpcFixBody panel={model.rpcFix} onprimary={() => (overlay = 'none')} />
+		<Dialog title={model.rpcFix.title} closeLabel={model.closeLabel} onclose={closeOverlay}>
+			<RpcFixBody panel={model.rpcFix} onprimary={closeOverlay} />
 		</Dialog>
 	{:else if overlay === 'sign-out'}
-		<Dialog
-			title={model.account.signOutLabel}
-			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
-		>
+		<Dialog title={model.account.signOutLabel} closeLabel={model.closeLabel} onclose={closeOverlay}>
 			<p class="dialog-body">{model.account.signOutNote}</p>
 			<div class="dialog-actions">
 				<Button variant="danger" shape="rounded" onclick={onsignout}>
@@ -410,7 +441,7 @@
 		<Dialog
 			title={model.clearCachesSheet.title}
 			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
+			onclose={closeOverlay}
 		>
 			<p class="dialog-body">{model.clearCachesSheet.body}</p>
 			<div class="dialog-actions">
@@ -419,39 +450,47 @@
 					shape="rounded"
 					onclick={() => {
 						onclearcaches?.();
-						overlay = 'none';
+						closeOverlay();
 					}}
 				>
 					{model.clearCachesSheet.confirm}
 				</Button>
 			</div>
 		</Dialog>
+	{:else if (overlay === 'clear-storage-item' || overlay === 'remove-network' || overlay === 'reset-endpoints') && pending}
+		<!-- The phone's confirm sheet, in a dialog: titled with what goes. -->
+		<Dialog title={pending.sheet.title} closeLabel={model.closeLabel} onclose={closeOverlay}>
+			<ConfirmSheet
+				sheet={pending.sheet}
+				onconfirm={() => {
+					const id = pending?.id;
+					const what = overlay;
+					closeOverlay();
+					if (id === undefined) return;
+					if (what === 'remove-network') onnetevent?.({ kind: 'delete-network', id });
+					else if (what === 'reset-endpoints') onnetevent?.({ kind: 'endpoints-reset' });
+					else onstorageclear?.(id);
+				}}
+				oncancel={closeOverlay}
+			/>
+		</Dialog>
 	{:else if overlay === 'erase-device'}
 		<!-- Spec 081 FR-017. Everything the phone's sheet says, in the desktop's
 		     container: what is lost, and — the note — that the passkey is NOT,
 		     because it lives with the person's passkey provider and not here.
+		     `ConfirmSheet` is the phone's own component and draws all three (body,
+		     note, callout), so the two clients cannot drift into saying different
+		     things about the same destructive action.
+
 		     The dialog does NOT close on confirm: a failed erase has to say so
-		     where the person is looking, and a success leaves this page. -->
-		<Dialog
-			title={model.eraseSheet.title}
-			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
-		>
-			<p class="dialog-body">{model.eraseSheet.body}</p>
-			{#if model.eraseSheet.note !== undefined}
-				<p class="dialog-note">{model.eraseSheet.note}</p>
-			{/if}
-			{#if model.eraseSheet.callout !== undefined}
-				<div class="dialog-callout"><Callout callout={model.eraseSheet.callout} /></div>
-			{/if}
-			<div class="dialog-actions">
-				<Button variant="danger" shape="rounded" onclick={() => onerase?.()}>
-					{model.eraseSheet.confirm}
-				</Button>
-				<Button variant="secondary" shape="rounded" onclick={() => (overlay = 'none')}>
-					{model.eraseSheet.cancel}
-				</Button>
-			</div>
+		     where the person is looking — its callout is in this sheet — and a
+		     success leaves this page anyway. -->
+		<Dialog title={model.eraseSheet.title} closeLabel={model.closeLabel} onclose={closeOverlay}>
+			<ConfirmSheet
+				sheet={model.eraseSheet}
+				onconfirm={() => onprefevent?.({ kind: 'erase' })}
+				oncancel={closeOverlay}
+			/>
 		</Dialog>
 	{/if}
 </div>
@@ -483,7 +522,7 @@
 	.panel {
 		width: 100%;
 		/* The row measure plus this panel's own gutters (issue 195): at the 800
-		   content column a label sat up to 480px from the control it names. */
+		   content column a label sat up to 480 pixels from the control it names. */
 		max-width: calc(var(--layout-rowMeasure) + var(--space-5xl) * 2);
 		height: 100%;
 		overflow-y: auto;
@@ -562,17 +601,6 @@
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		color: var(--color-fg-muted);
-	}
-
-	.dialog-note {
-		margin: calc(var(--space-xl) * -1) 0 var(--space-xl);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
-	}
-
-	.dialog-callout {
-		margin-bottom: var(--space-xl);
 	}
 
 	.dialog-actions {

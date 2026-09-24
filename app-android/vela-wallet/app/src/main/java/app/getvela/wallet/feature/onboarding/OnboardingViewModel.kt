@@ -9,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import app.getvela.wallet.VelaWalletApplication
 import app.getvela.wallet.core.crux.CoreDriver
 import app.getvela.wallet.core.crux.asBridge
+import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.HybridCeremony
@@ -245,6 +247,18 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     ) {
         // Read at failure time, so a language change needs no new executor.
         if (strings != null) this.strings = strings
+        // The endpoint again, because Settings may have changed it since this
+        // view model was built: the device pass of 2026-09-22 set a passkey
+        // index in Settings, created a wallet without restarting, and watched
+        // the ceremony query the PREVIOUS index. Re-read on entry, never
+        // mid-flow — one wallet must not be asked of two registries.
+        viewModelScope.launch {
+            val stored = session.registryUrl()
+            if (stored != endpointUrl) {
+                endpointUrl = stored
+                registry.baseUrl = stored
+            }
+        }
         if (passkey == null) {
             val isRealActivity = activityContext is app.getvela.wallet.MainActivity
             passkey = PasskeyExecutor(
@@ -314,6 +328,14 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         )
         createDriver = driver
         driver.dispatch(event("start"))
+        // Spec 075: WHICH Trusted Signer page Settings names decides whether that
+        // route can mint a key this set would accept — a key made on a page
+        // belongs to that page's domain, and a wallet's keys all belong to one.
+        // The core cannot read the store, so the shell tells it.
+        viewModelScope.launch {
+            val page = VelaStore(getApplication()).read(KeyValueStore.Keys.TRUSTED_SIGNER_URL).orEmpty()
+            send(driver, JSONObject().put("type", "signer_page_changed").put("url", page))
+        }
     }
 
     fun nameChanged(name: String) =
@@ -385,6 +407,10 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      * the finished machine.
      */
     fun beginSignIn(method: KeyMethod = KeyMethod.Platform) {
+        // Spec 075: a new attempt is a new flow. A previous one that ended in
+        // a failure the person read and dismissed may still hold a page open;
+        // this attempt opens its own.
+        container.trustedSigner.endFlow()
         startLogin()
         signIn(method)
     }
@@ -429,15 +455,31 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         createDriver?.dispose()
         createDriver = null
         createView = null
+        // Spec 075: one page visit per flow — and the flow is over, however it
+        // ended. A session left open would hold a socket and a tab the person
+        // has walked away from.
+        container.trustedSigner.endFlow()
     }
 
     fun disposeLogin() {
         loginDriver?.dispose()
         loginDriver = null
+        container.trustedSigner.endFlow()
     }
 
     fun consumeFinished() {
         finished = false
+    }
+
+    /**
+     * The ViewModel is going: whatever was mid-flight is cancelled with
+     * `viewModelScope`, and a Trusted Signer page left open would keep a bound
+     * loopback socket and a Custom Tab in front of an app that is no longer
+     * asking it for anything (spec 075).
+     */
+    override fun onCleared() {
+        container.trustedSigner.endFlow()
+        super.onCleared()
     }
 
     private fun executor(): OnboardingExecutor {
@@ -476,6 +518,19 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                     loginView = LoginView(busy = false, endpointUnreachable = false)
                     disposeLogin()
                 }
+
+                /**
+                 * Spec 075: what the Trusted Signer's card says the key is for.
+                 * The create machine holds the name the person typed; a
+                 * sign-in has none yet, which is the honest answer.
+                 */
+                override fun walletName(): String = createView?.name.orEmpty()
+            },
+            // Spec 075: a `trusted_signer` ceremony runs on the page, not on the
+            // platform's sheet. The channel throws a PasskeyFailure for every
+            // refusal, which the executor's failure contract already answers.
+            trustedSigner = { requestJson, operationJson, expected, signerOrigin ->
+                container.trustedSigner.ceremony(requestJson, operationJson, expected, signerOrigin)
             },
         )
     }

@@ -3,11 +3,11 @@ import type { DpermRejectReason } from "./DpermRejectReason";
 import type { DpermRespondPayload } from "./DpermRespondPayload";
 
 /**
- * The web-popup entry's verdict, on the wire.
+ * The web request window's verdict, on the wire.
  *
  * A projection of [`DpermPopupDecision`] — [`decide_popup_request`] keeps
  * exactly the semantics it was ported with; this only gives the answer a
- * serialisable shape so the popup window can ASK for it. `ForwardToSigning`
+ * serialisable shape so the window can ASK for it. `ForwardToSigning`
  * carries the granted address because that is the address the sign path must
  * be pinned to (invariant ⑨: the grant's own address, never the wallet's
  * active account).

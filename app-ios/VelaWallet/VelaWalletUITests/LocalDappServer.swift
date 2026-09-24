@@ -32,12 +32,17 @@ final class LocalDappServer {
     private let listener: NWListener
     private let body: Data
     private let queue = DispatchQueue(label: "vela.testdapp")
+    /// This server's own port — the shared one unless a suite that runs
+    /// beside the browser's needs another (spec 071).
+    let boundPort: UInt16
+    var pageUrl: String { "http://127.0.0.1:\(boundPort)/" }
 
-    init(html: String) throws {
+    init(html: String, port: UInt16 = LocalDappServer.port) throws {
         body = Data(html.utf8)
+        boundPort = port
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
-        listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: Self.port)!)
+        listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: port)!)
     }
 
     /// The harness page, from the test bundle. Not `#filePath`: that is a path

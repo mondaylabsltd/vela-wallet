@@ -367,6 +367,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                     // security key that was never plugged in, and no QR would show).
                     method: model.method,
                     purpose: ProofPurpose::RecoverSecond,
+                    signer_origin: assertion.signer_origin.clone(),
                 },
             )
         }
@@ -577,6 +578,7 @@ fn account_from_key(assertion: &Assertion, public_key_hex: &str, now_iso: &str) 
             public_key_hex: public_key_hex.to_owned(),
             name,
             transports: transports_from_attachment(&assertion.authenticator_attachment),
+            signer_origin: assertion.signer_origin.clone(),
         }],
     })
 }
@@ -760,6 +762,14 @@ fn reconstruct_account(
             } else {
                 String::new()
             },
+            // Spec 075: the key that answered through the Trusted Signer lives
+            // behind that page. The others are unknown here, as their
+            // transports are.
+            signer_origin: if member.credential_id == assertion.credential_id {
+                assertion.signer_origin.clone()
+            } else {
+                None
+            },
         })
         .collect();
     let first = keys.first()?;
@@ -876,6 +886,14 @@ fn registry_publish_op(
             // this member live (one prompt) — recovery has no creation-time
             // proof to replay.
             proof: None,
+            // …and that live signature must reach the page this key lives
+            // behind, if it lives behind one (spec 075).
+            signer_origin: account
+                .keys
+                .iter()
+                .find(|key| key.credential_id == account.id)
+                .or_else(|| account.keys.first())
+                .and_then(|key| key.signer_origin.clone()),
         }],
         group_seed_hex: String::new(),
         group_public_key_hex: String::new(),

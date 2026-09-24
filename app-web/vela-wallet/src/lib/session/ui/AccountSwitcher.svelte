@@ -25,7 +25,7 @@
 	import { session } from '$lib/session/core/session.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
-	import { avatarSvgForClient } from '$lib/wallet/identicon';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 
 	interface Props {
 		copy: { accounts: SettingsMessages['accounts']; close: string };
@@ -59,7 +59,7 @@
 				activeIndex: view.active_index,
 				balances,
 				currency: currency.view,
-				identicon: (address, name) => avatarSvgForClient(address, name)
+				identicon: identiconSvgForClient
 			},
 			copy.accounts
 		);
@@ -78,14 +78,32 @@
 		if (row !== undefined) session.switchAccount(row.index);
 		onclose();
 	}
+
+	/**
+	 * One wallet leaves, the others stay (2026-09-23). The switcher closes
+	 * because the list under it just changed: leaving it open would put the
+	 * next row where the finger already is.
+	 */
+	function remove(position: number): void {
+		const row = view.accounts[position];
+		if (row !== undefined) session.removeAccount(row.index);
+		onclose();
+	}
 </script>
 
 {#if wide}
 	<Dialog title={sheet.title} closeLabel={copy.close} {onclose}>
-		<AccountsSheetBody {sheet} layout="inline" onselect={select} {oncreate} {onsignin} />
+		<AccountsSheetBody
+			{sheet}
+			layout="inline"
+			onselect={select}
+			onremove={remove}
+			{oncreate}
+			{onsignin}
+		/>
 	</Dialog>
 {:else}
 	<BottomSheet title={sheet.title} closeLabel={copy.close} height="tall" {onclose}>
-		<AccountsSheetBody {sheet} onselect={select} {oncreate} {onsignin} />
+		<AccountsSheetBody {sheet} onselect={select} onremove={remove} {oncreate} {onsignin} />
 	</BottomSheet>
 {/if}

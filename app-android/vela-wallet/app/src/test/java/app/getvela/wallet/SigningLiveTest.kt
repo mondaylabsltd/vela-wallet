@@ -274,38 +274,11 @@ class SigningLiveTest {
         assertEquals("400000000000000", native.quoted_fee?.amount)
     }
 
-    /**
-     * Spec 081, device-found. A refused request answered the page with
-     * `-32603` and the refused FUNCTION as its message — "addOwnerWithThreshold"
-     * on its own, which reads as a label, not an answer. The page now gets a
-     * sentence and a machine-readable `kind`, the way the web shell already
-     * sends one.
-     */
-    @Test
-    fun aRefusedRequestTellsThePageWhatHappenedAndWhy() {
-        val json = SignExecutor.responseJson(
-            "rid-1",
-            SignResponsePayload.Err(
-                code = -32603,
-                kind = SignErrorKind.SelfCallBlocked,
-                message = "addOwnerWithThreshold",
-            ),
-        )
-        val error = json.getJSONObject("error")
-        assertEquals(-32603, error.getInt("code"))
-        assertEquals("self_call_blocked", error.getString("kind"))
-        assertTrue(
-            "the message must explain, not just name: ${error.getString("message")}",
-            error.getString("message").startsWith("This request would change who controls the wallet") &&
-                error.getString("message").contains("addOwnerWithThreshold"),
-        )
-
-        // An ordinary rejection keeps its own words and still carries a kind.
-        val rejected = SignExecutor.responseJson(
-            "rid-2",
-            SignResponsePayload.Err(code = 4001, kind = SignErrorKind.UserRejected, message = null),
-        ).getJSONObject("error")
-        assertEquals("User rejected the request", rejected.getString("message"))
-        assertEquals("user_rejected", rejected.getString("kind"))
-    }
+    // Spec 081's "a refusal says what happened, and carries a kind" moved with
+    // the code it tests: spec 070 made the CORE write the page's answer
+    // (`dapp_browser` → `dapp_rpc::sign_error_json`), so this shell no longer
+    // has a `responseJson` to check. The assertion is now
+    // `BrowserMachineTest."a refused request tells the page what happened and
+    // why"`, against the real machine, plus the core's own
+    // `dapp_rpc::tests::a_refused_request_is_answered_with_a_sentence_and_a_kind`.
 }

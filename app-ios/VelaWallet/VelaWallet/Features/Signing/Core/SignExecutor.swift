@@ -39,8 +39,13 @@ final class SignExecutor {
     ]
 
     struct Ports {
-        /// The answer, to the transport (tab) that owns the request.
-        var respond: (_ transportId: String, _ id: String, _ json: [String: Any]) -> Void = { _, _, _ in }
+        /// The answer, to the transport (tab) that owns the request — the
+        /// core's own `SignResponsePayload` (`{type: ok, result}` or
+        /// `{type: err, code, kind, message}`), untouched. Whoever owns the
+        /// transport builds the page's message from it: for the in-app
+        /// browser that is `dapp_browser` (spec 070), whose words for a
+        /// refusal are the core's rather than a table here.
+        var respond: (_ transportId: String, _ id: String, _ payload: [String: Any]) -> Void = { _, _, _ in }
         /// The relay accepted. The core must hear this **before** the submit
         /// resolves.
         var opSubmitted: (_ id: String, _ userOpHash: String) -> Void = { _, _ in }
@@ -52,6 +57,13 @@ final class SignExecutor {
         var switchAccount: (_ index: Int) async -> Bool = { _ in false }
         /// The chain's native symbol, for the record row.
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
+        /// Who asked, as the Trusted Signer's page is told it (spec 071): the
+        /// origin the browser observed, empty for the wallet's own request.
+        var origin: () -> String = { "" }
+        /// The Trusted Signer ended without a signature. The core hears a
+        /// cancelled ceremony — the request stays open and may be signed
+        /// another way — and the sheet says which sentence applies.
+        var trustedSignerEnded: (TrustedSignerNotice) -> Void = { _ in }
     }
 
     private let spine: UserOpSpine
@@ -91,10 +103,7 @@ final class SignExecutor {
             ports.respond(
                 operation["transport_id"] as? String ?? "",
                 operation["id"] as? String ?? "",
-                Self.responseJson(
-                    id: operation["id"] as? String ?? "",
-                    payload: operation["payload"] as? [String: Any] ?? [:]
-                )
+                operation["payload"] as? [String: Any] ?? Self.noAnswer
             )
             return CoreJSON.string(["type": "responded"])
 
@@ -215,6 +224,9 @@ final class SignExecutor {
                 calls: calls,
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
+                // The FINAL params — a guard's rewrite included — are what the
+                // page decodes, as they are what is signed.
+                asked: UserOpSpine.Asked(method: method, paramsJson: paramsJson, origin: ports.origin()),
                 signingStarted: { [ports] in ports.signingStarted() }
             )
             ports.opSubmitted(operation["id"] as? String ?? "", hash)
@@ -227,6 +239,9 @@ final class SignExecutor {
         } catch let refused as UserOpSpine.Refused {
             switch refused.failure {
             case .passkeyCancelled:
+                return ["type": "passkey_cancelled"]
+            case .trustedSigner(let notice):
+                ports.trustedSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
             case .bundlerUnderfunded:
                 return [
@@ -257,11 +272,16 @@ final class SignExecutor {
                 chainId: chainId,
                 account: address,
                 originalHash: original,
+                asked: UserOpSpine.Asked(method: method, paramsJson: paramsJson, origin: ports.origin()),
                 signingStarted: { [ports] in ports.signingStarted() }
             )
             return ["type": "succeeded", "result": signature]
         } catch let refused as UserOpSpine.Refused {
             if case .passkeyCancelled = refused.failure { return ["type": "passkey_cancelled"] }
+            if case .trustedSigner(let notice) = refused.failure {
+                ports.trustedSignerEnded(notice)
+                return ["type": "passkey_cancelled"]
+            }
             if case .other(let message) = refused.failure {
                 return ["type": "failed", "message": message ?? "Signing failed"]
             }
@@ -313,85 +333,20 @@ final class SignExecutor {
     /// `personal_sign` is the EIP-191 prefix over the bytes; `eth_sign` is the
     /// same envelope over `params[1]` (EIP-1474's rule, the params swapped);
     /// typed data is its EIP-712 digest, computed by the core.
+    /// What the site asked to sign, before the Safe's wrap — the core's one
+    /// rule (`sign_message::original_hash`), shared with Android, the desktop
+    /// and the Trusted Signer's page. The copy that lived here read typed data
+    /// from `params[1]` even for `eth_signTypedData`, which carries it first.
     static func messageHash(method: String, paramsJson: String) -> Data? {
-        guard let data = paramsJson.data(using: .utf8),
-              let params = try? JSONSerialization.jsonObject(with: data) as? [Any]
-        else { return nil }
-
-        if method == "personal_sign" || method == "eth_sign" {
-            let index = method == "eth_sign" ? 1 : 0
-            guard params.count > index, let payload = params[index] as? String, !payload.isEmpty
-            else { return nil }
-            let bytes: Data = isHexPayload(payload)
-                ? ((try? fromHex(s: payload)) ?? Data())
-                : Data(payload.utf8)
-            let prefix = Data("\u{19}Ethereum Signed Message:\n\(bytes.count)".utf8)
-            return keccak256(data: prefix + bytes)
-        }
-
-        guard params.count > 1 else { return nil }
-        let typed: String
-        if let text = params[1] as? String {
-            typed = text
-        } else if let object = try? JSONSerialization.data(withJSONObject: params[1]),
-                  let text = String(data: object, encoding: .utf8) {
-            typed = text
-        } else {
-            return nil
-        }
-        return try? hashTypedData(typedDataJson: typed)
+        signMessageHash(method: method, paramsJson: paramsJson)
     }
 
-    static func isHexPayload(_ payload: String) -> Bool {
-        payload.hasPrefix("0x") && payload.count % 2 == 0
-            && payload.dropFirst(2).allSatisfy { $0.isHexDigit }
-    }
-
-    /// The page's answer in the wire's shape; the core chose `ok`/`err` and
-    /// the code.
-    static func responseJson(id: String, payload: [String: Any]) -> [String: Any] {
-        switch payload["type"] as? String ?? "" {
-        case "ok":
-            return BrowserExecutor.resultJson(id: id, result: payload["result"] as? String)
-        case "err":
-            let kind = payload["kind"] as? String ?? ""
-            let detail = payload["message"] as? String
-            // A refusal's `message` is the refused FUNCTION name, which on its
-            // own reads as a label rather than an answer. Say what happened,
-            // then name it (spec 081, found on an Android device).
-            let message: String
-            if kind == "self_call_blocked", let detail {
-                message = "\(defaultMessage(kind)) (\(detail))"
-            } else {
-                message = detail ?? defaultMessage(kind)
-            }
-            return BrowserExecutor.errorJson(
-                id: id,
-                code: (payload["code"] as? NSNumber)?.intValue ?? -32603,
-                message: message,
-                kind: kind
-            )
-        default:
-            return BrowserExecutor.errorJson(id: id, code: -32603, message: "The wallet produced no answer")
-        }
-    }
-
-    static func defaultMessage(_ kind: String) -> String {
-        switch kind {
-        case "user_rejected": return "User rejected the request"
-        case "wallet_switched_chains": return "The wallet switched chains"
-        case "unsupported_chain": return "Unsupported chain"
-        case "unauthorized_account": return "Unauthorized account"
-        case "invalid_params": return "Invalid params"
-        case "unsupported_capability": return "Unsupported capability"
-        case "unlimited_approval": return "Unlimited approvals are disabled"
-        case "self_call_blocked": return "This request would change who controls the wallet"
-        case "funding_cancelled": return "Funding cancelled"
-        case "submit_failed": return "The transaction could not be submitted"
-        case "stale_fee_quote": return "The fee quote expired"
-        default: return "The request was refused"
-        }
-    }
+    /// What a transport is told when the operation carried no payload at
+    /// all — a shape drift, answered rather than left hanging.
+    static let noAnswer: [String: Any] = [
+        "type": "err", "code": -32603, "kind": "submit_failed",
+        "message": "The wallet produced no answer",
+    ]
 
     /// The calls a request carries: one for `eth_sendTransaction`, many for
     /// `wallet_sendCalls` — and **an empty batch is not a batch**. Hex value

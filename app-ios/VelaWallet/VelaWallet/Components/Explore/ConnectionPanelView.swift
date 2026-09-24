@@ -20,6 +20,10 @@ struct ConnectionPanelView: View {
     var onDisconnect: () -> Void = {}
     var onApprove: () -> Void = {}
     var onReject: () -> Void = {}
+    /// A network picked for this site, by chain id.
+    var onPickNetwork: (Int) -> Void = { _ in }
+
+    @State private var pickingNetwork = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
@@ -82,17 +86,60 @@ struct ConnectionPanelView: View {
 
             Divider().overlay(theme.borderBase)
 
-            HStack {
-                Text(verbatim: connection.networkLabel)
-                    .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-                Spacer()
-                HStack(spacing: Tokens.Space.s8) {
-                    Circle().fill(connection.network.dot)
-                        .frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
-                    Text(verbatim: connection.network.name)
-                        .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
+            // The SITE's network (spec 070: per origin, kept across launches).
+            // With choices it is a control; a pick moves this site only, and
+            // the page hears `chainChanged`.
+            Button {
+                guard !connection.networks.isEmpty else { return }
+                pickingNetwork.toggle()
+            } label: {
+                HStack {
+                    Text(verbatim: connection.networkLabel)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                    Spacer()
+                    HStack(spacing: Tokens.Space.s8) {
+                        Circle().fill(connection.network.dot)
+                            .frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                        Text(verbatim: connection.network.name)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                        if !connection.networks.isEmpty {
+                            LucideIcon(pickingNetwork ? .chevronDown : .chevronRight,
+                                       size: LucideIconSize.smallChevron)
+                                .foregroundStyle(theme.fgMuted)
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("explore.connection.network")
+
+            if pickingNetwork {
+                VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+                    ForEach(connection.networks) { network in
+                        Button {
+                            pickingNetwork = false
+                            onPickNetwork(network.id)
+                        } label: {
+                            HStack(spacing: Tokens.Space.s8) {
+                                Circle().fill(network.dot)
+                                    .frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                                Text(verbatim: network.name)
+                                    .typeRole(Typography.body.scaled(textScale))
+                                    .foregroundStyle(theme.fgBase)
+                                Spacer()
+                                if network.id == connection.chainId {
+                                    LucideIcon(.check, size: LucideIconSize.smallChevron)
+                                        .foregroundStyle(theme.successBase)
+                                }
+                            }
+                            .padding(.vertical, Tokens.Space.s8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
 

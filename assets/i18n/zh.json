@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "切换账户",
-   "contactsSubtitle": "已保存地址与最近收款人"
+   "contactsSubtitle": "已保存地址与最近收款人",
+   "remove": "从这台设备移除",
+   "removeBody": "只有这个钱包离开，其余的不动。"
   },
   "appearance": {
    "themeLight": "浅色",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "交易速度",
    "subtitle": "在 Vela 发起的每笔转账都从这里开始。发送时仍可单独调整某一笔。"
+  },
+  "signing": {
+   "title": "签名方式",
+   "subtitle": "你在 Vela 发起的每次签名都从这里开始。单次签名时仍可另选方式。",
+   "pageTitle": "可信签名器页面",
+   "pageSubtitle": "可信签名器打开的页面：官方页面，或你自己部署的零依赖签名页。",
+   "pageOfficial": "官方",
+   "pageInvalid": "这不是一个网址。",
+   "pageInsecure": "请使用 https 页面，或本机回环地址上的页面——浏览器不会在其他地方签名。",
+   "pageForeign": "你的通行密钥属于 getvela.app。其他域名上的页面可以显示请求，但无法签名。",
+   "pageReset": "使用官方页面",
+   "pageSave": "保存"
   },
   "advanced": {
    "networksTitle": "网络",
@@ -88,7 +102,8 @@
    "keeps": "选择「我已有钱包」用该通行密钥重新登录：地址不变，交易记录、联系人、代币和各项设置也都还在。",
    "warning": "您的公钥尚未同步到服务器。下次启动会自动重试，但在成功之前，您可能无法在其他设备上登录——如果卸载了应用，这台设备也一样。",
    "anyway": "仍然退出",
-   "cancel": "取消"
+   "cancel": "取消",
+   "descMany": "这台设备上的 {{count}} 个钱包都会退出。不会删除任何东西。"
   },
   "eraseDevice": {
    "title": "清理数据",
@@ -755,6 +770,8 @@
    "keysSubtitleFull": "已达上限 7 把。",
    "keysTitle": "添加通行密钥",
    "keysTitleBlocked": "再加一把才能创建",
+   "methodBlockedHint": "这个钱包的钥匙都属于 {{party}}。",
+   "methodBlockedSigner": "你的可信签名器页面是 {{page}}，它的钥匙属于 {{pageParty}}。在设置里换成 {{party}} 的页面才能添加。",
    "methodHybridBody": "扫码，用附近设备创建",
    "methodHybridTitle": "手机或平板",
    "methodHybridUnavailable": "即将支持",
@@ -1350,6 +1367,16 @@
    "techIdentityRecipient": "接收方",
    "copyValue": "复制",
    "signWith": "签名方式",
+   "trustedSignerTitle": "可信签名器",
+   "trustedSignerBody": "在独立的页面上核对并签名——所见即所签。",
+   "trustedSignerWaiting": "正在等待可信签名器…",
+   "trustedSignerWaitingHint": "请在打开的页面上核对这笔请求，并在那里签名。如果浏览器询问是否允许该页面访问本设备上的其他应用，请允许。",
+   "trustedSignerClosed": "可信签名器已关闭，没有签名。",
+   "trustedSignerRefused": "可信签名器拒绝签署这笔请求，原因见它的页面。",
+   "trustedSignerMismatch": "可信签名器的回复与这笔请求不符，什么都没有发出。",
+   "trustedSignerTimeout": "可信签名器没有及时回应。",
+   "trustedSignerReopen": "重新打开页面",
+   "trustedSignerDoneTab": "已签名。你可以关闭此标签页，回到 Vela。",
    "viewOnExplorer": "在区块浏览器中查看",
    "sendingToTokenContract": "发送到代币自身合约",
    "selfCallBlockedTitle": "Vela 不会签这笔请求",
@@ -1567,7 +1594,11 @@
    "fiatLabel": "法币汇率",
    "fiatHint": "以 USD 为基准的汇率，决定可选货币列表——可替换为覆盖范围更广的数据源。",
    "resetToDefaults": "四项全部恢复默认",
-   "selfHostGuide": "自行部署指南 →"
+   "selfHostGuide": "自行部署指南 →",
+   "resetTitle": "恢复默认服务节点？",
+   "resetBody": "四项服务都将改回 Vela 的地址，你在这里填写的地址将被清除。",
+   "resetConfirm": "恢复默认",
+   "resetCancel": "取消"
   },
   "addNetwork": {
    "modalTitle": "添加网络",
@@ -1585,7 +1616,6 @@
    "retry": "重试",
    "addNetworkBtn": "添加网络",
    "incompatibleHint": "此链上尚未部署所需合约。\n请使用 Vela Wallet 链配置工具进行部署，然后回来重新检查。",
-   "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。",
    "openChainSetupTool": "打开链配置工具",
    "recheck": "重新检查",
    "chainIdLabel": "Chain ID: {{chainId}}",
@@ -1595,7 +1625,8 @@
    "incompatible": "不兼容",
    "checkSafe": "Safe L2 合约",
    "checkSigner": "P-256 预编译",
-   "checkRemaining": "其余 {{count}} 项合约"
+   "checkRemaining": "其余 {{count}} 项合约",
+   "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。"
   },
   "treasury": {
    "modalTitle": "金库",
@@ -1766,6 +1797,11 @@
   "siteMenu": "站点菜单",
   "account": "账户",
   "addressBar": "地址栏",
-  "close": "关闭"
+  "close": "关闭",
+  "pageCrashedTitle": "此页面已停止运行",
+  "pageCrashedBody": "页面意外关闭。你的钱包不受影响——重新加载即可继续。",
+  "walletConnectUnsupported": "暂不支持 WalletConnect 链接。请在「探索」中打开该 dApp，并从页面内连接。",
+  "scanUnrecognized": "此二维码既不是网址，也不是钱包地址。",
+  "linkCopied": "链接已复制"
  }
 }

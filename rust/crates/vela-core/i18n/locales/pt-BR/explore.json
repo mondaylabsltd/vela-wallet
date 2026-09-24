@@ -53,6 +53,11 @@
     "siteMenu": "Menu do site",
     "account": "Conta",
     "addressBar": "Barra de endereço",
-    "close": "Fechar"
+    "close": "Fechar",
+    "pageCrashedTitle": "Esta página parou de funcionar",
+    "pageCrashedBody": "A página foi fechada inesperadamente. Sua carteira não foi afetada — recarregue para continuar.",
+    "walletConnectUnsupported": "Links do WalletConnect não são compatíveis. Abra o dApp em Explorar e conecte-se por lá.",
+    "scanUnrecognized": "Este código não é um endereço web nem um endereço de carteira.",
+    "linkCopied": "Link copiado"
   }
 }

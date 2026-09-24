@@ -9,6 +9,7 @@
  * core's module doc assigns to shells.
  */
 
+import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
@@ -16,10 +17,9 @@ import { moneyText, trimBalance } from '$lib/wallet/live';
 import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
 import {
 	formatBytes,
-	GROUP_OF_ITEM,
-	STORAGE_ITEM_IDS,
 	type DeviceStorageReport,
-	type StorageItemId
+	type StorageItemId,
+	type StorageItemReport
 } from '$lib/services/device-storage';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
@@ -37,6 +37,7 @@ import type { NetView } from '$lib/core/generated/NetView';
 import type { NetWizardView } from '$lib/core/generated/NetWizardView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
+import type { SignPrefView } from '$lib/core/generated/SignPrefView';
 import {
 	dateFormatOptions,
 	formatDate,
@@ -48,9 +49,10 @@ import {
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { chainMeta, languageRows, markFor, currencyGlyph } from './fixtures';
+import { chainMeta, languageRows, markFor, currencyGlyph, PROVIDER_KEY_URLS } from './fixtures';
 import type { SettingsMessages } from './messages';
 import type {
+	AboutModel,
 	AddNetworkModel,
 	BalanceDetailModel,
 	ChainMarkModel,
@@ -58,6 +60,7 @@ import type {
 	RpcFixModel,
 	SettingsDesktopModel,
 	CheckItemModel,
+	ConfirmSheetModel,
 	EndpointsModel,
 	NetworkDetailModel,
 	NetworkRowModel,
@@ -346,16 +349,6 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 
 const PROVIDER_NAMES = { alchemy: 'Alchemy', drpc: 'dRPC', ankr: 'Ankr' } as const;
 
-/**
- * Where each provider's API key is made. The panel sent every "Get key →" to
- * drpc.org, Alchemy's and Ankr's included.
- */
-export const PROVIDER_KEY_URLS = {
-	alchemy: 'https://dashboard.alchemy.com/',
-	drpc: 'https://drpc.org/',
-	ankr: 'https://www.ankr.com/rpc/'
-} as const;
-
 export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvidersModel {
 	return {
 		title: m.advanced.rpcProvidersTitle,
@@ -375,7 +368,11 @@ export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvide
 					value: p.key,
 					placeholder: p.has_key ? undefined : m.rpcProviders.notSet
 				},
+				// With a key the action tests it. Without one there is nothing to
+				// test, and "Get key" goes where a key is made — it used to run a
+				// test on the empty field under that label.
 				action: p.has_key ? m.rpcProviders.checkKey : m.rpcProviders.getKey,
+				actionUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider],
 				support:
 					test !== null && test.done
 						? fill(m.rpcProviders.supportsCount, { count: test.ok_count, total: test.total })
@@ -410,6 +407,7 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 			};
 		}),
 		reset: m.endpoints.reset,
+		resetSheet: resetEndpointsQuestion(m),
 		guide: m.endpoints.guide
 	};
 }
@@ -419,9 +417,36 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 // ---------------------------------------------------------------------------
 
 /**
+ * How many networks this wallet has, once the ledger has been read (spec 072):
+ * the fixture's 12 stood on the Networks row and in About for everyone.
+ * `undefined` until then — an empty cell, never a guess.
+ */
+function networkCount(view: NetView): number | undefined {
+	return view.loaded ? view.networks.length : undefined;
+}
+
+/** About's network row, counted from the list. */
+function aboutWithNetworkCount(
+	about: AboutModel,
+	count: number | undefined,
+	m: SettingsMessages
+): AboutModel {
+	return {
+		...about,
+		rows: about.rows.map((row) =>
+			row.id === 'networks'
+				? {
+						...row,
+						value: count === undefined ? '' : fill(m.about.techNetworksValue, { count })
+					}
+				: row
+		)
+	};
+}
+
+/**
  * Replace the network-owned sections of a built settings model with the
- * core's view. Identity, appearance, localization, storage and about stay
- * exactly as built — their machines are later features.
+ * core's view — the pages, and the two places that count the networks.
  */
 export function withLiveNetworks(
 	model: SettingsHomeModel,
@@ -430,8 +455,21 @@ export function withLiveNetworks(
 	expandedId?: string
 ): SettingsHomeModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
+	const count = networkCount(view);
 	return {
 		...model,
+		sections: model.sections.map((section) => ({
+			...section,
+			rows: section.rows.map((row) =>
+				row.id === 'networks'
+					? {
+							...row,
+							value: count === undefined ? undefined : fill(m.networks.count, { count })
+						}
+					: row
+			)
+		})),
+		about: aboutWithNetworkCount(model.about, count, m),
 		networks: { ...model.networks, rows: liveNetworkRows(view, m, expandedId) },
 		networkDetail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networkDetail,
 		addNetwork: liveAddNetwork(view.wizard, m),
@@ -450,6 +488,7 @@ export function withLiveNetworksDesktop(
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
 		...model,
+		about: aboutWithNetworkCount(model.about, networkCount(view), m),
 		networks: {
 			...model.networks,
 			rows: liveNetworkRows(view, m, expandedId),
@@ -535,6 +574,53 @@ export function withLiveFeeSpeedDesktop(
 			rows: model.feeSpeed.rows.map((row) => ({ ...row, value: label, options: rows }))
 		}
 	};
+}
+
+/**
+ * The default "Sign with" and the Trusted Signer's page, live (spec 071).
+ *
+ * The rows are the core's: `offered` in its order (a method this build has
+ * no words for is not drawn), `method` ticked — always an offered name, the
+ * factory `auto` when nothing was chosen. The page row names the HOST of the
+ * page in force, or "Official"; the sheet says why the last address was
+ * refused and whether a page there can use this wallet's passkeys — both the
+ * core's findings, worded here.
+ */
+export function withLiveSigning(model: SettingsHomeModel, view: SignPrefView): SettingsHomeModel {
+	const rows = liveSignWithRows(model.signWithSheet.rows, view);
+	const method = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
+	return {
+		...model,
+		sections: model.sections.map((section) => ({
+			...section,
+			rows: section.rows.map((row) => (row.id === 'sign-with' ? { ...row, value: method } : row))
+		})),
+		signWithSheet: { ...model.signWithSheet, rows }
+	};
+}
+
+/** DST's "Sign with" row, from the phone sheet's own rows. */
+export function withLiveSigningDesktop(
+	model: SettingsDesktopModel,
+	view: SignPrefView,
+	sheet: SelectSheetModel
+): SettingsDesktopModel {
+	const rows = liveSignWithRows(sheet.rows, view);
+	const label = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
+	return {
+		...model,
+		signing: {
+			...model.signing,
+			rows: model.signing.rows.map((row) => ({ ...row, value: label, options: rows }))
+		}
+	};
+}
+
+function liveSignWithRows(rows: SelectRowModel[], view: SignPrefView): SelectRowModel[] {
+	return view.offered.flatMap((id) => {
+		const row = rows.find((candidate) => candidate.id === id);
+		return row ? [{ ...row, selected: id === view.method }] : [];
+	});
 }
 
 /** The provider-driven list, when one has answered (spec 028 Phase 9, T491). */
@@ -753,8 +839,8 @@ function liveTextScale<T extends { steps: number; index: number }>(scale: T): T 
 /**
  * The preference rows, wired to what is actually stored (spec 028 T432).
  *
- * Everything here was drawn in 023 and inert until now: the theme and avatar
- * segments showed a fixed selection, and the three format sheets showed five
+ * Everything here was drawn in 023 and inert until now: the theme segments
+ * showed a fixed selection, and the three format sheets showed five
  * canon strings with the first one ticked no matter what the app did. This
  * overlay makes each of them show — and offer — the truth.
  */
@@ -782,7 +868,6 @@ export function withLivePreferences(
 		appearance: {
 			...model.appearance,
 			theme: { ...model.appearance.theme, selected: THEME_ID[preferences.theme] },
-			avatar: { ...model.appearance.avatar, selected: preferences.avatarStyle },
 			textScale: liveTextScale(model.appearance.textScale)
 		},
 		languageSheet: {
@@ -838,13 +923,6 @@ export function withLivePreferencesDesktop(
 			theme: {
 				...model.appearance.theme,
 				segmented: { ...model.appearance.theme.segmented, selected: THEME_ID[preferences.theme] }
-			},
-			avatar: {
-				...model.appearance.avatar,
-				segmented: {
-					...model.appearance.avatar.segmented,
-					selected: preferences.avatarStyle
-				}
 			}
 		},
 		localization: {
@@ -866,11 +944,11 @@ export function withLivePreferencesDesktop(
  * distinction it preserves is the whole reason `EraseIncompleteError` exists:
  * data is still here, and the person is still signed in.
  */
-export function withEraseFailure(
-	model: SettingsHomeModel,
+export function withEraseFailure<M extends { eraseSheet: ConfirmSheetModel }>(
+	model: M,
 	m: SettingsMessages,
 	failed: boolean
-): SettingsHomeModel {
+): M {
 	if (!failed) return model;
 	return {
 		...model,
@@ -952,7 +1030,7 @@ export interface LiveAccountsInput {
 	/** Per-account totals in USD by lowercased address — the balance core's switcher cache. */
 	balances: ReadonlyMap<string, number>;
 	currency: CurrencyView;
-	identicon: (address: string, name: string) => string;
+	identicon: (address: string) => string;
 }
 
 function liveAccountRows(input: LiveAccountsInput) {
@@ -962,7 +1040,7 @@ function liveAccountRows(input: LiveAccountsInput) {
 			name: row.account.name,
 			addressDisplay: shortenAddress(row.account.address),
 			addressFull: row.account.address,
-			identiconSvg: input.identicon(row.account.address, row.account.name),
+			identiconSvg: input.identicon(row.account.address),
 			// No cached total yet: an empty cell, never a mocked figure.
 			amount: usd === undefined ? '' : moneyText(usd, input.currency),
 			selected: position === input.activeIndex
@@ -994,7 +1072,9 @@ export function liveAccountsSheet(
 		summary: liveAccountsSummary(input, m),
 		rows: liveAccountRows(input),
 		primary: m.createNew,
-		secondary: m.signInExisting
+		secondary: m.signInExisting,
+		remove: m.remove,
+		removeBody: m.removeBody
 	};
 }
 
@@ -1089,8 +1169,9 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 		cache: 'cache',
 		sessions: 'sessions'
 	};
-	const isItem = (id: string): id is StorageItemId =>
-		(STORAGE_ITEM_IDS as readonly string[]).includes(id);
+	// The report's rows are the catalog's, each with its group: a drawn row
+	// the catalog has no entry for keeps its drawn meta.
+	const measured = (id: string): StorageItemReport | undefined => report.items[id as StorageItemId];
 	return {
 		...model,
 		storage: {
@@ -1111,11 +1192,12 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 				// ever say "0 records" about a thing that cannot exist here.
 				items: group.items
 					.filter((item) => !WEB_HAS_NO[item.id as StorageItemId])
-					.map((item) =>
-						isItem(item.id) && GROUP_OF_ITEM[item.id] !== 'sessions'
-							? { ...item, meta: storageItemMeta(item.id, report, m) }
-							: item
-					)
+					.map((item) => {
+						const row = measured(item.id);
+						return row !== undefined && row.group !== 'sessions'
+							? { ...item, meta: storageItemMeta(item.id as StorageItemId, report, m) }
+							: item;
+					})
 			}))
 		}
 	};
@@ -1453,6 +1535,17 @@ export function ethereumBackupRow(
 function keyDetails(key: WalletKeys['keys'][number], m: SettingsMessages) {
 	const transport = [key.authenticator_attachment, key.transports].filter(Boolean).join(' · ');
 	return [
+		// Spec 075: WHICH page, for a key that lives behind one. First, because
+		// it answers the question the rest of this list assumes — where the key
+		// is — and labelled with the Trusted Signer's own title, the same words the
+		// caption above it and the "Sign with" chooser use. Absent when the key
+		// lives behind no page, and then the row is exactly what it always was.
+		{
+			label: m.signing.methods.trusted_signer,
+			value: key.signer_origin ?? '',
+			mono: false,
+			copy: false
+		},
 		{
 			label: m.keys.publicKey,
 			value: key.public_key_hex ? `0x${key.public_key_hex}` : '',
@@ -1489,16 +1582,29 @@ export function walletKeysModel(
 	 * "Built-in passkey", a passkey built into some device — and the two lines
 	 * that ARE true wherever they are read ("Phone or tablet", "Security key")
 	 * are shared with the create flow.
+	 *
+	 * Spec 075 adds a fourth answer that is not about a device at all: a key
+	 * behind a Trusted Signer page lives behind the PAGE, and it is named with the
+	 * signing sheet's own title for that route, so Settings and the "Sign with"
+	 * chooser cannot call the same thing two names.
 	 */
 	const fallbackFor = (method: string) =>
-		method === 'security_key'
-			? m.keys.providerSecurityKey
-			: method === 'hybrid'
-				? m.keys.providerGeneric
-				: m.keys.providerPlatform;
+		method === 'trusted_signer'
+			? m.signing.methods.trusted_signer
+			: method === 'security_key'
+				? m.keys.providerSecurityKey
+				: method === 'hybrid'
+					? m.keys.providerGeneric
+					: m.keys.providerPlatform;
 	const rows = (keys?.keys ?? []).map((key, index) => ({
 		name: key.name !== '' ? key.name : m.keys.keyN.replace('{{n}}', String(index + 1)),
 		holderFallback: fallbackFor(key.method),
+		// …and for that fourth answer the catalog must not be asked at all: the
+		// AAGUID a page reports belongs to the authenticator on ITS side, which
+		// is the one thing this wallet cannot reach. Naming that vault points
+		// away from where the key is (the device pass of 2026-09-22 found such a
+		// key drawn as the phone's built-in passkey).
+		holder: key.method === 'trusted_signer' ? fallbackFor(key.method) : undefined,
 		fingerprint: keyFingerprint(key.public_key_hex),
 		pills: [
 			...(key.user_verified === true

@@ -30,6 +30,7 @@ import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -521,6 +522,12 @@ class SettingsLiveTest {
                 compat = NetCompatibility(
                     chain_id = 42220,
                     compatible = true,
+                    // Fully compatible, multi-key included — which is what
+                    // "nothing to explain" below means. The flag defaults to
+                    // false, and a chain that cannot hold a multi-passkey
+                    // wallet DOES get a callout saying so (spec 081 FR-009,
+                    // the test two below this one).
+                    multi_key_ready = true,
                     contracts = listOf(
                         NetContractStatus("EntryPoint", "0xaa", deployed = true),
                         NetContractStatus("Safe", "0xbb", deployed = true),
@@ -533,9 +540,14 @@ class SettingsLiveTest {
         val add = SettingsLive.withWizard(base(), view, strings).addNetwork
 
         assertEquals(SettingsTone.Ok, add.candidate!!.badge!!.tone)
-        assertEquals(listOf("EntryPoint", "Safe"), add.checks.map { it.label })
-        assertTrue(add.checks.all { it.ok })
+        // The core's contracts, then the signer precompile (the web's `checkSigner`).
+        // The row is named for what it CHECKS — `p256_available`, the precompile.
+        // It used to read "WebAuthn signer module", which is the name of a
+        // different contract in the same list (main, 87502cd0).
+        assertEquals(listOf("EntryPoint", "Safe", "P-256 precompile"), add.checks.map { it.label })
+        assertTrue(add.checks.dropLast(1).all { it.ok })
         assertTrue(add.primary!!.isNotBlank())
+        assertNull("nothing to explain on a compatible chain", add.callout)
     }
 
     /**
@@ -601,8 +613,38 @@ class SettingsLiveTest {
         val add = SettingsLive.withWizard(base(), view, strings).addNetwork
 
         assertEquals(SettingsTone.Error, add.candidate!!.badge!!.tone)
-        assertEquals(false, add.checks.single().ok)
+        assertEquals(false, add.checks.first { it.label == "EntryPoint" }.ok)
         assertNull("a chain whose contracts are missing cannot be added", add.primary)
+        // Spec 072: it says why, offers the setup tool and a re-check.
+        assertTrue(add.callout!!.text.isNotBlank())
+        assertTrue(add.secondary!!.isNotBlank())
+        assertTrue(add.recheck!!.isNotBlank())
+    }
+
+    /**
+     * Spec 072: a chain that could not be CHECKED is not called incompatible
+     * (the core's invariant ③): a warning, Retry and re-check — never the
+     * setup tool, which is for chains really missing Vela's contracts.
+     */
+    @Test
+    fun aChainThatCouldNotBeCheckedIsNeverCalledIncompatible() {
+        val view = wizardView(
+            NetWizardView(
+                phase = NetWizardPhase.Checked,
+                chain_info = chainInfo(1234, "Somewhere"),
+                compat = null,
+                can_add = false,
+            ),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals(SettingsTone.Warn, add.candidate!!.badge!!.tone)
+        assertEquals(strings.t("settingsModals.addNetwork.unableToVerify"), add.candidate!!.badge!!.label)
+        assertEquals(strings.t("settingsModals.addNetwork.retry"), add.primary)
+        assertNull(add.secondary)
+        assertTrue(add.recheck!!.isNotBlank())
+        assertTrue(add.checks.isEmpty())
     }
 
     /** A testnet says so, because sending real money to one loses it. */
@@ -678,5 +720,31 @@ class SettingsLiveTest {
         assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.COMMON_DONE), restored.primary)
         assertTrue(restored.providers.isEmpty())
         assertNull(restored.report)
+    }
+
+    /**
+     * Spec 071/075: how this device signs by default — five routes in the
+     * picker (auto and the four places a passkey can be), the Trusted Signer
+     * page row, and the tunnel row beside it.
+     */
+    @Test
+    fun `the sign-with sheet offers five routes and the tunnel row sits beside the page row`() {
+        val view = app.getvela.wallet.feature.settings.core.SignPrefView()
+        val model = SettingsLive.withSignPref(base(), view, strings)
+
+        assertEquals(
+            listOf("auto", "platform", "hybrid", "security_key", "trusted_signer"),
+            model.signWithSheet.rows.map { it.id },
+        )
+        val clear = model.signWithSheet.rows.single { it.id == "trusted_signer" }
+        assertEquals(strings.t("componentsUi.signing.trustedSignerTitle"), clear.label)
+        assertEquals(strings.t("componentsUi.signing.trustedSignerBody"), clear.detail)
+
+        fun rowValue(id: String) = model.sections.flatMap { it.rows }.single { it.id == id }.value
+        assertEquals(strings.t("settings.signing.pageOfficial"), rowValue(SettingsFixtures.SIGNER_PAGE_ROW))
+        // The pairing service is gone with the channel (owner, 2026-09-23):
+        // no row, no sheet, and nothing in the advanced block that names one.
+        val ids = model.sections.flatMap { it.rows }.map { it.id }
+        assertFalse(ids.any { it.contains("tunnel", ignoreCase = true) })
     }
 }

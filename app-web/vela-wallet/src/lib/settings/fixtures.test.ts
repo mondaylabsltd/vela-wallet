@@ -228,6 +228,9 @@ describe('desktop canon', () => {
 			// Spec 068 — the stored default transaction speed, in the position
 			// the phone's 高级 section gives it (after 服务端点, before 存储).
 			'fee-speed',
+			// Spec 071 — how every signature starts, beside the speed as on the
+			// phone, where its two rows follow 交易速度.
+			'signing',
 			'storage',
 			// Spec 081 FR-016 — the report. It had no desktop entrance at all,
 			// so the only way to reach it was `/gallery`. Beside 关于, which is

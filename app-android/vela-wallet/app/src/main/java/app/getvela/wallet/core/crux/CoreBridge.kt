@@ -9,6 +9,7 @@ import uniffi.vela_core_uniffi.LoginCore
 import uniffi.vela_core_uniffi.FeePolicyCore
 import uniffi.vela_core_uniffi.FeeSpeedCore
 import uniffi.vela_core_uniffi.FeeTierPrefCore
+import uniffi.vela_core_uniffi.SignPrefCore
 import uniffi.vela_core_uniffi.ManageTokensCore
 import uniffi.vela_core_uniffi.ApprovalGuardCore
 import uniffi.vela_core_uniffi.BatchImportCore
@@ -16,6 +17,7 @@ import uniffi.vela_core_uniffi.ClearSigningCore
 import uniffi.vela_core_uniffi.SignRequestCore
 import uniffi.vela_core_uniffi.BrowserHistoryCore
 import uniffi.vela_core_uniffi.ExploreSitesCore
+import uniffi.vela_core_uniffi.DappBrowserCore
 import uniffi.vela_core_uniffi.DappPermissionsCore
 import uniffi.vela_core_uniffi.SendCore
 import uniffi.vela_core_uniffi.TxTrackerCore
@@ -96,6 +98,10 @@ fun ActivityFeedCore.asBridge(): CoreBridge =
 fun ManageTokensCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
+/** The in-app browser's decision half (spec 070). */
+fun DappBrowserCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
 fun DappPermissionsCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
@@ -142,4 +148,8 @@ fun FeeTierPrefCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun FeeSpeedCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+// Spec 071: the default "Sign with" and the Trusted Signer page.
+fun SignPrefCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)

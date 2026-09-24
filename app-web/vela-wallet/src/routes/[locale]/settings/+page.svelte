@@ -22,7 +22,7 @@
 	 * - **Live**: the network list, its detail editor and the add-network
 	 *   wizard (024); the display currency (024); the connected sites (027);
 	 *   and, since 028, the theme, the language row, the number / date / time
-	 *   presets, the avatar style and "erase this device".
+	 *   presets and "erase this device".
 	 * - **Still canon data**: the latency figures, the storage accounting and
 	 *   the RPC-provider panel's health — those wait for the features that
 	 *   measure them.
@@ -47,6 +47,7 @@
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
+	import { signPreference } from '$lib/settings/core/sign-pref.svelte';
 	import {
 		withLiveAccounts,
 		withLiveAccountsDesktop,
@@ -57,6 +58,8 @@
 		withLiveFeeSpeedDesktop,
 		withLiveNetworks,
 		withLiveNetworksDesktop,
+		withLiveSigning,
+		withLiveSigningDesktop,
 		withLiveStorage
 	} from '$lib/settings/live';
 	import { listGrants, revokeAll, revokeGrant } from '$lib/dapp/connections';
@@ -98,7 +101,7 @@
 	import type { SettingsPrefEvent } from '$lib/settings/pref-events';
 	import { LOCALE_ENDONYMS } from '$lib/settings/fixtures';
 	import type { SettingsNetEvent } from '$lib/settings/net-events';
-	import { avatarSvgForClient } from '$lib/wallet/identicon';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 	import { WEB_DESTINATIONS } from '$lib/wallet/destinations';
 	import { balance } from '$lib/wallet/core/balance.svelte';
@@ -120,10 +123,7 @@
 			? {
 					name: view.accounts[view.active_index]?.account.name ?? '',
 					address: view.address,
-					identiconSvg: avatarSvgForClient(
-						view.address,
-						view.accounts[view.active_index]?.account.name ?? ''
-					)
+					identiconSvg: identiconSvgForClient(view.address)
 				}
 			: null
 	);
@@ -171,6 +171,7 @@
 		void networkAdmin.boot();
 		void currency.boot();
 		void feeTierPreference.boot();
+		void signPreference.boot();
 		void balance.boot();
 		preferences.boot();
 		void refreshGrants();
@@ -348,11 +349,6 @@
 				if (choice !== undefined) preferences.setTheme(choice);
 				return;
 			}
-			case 'avatar':
-				if (event.id === 'initials' || event.id === 'identicon') {
-					preferences.setAvatarStyle(event.id);
-				}
-				return;
 			case 'language': {
 				// `system` unpins and follows the browser again; anything else is a
 				// locale, and on the web a locale is a route.
@@ -388,6 +384,18 @@
 				if (event.id === 'fast' || event.id === 'standard' || event.id === 'slow') {
 					feeTierPreference.choose(event.id);
 				}
+				return;
+			// Spec 071: how every signature starts, and the Trusted Signer's page.
+			// The core refuses a method it does not offer and an address it would
+			// not open (saying why in its view); nothing is judged here.
+			case 'sign-with':
+				signPreference.chooseMethod(event.id);
+				return;
+			case 'signer-page':
+				signPreference.submitSignerUrl(event.text);
+				return;
+			case 'signer-page-reset':
+				signPreference.resetSignerUrl();
 				return;
 			case 'erase':
 				void erase();
@@ -476,7 +484,7 @@
 			activeIndex: view.active_index,
 			balances,
 			currency: currency.view,
-			identicon: (address: string, name: string) => avatarSvgForClient(address, name)
+			identicon: identiconSvgForClient
 		};
 	});
 
@@ -505,6 +513,7 @@
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
 		model = withLiveFeeSpeed(model, feeTierPreference.view);
+		model = withLiveSigning(model, signPreference.view);
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale);
@@ -556,10 +565,12 @@
 		// The desktop page reuses the phone sheet's rows — one list of tiers,
 		// one set of words, whichever layout is showing.
 		model = withLiveFeeSpeedDesktop(model, feeTierPreference.view, liveHome.feeSpeedSheet);
+		model = withLiveSigningDesktop(model, signPreference.view, liveHome.signWithSheet);
 		model = {
 			...model,
 			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }
 		};
+		model = withEraseFailure(model, m, eraseFailed);
 		// Spec 081: the wide layout's own two dead controls — the danger card
 		// with no handler, and a report panel that did not exist.
 		model = withEraseFailureDesktop(model, m, eraseFailed);
@@ -703,7 +714,6 @@
 				onaccountsopen={accountsOpen}
 				onstorageclear={clearRow}
 				onclearcaches={clearCaches}
-				onerase={() => void erase()}
 				onfeedbacksend={(report) => void sendFeedback(report)}
 				{feedbackSending}
 				{feedbackResult}
@@ -750,7 +760,16 @@
 	The wallet's own request to copy its keys to Ethereum is answered HERE
 	(spec 062). Same host, same four machines, same sheet as a page's request.
 -->
-<SigningHost messages={data.signingMessages} fee={feeQuote} />
+<!--
+	Spec 077: the backup to Ethereum is a transaction, and it lands here
+	like any other — it posts into the same seam a dApp does, so it gets the
+	same receipt rather than a second one written for it.
+-->
+<SigningHost
+	messages={data.signingMessages}
+	fee={feeQuote}
+	receipt={data.signingMessages.receipt}
+/>
 
 <style>
 	/* The phone screens are `height: 100%` of whatever holds them, and the

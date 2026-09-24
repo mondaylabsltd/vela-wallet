@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 1693 paths = 1605 leaf + 88 branch. Repeated per locale these key bytes
-//! would cost 668220 bytes; interned once they cost 46141.
+//! 1728 paths = 1639 leaf + 89 branch. Repeated per locale these key bytes
+//! would cost 684495 bytes; interned once they cost 47242.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 1693] = [
+pub(crate) static PATHS: [&str; 1728] = [
     "about",
     "about.footer",
     "about.linkGitHub",
@@ -540,6 +540,16 @@ pub(crate) static PATHS: [&str; 1693] = [
     "componentsUi.signing.techRawUnits",
     "componentsUi.signing.techUnknownFn",
     "componentsUi.signing.tokenToContractWarning",
+    "componentsUi.signing.trustedSignerBody",
+    "componentsUi.signing.trustedSignerClosed",
+    "componentsUi.signing.trustedSignerDoneTab",
+    "componentsUi.signing.trustedSignerMismatch",
+    "componentsUi.signing.trustedSignerRefused",
+    "componentsUi.signing.trustedSignerReopen",
+    "componentsUi.signing.trustedSignerTimeout",
+    "componentsUi.signing.trustedSignerTitle",
+    "componentsUi.signing.trustedSignerWaiting",
+    "componentsUi.signing.trustedSignerWaitingHint",
     "componentsUi.signing.typeLabel",
     "componentsUi.signing.typedDataIntent",
     "componentsUi.signing.typedDomain",
@@ -823,6 +833,7 @@ pub(crate) static PATHS: [&str; 1693] = [
     "explore.hiddenCount",
     "explore.hiddenTag",
     "explore.hide",
+    "explore.linkCopied",
     "explore.manageGroups",
     "explore.moveToGroup",
     "explore.network",
@@ -831,12 +842,15 @@ pub(crate) static PATHS: [&str; 1693] = [
     "explore.openInNewTab",
     "explore.openInSystemBrowser",
     "explore.openTabs",
+    "explore.pageCrashedBody",
+    "explore.pageCrashedTitle",
     "explore.recent",
     "explore.refresh",
     "explore.reload",
     "explore.removeFromFavorites",
     "explore.rename",
     "explore.scan",
+    "explore.scanUnrecognized",
     "explore.searchPlaceholder",
     "explore.secureSite",
     "explore.share",
@@ -851,6 +865,7 @@ pub(crate) static PATHS: [&str; 1693] = [
     "explore.systemGroup",
     "explore.tabs",
     "explore.title",
+    "explore.walletConnectUnsupported",
     "history",
     "history.deleteRecord",
     "history.emptyBody",
@@ -1037,6 +1052,8 @@ pub(crate) static PATHS: [&str; 1693] = [
     "onboarding.create.keysSubtitleFull",
     "onboarding.create.keysTitle",
     "onboarding.create.keysTitleBlocked",
+    "onboarding.create.methodBlockedHint",
+    "onboarding.create.methodBlockedSigner",
     "onboarding.create.methodHybridBody",
     "onboarding.create.methodHybridTitle",
     "onboarding.create.methodHybridUnavailable",
@@ -1468,6 +1485,8 @@ pub(crate) static PATHS: [&str; 1693] = [
     "settings.about.title",
     "settings.account",
     "settings.account.contactsSubtitle",
+    "settings.account.remove",
+    "settings.account.removeBody",
     "settings.account.switch",
     "settings.advanced",
     "settings.advanced.addNetworkSubtitle",
@@ -1545,9 +1564,21 @@ pub(crate) static PATHS: [&str; 1693] = [
     "settings.signOut.button",
     "settings.signOut.cancel",
     "settings.signOut.desc",
+    "settings.signOut.descMany",
     "settings.signOut.keeps",
     "settings.signOut.title",
     "settings.signOut.warning",
+    "settings.signing",
+    "settings.signing.pageForeign",
+    "settings.signing.pageInsecure",
+    "settings.signing.pageInvalid",
+    "settings.signing.pageOfficial",
+    "settings.signing.pageReset",
+    "settings.signing.pageSave",
+    "settings.signing.pageSubtitle",
+    "settings.signing.pageTitle",
+    "settings.signing.subtitle",
+    "settings.signing.title",
     "settings.storage",
     "settings.storage.caches",
     "settings.storage.clear",
@@ -1630,6 +1661,10 @@ pub(crate) static PATHS: [&str; 1693] = [
     "settingsModals.endpoints.modalTitle",
     "settingsModals.endpoints.passkeyHint",
     "settingsModals.endpoints.passkeyLabel",
+    "settingsModals.endpoints.resetBody",
+    "settingsModals.endpoints.resetCancel",
+    "settingsModals.endpoints.resetConfirm",
+    "settingsModals.endpoints.resetTitle",
     "settingsModals.endpoints.resetToDefaults",
     "settingsModals.endpoints.selfHostGuide",
     "settingsModals.health",
@@ -1708,25 +1743,25 @@ pub(crate) static PATHS: [&str; 1693] = [
 /// A branch is a distinct lookup outcome, not a miss: `t("home")` must return the
 /// byte-exact diagnostic `key 'home (en)' returned an object instead of string.`,
 /// which a flat map could never distinguish from an absent key.
-pub(crate) static IS_BRANCH: [u8; 212] = [
+pub(crate) static IS_BRANCH: [u8; 216] = [
     0x01, 0x00, 0x10, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x06, 0x00, 0x00, 0x01, 0x00, 0x00, 0x60, 0x00,
     0x00, 0x00, 0x14, 0x12, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x21, 0xa0, 0x00, 0x00, 0x04,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x60, 0x00, 0x00, 0x00, 0x10, 0x00,
-    0x00, 0x00, 0x80, 0x40, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x04, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x08, 0x00, 0x00, 0x00, 0x04, 0x80, 0x10,
-    0x00, 0x00, 0x27, 0x49, 0x12, 0x02, 0x40, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00,
-    0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x20, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0x12, 0x80, 0x00, 0x21, 0x40, 0x12, 0x22, 0x40, 0x20, 0x08,
-    0x08, 0x00, 0x00, 0x00, 0x43, 0x00, 0x00, 0x00, 0x02, 0x04, 0x80, 0x08, 0x40, 0x00, 0x02, 0x10,
-    0x08, 0x20, 0x08, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80, 0x01, 0x00, 0x00, 0x40,
+    0x00, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x10, 0x00, 0x00, 0x00, 0x08,
+    0x00, 0x21, 0x00, 0x00, 0x4e, 0x92, 0x24, 0x04, 0x80, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
+    0x08, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x84, 0x00, 0x04, 0x08, 0x01, 0x92, 0x10, 0x01,
+    0x02, 0x41, 0x80, 0x00, 0x04, 0x00, 0x00, 0x80, 0x21, 0x00, 0x00, 0x00, 0x01, 0x02, 0x00, 0x44,
+    0x00, 0x02, 0x10, 0x80, 0x40, 0x00, 0x41, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 1693;
+pub(crate) const N_PATHS: usize = 1728;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

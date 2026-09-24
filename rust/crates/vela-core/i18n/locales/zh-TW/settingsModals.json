@@ -42,7 +42,11 @@
       "fiatLabel": "法幣匯率",
       "fiatHint": "以 USD 為基準的匯率，決定可選貨幣清單——可替換為涵蓋更廣的匯率來源。",
       "resetToDefaults": "四項全部還原預設",
-      "selfHostGuide": "自行部署指南 →"
+      "selfHostGuide": "自行部署指南 →",
+      "resetTitle": "重設服務端點？",
+      "resetBody": "四項服務都會改回 Vela 的位址，你在這裡填寫的位址將被清除。",
+      "resetConfirm": "重設",
+      "resetCancel": "取消"
     },
     "addNetwork": {
       "modalTitle": "新增網路",
@@ -60,7 +64,6 @@
       "retry": "重試",
       "addNetworkBtn": "新增網路",
       "incompatibleHint": "此鏈上尚未部署部分必要合約。\n請使用 Vela Wallet 鏈設定工具部署，再回來重新檢查。",
-      "singleKeyOnly": "此網路上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。",
       "openChainSetupTool": "開啟鏈設定工具",
       "recheck": "重新檢查",
       "chainIdLabel": "Chain ID：{{chainId}}",
@@ -70,7 +73,8 @@
       "incompatible": "不相容",
       "checkSafe": "Safe L2 合約",
       "checkSigner": "P-256 預編譯合約",
-      "checkRemaining": "其餘 {{count}} 項合約"
+      "checkRemaining": "其餘 {{count}} 項合約",
+      "singleKeyOnly": "此網路上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。"
     },
     "treasury": {
       "modalTitle": "金庫",

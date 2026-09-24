@@ -14,17 +14,6 @@ là điều đã xảy ra với [Bybit](/vi/docs/bybit-attack).
 Trang ký tồn tại để tách việc đó làm hai: giao dịch đến từ một nơi, còn việc kiểm tra và ký
 diễn ra ở một nơi khác do bạn kiểm soát.
 
-**Tình trạng:** đã làm xong và thử nghiệm trên máy cục bộ; **chưa phát hành**, và **chưa có
-ứng dụng Vela nào gửi yêu cầu tới nó**. Hiện tại, nó là thứ để đọc, chạy và thử với các bên
-yêu cầu mẫu trong thư mục `samples/`. Muốn dùng nó cho chữ ký thật thì các ứng dụng phải
-chuyển yêu cầu của chúng sang đó, phần này vẫn chưa được xây.
-
-## Nó là gì
-
-Một thư mục — `app-web/clearsigning` trong kho mã — vừa là một trang web vừa là một tiện ích
-Chrome. Thuần HTML, CSS và JavaScript: không framework, không bundler, không bước build,
-không thư viện phụ thuộc, và không lấy dữ liệu gì từ máy chủ — yêu cầu duy nhất của nó là
-tải logo token để trang trí.
 
 Khi nhận một yêu cầu ký, nó không tin bản tóm tắt đi kèm. Nó tự giải mã calldata thô, tự tính
 digest của riêng nó, cho bạn thấy chữ ký thực sự sẽ cho phép điều gì, rồi mới hỏi passkey của
@@ -32,22 +21,6 @@ bạn.
 
 Vì không có bước build, các tệp bạn đọc chính là các tệp đang chạy. Bạn có thể so sánh thư mục
 với kho mã và biết chính xác mình đang phục vụ cái gì.
-
-## Bản sao nào ký được cho ví của bạn
-
-Một passkey gắn với tên miền mà nó được tạo ra. Các khóa Vela của bạn được đăng ký dưới
-`getvela.app`, và trình duyệt chỉ đưa chúng cho một trang có bên phụ thuộc (relying party)
-là `getvela.app`. Chỉ riêng quy tắc đó quyết định cách tự chạy nào thực sự hữu ích với bạn.
-
-**Dưới dạng tiện ích Chrome — cách dùng nó với các khóa bạn đang có.** Bên phụ thuộc của tiện
-ích là `getvela.app` bất kể thư mục đến từ đâu, nên các khóa hiện có của bạn ký được trong đó,
-còn mã chạy chính là thư mục bạn đã nạp và kiểm tra.
-
-1. Lấy thư mục: `git clone https://github.com/mondaylabsltd/vela-wallet`
-   (nó nằm ở `app-web/clearsigning` bên trong).
-2. Mở `chrome://extensions` và bật **Chế độ dành cho nhà phát triển**.
-3. Chọn **Tải tiện ích đã giải nén**, rồi chọn thư mục `app-web/clearsigning`.
-4. Biểu tượng trên thanh công cụ sẽ mở trang trong một thẻ.
 
 **Dưới dạng một trang trên tên miền của bạn, hoặc trên localhost.** Khi được phục vụ qua HTTPS
 (hoặc từ localhost), bên phụ thuộc của trang là chính tên máy chủ của nó — nên nó ký được bằng
@@ -57,7 +30,7 @@ chạy luồng máy tính, và để ký cho một ví có khóa được tạo 
 không phải là cách ký cho một ví `getvela.app` đã có.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

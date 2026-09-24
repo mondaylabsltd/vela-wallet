@@ -62,6 +62,11 @@ enum Fixture {
     Touch(TouchRequest),
     Pin(PinRequest),
     Pick(Vec<CredentialChoice>),
+    /// Spec 075's Trusted Signer dialogs, here for the same reason as the
+    /// cable's: each needs a browser and a socket in a particular state, so
+    /// they are among the screens a reviewer is least able to reach on
+    /// purpose. A `Refusal` is how an attempt ended.
+    TrustedSignerEnded(crate::executor::trusted_signer::Refusal),
 }
 
 struct Entry {
@@ -89,6 +94,17 @@ fn base_view() -> CreateView {
         can_add_key: true,
         can_finish: false,
         needs_second_key: false,
+        // An empty set has committed to no relying party, so every route is
+        // still open and there is nothing to explain (spec 075).
+        key_relying_party: None,
+        key_signer_origin: None,
+        add_methods: vec![
+            KeyMethod::Platform,
+            KeyMethod::Hybrid,
+            KeyMethod::SecurityKey,
+            KeyMethod::TrustedSigner,
+        ],
+        add_blocked: None,
     }
 }
 
@@ -193,6 +209,49 @@ fn entries() -> Vec<Entry> {
             key("Key 2", KeyMethod::SecurityKey, true, true),
         ];
         view.can_finish = true;
+        view
+    });
+    // Spec 075: a wallet's keys all belong to one relying party, so both ways
+    // the picker narrows — the row dims and the sentence under the list says
+    // what to do about it.
+    flow("keys · signer page elsewhere", {
+        let mut view = base_view();
+        view.stage = CreateStage::AddKeys;
+        view.can_go_back = true;
+        view.keys = vec![key("Everyday wallet", KeyMethod::SecurityKey, true, false)];
+        view.needs_second_key = true;
+        view.key_relying_party = Some("getvela.app".to_owned());
+        view.add_methods = vec![
+            KeyMethod::Platform,
+            KeyMethod::Hybrid,
+            KeyMethod::SecurityKey,
+        ];
+        view.add_blocked = Some(vela_core::app::create_wallet::AddBlocked {
+            relying_party: "getvela.app".to_owned(),
+            page: Some("http://localhost:8140/sign.html".to_owned()),
+            page_relying_party: Some("localhost".to_owned()),
+        });
+        view
+    });
+    flow("keys · a page's own set", {
+        let mut view = base_view();
+        view.stage = CreateStage::AddKeys;
+        view.can_go_back = true;
+        view.keys = vec![key(
+            "Everyday wallet",
+            KeyMethod::TrustedSigner,
+            true,
+            false,
+        )];
+        view.needs_second_key = true;
+        view.key_relying_party = Some("sign.example.com".to_owned());
+        view.key_signer_origin = Some("https://sign.example.com".to_owned());
+        view.add_methods = vec![KeyMethod::TrustedSigner];
+        view.add_blocked = Some(vela_core::app::create_wallet::AddBlocked {
+            relying_party: "sign.example.com".to_owned(),
+            page: None,
+            page_relying_party: None,
+        });
         view
     });
     flow("keys · unconfirmed row", {
@@ -361,6 +420,20 @@ fn entries() -> Vec<Entry> {
     // The failure sheet, one row per outcome the catalog names. The two that
     // carry a detail string are driven through the refinement rather than
     // around it, so this list is also a check on it.
+    // Spec 075: the Trusted Signer's own dialogs, in their own group — they are
+    // not the cable's, and a reviewer looking for "the page route" should find
+    // them together.
+    let mut signer = |code: &'static str, fixture: Fixture| {
+        out.push(Entry {
+            group: "Trusted Signer",
+            code,
+            fixture,
+        });
+    };
+    signer(
+        "ended · nothing came back in time",
+        Fixture::TrustedSignerEnded(crate::executor::trusted_signer::Refusal::TimedOut),
+    );
     let mut sheet = |code: &'static str, kind: PromptKind, confirmable: bool| {
         out.push(Entry {
             group: "Failures",
@@ -669,6 +742,10 @@ impl GalleryView {
             ),
             Fixture::Pick(choices) => {
                 crate::hardware::pick_card(theme, &self.loc, choices, |_, _, _| {}, |_, _, _| {})
+            }
+            // Spec 075: bare, like the cable's — the gallery IS the backdrop.
+            Fixture::TrustedSignerEnded(refusal) => {
+                crate::signing::trusted_signer::ended_card(theme, &self.loc, *refusal, |_, _, _| {})
             }
             Fixture::Sheet { kind, confirmable } => {
                 let mut prompt = Prompt::new(kind.clone(), *confirmable, 0);

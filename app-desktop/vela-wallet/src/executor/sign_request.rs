@@ -40,6 +40,8 @@ use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
 
 use crate::executor::passkey::{self, Ceremony};
+use crate::executor::trusted_signer::{self, Ask};
+use crate::executor::user_op::Signer;
 use crate::executor::{now_ms, relay, storage, user_op};
 
 /// `vela.transactionHistory` — the shared local store.
@@ -81,6 +83,15 @@ pub struct SignContext {
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
     pub signing_started: Arc<AtomicBool>,
+    /// Who asked, as the transport says — `None` for the wallet's own
+    /// requests, which the Trusted Signer's page is told as the wallet's own
+    /// send rather than as a site's.
+    pub site: Option<String>,
+    /// The account's name, for the Trusted Signer's page.
+    pub account_name: Option<String>,
+    /// The Trusted Signer (spec 071): whether THIS request goes to it, and its
+    /// waiting sheet. Shared like `route_override`, and for the same reason.
+    pub trusted_signer: Arc<trusted_signer::Channel>,
 }
 
 impl SignContext {
@@ -99,25 +110,42 @@ impl SignContext {
         }
     }
 
-    /// "Sign with": `auto` clears the choice; anything else asks the core which
-    /// key that pins (`wallet_keys::sign_route`). An answer of "none" — an
-    /// unknown method, a wallet with no usable credential — leaves the stored
-    /// route in force rather than guessing.
-    pub fn choose_method(&self, method: &str) {
-        let route =
-            vela_core::wallet_keys::sign_route(&self.device_keys, method).and_then(|route| {
-                let method = match route.method.as_str() {
-                    "platform" => KeyMethod::Platform,
-                    "hybrid" => KeyMethod::Hybrid,
-                    "security_key" => KeyMethod::SecurityKey,
-                    _ => return None,
-                };
-                Some((route.credential_id, method))
-            });
+    /// "Sign with": `auto` clears the choice; a place a passkey is asks the
+    /// core which key that pins (`wallet_keys::sign_route`); the Trusted Signer
+    /// routes the request to `page`. An answer of "none" — an unknown method,
+    /// a wallet with no usable credential — leaves the stored route in force
+    /// rather than guessing.
+    pub fn choose_method(&self, method: &str, page: &str) {
+        use crate::executor::send::Route;
+        let route = crate::executor::send::sign_route_of(&self.device_keys, method, page);
+        let (pinned, page) = match route {
+            Some(Route::Passkey(credential, key_method)) => (Some((credential, key_method)), None),
+            // Spec 075: the page the KEY lives behind when it has one, and the
+            // person's page from Settings when it does not.
+            Some(Route::TrustedSigner(page)) => (None, Some(page)),
+            None => (None, None),
+        };
         *self
             .route_override
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = route;
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = pinned;
+        self.trusted_signer.choose(page);
+    }
+
+    /// This request as the Trusted Signer's page is told it (contract §1): a
+    /// site's own method, params and origin — the FINAL params, invariant ⑨
+    /// — or, for the wallet's own transaction, just its calls. A message is
+    /// always its own method: there are no calls to tell it by.
+    fn ask(&self, method: &str, params_json: &str) -> Ask {
+        match &self.site {
+            None if !is_message(method) => Ask::own(self.account_name.clone()),
+            site => Ask {
+                method: method.to_owned(),
+                params: serde_json::from_str(params_json).unwrap_or_default(),
+                origin: site.clone().unwrap_or_default(),
+                account_name: self.account_name.clone(),
+            },
+        }
     }
 
     #[must_use]
@@ -131,19 +159,13 @@ impl SignContext {
             keys: send.keys,
             key_method: send.key_method,
             pinned_credential: send.pinned_credential,
-            device_keys: account
-                .keys
-                .iter()
-                .map(|key| vela_core::wallet_keys::DeviceKey {
-                    credential_id: key.credential_id.clone(),
-                    public_key_hex: key.public_key_hex.clone(),
-                    name: key.name.clone(),
-                    transports: key.transports.clone(),
-                })
-                .collect(),
+            device_keys: send.device_keys,
             route_override: Arc::new(std::sync::Mutex::new(None)),
             ceremony: send.ceremony,
             signing_started: send.signing_started,
+            site: None,
+            account_name: send.account_name,
+            trusted_signer: send.trusted_signer,
         }
     }
 }
@@ -276,6 +298,9 @@ fn sign_and_submit(
     quoted: Option<user_op::QuotedFee>,
     sink: &crate::resident::Sink<Event>,
 ) -> SignSubmitOutcome {
+    if is_message(method) {
+        return sign_message(ctx, chain_id, address, method, params_json);
+    }
     let Some(calls) = calls_of(method, params_json) else {
         return SignSubmitOutcome::Failed {
             message: format!("{method} carried no transaction this wallet could read"),
@@ -287,13 +312,23 @@ fn sign_and_submit(
         let (credential, method) = ctx.route();
         passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
     };
+    let ask = ctx.ask(method, params_json);
+    let page = ctx.trusted_signer.chosen();
+    let signer = match &page {
+        Some(page) => Signer::TrustedSigner {
+            ask: &ask,
+            page,
+            channel: &ctx.trusted_signer,
+        },
+        None => Signer::Passkey(&mut sign),
+    };
     let submitted = user_op::submit(
         chain_id,
         address,
         &calls,
         gas_fee_token,
         &ctx.keys,
-        &mut sign,
+        signer,
         quoted,
     );
     let user_op_hash = match submitted {
@@ -312,6 +347,53 @@ fn sign_and_submit(
 
     let receipt = await_receipt(&user_op_hash, chain_id);
     after_receipt_wait(user_op_hash, receipt)
+}
+
+/// A signature, not a transaction (the phones' `SignExecutor`): one
+/// ceremony over the Safe's `SafeMessage` hash of what the site asked to
+/// sign, answered as the EIP-1271 envelope — nothing submitted, no receipt.
+fn sign_message(
+    ctx: &SignContext,
+    chain_id: u32,
+    address: &str,
+    method: &str,
+    params_json: &str,
+) -> SignSubmitOutcome {
+    let Some(original) = message_hash(method, params_json) else {
+        return SignSubmitOutcome::Failed {
+            message: format!("{method} carried nothing this wallet could sign"),
+        };
+    };
+    let mut sign = |challenge: &[u8]| {
+        ctx.signing_started.store(true, Ordering::SeqCst);
+        let (credential, method) = ctx.route();
+        passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+    };
+    let ask = ctx.ask(method, params_json);
+    let page = ctx.trusted_signer.chosen();
+    let signer = match &page {
+        Some(page) => Signer::TrustedSigner {
+            ask: &ask,
+            page,
+            channel: &ctx.trusted_signer,
+        },
+        None => Signer::Passkey(&mut sign),
+    };
+    match user_op::sign_message(chain_id, address, &original, &ctx.keys, signer) {
+        Ok(signature) => SignSubmitOutcome::Succeeded { result: signature },
+        Err(failure) => submit_failure(chain_id, address, failure),
+    }
+}
+
+/// The methods the sheet signs as a message rather than submits.
+fn is_message(method: &str) -> bool {
+    vela_core::sign_message::is_message_method(method)
+}
+
+/// What the site asked to sign, before the Safe's wrap — the core's one rule
+/// (`vela_core::sign_message`), which the Trusted Signer's page shares.
+pub fn message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
+    vela_core::sign_message::original_hash(method, params_json)
 }
 
 /// What the receipt wait means for the core.
@@ -364,20 +446,47 @@ pub fn calls_of(method: &str, params_json: &str) -> Option<Vec<FeeCall>> {
 fn fee_call(raw: &Value) -> Option<FeeCall> {
     Some(FeeCall {
         to: raw.get("to")?.as_str()?.to_owned(),
-        // A missing value is zero, not a failure: most contract calls carry
-        // none. Hex on the wire, decimal to the core.
-        value: raw
-            .get("value")
-            .and_then(Value::as_str)
-            .and_then(|hex| u128::from_str_radix(hex.trim_start_matches("0x"), 16).ok())
-            .unwrap_or(0)
-            .to_string(),
+        value: wei_of(raw.get("value"))?,
         data: raw
             .get("data")
             .and_then(Value::as_str)
             .unwrap_or("0x")
             .to_owned(),
     })
+}
+
+/// A JSON-RPC quantity as wei, or `None` when it is not a number.
+///
+/// **Absent is zero; unreadable is not.** Most contract calls carry no value,
+/// so a missing field is 0 — but a field that is there and cannot be read used
+/// to be priced as 0 too, which puts a wrong fee beside a real transaction.
+/// Refusing it draws no fee instead, and no fee is better than a made-up one.
+///
+/// `"0x"` is zero. Several dApp libraries write it that way, and taking it for
+/// unreadable is what cost the WEB shell its fee and its speed control on a
+/// Uniswap swap (B-4, owner 2026-09-23).
+fn wei_of(value: Option<&Value>) -> Option<String> {
+    let Some(value) = value else {
+        return Some("0".to_owned());
+    };
+    if value.is_null() {
+        return Some("0".to_owned());
+    }
+    if let Some(number) = value.as_u64() {
+        return Some(number.to_string());
+    }
+    let text = value.as_str()?.trim();
+    let digits = text
+        .strip_prefix("0x")
+        .or_else(|| text.strip_prefix("0X"))
+        .map(|hex| (hex, 16))
+        .unwrap_or((text, 10));
+    if digits.0.is_empty() {
+        return Some("0".to_owned());
+    }
+    u128::from_str_radix(digits.0, digits.1)
+        .ok()
+        .map(|wei| wei.to_string())
 }
 
 /// Poll until the receipt lands or the budget runs out.
@@ -620,6 +729,122 @@ mod tests {
         }
     }
 
+    fn context(site: Option<&str>) -> SignContext {
+        let account = Account {
+            id: "cred0".to_owned(),
+            name: "savings".to_owned(),
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: String::new(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: String::new(),
+                transports: "internal".to_owned(),
+                signer_origin: None,
+            }],
+        };
+        let mut ctx = SignContext::new(
+            &account,
+            crate::ceremony::CeremonyChannel::new().ceremony(0),
+        );
+        ctx.site = site.map(str::to_owned);
+        ctx
+    }
+
+    /// "Sign with" on the sheet (spec 071): the Trusted Signer routes THIS
+    /// request to the page and pins no key; a place a passkey is does the
+    /// opposite; `auto` clears both.
+    #[test]
+    fn the_sheets_choice_routes_this_request() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        ctx.choose_method("trusted_signer", "https://sign.getvela.app/");
+        assert_eq!(
+            ctx.trusted_signer.chosen().as_deref(),
+            Some("https://sign.getvela.app/")
+        );
+        assert_eq!(ctx.route(), (Some("cred0".to_owned()), KeyMethod::Platform));
+
+        ctx.choose_method("hybrid", "https://sign.getvela.app/");
+        assert_eq!(ctx.trusted_signer.chosen(), None);
+        assert_eq!(ctx.route().1, KeyMethod::Hybrid);
+
+        ctx.choose_method("auto", "https://sign.getvela.app/");
+        assert_eq!(ctx.trusted_signer.chosen(), None);
+        assert_eq!(ctx.route().1, KeyMethod::Platform);
+    }
+
+    /// A site's request reaches the page as the site's — its method, its
+    /// FINAL params, its origin; the wallet's own is the wallet's own send.
+    #[test]
+    fn the_page_is_told_whose_request_it_is() {
+        let params = r#"[{"to":"0xbbb","value":"0x1"}]"#;
+        let site = context(Some("https://app.uniswap.org")).ask("eth_sendTransaction", params);
+        assert_eq!(site.method, "eth_sendTransaction");
+        assert_eq!(site.origin, "https://app.uniswap.org");
+        assert_eq!(site.params[0]["to"], "0xbbb");
+        assert_eq!(site.account_name.as_deref(), Some("savings"));
+
+        let own = context(None).ask("eth_sendTransaction", params);
+        assert_eq!(own.method, "", "the core builds the wallet's own intent");
+        assert_eq!(own.origin, "");
+    }
+
+    /// `personal_sign` hashes its bytes under EIP-191 — hex when the
+    /// payload is hex, the text itself otherwise — so "hello" and its hex
+    /// sign the same thing, the digest every EIP-191 verifier knows.
+    #[test]
+    fn a_message_is_hashed_the_way_its_verifier_hashes_it() {
+        let hello = "50b2c43fd39106bafbba0da34fc430e1f91e3c96ea2acee2bc34119f92b37750";
+        let hashed = |method: &str, params: &str| {
+            message_hash(method, params).map(|hash| vela_core::primitives::to_hex(&hash, false))
+        };
+        assert_eq!(
+            hashed("personal_sign", r#"["hello","0xabc"]"#).as_deref(),
+            Some(hello)
+        );
+        assert_eq!(
+            hashed("personal_sign", r#"["0x68656c6c6f","0xabc"]"#).as_deref(),
+            Some(hello)
+        );
+        assert_eq!(
+            hashed("eth_sign", r#"["0xabc","0x68656c6c6f"]"#).as_deref(),
+            Some(hello)
+        );
+        assert_eq!(hashed("personal_sign", r#"["","0xabc"]"#), None);
+        assert_eq!(hashed("personal_sign", "[]"), None);
+    }
+
+    /// Typed data is the core's EIP-712 digest of the document the page
+    /// derives it from: the second parameter, or the first for the legacy
+    /// names and when the second is missing.
+    #[test]
+    fn typed_data_is_the_cores_digest_of_the_right_parameter() {
+        let document = r#"{"types":{"EIP712Domain":[{"name":"name","type":"string"}],"Mail":[{"name":"contents","type":"string"}]},"primaryType":"Mail","domain":{"name":"Vela"},"message":{"contents":"hi"}}"#;
+        let digest = vela_core::eip712::hash_typed_data(document).ok();
+        assert!(digest.is_some());
+        let quoted = serde_json::to_string(document).unwrap_or_default();
+        assert_eq!(
+            message_hash("eth_signTypedData_v4", &format!(r#"["0xabc",{quoted}]"#)),
+            digest
+        );
+        assert_eq!(
+            message_hash("eth_signTypedData_v4", &format!(r#"["0xabc",{document}]"#)),
+            digest,
+            "a document sent as an object is the same document"
+        );
+        assert_eq!(
+            message_hash("eth_signTypedData_v4", &format!("[{quoted}]")),
+            digest
+        );
+        assert_eq!(
+            message_hash("eth_signTypedData", &format!(r#"[{quoted},"0xabc"]"#)),
+            digest
+        );
+        assert!(is_message("eth_signTypedData_v4") && is_message("personal_sign"));
+        assert!(!is_message("eth_sendTransaction") && !is_message("wallet_sendCalls"));
+    }
+
     /// Issue 262: a receipt that is late is not a confirmation. The core hears
     /// `ReceiptPending` (answer the page, keep the record pending); only a
     /// receipt in time is `Succeeded` with the TX hash.
@@ -762,6 +987,43 @@ mod tests {
             .unwrap_or_else(|| unreachable!("a bare call reads"));
         assert_eq!(calls[0].value, "0");
         assert_eq!(calls[0].data, "0x");
+    }
+
+    /// `"0x"` is ZERO, and a value nobody can read is not.
+    ///
+    /// The web shell took `"0x"` for unreadable (`BigInt("0x")` throws) and
+    /// lost the whole request's fee AND its speed control, silently, on a
+    /// Uniswap swap (B-4, owner 2026-09-23). This shell parsed it correctly by
+    /// luck — and priced an unreadable value as zero, which is the other half
+    /// of the same mistake: a wrong fee beside a real transaction.
+    #[test]
+    fn a_bare_0x_is_zero_and_an_unreadable_amount_is_refused() {
+        let zero = calls_of("eth_sendTransaction", r#"[{"to":"0xbbb","value":"0x"}]"#)
+            .unwrap_or_else(|| unreachable!("`0x` is zero, not unreadable"));
+        assert_eq!(zero[0].value, "0");
+
+        // Absent, empty and null are all zero too.
+        for params in [
+            r#"[{"to":"0xbbb"}]"#,
+            r#"[{"to":"0xbbb","value":""}]"#,
+            r#"[{"to":"0xbbb","value":null}]"#,
+        ] {
+            let calls = calls_of("eth_sendTransaction", params)
+                .unwrap_or_else(|| unreachable!("{params} reads as zero"));
+            assert_eq!(calls[0].value, "0", "{params}");
+        }
+
+        // And what is NOT a number draws no fee rather than a made-up one.
+        for params in [
+            r#"[{"to":"0xbbb","value":"soon"}]"#,
+            r#"[{"to":"0xbbb","value":"0xzz"}]"#,
+            r#"[{"to":"0xbbb","value":{}}]"#,
+        ] {
+            assert!(
+                calls_of("eth_sendTransaction", params).is_none(),
+                "{params} was priced anyway"
+            );
+        }
     }
 
     /// EIP-5792: one entry carrying many calls, and they stay in order —

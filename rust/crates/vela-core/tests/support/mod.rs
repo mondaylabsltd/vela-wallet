@@ -195,6 +195,7 @@ pub fn registration(credential_id: &str) -> Registration {
         client_data_json_hex: hex_of(r#"{"type":"webauthn.create","challenge":"Y2hhbGxlbmdl"}"#),
         authenticator_attachment: "platform".to_owned(),
         transports: "hybrid,internal".to_owned(),
+        signer_origin: None,
     }
 }
 
@@ -279,6 +280,7 @@ fn assertion_from(value: &Value, credential_id: &str) -> Assertion {
             "0f8fad5b-d9cb-469f-a165-70867728950e"
         ))),
         authenticator_attachment: "platform".to_owned(),
+        signer_origin: None,
     }
 }
 

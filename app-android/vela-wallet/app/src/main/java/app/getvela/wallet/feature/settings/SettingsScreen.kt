@@ -25,6 +25,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -166,6 +167,13 @@ data class SettingsActions(
     /** The RPC fix sheet's URL being typed, and its Save & Retry / Done. */
     val onRpcFixField: (String) -> Unit = {},
     val onRpcFixPrimary: () -> Unit = {},
+    /** Spec 071: the Trusted Signer page, as typed, and back to the official one. */
+    val onSignerUrlSave: (String) -> Unit = {},
+    val onSignerUrlReset: () -> Unit = {},
+    /** Spec 072: a page came on screen — the providers and endpoints pages ask the core to load and test. */
+    val onPageShown: (SettingsPage) -> Unit = {},
+    /** Spec 072: a sheet came up (or went: `None`) — the account sheet asks for every account's total. */
+    val onOverlayShown: (SettingsOverlay) -> Unit = {},
 )
 
 @Composable
@@ -178,7 +186,11 @@ fun SettingsRoute(
     // tapping owns it from then on.
     // Spec 048: keyed on the model's page too, so a page another route asked for (the add-token 原生代币 tab) wins over a remembered one.
     var page by rememberSaveable(model.state, model.page) { mutableStateOf(model.page) }
+    LaunchedEffect(page) { actions.onPageShown(page) }
+    // Spec 072: the network a trash tap asked about, until the sheet answers.
+    var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
+    LaunchedEffect(overlay) { actions.onOverlayShown(overlay) }
     // The storage row waiting on an answer, and the warning its group carries
     // (spec 058): 清除 asks before it removes.
     var pendingStorage by remember { mutableStateOf<Pair<StorageItemModel, String>?>(null) }
@@ -210,6 +222,8 @@ fun SettingsRoute(
                 "language" -> overlay = SettingsOverlay.Language
                 "currency" -> overlay = SettingsOverlay.Currency
                 SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
+                SettingsFixtures.SIGN_WITH_ROW -> overlay = SettingsOverlay.SignWith
+                SettingsFixtures.SIGNER_PAGE_ROW -> overlay = SettingsOverlay.SignerPage
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
                 "time-format" -> overlay = SettingsOverlay.TimeFormat
@@ -233,13 +247,22 @@ fun SettingsRoute(
         onSignOut = actions.onSignOut,
         onFieldEdited = actions.onFieldEdited,
         onFieldCommitted = actions.onFieldCommitted,
-        onRemoveNetwork = actions.onRemoveNetwork,
+        onRemoveNetwork = { id -> pendingRemoval = id; overlay = SettingsOverlay.RemoveNetwork },
+        onConfirmRemoveNetwork = {
+            pendingRemoval?.let(actions.onRemoveNetwork)
+            pendingRemoval = null
+            overlay = SettingsOverlay.None
+        },
         // Spec 048: a network row opens ITS detail page (the row only expanded the core's override before).
         onOpenNetwork = { id -> actions.onOpenNetwork(id); page = SettingsPage.NetworkDetail },
         onSearchNetwork = actions.onSearchNetwork,
         onPickNetwork = actions.onPickNetwork,
         onConfirmAddNetwork = actions.onConfirmAddNetwork,
-        onResetEndpoints = actions.onResetEndpoints,
+        onResetEndpoints = { overlay = SettingsOverlay.ResetEndpoints },
+        onConfirmResetEndpoints = {
+            overlay = SettingsOverlay.None
+            actions.onResetEndpoints()
+        },
         onSegment = actions.onSegment,
         onTextScale = actions.onTextScale,
         onStorageClear = { id ->
@@ -287,6 +310,8 @@ fun SettingsRoute(
             actions.onRpcFixPrimary()
             if (close) overlay = SettingsOverlay.None
         },
+        onSignerUrlSave = actions.onSignerUrlSave,
+        onSignerUrlReset = actions.onSignerUrlReset,
     )
 }
 
@@ -309,6 +334,8 @@ fun SettingsScreen(
     onFieldEdited: (String, String) -> Unit = { _, _ -> },
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
+    onConfirmRemoveNetwork: () -> Unit = {},
+    onConfirmResetEndpoints: () -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
@@ -337,6 +364,8 @@ fun SettingsScreen(
     onAccountSecondary: () -> Unit = {},
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
+    onSignerUrlSave: (String) -> Unit = {},
+    onSignerUrlReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -452,6 +481,8 @@ fun SettingsScreen(
                 onSheetSelect = onSheetSelect,
                 storageConfirm = storageConfirm,
                 onConfirmStorage = onConfirmStorage,
+                onConfirmRemoveNetwork = onConfirmRemoveNetwork,
+                onConfirmResetEndpoints = onConfirmResetEndpoints,
                 onClearCaches = onClearCaches,
                 onErase = onErase,
                 onFeedbackSend = onFeedbackSend,
@@ -464,6 +495,8 @@ fun SettingsScreen(
                 onAccountSecondary = onAccountSecondary,
                 onRpcFixField = onRpcFixField,
                 onRpcFixPrimary = onRpcFixPrimary,
+                onSignerUrlSave = onSignerUrlSave,
+                onSignerUrlReset = onSignerUrlReset,
             )
         }
     }
@@ -561,7 +594,7 @@ private fun SettingsHomeBody(
                 )
             }
         }
-        // The three appearance controls are not rows: they are the control
+        // The two appearance controls are not rows: they are the control
         // itself, shown inline under 语言 (ST1).
         if (section.appearanceControls) {
             VelaTextScaleSlider(model.textScale.steps, model.textScale.index, onChange = onTextScale)
@@ -572,15 +605,6 @@ private fun SettingsHomeBody(
                 },
                 selectedId = model.theme.selected,
                 onSelect = { onSegment("theme", it) },
-            )
-            Spacer(modifier = Modifier.height(VelaSpacing.lg))
-            VelaSegmentedControl(
-                label = model.avatar.label,
-                segments = model.avatar.segments.map { seg ->
-                    Triple(seg.id, seg.label, seg.icon?.let(::settingsIcon))
-                },
-                selectedId = model.avatar.selected,
-                onSelect = { onSegment("avatar", it) },
             )
         }
     }
@@ -670,7 +694,7 @@ private fun SettingsPageBody(
             model.networks.forEach { row ->
                 VelaNetworkRow(
                     row = row,
-                    deleteLabel = model.addNetworkLabel,
+                    deleteLabel = model.removeNetworkLabel.ifEmpty { null },
                     onClick = onOpenNetwork,
                     onDelete = onRemoveNetwork,
                 )
@@ -1139,6 +1163,8 @@ private fun SettingsSheet(
     onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
     storageConfirm: ConfirmSheetModel? = null,
     onConfirmStorage: () -> Unit = {},
+    onConfirmRemoveNetwork: () -> Unit = {},
+    onConfirmResetEndpoints: () -> Unit = {},
     onClearCaches: () -> Unit = {},
     onErase: () -> Unit = {},
     onFeedbackSend: (String) -> Unit = {},
@@ -1151,6 +1177,8 @@ private fun SettingsSheet(
     onAccountSecondary: () -> Unit = {},
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
+    onSignerUrlSave: (String) -> Unit = {},
+    onSignerUrlReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1196,6 +1224,15 @@ private fun SettingsSheet(
                 SettingsOverlay.FeeSpeed -> SelectSheetBody(model.feeSpeedSheet) {
                     onSheetSelect(SettingsOverlay.FeeSpeed, it)
                 }
+                SettingsOverlay.SignWith -> SelectSheetBody(model.signWithSheet) {
+                    onSheetSelect(SettingsOverlay.SignWith, it)
+                }
+                SettingsOverlay.SignerPage -> SignerPageSheetBody(
+                    model.signerPage,
+                    onSave = onSignerUrlSave,
+                    onReset = onSignerUrlReset,
+                    onDone = onDismiss,
+                )
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
                     onSheetSelect(SettingsOverlay.NumberFormat, it)
                 }
@@ -1205,6 +1242,16 @@ private fun SettingsSheet(
                 SettingsOverlay.TimeFormat -> SelectSheetBody(model.timeSheet) {
                     onSheetSelect(SettingsOverlay.TimeFormat, it)
                 }
+                SettingsOverlay.RemoveNetwork -> ConfirmSheetBody(
+                    model.removeNetworkSheet,
+                    onConfirm = onConfirmRemoveNetwork,
+                    onCancel = onDismiss,
+                )
+                SettingsOverlay.ResetEndpoints -> ConfirmSheetBody(
+                    model.resetEndpointsSheet,
+                    onConfirm = onConfirmResetEndpoints,
+                    onCancel = onDismiss,
+                )
                 SettingsOverlay.ClearStorageItem -> storageConfirm?.let { sheet ->
                     ConfirmSheetBody(sheet, onConfirm = onConfirmStorage, onCancel = onDismiss)
                 }
@@ -1278,11 +1325,27 @@ private fun SheetTitle(title: String, subtitle: String? = null) {
 private fun SelectSheetBody(sheet: SelectSheetModel, onFooterLink: (() -> Unit)? = null, onSelect: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(sheet.title, sheet.subtitle)
+    // Spec 072: the search box filters — it was drawn and did nothing.
+    var query by remember(sheet.title) { mutableStateOf("") }
     if (sheet.searchPlaceholder != null) {
-        VelaUrlField(label = "", value = "", placeholder = sheet.searchPlaceholder)
+        VelaUrlField(
+            label = "",
+            value = query,
+            placeholder = sheet.searchPlaceholder,
+            keyboard = androidx.compose.ui.text.input.KeyboardType.Text,
+            onValueChange = { query = it },
+        )
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
     }
-    sheet.rows.forEach { VelaSelectRow(it, onClick = onSelect) }
+    val needle = query.trim()
+    sheet.rows
+        .filter { row ->
+            needle.isEmpty() ||
+                row.label.contains(needle, ignoreCase = true) ||
+                row.caption?.contains(needle, ignoreCase = true) == true ||
+                row.id.contains(needle, ignoreCase = true)
+        }
+        .forEach { VelaSelectRow(it, onClick = onSelect) }
     if (sheet.footerNote != null) {
         Text(
             text = sheet.footerNote,
@@ -1343,8 +1406,18 @@ private fun ConfirmSheetBody(
 }
 
 @Composable
-internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Unit = {}, onPrimary: () -> Unit = {}, onSecondary: () -> Unit = {}) {
+internal fun AccountsSheetBody(
+    sheet: AccountsSheetModel,
+    onSelect: (Int) -> Unit = {},
+    onPrimary: () -> Unit = {},
+    onSecondary: () -> Unit = {},
+    // Spec 017's narrow half (2026-09-23): a wallet can leave this device
+    // without taking the others. `null` draws no affordance at all, which is
+    // what the settings gallery and the fixtures want.
+    onRemove: ((Int) -> Unit)? = null,
+) {
     val colors = VelaTheme.colors
+    var removing by remember(sheet.rows.size) { mutableStateOf<Int?>(null) }
     SheetTitle(sheet.title)
     Text(
         text = sheet.summary,
@@ -1370,7 +1443,6 @@ internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Uni
                 seed = row.addressFull,
                 size = VelaSpacing.xl4,
                 contentDescription = row.name,
-                name = row.name,
             )
             Column(
                 modifier = Modifier.weight(1f),
@@ -1407,6 +1479,44 @@ internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Uni
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }
+            if (onRemove != null && sheet.remove.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                Icon(
+                    imageVector = VelaIcons.Close,
+                    contentDescription = sheet.remove,
+                    tint = colors.fgSubtle,
+                    modifier = Modifier
+                        .size(VelaIconSize.md)
+                        .clickable { removing = index },
+                )
+            }
+        }
+    }
+    // Asked before it happens, because the row it takes is the one under a
+    // finger that was aiming to switch.
+    removing?.let { index ->
+        val row = sheet.rows.getOrNull(index)
+        if (row == null) {
+            removing = null
+        } else {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { removing = null },
+                title = { androidx.compose.material3.Text(row.name) },
+                text = { androidx.compose.material3.Text(sheet.removeBody) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        removing = null
+                        onRemove?.invoke(index)
+                    }) {
+                        androidx.compose.material3.Text(sheet.remove, color = colors.errorBase)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { removing = null }) {
+                        androidx.compose.material3.Text(sheet.removeCancel)
+                    }
+                },
+            )
         }
     }
     Spacer(modifier = Modifier.height(VelaSpacing.xl3))
@@ -1463,6 +1573,56 @@ private fun FeedbackSheetBody(model: FeedbackModel, onSend: (String) -> Unit = {
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onGithub).padding(top = VelaSpacing.lg),
     )
+}
+
+/**
+ * Spec 071: the Trusted Signer page. The address is checked by the core, not
+ * here: a refused one leaves the old page in force and says why under the
+ * field; an accepted one closes the sheet.
+ */
+@Composable
+private fun SignerPageSheetBody(model: SignerPageModel, onSave: (String) -> Unit, onReset: () -> Unit, onDone: () -> Unit) {
+    val colors = VelaTheme.colors
+    var text by remember(model.value) { mutableStateOf(model.value) }
+    var saving by remember { mutableStateOf(false) }
+    LaunchedEffect(model.value, model.error) {
+        if (saving) {
+            saving = false
+            if (model.error == null) onDone()
+        }
+    }
+    SheetTitle(model.title, model.subtitle)
+    VelaUrlField(
+        label = model.title,
+        value = text,
+        tone = if (model.error != null) SettingsTone.Error else SettingsTone.Neutral,
+        onValueChange = { text = it },
+    )
+    model.error?.let {
+        Spacer(modifier = Modifier.height(VelaSpacing.md))
+        Text(it, color = colors.errorBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+    }
+    model.foreign?.let {
+        Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        VelaCallout(CalloutModel(tone = CalloutTone.Warning, text = it))
+    }
+    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    VelaPrimaryButton(
+        model.save,
+        onClick = {
+            if (text.trim() == model.value) {
+                onDone()
+            } else {
+                saving = true
+                onSave(text)
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    model.reset?.let {
+        Spacer(modifier = Modifier.height(VelaSpacing.md))
+        VelaSecondaryButton(it, onClick = onReset, modifier = Modifier.fillMaxWidth())
+    }
 }
 
 @Composable

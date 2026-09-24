@@ -612,6 +612,190 @@ fn the_chosen_add_method_reaches_the_shell_and_the_key_row() {
     assert_eq!(keys[1].kind, KeyMethod::Platform, "the row says what it IS");
 }
 
+/// Spec 075: a key minted on the Trusted Signer page LIVES behind that page, and
+/// the row has to say so.
+///
+/// The page runs the ceremony in a browser, so the authenticator's report is
+/// `platform` — the device pass of 2026-09-22 found the row drawing a key made
+/// on a page as the built-in passkey of the phone, which is the wrong side of
+/// the page and the one place this wallet cannot reach it.
+#[test]
+fn a_key_minted_on_the_page_is_drawn_as_living_there() {
+    let mut sut = registered("Ann");
+
+    sut.dispatch(Event::AddKey {
+        name: "Page".to_owned(),
+        method: KeyMethod::TrustedSigner,
+    });
+    let mut registration = support::second_registration(CRED2);
+    registration.signer_origin = Some("https://sign.getvela.app".to_owned());
+    sut.resolve(ShellResult::PasskeyRegistered {
+        registration,
+        now_iso: NOW.to_owned(),
+    });
+    sut.resolve(ShellResult::MemberProofSigned {
+        proof: support::member_proof("k2"),
+    });
+
+    let keys = sut.view().keys;
+    assert_eq!(
+        keys[1].method,
+        KeyMethod::TrustedSigner,
+        "the choice routes the ceremony"
+    );
+    assert_eq!(
+        keys[1].kind,
+        KeyMethod::TrustedSigner,
+        "and the row says where the key lives — the page, not this device"
+    );
+}
+
+/// Spec 075, ruling 2026-09-23: a wallet's keys must share one relying party.
+///
+/// The registry stores ONE `rpId` per unit and every member's proof carries
+/// `sha256(rpId)` from its own authenticator, so a set spread over two sites
+/// can never be proved. The first key decides, and the rest of the choices
+/// narrow to match — refused here rather than discovered at the publish, when
+/// the person would already be holding a passkey they cannot use.
+#[test]
+fn the_first_key_decides_where_the_rest_may_come_from() {
+    // A key on somebody's own deployment: only that page may mint the rest.
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::AddKey {
+        name: "Page".to_owned(),
+        method: KeyMethod::TrustedSigner,
+    });
+    let mut registration = support::registration("credential-2");
+    registration.signer_origin = Some("http://localhost:8140".to_owned());
+    sut.resolve(ShellResult::PasskeyRegistered {
+        registration,
+        now_iso: NOW.to_owned(),
+    });
+    sut.resolve(ShellResult::MemberProofSigned {
+        proof: support::member_proof("k2"),
+    });
+
+    // …but this set's FIRST key was minted by the helper on the platform, so
+    // the set belongs to getvela.app and every route is still open.
+    let view = sut.view();
+    assert_eq!(view.key_relying_party.as_deref(), Some("getvela.app"));
+    assert_eq!(view.add_methods.len(), 4, "nothing is ruled out yet");
+
+    // A set whose FIRST key lives behind somebody's own page is different:
+    // build one from the form up, with that origin on key 1.
+    let mut own = filled("Ann");
+    own.dispatch(Event::Submit);
+    own.resolve(ShellResult::PasskeySupport { supported: true });
+    own.resolve(group_key_generated());
+    own.dispatch(Event::AddKey {
+        name: String::new(),
+        method: KeyMethod::TrustedSigner,
+    });
+    let mut first = support::registration(CRED);
+    first.signer_origin = Some("http://localhost:8140".to_owned());
+    own.resolve(ShellResult::PasskeyRegistered {
+        registration: first,
+        now_iso: NOW.to_owned(),
+    });
+    own.resolve(ShellResult::MemberProofSigned {
+        proof: support::member_proof("k1"),
+    });
+
+    // Settings still points at this deployment, as it must have to mint key 1.
+    own.dispatch(Event::SignerPageChanged {
+        url: "http://localhost:8140/sign.html".to_owned(),
+    });
+
+    let view = own.view();
+    assert_eq!(view.key_relying_party.as_deref(), Some("localhost"));
+    assert_eq!(
+        view.key_signer_origin.as_deref(),
+        Some("http://localhost:8140")
+    );
+    assert_eq!(
+        view.add_methods,
+        vec![KeyMethod::TrustedSigner],
+        "only the page that minted the first key can mint another of its domain"
+    );
+    let blocked = view.add_blocked.expect("the other three are off, and why");
+    assert_eq!(blocked.relying_party, "localhost");
+    assert_eq!(
+        (blocked.page, blocked.page_relying_party),
+        (None, None),
+        "the page is not the problem here — it is the only route that fits"
+    );
+
+    // Point Settings somewhere else and NOTHING fits: a key from that page
+    // would belong to getvela.app, and this wallet's belong to localhost.
+    own.dispatch(Event::SignerPageChanged {
+        url: "https://sign.getvela.app/".to_owned(),
+    });
+    let view = own.view();
+    assert!(
+        view.add_methods.is_empty(),
+        "no route can mint a key this wallet accepts: {:?}",
+        view.add_methods
+    );
+    let blocked = view.add_blocked.expect("and the reason names both sides");
+    assert_eq!(blocked.relying_party, "localhost");
+    assert_eq!(blocked.page.as_deref(), Some("https://sign.getvela.app/"));
+    assert_eq!(blocked.page_relying_party.as_deref(), Some("getvela.app"));
+
+    // And the machine refuses the others even if a shell asks anyway: minting
+    // one would leave a passkey that can never join this wallet.
+    let before = own.view().keys.len();
+    let asked = own.dispatch(Event::AddKey {
+        name: "Second".to_owned(),
+        method: KeyMethod::Platform,
+    });
+    assert!(asked.is_empty(), "no ceremony is started: {asked:?}");
+    assert_eq!(own.view().keys.len(), before, "and no draft appears");
+}
+
+/// Spec 075, the owner's report of 2026-09-23: a `getvela.app` set plus a
+/// signer page on somebody else's domain must not offer the Trusted Signer.
+///
+/// This was the shipped gap. The rule read "a set of `getvela.app` keys takes
+/// every route", which is true of the OFFICIAL page and false of the page
+/// Settings actually names — so a person with a local signer page minted a
+/// fourth key that no unit would accept, and heard about it only when the
+/// publish failed, holding a passkey with nowhere to go.
+#[test]
+fn a_signer_page_on_another_domain_is_off_for_a_getvela_set() {
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::SignerPageChanged {
+        url: "http://localhost:8140/sign.html?ch=ble".to_owned(),
+    });
+
+    let view = sut.view();
+    assert_eq!(view.key_relying_party.as_deref(), Some("getvela.app"));
+    assert_eq!(
+        view.add_methods,
+        vec![
+            KeyMethod::Platform,
+            KeyMethod::Hybrid,
+            KeyMethod::SecurityKey
+        ],
+        "this device, a nearby one and a fob all mint for getvela.app; that page does not"
+    );
+    let blocked = view.add_blocked.expect("and the row says why");
+    assert_eq!(blocked.relying_party, "getvela.app");
+    assert_eq!(
+        blocked.page.as_deref(),
+        Some("http://localhost:8140/sign.html?ch=ble"),
+        "the sentence names the page the person configured, so they can change it"
+    );
+    assert_eq!(blocked.page_relying_party.as_deref(), Some("localhost"));
+
+    // The official page is a getvela.app page, so it coexists with the three.
+    sut.dispatch(Event::SignerPageChanged {
+        url: vela_core::trusted_signer::DEFAULT_SIGNER_URL.to_owned(),
+    });
+    let view = sut.view();
+    assert_eq!(view.add_methods.len(), 4, "all four mint for getvela.app");
+    assert!(view.add_blocked.is_none(), "nothing to explain");
+}
+
 /// The creation-time confirmation must run on the route that MINTED the key.
 ///
 /// `SignMemberProof` is a `get()` against the credential the previous step just

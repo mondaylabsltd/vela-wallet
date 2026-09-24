@@ -2,21 +2,33 @@
 //  BrowserController.swift
 //  VelaWallet
 //
-//  The browser's owner: three app-resident machines, one engine per open tab,
-//  and the two maps that make an answer reach the page that asked.
+//  The browser's owner: three app-resident machines and one engine per open
+//  tab.
 //
-//  Ported from `app-android/.../feature/browser/core/BrowserController.kt`
-//  (spec 044). App-resident rather than screen-owned for the reason every
-//  wallet-state machine here is: a request in flight must survive a sheet,
-//  a tab switch and a trip to 设置, and a page that reloaded every time
-//  somebody glanced at their balance would lose a half-finished swap.
+//  App-resident rather than screen-owned for the reason every wallet-state
+//  machine here is: a request in flight must survive a sheet, a tab switch
+//  and a trip to 设置, and a page that reloaded every time somebody glanced at
+//  their balance would lose a half-finished swap.
 //
-//  ## Two delivery rules, and they are not the same rule
+//  ## It routes nothing (spec 070)
 //
-//  `answer` goes to the tab that **asked** (`requestTab`). `emit` goes to the
-//  tab **in front of the person**. A page that is not visible is not told about
-//  an account switch it never asked about, and an answer must never land in a
-//  tab that did not ask the question.
+//  Until 070 this file kept a request→tab map, a list of open ids, a global
+//  `browserChain` and two delivery rules ("answer the tab that asked, falling
+//  back to the front tab"; "emit to the front tab"). Every tab bug the audit
+//  found lived in that bookkeeping: a background tab's navigation settled the
+//  front tab's requests, answers fell back to the wrong page, a background
+//  tab's approval announced an address to the front page. `dapp_browser` owns
+//  all of it now, per tab and per DOCUMENT. This class tells the core what
+//  WebKit said — with the tab it said it in — and posts back exactly what the
+//  core addresses to exactly the tab it names. There is no `current` fallback
+//  anywhere on the page channel.
+//
+//  ## Leaving 探索 is not closing anything
+//
+//  The page keeps running and its requests stay open; only closing a tab,
+//  navigating, or the renderer dying settles them. (The old `browser_closed`
+//  on `onDisappear` cleared the connected chip on every trip to the wallet and
+//  never restored it.)
 //
 //  ## The history wait is not superstition
 //
@@ -32,7 +44,7 @@ import VelaCore
 
 extension ExploreSitesCore: CoreBridge {}
 extension BrowserHistoryCore: CoreBridge {}
-extension DappPermissionsCore: CoreBridge {}
+extension DappBrowserCore: CoreBridge {}
 
 @MainActor
 @Observable
@@ -42,84 +54,85 @@ final class BrowserController {
 
     private(set) var explore: ExploreViewWire = .empty
     private(set) var history: BhistViewWire = .empty
-    private(set) var permissions: DpermViewWire = .empty
+    /// The in-app browser's decisions: consent, per-tab facts, connected sites.
+    private(set) var dbr: DbrViewWire = .empty
 
     private var exploreCore: CoreStore<ExploreViewWire>!
     private var historyCore: CoreStore<BhistViewWire>!
-    private var permissionsCore: CoreStore<DpermViewWire>!
+    private var dbrCore: CoreStore<DbrViewWire>!
 
     private let exploreExecutor: ExploreExecutor
     private let historyExecutor: BhistExecutor
-    private let browserExecutor: BrowserExecutor
-    private let router: RequestRouter
+    private let dbrExecutor: DbrExecutor
 
     // MARK: - The engines
 
-    /// One per open tab, keyed by the core's tab id.
+    /// One per open tab, keyed by the explore machine's tab id — the same id
+    /// `dapp_browser` knows the tab by.
     private var engines: [String: BrowserEngine] = [:]
     /// The engine in front of the person, if a tab with a page is selected.
+    /// For DRAWING only: nothing on the page channel ever falls back to it.
     private(set) var current: BrowserEngine?
+
+    /// Whether the person has ASKED for a page this run (2026-09-23).
+    ///
+    /// Tabs survive a launch, and restoring one is right — landing inside it
+    /// is not. The owner opened 探索 on an iPhone and a page from a previous
+    /// session loaded itself: a tab kept from two days earlier, at a
+    /// `127.0.0.1` address that is nothing on this device now, so the browser
+    /// opened onto an error nobody asked for. Android lands on the start page
+    /// with the same tab waiting in the strip, which is what a person means by
+    /// a browser they have not opened yet.
+    ///
+    /// So `reconcile` will not MINT an engine until one of the three ways a
+    /// person asks for a page has happened: an address, a tab, a site. It
+    /// still keeps and tears down the engines that already exist, because that
+    /// half is about tabs that closed.
+    private var pageWanted = false
     /// Bumped whenever an engine's navigation state changes, so SwiftUI
     /// redraws chrome that reads a non-observable engine property.
     private(set) var engineTick = 0
 
-    // MARK: - Routing
+    /// The wallet's networks, as last told to the core — the chains a site
+    /// may be switched to from the connection panel.
+    private(set) var chainIds: [Int] = []
 
-    /// Request id → the tab that asked. An answer goes there and nowhere else.
-    private var requestTab: [String: String] = [:]
-    /// Forwarded requests not yet answered. A navigation settles them all.
-    private var openIds: [String] = []
     /// Visits recorded before the history store answered.
     private var queuedVisits: [[String: Any]] = []
     private var historyReady = false
 
-    /// The chain the browser is on. Gnosis until somebody says otherwise —
-    /// the chain this wallet's relay actually sponsors.
-    private(set) var browserChain = 100
-
     // MARK: - Ports the app fills in
 
     struct Ports {
-        var knownChains: () -> [Int] = { [] }
+        /// One call through the wallet's own pool — `["result": …]`,
+        /// `["error": …]`, or `nil` when no endpoint answered.
         var poolCall: (_ chainId: Int, _ method: String, _ params: [Any], _ bundler: Bool) async -> [String: Any]?
         = { _, _, _, _ in nil }
-        /// A signing request, on its way to the per-request controller.
-        var onSignRequest: (SignRequest) -> Void = { _ in }
-        /// `nil` when the hash is not one this wallet minted.
-        var receiptFor: (_ userOpHash: String) async -> RequestRouter.Receipt? = { _ in nil }
+        /// The transaction a user operation landed in (the relay's receipt).
+        var resolveUserOp: (_ chainId: Int, _ userOpHash: String) async -> String? = { _, _ in nil }
+        /// Open the signing sheet for a request. `nil` = there is no sheet to
+        /// open, and the request is refused rather than left waiting.
+        var onForwardToSigning: ((DbrForward) -> Void)?
+        /// The page behind a sheet is gone: close that sheet, answer nothing.
+        var onCancelSigning: (_ tab: String, _ id: String) -> Void = { _, _ in }
         /// The feed's store, for the "connected to" row.
         var writeRecords: ([[String: Any]]) -> Void = { _ in }
-        /// The wallet moved to another chain because a page asked.
-        var onChainSwitched: (Int) -> Void = { _ in }
-    }
-
-    struct SignRequest {
-        let id: String
-        let method: String
-        let paramsJson: String
-        let origin: String
-        let transportId: String
-        let chainId: Int
     }
 
     var ports: Ports
 
-    private let bundle: Bundle
     private let now: () -> Double
 
     init(
         store: VelaStore,
         ports: Ports = Ports(),
-        bundle: Bundle = .main,
         now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 }
     ) {
         self.ports = ports
-        self.bundle = bundle
         self.now = now
         self.exploreExecutor = ExploreExecutor(store: store)
         self.historyExecutor = BhistExecutor(store: store)
-        self.browserExecutor = BrowserExecutor(store: store)
-        self.router = RequestRouter()
+        self.dbrExecutor = DbrExecutor(store: store, now: now)
 
         exploreCore = CoreStore(
             bridge: ExploreSitesCore(),
@@ -133,11 +146,12 @@ final class BrowserController {
             onView: { [weak self] view in self?.history = view },
             onFault: { print("[vela-wallet] browser_history fault: \($0)") }
         )
-        permissionsCore = CoreStore(
-            bridge: DappPermissionsCore(),
-            perform: { [browserExecutor] in await browserExecutor.perform($0) },
-            onView: { [weak self] view in self?.permissions = view },
-            onFault: { print("[vela-wallet] dapp_permissions fault: \($0)") }
+        dbrCore = CoreStore(
+            bridge: DappBrowserCore(),
+            perform: { [dbrExecutor] in await dbrExecutor.perform($0) },
+            onView: { [weak self] view in self?.dbr = view },
+            onFault: { print("[vela-wallet] dapp_browser fault: \($0)") },
+            neutralAnswer: { DbrExecutor.neutralAnswer($0) }
         )
 
         wirePorts()
@@ -146,30 +160,17 @@ final class BrowserController {
     private func wirePorts() {
         historyExecutor.onLoaded = { [weak self] in self?.flushVisits() }
 
-        browserExecutor.ports = BrowserExecutor.Ports(
-            respond: { [weak self] id, json in self?.answer(id: id, json: json) },
-            emit: { [weak self] json in self?.emit(json) },
-            settleForwarded: { [weak self] code, message in
-                self?.settleForwarded(code: code, message: message)
-            },
-            saveConnectionRecord: { [weak self] row in self?.ports.writeRecords([row]) },
-            forward: { [weak self] id, method, paramsJson, origin in
-                self?.forward(id: id, method: method, paramsJson: paramsJson, origin: origin)
-            }
-        )
-
-        router.ports = RequestRouter.Ports(
-            browserChain: { [weak self] in self?.browserChain ?? 100 },
-            knownChains: { [weak self] in self?.ports.knownChains() ?? [] },
-            switchChain: { [weak self] chainId in self?.switchChain(to: chainId) },
+        dbrExecutor.ports = DbrExecutor.Ports(
+            deliver: { [weak self] tab, json in self?.engines[tab]?.deliver(json) },
             poolCall: { [weak self] chainId, method, params, bundler in
                 await self?.ports.poolCall(chainId, method, params, bundler) ?? nil
             },
-            respond: { [weak self] id, json in self?.answer(id: id, json: json) },
-            sign: { [weak self] id, method, paramsJson, origin in
-                self?.raiseSigning(id: id, method: method, paramsJson: paramsJson, origin: origin)
+            resolveUserOp: { [weak self] chainId, hash in
+                await self?.ports.resolveUserOp(chainId, hash) ?? nil
             },
-            receiptFor: { [weak self] hash in await self?.ports.receiptFor(hash) ?? nil }
+            forwardToSigning: { [weak self] forward in self?.forwardToSigning(forward) },
+            cancelSigning: { [weak self] tab, id in self?.ports.onCancelSigning(tab, id) },
+            saveConnectionRecord: { [weak self] row in self?.ports.writeRecords([row]) }
         )
     }
 
@@ -179,63 +180,61 @@ final class BrowserController {
     func start() {
         exploreCore.boot(CoreJSON.string(["type": "start"]))
         historyCore.boot(CoreJSON.string(["type": "start"]))
-        permissionsCore.boot(CoreJSON.string(["type": "chain_changed", "chain_id": browserChain]))
+        startConnections()
     }
 
-    /// The wallet's accounts, in the order the permissions machine needs them.
+    /// Boot the browser core alone, for Settings' list of connected sites.
+    /// Idempotent, and harmless before any page exists: it only lists the
+    /// stored sites.
+    func startConnections() {
+        dbrCore.boot(CoreJSON.string(["type": "start"]))
+    }
+
+    /// The wallet's chains. A site may switch or add only to one of these.
+    func networksChanged(_ chainIds: [Int]) {
+        self.chainIds = chainIds
+        dbrCore.dispatch(CoreJSON.string(["type": "networks_changed", "chain_ids": chainIds]))
+    }
+
+    /// The wallet's accounts, then the active one.
     ///
-    /// `accounts_updated` → `account_switched` → `chain_changed`, and not
-    /// because it reads nicely: a grant is pinned to an address, so the
-    /// machine has to know the whole set before it can judge one, and it has
-    /// to know the active one before it can re-pin.
+    /// All of them first: a grant whose account left the wallet is dropped
+    /// only against a KNOWN list (an empty one is "not known yet", never
+    /// "nobody"). Then the active one — every grant follows it, and each open
+    /// tab of a re-pinned site hears `accountsChanged`. Repeating it with the
+    /// same account changes nothing.
     func accountsChanged(addresses: [String], active: String?) {
-        permissionsCore.dispatch(CoreJSON.string([
+        dbrCore.dispatch(CoreJSON.string([
             "type": "accounts_updated",
             "addresses": addresses.isEmpty ? NSNull() : addresses as Any,
         ]))
         if let active, !active.isEmpty {
-            permissionsCore.dispatch(CoreJSON.string([
+            dbrCore.dispatch(CoreJSON.string([
                 "type": "account_switched", "address": active, "now_ms": now(),
             ]))
         }
-        permissionsCore.dispatch(CoreJSON.string([
-            "type": "chain_changed", "chain_id": browserChain,
-        ]))
-    }
-
-    func switchChain(to chainId: Int) {
-        guard chainId != browserChain else { return }
-        browserChain = chainId
-        permissionsCore.dispatch(CoreJSON.string(["type": "chain_changed", "chain_id": chainId]))
-        ports.onChainSwitched(chainId)
-    }
-
-    /// The browser screen went away.
-    func close() {
-        permissionsCore.dispatch(CoreJSON.string(["type": "browser_closed"]))
     }
 
     // MARK: - Tabs and navigation
 
-    /// Open a URL or a typed host. Waits for the mirror: a mutation dispatched
+    /// Open what somebody typed: a URL, a host, or a search.
+    ///
+    /// Through the core's `dappBrowserInput`, so all three browsers read the
+    /// address bar the same way. Waits for the mirror: a mutation dispatched
     /// before hydration is dropped by the core, which is how a deep link used
     /// to open nothing at all.
     func open(_ text: String) {
-        let url = BrowserEngine.coerce(text)
-        guard !url.isEmpty else { return }
+        guard let url = dappBrowserInput(text: text) else { return }
+        pageWanted = true
         whenReady { [weak self] in
             guard let self else { return }
             if let selected = explore.selected {
-                if engines[selected.id] != nil || selected.url != nil {
-                    exploreCore.dispatch(CoreJSON.string([
-                        "type": "tab_navigated", "id": selected.id, "url": url, "title": NSNull(),
-                    ]))
-                    engines[selected.id]?.load(url)
-                    return
-                }
                 exploreCore.dispatch(CoreJSON.string([
                     "type": "tab_navigated", "id": selected.id, "url": url, "title": NSNull(),
                 ]))
+                // An engine already showing a page is told directly; a start
+                // page gets its engine from `reconcile`, which loads the URL.
+                engines[selected.id]?.load(url)
                 return
             }
             exploreCore.dispatch(CoreJSON.string([
@@ -247,9 +246,8 @@ final class BrowserController {
     /// Open a site the person tapped, by the id the tile or row carries.
     ///
     /// A favourite's `url` can be deeper than its origin, because that is
-    /// where the person actually works — opening the origin instead would
-    /// take somebody from their swap page to a marketing front door every
-    /// time. Recents carry the exact URL for the same reason.
+    /// where the person actually works. Recents carry the exact URL for the
+    /// same reason.
     func openSite(id: String) {
         if let pinned = explore.favorites.first(where: { $0.origin == id }) {
             open(pinned.url)
@@ -272,6 +270,13 @@ final class BrowserController {
     }
 
     func selectTab(_ id: String) {
+        // Asked for, even when it is the tab already selected: tapping a tab in
+        // the strip is how a person reaches the page a launch left dormant.
+        pageWanted = true
+        guard explore.selectedTab != id else {
+            reconcile(explore)
+            return
+        }
         exploreCore.dispatch(CoreJSON.string(["type": "tab_selected", "id": id]))
     }
 
@@ -289,6 +294,9 @@ final class BrowserController {
     func goForward() { current?.goForward() }
     func reload() { current?.reload() }
 
+    /// The core's facts about the tab in front.
+    var currentTab: DbrTabViewWire? { dbr.tab(explore.selectedTab) }
+
     // MARK: - Favourites and groups
 
     func addFavorite(url: String, title: String?) {
@@ -300,6 +308,17 @@ final class BrowserController {
 
     func removeFavorite(origin: String) {
         exploreCore.dispatch(CoreJSON.string(["type": "favorite_removed", "origin": origin]))
+    }
+
+    /// The star: remove a site that is already a favourite, add one that is
+    /// not.
+    func toggleFavorite() {
+        guard let engine = current, !engine.url.isEmpty, !engine.origin.isEmpty else { return }
+        if explore.favorites.contains(where: { $0.origin == engine.origin }) {
+            removeFavorite(origin: engine.origin)
+        } else {
+            addFavorite(url: engine.url, title: engine.title.isEmpty ? nil : engine.title)
+        }
     }
 
     func renameFavorite(origin: String, name: String) {
@@ -341,70 +360,69 @@ final class BrowserController {
     // MARK: - Connections
 
     func consentApproved() {
-        permissionsCore.dispatch(CoreJSON.string(["type": "consent_approved", "now_ms": now()]))
+        dbrCore.dispatch(CoreJSON.string(["type": "consent_approved", "now_ms": now()]))
     }
 
     func consentRejected() {
-        permissionsCore.dispatch(CoreJSON.string(["type": "consent_rejected"]))
+        dbrCore.dispatch(CoreJSON.string(["type": "consent_rejected"]))
     }
 
-    /// `nil` revokes the origin in front of the person — the browser chip.
-    /// A named origin revokes silently, because the page for it is not here.
-    func revoke(origin: String? = nil) {
-        permissionsCore.dispatch(CoreJSON.string([
-            "type": "revoke_requested", "origin": origin.map { $0 as Any } ?? NSNull(),
+    /// Disconnect one site — from the connection panel, the site menu or
+    /// Settings. Every open tab of that origin hears `accountsChanged []` and
+    /// `disconnect`.
+    func revoke(origin: String) {
+        guard !origin.isEmpty else { return }
+        dbrCore.dispatch(CoreJSON.string(["type": "revoke_requested", "origin": origin]))
+    }
+
+    /// Settings → Storage → dApp connections: every grant, in the live
+    /// session too — not only on disk until the next launch.
+    func revokeAll() {
+        dbrCore.dispatch(CoreJSON.string(["type": "revoke_all"]))
+    }
+
+    /// The person picked a network for a site in the connection panel.
+    func pickSiteChain(origin: String, chainId: Int) {
+        guard !origin.isEmpty else { return }
+        dbrCore.dispatch(CoreJSON.string([
+            "type": "site_chain_picked", "origin": origin, "chain_id": chainId,
         ]))
     }
 
-    // MARK: - The request path
+    // MARK: - Signing
 
-    private func forward(id: String, method: String, paramsJson: String, origin: String) {
-        openIds.append(id)
-        Task { [weak self] in
-            await self?.router.route(id: id, method: method, paramsJson: paramsJson, origin: origin)
+    /// The signing pipeline's answer to a forwarded request, exactly once.
+    ///
+    /// `payload` is `sign_request`'s own `SignResponsePayload` — the core
+    /// builds the page's message from it. `userOpHash` is set when the page
+    /// was answered with a user-operation hash (a receipt that did not land
+    /// in time), so the page's later receipt polls can be translated.
+    func signingAnswered(tab: String, id: String, payload: [String: Any], userOpHash: String?) {
+        dbrCore.dispatch(CoreJSON.string([
+            "type": "signing_answered",
+            "tab": tab,
+            "id": id,
+            "payload": payload,
+            "user_op_hash": userOpHash.map { $0 as Any } ?? NSNull(),
+        ]))
+    }
+
+    /// The error a request gets when there is no sheet to show it on. -32002,
+    /// the code a busy wallet answers; the kind only picks default words, and
+    /// the message is given.
+    static func busyPayload() -> [String: Any] {
+        ["type": "err", "code": -32002, "kind": "submit_failed", "message": "Another request is open"]
+    }
+
+    private func forwardToSigning(_ forward: DbrForward) {
+        // The sheet names the site; the page behind it should be the one that
+        // asked, not whichever tab happened to be in front.
+        if explore.tabs.contains(where: { $0.id == forward.tab }) { selectTab(forward.tab) }
+        guard let open = ports.onForwardToSigning else {
+            signingAnswered(tab: forward.tab, id: forward.id, payload: Self.busyPayload(), userOpHash: nil)
+            return
         }
-    }
-
-    private func raiseSigning(id: String, method: String, paramsJson: String, origin: String) {
-        ports.onSignRequest(SignRequest(
-            id: id,
-            method: method,
-            paramsJson: paramsJson,
-            origin: origin,
-            transportId: requestTab[id] ?? current?.id ?? "",
-            chainId: browserChain
-        ))
-    }
-
-    /// Deliver an answer to the tab that asked, falling back to the tab in
-    /// front. A page whose tab closed mid-flight simply does not hear.
-    func answer(id: String, json: [String: Any]) {
-        openIds.removeAll { $0 == id }
-        let engine = requestTab.removeValue(forKey: id).flatMap { engines[$0] } ?? current
-        guard let engine else { return }
-        ProviderBridge.deliver(json, to: engine.webView)
-    }
-
-    /// The signing controller's answers come back through here so they reach
-    /// the page's own tab even after the sheet has taken the foreground.
-    func answerFromSigning(transportId: String, id: String, json: [String: Any]) {
-        openIds.removeAll { $0 == id }
-        requestTab.removeValue(forKey: id)
-        guard let engine = engines[transportId] ?? current else { return }
-        ProviderBridge.deliver(json, to: engine.webView)
-    }
-
-    private func emit(_ json: [String: Any]) {
-        guard let engine = current else { return }
-        ProviderBridge.deliver(json, to: engine.webView)
-    }
-
-    private func settleForwarded(code: Int, message: String) {
-        let pending = openIds
-        openIds.removeAll()
-        for id in pending {
-            answer(id: id, json: BrowserExecutor.errorJson(id: id, code: code, message: message))
-        }
+        open(forward)
     }
 
     // MARK: - Engines
@@ -416,74 +434,79 @@ final class BrowserController {
     }
 
     /// Make the engines match the tabs.
+    ///
+    /// An engine loads its tab's URL once, when it is made. After that the
+    /// PAGE is the authority on where it is — a redirect, a link, a
+    /// `pushState` — and the tab's record follows it (`onMeta`), never the
+    /// other way round: pushing the record back into a page mid-redirect
+    /// would reload it in a loop.
     private func reconcile(_ view: ExploreViewWire) {
         let live = Set(view.tabs.map(\.id))
-        for id in engines.keys where !live.contains(id) {
+        for (id, engine) in engines where !live.contains(id) {
             engines.removeValue(forKey: id)
-            if current?.id == id { current = nil }
+            if current === engine { current = nil }
+            engine.tearDown()
+            dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": id]))
         }
 
-        guard let selected = view.selected else {
+        guard let selected = view.selected, let url = selected.url, !url.isEmpty else {
+            // No tab, or the start page's own tab: a tab with no site is not
+            // a page.
             current = nil
             return
         }
-        guard let url = selected.url, !url.isEmpty else {
-            // The start page's own tab: a tab with no site is not a page.
-            current = nil
-            return
-        }
-
-        let engine = engines[selected.id] ?? makeEngine(id: selected.id)
-        if current !== engine {
+        if let engine = engines[selected.id] {
             current = engine
-            // The machine may have been born after the page loaded, and then
-            // it knows no origin at all. Telling it again costs a dispatch and
-            // saves a connect sheet that opens against nothing.
-            if !engine.origin.isEmpty {
-                permissionsCore.dispatch(CoreJSON.string([
-                    "type": "navigation_started", "url": engine.url,
-                ]))
-            }
+            return
         }
-        if engine.url != url, engine.webView.url?.absoluteString != url {
-            engine.load(url)
+        guard pageWanted else {
+            // A restored tab, and nobody has asked for a page yet: leave it
+            // dormant and let Explore show its start page. Selecting the tab
+            // is what wakes it — see `pageWanted`.
+            current = nil
+            return
         }
+        let engine = makeEngine(id: selected.id)
+        current = engine
+        engine.load(url)
     }
 
     private func makeEngine(id: String) -> BrowserEngine {
-        let engine = BrowserEngine(id: id, bundle: bundle)
-        engine.onIncoming = { [weak self] incoming in self?.incoming(tabId: id, incoming) }
-        engine.onNavigationStarted = { [weak self] url in
-            self?.permissionsCore.dispatch(CoreJSON.string([
-                "type": "navigation_started", "url": url,
+        let engine = BrowserEngine(id: id)
+        engine.onPageMessage = { [weak self] frameOrigin, isMainFrame, body in
+            self?.dbrCore.dispatch(CoreJSON.string([
+                "type": "page_message",
+                "tab": id,
+                "frame_origin": frameOrigin,
+                "is_main_frame": isMainFrame,
+                "message_json": body,
             ]))
         }
-        engine.onMeta = { [weak self] url, title, favicon in
-            self?.recordVisit(url: url, title: title, favicon: favicon)
-            guard let self, let tab = explore.selected, tab.id == id else { return }
-            exploreCore.dispatch(CoreJSON.string([
+        engine.onNavigationStarted = { [weak self] url in
+            self?.dbrCore.dispatch(CoreJSON.string([
+                "type": "navigation_started", "tab": id, "url": url,
+            ]))
+        }
+        engine.onLoadFinished = { [weak self] url in
+            self?.dbrCore.dispatch(CoreJSON.string([
+                "type": "load_finished", "tab": id, "url": url,
+            ]))
+        }
+        engine.onRendererGone = { [weak self] in
+            self?.dbrCore.dispatch(CoreJSON.string(["type": "renderer_gone", "tab": id]))
+        }
+        engine.onMeta = { [weak self] url, title in
+            self?.exploreCore.dispatch(CoreJSON.string([
                 "type": "tab_navigated", "id": id, "url": url,
                 "title": title.isEmpty ? NSNull() : title as Any,
             ]))
         }
+        engine.onVisited = { [weak self] url, title, favicon in
+            self?.recordVisit(url: url, title: title, favicon: favicon)
+        }
         engine.onStateChanged = { [weak self] in self?.engineTick &+= 1 }
         engines[id] = engine
         return engine
-    }
-
-    private func incoming(tabId: String, _ incoming: ProviderIncoming) {
-        requestTab[incoming.id] = tabId
-        permissionsCore.dispatch(CoreJSON.string([
-            "type": "provider_request",
-            "id": incoming.id,
-            "method": incoming.method,
-            "params_json": incoming.paramsJson,
-            // The WEB VIEW's URL through the core's own rule — never the
-            // envelope's claim about itself.
-            "origin": ProviderBridge.origin(of: incoming.url),
-            // True by construction: the bridge posts only from the top frame.
-            "is_main_frame": true,
-        ]))
     }
 
     // MARK: - The history queue
@@ -535,3 +558,35 @@ final class BrowserController {
         for work in queued { work() }
     }
 }
+
+#if DEBUG
+extension BrowserController {
+    /// Tests drive the REAL core through the REAL executor with a fake page:
+    /// what WebKit would have reported for `tab`, without a web view.
+    func pageMessageForTesting(tab: String, frameOrigin: String, isMainFrame: Bool = true, body: String) {
+        dbrCore.dispatch(CoreJSON.string([
+            "type": "page_message", "tab": tab, "frame_origin": frameOrigin,
+            "is_main_frame": isMainFrame, "message_json": body,
+        ]))
+    }
+
+    func navigationForTesting(tab: String, url: String, finished: Bool) {
+        dbrCore.dispatch(CoreJSON.string([
+            "type": finished ? "load_finished" : "navigation_started", "tab": tab, "url": url,
+        ]))
+    }
+
+    func tabClosedForTesting(tab: String) {
+        dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": tab]))
+    }
+
+    func rendererGoneForTesting(tab: String) {
+        dbrCore.dispatch(CoreJSON.string(["type": "renderer_gone", "tab": tab]))
+    }
+
+    /// Where `deliver` goes when there is no web view — a test's sink.
+    func deliverForTesting(_ sink: @escaping (_ tab: String, _ messageJson: String) -> Void) {
+        dbrExecutor.ports.deliver = sink
+    }
+}
+#endif

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { composing, pasted, takeAmount } from '$lib/flows/amount-field';
 	import KeyValueRows from './KeyValueRows.svelte';
 	import type { AllowanceChip, AllowanceInput, KeyValueRow, Tone } from '../model';
 
@@ -61,7 +62,19 @@
 				placeholder={custom.placeholder}
 				aria-label={custom.symbol}
 				aria-invalid={Boolean(custom.error)}
-				oninput={(event) => oncustom?.((event.currentTarget as HTMLInputElement).value)}
+				oninput={(event) => {
+					// Cleaned by the core's rule before it goes on (spec 073): the
+					// cap's parser drops every comma, so "4,5" left raw on a
+					// decimal-comma keypad allowed 45 — ten times what was typed.
+					if (composing(event) || custom === undefined) return;
+					const clean = takeAmount(event.currentTarget, custom.value, pasted(event));
+					if (clean !== null) oncustom?.(clean);
+				}}
+				oncompositionend={(event) => {
+					if (custom === undefined) return;
+					const clean = takeAmount(event.currentTarget, custom.value, false);
+					if (clean !== null) oncustom?.(clean);
+				}}
 			/>
 			<span class="unit">{custom.symbol}</span>
 		</label>

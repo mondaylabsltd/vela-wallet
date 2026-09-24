@@ -6,17 +6,15 @@
  * place to read to know what every control does — and a component that has to
  * be handed six callbacks does not grow a seventh quietly.
  *
- * Unlike the network events, none of these reaches a core. Theme, language,
- * the three formats and the avatar style are shell state with no rule behind
- * them (research D48); `erase` is the exception that has a rule, and it is a
+ * Unlike the network events, none of these reaches a core. Theme, language
+ * and the three formats are shell state with no rule behind them
+ * (research D48); `erase` is the exception that has a rule, and it is a
  * SHELL rule — a namespace sweep over three key-value stores, which no core has
  * a port to perform.
  */
 export type SettingsPrefEvent =
 	/** A segment id from the drawn control: `light` / `dark` / `auto`. */
 	| { kind: 'theme'; id: string }
-	/** `initials` or `identicon`. */
-	| { kind: 'avatar'; id: string }
 	/** `system`, or a shipped locale code. */
 	| { kind: 'language'; id: string }
 	/** The slider's stop, 0-based — `TEXT_SCALE_LEVELS` names what it means. */
@@ -31,6 +29,20 @@ export type SettingsPrefEvent =
 	 * rewrites the stored default.
 	 */
 	| { kind: 'fee-speed'; id: string }
+	/**
+	 * The default "Sign with" (spec 071) — one of `SignPrefView.offered`. Like
+	 * the speed, a pick on a signing sheet is NOT this event: it signs that one
+	 * request and never rewrites the default.
+	 */
+	| { kind: 'sign-with'; id: string }
+	/** The Trusted Signer's page, as typed and saved — the `sign_pref` core validates it. */
+	| { kind: 'signer-page'; text: string }
+	/** Back to the official page. */
+	| { kind: 'signer-page-reset' }
+	/** Spec 075: the tunnel a cross-device pairing goes through, as typed and saved. */
+	| { kind: 'tunnel-page'; text: string }
+	/** Back to the official tunnel. */
+	| { kind: 'tunnel-page-reset' }
 	| { kind: 'number-format'; id: string }
 	| { kind: 'date-format'; id: string }
 	| { kind: 'time-format'; id: string }

@@ -78,6 +78,12 @@ pub struct WalletStrings {
     pub sign_out_warning: SharedString,
     pub sign_out_anyway: SharedString,
     pub sign_out_cancel: SharedString,
+    /// How many wallets a sign-out takes, when it is more than one
+    /// (2026-09-23). `{{count}}` is filled where it is drawn.
+    pub sign_out_desc_many: SharedString,
+    /// Taking ONE wallet off this device, and what that means.
+    pub account_remove: SharedString,
+    pub account_remove_body: SharedString,
     pub all_networks: SharedString,
     pub search_placeholder: SharedString,
     pub receive_title: SharedString,
@@ -154,6 +160,9 @@ impl WalletStrings {
             sign_out_warning: s("settings.signOut.warning"),
             sign_out_anyway: s("settings.signOut.anyway"),
             sign_out_cancel: s("settings.signOut.cancel"),
+            sign_out_desc_many: s("settings.signOut.descMany"),
+            account_remove: s("settings.account.remove"),
+            account_remove_body: s("settings.account.removeBody"),
             all_networks: s("componentsUi.networkFilter.allNetworks"),
             search_placeholder: s("componentsUi.commandBar.placeholder"),
             receive_title: s("receive.title"),

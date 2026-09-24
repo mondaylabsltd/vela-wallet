@@ -23,6 +23,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
+import app.getvela.wallet.feature.signing.components.TrustedSignerWaiting
 import app.getvela.wallet.feature.signing.components.SignWithRow
 import app.getvela.wallet.feature.signing.components.SigningAmount
 import app.getvela.wallet.feature.signing.components.SigningBalances
@@ -65,6 +66,9 @@ fun SigningSheet(
     /** Spec 069: the speed control under the fee. */
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
+    /** Spec 071: the Trusted Signer's waiting card. */
+    onTrustedSignerReopen: () -> Unit = {},
+    onTrustedSignerCancel: () -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -82,6 +86,8 @@ fun SigningSheet(
             onFeePick = onFeePick,
             onToggleSpeed = onToggleSpeed,
             onPickSpeed = onPickSpeed,
+            onTrustedSignerReopen = onTrustedSignerReopen,
+            onTrustedSignerCancel = onTrustedSignerCancel,
         )
     }
 }
@@ -101,6 +107,8 @@ fun SigningSheetContent(
     onFeePick: (String) -> Unit = {},
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
+    onTrustedSignerReopen: () -> Unit = {},
+    onTrustedSignerCancel: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -178,11 +186,18 @@ fun SigningSheetContent(
         }
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
         model.signWith?.let { SignWithRow(it, onSignWith) }
-        // Spec 081: a refused request offers no confirm control at all. It is
-        // not disabled — it is absent, because the wallet never offered it.
+        model.trustedSignerNotice?.let { SigningWarning(SigningTone.Caution, it) }
+        val waiting = model.trustedSignerWait
+        // Three states, in order of precedence: waiting on the Trusted Signer's
+        // page (071), a request that can be confirmed, and a request that
+        // cannot. The last draws NOTHING — spec 081: a refused request offers
+        // no confirm control at all, not a disabled one, because the wallet
+        // never offered it.
         val hint = model.confirmHint
         val action = model.confirmAction
-        if (hint != null && action != null) {
+        if (waiting != null) {
+            TrustedSignerWaiting(waiting, onReopen = onTrustedSignerReopen, onCancel = onTrustedSignerCancel)
+        } else if (hint != null && action != null) {
             SlideToConfirm(
                 hint = hint,
                 action = action,
@@ -190,5 +205,27 @@ fun SigningSheetContent(
                 onConfirm = onConfirm,
             )
         }
+    }
+}
+
+/**
+ * Spec 071: the Trusted Signer's waiting card on its own, for a signature no
+ * signing sheet is showing (a send the person started). Swiping it away is
+ * the same as Cancel.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TrustedSignerWaitingSheet(model: TrustedSignerWaitModel, onReopen: () -> Unit, onCancel: () -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onCancel,
+        containerColor = VelaTheme.colors.bgRaised,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        TrustedSignerWaiting(
+            model,
+            onReopen = onReopen,
+            onCancel = onCancel,
+            modifier = Modifier.padding(horizontal = VelaSizing.screenPaddingX).padding(bottom = VelaSpacing.xl3),
+        )
     }
 }

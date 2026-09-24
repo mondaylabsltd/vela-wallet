@@ -72,6 +72,13 @@ enum class KeyMethod(val wire: String) {
     Platform("platform"),
     Hybrid("hybrid"),
     SecurityKey("security_key"),
+
+    /**
+     * Spec 075: the Trusted Signer — a page the person reads, which runs the
+     * WebAuthn ceremony itself. A passkey route of our own, beside the three
+     * the platform offers, and offered wherever they are.
+     */
+    TrustedSigner("trusted_signer"),
     ;
 
     companion object {
@@ -108,6 +115,27 @@ data class CreateKeyRow(
      */
     val providerName: String,
     val method: KeyMethod,
+    /**
+     * WHERE this key lives, as the core settled it (spec 075): the route the
+     * person chose is [method], but a key minted on a Trusted Signer page lives
+     * behind that page whatever the browser's authenticator reported about
+     * itself. Defaults to [method] for a core that predates the field.
+     */
+    val kind: KeyMethod = method,
+)
+
+/**
+ * `AddBlocked` — why a key route is not on offer (spec 075).
+ *
+ * A wallet's keys all belong to ONE relying party, because the registry files
+ * a unit under one `rpId`. Once the first key is minted, the routes that would
+ * mint for a different party are off — and the row says so, naming both sides,
+ * because the person can fix it: the Trusted Signer page is a setting.
+ */
+data class AddBlocked(
+    val relyingParty: String,
+    val page: String?,
+    val pageRelyingParty: String?,
 )
 
 /** `CreateView`. */
@@ -129,6 +157,10 @@ data class CreateView(
     val canGoBack: Boolean,
     val address: String?,
     val syncErrorDetail: String?,
+    /** The routes that may still mint a key for THIS set (spec 075). */
+    val addMethods: List<KeyMethod> = KeyMethod.entries,
+    /** Why the others may not, when some may not. */
+    val addBlocked: AddBlocked? = null,
 ) {
     companion object {
         fun from(json: JSONObject): CreateView = CreateView(
@@ -152,6 +184,8 @@ data class CreateView(
                     aaguid = key.optString("aaguid"),
                     providerName = key.optString("provider_name"),
                     method = KeyMethod.of(key.getString("method")),
+                    kind = key.optString("kind").ifEmpty { key.getString("method") }
+                        .let(KeyMethod::of),
                 )
             },
             canAddKey = json.optBoolean("can_add_key"),
@@ -160,6 +194,18 @@ data class CreateView(
             canGoBack = json.optBoolean("can_go_back"),
             address = json.nullableString("address"),
             syncErrorDetail = json.nullableString("sync_error_detail"),
+            // A core that predates the field says nothing, and every route
+            // stays on — the behaviour this client shipped with.
+            addMethods = json.optJSONArray("add_methods")
+                ?.let { arr -> (0 until arr.length()).map { KeyMethod.of(arr.getString(it)) } }
+                ?: KeyMethod.entries,
+            addBlocked = json.optJSONObject("add_blocked")?.let { blocked ->
+                AddBlocked(
+                    relyingParty = blocked.optString("relying_party"),
+                    page = blocked.nullableString("page"),
+                    pageRelyingParty = blocked.nullableString("page_relying_party"),
+                )
+            },
         )
     }
 }
@@ -178,7 +224,13 @@ data class LoginView(val busy: Boolean, val endpointUnreachable: Boolean) {
 data class SessionAccountRow(val index: Int, val name: String, val address: String)
 
 /** `SessionSignOutView` — present iff the confirmation dialog is open. */
-data class SessionSignOutView(val pendingUploadWarning: Boolean)
+data class SessionSignOutView(
+    val pendingUploadWarning: Boolean,
+    /** How many wallets this device is signed into — the sheet says so when
+     *  it is more than one, because "nothing is deleted, it all comes back"
+     *  says nothing about signing in six times (2026-09-23). */
+    val accountCount: Int = 1,
+)
 
 /** `SessionView` — the route guard and the account list. */
 data class SessionView(
@@ -216,7 +268,11 @@ data class SessionView(
             },
             allowedRoute = SessionRoute.of(json.getString("allowed_route")),
             signOut = json.optJSONObject("sign_out")?.let { sheet ->
-                SessionSignOutView(pendingUploadWarning = sheet.optBoolean("pending_upload_warning"))
+                SessionSignOutView(
+                    pendingUploadWarning = sheet.optBoolean("pending_upload_warning"),
+                    // One wallet and six cannot read the same (2026-09-23).
+                    accountCount = sheet.optInt("account_count", 1),
+                )
             },
         )
     }

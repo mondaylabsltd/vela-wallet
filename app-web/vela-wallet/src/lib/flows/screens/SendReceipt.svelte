@@ -18,6 +18,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Breakdown from '../ui/Breakdown.svelte';
 	import StatusHero from '../ui/StatusHero.svelte';
+	import { ringProgress } from '../ui/ring';
 	import type { SendReceiptModel } from '../model';
 
 	interface Props {
@@ -75,15 +76,13 @@
 		return [typicalLine, second];
 	});
 
-	// The ring round the disc. It eases toward full and never gets there:
-	// about 70% at the typical time, 86% at twice it, and a ceiling of 92%
-	// after that, so a transaction that takes three minutes is still visibly
-	// moving and one that takes ten seconds does not sit at 100% waiting.
-	// Only the confirmation closes it.
+	// The ring round the disc — `ringProgress`, which the dApp receipt draws
+	// from too (spec 077). The curve moved out of this file so the two cannot
+	// disagree about the same moment; the rule it encodes is unchanged.
 	const progress = $derived.by(() => {
 		if (model.stage === 'confirmed') return 1;
 		if (model.stage !== 'submitted' || !model.eta) return undefined;
-		return 0.92 * (1 - Math.exp((-1.4 * elapsedS) / Math.max(1, model.eta.typicalS)));
+		return ringProgress(elapsedS, model.eta.typicalS);
 	});
 </script>
 

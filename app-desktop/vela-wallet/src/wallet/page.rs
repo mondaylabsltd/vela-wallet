@@ -9,6 +9,8 @@
 //! the sidebar, third column, Esc handling and gallery chrome already exist,
 //! so contacts is a `Section` switch on the content column (research.md D1).
 
+use std::sync::Arc;
+
 use gpui::AnimationExt as _;
 use gpui::AppContext as _;
 use gpui::prelude::FluentBuilder as _;
@@ -49,18 +51,18 @@ const WIZARD_SEARCH_FOCUS: usize = ENDPOINT_FOCUS_COUNT + 3;
 const WIZARD_RPC_FOCUS: usize = WIZARD_SEARCH_FOCUS + 1;
 /// Two handles per network card, past everything above.
 const OVERRIDE_FOCUS_BASE: usize = WIZARD_RPC_FOCUS + 1;
-use std::rc::Rc;
+use crate::executor::dapp_browser::{Forwarded, SigningOrder};
 
-use crate::executor::appearance_prefs;
 use crate::executor::display_currency;
 use crate::executor::format_prefs;
 use crate::executor::passkey::WindowHandle;
 use crate::hardware;
 use crate::settings::components::{
-    CalloutTone, callout, chain_mark, check_list, danger_card, dropdown_menu, dropdown_menu_picks,
-    dropdown_trigger, editable_url_field, form_row, key_value_row, network_row, rpc_banner,
-    segmented, segmented_cells, settings_nav_row, status_pill, storage_bar, storage_group,
-    text_scale, text_scale_stops, url_field,
+    CalloutTone, ConfirmCopy, callout, chain_mark, check_list, confirm_card, danger_card,
+    dropdown_menu, dropdown_menu_choices, dropdown_menu_picks, dropdown_trigger,
+    editable_url_field, form_row, key_value_row, network_row, rpc_banner, segmented,
+    segmented_picks, settings_nav_row, status_pill, storage_bar, storage_group, storage_group_with,
+    text_scale, text_scale_picks, url_field,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -69,12 +71,14 @@ use crate::signing::SigningStrings;
 use crate::signing::components as signing_components;
 use crate::signing::fixtures as signing_fixtures;
 use crate::signing::live as signing_live;
+use crate::signing::trusted_signer as signing_trusted_signer;
 use crate::theme::{
     self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_HEADER_H, CONTACTS_HERO_AVATAR,
     CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W, GALLERY_BAR_H, SETTINGS_DIALOG_W,
     SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W, THIRD_PANEL_W,
     Theme, ThemeMode, WALLET_PAD_TOP, WALLET_PAD_X,
 };
+use crate::wallet::browser_host::{BROWSER_TAB, BrowserHost};
 use crate::wallet::live as wallet_live;
 use crate::wallet::money::{self, SendHost};
 use crate::window_frame::{
@@ -88,6 +92,7 @@ use vela_core::app::contacts::{
     ContactExportScope, ContactFileFormat, ContactGroupInput, ContactSaveInput, Contacts,
     Event as ContactEvent,
 };
+use vela_core::app::dapp_browser::Event as DbrEvent;
 use vela_core::app::display_currency::{DisplayCurrency, Event as CurrencyEvent};
 use vela_core::app::explore_sites::ExploreSites;
 use vela_core::app::fee_policy::Event as FeeEvent;
@@ -98,6 +103,7 @@ use vela_core::app::receive_watch::ReceiveWatch;
 use vela_core::app::send::{
     Event as SendEvent, SendAlertKind, SendDisplayContext, SendOpenParams, SendRecipientDraft,
 };
+use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
 use super::WalletStrings;
 use super::components::{
@@ -170,6 +176,22 @@ enum SettingsProbe {
     Providers,
 }
 
+/// A destructive action waiting on its question (spec 072 FR-010): nothing
+/// here happens on the first press.
+#[derive(Clone, Debug, PartialEq)]
+enum Confirm {
+    /// One of your-data rows, by the catalog's id — it cannot come back.
+    ClearItem(&'static str),
+    /// "Clear all caches".
+    ClearCaches,
+    /// One connected site, named.
+    Disconnect { origin: String, name: SharedString },
+    /// Every connected site.
+    DisconnectAll,
+    /// Service endpoints back to Vela's own, what was typed forgotten.
+    ResetEndpoints,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum SettingsDialog {
     /// DST4b — search a chain, check it, add it.
@@ -179,10 +201,6 @@ enum SettingsDialog {
     /// Spec 081 FR-017 — 抹除此设备, asked before it happens. The phone draws
     /// this as a bottom sheet; a wide layout has none, so it is a dialog.
     EraseDevice,
-    /// One storage row's 清除, asked before it happens — the founder's ruling
-    /// of 2026-09-15, after "联系人与分组 · 清除" took a whole address book on
-    /// one tap. `None` is 清除全部缓存, which asks the same way.
-    ClearStorage(Option<&'static str>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -212,6 +230,9 @@ enum ContactsMenu {
     /// groups. A menu rather than a new picker component: the question is
     /// "which of these", which is what a menu is.
     MoveGroup,
+    /// Spec 070 — which network the site on screen is on, ticked; picking
+    /// one moves THAT site (`site_chain_picked`) and no other.
+    SiteNetwork,
 }
 
 /// What the explore name dialog is asking for.
@@ -519,14 +540,25 @@ pub struct WalletPage {
     /// The star pins with THIS rather than the host, because the host is what
     /// a tile falls back to and a page's title is what a person recognises.
     browser_title: Option<String>,
-    /// The permissions machine for the browser column. Born with the first
-    /// request a page makes, because that is the first moment there is an
-    /// origin to judge.
-    #[cfg(not(target_os = "linux"))]
-    browser_host: Option<gpui::Entity<crate::wallet::browser_host::BrowserHost>>,
-    /// The request sink is installed once per page, not once per frame.
+    /// The browser machine (spec 070): every page's requests, the grants,
+    /// each site's chain, the signing line. Born the first time anything needs
+    /// it — a page's first message, or Settings listing the connected sites —
+    /// and alive for the rest of the session: leaving Explore settles nothing.
+    browser_host: Option<gpui::Entity<BrowserHost>>,
+    /// The consent sheet last seen, so the connection panel opens when a
+    /// NEW question appears rather than on every answer the machine delivers.
+    browser_consent: Option<(String, String)>,
+    /// The page's sinks are installed once per page, not once per frame.
     #[cfg(not(target_os = "linux"))]
     dapp_requests_armed: bool,
+    /// The address bar while it is being typed in — `None` when it shows the
+    /// page (or the placeholder). What was typed goes through the core's
+    /// `browser_input`, so a word searches and a host gets a scheme.
+    address_draft: Option<String>,
+    address_focus: gpui::FocusHandle,
+    /// The network menu's rows — `(chain, name, current)` — named when it
+    /// opened; `menu_origin` says which site it is about.
+    site_networks: Vec<(u32, SharedString, bool)>,
     /// `VELA_BROWSER_URL` is applied once, not on every frame the column draws.
     browser_url_pinned: bool,
     send_amount_focus: gpui::FocusHandle,
@@ -558,6 +590,14 @@ pub struct WalletPage {
     crash: Option<crate::outcome::Prompt>,
     /// One per editable settings field, made on first use.
     endpoint_focuses: Vec<gpui::FocusHandle>,
+    /// The Trusted Signer page as typed (spec 071), until it is saved — `None`
+    /// shows the page `sign_pref` holds. The core validates it on Save, not
+    /// per keystroke: half an address is not an error yet.
+    signer_page_draft: Option<String>,
+    signer_page_focus: Option<gpui::FocusHandle>,
+    /// Spec 075: the tunnel, the same way — typed until Save, and the core
+    /// says whether it is one (https/wss only, loopback allowed).
+    tunnel_focus: Option<gpui::FocusHandle>,
     /// Which network card's probes have been asked for, so opening one asks
     /// once rather than on every frame.
     settings_probed_network: Option<u32>,
@@ -569,6 +609,15 @@ pub struct WalletPage {
     /// The custom network the remove confirmation is about: its id and the
     /// name to say back to the person.
     network_remove: Option<(String, SharedString)>,
+    /// The destructive action on screen, asked about and not yet done.
+    confirm: Option<Confirm>,
+    /// Edited settings fields not yet committed, by focus slot: the event
+    /// that persists each (spec 072). Leaving the field — or Enter — commits
+    /// it; a field left untouched commits nothing.
+    field_commits: std::collections::HashMap<usize, settings_live::FieldCommit>,
+    /// One blur subscription per settings focus slot, made on the frame after
+    /// the slot's handle.
+    field_blurs: Vec<gpui::Subscription>,
     /// What the last address-book import did, as a title and a line. Cleared
     /// by acknowledging it.
     import_result: Option<(SharedString, SharedString)>,
@@ -611,17 +660,6 @@ pub struct WalletPage {
     /// when its detail's 收款 was pressed, because the holdings list can
     /// re-order under an open panel and an index would then name another.
     receive_token: Option<vela_core::app::balance_dashboard::BalanceToken>,
-    /// The chain the in-app BROWSER is on: what a connected site was told by
-    /// `eth_chainId`, what `wallet_switchEthereumChain` moves, and the chain a
-    /// signature from that site is quoted, routed and submitted on.
-    ///
-    /// Its own field since spec 037. It used to BE `receive_chain`, and the
-    /// two meanings had nothing to do with each other: tapping "Ethereum" on
-    /// the receive screen silently retargeted a connected dApp's next
-    /// signature to Ethereum, and a site's chain switch silently changed which
-    /// chain your receive QR was for. Same default — Gnosis, the chain this
-    /// wallet is cheapest on — and nothing else shared.
-    browser_chain: u32,
     /// The sidebar's network filter: one chain, or `None` for every network.
     ///
     /// Render state, not a preference — the phone keeps it in component state
@@ -651,6 +689,9 @@ pub struct WalletPage {
     /// The accounts the switcher last announced. `None` = it is not on screen,
     /// and the core has been told so.
     switcher_addresses: Option<Vec<String>>,
+    /// The switcher row a "remove this wallet" confirmation is open for
+    /// (2026-09-23). A position in the ORIGINAL list, as the core removes by.
+    removing_account: Option<usize>,
     /// DC3: the fixture roster is empty.
     contacts_empty: bool,
     /// Open anchored menu: which fixture feeds it, the window-coordinate
@@ -899,7 +940,6 @@ impl WalletPage {
             flow_strings: FlowStrings::resolve(&loc),
             receive_chain: 100,
             receive_token: None,
-            browser_chain: 100,
             celebrating: false,
             chain_filter: None,
             feed_privacy: None,
@@ -928,10 +968,13 @@ impl WalletPage {
             explore_form_focus: cx.focus_handle(),
             browser_title: None,
             cap_focus: cx.focus_handle(),
-            #[cfg(not(target_os = "linux"))]
             browser_host: None,
+            browser_consent: None,
             #[cfg(not(target_os = "linux"))]
             dapp_requests_armed: false,
+            address_draft: None,
+            address_focus: cx.focus_handle(),
+            site_networks: Vec::new(),
             browser_url_pinned: false,
             send_amount_focus: cx.focus_handle(),
             send_recipient_focus: cx.focus_handle(),
@@ -943,10 +986,16 @@ impl WalletPage {
             scan_preview: ScanPreview::default(),
             window_handle: crate::onboarding::native_window_handle(window),
             endpoint_focuses: Vec::new(),
+            signer_page_draft: None,
+            signer_page_focus: None,
+            tunnel_focus: None,
             settings_probed_network: None,
             settings_probed_panel: None,
             settings_fix_chain: None,
             network_remove: None,
+            confirm: None,
+            field_commits: std::collections::HashMap::new(),
+            field_blurs: Vec::new(),
             import_result: None,
             contact_form: None,
             contact_qr: None,
@@ -969,6 +1018,7 @@ impl WalletPage {
             contact: 0,
             inspected_contact: None,
             switcher_addresses: None,
+            removing_account: None,
             contacts_empty: false,
             menu: None,
             tab: match section {
@@ -1558,11 +1608,9 @@ impl WalletPage {
             .bg(theme.bg_raised)
             .border_1()
             .border_color(theme.border_card)
-            .child(crate::wallet::components::person_avatar(
-                theme,
+            .child(crate::wallet::components::identicon_avatar(
                 &mut self.identicons,
                 &address,
-                &name,
                 56.,
             ))
             .child(
@@ -1970,6 +2018,23 @@ impl WalletPage {
                     .child(s.sign_out_keeps.clone()),
             );
 
+        // What this takes, when it is more than one wallet. `keeps` above is
+        // true either way — the address returns, the history is still there —
+        // and on a machine holding six it was ALSO how the dialog managed to
+        // say nothing about signing in six times (owner, 2026-09-23).
+        if dialog.account_count > 1 {
+            card = card.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .line_height(px(20.))
+                    .text_color(theme.fg_base)
+                    .child(SharedString::from(
+                        s.sign_out_desc_many
+                            .replace("{{count}}", &dialog.account_count.to_string()),
+                    )),
+            );
+        }
+
         if dialog.pending_upload_warning {
             card = card.child(
                 div()
@@ -2033,6 +2098,115 @@ impl WalletPage {
         Some(
             div()
                 .id("sign-out-scrim")
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.backdrop)
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(card)
+                .into_any_element(),
+        )
+    }
+
+    /// "Remove from this device?" — one wallet leaving, the others staying
+    /// (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+    ///
+    /// Asked, like every other destructive row in this shell: the affordance
+    /// sits in a list whose whole purpose is switching, one press away from a
+    /// row somebody meant to land on. The words are the corpus's own, and the
+    /// wallet's NAME says which row the dialog is about.
+    fn account_remove_dialog(
+        &mut self,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let index = self.removing_account?;
+        let view = session::view(cx);
+        let row = view.accounts.get(index)?;
+        let name: SharedString = if row.account.name.is_empty() {
+            row.account.address.clone().into()
+        } else {
+            row.account.name.clone().into()
+        };
+        let s = &self.strings;
+        let hover_confirm = theme.error_base;
+        let hover_cancel = theme.bg_sunken;
+        let card = div()
+            .w(px(400.))
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .p(px(28.))
+            .rounded(px(20.))
+            .bg(theme.bg_raised)
+            .border_1()
+            .border_color(theme.border_card)
+            .child(
+                div()
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .child(name),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .line_height(px(20.))
+                    .text_color(theme.fg_muted)
+                    .child(s.account_remove_body.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .id("account-remove-confirm")
+                            .h(px(44.))
+                            .rounded(px(12.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .bg(theme.error_soft)
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.error_base)
+                            .hover(move |style| {
+                                style.bg(hover_confirm).text_color(theme.fg_inverse)
+                            })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.removing_account = None;
+                                session::remove_account(index, cx);
+                                cx.notify();
+                            }))
+                            .child(s.account_remove.clone()),
+                    )
+                    .child(
+                        div()
+                            .id("account-remove-cancel")
+                            .h(px(44.))
+                            .rounded(px(12.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            .hover(move |style| style.bg(hover_cancel))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.removing_account = None;
+                                cx.notify();
+                            }))
+                            .child(s.sign_out_cancel.clone()),
+                    ),
+            );
+
+        Some(
+            div()
+                .id("account-remove-scrim")
                 .absolute()
                 .inset_0()
                 .flex()
@@ -2153,6 +2327,312 @@ impl WalletPage {
         Some(
             div()
                 .id("network-remove-scrim")
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.backdrop)
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(card)
+                .into_any_element(),
+        )
+    }
+
+    /// Where the person is: the section, and which settings panel.
+    pub fn place(&self) -> (Section, SettingsPage) {
+        (self.section, self.settings_page)
+    }
+
+    /// A page built for another account opens where the last one was left —
+    /// a switch from Settings stays on Settings.
+    pub fn restore_place(&mut self, (section, settings_page): (Section, SettingsPage)) {
+        self.section = section;
+        self.settings_page = settings_page;
+    }
+
+    /// Resolve every string again, in the language now in force (spec 072):
+    /// a language chosen in Settings applies on the next frame, not the next
+    /// launch.
+    fn relocalize(&mut self) {
+        let loc = Loc::from_env();
+        self.strings = WalletStrings::resolve(&loc);
+        self.contacts = ContactsStrings::resolve(&loc);
+        self.settings = SettingsStrings::resolve(&loc);
+        self.explore = ExploreStrings::resolve(&loc);
+        self.signing = SigningStrings::resolve(&loc);
+        self.flow_strings = FlowStrings::resolve(&loc);
+        self.locale = gpui::SharedString::from(loc.language().to_owned());
+        self.loc = loc;
+    }
+
+    /// Watch each settings field for the moment it is left (spec 072). Made
+    /// here because a subscription needs the window mutably, and a field's
+    /// handle is made while it is drawn — the frame after, before anybody can
+    /// have typed into it.
+    fn watch_field_blurs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        while self.field_blurs.len() < self.endpoint_focuses.len() {
+            let index = self.field_blurs.len();
+            let handle = self.endpoint_focuses[index].clone();
+            let subscription = cx.on_blur(&handle, window, move |this, _, cx| {
+                this.commit_field(index, cx);
+            });
+            self.field_blurs.push(subscription);
+        }
+    }
+
+    /// An edited field was left: tell the core it may persist it.
+    fn commit_field(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(field) = self.field_commits.remove(&index) else {
+            return;
+        };
+        let saved = resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+            resident.dispatch(field.committed(), cx);
+            // Refused endpoints do not count as a fix. `rpc_chain_mismatch`
+            // is the core's own verdict on the one refusal that matters — an
+            // endpoint answering for another chain.
+            match field {
+                settings_live::FieldCommit::Override { chain_id, .. } => resident
+                    .view()
+                    .networks
+                    .iter()
+                    .find(|row| row.chain_id == chain_id)
+                    .is_none_or(|row| row.rpc_chain_mismatch.is_none()),
+                _ => true,
+            }
+        });
+        if let settings_live::FieldCommit::Override {
+            chain_id,
+            field: NetOverrideField::Rpc,
+        } = field
+            && saved
+        {
+            // The hero has this chain marked failed and its own retry is
+            // throttled like any other fetch. The person just repaired the
+            // endpoint by hand, which is the moment the web clears the failure
+            // and forces one read.
+            crate::executor::balance_dashboard::dispatch(
+                vela_core::app::balance_dashboard::Event::FixChainResolved { chain_id },
+                cx,
+            );
+            crate::executor::balance_dashboard::refresh(cx);
+        }
+        cx.notify();
+    }
+
+    /// One keystroke into an editable settings field: the core gets the draft,
+    /// and the page remembers the field owes a commit.
+    fn edit_field(
+        page: &gpui::Entity<Self>,
+        index: usize,
+        field: settings_live::FieldCommit,
+        text: String,
+        cx: &mut gpui::App,
+    ) {
+        page.update(cx, |this, _| {
+            this.field_commits.insert(index, field);
+        });
+        resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+            resident.dispatch(field.edited(text), cx);
+        });
+    }
+
+    /// Enter in a settings field: done with it — which is leaving it, so the
+    /// commit is the blur's, and happens once.
+    fn enter_leaves(page: &gpui::Entity<Self>) -> impl Fn(&mut Window, &mut gpui::App) + 'static {
+        let page = page.clone();
+        move |window, cx| {
+            let focus = page.read(cx).focus_handle.clone();
+            focus.focus(window, cx);
+        }
+    }
+
+    /// "Erase this device", confirmed (spec 072 FR-011).
+    ///
+    /// Live dApp sessions first — every grant revoked through the browser
+    /// machine, so an open page hears `accountsChanged []` and `disconnect`,
+    /// and the page on screen closed — then the sweep, which VERIFIES. Only a
+    /// clean store leaves for the first run: something surviving keeps the
+    /// person here, signed in, told so in the dialog, with the button live.
+    fn erase_device(&mut self, cx: &mut Context<Self>) {
+        if let Some(host) = self.browser_host.clone() {
+            host.update(cx, |host, cx| host.dispatch(DbrEvent::RevokeAll, cx));
+        }
+        self.close_browser_page(cx);
+        // The browser's OWN store — cookies, localStorage, databases, caches —
+        // which no `vela.` key names and an erase that skipped it left behind,
+        // so somebody was still signed in to the sites they had visited (main,
+        // spec 081 FR-017). On Linux there is no web view and this says so.
+        if !crate::webview::clear_browsing_data() {
+            eprintln!("[vela-wallet] erase: no web view to clear; browsing data untouched");
+        }
+        match crate::executor::device_storage::erase() {
+            Ok(removed) => {
+                eprintln!("[vela-wallet] erase: {} key(s) removed", removed.len());
+                self.confirm = None;
+                self.settings_dialog = None;
+                self.erase_failed = None;
+                // What the process still holds about this wallet goes back to
+                // a first launch's: the preferences, the formats, a saved
+                // index endpoint, the endpoint pools.
+                crate::executor::preferences::load();
+                format_prefs::reload();
+                crate::executor::registry::set_registry_url("");
+                crate::executor::pool::refresh(None);
+                // No wallet on disk: the session reads that, and the root
+                // takes the window to the first run. `reboot` is the whole of
+                // it — a `sign_out` alone only opens the confirmation, which is
+                // how a wiped machine ended up under a modal asking whether to
+                // sign out.
+                session::reboot(cx);
+            }
+            Err(incomplete) => {
+                eprintln!(
+                    "[vela-wallet] erase incomplete: {} key(s) survived: {:?}",
+                    incomplete.remaining.len(),
+                    incomplete.remaining
+                );
+                // WHICH keys, not merely that some did: the dialog prints them,
+                // and "something is still here" with no names is not something
+                // a person can act on (main, 081).
+                self.erase_failed = Some(incomplete.remaining);
+            }
+        }
+        cx.notify();
+    }
+
+    /// One storage row's Clear — your data after its question, a cache at
+    /// once — and then the machines that mirrored those keys in memory
+    /// forget them, so nothing writes a cleared list back.
+    fn clear_storage_row(&mut self, id: &'static str, cx: &mut Context<Self>) {
+        if let Err(error) = crate::executor::device_storage::clear_item(id) {
+            eprintln!("[vela-wallet] storage: {id} could not be cleared: {error}");
+        }
+        match id {
+            "transactions" => resident::forget::<ActivityFeed>(cx),
+            "contacts" => resident::forget::<Contacts>(cx),
+            "custom" => {
+                resident::forget::<NetworkAdmin>(cx);
+                resident::forget::<ManageTokens>(cx);
+                crate::executor::balance_dashboard::refresh(cx);
+            }
+            "browsing" => {
+                resident::forget::<BrowserHistory>(cx);
+                resident::forget::<ExploreSites>(cx);
+            }
+            _ => crate::executor::balance_dashboard::refresh(cx),
+        }
+        cx.notify();
+    }
+
+    /// "Clear all caches", confirmed — and a fresh read, since the balance
+    /// cache the hero paints from is one of them.
+    fn clear_caches(&mut self, cx: &mut Context<Self>) {
+        if let Err(error) = crate::executor::device_storage::clear_caches() {
+            eprintln!("[vela-wallet] storage: caches could not be cleared: {error}");
+        }
+        crate::executor::balance_dashboard::refresh(cx);
+        cx.notify();
+    }
+
+    /// The pending question, answered yes.
+    fn confirmed(&mut self, cx: &mut Context<Self>) {
+        let Some(action) = self.confirm.clone() else {
+            return;
+        };
+        match action {
+            // The dialog stays until the erase has an answer.
+            Confirm::ClearItem(id) => self.clear_storage_row(id, cx),
+            Confirm::ClearCaches => self.clear_caches(cx),
+            Confirm::Disconnect { origin, .. } => {
+                let host = self.browser_host(cx);
+                host.update(cx, |host, cx| {
+                    host.dispatch(DbrEvent::RevokeRequested { origin }, cx);
+                });
+            }
+            Confirm::DisconnectAll => {
+                let host = self.browser_host(cx);
+                host.update(cx, |host, cx| host.dispatch(DbrEvent::RevokeAll, cx));
+            }
+            Confirm::ResetEndpoints => {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(NetEvent::ResetEndpointsToDefaults, cx);
+                });
+            }
+        }
+        self.confirm = None;
+        cx.notify();
+    }
+
+    /// What each question says — every word the corpus's, the web phone's
+    /// confirm sheets: a row names itself and carries its group's consequence.
+    fn confirm_copy(&self, action: &Confirm) -> ConfirmCopy {
+        let s = &self.settings;
+        match action {
+            Confirm::ClearItem(id) => ConfirmCopy {
+                title: settings_live::storage_item_label(id, s),
+                body: s.storage_user_data.clone(),
+                callout: None,
+                note: None,
+                confirm: s.storage_clear.clone(),
+                cancel: s.cancel.clone(),
+                danger: true,
+            },
+            Confirm::ClearCaches => ConfirmCopy {
+                title: s.storage_clear_title.clone(),
+                body: s.storage_clear_body.clone(),
+                callout: None,
+                note: None,
+                confirm: s.storage_clear_confirm.clone(),
+                cancel: s.cancel.clone(),
+                danger: false,
+            },
+            Confirm::Disconnect { name, .. } => ConfirmCopy {
+                title: name.clone(),
+                body: s.storage_connections.clone(),
+                callout: None,
+                note: None,
+                confirm: self.explore.disconnect.clone(),
+                cancel: s.cancel.clone(),
+                danger: true,
+            },
+            Confirm::DisconnectAll => ConfirmCopy {
+                title: s.item_dapps.clone(),
+                body: s.storage_connections.clone(),
+                callout: None,
+                note: None,
+                confirm: s.storage_disconnect_all.clone(),
+                cancel: s.cancel.clone(),
+                danger: true,
+            },
+            Confirm::ResetEndpoints => ConfirmCopy {
+                title: s.endpoints_reset_title.clone(),
+                body: s.endpoints_reset_body.clone(),
+                callout: None,
+                note: None,
+                confirm: s.endpoints_reset_confirm.clone(),
+                cancel: s.endpoints_reset_cancel.clone(),
+                danger: true,
+            },
+        }
+    }
+
+    /// The question over the window, when one is pending.
+    fn confirm_dialog(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        let action = self.confirm.as_ref()?;
+        let card = confirm_card(
+            theme,
+            self.confirm_copy(action),
+            cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.confirmed(cx)),
+            cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.confirm = None;
+                this.erase_failed = None;
+                cx.notify();
+            }),
+        );
+        Some(
+            div()
+                .id("confirm-scrim")
                 .absolute()
                 .inset_0()
                 .flex()
@@ -3505,11 +3985,9 @@ impl WalletPage {
             .flex()
             .items_center()
             .gap(px(14.))
-            .child(crate::wallet::components::person_avatar(
-                theme,
+            .child(crate::wallet::components::identicon_avatar(
                 &mut self.identicons,
                 model.seed.as_ref(),
-                &model.name,
                 CONTACTS_HERO_AVATAR,
             ))
             .child(
@@ -4044,6 +4522,58 @@ impl WalletPage {
             token_chain_ids: view.tokens.iter().map(|token| token.chain_id).collect(),
             multi_chain_id: view.multi_chain_id,
         })
+    }
+
+    /// The Trusted Signer's four dialogs (specs 071 and 075), over whichever flow
+    /// started the attempt — the signing column or the send: where the signer
+    /// is, the cross-device pairing, the wait, and its last word. The buttons
+    /// speak to the attempt through its channel; the host redraws when the
+    /// channel answers.
+    fn trusted_signer_prompt(
+        &mut self,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let mut channels = Vec::new();
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.as_ref() {
+            channels.push(host.read(cx).trusted_signer());
+        }
+        if let Some(host) = self.send_host.as_ref() {
+            channels.push(host.read(cx).trusted_signer());
+        }
+        let channel = channels
+            .into_iter()
+            .find(|channel| channel.waiting() || channel.ended().is_some())?;
+        let card = if channel.waiting() {
+            let (reopen, cancel) = (Arc::clone(&channel), channel);
+            signing_trusted_signer::waiting_card(
+                theme,
+                &self.loc,
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| reopen.reopen(),
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel(),
+            )
+        } else {
+            let refusal = channel.ended()?;
+            signing_trusted_signer::ended_card(
+                theme,
+                &self.loc,
+                refusal,
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| channel.forget(),
+            )
+        };
+        Some(
+            div()
+                .id("trusted-signer-scrim")
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.backdrop)
+                .child(card)
+                .into_any_element(),
+        )
     }
 
     /// The cable's dialogs and the core's alert, over the send flow.
@@ -4870,6 +5400,7 @@ impl WalletPage {
                             },
                         ) as panels::Click);
                     }
+                    let previous = send.amount.clone();
                     actions.amount_field = Some(panels::AddressField {
                         focus: send.amount_focus,
                         value: send.amount,
@@ -4877,6 +5408,11 @@ impl WalletPage {
                         on_change: Box::new({
                             let host = host.clone();
                             move |amount: String, _: &mut Window, cx: &mut gpui::App| {
+                                // Spec 073: the core's amount rule first.
+                                let Some(amount) = flows_live::amount_edited(&amount, &previous)
+                                else {
+                                    return;
+                                };
                                 host.update(cx, |host, cx| {
                                     host.dispatch(SendEvent::SetAmount { amount }, cx);
                                 });
@@ -6054,6 +6590,10 @@ impl WalletPage {
                 self.settings.fee_speed_title.clone(),
                 Some(self.settings.fee_speed_subtitle.clone()),
             ),
+            SettingsPage::Signing => (
+                self.settings.nav_signing.clone(),
+                Some(self.settings.signing_subtitle.clone()),
+            ),
             SettingsPage::Storage => (
                 self.settings.nav_storage.clone(),
                 Some(self.settings.storage_subtitle.clone()),
@@ -6143,6 +6683,7 @@ impl WalletPage {
             SettingsPage::RpcProviders => self.settings_providers(theme, window, cx),
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
+            SettingsPage::Signing => self.settings_signing(theme, window, cx),
             SettingsPage::Storage => self.settings_storage(theme, cx),
             SettingsPage::About => self.settings_about(theme, cx),
         };
@@ -6254,7 +6795,6 @@ impl WalletPage {
     ) -> Div {
         let accounts_count = self.settings.accounts_count.clone();
         let accounts_total = self.settings.accounts_total.clone();
-        let currency = self.money(cx);
         self.sync_switcher(session, cx);
         self.ensure_backup_check(cx);
         let s = &self.settings;
@@ -6282,6 +6822,9 @@ impl WalletPage {
             .read(cx)
             .view()
             .switcher;
+        // The display currency the totals are stated in (spec 072) — the
+        // web's switcher prints them the way the hero would.
+        let currency = resident::resident::<DisplayCurrency>(cx).read(cx).view();
         // "1 accounts · Total $0.75". The sum is over what is actually KNOWN —
         // an account with no cached figure contributes nothing rather than
         // making the sentence wait for it.
@@ -6301,7 +6844,7 @@ impl WalletPage {
             crate::wallet::fill(
                 &accounts_total,
                 "amount",
-                &currency.text(known_total, &self.locale),
+                &settings_live::account_total(known_total, Some(&currency), &self.locale),
             )
         ));
         let mut list = div().flex().flex_col();
@@ -6322,7 +6865,11 @@ impl WalletPage {
                     // converted, and obsolete since `Money` made the rule
                     // explicit: it converts only when the endpoint priced the
                     // code, and draws USD when it could not. No guess.
-                    gpui::SharedString::from(currency.text(entry.usd, &self.locale))
+                    gpui::SharedString::from(settings_live::account_total(
+                        entry.usd,
+                        Some(&currency),
+                        &self.locale,
+                    ))
                 });
             // The core's own index, not the loop's: it survives a display
             // reorder, which is exactly what invariant ⑦ is about.
@@ -6335,11 +6882,9 @@ impl WalletPage {
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
-                .child(crate::wallet::components::person_avatar(
-                    theme,
+                .child(crate::wallet::components::identicon_avatar(
                     &mut self.identicons,
                     &address,
-                    &row.account.name,
                     40.,
                 ))
                 .child(
@@ -6389,6 +6934,22 @@ impl WalletPage {
                         cx.notify();
                     }));
             }
+            // Taking ONE wallet off this device (2026-09-23). Its own click
+            // target, so it cannot be hit by somebody aiming at the row.
+            card = card.child(
+                div()
+                    .id(("switcher-remove", index as u64))
+                    .px(px(6.))
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .hover(|el| el.text_color(theme.fg_base))
+                    .child(self.strings.account_remove.clone())
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.removing_account = Some(index);
+                        cx.notify();
+                    })),
+            );
             list = list.child(card).child(div().h(px(1.)).bg(theme.divider));
         }
 
@@ -6403,11 +6964,10 @@ impl WalletPage {
                     .child(summary),
             )
             .child(list)
-            // The create / sign-in buttons need a route back INTO onboarding
-            // from a signed-in window, which is a navigation decision this cut
-            // does not make. Drawing them dead would be worse than not drawing
-            // them: a button that highlights and does nothing is a promise
-            // broken every time it is pressed.
+            // Onboarding over this wallet (spec 072): the root shows it while
+            // the session says an account is being added, and a new account
+            // established — or "back" — returns here.
+            .child(self.account_buttons(theme, true, cx))
             .child(self.settings_account_footer(
                 theme,
                 sign_out,
@@ -6422,8 +6982,6 @@ impl WalletPage {
     fn settings_account(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         let summary = settings_fixtures::accounts_summary(s);
-        let create = s.account_create.clone();
-        let sign_in = s.account_sign_in.clone();
         let sign_out = s.sign_out_button.clone();
         let sign_out_desc = s.sign_out_desc.clone();
         let erase_title = s.erase_title.clone();
@@ -6465,11 +7023,9 @@ impl WalletPage {
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
-                .child(crate::wallet::components::person_avatar(
-                    theme,
+                .child(crate::wallet::components::identicon_avatar(
                     &mut self.identicons,
                     &seed,
-                    &name,
                     40.,
                 ))
                 .child(
@@ -6512,7 +7068,6 @@ impl WalletPage {
             list = list.child(row).child(div().h(px(1.)).bg(theme.divider));
         }
 
-        let hover_accent = theme.accent_hover;
         div()
             .flex()
             .flex_col()
@@ -6524,45 +7079,7 @@ impl WalletPage {
                     .child(summary),
             )
             .child(list)
-            .child(
-                div()
-                    .flex()
-                    .gap(px(12.))
-                    .pt(px(24.))
-                    .child(
-                        div()
-                            .id("settings-create-account")
-                            .h(px(CONTACTS_BUTTON_H))
-                            .px(px(32.))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .bg(theme.accent)
-                            .hover(move |el| el.bg(hover_accent))
-                            .text_size(theme::text_row_title())
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(theme.fg_inverse)
-                            .child(create),
-                    )
-                    .child(
-                        div()
-                            .id("settings-sign-in-account")
-                            .h(px(CONTACTS_BUTTON_H))
-                            .px(px(32.))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .border_1()
-                            .border_color(theme.outline_strong)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(sign_in),
-                    ),
-            )
+            .child(self.account_buttons(theme, false, cx))
             .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
             .child(
                 div()
@@ -6632,7 +7149,7 @@ impl WalletPage {
                 cx,
             );
             if let Some(host) = self.signing_host.clone() {
-                host.update(cx, |host, _| host.sign_with(None));
+                host.update(cx, |host, cx| host.sign_with(None, cx));
             }
         }
         self.backup_for = Some(account.address.clone());
@@ -6646,6 +7163,7 @@ impl WalletPage {
                 public_key_hex: account.public_key_hex.clone(),
                 name: account.name.clone(),
                 transports: String::new(),
+                signer_origin: None,
             }]
         } else {
             account
@@ -6656,6 +7174,7 @@ impl WalletPage {
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.clone(),
                     transports: key.transports.clone(),
+                    signer_origin: key.signer_origin.clone(),
                 })
                 .collect()
         };
@@ -6796,6 +7315,10 @@ impl WalletPage {
             s.keys_provider_generic.clone(),
             s.keys_provider_security_key.clone(),
         );
+        // Spec 075: the fourth place a key can live, in the "Sign with"
+        // sheet's own words — the caption for a key behind a page, and the
+        // label on the line naming which page.
+        let trusted_signer = trusted_signer_words(s);
         let user_verified = s.keys_user_verified.clone();
         let labels = (
             s.keys_public_key.clone(),
@@ -6870,15 +7393,7 @@ impl WalletPage {
                     } else {
                         key.name.clone()
                     };
-                    let holder = if key.provider_name.is_empty() {
-                        match key.method.as_str() {
-                            "security_key" => lines.2.clone(),
-                            "hybrid" => lines.1.clone(),
-                            _ => lines.0.clone(),
-                        }
-                    } else {
-                        gpui::SharedString::from(key.provider_name.clone())
-                    };
+                    let holder = key_holder(key, &lines, &trusted_signer);
                     let body = key.public_key_hex.trim_start_matches("04");
                     let fingerprint = (body.len() >= 8)
                         .then(|| format!("{}…{}", &body[..4], &body[body.len() - 4..]));
@@ -6982,7 +7497,13 @@ impl WalletPage {
                     .filter(|part| !part.is_empty())
                     .collect::<Vec<_>>()
                     .join(" · ");
+                    // Spec 075: WHICH page, first, because where a key lives is
+                    // the one fact about it a person cannot look up elsewhere.
+                    // Empty for every other key, and an empty value is dropped
+                    // below — so no ordinary row grows a line.
+                    let signer_page = key_page(key);
                     let details: Vec<(gpui::SharedString, String, bool, bool)> = [
+                        (trusted_signer.clone(), signer_page.clone(), false, true),
                         (
                             labels.0.clone(),
                             if key.public_key_hex.is_empty() {
@@ -7006,7 +7527,11 @@ impl WalletPage {
                     .into_iter()
                     .filter(|(_, value, _, _)| !value.is_empty())
                     .collect();
-                    let expandable = !key.credential_id.is_empty();
+                    // A row with no credential id came from the device alone and
+                    // has nothing worth opening — unless it lives behind a
+                    // page, which is exactly the row whose whereabouts a person
+                    // wants to check when the registry is unreachable.
+                    let expandable = !key.credential_id.is_empty() || !signer_page.is_empty();
                     let is_open = self.keys_open.contains(&index);
                     let mut stateful = row.id(("settings-key-row", index));
                     if expandable {
@@ -7144,23 +7669,10 @@ impl WalletPage {
         let Some(account) = money::active_account() else {
             return;
         };
-        let params = serde_json::json!([{
-            "from": account.address,
-            "to": call.to,
-            "value": "0x0",
-            "data": call.data,
-        }]);
-        let request = crate::wallet::signing_host::IncomingRequest {
-            id: format!("vela-ethereum-backup-{}", crate::executor::now_ms()),
-            method: "eth_sendTransaction".to_owned(),
-            params_json: params.to_string(),
-            origin: "https://getvela.app".to_owned(),
-            transport_id: crate::wallet::signing_host::WALLET_TRANSPORT.to_owned(),
-            chain_id: call.chain_id,
-        };
+        let request = backup_request(&account.address, &call);
         // After it closes, ask again: the row should say what is true now.
         self.backup_for = None;
-        self.open_signing_request(&account, request, cx);
+        self.open_signing_request(&account, request, None, cx);
     }
 
     #[cfg(target_os = "linux")]
@@ -7169,6 +7681,65 @@ impl WalletPage {
         _call: vela_core::registry_backup::BackupCall,
         _cx: &mut Context<Self>,
     ) {
+    }
+
+    /// "Create a new account" / "Sign in to an existing account". Live, they
+    /// open onboarding over this wallet; on the design surfaces they are the
+    /// mock's picture.
+    fn account_buttons(&mut self, theme: &Theme, live: bool, cx: &mut Context<Self>) -> Div {
+        let s = &self.settings;
+        let hover_accent = theme.accent_hover;
+        let hover_outline = theme.bg_sunken;
+        let create = div()
+            .id("settings-create-account")
+            .h(px(CONTACTS_BUTTON_H))
+            .px(px(32.))
+            .rounded(px(12.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .bg(theme.accent)
+            .hover(move |el| el.bg(hover_accent))
+            .text_size(theme::text_row_title())
+            .font_weight(gpui::FontWeight::SEMIBOLD)
+            .text_color(theme.fg_inverse)
+            .child(s.account_create.clone());
+        let sign_in = div()
+            .id("settings-sign-in-account")
+            .h(px(CONTACTS_BUTTON_H))
+            .px(px(32.))
+            .rounded(px(12.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .border_1()
+            .border_color(theme.outline_strong)
+            .hover(move |el| el.bg(hover_outline))
+            .text_size(theme::text_row_title())
+            .text_color(theme.fg_base)
+            .child(s.account_sign_in.clone());
+        let (create, sign_in) = if live {
+            (
+                create.on_click(cx.listener(|this, _, _, cx| {
+                    this.close_switcher(cx);
+                    session::add_account(session::AddAccount::Create, cx);
+                })),
+                sign_in.on_click(cx.listener(|this, _, _, cx| {
+                    this.close_switcher(cx);
+                    session::add_account(session::AddAccount::SignIn, cx);
+                })),
+            )
+        } else {
+            (create, sign_in)
+        };
+        div()
+            .flex()
+            .gap(px(12.))
+            .pt(px(24.))
+            .child(create)
+            .child(sign_in)
     }
 
     /// Sign out and erase, shared by the live and mock account panels.
@@ -7219,9 +7790,10 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(sign_out_desc),
             )
-            // Spec 081 FR-017: this card had no handler from the day it was
-            // drawn, so the app's one irreversible control was decoration. It
-            // asks; `SettingsDialog::EraseDevice` confirms; `erase_device` acts.
+            // The one irreversible control asks first (spec 072 FR-010, and
+            // spec 081 FR-017 — it had no handler at all from the day it was
+            // drawn). It asks; `SettingsDialog::EraseDevice` confirms;
+            // `erase_device` acts.
             .child(danger_card(
                 theme,
                 erase_title,
@@ -7235,105 +7807,129 @@ impl WalletPage {
             ))
     }
 
-    /// DST2 — language, text size, theme, avatar style.
+    /// DST2 — language, text size, theme. (The avatar style is retired, spec
+    /// 074: every avatar is the identicon.)
+    ///
+    /// Live since 072: each control stores its choice under the key every Vela
+    /// shares and puts it in force on the next frame.
     fn settings_appearance(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         let language = s.language.clone();
-        // The locale this window is ACTUALLY in. This line was the mock's
-        // literal — it told a German reader their language was 简体中文, in a
-        // panel whose whole job is to say what the app is set to. The endonym
-        // comes from the core beside `SUPPORTED`, so the fifteen names are one
-        // list rather than one per client.
-        let language_value = gpui::SharedString::from(format!(
-            "{} · {}",
-            vela_core::i18n::resolve::endonym(&self.locale),
-            s.note_system
-        ));
         let scale_label = s.text_scale.clone();
         let theme_label = s.theme_title.clone();
-        let avatar_label = s.avatar_title.clone();
         let themes = [
             (Some(Icon::Sun), s.theme_light.clone()),
             (Some(Icon::Moon), s.theme_dark.clone()),
             (Some(Icon::Monitor), s.theme_auto.clone()),
         ];
-        let avatars = [
-            (None, s.avatar_initials.clone()),
-            (None, s.avatar_identicon.clone()),
-        ];
-        // Which theme cell reads as chosen follows the appearance the window is
-        // actually in — a settings screen that says "Light" while drawing dark
-        // is the one thing this row must never do.
-        let theme_index = match self.theme_mode() {
-            ThemeMode::Light => 0,
-            ThemeMode::Dark => 1,
-        };
 
-        let language_control = dropdown_trigger(theme, &mut self.icons, language_value);
-        let theme_control = segmented(theme, &mut self.icons, &themes, theme_index);
-
-        // Both of these were drawn and not wired: `segmented` and `text_scale`
-        // took no handler at all ("spec 023 is UI only", in the component's own
-        // doc), so the size thumb sat on a stop that meant nothing and the
-        // avatar segment claimed a setting the desktop did not have. They are
-        // live now, on the web's own store keys and words, so one person's one
-        // choice reads the same on both clients.
+        // Both the size stops and the theme segments were drawn and not wired
+        // before this (`segmented` and `text_scale` took no handler at all —
+        // "spec 023 is UI only", in the component's own doc), so the thumb sat
+        // on a stop that meant nothing. They are live below, on the web's own
+        // store keys and words, so one person's one choice reads the same on
+        // both clients.
         //
-        // The design surface keeps the drawing — there is no session there to
-        // hold a preference, and the gallery's job is to show the control, not
-        // to own it.
-        let design_surface = self.identity.is_none();
-        let scale_index = if design_surface {
-            appearance_prefs::TextScale::default().index()
-        } else {
-            appearance_prefs::text_scale().index()
-        };
-        let avatar_index = if design_surface {
-            appearance_prefs::AvatarStyle::default().index()
-        } else {
-            appearance_prefs::avatar_style().index()
-        };
-        let scale_control = if design_surface {
-            text_scale(theme, appearance_prefs::TEXT_SCALES.len(), scale_index)
-        } else {
-            text_scale_stops(
-                theme,
-                appearance_prefs::TEXT_SCALES.len(),
-                scale_index,
-                &mut |i, stop| {
-                    stop.id(ElementId::from(("text-scale-stop", i)))
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
-                            if let Some(scale) = appearance_prefs::TEXT_SCALES.get(i) {
-                                appearance_prefs::set_text_scale(*scale);
-                            }
-                            cx.notify();
-                        }))
-                        .into_any_element()
-                },
-            )
-        };
-        let avatar_control = if design_surface {
-            segmented(theme, &mut self.icons, &avatars, avatar_index)
-        } else {
-            segmented_cells(
+        // The avatar row main wired here is NOT revived: spec 074 retired the
+        // setting — every avatar is the identicon — and a control for a
+        // preference the app no longer has is the same lie as a control that
+        // does nothing.
+        if self.identity.is_none() {
+            let language_value = gpui::SharedString::from(format!("简体中文 · {}", s.note_system));
+            // Which theme cell reads as chosen follows the appearance the
+            // window is actually in — a settings screen that says "Light"
+            // while drawing dark is the one thing this row must never do.
+            let theme_index = match self.theme_mode() {
+                ThemeMode::Light => 0,
+                ThemeMode::Dark => 1,
+            };
+            let language_control = dropdown_trigger(theme, &mut self.icons, language_value);
+            let scale_control = text_scale(theme, 7, 3);
+            let theme_control = segmented(theme, &mut self.icons, &themes, theme_index);
+            return div()
+                .flex()
+                .flex_col()
+                .child(form_row(theme, language, language_control))
+                .child(form_row(theme, scale_label, scale_control))
+                .child(form_row(theme, theme_label, theme_control));
+        }
+
+        let prefs = crate::executor::preferences::current();
+        let pinned = crate::executor::preferences::pinned_language();
+        // What "follow the system" follows, by the locale it resolves to.
+        let system_language = vela_core::i18n::resolve_language(&crate::loc::system_tag()).language;
+        let page = cx.entity();
+
+        let language_value = settings_live::language_value(pinned.as_deref(), &system_language, s);
+        let menu = (self.settings_open_dropdown == Some("language")).then(|| {
+            let rows = settings_live::language_menu(pinned.as_deref(), &system_language, s);
+            let page = page.clone();
+            dropdown_menu_choices(
+                "language-menu",
                 theme,
                 &mut self.icons,
-                &avatars,
-                avatar_index,
-                &mut |i, cell| {
-                    cell.id(ElementId::from(("avatar-style", i)))
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
-                            if let Some(style) = appearance_prefs::AVATAR_STYLES.get(i) {
-                                appearance_prefs::set_avatar_style(*style);
-                            }
-                            cx.notify();
-                        }))
-                        .into_any_element()
+                &rows,
+                move |index, _, cx| {
+                    page.update(cx, |this, cx| {
+                        if let Some(word) = settings_live::picked_language(index) {
+                            crate::executor::preferences::set_language(word);
+                            this.relocalize();
+                        }
+                        this.settings_open_dropdown = None;
+                        cx.notify();
+                    });
                 },
             )
-        };
+        });
+        let trigger = dropdown_trigger(theme, &mut self.icons, language_value);
+        let language_control = div()
+            .id("settings-dropdown-language")
+            .relative()
+            .w_full()
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.settings_open_dropdown = if this.settings_open_dropdown == Some("language") {
+                    None
+                } else {
+                    Some("language")
+                };
+                cx.notify();
+            }))
+            .child(trigger)
+            .when_some(menu, |el, menu| el.child(deferred(menu).with_priority(1)));
+
+        let scale_control = text_scale_picks(
+            theme,
+            vela_core::prefs::TEXT_SCALE_LEVELS.len(),
+            settings_live::text_scale_index(prefs.text_scale),
+            {
+                let page = page.clone();
+                move |index, window, cx| {
+                    if let Some((level, _)) = vela_core::prefs::TEXT_SCALE_LEVELS.get(index) {
+                        crate::executor::preferences::set_text_scale(level);
+                    }
+                    // Every text on screen changes size, not only this page's.
+                    window.refresh();
+                    page.update(cx, |_, cx| cx.notify());
+                }
+            },
+        );
+        let theme_control = segmented_picks(
+            "settings-theme",
+            theme,
+            &mut self.icons,
+            &themes,
+            settings_live::segment_of(&settings_live::THEME_SEGMENTS, prefs.theme),
+            move |index, window, cx| {
+                crate::executor::preferences::set_theme(settings_live::THEME_SEGMENTS[index]);
+                // "Follow System" reads the window's appearance again.
+                let mode = ThemeMode::detect(window);
+                page.update(cx, |this, cx| {
+                    this.mode = mode;
+                    cx.notify();
+                });
+            },
+        );
 
         div()
             .flex()
@@ -7341,7 +7937,6 @@ impl WalletPage {
             .child(form_row(theme, language, language_control))
             .child(form_row(theme, scale_label, scale_control))
             .child(form_row(theme, theme_label, theme_control))
-            .child(form_row(theme, avatar_label, avatar_control))
     }
 
     /// What the 货币 row shows — the core's committed currency for a real
@@ -7518,9 +8113,6 @@ impl WalletPage {
         }
         col
     }
-
-    /// A format row's pick, kept for the next launch. Row 0 of every menu is
-    /// "Automatic"; the rest name the presets in the menu's own order.
     fn pick_format(&mut self, id: &'static str, index: usize) {
         match id {
             "number" => format_prefs::set_number(settings_live::picked_number(index)),
@@ -7664,39 +8256,21 @@ impl WalletPage {
         let rpc_focus = self.endpoint_focus(OVERRIDE_FOCUS_BASE + index * 2, cx);
         let explorer_focus = self.endpoint_focus(OVERRIDE_FOCUS_BASE + index * 2 + 1, cx);
 
-        let edit = move |field: NetOverrideField| {
+        // A keystroke is a draft the core re-probes; leaving the field (or
+        // Enter) is the save, behind its chain-id gate. Until 072 both went on
+        // every keystroke, so the wrong-chain refusal ran against half a URL.
+        let page = cx.entity();
+        let rpc_slot = OVERRIDE_FOCUS_BASE + index * 2;
+        let edit = |slot: usize, field: NetOverrideField| {
+            let page = page.clone();
             move |text: String, _window: &mut Window, cx: &mut gpui::App| {
-                let saved = resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(
-                        NetEvent::OverrideFieldEdited {
-                            chain_id,
-                            field,
-                            value: text.clone(),
-                        },
-                        cx,
-                    );
-                    resident.dispatch(NetEvent::OverrideBlurred { chain_id }, cx);
-                    // Refused endpoints do not count as a fix. `rpc_chain_mismatch`
-                    // is the core's own verdict on the one refusal that matters —
-                    // an endpoint answering for another chain.
-                    resident
-                        .view()
-                        .networks
-                        .iter()
-                        .find(|row| row.chain_id == chain_id)
-                        .is_none_or(|row| row.rpc_chain_mismatch.is_none())
-                });
-                if saved && field == NetOverrideField::Rpc {
-                    // The hero has this chain marked failed and its own retry is
-                    // throttled like any other fetch. The person just repaired
-                    // the endpoint by hand, which is the moment the web clears
-                    // the failure and forces one read.
-                    crate::executor::balance_dashboard::dispatch(
-                        vela_core::app::balance_dashboard::Event::FixChainResolved { chain_id },
-                        cx,
-                    );
-                    crate::executor::balance_dashboard::refresh(cx);
-                }
+                Self::edit_field(
+                    &page,
+                    slot,
+                    settings_live::FieldCommit::Override { chain_id, field },
+                    text,
+                    cx,
+                );
             }
         };
 
@@ -7712,7 +8286,8 @@ impl WalletPage {
                 refused.then_some(Tone::Error),
                 &rpc_focus,
                 window,
-                edit(NetOverrideField::Rpc),
+                edit(rpc_slot, NetOverrideField::Rpc),
+                Self::enter_leaves(&page),
             ),
             editable_url_field(
                 ElementId::from(("override-explorer", index)),
@@ -7725,7 +8300,8 @@ impl WalletPage {
                 None,
                 &explorer_focus,
                 window,
-                edit(NetOverrideField::Explorer),
+                edit(rpc_slot + 1, NetOverrideField::Explorer),
+                Self::enter_leaves(&page),
             ),
         )
     }
@@ -7804,6 +8380,7 @@ impl WalletPage {
             // last time somebody typed.
             self.settings_opened(SettingsProbe::Providers, cx);
             let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+            let page = cx.entity();
             for (i, provider) in view.providers.iter().enumerate() {
                 let badge = if provider.has_key {
                     pill(Tone::Ok, self.settings.provider_connected.clone())
@@ -7834,6 +8411,23 @@ impl WalletPage {
                                         .child(settings_live::provider_name(id)),
                                 )
                                 .child(status_pill(theme, &badge))
+                                // No key yet: where to get one, as the web
+                                // offers — the page opens in the browser.
+                                .when(!provider.has_key, |el| {
+                                    let url = settings_live::provider_key_url(id);
+                                    el.child(
+                                        div()
+                                            .id(ElementId::from(("provider-get-key", i)))
+                                            .cursor_pointer()
+                                            .text_size(theme::text_row_sub())
+                                            .text_color(theme.info_base)
+                                            .on_click(move |_, _, cx| cx.open_url(url))
+                                            .child(SharedString::from(format!(
+                                                "{} →",
+                                                self.settings.provider_get_key
+                                            ))),
+                                    )
+                                })
                                 // The explicit re-run, on the row that carries
                                 // the verdict it rewrites. A key blur already
                                 // tests; this is for the person who changed
@@ -7880,25 +8474,22 @@ impl WalletPage {
                             None,
                             &focus,
                             window,
-                            move |text: String, _window: &mut Window, cx: &mut gpui::App| {
-                                let entity = resident::resident::<NetworkAdmin>(cx);
-                                entity.update(cx, |resident, cx| {
-                                    // Edited, then blurred — the blur is what
-                                    // persists, and it also DROPS a provider
-                                    // whose key was cleared (invariant ⑦).
-                                    resident.dispatch(
-                                        NetEvent::ProviderKeyEdited {
-                                            provider: id,
-                                            value: text.clone(),
-                                        },
+                            {
+                                // A keystroke is a draft; leaving the field is
+                                // what persists it — and what DROPS a provider
+                                // whose key was cleared (invariant ⑦).
+                                let page = page.clone();
+                                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                                    Self::edit_field(
+                                        &page,
+                                        ENDPOINT_FOCUS_COUNT + i,
+                                        settings_live::FieldCommit::ProviderKey(id),
+                                        text,
                                         cx,
                                     );
-                                    resident.dispatch(
-                                        NetEvent::ProviderKeyBlurred { provider: id },
-                                        cx,
-                                    );
-                                });
+                                }
                             },
+                            Self::enter_leaves(&page),
                         )),
                 );
             }
@@ -7990,6 +8581,7 @@ impl WalletPage {
             // keystroke re-probed it.
             self.settings_opened(SettingsProbe::Endpoints, cx);
             let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+            let page = cx.entity();
             for (i, endpoint) in view.endpoints.iter().enumerate() {
                 let (label, hint) = copy.get(i).cloned().unwrap_or_default();
                 let badge = settings_live::endpoint_badge(&endpoint.health, &self.settings);
@@ -8008,26 +8600,22 @@ impl WalletPage {
                     settings_live::endpoint_tone(&endpoint.health),
                     &focus,
                     window,
-                    move |text: String, _window: &mut Window, cx: &mut gpui::App| {
-                        let entity = resident::resident::<NetworkAdmin>(cx);
-                        entity.update(cx, |resident, cx| {
-                            // Edited, then blurred. The desktop has no blur
-                            // event of its own yet, and the core's blur is what
-                            // PERSISTS — so a keystroke that never blurred
-                            // would be a setting the next launch has never
-                            // heard of. Re-probing per keystroke is the cost;
-                            // the core debounces nothing here and neither does
-                            // the RN screen.
-                            resident.dispatch(
-                                NetEvent::EndpointEdited {
-                                    field,
-                                    value: text.clone(),
-                                },
+                    {
+                        // A keystroke is a draft; leaving the field (or Enter)
+                        // is the core's blur, which persists and re-probes —
+                        // once, for the whole URL, not for every prefix of it.
+                        let page = page.clone();
+                        move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                            Self::edit_field(
+                                &page,
+                                i,
+                                settings_live::FieldCommit::Endpoint(field),
+                                text,
                                 cx,
                             );
-                            resident.dispatch(NetEvent::EndpointBlurred { field }, cx);
-                        });
+                        }
                     },
+                    Self::enter_leaves(&page),
                 ));
             }
             return self.endpoints_footer(col, theme, cx);
@@ -8092,27 +8680,30 @@ impl WalletPage {
                 .pt(px(16.))
                 .child(if live {
                     reset
-                        .on_click(cx.listener(|_, _, _, cx| {
-                            resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(NetEvent::ResetEndpointsToDefaults, cx);
-                            });
+                        // Asks first (FR-010): every address the person typed
+                        // goes.
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.confirm = Some(Confirm::ResetEndpoints);
                             cx.notify();
                         }))
                         .into_any_element()
                 } else {
                     reset.into_any_element()
                 })
-                .child(
+                .child(panels::clickable(
+                    "settings-endpoints-guide",
+                    live.then(|| {
+                        Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            cx.open_url(crate::onboarding_flow::SELF_HOSTING_URL);
+                        }) as panels::Click
+                    }),
                     div()
                         .id("endpoints-self-hosting-guide")
                         .cursor_pointer()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.info_base)
-                        .child(self.settings.endpoints_guide.clone())
-                        .on_click(|_, _, cx| {
-                            cx.open_url(crate::onboarding_flow::SELF_HOSTING_URL);
-                        }),
-                ),
+                        .child(self.settings.endpoints_guide.clone()),
+                )),
         )
     }
 
@@ -8194,58 +8785,262 @@ impl WalletPage {
         div().flex().flex_col().max_w(px(560.)).child(list)
     }
 
-    fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+    /// How this device signs by default (spec 071): the five ways in the
+    /// core's order, the stored one ticked — choosing commits and persists at
+    /// once (`sign_pref`) — and the Trusted Signer's page under them. Every
+    /// signing sheet STARTS at the choice; none writes back to it.
+    fn settings_signing(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
+        use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
+        let view = resident::resident::<SignPref>(cx).read(cx).view();
         let s = &self.settings;
-        // Measured ONCE per draw and shared by the bar, the rows and the
-        // clear dialogs: two measurements of the same document, taken a
-        // moment apart, would let the bar disagree with the rows under it.
-        let measured = self
-            .identity
-            .is_some()
-            .then(crate::executor::device_storage::measure);
-        // The three-colour bar. It was `STORAGE_SEGMENTS` — the fixture's
-        // 50/30/20 — on every machine, which is the class of defect this
-        // whole panel was fixed for: a picture of a measurement. iOS and
-        // Android have divided it by `bytes(of:)` since spec 047.
-        let segments = match measured.as_ref() {
-            Some(report) => {
-                use crate::executor::device_storage::Group;
-                #[allow(clippy::cast_precision_loss)]
-                let share = |group: Group| report.bytes_of(group) as f32;
-                let total = share(Group::User) + share(Group::Cache) + share(Group::Sessions);
-                // Nothing stored yet: the fixture's proportions are a drawing,
-                // not a claim about an empty wallet, so the bar keeps them
-                // rather than dividing by zero.
-                if total <= 0.0 {
-                    settings_fixtures::STORAGE_SEGMENTS.to_vec()
-                } else {
-                    let colours = settings_fixtures::STORAGE_SEGMENTS;
-                    vec![
-                        (share(Group::User) / total, colours[0].1),
-                        (share(Group::Cache) / total, colours[1].1),
-                        (share(Group::Sessions) / total, colours[2].1),
-                    ]
-                }
-            }
-            None => settings_fixtures::STORAGE_SEGMENTS.to_vec(),
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .p(px(4.))
+            .rounded(px(12.))
+            .bg(theme.bg_sunken);
+        for (index, method) in view.offered.iter().enumerate() {
+            let name = s
+                .sign_with_options
+                .iter()
+                .find(|(id, _)| id == method)
+                .map_or_else(
+                    || SharedString::from(method.clone()),
+                    |(_, title)| title.clone(),
+                );
+            // The one choice that is not a place a passkey is says what it is.
+            let line = (method == vela_core::trusted_signer::METHOD)
+                .then(|| s.trusted_signer_body.clone());
+            let selected = *method == view.method;
+            let chosen = method.clone();
+            list = list.child(
+                div()
+                    .id(ElementId::from(("settings-sign-with", index)))
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .px(px(12.))
+                    .py(px(10.))
+                    .rounded(px(10.))
+                    .cursor_pointer()
+                    .when(selected, |row| row.bg(theme.bg_raised))
+                    .hover(|row| row.bg(theme.bg_raised))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        let method = chosen.clone();
+                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                            pref.dispatch(SignPrefEvent::MethodChosen { method }, cx);
+                        });
+                        cx.notify();
+                    }))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .text_color(if selected {
+                                        theme.accent
+                                    } else {
+                                        theme.fg_base
+                                    })
+                                    .child(name),
+                            )
+                            .children(line.map(|line| {
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_subtle)
+                                    .child(line)
+                            })),
+                    )
+                    .child(div().w(px(16.)).children(selected.then(|| {
+                        icon_img(&mut self.icons, Icon::Check, false, theme.accent, 16.)
+                    }))),
+            );
+        }
+
+        // The page. Its badge is where it is — "Official", or the host a
+        // person chose — and the field holds what they are typing until Save
+        // hands it to the core, which normalises it or says why not.
+        let s = &self.settings;
+        let badge = pill(
+            Tone::Neutral,
+            if view.signer_url_is_default {
+                s.signer_page_official.clone()
+            } else {
+                SharedString::from(page_host(&view.signer_url))
+            },
+        );
+        let refused = match view.signer_url_error.as_deref() {
+            Some("insecure") => Some(s.signer_page_insecure.clone()),
+            Some(_) => Some(s.signer_page_invalid.clone()),
+            None => None,
         };
-        // Live since 031. The panel told everybody 2.4 MB / 216 records, and a
-        // person deciding whether to clear a cache deserves their own number.
-        let (amount, unit, records) = if self.identity.is_some() {
-            let (bytes, records) = crate::executor::storage::usage();
-            let (amount, unit) = human_bytes(bytes);
-            (amount, unit, records)
-        } else {
-            (
+        let (title, subtitle, foreign, save, reset) = (
+            s.signer_page_title.clone(),
+            s.signer_page_subtitle.clone(),
+            s.signer_page_foreign.clone(),
+            s.signer_page_save.clone(),
+            s.signer_page_reset.clone(),
+        );
+        let focus = self
+            .signer_page_focus
+            .get_or_insert_with(|| cx.focus_handle())
+            .clone();
+        let typed = self
+            .signer_page_draft
+            .clone()
+            .unwrap_or_else(|| view.signer_url.clone());
+        let page = cx.entity();
+        let mut section = div()
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .child(editable_url_field(
+                "settings-signer-page",
+                theme,
+                Some(title),
+                &typed,
+                SharedString::from(vela_core::trusted_signer::DEFAULT_SIGNER_URL),
+                Some(&badge),
+                Some(subtitle),
+                refused.is_some().then_some(Tone::Error),
+                &focus,
+                window,
+                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                    page.update(cx, |page, cx| {
+                        page.signer_page_draft = Some(text);
+                        cx.notify();
+                    });
+                },
+                // Saved by its own button, which asks the core; Enter does
+                // not stand in for it.
+                |_, _| {},
+            ));
+        if let Some(refused) = refused {
+            section = section.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.error_base)
+                    .child(refused),
+            );
+        }
+        // A page elsewhere can show a request but not sign it: said beside
+        // the address rather than discovered at the worst moment (R5).
+        if !view.signer_uses_wallet_passkeys {
+            section = section.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.warning_base)
+                    .child(foreign),
+            );
+        }
+        // Drawn like the networks panel's header action: a settings panel has
+        // no primary CTA, and the accent means "this moves the money".
+        let mut actions = div().flex().items_center().gap(px(16.)).child(
+            div()
+                .id("settings-signer-page-save")
+                .h(px(36.))
+                .px(px(16.))
+                .rounded(px(10.))
+                .flex()
+                .flex_none()
+                .items_center()
+                .cursor_pointer()
+                .bg(theme.bg_raised)
+                .border_1()
+                .border_color(theme.divider)
+                .hover(|el| el.bg(theme.bg_sunken))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(save)
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    let text = page
+                        .signer_page_draft
+                        .clone()
+                        .unwrap_or_else(|| typed.clone());
+                    let stored = resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                        pref.dispatch(SignPrefEvent::SignerUrlSubmitted { text }, cx);
+                        pref.view().signer_url_error.is_none()
+                    });
+                    // Taken: the field shows the page as the core stored it.
+                    // Refused: what was typed stays, under its reason.
+                    if stored {
+                        page.signer_page_draft = None;
+                    }
+                    cx.notify();
+                })),
+        );
+        if !view.signer_url_is_default {
+            actions = actions.child(
+                div()
+                    .id("settings-signer-page-reset")
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|page, _, _, cx| {
+                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                            pref.dispatch(SignPrefEvent::SignerUrlReset, cx);
+                        });
+                        page.signer_page_draft = None;
+                        cx.notify();
+                    }))
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::RefreshCw,
+                        false,
+                        theme.accent,
+                        14.,
+                    ))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.accent)
+                            .child(reset),
+                    ),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(32.))
+            .max_w(px(560.))
+            .child(list)
+            .child(section.child(actions))
+    }
+
+    fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        // Live since 031; from the core's catalog since 072 — the rows, which
+        // key is whose, what a cache is — with this device's own numbers.
+        let live = self.identity.is_some();
+        let preset = format_prefs::current().number;
+        let report = live.then(crate::executor::device_storage::measure);
+        let s = &self.settings;
+        let (amount, unit, count, segments) = match &report {
+            Some(report) => {
+                let (amount, unit) = settings_live::bytes_text(report.total_bytes, preset);
+                (
+                    amount,
+                    unit,
+                    report.key_count,
+                    settings_live::storage_segments(report),
+                )
+            }
+            None => (
                 gpui::SharedString::from(settings_fixtures::STORAGE_AMOUNT),
                 gpui::SharedString::from(settings_fixtures::STORAGE_UNIT),
-                settings_fixtures::STORAGE_RECORDS,
-            )
+                settings_fixtures::STORAGE_RECORDS as usize,
+                settings_fixtures::STORAGE_SEGMENTS,
+            ),
         };
         let summary = gpui::SharedString::from(crate::wallet::fill(
             &s.storage_summary,
             "count",
-            &records.to_string(),
+            &count.to_string(),
         ));
         let mut col = div()
             .flex()
@@ -8278,48 +9073,167 @@ impl WalletPage {
                     ),
             )
             .child(storage_bar(theme, &segments));
-        let live = measured.is_some();
-        let groups = match measured.as_ref() {
-            Some(report) => settings_live::storage_groups(&self.settings, report),
-            None => settings_fixtures::storage_groups(&self.settings),
+
+        let Some(report) = report else {
+            // The design surfaces: the mock's three groups, drawn and inert.
+            for group in settings_fixtures::storage_groups(&self.settings) {
+                let action = group.action.clone();
+                col = col.child(storage_group(theme, &group));
+                if let Some(action) = action {
+                    col = col.child(
+                        div()
+                            .pt(px(16.))
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.info_base)
+                            .child(action),
+                    );
+                }
+            }
+            return col;
         };
+
         let page = cx.entity();
-        let on_clear: Option<Rc<dyn Fn(&'static str, &mut Window, &mut gpui::App)>> =
-            live.then(|| {
-                let page = page.clone();
-                Rc::new(
-                    move |id: &'static str, _: &mut Window, cx: &mut gpui::App| {
-                        page.update(cx, |this, cx| {
-                            this.settings_dialog = Some(SettingsDialog::ClearStorage(Some(id)));
+        for (key, group) in
+            ["storage-user", "storage-cache"]
+                .into_iter()
+                .zip(settings_live::storage_groups(
+                    &report,
+                    &self.settings,
+                    preset,
+                ))
+        {
+            // Your data asks first — it cannot come back. A cache clears at
+            // once: it rebuilds on its own, and asking would only teach a
+            // person to click through the questions that matter.
+            let actions = group
+                .items
+                .iter()
+                .map(|item| {
+                    let (page, id, destructive) = (page.clone(), item.id, item.destructive);
+                    Some(Box::new(
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            page.update(cx, |this, cx| {
+                                if destructive {
+                                    this.confirm = Some(Confirm::ClearItem(id));
+                                    cx.notify();
+                                } else {
+                                    this.clear_storage_row(id, cx);
+                                }
+                            });
+                        },
+                    ) as panels::Click)
+                })
+                .collect();
+            let clear_all = group.action.clone();
+            col = col.child(storage_group_with(key, theme, &group, actions));
+            if let Some(clear_all) = clear_all {
+                col = col.child(panels::clickable(
+                    "storage-clear-caches",
+                    Some(Box::new(cx.listener(
+                        |this, _: &gpui::ClickEvent, _, cx| {
+                            this.confirm = Some(Confirm::ClearCaches);
                             cx.notify();
-                        });
-                    },
-                ) as Rc<dyn Fn(&'static str, &mut Window, &mut gpui::App)>
-            });
-        for group in groups {
-            let action = group.action.clone();
-            col = col.child(storage_group(theme, &group, on_clear.clone()));
-            if let Some(action) = action {
-                let hover = theme.info_base.opacity(0.7);
-                col = col.child(
+                        },
+                    ))),
                     div()
-                        .id("storage-clear-all")
                         .pt(px(16.))
                         .text_size(theme::text_row_sub())
                         .text_color(theme.info_base)
-                        .when(live, |el| {
-                            el.cursor_pointer()
-                                .hover(move |el| el.text_color(hover))
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.settings_dialog = Some(SettingsDialog::ClearStorage(None));
-                                    cx.notify();
-                                }))
-                        })
-                        .child(action),
-                );
+                        .child(clear_all),
+                ));
             }
         }
-        col
+        // The connections group is the browser machine's list, live: one row
+        // per connected site, each with its own Disconnect — the web's
+        // `withLiveConnections`.
+        col.child(self.storage_connections(theme, cx))
+    }
+
+    /// Settings → Storage → Connections, from the browser machine.
+    ///
+    /// A revoke here is the same event the connection panel sends: the grant
+    /// leaves the file AND the live session, and any open page of that site
+    /// hears `accountsChanged []` and `disconnect`. "Disconnect all" is the
+    /// Storage clear, and reaches the live session too (spec 070 FR-017).
+    /// Both ask first (spec 072).
+    fn storage_connections(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        let host = self.browser_host(cx);
+        let sites = host.read(cx).view.sites.clone();
+        let s = &self.settings;
+        let page = cx.entity();
+        let revoke_all = || -> Option<panels::Click> {
+            let page = page.clone();
+            Some(Box::new(
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    page.update(cx, |this, cx| {
+                        this.confirm = Some(Confirm::DisconnectAll);
+                        cx.notify();
+                    });
+                },
+            ))
+        };
+        if sites.is_empty() {
+            // Nothing connected: the one row, saying so. Its action has
+            // nothing to do and is not armed.
+            let group = settings_fixtures::StorageGroup {
+                label: s.storage_connections.clone(),
+                action: None,
+                items: vec![settings_fixtures::StorageItem {
+                    id: "dapps",
+                    label: s.item_dapps.clone(),
+                    meta: SharedString::from(crate::wallet::fill(&s.count_sites, "count", "0")),
+                    action: s.storage_disconnect_all.clone(),
+                    destructive: true,
+                }],
+            };
+            return storage_group_with("storage-sessions", theme, &group, vec![None]);
+        }
+        let group = settings_fixtures::StorageGroup {
+            label: s.storage_connections.clone(),
+            action: None,
+            items: sites
+                .iter()
+                .map(|site| settings_fixtures::StorageItem {
+                    id: "dapps",
+                    label: signing_live::dapp_identity(&site.origin).0,
+                    meta: crate::contacts::model::shorten(&site.address),
+                    // Singular: this row cuts off ONE site. "Disconnect all"
+                    // on a row that disconnects one is the label somebody
+                    // taps meaning something else.
+                    action: self.explore.disconnect.clone(),
+                    destructive: true,
+                })
+                .collect(),
+        };
+        let actions = sites
+            .iter()
+            .map(|site| {
+                let (page, origin) = (page.clone(), site.origin.clone());
+                Some(Box::new(
+                    move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                        page.update(cx, |this, cx| this.revoke_site(origin.clone(), cx));
+                    },
+                ) as panels::Click)
+            })
+            .collect();
+        div()
+            .flex()
+            .flex_col()
+            .child(storage_group_with(
+                "storage-sessions",
+                theme,
+                &group,
+                actions,
+            ))
+            .child(panels::clickable(
+                "storage-disconnect-all",
+                revoke_all(),
+                div()
+                    .pt(px(16.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.error_base)
+                    .child(s.storage_disconnect_all.clone()),
+            ))
     }
 
     /// What one 清除 is about, in the row's own words.
@@ -8502,10 +9416,6 @@ impl WalletPage {
             ),
             SettingsDialog::FixRpc => (s.rpc_fix_title.clone(), None),
             SettingsDialog::EraseDevice => (s.erase_title.clone(), Some(s.erase_subtitle.clone())),
-            SettingsDialog::ClearStorage(id) => {
-                let (title, body, _, _) = self.clear_storage_target(id);
-                (title, Some(body))
-            }
         };
 
         let body = match kind {
@@ -8520,7 +9430,6 @@ impl WalletPage {
                 _ => self.settings_fix_rpc_body(theme),
             },
             SettingsDialog::EraseDevice => self.settings_erase_body(theme, cx),
-            SettingsDialog::ClearStorage(id) => self.settings_clear_storage_body(theme, id, cx),
         };
 
         let mut header = div()
@@ -8684,6 +9593,8 @@ impl WalletPage {
                         resident.dispatch(NetEvent::SearchInput { query: text }, cx);
                     });
                 },
+                // The search runs as it is typed; there is nothing to commit.
+                |_, _| {},
             ));
 
         // The suggestions the index answered with. Each one is a click that
@@ -8927,6 +9838,8 @@ impl WalletPage {
                     resident.dispatch(NetEvent::CustomRpcEdited { value: text }, cx);
                 });
             },
+            // A draft the wizard's own Add button commits.
+            |_, _| {},
         ));
 
         // The CTA renders only when the core says it may. `can_add` is its
@@ -9118,17 +10031,26 @@ impl WalletPage {
         let meta = settings_fixtures::chain_meta(s, u64::from(chain_id));
 
         let mut chips = div().flex().flex_wrap().gap(px(8.));
-        for provider in settings_fixtures::RPC_PROVIDER_LINKS {
+        for (index, (provider, url)) in settings_fixtures::RPC_PROVIDER_LINKS
+            .into_iter()
+            .enumerate()
+        {
+            // Each names a place to get a working endpoint, and goes there.
+            let hover = theme.outline_strong;
             chips = chips.child(
                 div()
+                    .id(("rpc-fix-provider", index))
                     .px(px(12.))
                     .py(px(8.))
                     .rounded(px(8.))
+                    .cursor_pointer()
                     .bg(theme.bg_raised)
                     .border_1()
                     .border_color(theme.divider)
+                    .hover(move |el| el.border_color(hover))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
+                    .on_click(move |_, _, cx| cx.open_url(url))
                     .child(provider),
             );
         }
@@ -9214,7 +10136,7 @@ impl WalletPage {
         let hover_accent = theme.accent_hover;
 
         let mut chips = div().flex().flex_wrap().gap(px(8.));
-        for name in settings_fixtures::RPC_PROVIDER_LINKS {
+        for (name, _) in settings_fixtures::RPC_PROVIDER_LINKS {
             chips = chips.child(
                 div()
                     .px(px(12.))
@@ -9309,100 +10231,6 @@ impl WalletPage {
             )
     }
 
-    /// 抹除此设备, asked before it happens (spec 081 FR-017).
-    ///
-    /// Four things, in the order somebody deciding needs them: what happens,
-    /// what is NOT lost — the passkey lives with the person's passkey
-    /// provider, and nothing on this machine can reach it, so the wallet comes
-    /// back at the same address — what IS lost, and only then the two buttons.
-    /// The red one is not the default focus and is not first on the pointer's
-    /// path out of the dialog.
-    /// One 清除, asked before it happens.
-    ///
-    /// The question is already on the page — the row's label, the group's
-    /// sentence about what that group means, the row's own action word — so no
-    /// new sentence is written for it. Same composition as iOS's sheet.
-    fn settings_clear_storage_body(
-        &mut self,
-        theme: &Theme,
-        id: Option<&'static str>,
-        cx: &mut Context<Self>,
-    ) -> Div {
-        let (_, _, confirm, destructive) = self.clear_storage_target(id);
-        let cancel = self.settings.erase_cancel.clone();
-        // How much goes, measured now rather than when the page was drawn.
-        let report = crate::executor::device_storage::measure();
-        let gone = match id {
-            Some(id) => report.item(id).map_or(0, |item| item.bytes),
-            None => report.bytes_of(crate::executor::device_storage::Group::Cache),
-        };
-        // How much this frees, and nothing else: the title already names the
-        // row and the subtitle already says what the group is.
-        let detail = gpui::SharedString::from(settings_live::human_size_public(gone));
-        let tone = if destructive {
-            theme.error_base
-        } else {
-            theme.accent
-        };
-
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(detail),
-            )
-            .child(
-                div()
-                    .id("settings-clear-storage-confirm")
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(tone)
-                    .text_size(theme::text_row_title())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_inverse)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        match id {
-                            Some(id) => {
-                                crate::executor::device_storage::clear(id);
-                            }
-                            None => {
-                                crate::executor::device_storage::clear_caches();
-                            }
-                        }
-                        this.settings_dialog = None;
-                        cx.notify();
-                    }))
-                    .child(confirm),
-            )
-            .child(
-                div()
-                    .id("settings-clear-storage-cancel")
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .border_1()
-                    .border_color(theme.outline_strong)
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_base)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.settings_dialog = None;
-                        cx.notify();
-                    }))
-                    .child(cancel),
-            )
-    }
-
     fn settings_erase_body(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         let desc = s.erase_desc.clone();
@@ -9470,49 +10298,6 @@ impl WalletPage {
                 }))
                 .child(cancel),
         )
-    }
-
-    /// Erase, verify, and only then end the session (spec 081 FR-017,
-    /// `contracts/erase-device.md`).
-    ///
-    /// The order is the contract's and the reason is the whole feature:
-    ///
-    /// 1. **Sweep** every `vela.` key in the state document but the keep-list
-    ///    — a prefix rule, so a key a future machine writes is erased on the
-    ///    day it is first written rather than the day somebody remembers to
-    ///    add it to a list.
-    /// 2. **Forget the browser.** The in-app web view keeps every visited
-    ///    dApp's cookies, localStorage and cache on the platform's own store,
-    ///    which nothing in `executor::storage` can reach. Best-effort: there
-    ///    is no portable way to ask without a live view.
-    /// 3. **Verify by re-reading.** `erase_all` re-enumerates; a non-empty
-    ///    answer means data is still here.
-    /// 4. **End the session — CONFIRMED.** `sign_out` alone only opens the
-    ///    confirmation dialog (`session.rs`), so a wallet erased with it would
-    ///    sit in a half-signed-in state with a modal over a wiped machine.
-    ///    Both events, so the app restarts as new.
-    ///
-    /// On failure the person stays signed in, on this dialog, with what
-    /// survived named in its own callout.
-    fn erase_device(&mut self, cx: &mut Context<Self>) {
-        let survivors = match crate::executor::storage::erase_all() {
-            Ok(survivors) => survivors,
-            // A storage fault is a failed erase, said in the same words as a
-            // survivor: something is still here.
-            Err(error) => vec![error.to_string()],
-        };
-        if !crate::webview::clear_browsing_data() {
-            eprintln!("[vela-wallet] erase: no web view to clear; browsing data untouched");
-        }
-        if survivors.is_empty() {
-            self.erase_failed = None;
-            self.close_settings_dialog(cx);
-            session::sign_out(cx);
-            session::sign_out_confirmed(cx);
-        } else {
-            self.erase_failed = Some(survivors);
-        }
-        cx.notify();
     }
 
     // -- column 2: explore (spec 022 DE1–DE4) --------------------------------
@@ -9591,6 +10376,9 @@ impl WalletPage {
     /// opinion about where a person just went.
     fn close_browser_tab(&mut self, id: &str, cx: &mut Context<Self>) {
         let resident = resident::resident::<ExploreSites>(cx);
+        // Only the tab on screen has a document behind it: the others are
+        // URLs the one webview will load when somebody picks them.
+        let was_shown = resident.read(cx).view().selected_tab.as_deref() == Some(id);
         resident.update(cx, |resident, cx| {
             resident.dispatch(
                 vela_core::app::explore_sites::Event::TabClosed { id: id.to_owned() },
@@ -9604,6 +10392,8 @@ impl WalletPage {
             .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
             .and_then(|tab| tab.url.clone());
         match next {
+            // The neighbour's page replaces this one, and its hello is what
+            // retires the closed page's document in the core.
             Some(url) => {
                 self.browsing = true;
                 self.browser_home = url.clone();
@@ -9611,9 +10401,33 @@ impl WalletPage {
                 crate::webview::navigate(&url);
             }
             // Nothing left, or a start-page tab: the wallet's own screen.
-            None => self.browsing = false,
+            None => {
+                self.browsing = false;
+                if was_shown {
+                    self.close_browser_page(cx);
+                }
+            }
         }
         cx.notify();
+    }
+
+    /// The page on screen is closed, not merely hidden: its requests are
+    /// settled (4900), a sheet showing one of them closes, and the document
+    /// stops running. Hiding the webview alone would leave the page alive and
+    /// able to ask for things nobody can see.
+    fn close_browser_page(&mut self, cx: &mut Context<Self>) {
+        if let Some(host) = self.browser_host.clone() {
+            host.update(cx, |host, cx| {
+                host.dispatch(
+                    DbrEvent::TabClosed {
+                        tab: BROWSER_TAB.to_owned(),
+                    },
+                    cx,
+                );
+            });
+        }
+        #[cfg(not(target_os = "linux"))]
+        crate::webview::navigate("about:blank");
     }
 
     /// The browser column: tab strip, toolbar, then either the start page or
@@ -9696,22 +10510,71 @@ impl WalletPage {
             actions,
         );
         let identity = self.identity();
+        // A REAL page, in a real session. The mock keeps drawing for the
+        // gallery and for a window nobody has signed in to, which is the same
+        // fork every other live surface takes — and it is what keeps
+        // `sweep-gallery.sh` from opening a webview per state.
+        #[cfg(not(target_os = "linux"))]
+        let live_browser = browsing && self.identity.is_some();
+        #[cfg(target_os = "linux")]
+        let live_browser = false;
+        // What the browser machine says about the page on screen: its site,
+        // whether that site is connected, whether its lock may be drawn, and
+        // whether its renderer died.
+        let tab_view = if live_browser {
+            self.browser_host
+                .as_ref()
+                .and_then(|host| host.read(cx).tab().cloned())
+        } else {
+            None
+        };
+        // Whether the page on screen is already a favourite — by ORIGIN, the
+        // key the core dedupes favourites on. The star then removes it: a
+        // star that can only add is a star that cannot be undone.
+        let favorite_origin =
+            tab_view
+                .as_ref()
+                .and_then(|tab| tab.origin.clone())
+                .filter(|origin| {
+                    explore_tabs.ready
+                        && explore_tabs
+                            .favorites
+                            .iter()
+                            .any(|site| &site.origin == origin)
+                });
         // The two trailing affordances open different things, so the page — not
         // the component — carries their listeners.
-        let star =
-            explore_components::toolbar_control(theme, &mut self.icons, Icon::Star, theme.fg_base);
+        let star = explore_components::toolbar_control(
+            theme,
+            &mut self.icons,
+            Icon::Star,
+            if favorite_origin.is_some() {
+                theme.accent
+            } else {
+                theme.fg_base
+            },
+        );
         let dots = explore_components::toolbar_control(
             theme,
             &mut self.icons,
             Icon::Ellipsis,
             theme.fg_base,
         );
+        // The green dot IS the connection state, so live it is the core's
+        // word — a grant for the site on screen — and never "a page is open".
+        let connected = if live_browser {
+            tab_view
+                .as_ref()
+                .is_some_and(|tab| tab.connected_address.is_some())
+        } else {
+            browsing
+        };
         let chip = explore_components::account_chip(
             theme,
             &mut self.identicons,
             identity.name.clone(),
             &identity.address,
-            browsing,
+            connected,
         );
         let trailing = div()
             .flex()
@@ -9725,7 +10588,19 @@ impl WalletPage {
                     .id("toolbar-star")
                     .cursor_pointer()
                     .child(star)
-                    .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                        if let Some(origin) = favorite_origin.clone() {
+                            resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+                                resident.dispatch(
+                                    vela_core::app::explore_sites::Event::FavoriteRemoved {
+                                        origin,
+                                    },
+                                    cx,
+                                );
+                            });
+                            cx.notify();
+                            return;
+                        }
                         #[cfg(not(target_os = "linux"))]
                         if let Some(url) = crate::webview::current_url() {
                             // The page's own title when it has reported one;
@@ -9779,15 +10654,6 @@ impl WalletPage {
                         cx.notify();
                     })),
             );
-        // A REAL page, in a real session. The mock keeps drawing for the
-        // gallery and for a window nobody has signed in to, which is the same
-        // fork every other live surface takes — and it is what keeps
-        // `sweep-gallery.sh` from opening a webview per state.
-        #[cfg(not(target_os = "linux"))]
-        let live_browser = browsing && self.identity.is_some();
-        #[cfg(target_os = "linux")]
-        let live_browser = false;
-
         // The host beside the lock is the WEBVIEW's, never the fixture's: a
         // label fed from anywhere else is a claim about which origin is loaded,
         // and that is the one thing browser chrome must not get wrong. Before
@@ -9801,6 +10667,43 @@ impl WalletPage {
         };
         #[cfg(target_os = "linux")]
         let host = explore_fixtures::uniswap().host;
+        // The lock tells the truth: the core's judgement of the site on
+        // screen, the same one that decides whether it may ask to sign.
+        let secure = !live_browser || tab_view.as_ref().is_none_or(|tab| tab.secure);
+        let crashed = tab_view.as_ref().is_some_and(|tab| tab.crashed);
+        let bar = explore_components::AddressBar {
+            browsing,
+            host,
+            secure,
+            placeholder: self.explore.search_placeholder.clone(),
+            draft: self.address_draft.clone().map(SharedString::from),
+        };
+        let field = explore_components::address_field(theme, &mut self.icons, &bar);
+        // Editable once somebody is signed in: a click takes the page's URL
+        // into the field, Enter goes wherever the core's `browser_input` says
+        // the text means — a URL, or a search for it.
+        let address: gpui::AnyElement = if self.identity.is_some() {
+            div()
+                .id("address-bar")
+                .track_focus(&self.address_focus)
+                .size_full()
+                .px(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .overflow_hidden()
+                .cursor_text()
+                .child(field)
+                .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
+                    this.edit_address(window, cx);
+                }))
+                .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                    this.address_key(event, cx);
+                }))
+                .into_any_element()
+        } else {
+            field.into_any_element()
+        };
 
         // Drawn and inert in the mock; three real listeners in a live session.
         #[cfg(not(target_os = "linux"))]
@@ -9820,17 +10723,16 @@ impl WalletPage {
         #[cfg(target_os = "linux")]
         let nav: Option<explore_components::NavActions> = None;
 
-        let toolbar = explore_components::toolbar(
-            theme,
-            &mut self.icons,
-            browsing,
-            host,
-            self.explore.search_placeholder.clone(),
-            trailing,
-            nav,
-        );
+        let toolbar = explore_components::toolbar(theme, &mut self.icons, address, trailing, nav);
 
-        let body: gpui::AnyElement = if live_browser {
+        let body: gpui::AnyElement = if live_browser && crashed {
+            // The renderer is gone and the page with it; the core has already
+            // settled what it asked. Said, with the way back — never a blank
+            // rectangle that looks like a page still loading.
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::hide();
+            self.page_crashed(theme, cx).into_any_element()
+        } else if live_browser {
             #[cfg(not(target_os = "linux"))]
             {
                 let home = self.browser_home.clone();
@@ -9882,16 +10784,137 @@ impl WalletPage {
             .child(body)
     }
 
-    /// Point the browser's requests at this page.
+    /// The renderer behind the page died (spec 070 FR-013; macOS reports it).
     ///
-    /// Installed once, and re-installing is harmless — the sink replaces
+    /// Said, with the way back. The browser machine has already settled what
+    /// the page had asked (4900) and closed any sheet it raised; Reload starts
+    /// a new document, whose hello clears this state.
+    fn page_crashed(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(12.))
+            .p(px(32.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::TriangleAlert,
+                false,
+                theme.warning_base,
+                28.,
+            ))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(self.explore.page_crashed_title.clone()),
+            )
+            .child(
+                div()
+                    .max_w(px(360.))
+                    .text_center()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(self.explore.page_crashed_body.clone()),
+            )
+            .child(
+                outline_button(
+                    ElementId::from("page-reload"),
+                    theme,
+                    &mut self.icons,
+                    Some(Icon::RefreshCw),
+                    self.explore.reload.clone(),
+                )
+                .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                    #[cfg(not(target_os = "linux"))]
+                    crate::webview::reload();
+                    cx.notify();
+                })),
+            )
+    }
+
+    /// The address bar takes the keyboard: it starts from the page that is
+    /// open, so editing a URL is editing THAT URL, not retyping it.
+    fn edit_address(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.address_draft.is_none() {
+            #[cfg(not(target_os = "linux"))]
+            let current = if self.browsing {
+                crate::webview::current_url().filter(|url| url != "about:blank")
+            } else {
+                None
+            };
+            #[cfg(target_os = "linux")]
+            let current: Option<String> = None;
+            self.address_draft = Some(current.unwrap_or_default());
+        }
+        window.focus(&self.address_focus, cx);
+        cx.notify();
+    }
+
+    /// One key in the address bar. Enter goes where the core's
+    /// `browser_input` says the text means: a URL as typed, a bare host with
+    /// a scheme, anything else a search — the same rule on every client.
+    fn address_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        let Some(draft) = self.address_draft.as_mut() else {
+            return;
+        };
+        let ks = &event.keystroke;
+        match ks.key.as_str() {
+            "enter" => {
+                cx.stop_propagation();
+                let typed = self.address_draft.take().unwrap_or_default();
+                if let Some(url) = vela_core::app::dapp_rpc::browser_input(&typed) {
+                    self.open_typed_url(url, cx);
+                }
+            }
+            "escape" => {
+                // One layer only: the typing stops, the column stays.
+                cx.stop_propagation();
+                self.address_draft = None;
+            }
+            "backspace" => {
+                draft.pop();
+            }
+            "v" if ks.modifiers.platform || ks.modifiers.control => {
+                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                    // A pasted URL is one line; a newline in it is the end.
+                    draft.push_str(text.lines().next().unwrap_or_default().trim());
+                }
+            }
+            _ if ks.modifiers.platform || ks.modifiers.control || ks.modifiers.alt => return,
+            _ => match &ks.key_char {
+                Some(ch) if !ch.chars().any(char::is_control) => draft.push_str(ch),
+                _ => return,
+            },
+        }
+        cx.notify();
+    }
+
+    /// Open what the address bar resolved to, in the page on screen — as a
+    /// favourite or a history row does.
+    fn open_typed_url(&mut self, url: String, cx: &mut Context<Self>) {
+        self.browsing = true;
+        #[cfg(not(target_os = "linux"))]
+        crate::webview::navigate(&url);
+        self.browser_home = url;
+        cx.notify();
+    }
+
+    /// Point the browser's strings, loads and titles at this page.
+    ///
+    /// Installed once, and re-installing is harmless — each sink replaces
     /// itself, which is what a page rebuilt after a route change needs.
     ///
-    /// The hop is DEFERRED on purpose. wry calls its ipc handler from a
-    /// platform callback, and `AsyncApp::update` borrows the app cell; doing
-    /// that synchronously inside another borrow is a panic in a wallet. So the
+    /// The hop is DEFERRED on purpose. wry calls its handlers from a platform
+    /// callback, and `AsyncApp::update` borrows the app cell; doing that
+    /// synchronously inside another borrow is a panic in a wallet. So each
     /// sink spawns onto the foreground executor and the work lands on the next
-    /// run-loop turn instead.
+    /// run-loop turn — in the order the platform reported it, which is the
+    /// order the core reads documents in (a load's commit, then the new
+    /// document's hello).
     #[cfg(not(target_os = "linux"))]
     fn arm_dapp_requests(&mut self, cx: &mut Context<Self>) {
         if self.dapp_requests_armed {
@@ -9900,12 +10923,22 @@ impl WalletPage {
         self.dapp_requests_armed = true;
         let page = cx.entity().downgrade();
         let async_cx = cx.to_async();
-        crate::webview::on_request_to(Box::new(move |incoming| {
+        crate::webview::on_message_to(Box::new(move |message| {
             let page = page.clone();
             async_cx
                 .spawn(async move |cx| {
-                    page.update(cx, |page, cx| page.browser_request(incoming, cx))
+                    page.update(cx, |page, cx| page.browser_message(message, cx))
                         .ok();
+                })
+                .detach();
+        }));
+        let page = cx.entity().downgrade();
+        let async_cx = cx.to_async();
+        crate::webview::on_load_to(Box::new(move |load| {
+            let page = page.clone();
+            async_cx
+                .spawn(async move |cx| {
+                    page.update(cx, |page, cx| page.browser_load(load, cx)).ok();
                 })
                 .detach();
         }));
@@ -9964,380 +10997,275 @@ impl WalletPage {
                 })
                 .detach();
         }));
-        let page = cx.entity().downgrade();
-        let async_cx = cx.to_async();
-        crate::webview::on_navigation_to(Box::new(move |url| {
-            let page = page.clone();
-            async_cx
-                .spawn(async move |cx| {
-                    page.update(cx, |page, cx| page.browser_navigated(url, cx))
-                        .ok();
-                })
-                .detach();
-        }));
     }
 
-    /// A page asked for something. EVERY request goes to the core.
-    ///
-    /// Until spec 032 phase 27 this file kept a list of "signing methods" and
-    /// refused the rest with 4900, so no real dApp could connect: a site asks
-    /// `eth_chainId` and `eth_requestAccounts` long before it asks for a
-    /// signature. Which requests are reads, which need consent, which may be
-    /// forwarded and which must be refused is `dapp_permissions`' judgment —
-    /// with the security rules inside it (a cross-origin frame, an insecure
-    /// origin, a grant pinned to its own address), none of which a method
-    /// list in a shell can express.
+    /// One string from the page, for the browser machine — which decides
+    /// everything about it: whether it is a hello or a request, which method,
+    /// which answer, which document the answer is for.
     #[cfg(not(target_os = "linux"))]
-    fn browser_request(&mut self, incoming: crate::webview::Incoming, cx: &mut Context<Self>) {
-        let host = match self.browser_host.clone() {
-            Some(host) => host,
-            None => {
-                let Some(host) = self.open_browser_host(cx) else {
-                    // No account: nothing to connect anything to. Refused
-                    // rather than dropped — a promise that never settles is
-                    // the worst outcome this transport has.
-                    crate::webview::refuse_unsupported(&incoming.id, &incoming.method);
-                    return;
-                };
-                host
-            }
-        };
+    fn browser_message(&mut self, message: crate::webview::PageMessage, cx: &mut Context<Self>) {
+        let host = self.browser_host(cx);
         host.update(cx, |host, cx| {
-            host.dispatch(
-                vela_core::app::dapp_permissions::Event::ProviderRequest {
-                    id: incoming.id,
-                    method: incoming.method,
-                    params_json: incoming.params_json,
-                    origin: incoming.origin,
-                    // TRUE by construction, not by assumption: wry's
-                    // `with_initialization_script` is main-frame-only
-                    // (wry-0.56.1/src/lib.rs:1011 — it calls
-                    // `with_initialization_script_for_main_only(js, true)`),
-                    // so no sub-frame has a provider to ask with, and every
-                    // envelope that reaches the ipc handler came from the
-                    // document whose URL the origin was read from.
-                    is_main_frame: true,
-                },
+            host.page_message(
+                message.sender,
+                message.is_main_frame,
+                message.message_json,
                 cx,
             );
         });
     }
 
-    /// A document load started. The core settles what the last one left open.
+    /// A document load, for the browser machine. None of these settles
+    /// anything by itself; the machine knows which document is gone.
     #[cfg(not(target_os = "linux"))]
-    fn browser_navigated(&mut self, url: String, cx: &mut Context<Self>) {
-        let Some(host) = self.browser_host.clone() else {
-            return;
+    fn browser_load(&mut self, load: crate::webview::Load, cx: &mut Context<Self>) {
+        let tab = BROWSER_TAB.to_owned();
+        let event = match load {
+            crate::webview::Load::Started(url) => DbrEvent::NavigationStarted { tab, url },
+            crate::webview::Load::Finished(url) => DbrEvent::LoadFinished { tab, url },
+            crate::webview::Load::Crashed => DbrEvent::RendererGone { tab },
         };
-        host.update(cx, |host, cx| {
-            host.dispatch(
-                vela_core::app::dapp_permissions::Event::NavigationStarted { url },
-                cx,
-            );
-        });
+        let host = self.browser_host(cx);
+        host.update(cx, |host, cx| host.dispatch(event, cx));
     }
 
-    /// The permissions machine, and the wiring that watches what it decides.
-    #[cfg(not(target_os = "linux"))]
-    fn open_browser_host(
-        &mut self,
-        cx: &mut Context<Self>,
-    ) -> Option<gpui::Entity<crate::wallet::browser_host::BrowserHost>> {
-        let account = money::active_account()?;
-        // ALL of them: a grant is pinned to the address it was made for, so
-        // the machine judges against every address this wallet has, not the
-        // one that happens to be active.
-        let addresses = money::account_addresses();
-        let chain_id = self.browser_chain;
-        let host = cx.new(|cx| {
-            crate::wallet::browser_host::BrowserHost::new(
-                addresses,
-                account.address.clone(),
-                chain_id,
-                cx,
-            )
-        });
+    /// The browser machine, born the first time anything needs it, and the
+    /// wiring that watches what it decides.
+    fn browser_host(&mut self, cx: &mut Context<Self>) -> gpui::Entity<BrowserHost> {
+        if let Some(host) = &self.browser_host {
+            return host.clone();
+        }
+        let host = cx.new(BrowserHost::new);
         cx.observe(&host, Self::browser_host_changed).detach();
-        // The document is ALREADY open — this machine is born on the first
-        // request a page makes, which is after its load. Without being told,
-        // the core has no `current_origin` and never resolves the connected
-        // chip, so a site that is granted shows as an unnamed "?" with no
-        // connection, and `Disconnect` has nothing to revoke. The URL, not
-        // the origin: `NavigationStarted` derives its own, and it is that
-        // derivation the grants are keyed by.
-        if let Some(url) = crate::webview::current_url() {
-            host.update(cx, |host, cx| {
-                host.dispatch(
-                    vela_core::app::dapp_permissions::Event::NavigationStarted { url },
-                    cx,
-                );
-            });
-        }
         self.browser_host = Some(host.clone());
-        Some(host)
+        host
     }
 
-    /// What the permissions machine decided, acted on once.
-    #[cfg(not(target_os = "linux"))]
-    fn browser_host_changed(
-        &mut self,
-        host: gpui::Entity<crate::wallet::browser_host::BrowserHost>,
-        cx: &mut Context<Self>,
-    ) {
-        let (forwarded, settled, consent) = host.update(cx, |host, _| {
+    /// What the browser machine decided, acted on once.
+    fn browser_host_changed(&mut self, host: gpui::Entity<BrowserHost>, cx: &mut Context<Self>) {
+        let (orders, consent) = host.update(cx, |host, _| {
             (
-                host.take_forwarded(),
-                host.take_settled(),
-                host.view.consent.is_some(),
+                host.take_orders(),
+                host.view
+                    .consent
+                    .as_ref()
+                    .map(|consent| (consent.tab.clone(), consent.origin.clone())),
             )
         });
-        if settled {
-            // The request those machines were decoding is over — the core
-            // said so, and a decoded intent must never outlive its request.
-            self.signing_host = None;
-        }
-        if consent {
-            // The question has to be in front of somebody to be answered.
+        // A NEW question has to be in front of somebody to be answered. Only
+        // when it appears: the machine notifies on every read it answers, and
+        // a panel that re-opened on each would be impossible to close.
+        if consent.is_some() && consent != self.browser_consent {
             self.panel = PanelId::Connection;
         }
-        for request in forwarded {
-            self.route_forwarded(request, cx);
+        self.browser_consent = consent;
+        for order in orders {
+            match order {
+                SigningOrder::Forward(forwarded) => self.open_dapp_signing(forwarded, cx),
+                SigningOrder::Cancel { id, .. } => self.cancel_dapp_signing(&id, cx),
+            }
         }
         cx.notify();
     }
 
-    /// A request the core forwarded, to whoever answers it.
-    ///
-    /// The core routes on PERMISSION and hands over everything it does not
-    /// answer itself; that remainder is three different things — a signature,
-    /// a fact about this wallet, and a read of the chain — and telling them
-    /// apart is the shell's table in every client (`executor::dapp_rpc`, the
-    /// extension's own). Refusing what is not on it is the load-bearing half:
-    /// a catch-all read bucket would proxy `eth_signTransaction` to a public
-    /// node and make the wallet an open relay for any site it renders.
-    #[cfg(not(target_os = "linux"))]
-    fn route_forwarded(
+    /// The signing column's answer to a site, handed to the machine — which
+    /// knows whether the document that asked is still there, delivers it
+    /// exactly once, and opens the next request waiting in line.
+    fn answer_dapp_signing(
         &mut self,
-        request: crate::wallet::browser_host::Forwarded,
+        tab: &str,
+        id: String,
+        payload: SignResponsePayload,
+        user_op_hash: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        use crate::executor::dapp_rpc::{self, Route};
-
-        let chain_id = self.browser_chain;
-        match dapp_rpc::classify(&request.method) {
-            Route::Sign => self.open_signing(request, cx),
-            Route::State => {
-                // The chain the wallet is on, in the two notations the two
-                // methods are specified in. `net_version` is decimal — a hex
-                // answer there is a string comparison every dApp fails.
-                let answer = if request.method == "net_version" {
-                    serde_json::Value::String(chain_id.to_string())
-                } else {
-                    serde_json::Value::String(dapp_rpc::hex_chain_id(chain_id))
-                };
-                crate::webview::respond_json(&request.id, &answer);
-                self.answered(&request.id, cx);
-            }
-            Route::Switch => self.switch_browser_chain(&request, cx),
-            Route::Ack => {
-                // Acknowledged, and nothing changed. A network or a token is
-                // added in this wallet's own settings, by a person looking at
-                // it — never because a page asked while it had the floor.
-                crate::webview::respond_json(&request.id, &serde_json::Value::Null);
-                self.answered(&request.id, cx);
-            }
-            Route::Read { bundler } => self.proxy_read(&request, chain_id, bundler, cx),
-            Route::Unsupported => {
-                crate::webview::refuse_unsupported(&request.id, &request.method);
-                self.answered(&request.id, cx);
-            }
-        }
-    }
-
-    /// EIP-3326. The wallet moves, and the page is told by the core.
-    #[cfg(not(target_os = "linux"))]
-    fn switch_browser_chain(
-        &mut self,
-        request: &crate::wallet::browser_host::Forwarded,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(chain_id) = crate::executor::dapp_rpc::switch_chain_param(&request.params_json)
-        else {
-            // -32602: the request named no chain. Not 4902, which would say
-            // "that chain is not added" about a chain nobody named.
-            crate::webview::respond_error(&request.id, -32602, "No chainId in the request");
-            self.answered(&request.id, cx);
-            return;
-        };
-        if !crate::wallet::signing_host::known_chain_ids().contains(&chain_id) {
-            // 4902 is the code a dApp watches for to offer "add this network".
-            crate::webview::respond_error(&request.id, 4902, "This chain is not added");
-            self.answered(&request.id, cx);
-            return;
-        }
-        self.browser_chain = chain_id;
-        // `null` is the success answer EIP-3326 specifies, and the
-        // `chainChanged` event is the CORE's to emit — it owns what a
-        // connected page is told, and a shell that emitted its own could
-        // announce a chain to a site that is not connected.
-        crate::webview::respond_json(&request.id, &serde_json::Value::Null);
-        self.answered(&request.id, cx);
-        if let Some(host) = self.browser_host.clone() {
-            host.update(cx, |host, cx| {
-                host.dispatch(
-                    vela_core::app::dapp_permissions::Event::ChainChanged { chain_id },
-                    cx,
-                );
-            });
-        }
-        cx.notify();
-    }
-
-    /// One read, through the pool that every other read in this app uses.
-    ///
-    /// On a worker: the pool blocks, and a frame that waited on a dApp's
-    /// `eth_getLogs` would be a wallet that freezes because a page asked it a
-    /// question.
-    #[cfg(not(target_os = "linux"))]
-    fn proxy_read(
-        &mut self,
-        request: &crate::wallet::browser_host::Forwarded,
-        chain_id: u32,
-        bundler: bool,
-        cx: &mut Context<Self>,
-    ) {
-        let id = request.id.clone();
-        let method = request.method.clone();
-        let params: serde_json::Value =
-            serde_json::from_str(&request.params_json).unwrap_or_else(|_| serde_json::json!([]));
-        let host = self.browser_host.clone();
-        cx.spawn(async move |_, cx| {
-            let answered = id.clone();
-            let call_id = id.clone();
-            let body = cx
-                .background_executor()
-                .spawn(async move {
-                    if bundler {
-                        crate::executor::pool::bundler_call(chain_id, &method, params)
-                    } else {
-                        crate::executor::pool::call(chain_id, &method, params)
-                    }
-                })
-                .await;
-            match body {
-                // The node's own envelope, unpacked: its `result` is the
-                // answer, and its `error` is an error the page must see as
-                // one rather than as a null result.
-                Ok(body) => match body.get("error") {
-                    Some(error) => crate::webview::respond_error(
-                        &call_id,
-                        error
-                            .get("code")
-                            .and_then(serde_json::Value::as_i64)
-                            .and_then(|code| i32::try_from(code).ok())
-                            .unwrap_or(-32603),
-                        error
-                            .get("message")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or("The node refused this call"),
-                    ),
-                    None => crate::webview::respond_json(
-                        &call_id,
-                        body.get("result").unwrap_or(&serde_json::Value::Null),
-                    ),
+        let host = self.browser_host(cx);
+        host.update(cx, |host, cx| {
+            host.dispatch(
+                DbrEvent::SigningAnswered {
+                    tab: tab.to_owned(),
+                    id,
+                    payload,
+                    user_op_hash,
                 },
-                // Every endpoint failed. -32603 rather than a silent drop: a
-                // promise that never settles is the worst answer this
-                // transport can give.
-                Err(_) => {
-                    crate::webview::respond_error(&call_id, -32603, "No node could be reached")
-                }
-            }
-            if let Some(host) = host {
-                host.update(cx, |host, _| host.answered(&answered));
-            }
-        })
-        .detach();
+                cx,
+            );
+        });
     }
 
-    /// That id is settled; the permissions machine no longer owes it an
-    /// answer if the document goes away.
+    /// A request the browser machine forwarded. The four signing machines are
+    /// born here — for the account the site was SHOWN.
+    ///
+    /// Pinned by construction: the column signs as the granted account itself,
+    /// so a site granted account A can never be answered by B because B
+    /// happened to be active (spec 070 defect 2).
     #[cfg(not(target_os = "linux"))]
-    fn answered(&mut self, id: &str, cx: &mut Context<Self>) {
-        if let Some(host) = self.browser_host.clone() {
-            host.update(cx, |host, _| host.answered(id));
+    fn open_dapp_signing(&mut self, forwarded: Forwarded, cx: &mut Context<Self>) {
+        // One sheet at a time is the core's rule, and it never forwards a
+        // second request while it has one open. What it cannot see is the
+        // wallet asking ITSELF (the Ethereum backup): that sheet is neither
+        // replaced nor replacing, and the site hears -32002 — "busy, ask
+        // again" — so the line moves on.
+        if self.signing_busy(cx) {
+            self.answer_dapp_signing(&forwarded.tab, forwarded.id, busy_answer(), None, cx);
+            return;
         }
-    }
-
-    /// A request the core forwarded. The four signing machines are born here.
-    #[cfg(not(target_os = "linux"))]
-    fn open_signing(
-        &mut self,
-        incoming: crate::wallet::browser_host::Forwarded,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(account) = money::active_account() else {
-            // No account, no signature. Refused rather than dropped.
-            crate::webview::refuse_unsupported(&incoming.id, &incoming.method);
+        let Some(account) = money::account_by_address(&forwarded.granted_address) else {
+            // The account the site was granted is not in this wallet any more.
+            // Nobody else signs in its place.
+            self.answer_dapp_signing(
+                &forwarded.tab,
+                forwarded.id,
+                SignResponsePayload::Err {
+                    code: 4100,
+                    kind: SignErrorKind::UnauthorizedAccount,
+                    message: None,
+                },
+                None,
+                cx,
+            );
             return;
         };
         let request = crate::wallet::signing_host::IncomingRequest {
-            id: incoming.id,
-            method: incoming.method,
-            params_json: incoming.params_json,
-            origin: incoming.origin,
-            // One browser, one transport. The id is what will pick between
-            // transports when there is more than one, and it must be stable
-            // for the life of this one.
-            transport_id: "browser".to_owned(),
-            chain_id: self.browser_chain,
+            id: forwarded.id,
+            method: forwarded.method,
+            params_json: forwarded.params_json,
+            origin: forwarded.origin,
+            transport_id: crate::wallet::signing_host::BROWSER_TRANSPORT.to_owned(),
+            // The SITE's chain, per origin, as the machine keeps it.
+            chain_id: forwarded.chain_id,
+            granted_address: Some(forwarded.granted_address),
         };
-        self.open_signing_request(&account, request, cx);
+        self.open_signing_request(&account, request, Some(forwarded.tab), cx);
+    }
+
+    /// No signing column on this platform, and no page to have asked. Refused
+    /// rather than left hanging, should that ever change.
+    #[cfg(target_os = "linux")]
+    fn open_dapp_signing(&mut self, forwarded: Forwarded, cx: &mut Context<Self>) {
+        self.answer_dapp_signing(&forwarded.tab, forwarded.id, busy_answer(), None, cx);
+    }
+
+    /// The page that asked is gone and already has its 4900: close its sheet,
+    /// unanswered. A column showing something else is left alone.
+    #[cfg(not(target_os = "linux"))]
+    fn cancel_dapp_signing(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(host) = self.signing_host.clone() else {
+            return;
+        };
+        let ours = {
+            let host = host.read(cx);
+            host.transport_id == crate::wallet::signing_host::BROWSER_TRANSPORT
+                && host.request_id == id
+        };
+        if !ours {
+            return;
+        }
+        host.update(cx, |host, cx| {
+            host.dispatch_sign(
+                vela_core::app::sign_request::Event::TransportDropped {
+                    transport_id: crate::wallet::signing_host::BROWSER_TRANSPORT.to_owned(),
+                },
+                cx,
+            );
+        });
+        // Gone whatever the machine did with it: a decoded intent must never
+        // outlive the page that asked for it.
+        self.signing_host = None;
+        if self.panel == PanelId::Signing {
+            self.panel = PanelId::None;
+        }
+        cx.notify();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn cancel_dapp_signing(&mut self, _id: &str, _cx: &mut Context<Self>) {}
+
+    /// Is the column taken by a request that is still open? A column that
+    /// has answered — showing a receipt, an error — is not: its request is
+    /// over, and the next one may take its place.
+    #[cfg(not(target_os = "linux"))]
+    fn signing_busy(&self, cx: &gpui::App) -> bool {
+        self.signing_host.as_ref().is_some_and(|host| {
+            let host = host.read(cx);
+            !host.closed && !host.responded
+        })
     }
 
     /// The four signing machines for one request — a page's, or the wallet's own.
+    ///
+    /// Never REPLACES a request that is still open. Until spec 070 this
+    /// function swapped the column's host for the new one, which silently
+    /// dropped whatever the first request was waiting on. A site's requests
+    /// are serialised by the browser machine now; the wallet's own (the
+    /// backup) finds the column busy and shows it instead — the row can be
+    /// pressed again once the site's request is done. `tab` is the browser
+    /// tab a site's request came from, `None` for the wallet's own.
     #[cfg(not(target_os = "linux"))]
     fn open_signing_request(
         &mut self,
         account: &vela_core::app::Account,
         request: crate::wallet::signing_host::IncomingRequest,
+        tab: Option<String>,
         cx: &mut Context<Self>,
     ) {
+        if self.signing_busy(cx) {
+            self.panel = PanelId::Signing;
+            cx.notify();
+            return;
+        }
         let window_handle = self.window_handle;
         let account = account.clone();
         let host = cx.new(|cx| {
             crate::wallet::signing_host::SigningHost::open(&account, request, window_handle, cx)
         });
-        cx.observe(&host, |page, host, cx| {
-            // WHETHER there is a column is the core's answer, not this
-            // file's. Most of what a dApp sends — `eth_chainId`,
-            // `eth_accounts` — is answered without a person ever seeing it,
-            // and a panel that opened for every request would put a signing
-            // sheet in front of somebody for a page merely asking which chain
-            // it is on.
-            if host.read(cx).closed {
+        let observed = tab.clone();
+        cx.observe(&host, move |page, host, cx| {
+            page.signing_host_changed(&host, observed.as_deref(), cx);
+        })
+        .detach();
+        self.signing_host = Some(host.clone());
+        self.panel = PanelId::Signing;
+        // The same question, once, for a request the core answered before
+        // any observation fires — a refusal on arrival.
+        self.signing_host_changed(&host, tab.as_deref(), cx);
+    }
+
+    /// What a signing column said, acted on: a site's answer goes to the
+    /// browser machine, and a column the core closed goes.
+    #[cfg(not(target_os = "linux"))]
+    fn signing_host_changed(
+        &mut self,
+        host: &gpui::Entity<crate::wallet::signing_host::SigningHost>,
+        tab: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        let answers = host.update(cx, |host, _| host.take_answers());
+        let closed = host.read(cx).closed;
+        // WHETHER there is a column is the core's answer, not this file's —
+        // and only for the column on screen: a column already replaced (its
+        // request over) must not close the one that took its place.
+        if self.signing_host.as_ref() == Some(host) {
+            if closed {
                 // The request is over: the column goes, and so do its
                 // machines — a decoded intent must never outlive the request
                 // it decoded.
-                page.signing_host = None;
-                if page.panel == PanelId::Signing {
-                    page.panel = PanelId::None;
+                self.signing_host = None;
+                if self.panel == PanelId::Signing {
+                    self.panel = PanelId::None;
                 }
             } else {
-                page.panel = PanelId::Signing;
+                self.panel = PanelId::Signing;
             }
-            cx.notify();
-        })
-        .detach();
-        // The same question, once, for a request the core answers before any
-        // observation fires.
-        if host.read(cx).closed {
-            return;
+        }
+        if let Some(tab) = tab {
+            for answer in answers {
+                self.answer_dapp_signing(tab, answer.id, answer.payload, answer.user_op_hash, cx);
+            }
         }
         // A new request opens closed: the last one's decision to look at the
         // bytes is not this one's.
-        self.signing_advanced_open = false;
-        self.signing_host = Some(host);
+        self.signing_host = Some(host.clone());
         self.panel = PanelId::Signing;
         cx.notify();
     }
@@ -10554,22 +11482,17 @@ impl WalletPage {
     /// the transport — never from anything the page said about itself. That
     /// is the whole point of the row: it is the fact the person is being
     /// asked to judge.
-    #[cfg(not(target_os = "linux"))]
     fn consent_body(
         &mut self,
         theme: &Theme,
-        consent: &vela_core::app::dapp_permissions::DpermConsentView,
+        consent: &vela_core::app::dapp_browser::DbrConsentView,
         cx: &mut Context<Self>,
     ) -> Div {
-        use vela_core::app::dapp_permissions::Event as DpermEvent;
-
         // The same derivation the signing header uses. Two ways of turning an
         // origin into a name is two answers to "who is asking", and the sheet
         // and this panel are asking about the same site.
         let (host, _, letter) = signing_live::dapp_identity(&consent.origin);
         let title = crate::signing::fill(&self.explore.consent_title, &[("host", &host)]);
-        let approve = self.browser_host.clone();
-        let reject = self.browser_host.clone();
         div()
             .flex()
             .flex_col()
@@ -10598,17 +11521,16 @@ impl WalletPage {
                 div()
                     .id("consent-approve")
                     .cursor_pointer()
-                    .on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
-                        if let Some(host) = approve.as_ref() {
-                            host.update(cx, |host, cx| {
-                                host.dispatch(
-                                    DpermEvent::ConsentApproved {
-                                        now_ms: crate::executor::now_ms(),
-                                    },
-                                    cx,
-                                );
-                            });
-                        }
+                    .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        let host = this.browser_host(cx);
+                        host.update(cx, |host, cx| {
+                            host.dispatch(
+                                DbrEvent::ConsentApproved {
+                                    now_ms: crate::executor::now_ms(),
+                                },
+                                cx,
+                            );
+                        });
                     }))
                     .child(crate::flows::components::accent_button(
                         theme,
@@ -10623,12 +11545,9 @@ impl WalletPage {
                     None,
                     self.explore.consent_cancel.clone(),
                 )
-                .on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
-                    if let Some(host) = reject.as_ref() {
-                        host.update(cx, |host, cx| {
-                            host.dispatch(DpermEvent::ConsentRejected, cx);
-                        });
-                    }
+                .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                    let host = this.browser_host(cx);
+                    host.update(cx, |host, cx| host.dispatch(DbrEvent::ConsentRejected, cx));
                 })),
             )
     }
@@ -10641,7 +11560,6 @@ impl WalletPage {
     /// on this shell to put it in — the founder's ruling, and the third
     /// column is where a decision about the browser belongs anyway.
     fn connection_body(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
-        #[cfg(not(target_os = "linux"))]
         if let Some(consent) = self
             .browser_host
             .as_ref()
@@ -10649,37 +11567,110 @@ impl WalletPage {
         {
             return self.consent_body(theme, &consent, cx);
         }
-        #[cfg(target_os = "linux")]
-        let _ = cx;
-        // WHICH site, and whether it is connected at all, from the core. The
-        // mock's `app.uniswap.org · Connected` under a live browser is the
-        // phase-22 defect wearing a different hat: this panel is a statement
-        // about a specific site's access to this wallet, and naming the wrong
-        // one is the only thing it can get seriously wrong.
+        // WHICH site, whether it is connected, and which chain it is on, from
+        // the browser machine's view of the page on screen. The mock's
+        // `app.uniswap.org · Connected` under a live browser is the phase-22
+        // defect wearing a different hat: this panel is a statement about a
+        // specific site's access to this wallet, and naming the wrong one is
+        // the only thing it can get seriously wrong.
         let mock = explore_fixtures::uniswap();
-        #[cfg(not(target_os = "linux"))]
         let live = self
-            .browser_host
+            .identity
             .as_ref()
-            .map(|host| host.read(cx))
-            .map(|host| {
-                (
-                    host.view.current_origin.clone(),
-                    host.view.connected_address.clone(),
-                )
-            });
-        #[cfg(target_os = "linux")]
-        let live: Option<(Option<String>, Option<String>)> = None;
-        let (site_host, site_letter, site_tint, connected) = match live {
-            Some((origin, address)) => {
+            .filter(|_| self.browsing)
+            .and(self.browser_host.as_ref())
+            .and_then(|host| host.read(cx).tab().cloned());
+        let (site_host, site_letter, site_tint, connected, secure, chain_id, origin) = match &live {
+            Some(tab) => {
                 let (host, _, letter) =
-                    signing_live::dapp_identity(origin.as_deref().unwrap_or_default());
-                (host, letter, theme.accent, address.is_some())
+                    signing_live::dapp_identity(tab.origin.as_deref().unwrap_or_default());
+                (
+                    host,
+                    letter,
+                    theme.accent,
+                    tab.connected_address.is_some(),
+                    tab.secure,
+                    tab.chain_id,
+                    tab.origin.clone(),
+                )
             }
-            None => (mock.host.clone(), mock.letter.clone(), mock.tint, true),
+            // The drawing's chain: Gnosis, as the mock always showed it.
+            None => (
+                mock.host.clone(),
+                mock.letter.clone(),
+                mock.tint,
+                true,
+                true,
+                100,
+                None,
+            ),
+        };
+        // "Secure" and "Connected" are claims, so each is only made when the
+        // core says so: a lock for the origin, a grant for the site.
+        let status = match (secure, connected) {
+            (true, true) => SharedString::from(format!(
+                "{} · {}",
+                self.explore.secure_site, self.explore.connected_tag
+            )),
+            (true, false) => self.explore.secure_site.clone(),
+            (false, true) => self.explore.connected_tag.clone(),
+            (false, false) => SharedString::default(),
         };
         let identity = self.identity();
         let e = &self.explore;
+        // The site's own network, which the person can change here — the
+        // site hears `chainChanged`, and every other site stays where it is.
+        let network_row = div()
+            .id("site-network")
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(self.explore.network.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .w(px(8.))
+                            .h(px(8.))
+                            .rounded_full()
+                            .bg(fixtures::chain_ethereum()),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            // The chain THIS SITE is on — the one its
+                            // `eth_chainId` answers and a signature from it
+                            // is quoted, routed and submitted on. Not a
+                            // column-wide chain: there is none any more.
+                            .child(SharedString::from(crate::flows::live::chain_name(chain_id))),
+                    )
+                    .when(origin.is_some(), |row| {
+                        row.child(icon_img(
+                            &mut self.icons,
+                            Icon::ChevronDown,
+                            false,
+                            theme.fg_muted,
+                            14.,
+                        ))
+                    }),
+            );
+        let network_row = match origin.clone() {
+            Some(origin) => network_row.cursor_pointer().on_click(cx.listener(
+                move |this, event: &gpui::ClickEvent, _, cx| {
+                    this.open_site_networks(origin.clone(), chain_id, event.position(), cx);
+                },
+            )),
+            None => network_row,
+        };
         div()
             .flex()
             .flex_col()
@@ -10714,17 +11705,7 @@ impl WalletPage {
                                     } else {
                                         theme.fg_muted
                                     })
-                                    // "Connected" is a claim, so it is only
-                                    // made when the core says an address is
-                                    // granted to this origin.
-                                    .child(if connected {
-                                        SharedString::from(format!(
-                                            "{} · {}",
-                                            e.secure_site, e.connected_tag
-                                        ))
-                                    } else {
-                                        e.secure_site.clone()
-                                    }),
+                                    .child(status),
                             ),
                     ),
             )
@@ -10764,50 +11745,11 @@ impl WalletPage {
                         div()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.fg_muted)
-                            .child(self.explore.switch_account.clone()),
+                            .child(e.switch_account.clone()),
                     ),
             )
             .child(row_divider(theme))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_muted)
-                            .child(self.explore.network.clone()),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .child(
-                                div()
-                                    .w(px(8.))
-                                    .h(px(8.))
-                                    .rounded_full()
-                                    .bg(fixtures::chain_ethereum()),
-                            )
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_title())
-                                    .text_color(theme.fg_base)
-                                    // The chain this browser is actually on —
-                                    // the one a `wallet_switchEthereumChain`
-                                    // moved it to, and the one a signature
-                                    // from this site would be asked on. The
-                                    // drawn "Ethereum" over a Gnosis fee is
-                                    // the contradiction phase 22 found on the
-                                    // signing sheet.
-                                    .child(SharedString::from(crate::flows::live::chain_name(
-                                        self.browser_chain,
-                                    ))),
-                            ),
-                    ),
-            )
+            .child(network_row)
             .child(
                 div()
                     .text_size(theme::text_row_sub())
@@ -10815,8 +11757,6 @@ impl WalletPage {
                     .child(self.explore.connection_explainer.clone()),
             )
             .child({
-                #[cfg(not(target_os = "linux"))]
-                let revoke = self.browser_host.clone();
                 let button = outline_button(
                     ElementId::from("disconnect"),
                     theme,
@@ -10824,23 +11764,17 @@ impl WalletPage {
                     None,
                     self.explore.disconnect.clone(),
                 );
-                // `None` means "the origin in front of us" — the core's own
-                // distinction, because revoking a NAMED origin is silent and
-                // revoking the current one owes the page a disconnect event.
-                #[cfg(not(target_os = "linux"))]
-                let button = button.on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
-                    if let Some(host) = revoke.as_ref() {
-                        host.update(cx, |host, cx| {
-                            host.dispatch(
-                                vela_core::app::dapp_permissions::Event::RevokeRequested {
-                                    origin: None,
-                                },
-                                cx,
-                            );
-                        });
+                // The site on screen, by name: the core revokes the grant and
+                // tells every open page of that site (`accountsChanged []` and
+                // `disconnect`). Nothing to revoke, nothing armed.
+                match origin.filter(|_| connected) {
+                    Some(origin) => {
+                        button.on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.revoke_site(origin.clone(), cx);
+                        }))
                     }
-                }));
-                button
+                    None => button,
+                }
             })
             .child(
                 div()
@@ -10849,6 +11783,45 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(self.explore.auto_request_hint.clone()),
             )
+    }
+
+    /// The networks a site can be put on, as a menu under the network row.
+    ///
+    /// The list is the wallet's own (built-ins plus what the person added),
+    /// named once here rather than on every frame the menu is open. The
+    /// machine is told the list first, so a network added in Settings a
+    /// moment ago is one it accepts.
+    fn open_site_networks(
+        &mut self,
+        origin: String,
+        current: u32,
+        position: gpui::Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        let host = self.browser_host(cx);
+        host.update(cx, |host, cx| host.follow_networks(cx));
+        self.site_networks = crate::wallet::signing_host::known_chain_ids()
+            .into_iter()
+            .map(|chain_id| {
+                (
+                    chain_id,
+                    SharedString::from(crate::flows::live::chain_name(chain_id)),
+                    chain_id == current,
+                )
+            })
+            .collect();
+        self.menu_origin = Some(origin);
+        self.menu = Some((ContactsMenu::SiteNetwork, position, Anchor::TopRight));
+        cx.notify();
+    }
+
+    /// Disconnect one site, from wherever the person asked — after asking
+    /// them (spec 072): the grant goes, and every open page of that site
+    /// hears `accountsChanged []` and `disconnect`.
+    fn revoke_site(&mut self, origin: String, cx: &mut Context<Self>) {
+        let name = signing_live::dapp_identity(&origin).0;
+        self.confirm = Some(Confirm::Disconnect { origin, name });
+        cx.notify();
     }
 
     /// DE4 / DCS1–8's third column — the signing request itself.
@@ -11057,8 +12030,13 @@ impl WalletPage {
                     &currency,
                 );
                 model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
-                model.confirm_enabled =
-                    signing_live::confirm_enabled(&host.view, &host.guard_view, fee, speed_tier);
+                model.confirm_enabled = signing_live::confirm_enabled(
+                    &host.view,
+                    &host.guard_view,
+                    &host.clear_view,
+                    fee,
+                    speed_tier,
+                );
             } else {
                 // No confirm control at all. It is not disabled — it is
                 // absent, because the wallet never offered it.
@@ -11169,12 +12147,18 @@ impl WalletPage {
                 )
                 .then(|| {
                     let host = self.signing_host.clone();
+                    let previous = cap_text.clone();
                     panels::AddressField {
                         focus: self.cap_focus.clone(),
                         value: cap_text.clone(),
                         placeholder: SharedString::from("0"),
                         on_change: Box::new(
                             move |text: String, _: &mut Window, cx: &mut gpui::App| {
+                                // Spec 073: the cap's parser drops every
+                                // comma, so a raw "4,5" allowed 45.
+                                let Some(text) = flows_live::amount_edited(&text, &previous) else {
+                                    return;
+                                };
                                 if let Some(host) = host.as_ref() {
                                     host.update(cx, |host, cx| {
                                         host.dispatch_guard(
@@ -11350,9 +12334,11 @@ impl WalletPage {
 
     /// "Sign with · Automatic ⌄" — WHERE the passkey that signs this request
     /// is (founder, 2026-09-19: creating and signing in let a person choose;
-    /// signing took the first key's stored route). Per request — the host lives
-    /// for one. Which key the choice pins is the core's (`sign_route`). Opens in
-    /// place: a dialog over the signing column is a modal under a modal.
+    /// signing took the first key's stored route), or the Trusted Signer's page
+    /// (spec 071). Per request — the host lives for one, and starts at the
+    /// default Settings keeps. Which key the choice pins is the core's
+    /// (`sign_route`). Opens in place: a dialog over the signing column is a
+    /// modal under a modal.
     #[cfg(not(target_os = "linux"))]
     fn sign_with_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         let (method, open) = {
@@ -11371,7 +12357,7 @@ impl WalletPage {
             cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                 if let Some(host) = page.signing_host.clone() {
                     host.update(cx, |host, cx| {
-                        host.sign_with(id);
+                        host.sign_with(id, cx);
                         cx.notify();
                     });
                 }
@@ -11420,6 +12406,26 @@ impl WalletPage {
                 .bg(theme.bg_sunken);
             for (index, (id, title)) in options.into_iter().enumerate() {
                 let selected = id == method;
+                let mut words = div().flex_1().flex().flex_col().gap(px(2.)).child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(if selected {
+                            theme.fg_base
+                        } else {
+                            theme.fg_muted
+                        })
+                        .child(title),
+                );
+                // The one choice that is not a place a passkey is says what
+                // it is — the create flow's lines only describe making a key.
+                if id == vela_core::trusted_signer::METHOD {
+                    words = words.child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(self.signing.trusted_signer_body.clone()),
+                    );
+                }
                 let mut option = div()
                     .id(("signing-sign-with-option", index))
                     .flex()
@@ -11430,17 +12436,7 @@ impl WalletPage {
                     .cursor_pointer()
                     .hover(|el| el.bg(theme.bg_raised))
                     .on_click(pick(Some(id), cx))
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(theme::text_row_sub())
-                            .text_color(if selected {
-                                theme.fg_base
-                            } else {
-                                theme.fg_muted
-                            })
-                            .child(title),
-                    );
+                    .child(words);
                 if selected {
                     option = option.child(icon_img(
                         &mut self.icons,
@@ -12228,31 +13224,38 @@ impl WalletPage {
                 None,
                 None,
                 None,
-                // Disconnect is the CORE's: `None` means "the origin in front
-                // of us", which owes the page a disconnect event, and a named
-                // one would be revoked silently.
+                // Disconnect is the CORE's: the site on screen, by name — its
+                // grant goes, and every open page of it hears
+                // `accountsChanged []` and `disconnect`.
                 Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     this.menu = None;
-                    #[cfg(not(target_os = "linux"))]
-                    if let Some(host) = this.browser_host.clone() {
-                        host.update(cx, |host, cx| {
-                            host.dispatch(
-                                vela_core::app::dapp_permissions::Event::RevokeRequested {
-                                    origin: None,
-                                },
-                                cx,
-                            );
-                        });
+                    let origin = this
+                        .browser_host
+                        .as_ref()
+                        .and_then(|host| host.read(cx).tab().and_then(|tab| tab.origin.clone()));
+                    if let Some(origin) = origin {
+                        this.revoke_site(origin, cx);
                     }
                     cx.notify();
                 })) as contacts_components::MenuAction),
-                // Close leaves the browser. The permissions machine hears
-                // `BrowserClosed` from the same place it always did — the
-                // frame that stops drawing the column.
+                // Close closes the PAGE — the tab on screen, as the phones'
+                // "Close page" does. Its requests are settled by the core
+                // when its document goes; merely leaving Explore settles
+                // nothing.
                 Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     this.menu = None;
-                    this.browsing = false;
                     this.panel = PanelId::None;
+                    let selected = resident::resident::<ExploreSites>(cx)
+                        .read(cx)
+                        .view()
+                        .selected_tab;
+                    match selected {
+                        Some(id) => this.close_browser_tab(&id, cx),
+                        None => {
+                            this.browsing = false;
+                            this.close_browser_page(cx);
+                        }
+                    }
                     cx.notify();
                 })) as contacts_components::MenuAction),
             ],
@@ -12455,6 +13458,32 @@ impl WalletPage {
                     .collect()
             }
 
+            // One row per network, in the order the menu drew them. The site
+            // is the one the menu was opened about, never "whatever is on
+            // screen now": a navigation in between must not move another site.
+            ContactsMenu::SiteNetwork => self
+                .site_networks
+                .iter()
+                .map(|(chain_id, _, _)| {
+                    let chain_id = *chain_id;
+                    Some(
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            let origin = this.menu_origin.take();
+                            this.menu = None;
+                            if let Some(origin) = origin {
+                                let host = this.browser_host(cx);
+                                host.update(cx, |host, cx| {
+                                    host.dispatch(
+                                        DbrEvent::SiteChainPicked { origin, chain_id },
+                                        cx,
+                                    );
+                                });
+                            }
+                            cx.notify();
+                        })) as contacts_components::MenuAction,
+                    )
+                })
+                .collect(),
             ContactsMenu::MoveGroup => {
                 let ids: Vec<String> = resident::resident::<ExploreSites>(cx)
                     .read(cx)
@@ -12671,6 +13700,13 @@ impl WalletPage {
                     .collect::<Vec<_>>(),
             ),
             ContactsMenu::Tile => explore_fixtures::tile_menu(&self.explore),
+            ContactsMenu::SiteNetwork => explore_fixtures::network_pick_menu(
+                &self
+                    .site_networks
+                    .iter()
+                    .map(|(_, name, current)| (name.clone(), *current))
+                    .collect::<Vec<_>>(),
+            ),
             ContactsMenu::Contact => contacts_fixtures::contact_context(&self.contacts),
             ContactsMenu::ContactGroups => {
                 contacts_fixtures::contact_group_pick(&self.contact_group_state(cx))
@@ -12706,6 +13742,7 @@ impl WalletPage {
 
 impl Render for WalletPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.watch_field_blurs(window, cx);
         let theme = Theme::of(self.theme_mode());
         // A survived panic (spec 038): the failure sheet, "Something went
         // wrong", with the report behind the disclosure.
@@ -12729,18 +13766,20 @@ impl Render for WalletPage {
         // route changed, so every frame that is not drawing the browser column
         // takes it off the screen. Miss this and a webview floats over the
         // wallet. `place` turns it back on in the same frame it is drawn.
+        //
+        // Hidden is not closed (spec 070). The page keeps running, the core
+        // keeps answering it, and a sheet it raised stays up: until 070 this
+        // frame told the core the browser had CLOSED, so looking at the
+        // wallet for a moment failed a connect or a signature the person was
+        // in the middle of. Only closing the tab or the page going away
+        // settles its requests.
         #[cfg(not(target_os = "linux"))]
         if !(self.section == Section::Explore && self.browsing && self.identity.is_some()) {
             crate::webview::hide();
-            // Leaving the browser is `BrowserClosed` to the core, which
-            // settles what the page left pending with its own 4900 — the
-            // alternative is a dApp promise that never resolves because
-            // somebody clicked away from the column.
-            if let Some(host) = self.browser_host.take() {
-                host.update(cx, |host, cx| {
-                    host.dispatch(vela_core::app::dapp_permissions::Event::BrowserClosed, cx);
-                });
-            }
+        }
+        // Typing stops when the address bar loses the keyboard.
+        if self.address_draft.is_some() && !self.address_focus.is_focused(window) {
+            self.address_draft = None;
         }
 
         // The column was closed under a live send: its machines go with it.
@@ -12786,9 +13825,12 @@ impl Render for WalletPage {
         let scan = self.scan_overlay(&theme, window, cx);
         let toast = self.receipt_toast(&theme, window, cx);
         let send_prompt = self.send_prompts(&theme, window, cx);
+        let trusted_signer_prompt = self.trusted_signer_prompt(&theme, cx);
         let menu = self.menu_overlay(&theme, cx);
         let sign_out = self.sign_out_dialog(&theme, cx);
         let network_remove = self.network_remove_dialog(&theme, cx);
+        let account_remove = self.account_remove_dialog(&theme, cx);
+        let confirm = self.confirm_dialog(&theme, cx);
         let settings_dialog = self.settings_dialog_overlay(&theme, window, cx);
         let import_result = self.import_result_dialog(&theme, cx);
         let contact_form = self.contact_form_dialog(&theme, window, cx);
@@ -12812,6 +13854,10 @@ impl Render for WalletPage {
         }
         // The cable's dialogs and the core's alert, over the send flow.
         if let Some(prompt) = send_prompt {
+            root = root.child(prompt);
+        }
+        // The Trusted Signer's, over the flow that is waiting on its page.
+        if let Some(prompt) = trusted_signer_prompt {
             root = root.child(prompt);
         }
         if let Some(menu) = menu {
@@ -12843,6 +13889,12 @@ impl Render for WalletPage {
         }
         if let Some(network_remove) = network_remove {
             root = root.child(network_remove);
+        }
+        if let Some(account_remove) = account_remove {
+            root = root.child(account_remove);
+        }
+        if let Some(confirm) = confirm {
+            root = root.child(confirm);
         }
         if let Some(prompt) = &self.crash {
             let entity = cx.entity();
@@ -12892,6 +13944,12 @@ impl Render for WalletPage {
                     cx.notify();
                     return;
                 }
+                if ks.key == "escape" && this.confirm.is_some() {
+                    this.confirm = None;
+                    this.erase_failed = None;
+                    cx.notify();
+                    return;
+                }
                 if ks.key == "escape" && this.settings_dialog.is_some() {
                     this.close_settings_dialog(cx);
                     cx.notify();
@@ -12931,9 +13989,250 @@ impl Render for WalletPage {
     }
 }
 
+/// The Ethereum key backup, as a request for the SHARED signing sheet.
+///
+/// A pure function so the sheet it goes to can be pinned by a test: the backup
+/// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
+/// means it gets the same "Sign with" row every other signature gets — the
+/// core's five routes, the Trusted Signer among them (spec 075). A backup with a
+/// sheet of its own would be the one signature a person could not route.
+#[cfg(not(target_os = "linux"))]
+fn backup_request(
+    address: &str,
+    call: &vela_core::registry_backup::BackupCall,
+) -> crate::wallet::signing_host::IncomingRequest {
+    let params = serde_json::json!([{
+        "from": address,
+        "to": call.to,
+        "value": "0x0",
+        "data": call.data,
+    }]);
+    crate::wallet::signing_host::IncomingRequest {
+        id: format!("vela-ethereum-backup-{}", crate::executor::now_ms()),
+        method: "eth_sendTransaction".to_owned(),
+        params_json: params.to_string(),
+        origin: "https://getvela.app".to_owned(),
+        transport_id: crate::wallet::signing_host::WALLET_TRANSPORT.to_owned(),
+        chain_id: call.chain_id,
+        granted_address: None,
+    }
+}
+
+/// The host of a signer page address, for its badge — the address itself is
+/// already in the field under it.
+fn page_host(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    rest.split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// The Trusted Signer's caption, taken out of the list the "Sign with" sheet and
+/// the Settings page both draw from.
+///
+/// Not a key of its own: the corpus's paths are pinned, and one way of signing
+/// named twice is the drift spec 075 was raised over. The core always offers
+/// the route (`wallet_keys::SIGN_METHODS`), which
+/// `settings::tests::the_sign_with_words_resolve` pins, so the search finds it.
+fn trusted_signer_words(s: &SettingsStrings) -> SharedString {
+    s.sign_with_options
+        .iter()
+        .find(|(method, _)| *method == vela_core::trusted_signer::METHOD)
+        .map(|(_, words)| words.clone())
+        .unwrap_or_default()
+}
+
+/// Who is holding a key, for the line under its name in the keys list.
+///
+/// `lines` is the fallback trio in the core's method order — built-in passkey,
+/// phone or tablet, security key — used when no catalog can name the vault.
+///
+/// Spec 075: a key minted on a Trusted Signer page ran its ceremony in a browser,
+/// so the authenticator reports `platform` and the AAGUID catalog names
+/// whatever vault answered on the page's own side. Both of those describe the
+/// side of the page this wallet cannot reach, and the Android device pass of
+/// 2026-09-22 found the result: a key made on the page, captioned as this
+/// machine's built-in passkey — the opposite of where the key is. So the page
+/// outranks both the report and the vault's name. The core decides it
+/// (`WalletKeyRow::method` is `trusted_signer` exactly when the row carries a
+/// `signer_origin`); this only says it.
+fn key_holder(
+    key: &vela_core::wallet_keys::WalletKeyRow,
+    lines: &(SharedString, SharedString, SharedString),
+    trusted_signer: &SharedString,
+) -> SharedString {
+    if key.method == vela_core::trusted_signer::METHOD {
+        return trusted_signer.clone();
+    }
+    if !key.provider_name.is_empty() {
+        return SharedString::from(key.provider_name.clone());
+    }
+    match key.method.as_str() {
+        "security_key" => lines.2.clone(),
+        "hybrid" => lines.1.clone(),
+        _ => lines.0.clone(),
+    }
+}
+
+/// Which page a key lives behind, for its details; empty when it lives behind
+/// none.
+///
+/// "A Trusted Signer" is no answer to "where is my key" for a person who has used
+/// two of them, so the row that says the route names the deployment as well.
+fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
+    key.signer_origin
+        .clone()
+        .filter(|origin| !origin.is_empty())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **A key minted on a Trusted Signer page is captioned as the page, and says
+    /// which page** (spec 075, the Android device pass of 2026-09-22).
+    ///
+    /// The pass found such a key drawn as the phone's built-in passkey, because
+    /// a page runs its ceremony in a browser and the authenticator therefore
+    /// reports `platform` — the far side of the page, the one side this wallet
+    /// cannot reach. The row is built here from the account record's own keys,
+    /// so the whole chain is walked: a `DeviceKey` carrying the origin the
+    /// record stored, through the core's row builder, to the two lines a person
+    /// reads. And the caption is the "Sign with" sheet's own words, so the keys
+    /// list and the picker never name one route two ways.
+    #[test]
+    fn a_key_behind_a_page_is_captioned_as_the_trusted_signer() {
+        let loc = Loc::from_env();
+        let s = SettingsStrings::resolve(&loc);
+        let lines = (
+            s.keys_provider_platform.clone(),
+            s.keys_provider_generic.clone(),
+            s.keys_provider_security_key.clone(),
+        );
+        let trusted_signer = super::trusted_signer_words(&s);
+        assert!(
+            !trusted_signer.is_empty(),
+            "the Trusted Signer's caption went missing from the sheet's list"
+        );
+        assert_eq!(
+            Some(trusted_signer.clone()),
+            SigningStrings::resolve(&loc)
+                .sign_with_options
+                .iter()
+                .find(|(method, _)| *method == vela_core::trusted_signer::METHOD)
+                .map(|(_, words)| words.clone()),
+            "the keys list and the sheet disagree about what this route is called"
+        );
+
+        // As `ensure_backup_check` builds them: one key behind a page, one on
+        // the end of a cable.
+        let page = "https://sign.example.test";
+        let device = [
+            vela_core::wallet_keys::DeviceKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04".to_owned() + &"ab".repeat(64),
+                name: "Behind the page".to_owned(),
+                transports: String::new(),
+                signer_origin: Some(page.to_owned()),
+            },
+            vela_core::wallet_keys::DeviceKey {
+                credential_id: "cred1".to_owned(),
+                public_key_hex: "04".to_owned() + &"cd".repeat(64),
+                name: "On the desk".to_owned(),
+                transports: "usb".to_owned(),
+                signer_origin: None,
+            },
+        ];
+        let rows = match vela_core::wallet_keys::step("", &device, &[]) {
+            vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
+            vela_core::wallet_keys::KeysStep::Ask { .. } => {
+                unreachable!("asked with no address, so nobody can be asked")
+            }
+        };
+        assert_eq!(rows.len(), 2);
+
+        // The key behind the page: captioned as the route, naming the page.
+        assert_eq!(rows[0].method, vela_core::trusted_signer::METHOD);
+        assert_eq!(
+            super::key_holder(&rows[0], &lines, &trusted_signer),
+            trusted_signer
+        );
+        assert_ne!(
+            super::key_holder(&rows[0], &lines, &trusted_signer),
+            lines.0,
+            "the page's key is drawn as this device's built-in passkey"
+        );
+        assert_eq!(super::key_page(&rows[0]), page);
+
+        // Even when a catalog names the vault that answered: that vault is on
+        // the far side of the page, and where the key lives is the page.
+        let named = vela_core::wallet_keys::WalletKeyRow {
+            provider_name: "Apple Passwords".to_owned(),
+            ..rows[0].clone()
+        };
+        assert_eq!(
+            super::key_holder(&named, &lines, &trusted_signer),
+            trusted_signer
+        );
+
+        // And an ordinary key is untouched: the USB key still reads as one, and
+        // its details grow no page line.
+        assert_eq!(
+            super::key_holder(&rows[1], &lines, &trusted_signer),
+            lines.2
+        );
+        assert!(super::key_page(&rows[1]).is_empty());
+        let vaulted = vela_core::wallet_keys::WalletKeyRow {
+            provider_name: "1Password".to_owned(),
+            ..rows[1].clone()
+        };
+        assert_eq!(
+            super::key_holder(&vaulted, &lines, &trusted_signer).as_ref(),
+            "1Password"
+        );
+    }
+
+    /// **The Ethereum key backup gets the Trusted Signer too** (spec 075: "创建/
+    /// 登录/转账/dapp签名/公钥备份 等" — the owner listed the backup with the rest).
+    ///
+    /// It gets it by being an ordinary request on the shared signing sheet
+    /// rather than a sheet of its own: the same `eth_sendTransaction` on the
+    /// wallet's own transport that a send is, so the same "Sign with" row with
+    /// the same five routes. If this ever grew its own sheet, the backup would
+    /// be the one signature a person could not route — and the backup is the
+    /// signature that matters most to a wallet living behind a signer page.
+    #[test]
+    #[cfg(not(target_os = "linux"))]
+    fn the_key_backup_goes_to_the_shared_signing_sheet() {
+        let call = vela_core::registry_backup::BackupCall {
+            chain_id: 1,
+            to: "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
+            value: "0".to_owned(),
+            data: "0xabcdef".to_owned(),
+        };
+        let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let request = backup_request(address, &call);
+        assert_eq!(request.method, "eth_sendTransaction");
+        assert_eq!(
+            request.transport_id,
+            crate::wallet::signing_host::WALLET_TRANSPORT,
+            "the backup is the wallet's own request, not a site's"
+        );
+        assert_eq!(request.granted_address, None);
+        assert_eq!(request.chain_id, 1);
+        // The calls the sheet reads out of it are the backup's own.
+        let calls = vela_core::sign_message::is_message_method(&request.method);
+        assert!(!calls, "a backup is submitted, not signed as a message");
+        assert!(request.params_json.contains(&call.data));
+        assert!(request.params_json.contains(address));
+        // And the row it lands under offers every route the core knows.
+        assert!(
+            vela_core::wallet_keys::SIGN_METHODS.contains(&vela_core::trusted_signer::METHOD),
+            "the shared sheet does not offer the Trusted Signer"
+        );
+    }
 
     /// The save button is available exactly when the address is one.
     ///
@@ -12962,61 +14261,6 @@ mod tests {
             "88cCA0EeDbF2C4426110bbFc998F048689266894"
         ));
         assert!(!super::is_evm_address(""));
-    }
-
-    /// Bytes read the way a file manager on this machine reads them.
-    #[test]
-    fn a_file_size_is_stated_in_the_unit_a_person_can_compare() {
-        let (amount, unit) = super::human_bytes(512);
-        assert_eq!((amount.as_ref(), unit.as_ref()), ("512", "B"));
-        // 1024 base, because that is what the OS says beside it.
-        let (amount, unit) = super::human_bytes(1536);
-        assert_eq!((amount.as_ref(), unit.as_ref()), ("1.5", "KB"));
-        let (amount, unit) = super::human_bytes(3 * 1024 * 1024 / 2);
-        assert_eq!((amount.as_ref(), unit.as_ref()), ("1.5", "MB"));
-        // No decimal below KB: "1.5 KB" of 1536 bytes is a real number, but
-        // "0.5 KB" of 512 is noise where "512 B" is exact.
-        let (amount, unit) = super::human_bytes(0);
-        assert_eq!((amount.as_ref(), unit.as_ref()), ("0", "B"));
-    }
-
-    /// The receive screen's chain and the browser's chain are not the same
-    /// thing, and for one commit they were one field.
-    ///
-    /// This is a defence against the shape of that bug rather than a test of a
-    /// function: a page holding both defaults to Gnosis for each, and moving
-    /// one must not move the other. Tapping "Ethereum" on the receive screen
-    /// used to retarget a connected dApp's next signature — its quote, its
-    /// RPC, its submit — to Ethereum, and a site's own `wallet_switchEthereumChain`
-    /// used to change which chain your receive QR was for.
-    #[test]
-    fn the_receive_chain_and_the_browser_chain_are_two_fields() {
-        let source = include_str!("page.rs");
-        // The browser's chain is what a signing request is opened on.
-        assert!(
-            source.contains("chain_id: self.browser_chain,"),
-            "a dApp request must be raised on the chain the BROWSER is on"
-        );
-        // And the receive screen's rows still write their own.
-        assert!(
-            source.contains("this.receive_chain = chain_id;"),
-            "the receive rows still choose the receive chain"
-        );
-        // Neither name may appear in the other's job. `switch_browser_chain`
-        // is the one place a site can move a chain, and it moves the browser's.
-        let switch = source
-            .split("fn switch_browser_chain")
-            .nth(1)
-            .unwrap_or_default();
-        let body = switch.split("\n    fn ").next().unwrap_or_default();
-        assert!(
-            body.contains("self.browser_chain = chain_id;"),
-            "a chain switch moves the browser"
-        );
-        assert!(
-            !body.contains("self.receive_chain"),
-            "a chain switch must not touch the receive screen"
-        );
     }
 
     /// FR-004 / data-model.md §Screen states: the gallery chip strip exposes
@@ -13075,15 +14319,29 @@ mod tests {
         assert_eq!(codes, crate::settings::fixtures::DESKTOP_STATES);
     }
 
+    /// The Trusted Signer page's badge names where the page is; the address
+    /// itself is in the field under it.
+    #[test]
+    fn a_signer_page_badge_is_its_host() {
+        assert_eq!(
+            page_host("https://sign.example.com/vela/"),
+            "sign.example.com"
+        );
+        assert_eq!(page_host("http://localhost:8140/"), "localhost:8140");
+        assert_eq!(page_host("https://[::1]:9/?x#y"), "[::1]:9");
+    }
+
     /// The second-level nav is the phone's settings list with the rows
     /// collapsed to their titles — same ids, same order, so somebody who
     /// learned one knows the other.
     #[test]
     fn settings_nav_covers_every_panel() {
-        assert_eq!(SettingsPage::ALL.len(), 9);
+        assert_eq!(SettingsPage::ALL.len(), 10);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
         assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
-        assert_eq!(SettingsPage::ALL[8], SettingsPage::About);
+        // "Sign with" beside the speed (spec 071).
+        assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
+        assert_eq!(SettingsPage::ALL[9], SettingsPage::About);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips
@@ -13125,6 +14383,17 @@ mod tests {
     }
 }
 
+/// -32002, "a request is already open": the site may ask again. What a site
+/// hears when the column is busy with the wallet's OWN request, which the
+/// browser machine cannot see.
+fn busy_answer() -> SignResponsePayload {
+    SignResponsePayload::Err {
+        code: -32002,
+        kind: SignErrorKind::SubmitFailed,
+        message: Some("Another signing request is already open in Vela".to_owned()),
+    }
+}
+
 /// Is this a well-formed EVM address?
 ///
 /// The core refuses a malformed one anyway; saying so before the press is what
@@ -13143,31 +14412,4 @@ struct ContactForm {
     editing: bool,
     address: String,
     name: String,
-}
-
-/// Bytes as the figure and the unit the hero draws them as.
-///
-/// KB and MB at 1024, because that is what a file manager on this machine will
-/// say and a person comparing the two numbers should not have to know which
-/// convention each used. One decimal past KB, none below: "1536 B" is a real
-/// number and "1.5 KB" of it is noise.
-fn human_bytes(bytes: u64) -> (SharedString, SharedString) {
-    #[allow(clippy::cast_precision_loss, reason = "a file size, for display")]
-    let value = bytes as f64;
-    if bytes < 1024 {
-        return (
-            SharedString::from(bytes.to_string()),
-            SharedString::from("B"),
-        );
-    }
-    if bytes < 1024 * 1024 {
-        return (
-            SharedString::from(format!("{:.1}", value / 1024.0)),
-            SharedString::from("KB"),
-        );
-    }
-    (
-        SharedString::from(format!("{:.1}", value / (1024.0 * 1024.0))),
-        SharedString::from("MB"),
-    )
 }

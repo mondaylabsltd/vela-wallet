@@ -2,7 +2,8 @@
 //  BrowserWireDriftTests.swift
 //  VelaWalletTests
 //
-//  The drift gate for 053's six machines.
+//  The drift gate for the browser's and the signing sheet's machines
+//  (053's six, with `dapp_browser` in place of `dapp_permissions` since 070).
 //
 //  Same check as `CoreWireDriftTests`, same reason: `ts-rs` has no Swift
 //  backend, the mirrors in `*Wire.swift` are hand-written, and nothing but
@@ -130,44 +131,93 @@ struct BrowserWireDriftTests {
         }
     }
 
-    // MARK: - dapp_permissions
+    // MARK: - dapp_browser (spec 070)
 
-    @Test func permissionsViewDecodes() throws {
-        let core = DappPermissionsCore()
+    private func dispatch(_ core: DappBrowserCore, _ event: [String: Any]) throws -> String {
+        try core.dispatch(eventJson: CoreJSON.string(event))
+    }
 
-        let initial = try CoreJSON.decode(DpermViewWire.self, from: try CoreJSON.object(core.view()))
-        #expect(initial.consent == nil)
-        #expect(!initial.isConnected)
+    /// The view decodes at every stage a live browser goes through, and every
+    /// operation the machine asks along the way is one the executor answers.
+    @Test func browserViewDecodesAndAsksOnlyWhatTheExecutorAnswers() throws {
+        let core = DappBrowserCore()
+        let initial = try CoreJSON.decode(DbrViewWire.self, from: try CoreJSON.object(core.view()))
+        #expect(!initial.ready, "not ready until the stored sites are read")
+        #expect(initial.tabs.isEmpty)
 
-        // The seeding order a live browser uses, in the order it uses it.
-        _ = try core.dispatch(eventJson: CoreJSON.string([
+        var asked: [String] = []
+        let started = try dispatch(core, ["type": "start"])
+        asked += tags(try effects(from: started))
+        #expect(asked == ["list_sites"])
+        let listId = (try effects(from: started).first?["id"] as? NSNumber)?.uint64Value ?? 0
+
+        _ = try dispatch(core, ["type": "networks_changed", "chain_ids": [1, 100, 8453]])
+        _ = try dispatch(core, [
             "type": "accounts_updated", "addresses": ["0x88cca0eedbf2c4426110bbfc998f048689266894"],
-        ]))
-        _ = try core.dispatch(eventJson: CoreJSON.string([
+        ])
+        _ = try dispatch(core, [
             "type": "account_switched",
             "address": "0x88cca0eedbf2c4426110bbfc998f048689266894",
             "now_ms": 1_757_000_000_000,
+        ])
+        let listed = try core.resolveEffect(effectId: listId, resultJson: CoreJSON.string([
+            "type": "sites_listed",
+            "sites": [[
+                "origin": "https://app.uniswap.org",
+                "grant": [
+                    "origin": "https://app.uniswap.org",
+                    "address": "0x88cca0eedbf2c4426110bbfc998f048689266894",
+                    "chain_id": 100, "granted_at_ms": 1_757_000_000_000,
+                ],
+                "chain_id": 8453,
+            ]],
         ]))
-        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "chain_changed", "chain_id": 100]))
-        _ = try core.dispatch(eventJson: CoreJSON.string([
-            "type": "navigation_started", "url": "https://app.uniswap.org/swap",
-        ]))
+        let ready = try CoreJSON.decode(DbrViewWire.self, from: try view(from: listed))
+        #expect(ready.ready)
+        #expect(ready.sites.map(\.origin) == ["https://app.uniswap.org"])
+        #expect(ready.sites.first?.chainId == 8453, "the stored chain outranks the grant's")
 
-        let asked = try core.dispatch(eventJson: CoreJSON.string([
-            "type": "provider_request",
-            "id": "req-1",
-            "method": "eth_requestAccounts",
-            "params_json": "[]",
-            "origin": "https://app.uniswap.org",
-            "is_main_frame": true,
-        ]))
-        for tag in tags(try effects(from: asked)) {
+        func page(_ message: [String: Any]) throws -> String {
+            try dispatch(core, [
+                "type": "page_message", "tab": "t1",
+                "frame_origin": "https://app.uniswap.org", "is_main_frame": true,
+                "message_json": CoreJSON.string(message),
+            ])
+        }
+        asked += tags(try effects(from: try page(["t": "hello", "doc": "d1"])))
+        asked += tags(try effects(from: try page([
+            "t": "req", "doc": "d1", "id": "1", "method": "eth_blockNumber", "params": [],
+        ])))
+        let signed = try page([
+            "t": "req", "doc": "d1", "id": "2", "method": "personal_sign", "params": ["0x68656c6c6f", "0x0"],
+        ])
+        asked += tags(try effects(from: signed))
+        asked += tags(try effects(from: try page([
+            "t": "req", "doc": "d1", "id": "3", "method": "wallet_switchEthereumChain",
+            "params": [["chainId": "0x1"]],
+        ])))
+        let tab = try CoreJSON.decode(DbrViewWire.self, from: try view(from: signed))
+        #expect(tab.tab("t1")?.connectedAddress == "0x88cca0eedbf2c4426110bbfc998f048689266894")
+        #expect(tab.signing == DbrSigningViewWire(tab: "t1", id: "2"))
+        // The page goes away with its sheet up: the sheet is cancelled.
+        asked += tags(try effects(from: try page(["t": "hello", "doc": "d2"])))
+        asked += tags(try effects(from: try dispatch(core, ["type": "revoke_requested", "origin": "https://app.uniswap.org"])))
+        asked += tags(try effects(from: try dispatch(core, ["type": "renderer_gone", "tab": "t1"])))
+        let crashed = try CoreJSON.decode(
+            DbrViewWire.self, from: try view(from: try dispatch(core, ["type": "tab_closed", "tab": "t1"]))
+        )
+        #expect(crashed.tabs.isEmpty, "a closed tab is forgotten")
+
+        for expected in ["deliver", "read", "forward_to_signing", "write_site_chain",
+                         "cancel_signing", "remove_grant"] {
+            #expect(asked.contains(expected), "the walk never asked `\(expected)`")
+        }
+        for tag in asked {
             #expect(
-                BrowserExecutor.operations.contains(tag),
-                "dapp_permissions asks for `\(tag)`, which this build's executor does not handle"
+                DbrExecutor.operations.contains(tag),
+                "dapp_browser asks for `\(tag)`, which this build's executor does not handle"
             )
         }
-        _ = try CoreJSON.decode(DpermViewWire.self, from: try view(from: asked))
     }
 
     // MARK: - sign_request

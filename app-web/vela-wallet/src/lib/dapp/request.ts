@@ -41,6 +41,11 @@ export type RequestStage =
 	/** A granted origin asking for a signature — 026's sheet, in Phase 5. */
 	| { kind: 'signing'; grantedAddress: string };
 
+// There is no `landing` stage. Spec 077 put the landing in the SHEET, keyed on
+// the tracker's handoff, precisely so it does not belong to a request: the dApp
+// already HAS its answer by then, and what is being watched is the chain, which
+// is the person's business and not the request's.
+
 /**
  * Ask the core what to do with this request, and do the parts that need nobody.
  *
@@ -129,10 +134,10 @@ export function encode(payload: DpermRespondPayload): unknown {
 		case 'permissions':
 			// EIP-2255's shape.
 			return payload.granted ? [{ parentCapability: 'eth_accounts' }] : [];
-		case 'error':
 		default:
-			// The core never answers a question with an `Error` payload — a refusal
-			// arrives as its own outcome. Defensive tail.
+			// A refusal arrives as its own outcome, never as a payload — the
+			// `Error` variant went with the browser half (spec 070 T063).
+			// Defensive tail.
 			return null;
 	}
 }

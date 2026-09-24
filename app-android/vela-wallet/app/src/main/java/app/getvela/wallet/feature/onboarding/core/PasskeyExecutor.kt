@@ -803,7 +803,10 @@ class PasskeyExecutor(
      * which object actually answers, which is what the response reports back.
      */
     private fun attachmentFor(method: KeyMethod): String? = when (method) {
-        KeyMethod.Platform, KeyMethod.SecurityKey, KeyMethod.Hybrid -> null
+        // `TrustedSigner` never arrives here: the executor hands a `trusted_signer`
+        // ceremony to the Trusted Signer instead of to Credential Manager, and the
+        // page constrains its own ceremony (spec 075).
+        KeyMethod.Platform, KeyMethod.SecurityKey, KeyMethod.Hybrid, KeyMethod.TrustedSigner -> null
     }
 
     private companion object {

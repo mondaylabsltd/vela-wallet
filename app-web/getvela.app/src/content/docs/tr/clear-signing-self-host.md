@@ -14,17 +14,6 @@ ulaşma yoluna müdahale edilmişse, size bir şey gösterip başka bir şey imz
 İmza sayfası, bunu ikiye bölmek için var: işlem bir yerden gelir, kontrol ve imza ise
 sizin denetiminizdeki başka bir yerde gerçekleşir.
 
-**Durum:** hazır ve yerelde test edildi; **yayımlanmadı** ve **henüz hiçbir Vela
-uygulaması ona istek göndermiyor**. Bugün okunacak, çalıştırılacak ve `samples/`
-klasöründeki örnek isteyicilerle denenecek bir şey. Onu gerçek imzalar için kullanmak,
-uygulamaların isteklerini ona yönlendirmesini gerektiriyor; bu kısım henüz yapılmadı.
-
-## Nedir
-
-Tek bir klasör — depodaki `app-web/clearsigning` — ve bu klasör hem bir web sayfası
-hem de bir Chrome uzantısı. Saf HTML, CSS ve JavaScript: framework yok, paketleyici
-(bundler) yok, derleme adımı yok, bağımlılık yok ve bir sunucudan veri çekmiyor —
-yaptığı tek istek, süs amaçlı token logoları için.
 
 Bir imza isteği aldığında, onunla birlikte gelen özete güvenmez. Ham calldata'yı
 kendisi çözer, kendi özet değerini (digest) hesaplar, imzanın gerçekte neye yetki
@@ -40,17 +29,6 @@ Bir geçiş anahtarı, oluşturulduğu alan adına bağlıdır. Vela anahtarlar�
 (relying party) `getvela.app` olan bir sayfaya sunar. Kendi kopyanızı çalıştırmanın
 hangi yolunun işinize yarayacağını bu tek kural belirler.
 
-**Chrome uzantısı olarak — mevcut anahtarlarınızla kullanmanın yolu budur.**
-Uzantının bağlı olan tarafı, klasör nereden gelmiş olursa olsun `getvela.app`'tir; yani
-mevcut anahtarlarınız onda imzalayabilir, çalışan kod ise sizin yüklediğiniz ve
-incelediğiniz klasördür.
-
-1. Klasörü edinin: `git clone https://github.com/mondaylabsltd/vela-wallet`
-   (içindeki `app-web/clearsigning`).
-2. `chrome://extensions` adresini açın ve **Geliştirici modu**'nu etkinleştirin.
-3. **Paketlenmemiş öğe yükle**'ye tıklayın ve `app-web/clearsigning` klasörünü seçin.
-4. Araç çubuğundaki simge, sayfayı bir sekmede açar.
-
 **Kendi alan adınızda ya da localhost'ta bir sayfa olarak.** HTTPS üzerinden (ya da
 localhost'tan) sunulduğunda sayfanın bağlı olan tarafı kendi ana makine adıdır
 (hostname) — yani `getvela.app` altında kayıtlı anahtarlarla değil, _o_ ana makine adı
@@ -60,7 +38,7 @@ için imzalamanın doğru yolu yapar. Mevcut bir `getvela.app` cüzdanı için i
 yolu değildir.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

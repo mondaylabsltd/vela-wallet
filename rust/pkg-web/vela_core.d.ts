@@ -556,6 +556,19 @@ export class SessionCore {
 }
 
 /**
+ * r#" How this device signs by default (spec 071): the "Sign with" every"#
+ * r" signing sheet starts at, and which Trusted Signer page it opens.
+ */
+export class SignPrefCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    view(): string;
+}
+
+/**
  * r" The dApp signing approval lifecycle.
  */
 export class SignRequestCore {
@@ -597,6 +610,18 @@ export function abiEncodeAddress(address_hex: string): Uint8Array;
 export function abiEncodeBytes32(data: Uint8Array): Uint8Array;
 
 export function abiEncodeUint256(value_hex: string): Uint8Array;
+
+/**
+ * Where the caret belongs in `clean`, having been at `caret` in `raw`
+ * (UTF-16 units, as `selectionStart` counts).
+ */
+export function amountTextCaret(raw: string, clean: string, caret: number): number;
+
+/**
+ * An amount field's text as the core reads it, or `undefined` for a paste
+ * with no reading as one figure (spec 073; `l10n::amount_text`).
+ */
+export function amountTextClean(raw: string, number: string, previous?: string | null, pasted?: boolean | null): string | undefined;
 
 /**
  * The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
@@ -662,9 +687,31 @@ export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): stri
 
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
 
+/**
+ * The document-start script an in-app browser injects, for `host`
+ * (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
+ * the real bridge in a real browser.
+ */
+export function dappProviderScript(host: string): string;
+
+/**
+ * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
+ */
+export function dappRpcClassify(method: string): string;
+
 export function decodeCalldata(sig: string, calldata: Uint8Array): AbiValue;
 
 export function derSignatureToRawLowS(der: Uint8Array): Uint8Array;
+
+/**
+ * How a request still pending when the request window goes away is settled,
+ * as JSON (`{"code":4900,"reason":"browser_closed"}`) — spec 070 T063.
+ *
+ * 4900, never 4001: a dApp treats an explicit "user rejected" as safe to
+ * retry, which double-spends a request that may already have landed. The
+ * window asks rather than restating it.
+ */
+export function dpermSettleOnClose(): string;
 
 /**
  * Encode the wallet's registry metadata blob to `0x`-hex, bounded to the
@@ -820,6 +867,18 @@ export function passkeyProviderName(aaguid: string): string;
 export function peggedNativeUsd(symbol: string): number | undefined;
 
 /**
+ * `{key: rawValue}` → `[{key, value | null}]`, the writes that bring an
+ * older spelling to the shared record.
+ */
+export function prefsMigrations(entries_json: string): string;
+
+/**
+ * `{key: rawValue}` → `{theme, language, textScale, textScaleFactor,
+ * numberFormat, dateFormat, timeFormat}`.
+ */
+export function prefsRead(entries_json: string): string;
+
+/**
  * Returns `null` when the two assertions do not pin down exactly one key
  * (different credentials, or the same signature twice) — that is a legitimate
  * outcome, not an error.
@@ -895,11 +954,97 @@ export function safeProxyRuntimeCode(): string;
 
 export function sha256(data: Uint8Array): Uint8Array;
 
+/**
+ * What a site's message request asks the account to sign, before the
+ * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
+ */
+export function signMessageHash(method: string, params_json: string): Uint8Array | undefined;
+
+/**
+ * `{value, unit}` — a byte count in 1024s, for the shell to format in the
+ * person's numbers.
+ */
+export function storageBytesDisplay(bytes: number): string;
+
+export function storageIsCacheKey(key: string): boolean;
+
+export function storageIsErasableKey(key: string): boolean;
+
+/**
+ * Is this key the wallet's at all (counted in the storage total)?
+ */
+export function storageIsOurs(key: string): boolean;
+
+/**
+ * The row a key belongs to, or `undefined`.
+ */
+export function storageItemOfKey(key: string): string | undefined;
+
+/**
+ * `[{id, group}]`, in the order the page draws them.
+ */
+export function storageItems(): string;
+
+/**
+ * Records in a stored list value; `undefined` when it is not a list.
+ */
+export function storageRecordsIn(value: string): number | undefined;
+
 export function toBase64Url(data: Uint8Array): string;
 
 export function toHex(data: Uint8Array, prefixed: boolean): string;
 
 export function toQuantity(value: string): string;
+
+/**
+ * The relying party a key minted behind `signerOrigin` belongs to, or `null`
+ * for a key this wallet's own authenticators made (spec 075).
+ *
+ * A key made on a Trusted Signer page is signed under THAT page's domain, so a
+ * challenge fetched under the wallet's own would never match the answer —
+ * 「可信签名器的回复与这笔请求不符」, which is how both phones found this.
+ */
+export function trustedSignerRegistryRpId(signer_origin?: string | null): string | undefined;
+
+/**
+ * The ONE relying party a unit is filed under, or an error naming the parties
+ * found when its members do not agree (ruling, 2026-09-23).
+ *
+ * The registry stores a single `rpId` per unit and every member proves under
+ * its own, so a mixed set is refused here rather than written and never
+ * provable.
+ * `member_origins_json` is a JSON array of each member's signer origin, with
+ * `null` for a key the wallet's own authenticators made — wasm-bindgen has no
+ * `Vec<Option<String>>`, and the phones pass the same shape.
+ */
+export function trustedSignerUnitRpId(member_origins_json: string, wallet_rp_id: string): string;
+
+/**
+ * Whether a page at `url` can use this wallet's passkeys (they are
+ * `getvela.app` keys).
+ *
+ * The web wallet cannot OPEN a Trusted Signer page, but it still has to decide
+ * whether a key that lives behind one is reachable by a platform sheet: a key
+ * minted on `*.getvela.app` is this app's passkey, and a key minted on
+ * anybody else's page is reachable nowhere but there.
+ */
+export function trustedSignerUsesWalletPasskeys(url: string): boolean;
+
+/**
+ * Spec 077: how long a submitted operation usually takes to land on a chain,
+ * in seconds — `0` where Vela ships no estimate for it.
+ *
+ * The send receipt has had this number since spec 038 (#D3), through the
+ * core's own `SendReceiptView`. A dApp transaction lands on the SAME receipt
+ * but arrives through `tx_tracker`, whose entries carry no estimate — so the
+ * web shell reads it from the core's table here rather than carrying a second
+ * copy of twenty-four numbers that would quietly drift.
+ *
+ * `0` rather than `undefined` because that is what the receipt already does
+ * with "no estimate": the ring circles instead of filling, which is the honest
+ * drawing of a wallet that does not know.
+ */
+export function typicalInclusionSeconds(chain_id: number): number;
 
 /**
  * `kind` is `"create"` or `"get"` (anything else errors — the caller is
@@ -962,6 +1107,7 @@ export interface InitOutput {
     readonly __wbg_rpcpoolcore_free: (a: number, b: number) => void;
     readonly __wbg_sendcore_free: (a: number, b: number) => void;
     readonly __wbg_sessioncore_free: (a: number, b: number) => void;
+    readonly __wbg_signprefcore_free: (a: number, b: number) => void;
     readonly __wbg_signrequestcore_free: (a: number, b: number) => void;
     readonly __wbg_tokentrustcore_free: (a: number, b: number) => void;
     readonly __wbg_txtrackercore_free: (a: number, b: number) => void;
@@ -972,6 +1118,8 @@ export interface InitOutput {
     readonly activityfeedcore_new: () => number;
     readonly activityfeedcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly activityfeedcore_view: (a: number) => [number, number, number, number];
+    readonly amountTextCaret: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly amountTextClean: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly approvalguardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly approvalguardcore_new: () => number;
     readonly approvalguardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1015,6 +1163,8 @@ export interface InitOutput {
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
+    readonly dappProviderScript: (a: number, b: number) => [number, number];
+    readonly dappRpcClassify: (a: number, b: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;
     readonly dapppermissionscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1029,6 +1179,7 @@ export interface InitOutput {
     readonly displaycurrencycore_new: () => number;
     readonly displaycurrencycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly displaycurrencycore_view: (a: number) => [number, number, number, number];
+    readonly dpermSettleOnClose: () => [number, number];
     readonly encodeRegistryMetadata: (a: any) => [number, number, number, number];
     readonly encodeSplitterDeployCall: (a: number, b: number) => [number, number, number, number];
     readonly encodeType: (a: number, b: number) => [number, number, number, number];
@@ -1106,6 +1257,8 @@ export interface InitOutput {
     readonly paymentrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly paymentrequestcore_view: (a: number) => [number, number, number, number];
     readonly peggedNativeUsd: (a: number, b: number) => [number, number];
+    readonly prefsMigrations: (a: number, b: number) => [number, number];
+    readonly prefsRead: (a: number, b: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1133,10 +1286,22 @@ export interface InitOutput {
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly signprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly signprefcore_new: () => number;
+    readonly signprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly signprefcore_view: (a: number) => [number, number, number, number];
     readonly signrequestcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
+    readonly storageBytesDisplay: (a: number) => [number, number];
+    readonly storageIsCacheKey: (a: number, b: number) => number;
+    readonly storageIsErasableKey: (a: number, b: number) => number;
+    readonly storageIsOurs: (a: number, b: number) => number;
+    readonly storageItemOfKey: (a: number, b: number) => [number, number];
+    readonly storageItems: () => [number, number];
+    readonly storageRecordsIn: (a: number, b: number) => number;
     readonly toBase64Url: (a: number, b: number) => [number, number];
     readonly toHex: (a: number, b: number, c: number) => [number, number];
     readonly toQuantity: (a: number, b: number) => [number, number, number, number];
@@ -1144,10 +1309,14 @@ export interface InitOutput {
     readonly tokentrustcore_new: () => number;
     readonly tokentrustcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly tokentrustcore_view: (a: number) => [number, number, number, number];
+    readonly trustedSignerRegistryRpId: (a: number, b: number) => [number, number];
+    readonly trustedSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly trustedSignerUsesWalletPasskeys: (a: number, b: number) => number;
     readonly txtrackercore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly txtrackercore_new: () => number;
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
+    readonly typicalInclusionSeconds: (a: number) => number;
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];

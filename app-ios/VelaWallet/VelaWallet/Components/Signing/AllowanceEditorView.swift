@@ -87,7 +87,19 @@ private struct CustomCapField: View {
                     .keyboardType(.decimalPad)
                     .font(Typography.title.scaled(textScale).font)
                     .foregroundStyle(theme.fgBase)
-                    .onChange(of: text) { _, value in onChange(value) }
+                    // Spec 073: the cap's parser drops every comma, so a raw
+                    // "4,5" allowed 45 — cleaned by the core's rule first.
+                    .onChange(of: text) { old, value in
+                        guard let clean = AmountText.clean(value, previous: old) else {
+                            text = old
+                            return
+                        }
+                        if clean != value {
+                            text = clean
+                            return
+                        }
+                        onChange(clean)
+                    }
                 Text(verbatim: input.symbol)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)

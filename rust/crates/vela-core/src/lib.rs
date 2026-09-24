@@ -43,6 +43,7 @@ pub mod identicon_raster;
 pub mod l10n;
 pub mod passkey;
 mod passkey_catalog;
+pub mod prefs;
 pub mod primitives;
 pub mod registry_backup;
 pub mod registry_chain;
@@ -51,6 +52,9 @@ pub mod registry_metadata;
 pub mod registry_proof;
 pub mod registry_resolve;
 pub mod safe;
+pub mod sign_message;
+pub mod storage_catalog;
+pub mod trusted_signer;
 pub mod types;
 /// The Safe ERC-4337 user operation — calldata, initCode, the SafeOp hash,
 /// the WebAuthn signature envelope, the v0.7 wire shape. Pure assembly; the

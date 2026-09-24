@@ -34,8 +34,14 @@ struct OnboardingExecutorTests {
         }
     }
 
-    @Test func sessionOperationsAreAllSeven() {
-        #expect(SessionExecutor.operations.count == 7)
+    /// The session machine's operations, all of them — a count, because the
+    /// failure map answers by NAME and an operation nobody taught it would
+    /// fall through to `accounts_unavailable` and sign the device out.
+    ///
+    /// Eight since 2026-09-23: `remove_account`, one wallet leaving a device
+    /// that keeps the others.
+    @Test func sessionOperationsAreAllEight() {
+        #expect(SessionExecutor.operations.count == 8)
     }
 
     /// `network` is the one bit of classification only a shell can supply: a

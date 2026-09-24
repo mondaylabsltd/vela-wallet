@@ -29,6 +29,14 @@ struct TypeRole {
     let size: CGFloat
     let relativeTo: Font.TextStyle
     let leading: CGFloat // line-height multiplier from Tokens.Leading
+    /// Whether a caller already multiplied by the person's chosen size.
+    ///
+    /// `typeRole` applies the size itself, from the environment, so a screen
+    /// that never heard of 设置 → 字号 grows with it too — which is how 228 of
+    /// the app's 494 text sites came to ignore the setting entirely (settings,
+    /// onboarding and the Trusted Signer's sheets among them; found 2026-09-23).
+    /// A role that went through [`scaled`] says so here, and is left alone.
+    var pinned: Bool = false
 
     var font: Font { .custom(fontName, size: size, relativeTo: relativeTo) }
     /// Extra spacing SwiftUI needs to reach the token line height.
@@ -166,14 +174,39 @@ struct MonoTypeRole {
 extension TypeRole {
     /// FR-011 wallet text scale: the same role at a multiplied point size
     /// (H7x = 1.35×). Line-height multiplier carries over unchanged.
+    ///
+    /// The result is [`pinned`] whatever the factor: a caller that did the
+    /// arithmetic owns the answer, and `typeRole` must not multiply again.
     func scaled(_ factor: CGFloat) -> TypeRole {
-        factor == 1 ? self : TypeRole(fontName: fontName, size: size * factor, relativeTo: relativeTo, leading: leading)
+        TypeRole(
+            fontName: fontName,
+            size: size * factor,
+            relativeTo: relativeTo,
+            leading: leading,
+            pinned: true
+        )
     }
 }
 
 extension MonoTypeRole {
     func scaled(_ factor: CGFloat) -> MonoTypeRole {
         factor == 1 ? self : MonoTypeRole(size: size * factor, weight: weight, relativeTo: relativeTo)
+    }
+}
+
+/// A role drawn at the size this person chose (设置 → 字号), unless the caller
+/// already applied it.
+///
+/// The multiplier rides in the environment — `walletTextScale` — so a screen
+/// with its own scale (the gallery's 1.35× chip) still overrides it for its
+/// subtree, and everything else inherits the one the root sets.
+private struct ScaledTypeRole: ViewModifier {
+    @Environment(\.walletTextScale) private var scale
+    let role: TypeRole
+
+    func body(content: Content) -> some View {
+        let drawn = role.pinned ? role : role.scaled(scale)
+        return content.font(drawn.font).lineSpacing(drawn.lineSpacing)
     }
 }
 
@@ -188,7 +221,7 @@ extension Text {
     /// Applies a complete type role (font + line spacing) — the only
     /// sanctioned way to style text outside DesignSystem/.
     func typeRole(_ role: TypeRole) -> some View {
-        self.font(role.font).lineSpacing(role.lineSpacing)
+        modifier(ScaledTypeRole(role: role))
     }
 
     /// Applies a monospaced role (addresses/seeds).

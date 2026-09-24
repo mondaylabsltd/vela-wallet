@@ -39,6 +39,11 @@ class NoStrayHttpClientTest {
         // routable through a pool that only knows about chains. Found by this
         // test on its first run, which is what it is for.
         "core/passkey/PasskeyDirectory.kt",
+        // Spec 075: the Trusted Signer tunnel is a WebSocket to a blind message
+        // forwarder the person names in Settings — not a chain, and the one
+        // socket in the app that must NOT be pooled or retried elsewhere: a
+        // second connection in the same role is closed with 4409 by the tunnel
+        // itself (contracts/tunnel.md §1).
     )
 
     private val clientMarkers = listOf(

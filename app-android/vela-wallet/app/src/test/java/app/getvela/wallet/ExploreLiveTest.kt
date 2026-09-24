@@ -5,6 +5,7 @@ import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.browser.ExploreLive
 import app.getvela.wallet.feature.browser.core.BhistEntry
 import app.getvela.wallet.feature.browser.core.BhistView
+import app.getvela.wallet.feature.browser.core.DbrTabView
 import app.getvela.wallet.feature.browser.core.EngineState
 import app.getvela.wallet.feature.browser.core.ExploreGroupView
 import app.getvela.wallet.feature.browser.core.ExploreSite
@@ -43,8 +44,10 @@ class ExploreLiveTest {
             ready = true,
         )
         val history = BhistView(listOf(BhistEntry("https://curve.fi", "https://curve.fi/dex", "curve.fi", "", "", 3.0)))
-        val engine = EngineState(url = "https://app.uniswap.org/swap", origin = "https://app.uniswap.org", host = "app.uniswap.org", secure = true, title = "Uniswap", canBack = true)
-        val model = ExploreLive.home(fallback, view, history, engine, strings)
+        val engine = EngineState(url = "https://app.uniswap.org/swap", origin = "https://app.uniswap.org", host = "app.uniswap.org", title = "Uniswap", canBack = true)
+        // The lock is the CORE's word (spec 070), not the engine's guess.
+        val tab = DbrTabView(tab = "t1", origin = "https://app.uniswap.org", secure = true)
+        val model = ExploreLive.home(fallback, view, history, engine, strings, tab)
         assertNull(model.empty)
         val tiles = model.favorites!!.tiles
         assertEquals(2, tiles.size)
@@ -65,6 +68,22 @@ class ExploreLiveTest {
         assertEquals(listOf("favorites", "recent", "g1", "g2"), model.groupManageSheet.rows.map { it.id })
         assertTrue(model.groupManageSheet.rows[3].hidden)
         assertEquals("app.uniswap.org", model.siteMenuSheet.site.host)
+        assertTrue(model.browser.secure)
+        assertTrue(model.siteMenuSheet.secure)
+        assertEquals("a favourite's row unpins it", strings.t("explore.removeFromFavorites"), model.siteMenuSheet.items.first { it.id == "favorite" }.label)
+        assertTrue("Disconnect is offered only to a connected site", model.siteMenuSheet.items.none { it.id == "disconnect" })
+    }
+
+    @Test
+    fun `an insecure page is never drawn with a lock, and a crashed tab says so`() {
+        val view = ExploreView(tabs = listOf(ExploreTab("t1", "http://evil.example/", "", "evil.example")), selected_tab = "t1", ready = true)
+        val engine = EngineState(url = "http://evil.example/", origin = "http://evil.example", host = "evil.example")
+        val tab = DbrTabView(tab = "t1", origin = "http://evil.example", secure = false, crashed = true)
+        val model = ExploreLive.home(fallback, view, BhistView(), engine, strings, tab)
+        assertFalse(model.browser.secure)
+        assertTrue(model.browser.crashed)
+        assertFalse(model.connection.secure)
+        assertEquals(strings.t("connect.browser.a11yInsecure"), model.siteMenuSheet.statusLine)
     }
 
     @Test
@@ -102,12 +121,20 @@ class ExploreLiveTest {
         assertEquals("https://app.uniswap.org", ExploreLive.scannedUrl("app.uniswap.org"))
         assertEquals("https://example.com:8443/x", ExploreLive.scannedUrl("example.com:8443/x"))
 
-        assertNull(ExploreLive.scannedUrl("0x2222222222222222222222222222222222222222"))
-        assertNull(ExploreLive.scannedUrl("wc:7f6e504bfad60b48@2?relay-protocol=irn&symKey=5"))
-        assertNull(ExploreLive.scannedUrl("ethereum:0x2222222222222222222222222222222222222222@1"))
         assertNull(ExploreLive.scannedUrl("velawallet://pay?a=1"))
         assertNull(ExploreLive.scannedUrl("hello world"))
         assertNull(ExploreLive.scannedUrl("localhost"))
         assertNull(ExploreLive.scannedUrl(""))
+    }
+
+    /** D1 option (b), spec 070: every code has a place to go, or a sentence saying why not. */
+    @Test
+    fun `a scanned payment goes to send and a WalletConnect code is named`() {
+        val address = "0x2222222222222222222222222222222222222222"
+        assertEquals(ExploreLive.Scanned.Payment(address), ExploreLive.scanned(address))
+        assertEquals(ExploreLive.Scanned.Payment("ethereum:$address@1"), ExploreLive.scanned("ethereum:$address@1"))
+        assertEquals(ExploreLive.Scanned.WalletConnect, ExploreLive.scanned("wc:7f6e504bfad60b48@2?relay-protocol=irn&symKey=5"))
+        assertEquals(ExploreLive.Scanned.Unrecognized, ExploreLive.scanned("hello world"))
+        assertEquals(ExploreLive.Scanned.Url("https://app.uniswap.org"), ExploreLive.scanned("app.uniswap.org"))
     }
 }

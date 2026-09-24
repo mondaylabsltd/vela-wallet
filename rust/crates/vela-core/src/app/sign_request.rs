@@ -551,13 +551,12 @@ pub enum Event {
 // Pure helpers — line-by-line ports
 // ---------------------------------------------------------------------------
 
-/// `isSigningMethod` (`use-dapp-signing.ts:490-496`), verbatim.
+/// `isSigningMethod` (`use-dapp-signing.ts:490-496`): the one predicate
+/// (`dapp_rpc::is_signing_method`, spec 070) plus `eth_sign`, which this
+/// machine renders as the blind-signing rung when a transport forwards it —
+/// the in-app browsers never do (`dapp_rpc::classify` refuses it, 4200).
 pub fn is_signing_method(method: &str) -> bool {
-    method == "eth_sendTransaction"
-        || method == "wallet_sendCalls"
-        || method == "personal_sign"
-        || method == "eth_sign"
-        || method.contains("signTypedData")
+    method == "eth_sign" || super::dapp_rpc::is_signing_method(method)
 }
 
 /// The signing-surface classification the sheet routes on.

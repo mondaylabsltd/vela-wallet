@@ -53,6 +53,7 @@ object I18nKeys {
         const val SIGN_OUT_BUTTON = "settings.signOut.button"
         const val SIGN_OUT_TITLE = "settings.signOut.title"
         const val SIGN_OUT_KEEPS = "settings.signOut.keeps"
+        const val SIGN_OUT_DESC_MANY = "settings.signOut.descMany"
         const val SIGN_OUT_WARNING = "settings.signOut.warning"
         const val SIGN_OUT_ANYWAY = "settings.signOut.anyway"
         const val SIGN_OUT_CANCEL = "settings.signOut.cancel"
@@ -128,6 +129,8 @@ object I18nKeys {
         const val METHOD_HYBRID_TITLE = "onboarding.create.methodHybridTitle"
         const val METHOD_HYBRID_BODY = "onboarding.create.methodHybridBody"
         const val METHOD_HYBRID_UNAVAILABLE = "onboarding.create.methodHybridUnavailable"
+        const val METHOD_BLOCKED_HINT = "onboarding.create.methodBlockedHint"
+        const val METHOD_BLOCKED_SIGNER = "onboarding.create.methodBlockedSigner"
         const val METHOD_SECURITY_KEY_TITLE = "onboarding.create.methodSecurityKeyTitle"
         const val METHOD_SECURITY_KEY_BODY = "onboarding.create.methodSecurityKeyBody"
         const val PROVIDER_PLATFORM = "onboarding.create.providerPlatform"
@@ -732,6 +735,8 @@ object I18nKeys {
 
         // Home rows.
         const val ACCOUNT_SWITCH = "settings.account.switch"
+        const val ACCOUNT_REMOVE = "settings.account.remove"
+        const val ACCOUNT_REMOVE_BODY = "settings.account.removeBody"
         const val CONTACTS_SUBTITLE = "settings.account.contactsSubtitle"
         const val FEEDBACK_TITLE = "settings.feedback.title"
         const val FEEDBACK_SUBTITLE = "settings.feedback.subtitle"
@@ -741,9 +746,6 @@ object I18nKeys {
         const val THEME_LIGHT = "settings.appearance.themeLight"
         const val THEME_DARK = "settings.appearance.themeDark"
         const val THEME_AUTO = "settings.appearance.themeAuto"
-        const val AVATAR_TITLE = "settings.appearance.avatarTitle"
-        const val AVATAR_INITIALS = "settings.appearance.avatarInitials"
-        const val AVATAR_IDENTICON = "settings.appearance.avatarIdenticon"
         const val TEXT_SCALE = "settings.appearance.textScale"
 
         // Language picker.
@@ -863,6 +865,10 @@ object I18nKeys {
         const val ENDPOINT_FIAT = "settingsModals.endpoints.fiatLabel"
         const val ENDPOINT_FIAT_HINT = "settingsModals.endpoints.fiatHint"
         const val ENDPOINTS_RESET = "settingsModals.endpoints.resetToDefaults"
+        const val ENDPOINTS_RESET_TITLE = "settingsModals.endpoints.resetTitle"
+        const val ENDPOINTS_RESET_BODY = "settingsModals.endpoints.resetBody"
+        const val ENDPOINTS_RESET_CONFIRM = "settingsModals.endpoints.resetConfirm"
+        const val ENDPOINTS_RESET_CANCEL = "settingsModals.endpoints.resetCancel"
 
         // Device storage.
         const val STORAGE_TITLE = "settings.storage.title"

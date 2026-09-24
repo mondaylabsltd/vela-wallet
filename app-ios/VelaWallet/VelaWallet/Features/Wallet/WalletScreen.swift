@@ -10,7 +10,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct WalletScreen: View {
     @Environment(\.theme) private var theme
@@ -103,7 +102,6 @@ struct WalletScreen: View {
             IdenticonViewerSheet(
                 loc: loc,
                 address: model.header.identiconSeed,
-                name: model.header.name,
                 onClose: { viewingIdenticon = false }
             )
             // `.large`, not `.medium`: the content is a big circle, a
@@ -127,7 +125,8 @@ struct WalletScreen: View {
             BalanceDisplay(model: model.balance, onStatusTap: onStatusTap)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    // A switch that takes effect: Select, not a button press.
+                    VelaHaptic.select.play()
                     onToggleBalance()
                 }
                 .accessibilityAddTraits(.isButton)

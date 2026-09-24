@@ -30,9 +30,6 @@ export interface SettingsMessages {
 		themeLight: string;
 		themeDark: string;
 		themeAuto: string;
-		avatarTitle: string;
-		avatarInitials: string;
-		avatarIdenticon: string;
 		textScale: string;
 	};
 	language: {
@@ -72,7 +69,7 @@ export interface SettingsMessages {
 	 * The speed sheet (spec 068). The option NAMES are the send flow's own
 	 * (`send.gasTier.*`) — one set of words for a tier, so Settings and the
 	 * send form can never call the same speed two different things. `rapid` is
-	 * not among them: it is a dead variant the relay refuses.
+	 * not among them: it is a dead variant the bundler refuses.
 	 */
 	feeSpeed: {
 		title: string;
@@ -89,6 +86,34 @@ export interface SettingsMessages {
 		fastHint: string;
 		standardHint: string;
 		slowHint: string;
+	};
+	/**
+	 * Spec 071: the default "Sign with" and the Trusted Signer's page, beside
+	 * the speed. The method names are the signing sheet's own (the create
+	 * flow's for where a passkey is, `common.automatic`, the Trusted Signer's
+	 * title) — one set of words, so Settings and the sheet cannot call the
+	 * same choice two different things.
+	 */
+	signing: {
+		title: string;
+		subtitle: string;
+		methods: {
+			auto: string;
+			platform: string;
+			hybrid: string;
+			security_key: string;
+			trusted_signer: string;
+		};
+		/** The Trusted Signer's one line, under its name. */
+		trustedSignerBody: string;
+		pageTitle: string;
+		pageSubtitle: string;
+		pageOfficial: string;
+		pageInvalid: string;
+		pageInsecure: string;
+		pageForeign: string;
+		pageReset: string;
+		pageSave: string;
 	};
 	networks: {
 		/** Template with `{{count}}`. */
@@ -107,6 +132,10 @@ export interface SettingsMessages {
 		chainId: string;
 		/** The delete control on a custom row — "Remove Network" (spec 028 Phase 8). */
 		remove: string;
+		/** What removing one asks first (spec 072). */
+		removeBody: string;
+		removeConfirm: string;
+		removeCancel: string;
 		rpcUrl: string;
 		explorer: string;
 		mismatch: string;
@@ -167,6 +196,11 @@ export interface SettingsMessages {
 		fiatLabel: string;
 		fiatHint: string;
 		reset: string;
+		/** Spec 072 (FR-010): resetting is destructive and asks first. */
+		resetTitle: string;
+		resetBody: string;
+		resetConfirm: string;
+		resetCancel: string;
 		guide: string;
 	};
 	storage: {
@@ -235,11 +269,17 @@ export interface SettingsMessages {
 		countPrefix: string;
 		createNew: string;
 		signInExisting: string;
+		/** Taking ONE wallet off this device (2026-09-23). */
+		remove: string;
+		removeBody: string;
 	};
 	signOut: {
 		button: string;
 		title: string;
 		desc: string;
+		/** Template with `{{count}}` — what a sign-out takes when it is more
+		 *  than one wallet. */
+		descMany: string;
 		keeps: string;
 		warning: string;
 		anyway: string;
@@ -404,9 +444,6 @@ export const SETTINGS_KEYS = [
 	'settings.appearance.themeLight',
 	'settings.appearance.themeDark',
 	'settings.appearance.themeAuto',
-	'settings.appearance.avatarTitle',
-	'settings.appearance.avatarInitials',
-	'settings.appearance.avatarIdenticon',
 	'settings.appearance.textScale',
 	'language.title',
 	'language.pickerTitle',
@@ -446,6 +483,21 @@ export const SETTINGS_KEYS = [
 	'send.gasTierHintFast',
 	'send.gasTierHintStandard',
 	'send.gasTierHintSlow',
+	'settings.signing.title',
+	'settings.signing.subtitle',
+	'onboarding.create.methodPlatformTitle',
+	'onboarding.create.methodHybridTitle',
+	'onboarding.create.methodSecurityKeyTitle',
+	'componentsUi.signing.trustedSignerTitle',
+	'componentsUi.signing.trustedSignerBody',
+	'settings.signing.pageTitle',
+	'settings.signing.pageSubtitle',
+	'settings.signing.pageOfficial',
+	'settings.signing.pageInvalid',
+	'settings.signing.pageInsecure',
+	'settings.signing.pageForeign',
+	'settings.signing.pageReset',
+	'settings.signing.pageSave',
 	'settings.networks.count',
 	'settings.networks.custom',
 	'settings.networks.builtinNote',
@@ -477,6 +529,9 @@ export const SETTINGS_KEYS = [
 	'onboarding.create.providerSecurityKey',
 	'settingsModals.network.chainId',
 	'settingsModals.network.removeTitle',
+	'settingsModals.network.removeBody',
+	'settingsModals.network.removeConfirm',
+	'settingsModals.network.removeCancel',
 	'settingsModals.network.fieldRpcUrl',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',
@@ -514,6 +569,10 @@ export const SETTINGS_KEYS = [
 	'settingsModals.endpoints.fiatLabel',
 	'settingsModals.endpoints.fiatHint',
 	'settingsModals.endpoints.resetToDefaults',
+	'settingsModals.endpoints.resetTitle',
+	'settingsModals.endpoints.resetBody',
+	'settingsModals.endpoints.resetConfirm',
+	'settingsModals.endpoints.resetCancel',
 	'settingsModals.endpoints.selfHostGuide',
 	'settings.storage.title',
 	'settings.storage.subtitle',

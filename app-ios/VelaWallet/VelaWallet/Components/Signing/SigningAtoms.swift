@@ -498,23 +498,36 @@ struct SignWithRow: View {
                 Text(verbatim: model.value)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
-                LucideIcon(.chevronDown, size: LucideIconSize.rowGlyph)
-                    .foregroundStyle(theme.fgMuted)
-                    .rotationEffect(.degrees(model.open ? 180 : 0))
+                // A row with nothing to choose is a statement, not a control.
+                if !model.options.isEmpty {
+                    LucideIcon(.chevronDown, size: LucideIconSize.rowGlyph)
+                        .foregroundStyle(theme.fgMuted)
+                        .rotationEffect(.degrees(model.open ? 180 : 0))
+                }
             }
             // The whole row is the target, not only its glyphs.
             .contentShape(Rectangle())
-            .onTapGesture { onSelect(nil) }
+            .onTapGesture { if !model.options.isEmpty { onSelect(nil) } }
             .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isButton)
+            .accessibilityAddTraits(model.options.isEmpty ? [] : .isButton)
 
             if model.open {
                 VStack(spacing: 0) {
                     ForEach(model.options) { option in
                         HStack {
-                            Text(verbatim: option.title)
-                                .typeRole(Typography.rowSub.scaled(textScale))
-                                .foregroundStyle(option.selected ? theme.fgBase : theme.fgMuted)
+                            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                                Text(verbatim: option.title)
+                                    .typeRole(Typography.rowSub.scaled(textScale))
+                                    .foregroundStyle(option.selected ? theme.fgBase : theme.fgMuted)
+                                // What the option does, under its name — never
+                                // squeezed beside it (the speed sheet's rule).
+                                if let detail = option.detail {
+                                    Text(verbatim: detail)
+                                        .typeRole(Typography.flowCaption.scaled(textScale))
+                                        .foregroundStyle(theme.fgSubtle)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
                             Spacer()
                             if option.selected {
                                 LucideIcon(.check, size: LucideIconSize.rowGlyph)

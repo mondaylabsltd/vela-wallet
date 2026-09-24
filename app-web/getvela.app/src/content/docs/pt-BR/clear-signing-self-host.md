@@ -15,13 +15,6 @@ uma coisa e assinar outra. Foi exatamente o que aconteceu com a
 A página de assinatura existe para dividir isso em dois: a transação vem de um lugar,
 e a conferência e a assinatura acontecem num lugar que você controla.
 
-**Situação:** pronta e testada localmente; **não publicada**, e **nenhum app da Vela
-envia solicitações para ela ainda**. Hoje, ela é algo para ler, rodar e experimentar
-com os solicitantes de demonstração da pasta `samples/`. Usá-la para assinaturas de
-verdade exige que os apps encaminhem suas solicitações para ela, e isso ainda precisa
-ser construído.
-
-## O que é
 
 Uma pasta — `app-web/clearsigning` no repositório — que é ao mesmo tempo uma página
 web e uma extensão do Chrome. HTML, CSS e JavaScript puros: nenhum framework, nenhum
@@ -42,17 +35,6 @@ registradas sob `getvela.app`, e um navegador só as oferece a uma página cuja
 relying party (a parte confiável, no vocabulário do WebAuthn) seja `getvela.app`.
 Essa única regra decide qual forma de rodar a sua própria cópia é útil para você.
 
-**Como extensão do Chrome — a forma de usá-la com as chaves que você já tem.** A
-relying party da extensão é `getvela.app`, não importa de onde a pasta veio, então as
-suas chaves existentes conseguem assinar nela, enquanto o código é a pasta que você
-carregou e inspecionou.
-
-1. Obtenha a pasta: `git clone https://github.com/mondaylabsltd/vela-wallet`
-   (ela está em `app-web/clearsigning`).
-2. Abra `chrome://extensions` e ative o **Modo do desenvolvedor**.
-3. Clique em **Carregar sem compactação** e escolha a pasta `app-web/clearsigning`.
-4. O ícone na barra de ferramentas abre a página numa aba.
-
 **Como página no seu próprio domínio, ou no localhost.** Servida por HTTPS (ou a
 partir do localhost), a relying party da página é o próprio hostname dela — então
 ela consegue assinar com chaves registradas sob _aquele_ hostname, não com chaves
@@ -62,7 +44,7 @@ cuja chave foi criada no seu próprio domínio. Não é uma forma de assinar por
 carteira existente do `getvela.app`.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

@@ -46,7 +46,10 @@ import app.getvela.wallet.feature.explore.components.ExploreEmpty
 import app.getvela.wallet.feature.explore.components.ExploreMetrics
 import app.getvela.wallet.feature.explore.components.ExploreSearchField
 import app.getvela.wallet.feature.explore.components.ExploreTabsScreen
+import app.getvela.wallet.feature.explore.components.BrowserNotice
 import app.getvela.wallet.feature.explore.components.GroupManageSheetContent
+import app.getvela.wallet.feature.explore.components.PickerOption
+import app.getvela.wallet.feature.explore.components.PickerSheetContent
 import app.getvela.wallet.feature.explore.components.SiteMenuSheetContent
 import app.getvela.wallet.feature.explore.components.SiteRow
 import app.getvela.wallet.feature.explore.components.SiteTile
@@ -97,8 +100,16 @@ fun ExploreScreen(
     /** Spec 044: the address typed on the start page becomes a real navigation. */
     onOpenUrl: ((String) -> Unit)? = null,
     onClosePage: () -> Unit = {},
-    onPageBack: () -> Unit = {},
+    /** Back inside the page; `false` when it has no history left (spec 070: system Back then leaves the page). */
+    onPageBack: () -> Boolean = { false },
     onPageForward: () -> Unit = {},
+    /** Reload the page — or bring back a tab whose renderer died (spec 070). */
+    onPageReload: () -> Unit = {},
+    /** Spec 070: the networks the page in front may be put on, and the accounts the wallet has. */
+    networkOptions: List<PickerOption> = emptyList(),
+    onPickNetwork: (String) -> Unit = {},
+    accountOptions: List<PickerOption> = emptyList(),
+    onPickAccount: (String) -> Unit = {},
     live: ExploreCallbacks? = null,
     /** Spec 044: the core is asking whether this origin may connect; drawn as the connection sheet's not-yet-connected form. */
     consent: ConnectionModel? = null,
@@ -123,8 +134,23 @@ fun ExploreScreen(
     // Live (spec 044): the browsing view exists only while a page does. Without
     // this the switcher's Done, with only the start tab left, drew the demo
     // page — a fixture on a live route (device-found).
-    val view = (viewOverride ?: model.view).let { if (live != null && it == ExploreView.Browsing && page == null) ExploreView.Start else it }
+    // …except a tab whose renderer died: it has no page, and shows the reload
+    // panel where the page was (spec 070).
+    val view = (viewOverride ?: model.view).let { if (live != null && it == ExploreView.Browsing && page == null && !model.browser.crashed) ExploreView.Start else it }
     var scanning by rememberSaveable { mutableStateOf(false) }
+    /** Which pick-one sheet is up over the connection panel: `"network"` or `"account"`. */
+    var picker by remember { mutableStateOf<String?>(null) }
+    val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    // Spec 070: system Back walks the page's own history first, then leaves
+    // the page for the start page — it used to leave 探索 altogether. The
+    // switcher goes back to where it came from. (Registered before the
+    // scanner's, which wins while scanning.)
+    BackHandler(enabled = !scanning && live != null && view == ExploreView.Browsing) {
+        if (!onPageBack()) viewOverride = ExploreView.Start
+    }
+    BackHandler(enabled = !scanning && live != null && view == ExploreView.Tabs) {
+        viewOverride = if (page != null) ExploreView.Browsing else ExploreView.Start
+    }
     BackHandler(enabled = scanning) { scanning = false }
 
     if (scanning && scanner != null) {
@@ -162,9 +188,36 @@ fun ExploreScreen(
                     menuLabel = strings.t("explore.siteMenu"),
                     onClose = { onClosePage(); viewOverride = ExploreView.Start },
                     onMenu = { sheet = model.siteMenuSheet },
+                    url = model.browser.url,
+                    insecureLabel = strings.t("connect.browser.a11yInsecure"),
+                    loading = model.browser.loading,
+                    progress = model.browser.progress,
+                    onSubmitUrl = onOpenUrl,
                 )
                 Box(Modifier.weight(1f)) {
-                    if (page != null) page() else DemoPage(model.browser.page, onAction = { if (signing != null) signingUp = true })
+                    when {
+                        // The renderer died: the app is fine, the page is gone,
+                        // and one tap brings it back (spec 070).
+                        live != null && model.browser.crashed -> BrowserNotice(
+                            title = strings.t("explore.pageCrashedTitle"),
+                            body = strings.t("explore.pageCrashedBody"),
+                            action = strings.t("explore.reload"),
+                            onAction = onPageReload,
+                        )
+                        page != null -> {
+                            page()
+                            if (model.browser.failed) {
+                                BrowserNotice(
+                                    title = strings.t("connect.browser.loadFailed"),
+                                    body = model.browser.host,
+                                    action = strings.t("connect.browser.retry"),
+                                    onAction = onPageReload,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                        else -> DemoPage(model.browser.page, onAction = { if (signing != null) signingUp = true })
+                    }
                 }
                 BrowserToolbar(
                     modifier = Modifier.navigationBarsPadding(),
@@ -173,11 +226,11 @@ fun ExploreScreen(
                     forwardLabel = strings.t("explore.forward"),
                     accountLabel = strings.t("explore.account"),
                     connectedLabel = strings.t("explore.connectedTag"),
-                    bookmarkLabel = strings.t("explore.addToFavorites"),
+                    bookmarkLabel = strings.t(if (model.browser.bookmarked) "explore.removeFromFavorites" else "explore.addToFavorites"),
                     tabsLabel = strings.t("explore.tabs"),
                     onAccount = { sheet = ExploreSheet.Connection(model.connection) },
                     onTabs = { viewOverride = ExploreView.Tabs },
-                    onBack = onPageBack,
+                    onBack = { onPageBack() },
                     onForward = onPageForward,
                     onBookmark = { live?.onBookmark() },
                 )
@@ -189,7 +242,10 @@ fun ExploreScreen(
                     hidden = hidden,
                     onOpenUrl = onOpenUrl?.let { open -> { text: String -> open(text); viewOverride = ExploreView.Browsing } },
                     onScan = scanner?.let { { scanning = true } },
-                    onBrowse = { viewOverride = ExploreView.Browsing },
+                    // Live: nothing to "browse" but what a person types — the
+                    // "+" tile and an empty Go put the cursor in the field.
+                    onBrowse = { if (live != null) runCatching { searchFocus.requestFocus() } else viewOverride = ExploreView.Browsing },
+                    searchFocus = searchFocus.takeIf { live != null },
                     onTabs = { viewOverride = ExploreView.Tabs },
                     onManageGroups = { sheet = model.groupManageSheet },
                     live = live,
@@ -230,7 +286,7 @@ fun ExploreScreen(
     }
     sheet?.let { current ->
         ModalBottomSheet(
-            onDismissRequest = { sheet = null },
+            onDismissRequest = { sheet = null; picker = null },
             containerColor = colors.bgBase,
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         ) {
@@ -269,16 +325,30 @@ fun ExploreScreen(
                         },
                     )
 
-                    is ExploreSheet.Connection -> ConnectionPanel(
-                        connection = if (live != null) model.connection else current.connection,
-                        closeLabel = strings.t("explore.close"),
-                        onClose = { sheet = null },
-                        onDisconnect = { sheet = null; live?.onDisconnect() },
-                        // The sheet goes first: the switcher is a sheet too.
-                        onSwitchAccount = onSwitchAccount?.let { open ->
-                            { sheet = null; open() }
-                        },
-                    )
+                    is ExploreSheet.Connection -> when {
+                        picker == "network" && networkOptions.isNotEmpty() -> PickerSheetContent(
+                            title = strings.t("explore.network"),
+                            options = networkOptions,
+                            closeLabel = strings.t("explore.close"),
+                            onClose = { picker = null },
+                            onPick = { id -> picker = null; onPickNetwork(id) },
+                        )
+                        picker == "account" && accountOptions.isNotEmpty() -> PickerSheetContent(
+                            title = strings.t("explore.switchAccount"),
+                            options = accountOptions,
+                            closeLabel = strings.t("explore.close"),
+                            onClose = { picker = null },
+                            onPick = { id -> picker = null; onPickAccount(id) },
+                        )
+                        else -> ConnectionPanel(
+                            connection = if (live != null) model.connection else current.connection,
+                            closeLabel = strings.t("explore.close"),
+                            onClose = { sheet = null },
+                            onDisconnect = { sheet = null; live?.onDisconnect() },
+                            onSwitchAccount = { picker = "account" }.takeIf { accountOptions.size > 1 },
+                            onNetwork = { picker = "network" }.takeIf { networkOptions.isNotEmpty() },
+                        )
+                    }
                 }
             }
         }
@@ -301,6 +371,7 @@ private fun StartPage(
     modifier: Modifier = Modifier,
     live: ExploreCallbacks? = null,
     onOpenSite: ((String) -> Unit)? = null,
+    searchFocus: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -356,6 +427,7 @@ private fun StartPage(
             scanLabel = model.scanLabel,
             onSubmit = { text -> if (onOpenUrl != null && text.isNotBlank()) onOpenUrl(text) else onBrowse() },
             onScan = onScan,
+            focusRequester = searchFocus,
         )
 
         model.empty?.let {

@@ -39,6 +39,10 @@ final class SendExecutor {
         /// The pending row is on disk: the feed re-reads, so the home shows it
         /// at submit (FR-006).
         var recordsPersisted: () -> Void = {}
+        /// The Trusted Signer ended without a signature (spec 071). The core
+        /// hears a cancelled ceremony — back to confirm, nothing sent — and
+        /// the screen says which of the Trusted Signer's sentences applies.
+        var trustedSignerEnded: (TrustedSignerNotice) -> Void = { _ in }
     }
 
     private let store: VelaStore
@@ -319,6 +323,7 @@ final class SendExecutor {
                 "now_ms": Date().timeIntervalSince1970 * 1000,
             ])
         } catch let refused as UserOpSpine.Refused {
+            if case .trustedSigner(let notice) = refused.failure { ports.trustedSignerEnded(notice) }
             return CoreJSON.string([
                 "type": "submit_failed", "failure": Self.failureWire(refused.failure),
             ])
@@ -419,6 +424,10 @@ final class SendExecutor {
     private static func failureWire(_ failure: UserOpSpine.Failure) -> [String: Any] {
         switch failure {
         case .passkeyCancelled: return ["type": "passkey_cancelled"]
+        // Nothing was signed and the send may be signed another way: the
+        // core's cancelled ceremony, which keeps the confirmation on screen.
+        // The words are the screen's (`trustedSignerEnded`).
+        case .trustedSigner: return ["type": "passkey_cancelled"]
         case .relayerUnavailable: return ["type": "relayer_unavailable"]
         case .bundlerUnderfunded: return ["type": "bundler_underfunded"]
         case .other(let message):
@@ -486,10 +495,19 @@ struct SendAccountPort: UserOpSpine.AccountPort {
     func keyRoutesJson(of address: String) async -> String {
         guard let record = await record(for: address) else { return "[]" }
         let routes = (record["keys"] as? [[String: Any]] ?? []).map { key -> [String: String] in
-            [
+            var route = [
                 "credential_id": key["credential_id"] as? String ?? key["credentialId"] as? String ?? "",
                 "transports": key["transports"] as? String ?? "",
             ]
+            // Spec 075: a key minted or found through the Trusted Signer lives
+            // behind that page, and `sign_route` will not find its way back
+            // there without this. Dropping it here would silently send the
+            // ceremony to a platform sheet that cannot see the key.
+            if let origin = key["signer_origin"] as? String ?? key["signerOrigin"] as? String,
+               !origin.isEmpty {
+                route["signer_origin"] = origin
+            }
+            return route
         }
         let data = (try? JSONSerialization.data(withJSONObject: routes)) ?? Data("[]".utf8)
         return String(decoding: data, as: UTF8.self)
@@ -531,6 +549,10 @@ struct SendAccountPort: UserOpSpine.AccountPort {
         else if hints.contains("usb") || hints.contains("nfc") { method = .securityKey }
         else { method = .platform }
         return (transports, method)
+    }
+
+    func name(of address: String) async -> String? {
+        (await record(for: address)?["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     private func record(for address: String) async -> [String: Any]? {

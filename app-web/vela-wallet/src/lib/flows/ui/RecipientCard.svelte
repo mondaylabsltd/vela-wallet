@@ -27,6 +27,7 @@
 	 * exactly as asked — so this warns, beside the row it is about, and refuses
 	 * nothing.
 	 */
+	import { composing, pasted, takeAmount } from '../amount-field';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
@@ -132,7 +133,17 @@
 				aria-describedby={recipient.amountNote ? amountNoteId : undefined}
 				placeholder="0"
 				value={recipient.amountValue ?? ''}
-				oninput={(event) => oninput({ amount: event.currentTarget.value })}
+				oninput={(event) => {
+					// Cleaned by the core's rule before it goes on (spec 073): a
+					// share typed "4,5" on a decimal-comma keypad is 4.5.
+					if (composing(event)) return;
+					const clean = takeAmount(event.currentTarget, recipient.amountValue ?? '', pasted(event));
+					if (clean !== null) oninput({ amount: clean });
+				}}
+				oncompositionend={(event) => {
+					const clean = takeAmount(event.currentTarget, recipient.amountValue ?? '', false);
+					if (clean !== null) oninput({ amount: clean });
+				}}
 			/>
 			{#if symbol !== undefined}<span class="symbol">{symbol}</span>{/if}
 		</span>

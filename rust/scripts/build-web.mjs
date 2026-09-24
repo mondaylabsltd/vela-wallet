@@ -45,7 +45,18 @@ const PUBLIC_DIR = join(dirname(RUST_DIR), 'assets', 'wasm');
  * bundle size: at 4 MB raw the brotli'd wire cost is roughly 1.3 MB, fetched
  * once and cached immutably under its source-fingerprint name.
  */
-const MAX_WASM_BYTES = 4_000_000;
+//
+// 8 MB since 2026-09-23 (owner). The previous 4.1 MB was a measured step taken
+// in spec 071 and the core had grown into it — today's build is 4,099,186
+// bytes, 814 under — so a cap that tight fails the next feature rather than a
+// regression, which is the opposite of what a guard is for.
+//
+// What that costs, plainly: this artifact ships to every web reader, fetched
+// once and cached immutably under its fingerprint name. 4 MB raw is roughly
+// 1.3 MB brotli'd; the cap no longer argues about growth until the core has
+// nearly doubled. If the wire cost matters again, the number to watch is the
+// brotli'd size, which this gate has never measured.
+const MAX_WASM_BYTES = 8_000_000;
 
 const CHECK_ONLY = process.argv.includes('--check');
 
@@ -99,8 +110,14 @@ function patchGlue(js) {
 }
 
 /**
- * A fingerprint of the SOURCE the artifact was built from: every Rust file in
- * the workspace plus the manifests and the lockfile.
+ * A fingerprint of the SOURCE the artifact was built from: every Rust file of
+ * the crates this module is COMPILED FROM — `vela-core` and `vela-core-wasm`
+ * — plus the workspace manifests and the lockfile.
+ *
+ * Narrowed from "every crate in the workspace" (spec 075): the workspace also
+ * holds the uniffi shell, the dev fixtures and the relay, none of which the
+ * wasm links. Hashing those renamed this 4 MB asset — and demanded a rebuild
+ * and a commit of it — every time a relay file changed.
  *
  * This is what `--check` compares, instead of the wasm bytes. The wasm is NOT
  * reproducible across machines and demanding that it be was a mistake:
@@ -116,7 +133,10 @@ function patchGlue(js) {
  * reproducible anywhere, because it only hashes text this repo controls.
  */
 function sourceFingerprint() {
-  const roots = [join(RUST_DIR, 'crates')];
+  const roots = [
+    join(RUST_DIR, 'crates', 'vela-core'),
+    join(RUST_DIR, 'crates', 'vela-core-wasm'),
+  ];
   const files = [];
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {

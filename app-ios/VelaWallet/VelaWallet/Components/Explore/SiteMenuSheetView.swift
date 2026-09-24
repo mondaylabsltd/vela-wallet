@@ -17,6 +17,9 @@ struct SiteMenuSheetView: View {
     let statusLine: String
     let items: [SiteMenuItem]
     let closeLabel: String
+    /// The padlock and the green are for a secure origin only (spec 070):
+    /// an http page's menu names its host in plain text.
+    var secure: Bool = true
     var onClose: () -> Void = {}
     var onPick: (String) -> Void = { _ in }
 
@@ -30,11 +33,13 @@ struct SiteMenuSheetView: View {
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(1)
                     HStack(spacing: Tokens.Space.s4) {
-                        LucideIcon(.lock, size: LucideIconSize.addressLock)
+                        if secure {
+                            LucideIcon(.lock, size: LucideIconSize.addressLock)
+                        }
                         Text(verbatim: statusLine)
                             .typeRole(Typography.rowSub.scaled(textScale))
                     }
-                    .foregroundStyle(theme.successBase)
+                    .foregroundStyle(secure ? theme.successBase : theme.fgMuted)
                 }
                 Spacer(minLength: Tokens.Space.s12)
                 Button(action: onClose) {

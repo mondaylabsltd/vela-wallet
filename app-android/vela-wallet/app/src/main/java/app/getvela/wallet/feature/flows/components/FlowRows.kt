@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.format.cleanAmountEdit
 import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -205,7 +206,7 @@ fun FactRow(
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
             is FactLead.Identicon -> {
-                IdenticonImage(seed = lead.seed, size = VelaIconSize.lg, name = lead.name)
+                IdenticonImage(seed = lead.seed, size = VelaIconSize.lg)
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
             null -> Unit
@@ -305,7 +306,7 @@ fun RecipientCard(
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2, name = recipient.name)
+        IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         if (onPick != null) {
             Icon(
@@ -394,10 +395,14 @@ fun RecipientCard(
             BasicTextField(
                 value = typed,
                 onValueChange = { next ->
-                    typed = next
-                    sent.addLast(next)
-                    if (sent.size > 256) sent.removeFirst()
-                    onAmountChange(next)
+                    // Spec 073: the core's amount rule, as the send figure.
+                    val clean = cleanAmountEdit(next, typed)
+                    if (clean != null) {
+                        typed = clean
+                        sent.addLast(clean)
+                        if (sent.size > 256) sent.removeFirst()
+                        onAmountChange(clean)
+                    }
                 },
                 singleLine = true,
                 textStyle = amountStyle,
@@ -533,7 +538,7 @@ fun ContactPickRow(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = contact.identiconSeed, size = VelaIconSize.xl2, name = contact.name)
+        IdenticonImage(seed = contact.identiconSeed, size = VelaIconSize.xl2)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

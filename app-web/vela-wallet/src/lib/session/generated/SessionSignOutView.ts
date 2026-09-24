@@ -5,4 +5,13 @@ export type SessionSignOutView = {
  * Un-synced pending uploads exist — the dialog must show the warning and
  * relabel the button ("Sign out anyway").
  */
-pending_upload_warning: boolean, };
+pending_upload_warning: boolean, 
+/**
+ * How many wallets this device is signed into, so the dialog can say so.
+ *
+ * The copy was true of one wallet and quietly false of six: "the wallet
+ * is not deleted, everything comes back when you sign in again" says
+ * nothing about signing in SIX times (owner, 2026-09-23). The number is
+ * here rather than counted in each shell so all four say the same one.
+ */
+account_count: number, };

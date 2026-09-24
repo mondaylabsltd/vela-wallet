@@ -478,6 +478,19 @@ fn builtin(chain_id: u32) -> Option<&'static NetBuiltinChain> {
     BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id)
 }
 
+/// How long a submitted operation USUALLY takes to land on this chain, in
+/// seconds.
+///
+/// `None` for a chain Vela does not ship: the wallet has no number for it, and
+/// a receipt with no number circles rather than drawing a ring that would be an
+/// invented promise (spec 038 #D3, and spec 077 for the dApp receipt, which
+/// reads the same number through the wasm shell rather than carrying a second
+/// copy of this table).
+#[must_use]
+pub fn typical_inclusion_s(chain_id: u32) -> Option<u16> {
+    builtin(chain_id).map(|c| c.typical_inclusion_s)
+}
+
 /// Whether this is a network Vela ships, as opposed to one a person added.
 ///
 /// The distinction decides WHO can fix an out-of-gas relayer. On a network we
@@ -2736,25 +2749,32 @@ fn provider_blurred(model: &mut Model, provider: NetProviderId) -> Command<NetEf
     if !model.loaded {
         return Command::done();
     }
-    let trimmed = model
-        .provider_drafts
-        .get(&provider)
-        .map(|k| k.trim().to_owned())
-        .unwrap_or_default();
+    // A field never edited since the page opened — or on a shell that never
+    // raised `ProvidersOpened` — showed the SAVED key, so leaving it keeps
+    // that key: an absent draft is "unchanged", never "cleared" (spec 072,
+    // found by the web's wide-layout test after FR-001).
+    let trimmed = match model.provider_drafts.get(&provider) {
+        Some(draft) => draft.trim().to_owned(),
+        None => model
+            .provider_keys
+            .get(provider)
+            .cloned()
+            .unwrap_or_default(),
+    };
     model.provider_drafts.insert(provider, trimmed.clone());
 
     // `saveRpcProviders`: trim every entry, DROP empties — a cleared key
-    // fully removes the provider (invariant ⑦, storage.ts:323-335). Note
-    // that other providers' in-progress drafts persist too, verbatim
-    // (`persist(next)` writes the whole draft map).
-    let mut cleaned = NetProviderKeys::default();
+    // fully removes the provider (invariant ⑦, storage.ts:323-335). Other
+    // providers' in-progress drafts persist too, verbatim. A provider with NO
+    // draft keeps its saved key: rebuilding the map from drafts alone wiped
+    // every saved key the moment a shell that never seeded them (no
+    // `ProvidersOpened`) saw one field lose focus (spec 072, P0).
+    let mut cleaned = model.provider_keys.clone();
     for &id in &PROVIDER_ORDER {
-        let value = model
-            .provider_drafts
-            .get(&id)
-            .map(|k| k.trim().to_owned())
-            .unwrap_or_default();
-        cleaned.set(id, (!value.is_empty()).then_some(value));
+        if let Some(draft) = model.provider_drafts.get(&id) {
+            let value = draft.trim().to_owned();
+            cleaned.set(id, (!value.is_empty()).then_some(value));
+        }
     }
     model.provider_keys = cleaned;
 
@@ -3143,10 +3163,14 @@ fn wizard_view(model: &Model) -> NetWizardView {
 }
 
 fn provider_view(model: &Model, provider: NetProviderId) -> NetProviderView {
+    // The draft when one is being typed, else the SAVED key: a shell that
+    // never raised `ProvidersOpened` (spec 072: web's wide layout, Android)
+    // showed every saved key as "Not set".
     let key = model
         .provider_drafts
         .get(&provider)
         .cloned()
+        .or_else(|| model.provider_keys.get(provider).cloned())
         .unwrap_or_default();
     let test = model.provider_tests.get(&provider).map(|t| {
         let results: Vec<NetProviderNetRow> = t

@@ -28,7 +28,6 @@
 //
 
 import Foundation
-import UIKit
 import VelaCore
 
 @MainActor
@@ -131,7 +130,7 @@ final class ActivityExecutor {
             // Money in. The one buzz this screen has, and it fires even when
             // the balance is hidden — the core withholds the toast there, not
             // the feeling that something arrived.
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            VelaHaptic.success.play()
             return CoreJSON.string(["type": "haptic_played"])
 
         default:

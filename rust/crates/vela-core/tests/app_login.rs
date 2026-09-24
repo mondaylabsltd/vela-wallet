@@ -296,6 +296,7 @@ fn awaiting_second_signature(first: Assertion) -> Sut {
             // platform vault this walk signed in with.
             method: KeyMethod::Platform,
             purpose: ProofPurpose::RecoverSecond,
+            signer_origin: None,
         }],
         "accepting asks for the disambiguating second signature"
     );
@@ -676,12 +677,14 @@ fn a_sibling_credential_matches_the_local_multikey_account() {
                 public_key_hex: support::expected_public_key_hex(),
                 name: "Ann".to_owned(),
                 transports: "internal".to_owned(),
+                signer_origin: None,
             },
             vela_core::app::AccountKey {
                 credential_id: CRED2.to_owned(),
                 public_key_hex: support::second_public_key_hex(),
                 name: "Backup".to_owned(),
                 transports: "usb,nfc".to_owned(),
+                signer_origin: None,
             },
         ],
         ..support::account(CRED, "Ann", &multi_address())
@@ -845,6 +848,7 @@ fn an_uppercase_uuid_handle_still_yields_its_name() {
                 .collect(),
         ),
         authenticator_attachment: String::new(),
+        signer_origin: None,
     };
     // user_name() is pub(crate); observe through the machine instead: a
     // local account match is not needed — the name only matters on save, so

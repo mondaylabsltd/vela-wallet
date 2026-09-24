@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Cambia account",
-   "contactsSubtitle": "Indirizzi salvati e destinatari recenti"
+   "contactsSubtitle": "Indirizzi salvati e destinatari recenti",
+   "remove": "Rimuovi da questo dispositivo",
+   "removeBody": "Se ne va solo questo portafoglio, gli altri restano."
   },
   "appearance": {
    "themeLight": "Chiaro",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "Velocità delle transazioni",
    "subtitle": "Ogni invio che avvii in Vela parte da qui. Puoi comunque cambiarne uno singolo al momento dell'invio."
+  },
+  "signing": {
+   "title": "Firma con",
+   "subtitle": "Ogni firma che avvii in Vela parte da qui. Per una singola puoi comunque scegliere un altro modo.",
+   "pageTitle": "Pagina del Trusted Signer",
+   "pageSubtitle": "La pagina che apre il Trusted Signer: quella ufficiale o la tua copia della pagina senza dipendenze.",
+   "pageOfficial": "Ufficiale",
+   "pageInvalid": "Questo non è un indirizzo web.",
+   "pageInsecure": "Usa una pagina https o una sul loopback di questo dispositivo: altrove il browser non firmerà.",
+   "pageForeign": "Le tue passkey appartengono a getvela.app. Una pagina su un altro dominio può mostrare una richiesta ma non firmarla.",
+   "pageReset": "Usa la pagina ufficiale",
+   "pageSave": "Salva"
   },
   "advanced": {
    "networksTitle": "Reti",
@@ -88,7 +102,8 @@
    "keeps": "Scegli «Ho già un wallet» per accedere di nuovo con la stessa passkey: ritrovi lo stesso indirizzo e restano al loro posto cronologia, contatti, token e impostazioni.",
    "warning": "La tua chiave pubblica non è ancora arrivata al server di sincronizzazione. L'app riproverà al prossimo avvio, ma finché non riesce potresti non riuscire ad accedere da un altro dispositivo — né da qui, se disinstalli l'app.",
    "anyway": "Esci comunque",
-   "cancel": "Annulla"
+   "cancel": "Annulla",
+   "descMany": "Tutti i {{count}} portafogli di questo dispositivo usciranno. Non si cancella nulla."
   },
   "eraseDevice": {
    "title": "Cancella questo dispositivo",
@@ -751,6 +766,8 @@
    "keysSubtitleFull": "Hai raggiunto il limite di 7.",
    "keysTitle": "Aggiungi passkey",
    "keysTitleBlocked": "Serve un'altra chiave per creare",
+   "methodBlockedHint": "Le chiavi di questo portafoglio appartengono tutte a {{party}}.",
+   "methodBlockedSigner": "La tua pagina Trusted Signer è {{page}}, le sue chiavi sono di {{pageParty}}. Nelle impostazioni passa a {{party}} per aggiungerne una qui.",
    "methodHybridBody": "Scansiona un codice e creala su un dispositivo vicino",
    "methodHybridTitle": "Telefono o tablet",
    "methodHybridUnavailable": "Prossimamente",
@@ -1343,6 +1360,16 @@
    "techIdentityRecipient": "Destinatario",
    "copyValue": "Copia",
    "signWith": "Firma con",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "Controlla e firma su una pagina separata: ciò che vedi è ciò che firmi.",
+   "trustedSignerWaiting": "In attesa del Trusted Signer…",
+   "trustedSignerWaitingHint": "Controlla la richiesta nella pagina che si è aperta e firmala lì. Se il browser chiede se la pagina può accedere ad altre app su questo dispositivo, consenti.",
+   "trustedSignerClosed": "Il Trusted Signer è stato chiuso senza firmare.",
+   "trustedSignerRefused": "Il Trusted Signer non ha voluto firmare questa richiesta. La sua pagina spiega perché.",
+   "trustedSignerMismatch": "La risposta del Trusted Signer non corrisponde a questa richiesta, quindi non è stato inviato nulla.",
+   "trustedSignerTimeout": "Il Trusted Signer non ha risposto in tempo.",
+   "trustedSignerReopen": "Riapri la pagina",
+   "trustedSignerDoneTab": "Firmato. Puoi chiudere questa scheda e tornare a Vela.",
    "viewOnExplorer": "Vedi sull’explorer",
    "sendingToTokenContract": "Inviato al contratto del token stesso",
    "selfCallBlockedTitle": "Vela non firma questa richiesta",
@@ -1560,7 +1587,11 @@
    "fiatLabel": "TASSI FIAT",
    "fiatHint": "Tassi di cambio in USD che definiscono l’elenco delle valute — sostituibile per una copertura più ampia.",
    "resetToDefaults": "Ripristina tutti e quattro",
-   "selfHostGuide": "Guida al self-hosting →"
+   "selfHostGuide": "Guida al self-hosting →",
+   "resetTitle": "Ripristinare gli endpoint dei servizi?",
+   "resetBody": "I quattro servizi tornano agli indirizzi di Vela. Gli indirizzi inseriti qui vengono dimenticati.",
+   "resetConfirm": "Ripristina",
+   "resetCancel": "Annulla"
   },
   "addNetwork": {
    "modalTitle": "Aggiungi rete",
@@ -1578,7 +1609,6 @@
    "retry": "Riprova",
    "addNetworkBtn": "Aggiungi rete",
    "incompatibleHint": "Alcuni contratti necessari non sono ancora stati deployati su questa rete.\nEseguine il deploy con lo strumento Vela Wallet Chain Setup, poi torna e ricontrolla.",
-   "singleKeyOnly": "Un wallet con più di una passkey non può essere creato su questa rete: la factory dei signer passkey di Safe non è deployata qui.\nUn wallet con una sola passkey funziona normalmente.",
    "openChainSetupTool": "Apri Chain Setup Tool",
    "recheck": "Ricontrolla",
    "chainIdLabel": "Chain ID: {{chainId}}",
@@ -1588,7 +1618,8 @@
    "incompatible": "Non compatibile",
    "checkSafe": "Contratti Safe L2",
    "checkSigner": "Precompilato P-256",
-   "checkRemaining": "altri {{count}} contratti"
+   "checkRemaining": "altri {{count}} contratti",
+   "singleKeyOnly": "Un wallet con più di una passkey non può essere creato su questa rete: la factory dei signer passkey di Safe non è deployata qui.\nUn wallet con una sola passkey funziona normalmente."
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1760,6 +1791,11 @@
   "siteMenu": "Menu del sito",
   "account": "Account",
   "addressBar": "Barra degli indirizzi",
-  "close": "Chiudi"
+  "close": "Chiudi",
+  "pageCrashedTitle": "Questa pagina ha smesso di funzionare",
+  "pageCrashedBody": "La pagina si è chiusa inaspettatamente. Il tuo wallet non è coinvolto: ricarica per continuare.",
+  "walletConnectUnsupported": "I link WalletConnect non sono supportati. Apri la dApp in Esplora e connettiti da lì.",
+  "scanUnrecognized": "Questo codice non è né un indirizzo web né un indirizzo di wallet.",
+  "linkCopied": "Link copiato"
  }
 }

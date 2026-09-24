@@ -44,8 +44,17 @@ const SITE = DIST;
  */
 const APP_DIR = 'app';
 
-/** The page-side scripts, bundled from their module sources (below). */
+/**
+ * The scripts this package ships, bundled from their module sources (below).
+ *
+ * `inpage.js` is not in this folder: the page-side provider is THE one every
+ * Vela injects, and its home is the core crate (spec 070) — the desktop, iOS
+ * and Android in-app browsers embed the same bytes through
+ * `vela_core::app::dapp_rpc::provider_script`.
+ */
+const PROVIDER = join(HERE, '..', '..', '..', 'rust', 'crates', 'vela-core', 'provider', 'inpage.js');
 const ENTRIES = ['inpage.js', 'content.js', 'background.js', 'panel.js'];
+const SOURCES = { 'inpage.js': PROVIDER };
 /** What must NOT be copied verbatim: build inputs and the bundler's own sources. */
 const SKIP_COPY = new Set(['dist', 'build.mjs', 'README.md', 'release-notes.md', 'lib', ...ENTRIES]);
 
@@ -161,7 +170,9 @@ log(`externalised ${scripts} inline scripts across ${htmlFiles.length} pages`);
  * in their own dev tools.
  */
 await esbuild({
-	entryPoints: ENTRIES.map((name) => join(HERE, name)),
+	entryPoints: Object.fromEntries(
+		ENTRIES.map((name) => [name.replace(/\.js$/, ''), SOURCES[name] ?? join(HERE, name)])
+	),
 	outdir: DIST,
 	bundle: true,
 	format: 'iife',

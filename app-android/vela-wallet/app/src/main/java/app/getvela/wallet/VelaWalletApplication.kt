@@ -21,7 +21,10 @@ import app.getvela.wallet.feature.send.core.SendReceiptOutcome
 import app.getvela.wallet.feature.send.core.TrackStatus
 import app.getvela.wallet.feature.wallet.core.TrackerWorker
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
+import app.getvela.wallet.feature.send.core.TrustedSignerLabels
 import app.getvela.wallet.feature.send.core.UserOpSigner
+import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel
+import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerTab
 import app.getvela.wallet.feature.send.core.SendHapticKind
 import app.getvela.wallet.feature.send.core.SendController
 import app.getvela.wallet.feature.browser.core.BrowserController
@@ -34,7 +37,9 @@ import app.getvela.wallet.feature.signing.core.SigningController
 import app.getvela.wallet.feature.signing.core.IncomingRequest
 import app.getvela.wallet.feature.signing.core.SignAccountRef
 import app.getvela.wallet.feature.send.core.StoreAccountPort
-import app.getvela.wallet.feature.browser.core.BrowserExecutor
+import app.getvela.wallet.feature.browser.core.DbrOperation
+import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.RegistryBackup
 import app.getvela.wallet.feature.settings.core.WalletKeys
@@ -76,7 +81,11 @@ class AppContainer(private val app: Application) {
         app.assets.open("i18n/$tag.json").use { it.readBytes() }
     }
 
-    val themeRepository = ThemePreferenceRepository(app)
+    val themeRepository = ThemePreferenceRepository(
+        app,
+        VelaStore(app),
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
+    )
 
     /** Spec 047 D9: online or not, from the platform. */
 
@@ -89,6 +98,13 @@ class AppContainer(private val app: Application) {
     val pendingFlow = MutableStateFlow<WalletFlowEntry?>(null)
     /** Spec 048: split rows to seed into the send machine right after it opens (a group's 群发转账). */
     val pendingSplitSeed = MutableStateFlow<List<SendRecipientDraft>?>(null)
+
+    /**
+     * A code scanned from 探索 that is a payment (an address, an `ethereum:`
+     * request — spec 070): the send opens on it as if its own scanner had read
+     * it, so the core's `scan_resolved` decides what it means.
+     */
+    val pendingScan = MutableStateFlow<String?>(null)
     /** Spec 048: the home's status line opens the matching rescue sheet on the settings page. */
     val pendingSettingsOverlay = MutableStateFlow<SettingsOverlay?>(null)
     /** Spec 048: the add-token 原生币 tab opens the settings' add-network page. */
@@ -102,6 +118,38 @@ class AppContainer(private val app: Application) {
     ).also { it.load() }
 
     val accountStore = AccountStore(app)
+
+    /**
+     * This app's own mark, as the small inline PNG the signer page accepts.
+     *
+     * Rendered once and kept: it cannot change while the app is installed, and
+     * a handshake travels in the clear in 244-byte frames, so the size matters
+     * more than the fidelity — 64 px is what the page draws.
+     */
+    private val appMarkOnce: String by lazy {
+        runCatching {
+            val size = 64
+            val drawable = app.packageManager.getApplicationIcon(app.packageName)
+            val bitmap = android.graphics.Bitmap.createBitmap(
+                size, size, android.graphics.Bitmap.Config.ARGB_8888,
+            )
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, size, size)
+            drawable.draw(canvas)
+            val bytes = java.io.ByteArrayOutputStream()
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes)
+            bitmap.recycle()
+            val encoded = android.util.Base64.encodeToString(
+                bytes.toByteArray(), android.util.Base64.NO_WRAP,
+            )
+            val uri = "data:image/png;base64,\u0024encoded"
+            // The core refuses anything over its cap anyway; not building a
+            // useless string is cheaper than having it dropped there.
+            if (uri.length <= 6144) uri else ""
+        }.getOrDefault("")
+    }
+
+    fun appMark(): String = appMarkOnce
 
     /**
      * The session machine lives HERE, not in a ViewModel.
@@ -282,6 +330,46 @@ class AppContainer(private val app: Application) {
     @Volatile
     var passkeySigner: UserOpSigner? = null
 
+    /** Spec 071: the Trusted Signer's tab, attached by the activity in onCreate. */
+    @Volatile
+    var trustedSignerTab: TrustedSignerTab? = null
+
+    /**
+     * Spec 071: the fourth "Sign with" — one channel per process, one ceremony
+     * at a time. The page is `sign_pref`'s; the words are the corpus'.
+     */
+    val trustedSigner: TrustedSignerChannel by lazy {
+        TrustedSignerChannel(
+            signerUrl = { settings.signPref.value.signer_url },
+            openPage = { url -> trustedSignerTab?.open(url) ?: false },
+            bringBack = { trustedSignerTab?.bringBack() },
+            words = {
+                TrustedSignerChannel.Words(
+                    closed = i18nRuntime.t("componentsUi.signing.trustedSignerClosed"),
+                    refused = i18nRuntime.t("componentsUi.signing.trustedSignerRefused"),
+                    mismatch = i18nRuntime.t("componentsUi.signing.trustedSignerMismatch"),
+                    timeout = i18nRuntime.t("componentsUi.signing.trustedSignerTimeout"),
+                )
+            },
+            // Read by a person on the signer page, beside "the name and mark
+            // it gave for itself" — so both are written for a person, not for
+            // a log. Neither is proof of anything and the page says so; what
+            // they buy is telling THIS wallet apart from another one that
+            // connected to the same page.
+            appName = "Vela Wallet " + BuildConfig.VERSION_NAME,
+            appIcon = { appMark() },
+            labels = { chainId, account ->
+                val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
+                TrustedSignerLabels(
+                    chainName = network?.display_name,
+                    nativeSymbol = network?.native_symbol,
+                    accountName = session.view.value.accounts
+                        .firstOrNull { it.address.equals(account, ignoreCase = true) }?.name,
+                )
+            },
+        )
+    }
+
     /** Spec 045: the platform's documents (picker, creator, share sheet); the activity attaches them in onCreate. */
     @Volatile
     var documents: app.getvela.wallet.feature.documents.DocumentPorts? = null
@@ -323,10 +411,13 @@ class AppContainer(private val app: Application) {
             },
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
+            signMethod = { settings.signPref.value.method },
+            trustedSigner = { trustedSigner },
         ).also { controller ->
             // Spec 069: the stored default speed, read now and followed after —
             // Settings changing it reaches a send already open.
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                settings.refreshSignPref()
                 settings.refreshFeeTier()
                 settings.feeTier.collect { controller.preferenceChanged() }
             }
@@ -346,7 +437,7 @@ class AppContainer(private val app: Application) {
         }
     }
 
-    /** The in-app browser (spec 044): the tab engines, the provider bridge, the request sink. */
+    /** The in-app browser (spec 044, on the core's `dapp_browser` since 070): the tab engines and what they carry. */
     val browser: BrowserController by lazy {
         BrowserController(
             context = app,
@@ -355,18 +446,25 @@ class AppContainer(private val app: Application) {
             pool = pool,
             feed = wallet.feedExecutor,
             relay = relay,
-            knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
             debuggable = BuildConfig.DEBUG,
         ).also { controller ->
-            // A page asked for a signature: the four signing machines are born
-            // for it, answer it, and die with it (spec 044 phase 4).
-            controller.onSignRequest = { request -> openSigning(controller, request) }
-            // The permissions machine is told the session's accounts as the
-            // desktop tells it at birth, and again on every change.
-            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            // The core forwards one signature at a time: the four signing
+            // machines are born for it, answer it, and die with it.
+            controller.onForwardToSigning = { operation -> openSigning(controller, operation) }
+            // The page behind the open sheet is gone and already answered.
+            controller.onCancelSigning = { tab, id ->
+                signing.value?.takeIf { open -> open.request.value?.let { it.transportId == tab && it.id == id } == true }?.cancel()
+            }
+            val follow = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+            // Every wallet address and the active one: every grant follows it.
+            follow.launch {
                 session.view.collect { view ->
                     if (!view.loading) controller.accountsChanged(view.accounts.map { it.address }, view.address.takeIf { it.isNotBlank() })
                 }
+            }
+            // The chains a page may switch to are the wallet's networks, live.
+            follow.launch {
+                settings.networks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
             }
         }
     }
@@ -376,11 +474,24 @@ class AppContainer(private val app: Application) {
 
     private val signingScope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
 
-    private fun openSigning(browser: BrowserController, request: BrowserController.SignRequest) = openSigningRequest(
-        request = IncomingRequest(id = request.id, method = request.method, paramsJson = request.paramsJson, origin = request.origin, transportId = request.transportId, chainId = request.chainId),
-        answer = { transportId, id, json -> browser.answerFromSigning(transportId, id, json) },
-        rememberUserOp = { browser.rememberUserOp(it) },
-    )
+    private fun openSigning(browser: BrowserController, operation: DbrOperation.ForwardToSigning) {
+        // The user operation this request submitted, if any: the core translates
+        // the page's later receipt lookups by it.
+        var userOpHash: String? = null
+        openSigningRequest(
+            request = IncomingRequest(
+                id = operation.id,
+                method = operation.method,
+                paramsJson = operation.params_json,
+                origin = operation.origin,
+                transportId = operation.tab,
+                chainId = operation.chain_id,
+                grantedAddress = operation.granted_address,
+            ),
+            answer = { payload -> browser.signingAnswered(operation.tab, operation.id, payload, userOpHash) },
+            rememberUserOp = { userOpHash = it },
+        )
+    }
 
     /**
      * The Ethereum backup (spec 062): ONE transaction the wallet asks ITSELF to
@@ -404,7 +515,7 @@ class AppContainer(private val app: Application) {
                 transportId = WALLET_TRANSPORT,
                 chainId = call.chainId,
             ),
-            answer = { _, _, _ -> },
+            answer = {},
             rememberUserOp = {},
         )
     }
@@ -439,10 +550,20 @@ class AppContainer(private val app: Application) {
      * The record keeps no per-key label, so only key 0 — whose name IS the
      * wallet's — arrives named; the registry's metadata names the rest.
      */
-    suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> =
-        StoreAccountPort(AccountStore(app)).keysOf(address).mapIndexed { index, key ->
-            WalletKeys.DeviceKey(key.publicKeyHex, if (index == 0) walletName else "", "")
+    suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> {
+        val port = StoreAccountPort(AccountStore(app))
+        // Spec 075: a key minted on a Trusted Signer page lives behind it, and
+        // only the record knows that — the registry does not store it.
+        val pages = port.pagesOf(address)
+        return port.keysOf(address).mapIndexed { index, key ->
+            WalletKeys.DeviceKey(
+                publicKeyHex = key.publicKeyHex,
+                name = if (index == 0) walletName else "",
+                transports = "",
+                signerOrigin = pages[key.publicKeyHex.removePrefix("0x").lowercase()].orEmpty(),
+            )
         }
+    }
 
     /** The active account's FIRST founding key — the one the registry files its groups under. */
     suspend fun foundingKeyOf(address: String): String? =
@@ -450,7 +571,7 @@ class AppContainer(private val app: Application) {
 
     private fun openSigningRequest(
         request: IncomingRequest,
-        answer: (transportId: String, id: String, json: JSONObject) -> Unit,
+        answer: (SignResponsePayload) -> Unit,
         rememberUserOp: (String) -> Unit,
     ) {
         signingScope.launch {
@@ -458,12 +579,14 @@ class AppContainer(private val app: Application) {
             val accountPort = StoreAccountPort(AccountStore(app))
             val credential = accountPort.keysOf(address).firstOrNull()?.credentialId
             if (address.isBlank() || credential == null) {
-                answer(request.transportId, request.id, BrowserExecutor.errorJson(request.id, 4100, "No wallet account available"))
+                answer(SignResponsePayload.Err(4100, SignErrorKind.UnauthorizedAccount, "No wallet account available"))
                 return@launch
             }
-            // One request at a time: a second while the sheet is up is the core's ConsentBusy on the permissions side; here it is refused plainly.
+            // The browser core forwards one page request at a time; what can
+            // still be open here is the wallet's OWN request (the Ethereum
+            // backup). The page is refused plainly rather than queued behind it.
             signing.value?.let { open ->
-                answer(request.transportId, request.id, BrowserExecutor.errorJson(request.id, -32002, "Another request is open"))
+                answer(SignResponsePayload.Err(-32002, SignErrorKind.SubmitFailed, "Another request is open"))
                 return@launch
             }
             lateinit var controller: SigningController
@@ -477,6 +600,8 @@ class AppContainer(private val app: Application) {
                 wallet = SignAccountRef(address = address, credential_id = credential),
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
+                defaultMethod = { settings.signPref.value.method },
+                trustedSigner = { trustedSigner },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
                 measureCall = { chainId, from, to, valueHex, data ->
@@ -484,8 +609,8 @@ class AppContainer(private val app: Application) {
                         ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")?.takeIf { it.startsWith("0x") }
                 },
                 ports = object : SigningController.Ports {
-                    override fun respond(transportId: String, id: String, json: org.json.JSONObject) {
-                        answer(transportId, id, json)
+                    override fun respond(transportId: String, id: String, payload: SignResponsePayload) {
+                        answer(payload)
                         // Answered either way: the sheet closes off this, page or no page.
                         controller.markAnswered()
                     }
@@ -598,6 +723,8 @@ class AppContainer(private val app: Application) {
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             settings.ethereumDataBase().collect { base -> Marks.base = base }
         }
+        // Spec 071: how this device signs by default — read before any sheet can open.
+        settings.refreshSignPref()
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             pool.view.collect { view ->
@@ -630,9 +757,9 @@ class AppContainer(private val app: Application) {
         }
     }
 
-    /** Spec 047: the language preference — a tag, or `system` (the OS's locales through the resolver). */
+    /** Spec 047: the language preference — a tag, or `auto` (the OS's locales through the resolver). */
     fun applyLanguage(choice: String) {
-        if (choice == "system" || choice.isBlank()) return applySystemLocale()
+        if (choice == Preferences.AUTO_LANGUAGE || choice == "system" || choice.isBlank()) return applySystemLocale()
         i18nExecutor.execute {
             runCatching { i18nRuntime.setLocale(LocaleResolver.resolve(listOf(java.util.Locale.forLanguageTag(choice)))) }
                 .onFailure { VelaLog.failure("i18n", "language preference failed", it) }

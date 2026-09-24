@@ -254,7 +254,7 @@ pub type MenuRow = (gpui::SharedString, Option<gpui::SharedString>, bool);
 /// A picture of the control: the gallery's and the mock's. A menu whose rows
 /// answer to a click is [`dropdown_menu_picks`].
 pub fn dropdown_menu(theme: &Theme, icons: &mut IconCache, rows: &[MenuRow]) -> Div {
-    menu_of(theme, icons, rows, None)
+    menu_of(theme, icons, rows, None, true)
 }
 
 /// The same menu, live (spec 038 #E3): `on_pick` is handed the index of the
@@ -265,7 +265,23 @@ pub fn dropdown_menu_picks(
     rows: &[MenuRow],
     on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    menu_of(theme, icons, rows, Some(Rc::new(on_pick)))
+    menu_of(theme, icons, rows, Some(Rc::new(on_pick)), true)
+}
+
+/// A live menu of NAMES rather than examples — languages, currencies (spec
+/// 072) — set in the UI face, and scrolling past a fixed height: fifteen
+/// languages would otherwise run off the bottom of the window.
+pub fn dropdown_menu_choices(
+    id: &'static str,
+    theme: &Theme,
+    icons: &mut IconCache,
+    rows: &[MenuRow],
+    on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Stateful<Div> {
+    menu_of(theme, icons, rows, Some(Rc::new(on_pick)), false)
+        .id(id)
+        .max_h(px(MENU_MAX_H))
+        .overflow_y_scroll()
 }
 
 type PickAction = Rc<dyn Fn(usize, &mut gpui::Window, &mut gpui::App)>;
@@ -285,6 +301,7 @@ fn menu_of(
     icons: &mut IconCache,
     rows: &[MenuRow],
     on_pick: Option<PickAction>,
+    mono: bool,
 ) -> Div {
     let hover = theme.bg_sunken;
     // One id per menu, from the first row it draws — the same trick
@@ -309,7 +326,7 @@ fn menu_of(
             .py(px(10.))
             .child(
                 div()
-                    .font_family(theme::font_mono())
+                    .when(mono, |el| el.font_family(theme::font_mono()))
                     .text_size(theme::text_row_sub())
                     .text_color(if *selected {
                         theme.accent
@@ -366,8 +383,8 @@ fn menu_of(
 // -- SegmentedControl ---------------------------------------------------------
 
 /// The product's ONE segmented control (design review 2026-07). Three-up for
-/// the theme picker, two-up for the avatar style; the desktop reuses the same
-/// component the phone does.
+/// the theme picker (its two-up avatar-style use was retired in spec 074); the
+/// desktop reuses the same component the phone does.
 pub fn segmented(
     theme: &Theme,
     icons: &mut IconCache,
@@ -433,6 +450,27 @@ pub fn segmented_cells(
     row
 }
 
+/// The same control, live (spec 072): `on_pick` is handed the index of the
+/// cell the person chose. The cells are [`segmented`]'s own, armed, so the
+/// picture and the control cannot drift apart.
+pub fn segmented_picks(
+    id: &'static str,
+    theme: &Theme,
+    icons: &mut IconCache,
+    items: &[(Option<Icon>, gpui::SharedString)],
+    selected: usize,
+    on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let on_pick: PickAction = Rc::new(on_pick);
+    segmented_cells(theme, icons, items, selected, &mut |i, cell| {
+        let pick = on_pick.clone();
+        cell.id((id, i))
+            .cursor_pointer()
+            .on_click(move |_, window, cx| pick(i, window, cx))
+            .into_any_element()
+    })
+}
+
 /// A ——●—— A, drawn only. The gallery still wants the picture; a real session
 /// uses [`text_scale_stops`] so the thumb can be moved.
 pub fn text_scale(theme: &Theme, steps: usize, index: usize) -> Div {
@@ -477,6 +515,64 @@ pub fn text_scale_stops(
         .flex()
         .items_center()
         .gap(px(12.))
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(theme.fg_base)
+                .child("A"),
+        )
+        .child(track)
+        .child(
+            div()
+                .text_size(theme::text_panel_title())
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(theme.fg_base)
+                .child("A"),
+        )
+}
+
+/// The text-size control, live (spec 072): one stop per level the core ships
+/// (`vela_core::prefs::TEXT_SCALE_LEVELS`), each its own target. The picture
+/// above spaced dots along a track; a dot four pixels wide is not something a
+/// person can click, so here every stop owns an equal share of the track.
+pub fn text_scale_picks(
+    theme: &Theme,
+    steps: usize,
+    index: usize,
+    on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let on_pick: PickAction = Rc::new(on_pick);
+    let mut track = div().flex_1().h(px(28.)).flex().items_center();
+    for i in 0..steps {
+        let pick = on_pick.clone();
+        let hover = theme.fg_subtle;
+        track = track.child(
+            div()
+                .id(("text-scale-stop", i))
+                .flex_1()
+                .h_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .on_click(move |_, window, cx| pick(i, window, cx))
+                .child(if i == index {
+                    div().size(px(16.)).rounded_full().bg(theme.fg_muted)
+                } else {
+                    div()
+                        .size(px(6.))
+                        .rounded_full()
+                        .bg(theme.outline_strong)
+                        .hover(move |el| el.bg(hover))
+                }),
+        );
+    }
+    div()
+        .w_full()
+        .flex()
+        .items_center()
+        .gap(px(8.))
         .child(
             div()
                 .text_size(theme::text_row_sub())
@@ -652,8 +748,16 @@ pub fn editable_url_field(
     focus: &gpui::FocusHandle,
     window: &gpui::Window,
     on_change: impl Fn(String, &mut gpui::Window, &mut gpui::App) + 'static,
+    // Enter: "I am done with this field" — the same as leaving it (spec 072).
+    on_enter: impl Fn(&mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    let mut col = div().flex().flex_col().gap(px(8.));
+    let mut col = div().flex().flex_col().gap(px(8.)).on_key_down(
+        move |event: &gpui::KeyDownEvent, window, cx| {
+            if event.keystroke.key == "enter" {
+                on_enter(window, cx);
+            }
+        },
+    );
     if label.is_some() || badge.is_some() {
         let mut head = div().flex().items_center().justify_between().gap(px(8.));
         if let Some(label) = label {
@@ -853,15 +957,22 @@ pub fn storage_bar(theme: &Theme, segments: &[(f32, u32)]) -> Div {
 /// One storage group. The group label carries the consequence — "清除后无法
 /// 找回" against "清除后自动重建" — which is why the same word 清除 is red in
 /// the first group and plain in the second.
-/// `on_clear` is what a row's 清除 DOES. Absent — the gallery, and a signed-out
-/// page with nothing measured — the word stays a label and the row keeps no
-/// pointer: eight rows each ending in a red 清除 that did nothing was this
-/// page until 2026-09-23.
-pub fn storage_group(
+pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
+    storage_group_with("storage-action", theme, group, Vec::new())
+}
+
+/// The same group with its row actions armed: `actions[i]` is what row `i`'s
+/// action does, `None` (or a missing entry) leaves it drawn and inert — which
+/// is what every mock row is.
+pub fn storage_group_with(
+    // Each group's actions under their own name: two groups on one page with
+    // the same element ids would share hover and click state.
+    key: &'static str,
     theme: &Theme,
     group: &StorageGroup,
-    on_clear: Option<Rc<dyn Fn(&'static str, &mut gpui::Window, &mut gpui::App)>>,
+    actions: Vec<Option<crate::flows::panels::Click>>,
 ) -> Div {
+    let mut actions = actions.into_iter();
     let mut col = div().flex().flex_col().pt(px(16.)).child(
         div()
             .pb(px(4.))
@@ -869,7 +980,7 @@ pub fn storage_group(
             .text_color(theme.fg_subtle)
             .child(group.label.clone()),
     );
-    for item in &group.items {
+    for (index, item) in group.items.iter().enumerate() {
         let action_tint = if item.destructive {
             theme.error_base
         } else {
@@ -901,7 +1012,9 @@ pub fn storage_group(
                                 .text_color(theme.fg_subtle)
                                 .child(item.meta.clone()),
                         )
-                        .child(
+                        .child(crate::flows::panels::clickable(
+                            ElementId::from((key, index)),
+                            actions.next().flatten(),
                             div()
                                 .id(ElementId::from(SharedString::from(format!(
                                     "storage-clear-{}",
@@ -909,14 +1022,16 @@ pub fn storage_group(
                                 ))))
                                 .text_size(theme::text_row_sub())
                                 .text_color(action_tint)
-                                .when_some(on_clear.clone(), |el, act| {
-                                    let id = item.id;
+                                .when_some(actions.next().flatten(), |el, act| {
+                                    // The action was built for THIS row, so it
+                                    // carries its own id; a `Click` takes the
+                                    // event, as every other one here does.
                                     el.cursor_pointer()
                                         .hover(move |el| el.opacity(0.7))
-                                        .on_click(move |_, window, cx| act(id, window, cx))
+                                        .on_click(move |event, window, cx| act(event, window, cx))
                                 })
                                 .child(item.action.clone()),
-                        ),
+                        )),
                 )
                 .child(div().h(px(1.)).bg(theme.divider)),
         );
@@ -1061,6 +1176,120 @@ pub fn danger_card(
             .into_any_element(),
         None => card.into_any_element(),
     }
+}
+
+// -- ConfirmCard --------------------------------------------------------------
+
+/// What a destructive action asks before it happens (spec 072 FR-010): a
+/// title naming what goes, the consequence, an optional red callout (what
+/// is lost) and note (what is not), and the two answers.
+pub struct ConfirmCopy {
+    pub title: gpui::SharedString,
+    pub body: gpui::SharedString,
+    pub callout: Option<gpui::SharedString>,
+    pub note: Option<gpui::SharedString>,
+    pub confirm: gpui::SharedString,
+    pub cancel: gpui::SharedString,
+    /// Red for what cannot be undone; the accent for what rebuilds itself.
+    pub danger: bool,
+}
+
+/// The one confirmation card every settings question is drawn with — the
+/// sign-out dialog's shape, so a person meets one kind of question.
+pub fn confirm_card(
+    theme: &Theme,
+    copy: ConfirmCopy,
+    on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+    on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let (fg, bg, hover) = if copy.danger {
+        (theme.error_base, theme.error_soft, theme.error_base)
+    } else {
+        (theme.accent, theme.bg_sunken, theme.accent)
+    };
+    let hover_cancel = theme.bg_sunken;
+    let mut card = div()
+        .w(px(400.))
+        .flex()
+        .flex_col()
+        .gap(px(16.))
+        .p(px(28.))
+        .rounded(px(20.))
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.border_card)
+        .child(
+            div()
+                .text_size(theme::text_panel_title())
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(theme.fg_base)
+                .child(copy.title),
+        )
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .line_height(theme::line_height_body())
+                .text_color(theme.fg_muted)
+                .child(copy.body),
+        );
+    if let Some(callout) = copy.callout {
+        card = card.child(
+            div()
+                .p(px(12.))
+                .rounded(px(10.))
+                .bg(theme.error_soft)
+                .text_size(theme::text_row_sub())
+                .line_height(theme::line_height_body())
+                .text_color(theme.error_base)
+                .child(callout),
+        );
+    }
+    if let Some(note) = copy.note {
+        card = card.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .line_height(theme::line_height_body())
+                .text_color(theme.fg_subtle)
+                .child(note),
+        );
+    }
+    card.child(
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(
+                div()
+                    .id("confirm-accept")
+                    .h(px(44.))
+                    .rounded(px(12.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .bg(bg)
+                    .text_size(theme::text_row_title())
+                    .text_color(fg)
+                    .hover(move |style| style.bg(hover).text_color(theme.fg_inverse))
+                    .on_click(on_confirm)
+                    .child(copy.confirm),
+            )
+            .child(
+                div()
+                    .id("confirm-cancel")
+                    .h(px(44.))
+                    .rounded(px(12.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_title())
+                    .text_color(theme.fg_base)
+                    .hover(move |style| style.bg(hover_cancel))
+                    .on_click(on_cancel)
+                    .child(copy.cancel),
+            ),
+    )
 }
 
 // -- RpcBanner ----------------------------------------------------------------

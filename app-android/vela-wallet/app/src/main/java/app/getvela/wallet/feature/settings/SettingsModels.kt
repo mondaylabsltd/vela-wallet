@@ -45,6 +45,19 @@ enum class SettingsOverlay {
 
     /** The default transaction speed (spec 069): three speeds, each with what it buys. */
     FeeSpeed,
+
+    /** Spec 071: the default "Sign with" — the three places a passkey is, and the Trusted Signer. */
+    SignWith,
+
+    /** Spec 071: which Trusted Signer page the wallet opens. */
+    SignerPage,
+
+
+    /** Spec 072: removing a custom network asks first. */
+    RemoveNetwork,
+
+    /** Spec 072: resetting the service endpoints asks first. */
+    ResetEndpoints,
 }
 
 /** Status-pill tone. `Neutral` is unset/idle, not failed. */
@@ -170,6 +183,25 @@ data class SelectSheetModel(
     val footerLink: String? = null,
 )
 
+/**
+ * Spec 071: the Trusted Signer page's sheet — the address, why an address typed
+ * was refused, and whether the page can use this wallet's passkeys.
+ */
+@Immutable
+data class SignerPageModel(
+    val title: String = "",
+    val subtitle: String = "",
+    /** The address in force, as the field starts. */
+    val value: String = "",
+    /** `settings.signing.pageInvalid` / `pageInsecure` for the last address typed. */
+    val error: String? = null,
+    /** `settings.signing.pageForeign` when the page is off `getvela.app`. */
+    val foreign: String? = null,
+    val save: String = "",
+    /** "Use the official page" — `null` when it already is. */
+    val reset: String? = null,
+)
+
 @Immutable
 data class AccountsSheetRowModel(
     val name: String,
@@ -187,6 +219,14 @@ data class AccountsSheetModel(
     val rows: List<AccountsSheetRowModel>,
     val primary: String,
     val secondary: String,
+    /**
+     * The words for taking ONE wallet off this device (2026-09-23). Empty
+     * leaves the affordance undrawn, which is what a fixture with nothing
+     * wired behind it wants — the screen resolves no strings of its own.
+     */
+    val remove: String = "",
+    val removeBody: String = "",
+    val removeCancel: String = "",
 )
 
 /** ST3 / ST13b / ST16 share this; only the tone and the callout differ. */
@@ -495,7 +535,6 @@ data class SettingsScreenModel(
     val keys: WalletKeysModel? = null,
     val sections: List<SettingsSectionModel>,
     val theme: SegmentedModel,
-    val avatar: SegmentedModel,
     val textScale: TextScaleModel,
     val signOutLabel: String,
     val eraseTitle: String,
@@ -504,6 +543,11 @@ data class SettingsScreenModel(
     val networksSubtitle: String,
     val networks: List<NetworkRowModel>,
     val addNetworkLabel: String,
+    /** Spec 072: the trash icon's name, and the question it asks. */
+    val removeNetworkLabel: String = "",
+    val removeNetworkSheet: ConfirmSheetModel = ConfirmSheetModel(title = "", body = "", confirm = "", cancel = "", danger = true),
+    /** Spec 072 (FR-010): what the endpoints' Reset asks before every field goes back. */
+    val resetEndpointsSheet: ConfirmSheetModel = ConfirmSheetModel(title = "", body = "", confirm = "", cancel = "", danger = true),
     val networkDetail: NetworkDetailModel,
     val addNetwork: AddNetworkModel,
     val rpcProviders: RpcProvidersModel,
@@ -516,6 +560,9 @@ data class SettingsScreenModel(
     val currencySheet: SelectSheetModel,
     /** Spec 069: the default transaction speed's sheet. */
     val feeSpeedSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
+    /** Spec 071: the default "Sign with" sheet, and the Trusted Signer page's. */
+    val signWithSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
+    val signerPage: SignerPageModel = SignerPageModel(),
     val numberSheet: SelectSheetModel,
     val dateSheet: SelectSheetModel,
     val timeSheet: SelectSheetModel,

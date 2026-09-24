@@ -103,6 +103,7 @@ alloy-primitives = { workspace = true }
 alloy-dyn-abi = { workspace = true }
 alloy-json-abi = { workspace = true }
 sha2 = { workspace = true }
+sha1 = { workspace = true }
 # `ecdh` for the CTAP2 PIN/UV key agreement in `ctap::ceremony` — the ephemeral
 # scalar's randomness still comes from the shell, through the `Host` seam.
 p256 = { workspace = true, features = ["ecdh"] }
@@ -118,6 +119,7 @@ cbc = { workspace = true }
 ciborium-io = { workspace = true }
 coset = { workspace = true }
 base64 = { workspace = true }
+miniz_oxide = { workspace = true }
 ryu-js = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

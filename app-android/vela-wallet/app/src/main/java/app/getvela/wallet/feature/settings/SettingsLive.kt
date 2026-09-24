@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.settings
 
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.FeeTierPrefView
+import app.getvela.wallet.feature.settings.core.SignPrefView
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.browser.ExploreLive
@@ -24,6 +25,7 @@ import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.settings.core.NetWizardErrorKind
 import app.getvela.wallet.feature.settings.core.NetWizardPhase
 import app.getvela.wallet.feature.wallet.core.BalanceView
 
@@ -77,6 +79,64 @@ object SettingsLive {
                 )
             },
             feeSpeedSheet = sheet,
+        )
+    }
+
+    /**
+     * How this device signs by default (spec 071): the "Sign with" row and its
+     * sheet, the Trusted Signer page row and its sheet — all from the `sign_pref`
+     * core, so the row, the sheet and every signing sheet say the same thing.
+     */
+    fun withSignPref(model: SettingsScreenModel, view: SignPrefView, s: VelaStrings): SettingsScreenModel {
+        val titles = mapOf(
+            "auto" to s.t("common.automatic"),
+            "platform" to s.t("onboarding.create.methodPlatformTitle"),
+            "hybrid" to s.t("onboarding.create.methodHybridTitle"),
+            "security_key" to s.t("onboarding.create.methodSecurityKeyTitle"),
+            "trusted_signer" to s.t("componentsUi.signing.trustedSignerTitle"),
+        )
+        val sheet = SelectSheetModel(
+            title = s.t("settings.signing.title"),
+            subtitle = s.t("settings.signing.subtitle"),
+            rows = view.offered.mapNotNull { id ->
+                val title = titles[id] ?: return@mapNotNull null
+                SelectRowModel(
+                    id = id,
+                    label = title,
+                    detail = if (id == "trusted_signer") s.t("componentsUi.signing.trustedSignerBody") else null,
+                    selected = id == view.method,
+                )
+            },
+        )
+        val official = s.t("settings.signing.pageOfficial")
+        val host = view.signer_url.substringAfter("://").substringBefore('/')
+        val page = SignerPageModel(
+            title = s.t("settings.signing.pageTitle"),
+            subtitle = s.t("settings.signing.pageSubtitle"),
+            value = view.signer_url,
+            error = when (view.signer_url_error) {
+                "invalid" -> s.t("settings.signing.pageInvalid")
+                "insecure" -> s.t("settings.signing.pageInsecure")
+                else -> null
+            },
+            foreign = if (view.signer_uses_wallet_passkeys) null else s.t("settings.signing.pageForeign"),
+            save = s.t("settings.signing.pageSave"),
+            reset = if (view.signer_url_is_default) null else s.t("settings.signing.pageReset"),
+        )
+        return model.copy(
+            sections = model.sections.map { section ->
+                section.copy(
+                    rows = section.rows.map { row ->
+                        when (row.id) {
+                            SettingsFixtures.SIGN_WITH_ROW -> row.copy(value = titles[view.method] ?: row.value)
+                            SettingsFixtures.SIGNER_PAGE_ROW -> row.copy(value = if (view.signer_url_is_default) official else host)
+                            else -> row
+                        }
+                    },
+                )
+            },
+            signWithSheet = sheet,
+            signerPage = page,
         )
     }
 
@@ -184,6 +244,11 @@ object SettingsLive {
         val wizard = view.wizard
         val info = wizard.chain_info
         val compat = wizard.compat
+        val checked = wizard.phase == NetWizardPhase.Checked
+        val stopped = wizard.phase == NetWizardPhase.Error
+        val inconclusive = wizard.error is NetWizardErrorKind.CheckFailed
+        val unverified = checked && (compat == null || compat.rpc_failure != null)
+        val compatible = checked && compat != null && compat.compatible && compat.rpc_failure == null
         return model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
@@ -225,18 +290,14 @@ object SettingsLive {
                         // **No verdict until one was reached.** While the
                         // checks are running there is no pill: a chain drawn as
                         // compatible before anything was checked is the same
-                        // lie as a latency nobody measured.
-                        badge = compat?.let { result ->
-                            StatusPillModel(
-                                tone = if (result.compatible) SettingsTone.Ok else SettingsTone.Error,
-                                label = strings.t(
-                                    if (result.compatible) {
-                                        I18nKeys.SettingsUi.ADD_COMPATIBLE
-                                    } else {
-                                        I18nKeys.SettingsUi.ADD_INCOMPATIBLE
-                                    },
-                                ),
-                            )
+                        // lie as a latency nobody measured. And "we could not
+                        // check" is NEVER worded as "incompatible" (the core's
+                        // invariant ③, the web's `wizardModel`).
+                        badge = when {
+                            compatible -> StatusPillModel(SettingsTone.Ok, strings.t(I18nKeys.SettingsUi.ADD_COMPATIBLE))
+                            unverified -> StatusPillModel(SettingsTone.Warn, strings.t("settingsModals.addNetwork.unableToVerify"))
+                            checked -> StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE))
+                            else -> null
                         },
                         tag = if (it.is_testnet) {
                             strings.t(I18nKeys.SettingsUi.ADD_TESTNET)
@@ -245,33 +306,21 @@ object SettingsLive {
                         },
                     )
                 },
-                // Each contract the core looked for, and whether it is there.
-                // The names are the core's; this only says found or not.
-                checks = compat?.contracts?.map { contract ->
-                    CheckItemModel(label = contract.name, ok = contract.deployed)
-                }.orEmpty(),
-                checksTitle = compat?.let {
+                // Each contract the core looked for, and the signer precompile:
+                // found or not. The names are the core's.
+                checks = compat?.let { result ->
+                    result.contracts.map { contract -> CheckItemModel(label = contract.name, ok = contract.deployed) } +
+                        CheckItemModel(label = strings.t(I18nKeys.SettingsUi.ADD_CHECK_SIGNER), ok = result.p256_available == true)
+                }.orEmpty().takeIf { checked && !unverified }.orEmpty(),
+                checksTitle = if (checked && !unverified && compat != null) {
                     strings.t(I18nKeys.SettingsUi.ADD_COMPATIBILITY_CHECK)
-                },
-                // Spec 081 FR-009. Two of the contracts above only matter to a
-                // wallet holding more than one passkey. When those are the only
-                // ones missing the core still says "compatible" — truthfully —
-                // and this is the rest of that sentence. Without it the pill
-                // says Compatible while two rows carry a red cross.
-                callout = compat?.takeIf { it.compatible && !it.multi_key_ready }?.let {
-                    CalloutModel(
-                        tone = CalloutTone.Warning,
-                        text = strings.t(I18nKeys.SettingsUi.ADD_SINGLE_KEY_ONLY),
-                    )
+                } else {
+                    null
                 },
                 // The person's own RPC for this chain, as the core holds it —
-                // so a keystroke round-trips (the ST1 base has no such field,
-                // and the compatible fixture's was a blank that never echoed).
-                // Offered where the web offers it: once checked, unless the
-                // chain was ruled incompatible.
-                customRpc = if (wizard.phase == NetWizardPhase.Checked &&
-                    (compat == null || compat.rpc_failure != null || compat.compatible)
-                ) {
+                // so a keystroke round-trips. Offered where the web offers it:
+                // once checked, unless the chain was ruled incompatible.
+                customRpc = if (compatible || unverified) {
                     UrlFieldModel(
                         id = "custom-rpc",
                         label = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
@@ -281,12 +330,49 @@ object SettingsLive {
                 } else {
                     null
                 },
-                // Only offered when the core says this chain can be added.
-                // The button is what writes a network somebody's money will be
-                // read from, and it must not be reachable on a chain whose
-                // contracts are not deployed.
-                primary = if (wizard.can_add) {
-                    strings.t(I18nKeys.SettingsUi.ADD_BUTTON)
+                // Why the wizard stopped, why this chain cannot be added, or —
+                // when it can — what adding it still will not do. Said, not
+                // just badged, and only ONE of the three: a callout is the
+                // sentence under the pill, and two would contradict.
+                //
+                // The stop comes first because it is why nothing more happened.
+                // The last arm is spec 081 FR-009: two of the contracts above
+                // matter only to a wallet holding more than one passkey, so
+                // when those are the only ones missing the core says
+                // "compatible" — truthfully — and this is the rest of that
+                // sentence. Without it the pill says Compatible while two rows
+                // carry a red cross. It cannot collide with the arm above it:
+                // that one needs `!compatible`, this one needs `compatible`.
+                callout = when {
+                    stopped -> CalloutModel(
+                        CalloutTone.Warning,
+                        strings.t(if (inconclusive) "settingsModals.addNetwork.unableToVerify" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
+                    )
+                    checked && !compatible && !unverified -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
+                    compat?.let { it.compatible && !it.multi_key_ready } == true -> CalloutModel(
+                        tone = CalloutTone.Warning,
+                        text = strings.t(I18nKeys.SettingsUi.ADD_SINGLE_KEY_ONLY),
+                    )
+                    else -> null
+                },
+                // Only offered when the core says this chain can be added — or,
+                // for a chain that could not be checked, Retry. The button that
+                // writes a network somebody's money will be read from must not
+                // be reachable on a chain whose contracts are not deployed.
+                primary = when {
+                    wizard.can_add -> strings.t(I18nKeys.SettingsUi.ADD_BUTTON)
+                    unverified -> strings.t("settingsModals.addNetwork.retry")
+                    else -> null
+                },
+                // The chain setup tool is for a chain that is really missing
+                // Vela's contracts — never for one that could not be reached.
+                secondary = if ((stopped && !inconclusive) || (checked && !compatible && !unverified)) {
+                    strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL)
+                } else {
+                    null
+                },
+                recheck = if (stopped || unverified || (checked && !compatible)) {
+                    strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC)
                 } else {
                     null
                 },
@@ -472,8 +558,8 @@ object SettingsLive {
     )
 
     /**
-     * Language, the three formats, the text scale and the avatar style, from
-     * the person's preferences: the rows say the choice, the sheets tick it,
+     * Language, the three formats and the text scale, from the person's
+     * preferences: the rows say the choice, the sheets tick it,
      * the controls sit on it. `system` shows the resolved language beside it.
      */
     fun withPreferences(
@@ -484,7 +570,7 @@ object SettingsLive {
         theme: String,
     ): SettingsScreenModel {
         val endonym = { tag: String -> SettingsFixtures.LOCALE_ENDONYMS.firstOrNull { it.first == tag }?.second ?: tag }
-        val languageValue = if (prefs.language == "system") "${endonym(activeLanguage)} · ${strings.t(I18nKeys.SettingsUi.COMMON_SYSTEM)}" else endonym(prefs.language)
+        val languageValue = if (prefs.language == app.getvela.wallet.core.data.Preferences.AUTO_LANGUAGE) "${endonym(activeLanguage)} · ${strings.t(I18nKeys.SettingsUi.COMMON_SYSTEM)}" else endonym(prefs.language)
         val formats = Formats.current
         val numberSheet = formatSheet(model.numberSheet, NumberFormatKey.entries, { it.wire }, prefs.numberFormat.wire) {
             Formats(number = it, locale = formats.locale).example()
@@ -517,7 +603,6 @@ object SettingsLive {
             dateSheet = dateSheet,
             timeSheet = timeSheet,
             theme = model.theme.copy(selected = theme),
-            avatar = model.avatar.copy(selected = prefs.avatarStyle),
             textScale = model.textScale.copy(steps = TextScaleLevel.entries.size, index = prefs.textScale.ordinal),
         )
     }
@@ -557,10 +642,46 @@ object SettingsLive {
         )
     }
 
-    internal fun bytesText(bytes: Long): Pair<String, String> = when {
-        bytes >= 1_000_000 -> Formats.current.number(java.math.BigDecimal(bytes).divide(java.math.BigDecimal(1_000_000)), 1, 1) to "MB"
-        bytes >= 1_000 -> Formats.current.number(java.math.BigDecimal(bytes).divide(java.math.BigDecimal(1_000)), 0, 0) to "KB"
-        else -> bytes.toString() to "B"
+    /**
+     * The Connections group, one row per connected site (spec 070 — the web's
+     * `withLiveConnections`, row for row). A grant is a standing permission, so
+     * a person has to see WHICH sites hold one, not only how many. `id` is the
+     * origin, so the row's clear names exactly the grant to revoke; the words
+     * say "Disconnect" (one site), never "Disconnect all". With no site
+     * connected the drawn "dApp permissions · 0" row stands.
+     */
+    fun withConnections(
+        model: SettingsScreenModel,
+        sites: List<app.getvela.wallet.feature.browser.core.DbrSiteView>,
+        strings: VelaStrings,
+    ): SettingsScreenModel {
+        if (sites.isEmpty()) return model
+        val label = strings.t(I18nKeys.SettingsUi.STORAGE_CONNECTIONS)
+        return model.copy(
+            storage = model.storage.copy(
+                groups = model.storage.groups.map { group ->
+                    if (group.label != label) return@map group
+                    group.copy(
+                        items = sites.map { site ->
+                            StorageItemModel(
+                                id = site.origin,
+                                label = site.origin.substringAfter("://"),
+                                meta = app.getvela.wallet.feature.browser.ExploreLive.shortAddress(site.address),
+                                action = strings.t("explore.disconnect"),
+                                destructive = true,
+                            )
+                        },
+                    )
+                },
+            ),
+        )
+    }
+
+    /** A byte count in 1024s — the core's, as every Vela writes it (this shell used 1000s) — in the person's number format. */
+    internal fun bytesText(bytes: Long): Pair<String, String> {
+        val display = uniffi.vela_core_uniffi.storageBytesDisplay(bytes.coerceAtLeast(0).toULong())
+        val digits = when (display.unit) { "B" -> 0; "KB" -> 0; else -> 1 }
+        return Formats.current.number(java.math.BigDecimal(display.value), digits, digits) to display.unit
     }
 
     /** About: the build's version and commit, the wallet's network count. */
@@ -782,15 +903,21 @@ object SettingsLive {
 
     private const val MASK = "••••"
 
-    /** The accounts sheet: this device's accounts, the active one ticked; the drawn amount is not known here and stays blank. */
-    fun withAccounts(model: SettingsScreenModel, accounts: List<Pair<String, String>>, activeIndex: Int, strings: VelaStrings): SettingsScreenModel = model.copy(
-        accountsSheet = model.accountsSheet.copy(
-            // The count line ends in the separator that precedes a total; this sheet shows none, so the separator goes too.
-            summary = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString())).trimEnd(' ', '·'),
-            rows = accounts.mapIndexed { i, (name, address) ->
-                AccountsSheetRowModel(name = name.ifBlank { ExploreLive.shortAddress(address) }, addressDisplay = ExploreLive.shortAddress(address), addressFull = address, amount = "", selected = i == activeIndex)
-            },
-        ),
+    /**
+     * The accounts sheet: the home's own switcher (spec 072) — this device's
+     * accounts, the active one ticked, each with the total the balance core
+     * keeps for it once the sheet asked (`SwitcherOpened`), in the display
+     * currency. One builder for both places a person switches accounts.
+     */
+    fun withAccounts(
+        model: SettingsScreenModel,
+        accounts: List<Pair<String, String>>,
+        activeIndex: Int,
+        switcher: app.getvela.wallet.feature.wallet.core.BalanceSwitcherView,
+        currency: app.getvela.wallet.feature.settings.core.CurrencyView,
+        strings: VelaStrings,
+    ): SettingsScreenModel = model.copy(
+        accountsSheet = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(accounts, activeIndex, switcher, currency, strings),
     )
 
     /**
@@ -821,6 +948,10 @@ object SettingsLive {
                             app.getvela.wallet.feature.onboarding.core.KeyMethod.SecurityKey -> k.KEYS_PROVIDER_SECURITY_KEY
                             app.getvela.wallet.feature.onboarding.core.KeyMethod.Hybrid -> k.KEYS_PROVIDER_GENERIC
                             app.getvela.wallet.feature.onboarding.core.KeyMethod.Platform -> k.KEYS_PROVIDER_PLATFORM
+                            // Spec 075: the page holds it, so the page is what
+                            // the line names — no vault this device can see.
+                            app.getvela.wallet.feature.onboarding.core.KeyMethod.TrustedSigner ->
+                                "componentsUi.signing.trustedSignerTitle"
                         },
                     )
                 },
@@ -834,6 +965,10 @@ object SettingsLive {
                     KeyDetailModel(strings.t(k.KEYS_PUBLIC_KEY), if (row.publicKeyHex.isEmpty()) "" else "0x${row.publicKeyHex.removePrefix("0x")}", mono = true, copy = true),
                     KeyDetailModel(strings.t(k.KEYS_CREDENTIAL), row.credentialId, mono = true, copy = true),
                     KeyDetailModel("AAGUID", row.key.aaguid, mono = true, copy = false),
+                    // Spec 075: WHICH page, when the key lives behind one —
+                    // the holder line above says it is the Trusted Signer, and a
+                    // person running their own deployment needs to see which.
+                    KeyDetailModel(strings.t("componentsUi.signing.trustedSignerTitle"), row.signerOrigin, mono = false, copy = true),
                     KeyDetailModel(strings.t(k.KEYS_TRANSPORT), listOf(row.key.authenticatorAttachment, row.key.transports).filter { it.isNotEmpty() }.joinToString(" · "), mono = false, copy = false),
                     KeyDetailModel(strings.t(k.KEYS_ATTESTATION), row.attestationHex, mono = true, copy = false),
                 ).filter { it.value.isNotEmpty() },

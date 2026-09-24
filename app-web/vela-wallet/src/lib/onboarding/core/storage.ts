@@ -107,7 +107,8 @@ export function normaliseAccount(record: unknown): Account | null {
 	const old =
 		'publicKeyHex' in r ||
 		'createdAt' in r ||
-		(Array.isArray(r.keys) && r.keys.some((k) => k && typeof k === 'object' && 'credentialId' in k)) ||
+		(Array.isArray(r.keys) &&
+			r.keys.some((k) => k && typeof k === 'object' && 'credentialId' in k)) ||
 		!Array.isArray(r.keys);
 	if (!old) return record as Account;
 	const keys = Array.isArray(r.keys) ? r.keys : [];
@@ -119,13 +120,23 @@ export function normaliseAccount(record: unknown): Account | null {
 		created_at_iso: str(r.created_at_iso, r.createdAt) ?? '',
 		keys: keys
 			.filter((k): k is Record<string, unknown> => !!k && typeof k === 'object')
-			.map((k) => ({
-				credential_id: str(k.credential_id, k.credentialId) ?? '',
-				public_key_hex: str(k.public_key_hex, k.publicKeyHex) ?? '',
-				name: str(k.name) ?? '',
-				// Where the credential lives; the old client never recorded it.
-				transports: str(k.transports) ?? ''
-			}))
+			.map((k) => {
+				const key: Account['keys'][number] = {
+					credential_id: str(k.credential_id, k.credentialId) ?? '',
+					public_key_hex: str(k.public_key_hex, k.publicKeyHex) ?? '',
+					name: str(k.name) ?? '',
+					// Where the credential lives; the old client never recorded it.
+					transports: str(k.transports) ?? ''
+				};
+				// Spec 075: the Trusted Signer page a key lives behind. It is the
+				// ONLY way that key can ever be reached, so normalising a record
+				// must carry it through — dropping it here would make the key
+				// unsignable and the wallet unopenable, silently. Absent stays
+				// absent (the field is optional on the wire).
+				const origin = str(k.signer_origin, k.signerOrigin);
+				if (origin !== undefined && origin !== '') key.signer_origin = origin;
+				return key;
+			})
 	};
 }
 
@@ -136,6 +147,22 @@ export function saveAccount(account: Account): void {
 	if (at >= 0) accounts[at] = account;
 	else accounts.push(account);
 	writeList(STORAGE_KEYS.accounts, accounts);
+}
+
+/**
+ * Drop ONE account from the stored list, by ADDRESS — spec 017's narrow half
+ * (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+ *
+ * By address, not by id or position, because a row's identity is its address
+ * (session invariant ⑨): a write that raced a re-sorted display must not take
+ * a stranger. A row that is no longer there is a no-op — the person asked for
+ * it to be gone, and it is.
+ */
+export function removeAccount(address: string): void {
+	const kept = loadAccounts().filter(
+		(account) => account.address.toLowerCase() !== address.toLowerCase()
+	);
+	writeList(STORAGE_KEYS.accounts, kept);
 }
 
 export function loadActiveIndex(): number {

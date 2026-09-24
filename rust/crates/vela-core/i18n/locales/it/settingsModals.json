@@ -42,7 +42,11 @@
       "fiatLabel": "TASSI FIAT",
       "fiatHint": "Tassi di cambio in USD che definiscono l’elenco delle valute — sostituibile per una copertura più ampia.",
       "resetToDefaults": "Ripristina tutti e quattro",
-      "selfHostGuide": "Guida al self-hosting →"
+      "selfHostGuide": "Guida al self-hosting →",
+      "resetTitle": "Ripristinare gli endpoint dei servizi?",
+      "resetBody": "I quattro servizi tornano agli indirizzi di Vela. Gli indirizzi inseriti qui vengono dimenticati.",
+      "resetConfirm": "Ripristina",
+      "resetCancel": "Annulla"
     },
     "addNetwork": {
       "modalTitle": "Aggiungi rete",
@@ -60,7 +64,6 @@
       "retry": "Riprova",
       "addNetworkBtn": "Aggiungi rete",
       "incompatibleHint": "Alcuni contratti necessari non sono ancora stati deployati su questa rete.\nEseguine il deploy con lo strumento Vela Wallet Chain Setup, poi torna e ricontrolla.",
-      "singleKeyOnly": "Un wallet con più di una passkey non può essere creato su questa rete: la factory dei signer passkey di Safe non è deployata qui.\nUn wallet con una sola passkey funziona normalmente.",
       "openChainSetupTool": "Apri Chain Setup Tool",
       "recheck": "Ricontrolla",
       "chainIdLabel": "Chain ID: {{chainId}}",
@@ -70,7 +73,8 @@
       "incompatible": "Non compatibile",
       "checkSafe": "Contratti Safe L2",
       "checkSigner": "Precompilato P-256",
-      "checkRemaining": "altri {{count}} contratti"
+      "checkRemaining": "altri {{count}} contratti",
+      "singleKeyOnly": "Un wallet con più di una passkey non può essere creato su questa rete: la factory dei signer passkey di Safe non è deployata qui.\nUn wallet con una sola passkey funziona normalmente."
     },
     "treasury": {
       "modalTitle": "Treasury",

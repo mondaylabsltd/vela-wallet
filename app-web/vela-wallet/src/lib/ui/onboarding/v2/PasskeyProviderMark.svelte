@@ -66,6 +66,13 @@
 		// Nothing to draw before hydration: the artwork comes from the wasm core,
 		// which only exists in the browser, and these screens only render there.
 		if (!browser) return undefined;
+		// Spec 075: a key behind a Trusted Signer page wears no vault's mark. The
+		// AAGUID it reported is the authenticator on the PAGE's side — the one
+		// thing this wallet cannot reach — so a vendor's logo here would draw the
+		// far side of the page while the caption names the page. The glyph below
+		// (the eye) is the honest slot, and the two read one field, as issue 207
+		// requires.
+		if (key.kind === 'trusted_signer') return undefined;
 		const provider = key.aaguid ? passkeyProviderIconDataUri(key.aaguid, dark) : undefined;
 		if (provider) return provider;
 		const listed = directoryEntry(key.aaguid, dark);

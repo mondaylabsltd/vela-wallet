@@ -1,9 +1,9 @@
 <script lang="ts">
 	/**
 	 * The only segmented control in the product (design review 2026-07: one
-	 * segmented control, no lookalikes). Two mocks use it — the three-up theme
-	 * picker and the two-up avatar picker — and the desktop reuses it verbatim
-	 * in its form rows.
+	 * segmented control, no lookalikes). The three-up theme picker uses it, and
+	 * the desktop reuses it verbatim in its form rows. (The two-up avatar
+	 * picker it also drew was retired in spec 074.)
 	 */
 	import type { SegmentedModel } from '../model';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';

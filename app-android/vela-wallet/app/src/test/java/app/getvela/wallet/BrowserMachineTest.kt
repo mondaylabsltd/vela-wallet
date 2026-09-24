@@ -4,11 +4,12 @@ import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.feature.browser.core.BrowserExecutor
-import app.getvela.wallet.feature.browser.core.DpermEvent
-import app.getvela.wallet.feature.browser.core.DpermOperation
-import app.getvela.wallet.feature.browser.core.DpermShellResult
-import app.getvela.wallet.feature.browser.core.DpermView
-import app.getvela.wallet.feature.browser.core.RequestRouter
+import app.getvela.wallet.feature.browser.core.DbrEvent
+import app.getvela.wallet.feature.browser.core.DbrOperation
+import app.getvela.wallet.feature.browser.core.DbrShellResult
+import app.getvela.wallet.feature.browser.core.DbrView
+import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,145 +22,234 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uniffi.vela_core_uniffi.DappPermissionsCore
+import uniffi.vela_core_uniffi.DappBrowserCore
+import uniffi.vela_core_uniffi.dappBrowserInput
+import uniffi.vela_core_uniffi.dappProviderScript
 
 /**
- * Spec 044 T026: connect through the real `dapp_permissions` machine — a
- * never-connected origin gets consent, approval answers one address, the
- * second ask is instant, a dismissal is the standard refusal once, a
- * revoke fires `disconnect` and re-asks; the grant is keyed by origin. And
- * the shell's own routing for what the core forwards.
+ * Spec 070: the in-app browser through the REAL `dapp_browser` machine and
+ * this shell's executor — the store keys every client shares, answers that go
+ * to the tab that asked and nowhere else, the signing hand-off carrying the
+ * granted address and the site's chain, and the script the page gets.
+ * (The machine's own rules are the core's 59 conformance tests.)
  */
 class BrowserMachineTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val store = FakeStore()
-    // Iterated by the test while the machines append on their own threads:
-    // `synchronizedList` does not protect iteration (a CME, now and then).
-    private val answers = java.util.concurrent.CopyOnWriteArrayList<Pair<String, JSONObject>>()
-    private val events = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
-    private val forwarded = java.util.concurrent.CopyOnWriteArrayList<String>()
-    private val records = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
     private val safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private val origin = "http://127.0.0.1:8137"
+
+    /** Everything the executor was asked to do, in order. */
+    private val delivered = java.util.concurrent.CopyOnWriteArrayList<Pair<String, JSONObject>>()
+    private val forwarded = java.util.concurrent.CopyOnWriteArrayList<DbrOperation.ForwardToSigning>()
+    private val cancelled = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val records = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
+    private val reads = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     @After
     fun stop() = scope.cancel()
 
-    private fun host(): CoreHost<DpermView> {
+    private fun host(store: FakeStore): CoreHost<DbrView> {
         val executor = BrowserExecutor(
             store,
             object : BrowserExecutor.Ports {
-                override fun respond(id: String, json: JSONObject) { answers += id to json }
-                override fun emit(json: JSONObject) { events += json }
-                override fun settleForwarded(code: Int, message: String) { answers += "settled" to BrowserExecutor.errorJson("settled", code, message) }
+                override fun deliver(tab: String, messageJson: String) { delivered += tab to JSONObject(messageJson) }
+                override suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): JSONObject? {
+                    reads += "$chainId:$method:$bundler"
+                    return JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", "0x10")
+                }
+                override suspend fun userOpTxHash(chainId: Int, userOpHash: String): String? = null
+                override fun forwardToSigning(operation: DbrOperation.ForwardToSigning) { forwarded += operation }
+                override fun cancelSigning(tab: String, id: String) { cancelled += "$tab/$id" }
                 override fun saveConnectionRecord(row: JSONObject) { records += row }
-                override fun forward(id: String, method: String, paramsJson: String, origin: String) { forwarded += "$id:$method" }
             },
         )
         return CoreHost(
-            bridge = DappPermissionsCore().asBridge(), scope = scope, initial = DpermView(), serializer = DpermView.serializer(),
-            perform = JsonShell.perform(DpermOperation.serializer(), DpermShellResult.serializer(), executor::perform),
-            escapedFailure = JsonShell.escapedFailure(DpermOperation.serializer(), DpermShellResult.serializer(), fallback = DpermShellResult.Ack, answer = executor::neutralAnswer),
-            onFault = { error -> throw AssertionError("core fault", error) },
+            bridge = DappBrowserCore().asBridge(), scope = scope, initial = DbrView(), serializer = DbrView.serializer(),
+            perform = JsonShell.perform(DbrOperation.serializer(), DbrShellResult.serializer(), executor::perform),
+            escapedFailure = JsonShell.escapedFailure(DbrOperation.serializer(), DbrShellResult.serializer(), fallback = DbrShellResult.Ack, answer = executor::neutralAnswer),
         ).also { h ->
-            h.dispatch(DpermEvent.AccountsUpdated(listOf(safe)), DpermEvent.serializer())
-            h.dispatch(DpermEvent.AccountSwitched(safe, 1.0e12), DpermEvent.serializer())
-            h.dispatch(DpermEvent.ChainChanged(100), DpermEvent.serializer())
-            h.dispatch(DpermEvent.NavigationStarted("$origin/?v=3"), DpermEvent.serializer())
+            h.dispatch(DbrEvent.Start, DbrEvent.serializer())
+            h.dispatch(DbrEvent.NetworksChanged(listOf(1, 100, 8453)), DbrEvent.serializer())
+            h.dispatch(DbrEvent.AccountsUpdated(listOf(safe)), DbrEvent.serializer())
+            h.dispatch(DbrEvent.AccountSwitched(safe, 1.0e12), DbrEvent.serializer())
         }
     }
 
-    private fun ask(h: CoreHost<DpermView>, id: String, method: String, params: String = "[]") =
-        h.dispatch(DpermEvent.ProviderRequest(id = id, method = method, params_json = params, origin = origin, is_main_frame = true), DpermEvent.serializer())
+    private fun page(h: CoreHost<DbrView>, tab: String, message: JSONObject, from: String = origin, mainFrame: Boolean = true) =
+        h.dispatch(DbrEvent.PageMessage(tab = tab, frame_origin = from, is_main_frame = mainFrame, message_json = message.toString()), DbrEvent.serializer())
 
-    private suspend fun answered(id: String): JSONObject = withTimeout(10_000) {
-        while (answers.none { it.first == id }) delay(20)
-        answers.first { it.first == id }.second
+    private fun hello(h: CoreHost<DbrView>, tab: String, doc: String) = page(h, tab, JSONObject().put("t", "hello").put("doc", doc))
+
+    private fun ask(h: CoreHost<DbrView>, tab: String, doc: String, id: String, method: String, params: JSONArray = JSONArray()) =
+        page(h, tab, JSONObject().put("t", "req").put("doc", doc).put("id", id).put("method", method).put("params", params))
+
+    private suspend fun answerFor(id: String): Pair<String, JSONObject> {
+        withTimeout(10_000) { while (delivered.none { it.second.optString("id") == id }) delay(10) }
+        return delivered.first { it.second.optString("id") == id }
     }
 
     @Test
-    fun `consent, then the instant answer, then the standard refusal once`() = runBlocking {
-        val h = host()
-        withTimeout(10_000) { h.view.first { it.current_origin == origin } }
-        ask(h, "r1", "eth_requestAccounts")
-        val asking = withTimeout(10_000) { h.view.first { it.consent != null } }
-        assertEquals("the consent card carries the CORE's origin", origin, asking.consent!!.origin)
-        h.dispatch(DpermEvent.ConsentApproved(1.0e12 + 5), DpermEvent.serializer())
-        val a1 = answered("r1")
-        assertEquals(safe, a1.getJSONArray("result").getString(0))
-        val connected = withTimeout(10_000) { h.view.first { it.connected_address != null } }
-        assertEquals(safe, connected.connected_address)
+    fun `the page gets the core's script, one per host, with the bridge for Android`() {
+        val script = dappProviderScript("android")
+        assertTrue(script.startsWith("(function () {"))
+        assertTrue("the Android bridge posts through the message listener", script.contains("VelaHost.postMessage(s)"))
+        assertTrue("the provider itself is in it", script.contains("eip6963:announceProvider"))
+        assertFalse("no module syntax survives", script.lines().any { it.trimStart().startsWith("import ") || it.trimStart().startsWith("export ") })
+    }
+
+    @Test
+    fun `the address bar searches words and opens hosts`() {
+        assertEquals("https://app.uniswap.org", dappBrowserInput("app.uniswap.org"))
+        assertEquals("https://duckduckgo.com/?q=uniswap", dappBrowserInput("uniswap"))
+        assertEquals("http://127.0.0.1:8137/", dappBrowserInput("127.0.0.1:8137/"))
+        assertNull(dappBrowserInput("   "))
+    }
+
+    @Test
+    fun `connect writes the grant under the shared key and answers the tab that asked`() = runBlocking<Unit> {
+        val store = FakeStore()
+        val h = host(store)
+        hello(h, "tab-1", "d1")
+        hello(h, "tab-2", "d2")
+        ask(h, "tab-2", "d2", "c1", "eth_requestAccounts")
+        val consent = withTimeout(10_000) { h.view.first { it.consent != null } }.consent!!
+        assertEquals(origin, consent.origin)
+        assertEquals(safe, consent.address)
+        h.dispatch(DbrEvent.ConsentApproved(1.0e12 + 5), DbrEvent.serializer())
+        val (tab, answer) = answerFor("c1")
+        assertEquals("the answer goes to the tab that asked", "tab-2", tab)
+        assertEquals(safe, answer.getJSONArray("result").getString(0))
+        assertEquals("d2", answer.getString("doc"))
+        withTimeout(10_000) { while (store.values[BrowserExecutor.grantKey(origin)].isNullOrBlank()) delay(20) }
+        val grant = JSONObject(store.values.getValue(BrowserExecutor.grantKey(origin)))
+        assertEquals(safe, grant.getString("address"))
         withTimeout(10_000) { while (records.isEmpty()) delay(20) }
         assertEquals("connect", records.single().getString("type"))
         assertEquals(origin, records.single().getString("dappOrigin"))
-        // The grant is keyed by ORIGIN, not URL.
-        withTimeout(10_000) { while (store.values[BrowserExecutor.grantKey(origin)].isNullOrBlank()) delay(20) }
-        assertNull(store.values["${BrowserExecutor.grantKey(origin)}/?v=3"])
-        // The second ask: instant, no consent.
-        ask(h, "r2", "eth_accounts")
-        val a2 = answered("r2")
-        assertEquals(safe, a2.getJSONArray("result").getString(0))
-        assertNull(h.view.value.consent)
-        // A read is forwarded, never answered here.
-        ask(h, "r3", "eth_blockNumber")
-        withTimeout(10_000) { while (forwarded.none { it == "r3:eth_blockNumber" }) delay(20) }
-        // Revoke: the page hears disconnect, and asks again next time.
-        h.dispatch(DpermEvent.RevokeRequested(origin), DpermEvent.serializer())
-        withTimeout(10_000) { while (events.none { it.optString("event") == "disconnect" }) delay(20) }
-        withTimeout(10_000) { h.view.first { it.connected_address == null } }
-        ask(h, "r4", "eth_requestAccounts")
-        withTimeout(10_000) { h.view.first { it.consent != null } }
-        h.dispatch(DpermEvent.ConsentRejected, DpermEvent.serializer())
-        val a4 = answered("r4")
-        assertEquals(4001, a4.getJSONObject("error").getInt("code"))
-        assertEquals("User rejected the request", a4.getJSONObject("error").getString("message"))
-        assertEquals("one refusal, not two", 1, answers.count { it.first == "r4" })
+        assertEquals(1, withTimeout(10_000) { h.view.first { it.sites.isNotEmpty() } }.sites.size)
     }
 
     @Test
-    fun `the shell answers what the core forwards - facts, reads, switches, refusals`() = runBlocking {
-        var chain = 100
-        val switched = ArrayList<Int>()
-        val router = RequestRouter(
-            object : RequestRouter.Ports {
-                override fun browserChain() = chain
-                override fun knownChains() = listOf(1, 100)
-                override fun switchChain(chainId: Int) { chain = chainId; switched += chainId }
-                override suspend fun poolCall(chainId: Int, method: String, params: JSONArray, bundler: Boolean): JSONObject? = when (method) {
-                    "eth_blockNumber" -> JSONObject().put("result", "0x2df8cad")
-                    "eth_getLogs" -> JSONObject().put("error", JSONObject().put("code", -32005).put("message", "range too wide"))
-                    else -> null
-                }
-                override fun respond(id: String, json: JSONObject) { answers += id to json }
-                override fun sign(id: String, method: String, paramsJson: String, origin: String) { forwarded += "$id:$method" }
-                override suspend fun receiptFor(userOpHash: String): RequestRouter.Receipt? = null
-            },
+    fun `stored grants and chains are listed at start and a site keeps its chain`() = runBlocking<Unit> {
+        val store = FakeStore(
+            mapOf(
+                BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":100,"granted_at_ms":1.0e12}""",
+                BrowserExecutor.chainKey(origin) to "8453",
+                BrowserExecutor.grantKey("https://broken.example") to "{not json",
+            ),
         )
-        router.route("s1", "eth_chainId", "[]", origin)
-        assertEquals("0x64", answers.first { it.first == "s1" }.second.getString("result"))
-        router.route("s2", "net_version", "[]", origin)
-        assertEquals("100", answers.first { it.first == "s2" }.second.getString("result"))
-        router.route("s3", "eth_blockNumber", "[]", origin)
-        assertEquals("0x2df8cad", answers.first { it.first == "s3" }.second.getString("result"))
-        router.route("s4", "eth_getLogs", "[{}]", origin)
-        assertEquals(-32005, answers.first { it.first == "s4" }.second.getJSONObject("error").getInt("code"))
-        router.route("s5", "eth_gasPrice", "[]", origin)
-        assertEquals(-32603, answers.first { it.first == "s5" }.second.getJSONObject("error").getInt("code"))
-        router.route("s6", "wallet_switchEthereumChain", """[{"chainId":"0x1"}]""", origin)
-        assertEquals(listOf(1), switched)
-        assertTrue(answers.first { it.first == "s6" }.second.isNull("result"))
-        router.route("s7", "wallet_switchEthereumChain", """[{"chainId":"0x89"}]""", origin)
-        assertEquals(4902, answers.first { it.first == "s7" }.second.getJSONObject("error").getInt("code"))
-        router.route("s8", "wallet_watchAsset", "[]", origin)
-        assertTrue(answers.first { it.first == "s8" }.second.isNull("result"))
-        router.route("s9", "eth_signTransaction", "[]", origin)
-        assertEquals(4900, answers.first { it.first == "s9" }.second.getJSONObject("error").getInt("code"))
-        router.route("s10", "eth_sendTransaction", "[]", origin)
-        assertEquals(listOf("s10:eth_sendTransaction"), forwarded)
-        assertNotNull(BrowserExecutor.connectionRow(safe, 100, origin, 1000L).getString("id"))
+        val h = host(store)
+        val view = withTimeout(10_000) { h.view.first { it.ready } }
+        assertEquals("an unreadable grant is no grant", listOf(origin), view.sites.map { it.origin })
+        assertEquals(8453, view.sites.single().chain_id)
+        hello(h, "tab-1", "d1")
+        ask(h, "tab-1", "d1", "q1", "eth_chainId")
+        assertEquals("0x2105", answerFor("q1").second.getString("result"))
+    }
+
+    @Test
+    fun `a signature is handed to the sheet with the granted address and the site's chain, and answered once`() = runBlocking<Unit> {
+        val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":100,"granted_at_ms":1.0e12}"""))
+        val h = host(store)
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        ask(h, "tab-1", "d1", "s1", "personal_sign", JSONArray().put("0x68656c6c6f").put(safe))
+        withTimeout(10_000) { while (forwarded.isEmpty()) delay(10) }
+        val op = forwarded.single()
+        assertEquals("tab-1", op.tab)
+        assertEquals(safe, op.granted_address)
+        assertEquals(100, op.chain_id)
+        h.dispatch(DbrEvent.SigningAnswered("tab-1", "s1", SignResponsePayload.Err(4001, SignErrorKind.UserRejected, null), null), DbrEvent.serializer())
+        val answer = answerFor("s1").second
+        assertEquals(4001, answer.getJSONObject("error").getInt("code"))
+        assertEquals("the core's words", "User rejected the request", answer.getJSONObject("error").getString("message"))
+        assertEquals("user_rejected", answer.getJSONObject("error").getString("kind"))
+    }
+
+    /**
+     * Spec 081, device-found — through this shell, where the report came from.
+     *
+     * A refused request was answered with the refused FUNCTION's name and
+     * nothing else ("addOwnerWithThreshold"), which reads as a label rather
+     * than an answer. The page now gets a sentence that names it, and a
+     * machine-readable `kind` beside the code.
+     *
+     * This lived in `SigningLiveTest` against `SignExecutor.responseJson` while
+     * the shell built the page's answer itself. Spec 070 moved that into the
+     * core (`dapp_browser` → `dapp_rpc::sign_error_json`), so the assertion
+     * moved to where the answer is now made — and it is the REAL machine
+     * answering here, not this shell's copy of the rule.
+     */
+    @Test
+    fun `a refused request tells the page what happened and why`() = runBlocking<Unit> {
+        val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":100,"granted_at_ms":1.0e12}"""))
+        val h = host(store)
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        ask(h, "tab-1", "d1", "s1", "eth_sendTransaction", JSONArray().put(JSONObject().put("to", safe)))
+        withTimeout(10_000) { while (forwarded.isEmpty()) delay(10) }
+        h.dispatch(
+            DbrEvent.SigningAnswered(
+                "tab-1",
+                "s1",
+                SignResponsePayload.Err(-32603, SignErrorKind.SelfCallBlocked, "addOwnerWithThreshold"),
+                null,
+            ),
+            DbrEvent.serializer(),
+        )
+        val error = answerFor("s1").second.getJSONObject("error")
+        assertEquals(-32603, error.getInt("code"))
+        assertEquals("self_call_blocked", error.getString("kind"))
+        val message = error.getString("message")
+        assertTrue("a sentence, not a label: $message", message.contains("refused a call that would change who controls"))
+        assertTrue("and it names what was refused: $message", message.contains("addOwnerWithThreshold"))
+    }
+
+    @Test
+    fun `a navigation mid-signature settles the page and closes the sheet`() = runBlocking<Unit> {
+        val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":100,"granted_at_ms":1.0e12}"""))
+        val h = host(store)
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        ask(h, "tab-1", "d1", "s1", "eth_sendTransaction", JSONArray().put(JSONObject().put("to", safe)))
+        withTimeout(10_000) { while (forwarded.isEmpty()) delay(10) }
+        hello(h, "tab-1", "d2")
+        assertEquals(4900, answerFor("s1").second.getJSONObject("error").getInt("code"))
+        withTimeout(10_000) { while (cancelled.isEmpty()) delay(10) }
+        assertEquals(listOf("tab-1/s1"), cancelled.toList())
+    }
+
+    @Test
+    fun `reads go through the pool on the site's chain, and a subframe is never heard`() = runBlocking<Unit> {
+        val h = host(FakeStore())
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        ask(h, "tab-1", "d1", "r1", "eth_blockNumber")
+        assertEquals("0x10", answerFor("r1").second.getString("result"))
+        assertEquals(listOf("1:eth_blockNumber:false"), reads.toList())
+        page(h, "tab-1", JSONObject().put("t", "req").put("doc", "d1").put("id", "x").put("method", "eth_requestAccounts"), from = "https://ads.example", mainFrame = false)
+        delay(200)
+        assertNull(h.view.value.consent)
+        assertTrue(delivered.none { it.second.optString("id") == "x" })
+    }
+
+    @Test
+    fun `revoking removes the key and tells the open page`() = runBlocking<Unit> {
+        val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":100,"granted_at_ms":1.0e12}"""))
+        val h = host(store)
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        h.dispatch(DbrEvent.RevokeRequested(origin), DbrEvent.serializer())
+        withTimeout(10_000) { while (store.values.containsKey(BrowserExecutor.grantKey(origin))) delay(10) }
+        withTimeout(10_000) { while (delivered.none { it.second.optString("event") == "disconnect" }) delay(10) }
+        val events = delivered.filter { it.second.optString("dir") == "evt" }.map { it.second.getString("event") }
+        assertEquals(listOf("accountsChanged", "disconnect"), events)
+        assertNotNull(h.view.value)
+        assertTrue(h.view.value.sites.isEmpty())
     }
 }

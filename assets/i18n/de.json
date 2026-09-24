@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Konto wechseln",
-   "contactsSubtitle": "Gespeicherte Adressen und letzte Empfänger"
+   "contactsSubtitle": "Gespeicherte Adressen und letzte Empfänger",
+   "remove": "Von diesem Gerät entfernen",
+   "removeBody": "Nur diese Wallet geht, die anderen bleiben."
   },
   "appearance": {
    "themeLight": "Hell",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "Transaktionsgeschwindigkeit",
    "subtitle": "Jede Überweisung, die du in Vela startest, beginnt hier. Eine einzelne kannst du beim Senden trotzdem ändern."
+  },
+  "signing": {
+   "title": "Signieren mit",
+   "subtitle": "Jede Signatur, die Sie in Vela beginnen, startet hier. Für eine einzelne können Sie trotzdem einen anderen Weg wählen.",
+   "pageTitle": "Clear-Signer-Seite",
+   "pageSubtitle": "Die Seite, die der Trusted Signer öffnet: die offizielle oder Ihre eigene Kopie der abhängigkeitsfreien Seite.",
+   "pageOfficial": "Offiziell",
+   "pageInvalid": "Das ist keine Webadresse.",
+   "pageInsecure": "Verwenden Sie eine https-Seite oder eine Seite auf dem Loopback dieses Geräts — anderswo signiert ein Browser nicht.",
+   "pageForeign": "Ihre Passkeys gehören zu getvela.app. Eine Seite auf einer anderen Domain kann eine Anfrage anzeigen, aber nicht signieren.",
+   "pageReset": "Offizielle Seite verwenden",
+   "pageSave": "Speichern"
   },
   "advanced": {
    "networksTitle": "Netzwerke",
@@ -88,7 +102,8 @@
    "keeps": "Wählen Sie „Ich habe bereits eine Wallet“, um sich mit demselben Passkey wieder anzumelden: Sie erhalten dieselbe Adresse zurück, und Verlauf, Kontakte, Token und Einstellungen sind weiterhin da.",
    "warning": "Ihr öffentlicher Schlüssel hat den Sync-Server noch nicht erreicht. Beim nächsten Start wird es erneut versucht, aber bis dahin können Sie sich auf anderen Geräten möglicherweise nicht anmelden — und auch hier nicht, wenn Sie die App entfernen.",
    "anyway": "Trotzdem abmelden",
-   "cancel": "Abbrechen"
+   "cancel": "Abbrechen",
+   "descMany": "Alle {{count}} Wallets auf diesem Gerät werden abgemeldet. Nichts wird gelöscht."
   },
   "eraseDevice": {
    "title": "Dieses Gerät löschen",
@@ -748,6 +763,8 @@
    "keysSubtitleFull": "Das Limit von 7 ist erreicht.",
    "keysTitle": "Passkeys hinzufügen",
    "keysTitleBlocked": "Noch ein Schlüssel, dann kannst du erstellen",
+   "methodBlockedHint": "Die Schlüssel dieser Wallet gehören alle zu {{party}}.",
+   "methodBlockedSigner": "Deine Clear-Signer-Seite ist {{page}}, ihre Schlüssel gehören zu {{pageParty}}. Stelle in den Einstellungen {{party}} ein, um hier einen hinzuzufügen.",
    "methodHybridBody": "Code scannen und auf einem Gerät in der Nähe erstellen",
    "methodHybridTitle": "Handy oder Tablet",
    "methodHybridUnavailable": "Demnächst",
@@ -1340,6 +1357,16 @@
    "techIdentityRecipient": "Empfänger",
    "copyValue": "Kopieren",
    "signWith": "Signieren mit",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "Auf einer eigenen Seite prüfen und signieren — was Sie sehen, signieren Sie.",
+   "trustedSignerWaiting": "Warten auf den Trusted Signer…",
+   "trustedSignerWaitingHint": "Prüfen Sie die Anfrage auf der geöffneten Seite und signieren Sie dort. Fragt der Browser, ob die Seite auf andere Apps auf diesem Gerät zugreifen darf, erlauben Sie es.",
+   "trustedSignerClosed": "Der Trusted Signer wurde ohne Signatur geschlossen.",
+   "trustedSignerRefused": "Der Trusted Signer hat diese Anfrage nicht signiert. Seine Seite nennt den Grund.",
+   "trustedSignerMismatch": "Die Antwort des Trusted Signers passt nicht zu dieser Anfrage, daher wurde nichts gesendet.",
+   "trustedSignerTimeout": "Der Trusted Signer hat nicht rechtzeitig geantwortet.",
+   "trustedSignerReopen": "Seite erneut öffnen",
+   "trustedSignerDoneTab": "Signiert. Sie können diesen Tab schließen und zu Vela zurückkehren.",
    "viewOnExplorer": "Im Explorer ansehen",
    "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet",
    "selfCallBlockedTitle": "Vela signiert diese Anfrage nicht",
@@ -1557,7 +1584,11 @@
    "fiatLabel": "FIAT-KURSE",
    "fiatHint": "USD-basierte Wechselkurse für die Währungsliste — austauschbar für breitere Abdeckung.",
    "resetToDefaults": "Alle vier zurücksetzen",
-   "selfHostGuide": "Anleitung zum Selbst-Hosten →"
+   "selfHostGuide": "Anleitung zum Selbst-Hosten →",
+   "resetTitle": "Dienst-Endpunkte zurücksetzen?",
+   "resetBody": "Alle vier Dienste nutzen wieder die Adressen von Vela. Die hier eingegebenen Adressen werden verworfen.",
+   "resetConfirm": "Zurücksetzen",
+   "resetCancel": "Abbrechen"
   },
   "addNetwork": {
    "modalTitle": "Netzwerk hinzufügen",
@@ -1575,7 +1606,6 @@
    "retry": "Erneut versuchen",
    "addNetworkBtn": "Netzwerk hinzufügen",
    "incompatibleHint": "Einige erforderliche Contracts sind auf dieser Chain noch nicht bereitgestellt.\nNutzen Sie das Vela-Wallet-Chain-Setup-Tool, um sie bereitzustellen, und prüfen Sie dann erneut.",
-   "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal.",
    "openChainSetupTool": "Chain-Setup-Tool öffnen",
    "recheck": "Erneut prüfen",
    "chainIdLabel": "Chain-ID: {{chainId}}",
@@ -1585,7 +1615,8 @@
    "incompatible": "Nicht kompatibel",
    "checkSafe": "Safe-L2-Verträge",
    "checkSigner": "P-256-Precompile",
-   "checkRemaining": "{{count}} weitere Verträge"
+   "checkRemaining": "{{count}} weitere Verträge",
+   "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal."
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1756,6 +1787,11 @@
   "siteMenu": "Website-Menü",
   "account": "Konto",
   "addressBar": "Adressleiste",
-  "close": "Schließen"
+  "close": "Schließen",
+  "pageCrashedTitle": "Diese Seite funktioniert nicht mehr",
+  "pageCrashedBody": "Die Seite wurde unerwartet beendet. Deine Wallet ist nicht betroffen – lade neu, um fortzufahren.",
+  "walletConnectUnsupported": "WalletConnect-Links werden nicht unterstützt. Öffne die dApp in „Entdecken“ und verbinde dich dort.",
+  "scanUnrecognized": "Dieser Code ist weder eine Webadresse noch eine Wallet-Adresse.",
+  "linkCopied": "Link kopiert"
  }
 }

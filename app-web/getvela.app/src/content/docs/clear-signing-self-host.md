@@ -14,43 +14,6 @@ thing and sign another. That is exactly what happened to
 The signing page exists to split that in two: the transaction comes from one
 place, and the check and the signature happen somewhere you control.
 
-**Status:** built and tested locally; **not published**, and **no Vela app sends
-requests to it yet**. Today it is something to read, run and try with the demo
-requesters in its `samples/` folder. Using it for real signatures needs the apps
-to route their requests to it, which is still to be built.
-
-## What it is
-
-One folder — `app-web/clearsigning` in the repository — that is both a web page
-and a Chrome extension. Pure HTML, CSS and JavaScript: no framework, no
-bundler, no build step, no dependencies, and no data fetched from a server —
-its only request is for decorative token logos.
-
-Given a signing request it does not trust the summary that came with it. It
-decodes the raw calldata itself, computes its own digest, shows you what the
-signature will actually authorise, and only then asks your passkey.
-
-Because there is no build step, the files you read are the files that run. You
-can diff the folder against the repository and know what you are serving.
-
-## Which copy can sign for your wallet
-
-A passkey is bound to the domain it was created on. Your Vela keys are
-registered under `getvela.app`, and a browser will only offer them to a page
-whose relying party is `getvela.app`. That single rule decides which way of
-running your own copy is useful to you.
-
-**As a Chrome extension — the way to use it with your existing keys.** The
-extension's relying party is `getvela.app` regardless of where the folder came
-from, so your existing keys can sign in it, while the code is the folder you
-loaded and inspected.
-
-1. Get the folder: `git clone https://github.com/mondaylabsltd/vela-wallet`
-   (it is `app-web/clearsigning` inside).
-2. Open `chrome://extensions` and turn on **Developer mode**.
-3. **Load unpacked**, and pick the `app-web/clearsigning` folder.
-4. The toolbar icon opens the page in a tab.
-
 **As a page on your own domain, or on localhost.** Served over HTTPS (or from localhost), the
 page's relying party is its own hostname — so it can sign with keys registered
 under _that_ hostname, not with keys registered under `getvela.app`. That makes
@@ -59,7 +22,7 @@ and to sign for a wallet whose key was created on your own domain. It is not a
 way to sign for an existing `getvela.app` wallet.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

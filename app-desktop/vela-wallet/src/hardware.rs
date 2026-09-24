@@ -32,7 +32,10 @@ use crate::passkey_icons::{Palette, PasskeyIcon, PasskeyIconCache};
 use crate::theme::{self, FLOW_GAP_LG, FLOW_GAP_MD, FLOW_GAP_SM, TOUCH_DISC, Theme};
 use crate::ui::{ButtonVariant, NameFieldStrings, text_field, vela_button, vela_button_opts};
 
-fn card(theme: &Theme) -> Div {
+/// The dialog card every ceremony prompt sits on — shared with the Clear
+/// Signer's two (`signing::trusted_signer`), so a person waiting on a page and
+/// a person waiting on a key see one kind of card.
+pub(crate) fn card(theme: &Theme) -> Div {
     div()
         .w(px(SHEET_W))
         .flex()
@@ -45,7 +48,7 @@ fn card(theme: &Theme) -> Div {
         .border_color(theme.border_card)
 }
 
-fn title(theme: &Theme, text: SharedString) -> Div {
+pub(crate) fn title(theme: &Theme, text: SharedString) -> Div {
     div()
         .text_size(theme::text_flow_headline())
         .font_weight(FontWeight::BOLD)
@@ -53,7 +56,7 @@ fn title(theme: &Theme, text: SharedString) -> Div {
         .child(text)
 }
 
-fn body(theme: &Theme, text: SharedString) -> Div {
+pub(crate) fn body(theme: &Theme, text: SharedString) -> Div {
     div()
         .text_size(theme::text_body())
         .line_height(theme::line_height_body())
@@ -143,19 +146,80 @@ pub fn touch_card(
     }
 }
 
-/// The three ways to sign in — this device, a phone by scan, a security key —
-/// the same set creating a wallet offers per key. A wallet that lives on a
-/// security key (or a phone) is reachable even where a platform passkey would be
-/// the silent default. `Platform` has no route on the desktop and shows as
-/// unavailable-with-a-reason, exactly as it does in the create picker.
+/// The four ways to sign in — this device, a phone by scan, a security key, the
+/// Trusted Signer — the same set creating a wallet offers per key. A wallet that
+/// lives on a security key, a phone or a signer page is reachable even where a
+/// platform passkey would be the silent default. `Platform` has no route on the
+/// desktop and shows as unavailable-with-a-reason, exactly as it does in the
+/// create picker.
 /// The method rows' mark size — the web's `--icon-lg`.
 pub const METHOD_ICON_PX: u32 = 24;
+
+/// The four passkey routes the CREATE chooser offers, in its order: the key on
+/// the desk, this device, a phone by scan, and the Trusted Signer (spec 075).
+pub const CREATE_ROUTES: [KeyMethod; 4] = [
+    KeyMethod::SecurityKey,
+    KeyMethod::Platform,
+    KeyMethod::Hybrid,
+    KeyMethod::TrustedSigner,
+];
+
+/// The same four on the SIGN-IN chooser, in its own order — a wallet reached
+/// from a phone or a signer page is the interesting case at sign-in, and "this
+/// device" is the row most likely to be greyed.
+pub const SIGNIN_ROUTES: [KeyMethod; 4] = [
+    KeyMethod::SecurityKey,
+    KeyMethod::Hybrid,
+    KeyMethod::Platform,
+    KeyMethod::TrustedSigner,
+];
+
+/// A route's title and its line, as both choosers say them.
+///
+/// ONE mapping, because a create chooser and a sign-in chooser that disagreed
+/// about what a route is called is exactly the drift spec 075 was raised over
+/// — the owner counted the rows on one screen and found three.
+#[must_use]
+pub const fn method_words(method: KeyMethod) -> (&'static str, &'static str) {
+    match method {
+        KeyMethod::SecurityKey => (
+            "onboarding.create.methodSecurityKeyTitle",
+            "onboarding.create.methodSecurityKeyBody",
+        ),
+        KeyMethod::Platform => (
+            "onboarding.create.methodPlatformTitle",
+            "onboarding.create.methodPlatformBody",
+        ),
+        KeyMethod::Hybrid => (
+            "onboarding.create.methodHybridTitle",
+            "onboarding.create.methodHybridBody",
+        ),
+        KeyMethod::TrustedSigner => (
+            "componentsUi.signing.trustedSignerTitle",
+            "componentsUi.signing.trustedSignerBody",
+        ),
+    }
+}
+
+/// May this route run on this machine? Only "this device" can answer no: a
+/// platform authenticator needs a system passkey service, which in this app's
+/// reach only Windows has. A key on the desk, a phone by scan and a signer
+/// page are reachable from every desktop.
+#[must_use]
+pub fn method_available(method: KeyMethod) -> bool {
+    method != KeyMethod::Platform || crate::executor::passkey::platform_supported()
+}
+
+/// What a screen does when the person picks a way to sign in. An `Arc` rather
+/// than a closure per row: the card draws four rows from one handler, and
+/// gpui's own listeners are not `Clone`.
+pub type PickMethod = std::sync::Arc<dyn Fn(KeyMethod, &mut Window, &mut App)>;
 
 pub fn signin_method_card(
     theme: &Theme,
     loc: &Loc,
     icons: &RefCell<PasskeyIconCache>,
-    on_pick: std::sync::Arc<dyn Fn(KeyMethod, &mut Window, &mut App)>,
+    on_pick: PickMethod,
     on_dismiss: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
     // The row's mark (spec 038, #190): the founder's set, with "this device"
@@ -169,8 +233,15 @@ pub fn signin_method_card(
     // "This device" is real on exactly one desktop. Windows has Windows Hello
     // behind `webauthn.dll`; macOS and Linux reach no platform authenticator
     // from gpui at all, so there the row stays greyed and says why.
-    let this_device = crate::executor::passkey::platform_supported();
-    let entry = |method: KeyMethod, title_key: &str, body_key: &str, available: bool| {
+    let entry = |method: KeyMethod| {
+        let available = method_available(method);
+        let (title_key, body_key) = method_words(method);
+        // The one row that can be unavailable says why in its own line.
+        let body_key = if available {
+            body_key
+        } else {
+            "onboarding.create.securityKeyRequiredBody"
+        };
         let on_pick = on_pick.clone();
         let mark =
             icons
@@ -215,37 +286,19 @@ pub fn signin_method_card(
         }
     };
 
-    card(theme)
-        .child(title(theme, loc.t("onboarding.login.header")))
-        .child(entry(
-            KeyMethod::SecurityKey,
-            "onboarding.create.methodSecurityKeyTitle",
-            "onboarding.create.methodSecurityKeyBody",
-            true,
-        ))
-        .child(entry(
-            KeyMethod::Hybrid,
-            "onboarding.create.methodHybridTitle",
-            "onboarding.create.methodHybridBody",
-            true,
-        ))
-        .child(entry(
-            KeyMethod::Platform,
-            "onboarding.create.methodPlatformTitle",
-            if this_device {
-                "onboarding.create.methodPlatformBody"
-            } else {
-                "onboarding.create.securityKeyRequiredBody"
-            },
-            this_device,
-        ))
-        .child(vela_button(
-            "signin-methods-cancel",
-            ButtonVariant::Secondary,
-            loc.t("onboarding.common.close"),
-            theme,
-            on_dismiss,
-        ))
+    // Spec 075: four rows, the Trusted Signer among them — a wallet whose key
+    // was created on a signer page can only be signed into through one.
+    let mut sheet = card(theme).child(title(theme, loc.t("onboarding.login.header")));
+    for method in SIGNIN_ROUTES {
+        sheet = sheet.child(entry(method));
+    }
+    sheet.child(vela_button(
+        "signin-methods-cancel",
+        ButtonVariant::Secondary,
+        loc.t("onboarding.common.close"),
+        theme,
+        on_dismiss,
+    ))
 }
 
 /// The caBLE QR the person scans with their phone to sign in or add a key over
@@ -544,4 +597,82 @@ pub fn pick_card(
             theme,
             on_cancel,
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::passkey_icons::PasskeyIcon;
+
+    /// **Five routes where there were four** (spec 075 SC-001, the owner's
+    /// count): both choosers offer every passkey route the core knows —
+    /// "这台设备 / 手机或平板 / USB 安全密钥" and the Trusted Signer — each exactly
+    /// once, and neither screen can grow or lose one without the other.
+    #[test]
+    fn both_choosers_offer_every_route_exactly_once() {
+        for (screen, routes) in [("create", CREATE_ROUTES), ("sign in", SIGNIN_ROUTES)] {
+            for method in [
+                KeyMethod::Platform,
+                KeyMethod::Hybrid,
+                KeyMethod::SecurityKey,
+                KeyMethod::TrustedSigner,
+            ] {
+                let offered = routes.iter().filter(|row| **row == method).count();
+                assert_eq!(offered, 1, "{screen} offers {method:?} {offered} times");
+            }
+        }
+    }
+
+    /// Every route says something of its own, in words the corpus carries in
+    /// fifteen languages. A row echoing its key, or two rows sharing a title,
+    /// is a picker that cannot be used.
+    #[test]
+    fn every_route_has_its_own_words_and_its_own_mark() {
+        let loc = crate::loc::Loc::from_env();
+        let mut titles = Vec::new();
+        let mut marks = Vec::new();
+        for method in CREATE_ROUTES {
+            let (title_key, body_key) = method_words(method);
+            for key in [title_key, body_key] {
+                let said = loc.t(key);
+                assert_ne!(said.as_ref(), key, "`{key}` echoed its key");
+                assert!(!said.is_empty(), "`{key}` resolved empty");
+            }
+            titles.push(loc.t(title_key).to_string());
+            marks.push(PasskeyIcon::for_method(method));
+        }
+        titles.sort();
+        titles.dedup();
+        assert_eq!(
+            titles.len(),
+            CREATE_ROUTES.len(),
+            "two routes share a title"
+        );
+        marks.dedup();
+        assert_eq!(marks.len(), CREATE_ROUTES.len(), "two routes share a mark");
+        // The Trusted Signer's glyph says what that route claims: a page you
+        // READ. Not a lock and not a key.
+        assert_eq!(
+            PasskeyIcon::for_method(KeyMethod::TrustedSigner),
+            PasskeyIcon::Eye
+        );
+    }
+
+    /// Only "this device" can be unavailable, and it is the only row whose
+    /// line changes when it is. A greyed Trusted Signer row would be a wallet
+    /// telling somebody their own page is out of reach — it never is.
+    #[test]
+    fn only_this_device_can_be_out_of_reach() {
+        for method in CREATE_ROUTES {
+            if method == KeyMethod::Platform {
+                continue;
+            }
+            assert!(method_available(method), "{method:?} was greyed out");
+        }
+        assert_eq!(
+            method_available(KeyMethod::Platform),
+            crate::executor::passkey::platform_supported()
+        );
+    }
 }

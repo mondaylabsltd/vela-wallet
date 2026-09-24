@@ -8,13 +8,18 @@
  * whether a disabled control refuses it, is the browser's to answer.
  */
 import { tick } from 'svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { loadCore } from '$lib/core/client';
 import { preferences } from '$lib/services/preferences.svelte';
 import AmountInput from './AmountInput.svelte';
 
 const BASE = { value: '0.5', fiat: '≈ $1,500.00', denomLabel: 'ETH' };
+
+// Every keystroke is cleaned by the core's rule (spec 073), as in the product,
+// where the send screen only exists once the core has loaded.
+beforeAll(() => loadCore());
 
 describe('AmountInput', () => {
 	it('presses through to the core when the swap is on offer', async () => {

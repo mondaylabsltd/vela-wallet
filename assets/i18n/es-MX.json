@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Cambiar de cuenta",
-   "contactsSubtitle": "Direcciones guardadas y destinatarios recientes"
+   "contactsSubtitle": "Direcciones guardadas y destinatarios recientes",
+   "remove": "Quitar de este dispositivo",
+   "removeBody": "Solo se va esta cartera; las demás se quedan."
   },
   "appearance": {
    "themeLight": "Claro",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "Velocidad de transacción",
    "subtitle": "Cada envío que empiezas en Vela comienza aquí. Aun así puedes cambiar uno en particular."
+  },
+  "signing": {
+   "title": "Firmar con",
+   "subtitle": "Cada firma que inicias en Vela empieza aquí. Aun así, puedes elegir otra forma para una sola.",
+   "pageTitle": "Página del Trusted Signer",
+   "pageSubtitle": "La página que abre el Trusted Signer: la oficial o tu propia copia de la página sin dependencias.",
+   "pageOfficial": "Oficial",
+   "pageInvalid": "Esa no es una dirección web.",
+   "pageInsecure": "Usa una página https o una en el loopback de este dispositivo: el navegador no firmará en ningún otro lugar.",
+   "pageForeign": "Tus passkeys pertenecen a getvela.app. Una página en otro dominio puede mostrar una solicitud, pero no puede firmarla.",
+   "pageReset": "Usar la página oficial",
+   "pageSave": "Guardar"
   },
   "advanced": {
    "networksTitle": "Redes",
@@ -88,7 +102,8 @@
    "keeps": "Elige “Ya tengo una billetera” para volver a entrar con esa misma passkey: recuperas la misma dirección, y tu historial, contactos, tokens y ajustes siguen aquí.",
    "warning": "Tu llave pública todavía no llegó al servidor de sincronización. Se reintentará al abrir la app de nuevo, pero hasta que lo logre podrías no poder iniciar sesión en otro dispositivo, ni aquí si desinstalas la app.",
    "anyway": "Cerrar sesión de todos modos",
-   "cancel": "Cancelar"
+   "cancel": "Cancelar",
+   "descMany": "Las {{count}} carteras de este dispositivo cerrarán sesión. No se borra nada."
   },
   "eraseDevice": {
    "title": "Borrar este dispositivo",
@@ -751,6 +766,8 @@
    "keysSubtitleFull": "Alcanzaste el límite de 7.",
    "keysTitle": "Añade passkeys",
    "keysTitleBlocked": "Falta una llave más para crear",
+   "methodBlockedHint": "Las llaves de esta cartera pertenecen a {{party}}.",
+   "methodBlockedSigner": "Tu página del Trusted Signer es {{page}}, y sus llaves pertenecen a {{pageParty}}. Cámbiala en Ajustes a {{party}} para agregar una aquí.",
    "methodHybridBody": "Escanea un código y créala en un dispositivo cercano",
    "methodHybridTitle": "Teléfono o tablet",
    "methodHybridUnavailable": "Muy pronto",
@@ -1343,6 +1360,16 @@
    "techIdentityRecipient": "Destinatario",
    "copyValue": "Copiar",
    "signWith": "Firmar con",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "Revisa y firma en una página aparte: lo que ves es lo que firmas.",
+   "trustedSignerWaiting": "Esperando al Trusted Signer…",
+   "trustedSignerWaitingHint": "Revisa la solicitud en la página que se abrió y fírmala ahí. Si el navegador pregunta si la página puede acceder a otras apps de este dispositivo, permítelo.",
+   "trustedSignerClosed": "El Trusted Signer se cerró sin firmar.",
+   "trustedSignerRefused": "El Trusted Signer no quiso firmar esta solicitud. Su página explica por qué.",
+   "trustedSignerMismatch": "La respuesta del Trusted Signer no coincide con esta solicitud, así que no se envió nada.",
+   "trustedSignerTimeout": "El Trusted Signer no respondió a tiempo.",
+   "trustedSignerReopen": "Abrir la página otra vez",
+   "trustedSignerDoneTab": "Firmado. Puedes cerrar esta pestaña y volver a Vela.",
    "viewOnExplorer": "Ver en el explorador",
    "sendingToTokenContract": "Enviado al contrato del propio token",
    "selfCallBlockedTitle": "Vela no firma esta solicitud",
@@ -1560,7 +1587,11 @@
    "fiatLabel": "TIPOS DE CAMBIO FIAT",
    "fiatHint": "Tipos de cambio en USD que definen la lista de monedas — cámbialo para mayor cobertura.",
    "resetToDefaults": "Restablecer los cuatro",
-   "selfHostGuide": "Guía de autoalojamiento →"
+   "selfHostGuide": "Guía de autoalojamiento →",
+   "resetTitle": "¿Restablecer los endpoints de servicio?",
+   "resetBody": "Los cuatro servicios vuelven a las direcciones de Vela. Las direcciones que ingresaste aquí se descartan.",
+   "resetConfirm": "Restablecer",
+   "resetCancel": "Cancelar"
   },
   "addNetwork": {
    "modalTitle": "Agregar red",
@@ -1578,7 +1609,6 @@
    "retry": "Reintentar",
    "addNetworkBtn": "Agregar red",
    "incompatibleHint": "Algunos contratos requeridos aún no están desplegados en esta cadena.\nUsa la herramienta Vela Wallet Chain Setup para desplegarlos, luego regresa y vuelve a verificar.",
-   "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad.",
    "openChainSetupTool": "Abrir herramienta Chain Setup",
    "recheck": "Volver a verificar",
    "chainIdLabel": "Chain ID: {{chainId}}",
@@ -1588,7 +1618,8 @@
    "incompatible": "Incompatible",
    "checkSafe": "Contratos Safe L2",
    "checkSigner": "Precompilado P-256",
-   "checkRemaining": "otros {{count}} contratos"
+   "checkRemaining": "otros {{count}} contratos",
+   "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad."
   },
   "treasury": {
    "modalTitle": "Tesorería",
@@ -1760,6 +1791,11 @@
   "siteMenu": "Menú del sitio",
   "account": "Cuenta",
   "addressBar": "Barra de direcciones",
-  "close": "Cerrar"
+  "close": "Cerrar",
+  "pageCrashedTitle": "Esta página dejó de funcionar",
+  "pageCrashedBody": "La página se cerró de forma inesperada. Tu billetera no se vio afectada: recarga para continuar.",
+  "walletConnectUnsupported": "Los enlaces de WalletConnect no son compatibles. Abre la dApp en Explorar y conéctate desde ahí.",
+  "scanUnrecognized": "Este código no es una dirección web ni una dirección de billetera.",
+  "linkCopied": "Enlace copiado"
  }
 }

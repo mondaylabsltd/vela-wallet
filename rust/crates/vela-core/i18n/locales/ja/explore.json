@@ -53,6 +53,11 @@
     "siteMenu": "サイトメニュー",
     "account": "アカウント",
     "addressBar": "アドレスバー",
-    "close": "閉じる"
+    "close": "閉じる",
+    "pageCrashedTitle": "このページは動作を停止しました",
+    "pageCrashedBody": "ページが予期せず終了しました。ウォレットには影響ありません。再読み込みして続けてください。",
+    "walletConnectUnsupported": "WalletConnect のリンクには対応していません。「探索」で dApp を開き、ページから接続してください。",
+    "scanUnrecognized": "このコードはウェブアドレスでもウォレットアドレスでもありません。",
+    "linkCopied": "リンクをコピーしました"
   }
 }

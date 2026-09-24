@@ -19,6 +19,27 @@
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <!-- gpui renders through Metal and expects a real backing-scale factor;
          without this the window is rendered at 1x and upscaled. -->
+    <!-- Spec 076: the Trusted Signer's answer comes back as a navigation to
+         `velawallet://sign-result`, because the published signing page carries
+         `default-src 'none'` in its hashed bytes and cannot open a socket at
+         all. macOS hands a URL only to a BUNDLE that declares the scheme, so
+         without this the browser reports the navigation cancelled and the
+         wallet waits out its timeout — which is exactly how it behaved before
+         this key existed.
+
+         The same scheme the phones already register. It is not exclusive: any
+         app may claim it, which is why the callback carries a one-time token
+         and the core still verifies the assertion itself. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>       <string>app.getvela.VelaWallet.signer</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>velawallet</string>
+            </array>
+        </dict>
+    </array>
     <key>NSHighResolutionCapable</key>   <true/>
     <key>LSMinimumSystemVersion</key>    <string>11.0</string>
     <key>LSApplicationCategoryType</key> <string>public.app-category.finance</string>

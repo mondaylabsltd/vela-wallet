@@ -29,7 +29,9 @@
   },
   "account": {
    "switch": "Ganti akun",
-   "contactsSubtitle": "Alamat tersimpan dan penerima terbaru"
+   "contactsSubtitle": "Alamat tersimpan dan penerima terbaru",
+   "remove": "Hapus dari perangkat ini",
+   "removeBody": "Hanya dompet ini yang pergi; yang lain tetap."
   },
   "appearance": {
    "themeLight": "Terang",
@@ -54,6 +56,18 @@
   "feeSpeed": {
    "title": "Kecepatan transaksi",
    "subtitle": "Setiap pengiriman yang Anda mulai di Vela dimulai dari sini. Anda tetap bisa mengubahnya untuk satu pengiriman."
+  },
+  "signing": {
+   "title": "Tanda tangani dengan",
+   "subtitle": "Setiap tanda tangan yang Anda mulai di Vela berawal dari sini. Untuk satu tanda tangan, Anda tetap bisa memilih cara lain.",
+   "pageTitle": "Halaman Trusted Signer",
+   "pageSubtitle": "Halaman yang dibuka Trusted Signer: halaman resmi, atau salinan halaman tanpa dependensi milik Anda sendiri.",
+   "pageOfficial": "Resmi",
+   "pageInvalid": "Itu bukan alamat web.",
+   "pageInsecure": "Gunakan halaman https, atau halaman di loopback perangkat ini sendiri — browser tidak akan menandatangani di tempat lain.",
+   "pageForeign": "Passkey Anda milik getvela.app. Halaman di domain lain dapat menampilkan permintaan tetapi tidak dapat menandatanganinya.",
+   "pageReset": "Gunakan halaman resmi",
+   "pageSave": "Simpan"
   },
   "advanced": {
    "networksTitle": "Jaringan",
@@ -88,7 +102,8 @@
    "keeps": "Pilih “Saya sudah punya dompet” untuk masuk lagi dengan passkey yang sama: alamatnya tetap sama, dan riwayat transaksi, kontak, token serta pengaturan Anda masih ada.",
    "warning": "Kunci publik Anda belum sampai ke server sinkronisasi. Aplikasi akan mencoba lagi saat dibuka berikutnya, tetapi sebelum berhasil Anda mungkin tidak bisa masuk di perangkat lain — juga di perangkat ini jika aplikasinya dihapus.",
    "anyway": "Tetap Keluar",
-   "cancel": "Batal"
+   "cancel": "Batal",
+   "descMany": "Semua {{count}} dompet di perangkat ini akan keluar. Tidak ada yang dihapus."
   },
   "eraseDevice": {
    "title": "Hapus Perangkat Ini",
@@ -748,6 +763,8 @@
    "keysSubtitleFull": "Sudah mencapai batas 7 kunci.",
    "keysTitle": "Tambah passkey",
    "keysTitleBlocked": "Perlu satu kunci lagi untuk membuat",
+   "methodBlockedHint": "Semua kunci dompet ini milik {{party}}.",
+   "methodBlockedSigner": "Halaman Trusted Signer kamu {{page}}, kuncinya milik {{pageParty}}. Ganti ke halaman {{party}} di Pengaturan untuk menambah di sini.",
    "methodHybridBody": "Pindai kode dan buat di perangkat terdekat",
    "methodHybridTitle": "Ponsel atau tablet",
    "methodHybridUnavailable": "Segera hadir",
@@ -1340,6 +1357,16 @@
    "techIdentityRecipient": "Penerima",
    "copyValue": "Salin",
    "signWith": "Tanda tangani dengan",
+   "trustedSignerTitle": "Trusted Signer",
+   "trustedSignerBody": "Periksa dan tanda tangani di halaman terpisah — yang Anda lihat adalah yang Anda tanda tangani.",
+   "trustedSignerWaiting": "Menunggu Trusted Signer…",
+   "trustedSignerWaitingHint": "Periksa permintaan di halaman yang terbuka, lalu tanda tangani di sana. Jika browser bertanya apakah halaman boleh mengakses aplikasi lain di perangkat ini, izinkan.",
+   "trustedSignerClosed": "Trusted Signer ditutup tanpa menandatangani.",
+   "trustedSignerRefused": "Trusted Signer tidak mau menandatangani permintaan ini. Halamannya menjelaskan alasannya.",
+   "trustedSignerMismatch": "Jawaban Trusted Signer tidak cocok dengan permintaan ini, jadi tidak ada yang dikirim.",
+   "trustedSignerTimeout": "Trusted Signer tidak menjawab tepat waktu.",
+   "trustedSignerReopen": "Buka halaman lagi",
+   "trustedSignerDoneTab": "Sudah ditandatangani. Anda dapat menutup tab ini dan kembali ke Vela.",
    "viewOnExplorer": "Lihat di explorer",
    "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri",
    "selfCallBlockedTitle": "Vela tidak menandatangani permintaan ini",
@@ -1557,7 +1584,11 @@
    "fiatLabel": "KURS FIAT",
    "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
    "resetToDefaults": "Kembalikan keempatnya ke default",
-   "selfHostGuide": "Panduan self-hosting →"
+   "selfHostGuide": "Panduan self-hosting →",
+   "resetTitle": "Setel ulang endpoint layanan?",
+   "resetBody": "Keempat layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
+   "resetConfirm": "Setel Ulang",
+   "resetCancel": "Batal"
   },
   "addNetwork": {
    "modalTitle": "Tambah Jaringan",
@@ -1575,7 +1606,6 @@
    "retry": "Coba Lagi",
    "addNetworkBtn": "Tambah Jaringan",
    "incompatibleHint": "Beberapa kontrak yang diperlukan belum di-deploy di chain ini.\nGunakan alat Vela Wallet Chain Setup untuk men-deploy-nya, lalu kembali dan periksa ulang.",
-   "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal.",
    "openChainSetupTool": "Buka Chain Setup Tool",
    "recheck": "Periksa ulang",
    "chainIdLabel": "Chain ID: {{chainId}}",
@@ -1585,7 +1615,8 @@
    "incompatible": "Tidak kompatibel",
    "checkSafe": "Kontrak Safe L2",
    "checkSigner": "Precompile P-256",
-   "checkRemaining": "{{count}} kontrak lainnya"
+   "checkRemaining": "{{count}} kontrak lainnya",
+   "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal."
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1756,6 +1787,11 @@
   "siteMenu": "Menu situs",
   "account": "Akun",
   "addressBar": "Bilah alamat",
-  "close": "Tutup"
+  "close": "Tutup",
+  "pageCrashedTitle": "Halaman ini berhenti berfungsi",
+  "pageCrashedBody": "Halaman tertutup secara tak terduga. Dompetmu tidak terpengaruh — muat ulang untuk melanjutkan.",
+  "walletConnectUnsupported": "Tautan WalletConnect belum didukung. Buka dApp di Jelajahi dan hubungkan dari sana.",
+  "scanUnrecognized": "Kode ini bukan alamat web maupun alamat dompet.",
+  "linkCopied": "Tautan disalin"
  }
 }

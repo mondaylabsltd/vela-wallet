@@ -33,7 +33,6 @@ import app.getvela.wallet.core.designsystem.components.VelaLaunchAnimation
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.theme.isDarkEffective
 import app.getvela.wallet.core.i18n.LocalVelaStrings
-import app.getvela.wallet.core.identicon.LocalAvatarStyle
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.onboarding.core.SecurityKeyCeremony
 import app.getvela.wallet.feature.onboarding.gallery.GalleryScreen
@@ -87,6 +86,10 @@ class MainActivity : ComponentActivity() {
     private var locationSettingsAnswer:
         kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
+    override fun onDestroy() {
+        super.onDestroy()
+    }
+
     /** The permissions the caBLE scan needs on this API level. */
     private fun bluetoothPermissions(): Array<String> =
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -99,8 +102,19 @@ class MainActivity : ComponentActivity() {
         }
 
     /** Grant (or confirm) the Bluetooth permissions; `true` if all are held. */
-    suspend fun requestBluetoothPermission(): Boolean {
-        val needed = bluetoothPermissions().filter {
+    suspend fun requestBluetoothPermission(): Boolean =
+        requestPermissions(bluetoothPermissions())
+
+    /**
+     * Grant (or confirm) exactly these permissions; `true` if all are held.
+     *
+     * Spec 075 T040 asks for a different pair from the caBLE scan above —
+     * `BLUETOOTH_ADVERTISE` and `BLUETOOTH_CONNECT`, because there the phone
+     * is the peripheral — so the launcher is shared and the set is the
+     * caller's.
+     */
+    suspend fun requestPermissions(permissions: Array<String>): Boolean {
+        val needed = permissions.filter {
             checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
         if (needed.isEmpty()) return true
@@ -250,6 +264,7 @@ class MainActivity : ComponentActivity() {
             cameraPermissionAnswer = null
         }
         (application as VelaWalletApplication).container.documents = app.getvela.wallet.feature.documents.ActivityDocumentPorts(this)
+        (application as VelaWalletApplication).container.trustedSignerTab = app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerTab(this)
         bluetoothPermissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
         ) { grants ->
@@ -274,7 +289,7 @@ class MainActivity : ComponentActivity() {
         // Spec 047: the stored language wins over the system once the preferences are read.
         lifecycleScope.launch {
             val prefs = container.preferences.view.first { it.loaded }
-            if (prefs.language != "system") container.applyLanguage(prefs.language) else container.applySystemLocale()
+            container.applyLanguage(prefs.language)
         }
         receiptRequested()?.let { container.pendingReceipt.value = it }
         intent?.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
@@ -343,8 +358,6 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalVelaStrings provides strings,
                     LocalLayoutDirection provides layoutDirection,
-                    // Spec 049: every avatar reads the chosen style from here.
-                    LocalAvatarStyle provides prefs.avatarStyle,
                 ) {
                     // One continuous surface. Both the launch screen and Welcome
                     // sit on this exact colour, which is what lets them
@@ -400,6 +413,8 @@ class MainActivity : ComponentActivity() {
         val container = (application as VelaWalletApplication).container
         intent.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
+        // Spec 070: the page in front's renderer dies on purpose — debug builds only.
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("vela.crashRenderer", false)) container.browser.debugCrashRenderer()
     }
 
     /** Spec 047 D8: `velawallet://` and `/pay` links, tokenized here, validated by the core on the wallet route. */

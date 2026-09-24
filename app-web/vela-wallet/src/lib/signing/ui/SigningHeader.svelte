@@ -15,7 +15,7 @@
 <header class="header">
 	{#if dapp.own}
 		<!-- The wallet asking itself: its own mark, never a letter on a disc. -->
-		<span class="own" style:width="36px" style:height="36px"><BrandMark size={22} /></span>
+		<span class="own"><BrandMark size={22} /></span>
 	{:else}
 		<!-- The site's own icon over its initial: the letter shows until the icon
 		     lands, and stays when the site has none. -->
@@ -87,7 +87,9 @@
 		display: grid;
 		flex: none;
 		place-items: center;
-		/* The letter avatar's own box (36), set inline as that component does. */
+		/* The letter avatar's own box (CONTROL.sm = 36). */
+		width: var(--size-control-sm);
+		height: var(--size-control-sm);
 		border-radius: var(--radius-full);
 		background: var(--color-bg-sunken);
 	}

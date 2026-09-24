@@ -42,7 +42,11 @@
       "fiatLabel": "FİAT KURLARI",
       "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
       "resetToDefaults": "Dördünü de varsayılana döndür",
-      "selfHostGuide": "Kendin barındırma kılavuzu →"
+      "selfHostGuide": "Kendin barındırma kılavuzu →",
+      "resetTitle": "Servis uç noktaları sıfırlansın mı?",
+      "resetBody": "Dört servisin tümü Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
+      "resetConfirm": "Sıfırla",
+      "resetCancel": "İptal"
     },
     "addNetwork": {
       "modalTitle": "Ağ Ekle",
@@ -60,7 +64,6 @@
       "retry": "Yeniden Dene",
       "addNetworkBtn": "Ağ Ekle",
       "incompatibleHint": "Bu zincirde gerekli bazı sözleşmeler henüz dağıtılmamış.\nBunları dağıtmak için Vela Wallet Chain Setup aracını kullanın, ardından geri dönüp yeniden kontrol edin.",
-      "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır.",
       "openChainSetupTool": "Chain Setup Aracını Aç",
       "recheck": "Yeniden kontrol et",
       "chainIdLabel": "Zincir ID: {{chainId}}",
@@ -70,7 +73,8 @@
       "incompatible": "Uyumsuz",
       "checkSafe": "Safe L2 sözleşmeleri",
       "checkSigner": "P-256 ön derlemesi",
-      "checkRemaining": "diğer {{count}} sözleşme"
+      "checkRemaining": "diğer {{count}} sözleşme",
+      "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır."
     },
     "treasury": {
       "modalTitle": "Hazine",

@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.draw.rotate
+import app.getvela.wallet.core.format.cleanAmountEdit
 import app.getvela.wallet.feature.signing.SignWithModel
 import app.getvela.wallet.core.designsystem.components.VelaLogo
 import app.getvela.wallet.core.marks.RemoteLogo
@@ -653,7 +654,14 @@ fun AllowanceEditor(
                 ) {
                     androidx.compose.foundation.text.BasicTextField(
                         value = typed,
-                        onValueChange = { next -> typed = next; onCustomAmount(next) },
+                        // Spec 073: the cap's parser drops every comma, so a
+                        // raw "4,5" allowed 45 — cleaned by the core's rule first.
+                        onValueChange = { next ->
+                            cleanAmountEdit(next, typed)?.let { clean ->
+                                typed = clean
+                                onCustomAmount(clean)
+                            }
+                        },
                         singleLine = true,
                         textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
@@ -825,7 +833,7 @@ fun SignerRow(label: String, name: String, seed: String, modifier: Modifier = Mo
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            IdenticonAvatar(seed = seed, size = VelaIconSize.base, name = name)
+            IdenticonAvatar(seed = seed, size = VelaIconSize.base)
             Text(
                 text = name,
                 color = colors.fgBase,
@@ -879,13 +887,17 @@ fun SignWithRow(model: SignWithModel, onSelect: (String?) -> Unit, modifier: Mod
                             .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.lg),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            option.title,
-                            color = if (option.selected) colors.fgBase else colors.fgMuted,
-                            fontFamily = VelaFontFamily,
-                            fontSize = VelaTextSize.base,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                            Text(
+                                option.title,
+                                color = if (option.selected) colors.fgBase else colors.fgMuted,
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.base,
+                            )
+                            option.line?.let {
+                                Text(it, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+                            }
+                        }
                         if (option.selected) {
                             Icon(VelaIcons.Check, contentDescription = null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
                         }
@@ -893,5 +905,32 @@ fun SignWithRow(model: SignWithModel, onSelect: (String?) -> Unit, modifier: Mod
                 }
             }
         }
+    }
+}
+
+/**
+ * The Trusted Signer's page is open (spec 071): what to do there, a way back to
+ * it (a tab closed by mistake), and a way out. It stands where the slide was —
+ * the signature is being made on the page, not here.
+ */
+@Composable
+fun TrustedSignerWaiting(
+    model: app.getvela.wallet.feature.signing.TrustedSignerWaitModel,
+    onReopen: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
+            .padding(VelaSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Text(model.title, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.base)
+        Text(model.hint, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+        app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(model.reopen, onReopen, Modifier.fillMaxWidth())
+        app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(model.cancel, onCancel, Modifier.fillMaxWidth())
     }
 }

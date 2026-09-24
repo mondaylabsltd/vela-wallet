@@ -16,19 +16,6 @@ La page de signature existe pour séparer les deux : la transaction vient d'un
 endroit, et la vérification comme la signature ont lieu à un endroit que vous
 contrôlez.
 
-**État :** construite et testée en local ; **pas publiée**, et **aucune app Vela ne
-lui envoie encore de demandes**. Aujourd'hui, c'est quelque chose à lire, à faire
-tourner et à essayer avec les demandeurs de démonstration de son dossier
-`samples/`. L'utiliser pour de vraies signatures suppose que les apps lui
-transmettent leurs demandes, ce qui reste à développer.
-
-## Ce que c'est
-
-Un seul dossier — `app-web/clearsigning` dans le dépôt — qui est à la fois une page
-web et une extension Chrome. Du HTML, du CSS et du JavaScript purs : pas de
-framework, pas de bundler, pas d'étape de build, pas de dépendances, et aucune
-donnée récupérée sur un serveur — sa seule requête concerne des logos de jetons
-décoratifs.
 
 Face à une demande de signature, elle ne se fie pas au résumé qui l'accompagne.
 Elle décode elle-même la calldata brute, calcule son propre condensat, vous montre
@@ -46,18 +33,6 @@ enregistrées sous `getvela.app`, et un navigateur ne les propose qu'à une page
 la partie de confiance (relying party) est `getvela.app`. Cette seule règle décide
 de la façon de faire tourner votre propre copie qui vous sera utile.
 
-**Comme extension Chrome — la façon de l'utiliser avec vos clés existantes.** La
-partie de confiance de l'extension est `getvela.app`, quelle que soit la provenance
-du dossier : vos clés existantes peuvent donc y signer, tandis que le code est bien
-celui du dossier que vous avez chargé et inspecté.
-
-1. Récupérez le dossier : `git clone https://github.com/mondaylabsltd/vela-wallet`
-   (c'est `app-web/clearsigning` à l'intérieur).
-2. Ouvrez `chrome://extensions` et activez le **Mode développeur**.
-3. Cliquez sur **Charger l'extension non empaquetée** et choisissez le dossier
-   `app-web/clearsigning`.
-4. L'icône de la barre d'outils ouvre la page dans un onglet.
-
 **Comme page sur votre propre domaine, ou sur localhost.** Servie en HTTPS (ou
 depuis localhost), la page a pour partie de confiance son propre nom d'hôte — elle
 peut donc signer avec des clés enregistrées sous _ce_ nom d'hôte, et non avec des
@@ -67,7 +42,7 @@ pour un portefeuille dont la clé a été créée sur votre propre domaine. Ce n
 un moyen de signer pour un portefeuille `getvela.app` existant.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

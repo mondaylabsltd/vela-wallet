@@ -95,7 +95,6 @@ fun ContactDetailScreen(
                     seed = detail.contact.addressFull,
                     size = ContactsMetrics.heroAvatar,
                     contentDescription = detail.contact.name,
-                    name = detail.contact.name,
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 Text(

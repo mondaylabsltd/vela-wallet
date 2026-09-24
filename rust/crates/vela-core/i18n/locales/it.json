@@ -29,7 +29,9 @@
     },
     "account": {
       "switch": "Cambia account",
-      "contactsSubtitle": "Indirizzi salvati e destinatari recenti"
+      "contactsSubtitle": "Indirizzi salvati e destinatari recenti",
+      "remove": "Rimuovi da questo dispositivo",
+      "removeBody": "Se ne va solo questo portafoglio, gli altri restano."
     },
     "appearance": {
       "themeLight": "Chiaro",
@@ -54,6 +56,18 @@
     "feeSpeed": {
       "title": "Velocità delle transazioni",
       "subtitle": "Ogni invio che avvii in Vela parte da qui. Puoi comunque cambiarne uno singolo al momento dell'invio."
+    },
+    "signing": {
+      "title": "Firma con",
+      "subtitle": "Ogni firma che avvii in Vela parte da qui. Per una singola puoi comunque scegliere un altro modo.",
+      "pageTitle": "Pagina del Trusted Signer",
+      "pageSubtitle": "La pagina che apre il Trusted Signer: quella ufficiale o la tua copia della pagina senza dipendenze.",
+      "pageOfficial": "Ufficiale",
+      "pageInvalid": "Questo non è un indirizzo web.",
+      "pageInsecure": "Usa una pagina https o una sul loopback di questo dispositivo: altrove il browser non firmerà.",
+      "pageForeign": "Le tue passkey appartengono a getvela.app. Una pagina su un altro dominio può mostrare una richiesta ma non firmarla.",
+      "pageReset": "Usa la pagina ufficiale",
+      "pageSave": "Salva"
     },
     "advanced": {
       "networksTitle": "Reti",
@@ -88,7 +102,8 @@
       "keeps": "Scegli «Ho già un wallet» per accedere di nuovo con la stessa passkey: ritrovi lo stesso indirizzo e restano al loro posto cronologia, contatti, token e impostazioni.",
       "warning": "La tua chiave pubblica non è ancora arrivata al server di sincronizzazione. L'app riproverà al prossimo avvio, ma finché non riesce potresti non riuscire ad accedere da un altro dispositivo — né da qui, se disinstalli l'app.",
       "anyway": "Esci comunque",
-      "cancel": "Annulla"
+      "cancel": "Annulla",
+      "descMany": "Tutti i {{count}} portafogli di questo dispositivo usciranno. Non si cancella nulla."
     },
     "eraseDevice": {
       "title": "Cancella questo dispositivo",

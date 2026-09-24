@@ -41,6 +41,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use futures::StreamExt as _;
 use gpui::{Context, Entity, FocusHandle};
 
 use vela_core::app::Account;
@@ -57,6 +58,7 @@ use vela_core::app::send::{
     SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation, SendReceiptOutcome,
     SendRecipientDraft, SendShellResult, SendView,
 };
+use vela_core::app::sign_pref::SignPref;
 use vela_core::app::tx_tracker::{TrackStatus, TxTracker};
 
 use crate::ceremony::CeremonyChannel;
@@ -64,6 +66,7 @@ use crate::core_host::{CoreHost, Pending};
 use crate::ctap::usb::TouchRequest;
 use crate::executor::passkey::{CredentialChoice, PinRequest, WindowHandle};
 use crate::executor::send::{self as send_executor, SendAnswer, SendContext};
+use crate::executor::trusted_signer;
 use crate::executor::{batch, storage, tracker};
 use crate::resident::{self, ResidentCore};
 
@@ -133,27 +136,23 @@ pub struct SendHost {
     last_track_status: Option<TrackStatus>,
 }
 
-/// Every address this wallet holds.
-///
-/// `dapp_permissions` judges a grant against ALL of them, because a grant is
-/// pinned to the address it was made for rather than to whichever account is
-/// active now (the core's invariant ⑨). Handing it only the active one would
-/// make switching accounts look like a revoked connection.
-pub fn account_addresses() -> Vec<String> {
-    storage::load_accounts()
-        .map(|accounts| {
-            accounts
-                .into_iter()
-                .map(|account| account.address)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// The active account, whole — the send flow signs as it.
 pub fn active_account() -> Option<Account> {
     let accounts = storage::load_accounts().ok()?;
     accounts.into_iter().nth(storage::load_active_index())
+}
+
+/// The account at `address`, whole — the one a site was granted, which is
+/// the one that signs for it (spec 070: never whichever happens to be active).
+#[cfg_attr(
+    target_os = "linux",
+    allow(dead_code, reason = "Linux has no signing column to open")
+)]
+pub fn account_by_address(address: &str) -> Option<Account> {
+    storage::load_accounts()
+        .ok()?
+        .into_iter()
+        .find(|account| account.address.eq_ignore_ascii_case(address))
 }
 
 impl SendHost {
@@ -165,7 +164,13 @@ impl SendHost {
         cx: &mut Context<Self>,
     ) -> Self {
         let channel = CeremonyChannel::new();
-        let ctx = SendContext::new(&account, channel.ceremony(window_handle));
+        let mut ctx = SendContext::new(&account, channel.ceremony(window_handle));
+        // The send has no "Sign with" of its own: it signs the way Settings
+        // says every signature starts (spec 071), read once as it opens.
+        let (trusted_signer, changed) = trusted_signer::Channel::new();
+        ctx.trusted_signer = trusted_signer;
+        let preference = resident::resident::<SignPref>(cx).read(cx).view();
+        ctx.sign_with(&preference.method, &preference.signer_url);
         let send = CoreHost::<Send>::new();
         let view = send.view();
         let display_code = display.code.clone();
@@ -193,6 +198,21 @@ impl SendHost {
             tracked_hash: None,
             last_track_status: None,
         };
+
+        // The Trusted Signer's channel speaks up whenever a ceremony waits,
+        // ends, or wants the page opened. The stream ends with the host.
+        cx.spawn(async move |host, cx| {
+            let mut changed = changed;
+            while changed.next().await.is_some() {
+                if host
+                    .update(cx, |host, cx| host.trusted_signer_changed(cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
 
         // Receipts arrive through the app-resident tracker, which outlives
         // this host; observing it is what turns a confirmation into the
@@ -694,6 +714,8 @@ impl SendHost {
     // -- the ceremony ---------------------------------------------------------
 
     fn cancel_ceremony(&mut self) {
+        // A Trusted Signer waiting on its page is a ceremony too.
+        self.ctx.trusted_signer.cancel();
         self.channel.close();
         self.channel = CeremonyChannel::new();
         self.ctx.ceremony = self.channel.ceremony(self.window_handle);
@@ -732,7 +754,9 @@ impl SendHost {
 
     /// One poll. Returns whether to keep polling.
     fn tick(&mut self, cx: &mut Context<Self>) -> bool {
-        if !self.signing_reported && self.ctx.signing_started.load(Ordering::SeqCst) {
+        let signing =
+            self.ctx.signing_started.load(Ordering::SeqCst) || self.ctx.trusted_signer.waiting();
+        if !self.signing_reported && signing {
             self.signing_reported = true;
             self.dispatch(SendEvent::SigningStarted, cx);
         }
@@ -778,6 +802,20 @@ impl SendHost {
         self.channel.touch_waiting()
     }
 
+    /// The Trusted Signer's waiting sheet and its last word (spec 071).
+    pub fn trusted_signer(&self) -> Arc<trusted_signer::Channel> {
+        Arc::clone(&self.ctx.trusted_signer)
+    }
+
+    /// Something on the Trusted Signer's channel changed: hand the browser the
+    /// page if a ceremony asked for it, and redraw.
+    fn trusted_signer_changed(&mut self, cx: &mut Context<Self>) {
+        if let Some(url) = self.ctx.trusted_signer.take_page() {
+            cx.open_url(&url);
+        }
+        cx.notify();
+    }
+
     /// The caBLE QR to show, if a hybrid ceremony waits for a scan.
     pub fn qr_showing(&self) -> Option<String> {
         self.channel.qr_showing()
@@ -811,6 +849,14 @@ impl SendHost {
     pub fn acknowledge_alert(&mut self, cx: &mut Context<Self>) {
         self.alert = None;
         cx.notify();
+    }
+}
+
+impl Drop for SendHost {
+    /// The flow is gone: a Trusted Signer still waiting stops now rather than
+    /// holding a port for five minutes nobody can see.
+    fn drop(&mut self) {
+        self.ctx.trusted_signer.close();
     }
 }
 
@@ -866,9 +912,7 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::chain;
-    use crate::resident::{Answer, Machine};
-    use vela_core::app::fee_policy::{FeeOperation, FeePolicy};
+    use vela_core::app::fee_policy::FeePolicy;
 
     /// Issue #265: an import ADDS to the recipients already on the form, and
     /// replaces them only when the person chose "Replace them instead".

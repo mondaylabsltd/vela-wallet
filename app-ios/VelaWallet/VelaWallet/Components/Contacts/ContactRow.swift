@@ -75,8 +75,7 @@ struct ContactRow: View {
     private var content: some View {
         Button(action: onTap) {
             HStack(spacing: Tokens.Space.s12) {
-                IdenticonAvatar(seed: contact.addressFull, size: avatar, name: contact.name,
-                                tappable: false)
+                IdenticonAvatar(seed: contact.addressFull, size: avatar, tappable: false)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: contact.name)
                         .typeRole(Typography.rowTitle.scaled(textScale))

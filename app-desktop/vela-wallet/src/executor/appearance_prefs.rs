@@ -1,15 +1,19 @@
-//! Text size and avatar style — the two Appearance rows that were drawn and
-//! never wired.
+//! Text size — the Appearance row that was drawn and never wired.
 //!
 //! `text_scale` and `segmented` took no click handler at all ("spec 023 is UI
 //! only", in the component's own doc), so the size thumb sat on a stop that
-//! meant nothing and the avatar segment claimed "identicon" while the desktop
-//! had no such setting to be on either side of. A settings screen that shows a
-//! control which does nothing is worse than one that shows no control.
+//! meant nothing. A settings screen that shows a control which does nothing is
+//! worse than one that shows no control.
 //!
-//! The levels, the words and the store keys are the web's — `vela.textScale`
-//! and `vela.avatarStyle`, holding the same bare strings — so the two clients
-//! describe one preference rather than two that happen to look alike. Six
+//! The avatar style that used to live here went with spec 074: the owner
+//! dropped the choice between initials and the identicon, every avatar is the
+//! identicon, and the core's launch migration removes a stored
+//! `vela.avatarStyle`. A store key for a preference the app no longer has is
+//! the same lie as an unwired control.
+//!
+//! The levels, the words and the store key are the web's — `vela.textScale`,
+//! holding the same bare string — so the two clients describe one preference
+//! rather than two that happen to look alike. Six
 //! levels, not the mock's seven stops: the mock was a drawing, and the product
 //! has six.
 
@@ -19,9 +23,8 @@ use serde_json::Value;
 
 use crate::executor::storage;
 
-/// The store keys, verbatim from `app-web/vela-wallet/src/lib/services/preferences.svelte.ts`.
+/// The store key, verbatim from `app-web/vela-wallet/src/lib/services/preferences.svelte.ts`.
 pub const KEY_TEXT_SCALE: &str = "vela.textScale";
-pub const KEY_AVATAR_STYLE: &str = "vela.avatarStyle";
 
 /// How much bigger or smaller every piece of type is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -87,44 +90,9 @@ impl TextScale {
     }
 }
 
-/// What an avatar is a picture of.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum AvatarStyle {
-    Initials,
-    /// The address's own artwork, and the default: the receive card leans on
-    /// it as an anti-forgery mark, so it is the one a person learns to read.
-    #[default]
-    Identicon,
-}
-
-pub const AVATAR_STYLES: [AvatarStyle; 2] = [AvatarStyle::Initials, AvatarStyle::Identicon];
-
-impl AvatarStyle {
-    #[must_use]
-    pub fn word(self) -> &'static str {
-        match self {
-            Self::Initials => "initials",
-            Self::Identicon => "identicon",
-        }
-    }
-
-    fn from_word(word: &str) -> Option<Self> {
-        AVATAR_STYLES.into_iter().find(|style| style.word() == word)
-    }
-
-    #[must_use]
-    pub fn index(self) -> usize {
-        match self {
-            Self::Initials => 0,
-            Self::Identicon => 1,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 struct Prefs {
     text: TextScale,
-    avatar: AvatarStyle,
 }
 
 static PREFS: OnceLock<Mutex<Prefs>> = OnceLock::new();
@@ -151,19 +119,8 @@ pub fn text_factor() -> f32 {
     text_scale().factor()
 }
 
-#[must_use]
-pub fn avatar_style() -> AvatarStyle {
-    let mut out = AvatarStyle::default();
-    read(|prefs| out = prefs.avatar);
-    out
-}
-
 pub fn set_text_scale(scale: TextScale) {
     update(|prefs| prefs.text = scale, KEY_TEXT_SCALE, scale.word());
-}
-
-pub fn set_avatar_style(style: AvatarStyle) {
-    update(|prefs| prefs.avatar = style, KEY_AVATAR_STYLE, style.word());
 }
 
 fn update(apply: impl FnOnce(&mut Prefs), key: &str, word: &str) {
@@ -186,9 +143,6 @@ fn load() -> Prefs {
     Prefs {
         text: word(KEY_TEXT_SCALE)
             .and_then(|w| TextScale::from_word(&w))
-            .unwrap_or_default(),
-        avatar: word(KEY_AVATAR_STYLE)
-            .and_then(|w| AvatarStyle::from_word(&w))
             .unwrap_or_default(),
     }
 }
@@ -223,10 +177,6 @@ mod tests {
             "standard changes nothing"
         );
         assert_eq!(TextScale::Standard.index(), 2);
-
-        assert_eq!(AvatarStyle::Initials.word(), "initials");
-        assert_eq!(AvatarStyle::Identicon.word(), "identicon");
-        assert_eq!(AvatarStyle::default(), AvatarStyle::Identicon);
     }
 
     /// An unreadable or absent value is the default, never a panic and never a
@@ -234,11 +184,6 @@ mod tests {
     #[test]
     fn an_unknown_word_falls_back_to_the_default() {
         assert_eq!(TextScale::from_word("enormous"), None);
-        assert_eq!(AvatarStyle::from_word("photo"), None);
         assert_eq!(TextScale::from_word("large"), Some(TextScale::Large));
-        assert_eq!(
-            AvatarStyle::from_word("initials"),
-            Some(AvatarStyle::Initials)
-        );
     }
 }

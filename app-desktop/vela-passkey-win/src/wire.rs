@@ -23,6 +23,11 @@ pub fn registration_from(registered: Registered) -> Registration {
         client_data_json_hex: primitives::to_hex(registered.client_data_json.as_bytes(), false),
         authenticator_attachment: registered.attachment,
         transports: registered.transport,
+        // Spec 075: only a key minted ON the Trusted Signer's page records that
+        // page. Windows Hello is this device's own authenticator, so there is
+        // no origin to remember — `None`, never an empty string, because "no
+        // page" and "a page that named itself with nothing" are different facts.
+        signer_origin: None,
     }
 }
 
@@ -43,5 +48,7 @@ pub fn assertion_from(asserted: Asserted) -> Assertion {
             .filter(|bytes| !bytes.is_empty())
             .map(|bytes| primitives::to_hex(bytes, false)),
         authenticator_attachment: String::new(),
+        // As above: this assertion came from Windows Hello, not from a page.
+        signer_origin: None,
     }
 }

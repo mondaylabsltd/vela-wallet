@@ -190,6 +190,8 @@ private fun KeysPreview(darkTheme: Boolean, code: String) {
             canFinish = v.canFinish,
             needsSecondKey = v.needsSecondKey,
             busy = v.busy,
+            addMethods = v.addMethods,
+            addBlocked = v.addBlocked,
             onAddKey = {},
             onConfirmKey = {},
             onRemoveKey = {},

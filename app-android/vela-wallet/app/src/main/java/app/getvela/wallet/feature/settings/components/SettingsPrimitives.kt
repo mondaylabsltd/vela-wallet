@@ -390,7 +390,7 @@ fun VelaUrlField(
 
 /**
  * The product's ONE segmented control (design review 2026-07): three-up for the
- * theme picker, two-up for the avatar style.
+ * theme picker. (Its two-up avatar-style use was retired in spec 074.)
  */
 @Composable
 fun VelaSegmentedControl(

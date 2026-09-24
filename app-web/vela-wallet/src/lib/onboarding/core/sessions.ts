@@ -53,14 +53,11 @@ export function createCreateWalletSession(
 }
 
 export function createLoginSession(options: SessionOptions<LoginView>): LoginSession {
-	return createJsonWasmShell<LoginView, LoginEvent, OnboardingEffect, ShellResult>(
-		new LoginCore(),
-		{
-			onView: options.onView,
-			execute: createOnboardingExecutor(options.deps),
-			toFailure: operationFailure,
-			// Never silent (spec 048): a caller that passes no handler still gets the fault reported.
-			onError: options.onError ?? ((error) => console.error('[onboarding] core fault:', error))
-		}
-	);
+	return createJsonWasmShell<LoginView, LoginEvent, OnboardingEffect, ShellResult>(new LoginCore(), {
+		onView: options.onView,
+		execute: createOnboardingExecutor(options.deps),
+		toFailure: operationFailure,
+		// Never silent (spec 048): a caller that passes no handler still gets the fault reported.
+		onError: options.onError ?? ((error) => console.error('[onboarding] core fault:', error))
+	});
 }

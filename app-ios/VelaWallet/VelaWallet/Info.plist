@@ -95,12 +95,21 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Vela saves your receive QR code to your album so you can share it.</string>
 	<!--
-	  caBLE "sign in with your phone" (spec 019): the BLE scan that finds the
-	  phone that scanned our QR, and the CTAP 2.3 L2CAP channel to it. The
-	  system shows this sentence on the first scan.
+	  Two uses, one sentence — iOS shows this key once, for whichever comes
+	  first, so it has to be true of both:
+
+	    - caBLE "sign in with your phone" (spec 019): the BLE SCAN that finds
+	      the phone that scanned our QR, and the CTAP 2.3 L2CAP channel to it;
+	    - the Trusted Signer's nearby channel (spec 075 T041): this phone
+	      ADVERTISING as a GATT peripheral so the signing page open on a
+	      computer in the room can connect to it (PROTOCOL.md §1).
+
+	  The peripheral role is what makes the wording matter: asking for it is
+	  what raises the prompt, and a sentence that only mentioned scanning would
+	  be asking to advertise under cover of a different explanation.
 	-->
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Vela uses Bluetooth to find the nearby device you sign in with after it scans the code on screen.</string>
+	<string>Vela uses Bluetooth to reach a nearby device you sign with — the phone that scans the code on screen, or a computer running the Trusted Signer in the same room.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

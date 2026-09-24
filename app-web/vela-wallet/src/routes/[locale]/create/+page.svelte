@@ -65,6 +65,10 @@
 	/>
 </main>
 
+<!-- Spec 075: a founding key can be minted on the Trusted Signer's page. The
+     wait, the pairing code and the sentence a refusal ends with are drawn
+     over this flow, which stays exactly as it was underneath. -->
+
 {#if pending}
 	<PromptSheet
 		copy={pending.copy}

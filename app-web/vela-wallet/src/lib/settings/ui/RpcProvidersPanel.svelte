@@ -3,6 +3,10 @@
 	 * ST11 / DST5 — one card per provider: name, connection badge, key field
 	 * with its own in-field action, and a support line. `未设置` is a neutral
 	 * badge, not an error: not having an Alchemy key is a normal state.
+	 *
+	 * The in-field action is the key test when there is a key, and a link to
+	 * the provider's key page when there is not (`actionUrl`): "Get key" used
+	 * to run a test on the empty field (spec 072).
 	 */
 	import type { RpcProvidersModel } from '../model';
 	import StatusPill from './StatusPill.svelte';
@@ -31,6 +35,7 @@
 			<UrlField
 				field={provider.field}
 				action={provider.action}
+				actionHref={provider.actionUrl}
 				onaction={() => onaction?.(provider.id)}
 				oninput={(value) => onfield?.(provider.id, value)}
 				onblur={() => onfieldblur?.(provider.id)}
@@ -39,6 +44,7 @@
 				<p class="support">{provider.support}</p>
 			{/if}
 			{#if provider.link !== undefined && provider.linkUrl !== undefined}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the provider's own site, not an app route -->
 				<a class="link" href={provider.linkUrl} target="_blank" rel="noreferrer noopener">
 					{provider.link}
 				</a>

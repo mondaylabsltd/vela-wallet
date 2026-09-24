@@ -188,6 +188,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 		},
 		signOut: {
 			title: k('settings.signOut.title'),
+			descMany: k('settings.signOut.descMany'),
 			keeps: k('settings.signOut.keeps'),
 			warning: k('settings.signOut.warning'),
 			button: k('settings.signOut.button'),
@@ -315,9 +316,6 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			themeLight: k('settings.appearance.themeLight'),
 			themeDark: k('settings.appearance.themeDark'),
 			themeAuto: k('settings.appearance.themeAuto'),
-			avatarTitle: k('settings.appearance.avatarTitle'),
-			avatarInitials: k('settings.appearance.avatarInitials'),
-			avatarIdenticon: k('settings.appearance.avatarIdenticon'),
 			textScale: k('settings.appearance.textScale')
 		},
 		language: {
@@ -371,6 +369,27 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			standardHint: k('send.gasTierHintStandard'),
 			slowHint: k('send.gasTierHintSlow')
 		},
+		signing: {
+			title: k('settings.signing.title'),
+			subtitle: k('settings.signing.subtitle'),
+			// The signing sheet's own names, so the two surfaces cannot drift.
+			methods: {
+				auto: k('common.automatic'),
+				platform: k('onboarding.create.methodPlatformTitle'),
+				hybrid: k('onboarding.create.methodHybridTitle'),
+				security_key: k('onboarding.create.methodSecurityKeyTitle'),
+				trusted_signer: k('componentsUi.signing.trustedSignerTitle')
+			},
+			trustedSignerBody: k('componentsUi.signing.trustedSignerBody'),
+			pageTitle: k('settings.signing.pageTitle'),
+			pageSubtitle: k('settings.signing.pageSubtitle'),
+			pageOfficial: k('settings.signing.pageOfficial'),
+			pageInvalid: k('settings.signing.pageInvalid'),
+			pageInsecure: k('settings.signing.pageInsecure'),
+			pageForeign: k('settings.signing.pageForeign'),
+			pageReset: k('settings.signing.pageReset'),
+			pageSave: k('settings.signing.pageSave')
+		},
 		networks: {
 			count: k('settings.networks.count'),
 			custom: k('settings.networks.custom'),
@@ -383,6 +402,9 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			invalid: k('settingsModals.health.invalid'),
 			chainId: k('settingsModals.network.chainId'),
 			remove: k('settingsModals.network.removeTitle'),
+			removeBody: k('settingsModals.network.removeBody'),
+			removeConfirm: k('settingsModals.network.removeConfirm'),
+			removeCancel: k('settingsModals.network.removeCancel'),
 			rpcUrl: k('settingsModals.network.fieldRpcUrl'),
 			explorer: k('settingsModals.network.fieldExplorer'),
 			mismatch: k('settingsModals.network.rpcChainMismatch')
@@ -433,6 +455,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			fiatLabel: k('settingsModals.endpoints.fiatLabel'),
 			fiatHint: k('settingsModals.endpoints.fiatHint'),
 			reset: k('settingsModals.endpoints.resetToDefaults'),
+			resetTitle: k('settingsModals.endpoints.resetTitle'),
+			resetBody: k('settingsModals.endpoints.resetBody'),
+			resetConfirm: k('settingsModals.endpoints.resetConfirm'),
+			resetCancel: k('settingsModals.endpoints.resetCancel'),
 			guide: k('settingsModals.endpoints.selfHostGuide')
 		},
 		storage: {
@@ -492,12 +518,15 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			total: k('settingsModals.account.total'),
 			countPrefix: k('home.switcherAccountCount'),
 			createNew: k('settingsModals.account.createNew'),
-			signInExisting: k('settingsModals.account.signInExisting')
+			signInExisting: k('settingsModals.account.signInExisting'),
+			remove: k('settings.account.remove'),
+			removeBody: k('settings.account.removeBody')
 		},
 		signOut: {
 			button: k('settings.signOut.button'),
 			title: k('settings.signOut.title'),
 			desc: k('settings.signOut.desc'),
+			descMany: k('settings.signOut.descMany'),
 			keeps: k('settings.signOut.keeps'),
 			warning: k('settings.signOut.warning'),
 			anyway: k('settings.signOut.anyway'),
@@ -896,6 +925,20 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signWithPlatform: k('onboarding.create.methodPlatformTitle'),
 		signWithHybrid: k('onboarding.create.methodHybridTitle'),
 		signWithSecurityKey: k('onboarding.create.methodSecurityKeyTitle'),
+		// Spec 077: the send receipt's own words, for the landing this sheet
+		// draws once a transaction is submitted.
+		receipt: {
+			confirming: k('componentsTx.receipt.confirming'),
+			confirmingHint: k('componentsTx.receipt.confirmingHint'),
+			submitted: k('componentsTx.receipt.statusSubmitted'),
+			confirmed: k('componentsTx.receipt.statusConfirmed'),
+			failed: k('componentsTx.receipt.statusFailed'),
+			failedHint: k('componentsTx.receipt.failedHint'),
+			opHashLabel: k('componentsTx.receipt.userOpHash'),
+			txHashLabel: k('componentsTx.receipt.txHash'),
+			explorer: k('componentsTx.receipt.explorer'),
+			done: k('componentsTx.receipt.done')
+		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),
 		safeInnerCall: k('componentsUi.signing.safeInnerCall'),

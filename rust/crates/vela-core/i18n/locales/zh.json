@@ -29,7 +29,9 @@
     },
     "account": {
       "switch": "切换账户",
-      "contactsSubtitle": "已保存地址与最近收款人"
+      "contactsSubtitle": "已保存地址与最近收款人",
+      "remove": "从这台设备移除",
+      "removeBody": "只有这个钱包离开，其余的不动。"
     },
     "appearance": {
       "themeLight": "浅色",
@@ -54,6 +56,18 @@
     "feeSpeed": {
       "title": "交易速度",
       "subtitle": "在 Vela 发起的每笔转账都从这里开始。发送时仍可单独调整某一笔。"
+    },
+    "signing": {
+      "title": "签名方式",
+      "subtitle": "你在 Vela 发起的每次签名都从这里开始。单次签名时仍可另选方式。",
+      "pageTitle": "可信签名器页面",
+      "pageSubtitle": "可信签名器打开的页面：官方页面，或你自己部署的零依赖签名页。",
+      "pageOfficial": "官方",
+      "pageInvalid": "这不是一个网址。",
+      "pageInsecure": "请使用 https 页面，或本机回环地址上的页面——浏览器不会在其他地方签名。",
+      "pageForeign": "你的通行密钥属于 getvela.app。其他域名上的页面可以显示请求，但无法签名。",
+      "pageReset": "使用官方页面",
+      "pageSave": "保存"
     },
     "advanced": {
       "networksTitle": "网络",
@@ -88,7 +102,8 @@
       "keeps": "选择「我已有钱包」用该通行密钥重新登录：地址不变，交易记录、联系人、代币和各项设置也都还在。",
       "warning": "您的公钥尚未同步到服务器。下次启动会自动重试，但在成功之前，您可能无法在其他设备上登录——如果卸载了应用，这台设备也一样。",
       "anyway": "仍然退出",
-      "cancel": "取消"
+      "cancel": "取消",
+      "descMany": "这台设备上的 {{count}} 个钱包都会退出。不会删除任何东西。"
     },
     "eraseDevice": {
       "title": "清理数据",

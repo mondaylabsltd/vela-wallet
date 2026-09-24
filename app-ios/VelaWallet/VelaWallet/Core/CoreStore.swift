@@ -60,11 +60,15 @@ final class CoreStore<View: Decodable> {
     ///   - onView: called on every committed view, in the core's own order.
     ///   - onFault: a shell fault (a malformed event, an unreadable view).
     ///     Never a user-facing error.
+    ///   - neutralAnswer: the machine's own answer for an operation whose
+    ///     result the core refused — see `CoreDriver.neutralAnswer`. `nil`
+    ///     leaves the fault reported and nothing else.
     init(
         bridge: CoreBridge,
         perform: @escaping ([String: Any]) async -> String,
         onView: @escaping (View) -> Void = { _ in },
-        onFault: @escaping (Error) -> Void = { _ in }
+        onFault: @escaping (Error) -> Void = { _ in },
+        neutralAnswer: (([String: Any]) -> String?)? = nil
     ) {
         self.onView = onView
         self.onFault = onFault
@@ -78,6 +82,7 @@ final class CoreStore<View: Decodable> {
             onView: { json in commit(json) },
             onFault: { error in fault(error) }
         )
+        driver.neutralAnswer = neutralAnswer
         commit = { [weak self] json in self?.commit(json) }
         fault = { [weak self] error in self?.onFault(error) }
     }

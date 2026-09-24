@@ -771,6 +771,15 @@ class CoreWireDriftTest {
         assertStringUnion<FeeAssetKind>("FeeAssetKind")
     }
 
+    /** Spec 071: the default "Sign with" and the Trusted Signer page. */
+    @Test
+    fun signPreferenceMatchesTheGeneratedMirrors() {
+        assertFieldsExist<app.getvela.wallet.feature.settings.core.SignPrefView>("SignPrefView")
+        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.SignPrefOperation>("SignPrefOperation")
+        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.SignPrefShellResult>("SignPrefShellResult")
+        assertVariantsExist<app.getvela.wallet.feature.settings.core.SignPrefEvent>("SignPrefEvent")
+    }
+
     /** Spec 069: the default speed's machine and the speed control's. */
     @Test
     fun speedViewsEventsAndPreferenceMatchTheGeneratedMirrors() {
@@ -817,20 +826,19 @@ class CoreWireDriftTest {
     // -- spec 044: the in-app browser and what it signs --------------------
 
     @Test
-    fun dappPermissionsWiresMatchTheMirrors() {
-        assertFieldsExist<DpermView>("DpermView")
-        assertFieldsExist<DpermConsentView>("DpermConsentView")
-        assertFieldsExist<DpermPopupView>("DpermPopupView")
+    fun dappBrowserWiresMatchTheMirrors() {
+        assertFieldsExist<DbrView>("DbrView")
+        assertFieldsExist<DbrConsentView>("DbrConsentView")
+        assertFieldsExist<DbrTabView>("DbrTabView")
+        assertFieldsExist<DbrSiteView>("DbrSiteView")
+        assertFieldsExist<DbrSigningView>("DbrSigningView")
+        assertFieldsExist<DbrStoredSite>("DbrStoredSite")
         assertFieldsExist<DpermGrant>("DpermGrant")
-        assertVariantsExhaustive<DpermOperation>("DpermOperation")
-        assertVariantsExhaustive<DpermShellResult>("DpermShellResult")
-        assertVariantsExhaustive<DpermPageEvent>("DpermPageEvent")
-        assertVariantsExhaustive<DpermRespondPayload>("DpermRespondPayload")
-        assertVariantsExhaustive<DpermPopupOutcome>("DpermPopupOutcome")
-        assertStringUnion<DpermRejectReason>("DpermRejectReason")
-        assertVariantsExist<DpermEvent>("DpermEvent")
-        assertVariantFields(DpermOperation.serializer(), "DpermOperation")
-        assertVariantFields(DpermEvent.serializer(), "DpermEvent")
+        assertVariantsExhaustive<DbrOperation>("DbrOperation")
+        assertVariantsExhaustive<DbrShellResult>("DbrShellResult")
+        assertVariantsExist<DbrEvent>("DbrEvent")
+        assertVariantFields(DbrOperation.serializer(), "DbrOperation")
+        assertVariantFields(DbrEvent.serializer(), "DbrEvent")
     }
 
     @Test

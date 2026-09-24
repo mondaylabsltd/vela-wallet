@@ -46,6 +46,13 @@ pub const KEY_DISPLAY_CURRENCY: &str = "vela.displayCurrency";
 /// The default transaction speed (spec 068, on the desktop since 069). A bare
 /// tier name — `fast` / `standard` / `slow` — judged by the core, never here.
 pub const KEY_FEE_TIER: &str = "vela.feeTier";
+/// The default "Sign with" (spec 071): `auto` or a method name, judged by the
+/// core's `sign_pref`, never here.
+pub const KEY_SIGN_METHOD: &str = "vela.signMethod";
+/// The Trusted Signer's page, when the person chose one; absent is the
+/// official page.
+/// The Trusted Signer page a person named in Settings.
+pub const KEY_TRUSTED_SIGNER_URL: &str = "vela.trustedSignerUrl";
 
 /// The storage failed in a way the core answers with `storage_failed`, never a
 /// crash: a read-only home directory, a full disk, a file another process holds.
@@ -138,39 +145,82 @@ pub fn read_value(key: &str) -> Result<Option<Value>> {
     Ok(read_all()?.get(key).cloned())
 }
 
-/// What this wallet is actually using on disk, and how many records it holds.
+/// Every key under `prefix`, with its value.
 ///
-/// One JSON document, so the size is one `metadata` call and the record count
-/// is the sum of the array-valued keys plus one for each scalar. The settings
-/// screen said **2.4 MB / 216 records** to everybody; a person deciding whether
-/// to clear a cache deserves their own number.
-///
-/// `(bytes, records)`. Zero for both when the file is not there yet, which is a
-/// true statement about a wallet that has written nothing.
-#[must_use]
-/// The whole document, for whoever needs to see every key — the storage page
-/// measures with it. Read-only by construction: it is a copy.
-#[must_use]
-pub fn read_all_public() -> Map<String, Value> {
-    read_all().unwrap_or_default()
+/// For the stores that are ONE key per thing rather than one document —
+/// `vela.perm.<origin>` and `vela.chain.<origin>` are the other clients'
+/// spelling, and a reader that needed a list of origins first would need a
+/// second key to keep in step with the first.
+pub fn entries_with_prefix(prefix: &str) -> Result<Vec<(String, Value)>> {
+    Ok(read_all()?
+        .into_iter()
+        .filter(|(key, _)| key.starts_with(prefix))
+        .collect())
 }
 
-pub fn usage() -> (u64, u32) {
-    let Ok(path) = path() else {
-        return (0, 0);
+/// Every key in the store, with its value as the RAW string the other shells
+/// keep (spec 072): a string as itself, anything else as its JSON text.
+///
+/// The shared rules — `prefs::read`, the storage catalog — are written against
+/// a key-value store of strings, which is what `localStorage`, `AsyncStorage`,
+/// `UserDefaults` and Android's store all are. This document holds JSON values
+/// instead, so this is the one place a value becomes the string those rules
+/// read. A corrupt document reads as empty, as everywhere else here.
+pub fn raw_entries() -> Result<Vec<(String, String)>> {
+    Ok(read_all()?
+        .into_iter()
+        .map(|(key, value)| {
+            let raw = match value {
+                Value::String(text) => text,
+                other => other.to_string(),
+            };
+            (key, raw)
+        })
+        .collect())
+}
+
+/// What a raw string is stored as: a JSON object or array as that value (the
+/// `vela.localePrefs` record), anything else as a string (`dark`, `auto`).
+#[must_use]
+pub fn stored_value(raw: &str) -> Value {
+    match serde_json::from_str::<Value>(raw) {
+        Ok(value @ (Value::Object(_) | Value::Array(_))) => value,
+        _ => Value::String(raw.to_owned()),
+    }
+}
+
+/// Apply writes and removals in ONE rewrite of the document: `Some` stores the
+/// raw value ([`stored_value`]), `None` removes the key. What the core's
+/// `prefs::migrations` answers is exactly this shape.
+pub fn apply_raw(writes: &[(String, Option<String>)]) -> Result<()> {
+    if writes.is_empty() {
+        return Ok(());
+    }
+    let Ok(_guard) = LOCK.lock() else {
+        return Err(StorageError("the storage lock is poisoned".to_owned()));
     };
-    let bytes = fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
-    let records = read_all().map_or(0, |map| {
-        map.values()
-            .map(|value| match value {
-                // An array key holds N records; anything else is one.
-                Value::Array(items) => u32::try_from(items.len()).unwrap_or(u32::MAX),
-                Value::Null => 0,
-                _ => 1,
-            })
-            .sum()
-    });
-    (bytes, records)
+    let mut map = read_all()?;
+    for (key, value) in writes {
+        match value {
+            Some(raw) => {
+                map.insert(key.clone(), stored_value(raw));
+            }
+            None => {
+                map.remove(key);
+            }
+        }
+    }
+    write_all(map)
+}
+
+/// Remove several keys in one rewrite — a storage row's clear, an erase.
+pub fn remove_values(keys: &[String]) -> Result<()> {
+    apply_raw(
+        &keys
+            .iter()
+            .map(|key| (key.clone(), None))
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// Write one key, whole.
@@ -402,6 +452,34 @@ pub fn save_registry_endpoint(url: &str) -> Result<()> {
 /// public key the registry never confirmed, and the next launch can still retry
 /// it — but a deleted record can never be retried, and that credential becomes
 /// unfindable at sign-in.
+/// Drop ONE account from the stored list, by ADDRESS — spec 017's narrow half
+/// (2026-09-23: 「有时候不想退出所有，只想退出单个」).
+///
+/// By address, not by id or position, because a row's identity is its address
+/// (session invariant ⑨): a write that raced a re-sorted display must not take
+/// a stranger. A row that is no longer there is a no-op — the person asked for
+/// it to be gone, and it is.
+pub fn remove_account(address: &str) -> Result<()> {
+    let Ok(_guard) = LOCK.lock() else {
+        return Err(StorageError("the storage lock is poisoned".to_owned()));
+    };
+    let mut map = read_all()?;
+    let accounts = match map.get(KEY_ACCOUNTS) {
+        Some(Value::Array(items)) => items.clone(),
+        _ => Vec::new(),
+    };
+    let kept: Vec<Value> = accounts
+        .into_iter()
+        .filter(|item| {
+            item.get("address")
+                .and_then(Value::as_str)
+                .is_none_or(|stored| !stored.eq_ignore_ascii_case(address))
+        })
+        .collect();
+    map.insert(KEY_ACCOUNTS.to_owned(), Value::Array(kept));
+    write_all(map)
+}
+
 pub fn clear_signed_in_wallet() -> Result<()> {
     let Ok(_guard) = LOCK.lock() else {
         return Err(StorageError("the storage lock is poisoned".to_owned()));
@@ -412,146 +490,58 @@ pub fn clear_signed_in_wallet() -> Result<()> {
     write_all(map)
 }
 
-/// The only keys an erase leaves behind (spec 081 FR-017).
-///
-/// A record in `vela.pendingUploads` is a passkey public key the index service
-/// has never confirmed. The next launch's retry needs no account list to
-/// re-send it, but a DELETED record can never be retried — and that credential
-/// then cannot be found at sign-in on any device. Erasing it would downgrade
-/// "recoverable" to "possibly ruined", which is strictly worse here than at
-/// sign-out, because the account list is going too and the retry is the only
-/// remaining path to that key. Uploading first and erasing after was the
-/// alternative, rejected because it makes a destructive action the person
-/// asked for depend on a network that may be down.
-///
-/// The same one exception the web module names, with the same reason.
-pub const ERASE_KEEP_KEYS: &[&str] = &[KEY_PENDING_UPLOADS];
-
-/// Erase this device: every `vela.` key in the document but the keep-list.
-///
-/// **A prefix sweep, not a delete-list**, and that is the whole design. The
-/// web module was rewritten once already for exactly this: its predecessor
-/// walked a hand-maintained list of the keys ONE module happened to own, and
-/// it drifted out of date in silence, because nothing about a delete-list
-/// fails when the app grows a key. So the direction is inverted — enumerate
-/// what is ACTUALLY stored, drop everything under `vela.`, and name the
-/// exceptions. A key a new machine writes next year is erased on the day it is
-/// first written, with no edit here.
-///
-/// Keys outside the `vela.` namespace are not this function's to judge and are
-/// left alone; nothing else writes to this document today, so in practice the
-/// file ends up holding the keep-list and nothing more.
-///
-/// Returns the keys that SURVIVED. A non-empty answer is a failed erase, and
-/// the caller must say so rather than reporting success — telling a person
-/// their machine is clean while their transaction history is still on it is
-/// the one outcome this feature cannot have.
-pub fn erase_all() -> Result<Vec<String>> {
-    let Ok(_guard) = LOCK.lock() else {
-        return Err(StorageError("the storage lock is poisoned".to_owned()));
-    };
-    let erasable = |key: &str| key.starts_with("vela.") && !ERASE_KEEP_KEYS.contains(&key);
-
-    let mut map = read_all()?;
-    map.retain(|key, _| !erasable(key));
-    write_all(map)?;
-
-    // Re-READ, rather than trusting the write: the verification is the point.
-    Ok(read_all()?
-        .keys()
-        .filter(|key| erasable(key))
-        .cloned()
-        .collect())
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
     use vela_core::app::AccountKey;
 
-    /// One temporary state directory per test.
-    ///
-    /// `VELA_STATE_DIR` is process-wide, so these tests are serialized behind
-    /// one lock rather than run in parallel — the alternative is a shared
-    /// document two tests rewrite at once, which is exactly the interleave the
-    /// file lock in this module exists to prevent.
+    /// The raw view the shared rules read: a string as itself, a record as its
+    /// JSON text — and a raw value written back lands as the same JSON value,
+    /// so a record another shell reads is an object, not a quoted string.
+    #[test]
+    fn raw_entries_and_raw_writes_round_trip() {
+        with_temp_state("storage-raw", || {
+            if write_value("vela.theme", json!("dark")).is_err()
+                || write_value("vela.localePrefs", json!({ "numberFormat": "iso" })).is_err()
+            {
+                unreachable!("could not seed");
+            }
+            let raw = raw_entries().unwrap_or_else(|error| unreachable!("{error}"));
+            assert!(raw.contains(&("vela.theme".to_owned(), "dark".to_owned())));
+            assert!(raw.contains(&(
+                "vela.localePrefs".to_owned(),
+                r#"{"numberFormat":"iso"}"#.to_owned()
+            )));
+
+            let writes = [
+                (
+                    "vela.localePrefs".to_owned(),
+                    Some(r#"{"numberFormat":"dot_comma"}"#.to_owned()),
+                ),
+                ("vela.textScale".to_owned(), Some("large".to_owned())),
+                ("vela.theme".to_owned(), None),
+            ];
+            if apply_raw(&writes).is_err() {
+                unreachable!("could not apply");
+            }
+            assert_eq!(
+                read_value("vela.localePrefs").ok().flatten(),
+                Some(json!({ "numberFormat": "dot_comma" })),
+                "a record is stored as a record"
+            );
+            assert_eq!(
+                read_value("vela.textScale").ok().flatten(),
+                Some(json!("large"))
+            );
+            assert!(matches!(read_value("vela.theme"), Ok(None)));
+        });
+    }
+
     /// Two writers share `vela.serviceEndpoints`, and until spec 030 either
     /// erased the other. Onboarding saves the passkey-index override;
     /// `network_admin` saves the other three service URLs. The whole-value write
     /// this replaced meant configuring a self-hosted index silently unset the
     /// data, bundler and fiat endpoints — and saving those silently unset the
-    /// The erase, and the list it is not (spec 081 FR-017).
-    ///
-    /// The property is deliberately NOT "these keys are deleted" — that is a
-    /// delete-list with a test around it, which is the mistake the web module
-    /// was rewritten to undo. It is: a key nobody has written yet is erased by
-    /// default, the one named exception survives, and a key outside the
-    /// namespace is not this function's to judge.
-    #[test]
-    fn erase_sweeps_by_prefix_and_keeps_only_the_outbox() {
-        with_temp_state("storage-erase", || {
-            // Two keys that exist today, one that does NOT — standing in for
-            // whatever a machine written next year will store. A delete-list
-            // erase leaves that one behind and nothing fails.
-            let seeded = [
-                (KEY_ACCOUNTS, json!([{ "address": "0x88" }])),
-                (KEY_CONTACTS, json!([{ "name": "a" }])),
-                ("vela.somethingNobodyHasWrittenYet", json!("keep me? no")),
-                (KEY_PENDING_UPLOADS, json!([{ "credentialId": "cred0" }])),
-                ("notVela.leaveThisAlone", json!("not ours")),
-            ];
-            for (key, value) in seeded {
-                if write_value(key, value).is_err() {
-                    unreachable!("could not seed {key}");
-                }
-            }
-
-            let Ok(survivors) = erase_all() else {
-                unreachable!("the erase could not run");
-            };
-            assert!(
-                survivors.is_empty(),
-                "nothing under `vela.` should survive: {survivors:?}"
-            );
-
-            let Ok(after) = read_all() else {
-                unreachable!("could not re-read");
-            };
-            // The outbox: a public key the index has never confirmed, whose
-            // only remaining retry is the record itself.
-            assert!(after.contains_key(KEY_PENDING_UPLOADS));
-            // Everything else under the namespace, including the key this
-            // function has never heard of.
-            assert!(!after.contains_key(KEY_ACCOUNTS));
-            assert!(!after.contains_key(KEY_CONTACTS));
-            assert!(!after.contains_key("vela.somethingNobodyHasWrittenYet"));
-            // Not ours, not touched.
-            assert!(after.contains_key("notVela.leaveThisAlone"));
-        });
-    }
-
-    /// The storage panel's two figures, measured rather than asserted.
-    #[test]
-    fn usage_counts_records_and_measures_the_file() {
-        tests::with_temp_state("storage-usage", || {
-            // Nothing written yet: zero of both, which is true about a wallet
-            // that has stored nothing — not a failure to measure.
-            assert_eq!(usage(), (0, 0));
-
-            if write_value("vela.accounts", serde_json::json!([{ "a": 1 }, { "a": 2 }])).is_err()
-                || write_value("vela.balanceHidden", serde_json::json!("1")).is_err()
-                || write_value("vela.empty", serde_json::json!([])).is_err()
-            {
-                unreachable!("could not seed");
-            }
-            let (bytes, records) = usage();
-            // Two array entries plus one scalar. An empty array holds nothing
-            // and counts as nothing.
-            assert_eq!(records, 3);
-            assert!(bytes > 0, "the file is on disk and has a size");
-        });
-    }
-
     /// index, sending the next launch back to the public default.
     #[test]
     fn saving_one_service_endpoint_leaves_its_siblings_alone() {
@@ -665,8 +655,46 @@ pub(crate) mod tests {
         });
     }
 
+    /// A state directory of its own, held for as long as the returned guard
+    /// is. `with_temp_state`'s shape for a test whose body is too long, or too
+    /// full of threads, to sit inside a closure — the Chrome e2e's.
+    pub(crate) struct StateDir {
+        dir: std::path::PathBuf,
+        _guard: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Drop for StateDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    pub(crate) fn state_dir(name: &str) -> StateDir {
+        let Ok(_guard) = SERIAL.lock() else {
+            unreachable!("the test lock is poisoned");
+        };
+        let dir = std::env::temp_dir().join(format!("vela-storage-test-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        if fs::create_dir_all(&dir).is_err() {
+            unreachable!("could not create the temporary state directory");
+        }
+        // SAFETY: the lock above makes this the only thread touching the
+        // variable for as long as the guard is held.
+        unsafe { std::env::set_var("VELA_STATE_DIR", &dir) };
+        StateDir { dir, _guard }
+    }
+
+    /// The serial lock both forms share: one state directory at a time, in one
+    /// process, however many tests want one.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    /// One temporary state directory per test.
+    ///
+    /// `VELA_STATE_DIR` is process-wide, so these tests are serialized behind
+    /// one lock rather than run in parallel — the alternative is a shared
+    /// document two tests rewrite at once, which is exactly the interleave the
+    /// file lock in this module exists to prevent.
     pub(crate) fn with_temp_state<T>(name: &str, body: impl FnOnce() -> T) -> T {
-        static SERIAL: Mutex<()> = Mutex::new(());
         let Ok(_guard) = SERIAL.lock() else {
             unreachable!("the test lock is poisoned");
         };
@@ -714,9 +742,76 @@ pub(crate) mod tests {
                     public_key_hex: format!("04{index:02}"),
                     name: format!("Key {}", index + 1),
                     transports: "usb".to_owned(),
+                    signer_origin: None,
                 })
                 .collect(),
         }
+    }
+
+    /// Spec 075: a key that lives behind a signer page must come back
+    /// remembering which one.
+    ///
+    /// The field is written by the create and the sign-in that minted or
+    /// found the key, and read by `sign_route` to decide where the NEXT
+    /// signature goes. A record that loses it on a rewrite leaves a key
+    /// reachable only through somebody's own deployment being routed to a
+    /// platform sheet that cannot see it — a wallet that has quietly
+    /// forgotten where its key is. Written on its own key, absent when there
+    /// is none, and carried through to the device keys the signing sheet
+    /// routes by.
+    #[test]
+    fn a_key_behind_a_page_comes_back_remembering_it() {
+        with_temp_state("signer-origin-round-trip", || {
+            let mut record = account("cred0", 2);
+            record.keys[0].signer_origin = Some("https://sign.example.test".to_owned());
+            if save_account(&record).is_err() {
+                unreachable!("save");
+            }
+
+            // On disk: the field is there, and only on the key that has one.
+            let raw = read_list(KEY_ACCOUNTS).unwrap_or_default();
+            let keys = raw[0]["keys"].as_array().cloned().unwrap_or_default();
+            assert_eq!(keys[0]["signer_origin"], "https://sign.example.test");
+            assert!(
+                keys[1].get("signer_origin").is_none(),
+                "an ordinary key carries no page: {}",
+                keys[1]
+            );
+
+            let loaded = load_accounts().unwrap_or_default();
+            assert_eq!(
+                loaded[0].keys[0].signer_origin.as_deref(),
+                Some("https://sign.example.test")
+            );
+            assert_eq!(loaded[0].keys[1].signer_origin, None);
+
+            // And through the mirror the signing sheet actually routes by: a
+            // `DeviceKey` that dropped it would send the next signature to a
+            // sheet that cannot reach the key.
+            let context = crate::executor::send::SendContext::new(
+                &loaded[0],
+                crate::ceremony::CeremonyChannel::new().ceremony(0),
+            );
+            assert_eq!(
+                context.device_keys[0].signer_origin.as_deref(),
+                Some("https://sign.example.test")
+            );
+            assert_eq!(context.device_keys[1].signer_origin, None);
+
+            // `auto` therefore follows the key to its page rather than to the
+            // route the first key's transports would suggest.
+            let route = crate::executor::send::sign_route_of(
+                &context.device_keys,
+                "auto",
+                "https://sign.getvela.app/",
+            );
+            assert_eq!(
+                route,
+                Some(crate::executor::send::Route::TrustedSigner(
+                    "https://sign.example.test".to_owned()
+                ))
+            );
+        });
     }
 
     /// THE invariant. A multi-key account that comes back with fewer keys is a

@@ -55,6 +55,14 @@ final class BrowserAcceptanceTests: XCTestCase {
         return app
     }
 
+    /// A launch with `VELA_URL` opens straight into Explore (spec 070), where
+    /// the full-screen browser hides the tab bar; tap the tab only when it is
+    /// there to tap.
+    private func openExplore(_ app: XCUIApplication) {
+        let tab = app.buttons["探索"].firstMatch
+        if tab.waitForExistence(timeout: 3), tab.isHittable { tab.tap() }
+    }
+
     private func attach(_ screenshot: XCUIScreenshot, named name: String) {
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
@@ -76,6 +84,12 @@ final class BrowserAcceptanceTests: XCTestCase {
         if asked { approve.tap() }
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_requestAccounts ok"),
                       "the page was never connected")
+        // The chain is the SITE's since spec 070 (Ethereum for a site never
+        // seen, research R5), and the parallel space's Safe lives on Gnosis:
+        // the page puts itself there, as a dApp would.
+        app.webViews.buttons["Switch to Gnosis"].firstMatch.tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict wallet_switchEthereumChain ok"),
+                      "the page could not switch itself to Gnosis")
         return asked
     }
 
@@ -128,11 +142,27 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30),
                       "the space must be open — everything after this signs something")
 
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
 
         // The page's own <h1>, painted by WebKit rather than by SwiftUI.
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30),
                       "no page rendered — the engine never loaded, or the URL never reached it")
+
+        // The viewport units, as the page measures them (2026-09-23). Android's
+        // in-app browser was handing Chromium no viewport height: every `vh`
+        // resolved to 0 and modern sheets collapsed to a pixel. A `vh` of 0
+        // here would mean WKWebView is sized the same way, and every page that
+        // lays itself out against the viewport is broken in this browser too.
+        let viewport = app.webViews.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "#viewport")
+        ).firstMatch
+        XCTAssertTrue(viewport.waitForExistence(timeout: 20), "the probe never painted")
+        let measured = viewport.label
+        XCTContext.runActivity(named: measured) { _ in }
+        XCTAssertFalse(
+            measured.contains("\"vh\":0"),
+            "`100vh` resolves to zero in this WebView: \(measured)"
+        )
 
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict announce Vela Wallet app.getvela"),
                       "the page did not hear the discovery announcement: the provider is missing, or it was injected into an isolated content world where no dApp can see it")
@@ -142,21 +172,22 @@ final class BrowserAcceptanceTests: XCTestCase {
         attach(app.screenshot(), named: "device-browser-announce")
     }
 
-    /// The address bar shows the page's own host, and the padlock tells the
-    /// truth about the scheme.
+    /// The address bar shows the page's own host, and the lock tells the
+    /// truth about the origin.
     ///
-    /// The harness is served over http on loopback, so the padlock must be
-    /// ABSENT here. A browser chrome that claimed a lock it did not have would
-    /// be the single most dangerous thing in this cut.
+    /// The harness is served over http on LOOPBACK — a local dev server, which
+    /// the core counts as secure (spec 070: https, or a loopback / private-
+    /// network host; the same rule that lets it sign). What must never appear
+    /// here is the INSECURE mark, which is for public http.
     func testTheAddressBarShowsThePagesOwnHost() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
 
         XCTAssertTrue(app.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 30),
                       "the address bar shows a host the page is not on")
-        XCTAssertFalse(app.images["explore.secureSite"].exists,
-                       "an http page must not be drawn with a padlock")
+        XCTAssertFalse(app.images["explore.insecure"].exists,
+                       "a loopback dev server is not public http, and is not flagged as it")
 
         attach(app.screenshot(), named: "device-browser-address-bar")
     }
@@ -177,7 +208,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testFavouritesAndRecentsSurviveAForceQuit() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         // The star in the browser toolbar, by its corpus label.
@@ -233,7 +264,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testASiteAsksForAnAccountAndIsAnsweredOnce() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         app.webViews.buttons["Connect"].firstMatch.tap()
@@ -269,14 +300,17 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testThePageReadsAChainAndSwitchesIt() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         // `eth_chainId` needs no permission: it is the wallet's own answer
-        // about itself, from the grant mirror, with no network at all.
+        // about the SITE's chain (spec 070: per origin, kept across launches —
+        // Ethereum for a site never seen, else the site's own), with no
+        // network at all. Which chain depends on this device's history; the
+        // notation does not.
         app.webViews.buttons["Chain"].firstMatch.tap()
-        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_chainId ok \"0x64\""),
-                      "the page was told the wrong chain, or told it in the wrong notation")
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_chainId ok \"0x"),
+                      "the page was told the chain in the wrong notation, or not at all")
 
         // A real read, through this wallet's endpoints for this chain.
         app.webViews.buttons["Block number"].firstMatch.tap()
@@ -288,17 +322,18 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// **`eth_sign` is refused**, and the refusal is not a lie about a human
     /// action.
     ///
-    /// 4900 rather than 4001: nobody declined anything. The same answer the
-    /// extension, the desktop and Android give, checked here on the page's own
-    /// side of the channel.
+    /// 4200 "unsupported method" (spec 070 research R4): nobody declined
+    /// anything (4001), and the wallet is not disconnected (4900, what the
+    /// native shells answered before the core owned the table). The
+    /// extension's answer, now every client's.
     func testEthSignIsRefusedWithoutReachingAnybody() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         app.webViews.buttons["eth_sign"].firstMatch.tap()
-        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_sign err 4900"),
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_sign err 4200"),
                       "eth_sign was not refused as policy")
         attach(app.screenshot(), named: "device-browser-ethsign-refused")
     }
@@ -323,7 +358,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testDustLeavesTheSafeBecauseAPageAskedForIt() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         connect(app)
@@ -402,7 +437,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testTheDappSheetOffersASpeedAndNeverSignsOneItLeft() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
         connect(app)
 
@@ -448,7 +483,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testAnUnlimitedApprovalIsStoppedUntilACapIsNamed() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
         connect(app)
 
@@ -527,7 +562,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testAMessageSignatureVerifiesOnChainThroughTheWalletsOwnProxy() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
         connect(app)
 
@@ -544,6 +579,11 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(slide.waitForExistence(timeout: 20))
         // No network fee to wait for: an off-chain signature costs nothing.
         XCTAssertTrue(slide.isEnabled, "a message signature must not wait for a fee quote")
+        // The parallel space signs with its built-in key: no passkey sheet
+        // follows the slide, and the sheet says so instead of offering
+        // choices it would not use (owner, 2026-09-22).
+        XCTAssertTrue(app.staticTexts["平行空间内置钥匙"].exists,
+                      "the sheet does not say the parallel space's key will sign")
         slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
             .press(forDuration: 0.05,
                    thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))

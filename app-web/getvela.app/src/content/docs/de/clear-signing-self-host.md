@@ -16,17 +16,6 @@ Die Signaturseite gibt es, um das in zwei Teile zu trennen: Die Transaktion komm
 einem Ort, und die Prüfung und die Signatur passieren an einem Ort, den du
 kontrollierst.
 
-**Stand:** gebaut und lokal getestet; **nicht veröffentlicht**, und **noch keine
-Vela-App schickt Anfragen an sie**. Heute kannst du sie lesen, starten und mit den
-Demo-Anfragern im Ordner `samples/` ausprobieren. Um sie für echte Signaturen zu
-nutzen, müssen die Apps ihre Anfragen an sie weiterleiten, und das ist noch zu bauen.
-
-## Was sie ist
-
-Ein Ordner – `app-web/clearsigning` im Repository –, der zugleich eine Webseite und eine
-Chrome-Erweiterung ist. Reines HTML, CSS und JavaScript: kein Framework, kein Bundler,
-kein Build-Schritt, keine Abhängigkeiten und keine Daten von einem Server – ihre
-einzige Anfrage gilt dekorativen Token-Logos.
 
 Bekommt sie eine Signaturanfrage, traut sie der mitgelieferten Zusammenfassung nicht.
 Sie dekodiert die rohe Calldata selbst, berechnet ihren eigenen Digest, zeigt dir, was
@@ -43,18 +32,6 @@ Vela-Schlüssel sind unter `getvela.app` registriert, und ein Browser bietet sie
 einer Seite an, deren Relying Party `getvela.app` ist. Diese eine Regel entscheidet,
 welche Art, deine eigene Kopie zu betreiben, dir etwas nützt.
 
-**Als Chrome-Erweiterung – der Weg, sie mit deinen bestehenden Schlüsseln zu
-nutzen.** Die Relying Party der Erweiterung ist `getvela.app`, egal woher der Ordner
-stammt; deine bestehenden Schlüssel können darin also signieren, während der Code der
-Ordner ist, den du geladen und geprüft hast.
-
-1. Hol dir den Ordner: `git clone https://github.com/mondaylabsltd/vela-wallet`
-   (darin liegt `app-web/clearsigning`).
-2. Öffne `chrome://extensions` und schalte den **Entwicklermodus** ein.
-3. Klicke auf **Entpackte Erweiterung laden** und wähle den Ordner
-   `app-web/clearsigning`.
-4. Das Symbol in der Symbolleiste öffnet die Seite in einem Tab.
-
 **Als Seite auf deiner eigenen Domain oder auf localhost.** Über HTTPS (oder von
 localhost) ausgeliefert, ist die Relying Party der Seite ihr eigener Hostname – sie kann
 also mit Schlüsseln signieren, die unter _diesem_ Hostnamen registriert sind, nicht mit
@@ -64,7 +41,7 @@ signieren, deren Schlüssel auf deiner eigenen Domain erstellt wurde. Für eine
 bestehende `getvela.app`-Wallet kann sie so nicht signieren.
 
 ```sh
-cd app-web/clearsigning
+cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 

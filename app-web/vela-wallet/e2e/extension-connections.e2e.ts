@@ -124,6 +124,11 @@ test.describe('connections', () => {
 		// this one site, and a row that disconnects one must not be labelled with
 		// the words for all of them.
 		await wallet.getByRole('button', { name: 'Disconnect', exact: true }).first().click();
+		// A destructive row asks first, in a sheet titled with the site; the
+		// sheet's own Disconnect is the act.
+		const sheet = wallet.locator('[role=dialog], dialog[open]');
+		await expect(sheet).toContainText(`localhost:${PORT}`);
+		await sheet.getByRole('button', { name: 'Disconnect', exact: true }).click();
 		await expect(row).toHaveCount(0, { timeout: 10_000 });
 
 		// Which is what makes revocation mean something: the site's next request

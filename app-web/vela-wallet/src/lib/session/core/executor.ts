@@ -1,7 +1,7 @@
 /**
  * The session machine's only contact with the outside world.
  *
- * Seven operations, all storage. The machine is app-resident — constructed once
+ * Eight operations, all storage. The machine is app-resident — constructed once
  * per page load and outliving every screen — because "which wallet is this
  * browser signed into" is not a property of any one screen.
  */
@@ -31,6 +31,10 @@ export async function executeSession(effect: SessionEffect): Promise<SessionShel
 
 		case 'check_pending_uploads':
 			return { type: 'pending_uploads', has_pending: Storage.loadPendingUploads().length > 0 };
+
+		case 'remove_account':
+			Storage.removeAccount(operation.address);
+			return { type: 'account_removed' };
 
 		case 'clear_signed_in_wallet':
 			Storage.clearSignedInWallet();
@@ -75,6 +79,11 @@ export function sessionFailure(effect: SessionEffect): SessionShellResult {
 			return { type: 'account_saved' };
 		case 'save_active_index':
 			return { type: 'active_index_saved' };
+		case 'remove_account':
+			// The list is unchanged, and the core's own state already dropped
+			// the row: answering keeps the sequence going, and the next write
+			// re-states the truth.
+			return { type: 'account_removed' };
 		case 'clear_signed_in_wallet':
 			return { type: 'signed_in_wallet_cleared' };
 		case 'clear_extension_cache':

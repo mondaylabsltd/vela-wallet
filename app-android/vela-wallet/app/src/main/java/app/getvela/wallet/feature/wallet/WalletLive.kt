@@ -468,6 +468,11 @@ object WalletLive {
             },
             primary = strings.t(I18nKeys.SettingsUi.ACCOUNT_CREATE),
             secondary = strings.t(I18nKeys.SettingsUi.ACCOUNT_SIGN_IN),
+            // Taking ONE wallet off this device (2026-09-23). The words are
+            // resolved here because the sheet resolves none of its own.
+            remove = strings.t(I18nKeys.SettingsUi.ACCOUNT_REMOVE),
+            removeBody = strings.t(I18nKeys.SettingsUi.ACCOUNT_REMOVE_BODY),
+            removeCancel = strings.t(I18nKeys.Settings.SIGN_OUT_CANCEL),
         )
     }
 

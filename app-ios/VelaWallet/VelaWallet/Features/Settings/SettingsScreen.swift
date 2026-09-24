@@ -32,10 +32,9 @@ struct SettingsEndpointActions {
     var onOpenProviders: () -> Void = {}
 }
 
-/// The three appearance controls' live half.
+/// The two appearance controls' live half.
 struct SettingsAppearanceActions {
     var onTheme: ((String) -> Void)?
-    var onAvatar: ((String) -> Void)?
     var onTextScale: ((Int) -> Void)?
 }
 
@@ -51,16 +50,19 @@ struct SettingsScreen: View {
     var appearance = SettingsAppearanceActions()
     var onPick: ((SettingsOverlay, String) -> Void)?
     var onClearCaches: (() -> Void)?
-    /// One storage row's 清除, by item id (058). Android clears the row's keys
-    /// on the tap, with no second question; matched here rather than inventing
-    /// a confirmation sheet nobody drew — recorded in results.md as a hazard
-    /// the founder may want a gate on.
+    /// One storage row's 清除, by item id (058) — called once the person has
+    /// answered the row's own confirm sheet (the founder's ruling of
+    /// 2026-09-15).
     var onClearStorageItem: ((String) -> Void)?
+    /// Erase, answering whether it happened. `false` keeps the sheet up with
+    /// its failure callout — the person is still signed in (spec 072).
     var onErase: (() -> Void)?
     var onSelectAccount: ((String) -> Void)?
     /// The two ways on from the account sheet. Absent = a fixture board.
     var onAccountCreate: (() -> Void)?
     var onAccountSignIn: (() -> Void)?
+    /// Taking ONE wallet off this device (2026-09-23).
+    var onRemoveAccount: ((Int) -> Void)?
     /// The endpoints and providers pages' live half.
     var endpointActions: SettingsEndpointActions?
     /// The switcher was opened. The balance machine reads every account's
@@ -69,6 +71,16 @@ struct SettingsScreen: View {
     /// "Back up keys to Ethereum" was tapped (spec 062). The host decides
     /// whether there is anything to send.
     var onEthereumBackup: (() -> Void)?
+    /// The Trusted Signer page's Save and reset (spec 071). Save answers whether
+    /// the core took the address.
+    var onSaveSignerUrl: ((String) -> Bool)?
+    var onResetSignerUrl: (() -> Void)?
+    /// The relay's Save and reset (spec 075) — the same pair against the
+    /// other key.
+    /// A link on the page — About's three, the language sheet's "suggest a
+    /// fix", a provider's "Get a key". Absent in the gallery, where a link is
+    /// drawn and goes nowhere on purpose.
+    var onOpenLink: ((String) -> Void)?
     /// What the add-network wizard raises (spec 050).
     ///
     /// Defaulted to no-ops so every gallery board and fixture call site is
@@ -78,12 +90,17 @@ struct SettingsScreen: View {
 
     @State private var page: SettingsPage
     @State private var overlay: SettingsOverlay
-    /// The storage row whose 清除 is waiting on an answer.
-    @State private var pendingStorageItem: StorageItemModel?
-    @State private var pendingStorageWarning = ""
+    /// The destructive action waiting on its answer — a storage row's 清除, a
+    /// network's bin, "reset to defaults" — and what "yes" does. One slot,
+    /// because one sheet asks at a time.
+    @State private var pendingConfirm: PendingConfirm?
     @State private var advancedOpen: Bool
     /// Which network row was tapped, so the detail page is that chain's.
     @State private var selectedNetwork: String?
+    /// Bumped by a confirmed "Reset to defaults": the endpoints page starts
+    /// its fields again from the core's values, not the addresses typed
+    /// before the reset.
+    @State private var endpointsGeneration = 0
 
     init(
         model: SettingsScreenModel,
@@ -100,9 +117,13 @@ struct SettingsScreen: View {
         onSelectAccount: ((String) -> Void)? = nil,
         onAccountCreate: (() -> Void)? = nil,
         onAccountSignIn: (() -> Void)? = nil,
+        onRemoveAccount: ((Int) -> Void)? = nil,
         endpointActions: SettingsEndpointActions? = nil,
         onOpenAccounts: (() -> Void)? = nil,
-        onEthereumBackup: (() -> Void)? = nil
+        onEthereumBackup: (() -> Void)? = nil,
+        onSaveSignerUrl: ((String) -> Bool)? = nil,
+        onResetSignerUrl: (() -> Void)? = nil,
+        onOpenLink: ((String) -> Void)? = nil
     ) {
         self.model = model
         self.loc = loc
@@ -118,9 +139,13 @@ struct SettingsScreen: View {
         self.onSelectAccount = onSelectAccount
         self.onAccountCreate = onAccountCreate
         self.onAccountSignIn = onAccountSignIn
+        self.onRemoveAccount = onRemoveAccount
         self.endpointActions = endpointActions
         self.onOpenAccounts = onOpenAccounts
         self.onEthereumBackup = onEthereumBackup
+        self.onSaveSignerUrl = onSaveSignerUrl
+        self.onResetSignerUrl = onResetSignerUrl
+        self.onOpenLink = onOpenLink
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -157,6 +182,16 @@ struct SettingsScreen: View {
                 )
             }
             .background(theme.bgBase.ignoresSafeArea())
+            // The endpoints and providers pages ask the core to read and probe
+            // what is stored when they are SHOWN — not whenever Settings
+            // opens, and whichever way the page was reached.
+            .task(id: page) {
+                switch page {
+                case .endpoints: endpointActions?.onOpenEndpoints()
+                case .rpcProviders: endpointActions?.onOpenProviders()
+                default: break
+                }
+            }
             .sheet(item: sheetBinding) { overlay in
                 SettingsSheet(
                     model: model, overlay: overlay,
@@ -194,19 +229,21 @@ struct SettingsScreen: View {
                             go()
                         }
                     },
-                    storageConfirm: pendingStorageItem.map { item in
-                        ConfirmSheetModel(
-                            title: item.label,
-                            body: pendingStorageWarning,
-                            confirm: item.action,
-                            cancel: model.clearCachesSheet.cancel,
-                            danger: item.destructive
-                        )
+                    // The sheet closes because the list under it just changed.
+                    onRemoveAccount: onRemoveAccount.map { remove in
+                        { index in
+                            self.overlay = .none
+                            remove(index)
+                        }
                     },
-                    onConfirmStorage: {
-                        if let id = pendingStorageItem?.id { onClearStorageItem?(id) }
-                        pendingStorageItem = nil
-                    }
+                    pendingConfirm: pendingConfirm?.sheet,
+                    onConfirmPending: {
+                        pendingConfirm?.action()
+                        pendingConfirm = nil
+                    },
+                    onSaveSignerUrl: onSaveSignerUrl,
+                    onResetSignerUrl: onResetSignerUrl,
+                    onOpenLink: onOpenLink
                 )
                     .themed(theme.scheme)
             }
@@ -269,10 +306,31 @@ struct SettingsScreen: View {
         switch page {
         case .home: homeBody
         case .networks: networksBody
-        case .networkDetail: NetworkDetailBody(detail: networkDetail)
+        case .networkDetail:
+            NetworkDetailBody(
+                detail: networkDetail,
+                chainId: selectedChainId,
+                actions: networkActions
+            )
+            // A different network is a different page: its drafts start
+            // from ITS values, not the last one's half-typed URL.
+            .id(selectedNetwork)
         case .addNetwork: AddNetworkBody(panel: model.addNetwork, actions: networkActions)
-        case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders, actions: endpointActions)
-        case .endpoints: EndpointsBody(panel: model.endpoints, actions: endpointActions)
+        case .rpcProviders:
+            RpcProvidersBody(panel: model.rpcProviders, actions: endpointActions, onOpenLink: onOpenLink)
+        case .endpoints:
+            EndpointsBody(
+                panel: model.endpoints,
+                actions: endpointActions,
+                onReset: endpointActions == nil ? nil : {
+                    let reset = endpointActions?.onResetEndpoints
+                    ask(SettingsLive.resetEndpointsConfirm(loc: loc), in: .resetEndpoints) {
+                        reset?()
+                        endpointsGeneration += 1
+                    }
+                }
+            )
+            .id(endpointsGeneration)
         case .storage: StorageBody(
             panel: model.storage,
             onClearCaches: { overlay = .clearCaches },
@@ -282,14 +340,29 @@ struct SettingsScreen: View {
             onClearItem: onClearStorageItem == nil ? nil : { id in
                 guard let item = model.storage.groups
                     .flatMap(\.items).first(where: { $0.id == id }) else { return }
-                pendingStorageItem = item
-                pendingStorageWarning = model.storage.groups
+                let warning = model.storage.groups
                     .first { $0.items.contains { $0.id == id } }?.label ?? ""
-                overlay = .clearStorageItem
+                let clear = onClearStorageItem
+                ask(
+                    ConfirmSheetModel(
+                        title: item.label,
+                        body: warning,
+                        confirm: item.action,
+                        cancel: model.clearCachesSheet.cancel,
+                        danger: item.destructive
+                    ),
+                    in: .clearStorageItem
+                ) { clear?(id) }
             }
         )
-        case .about: AboutBody(panel: model.about)
+        case .about: AboutBody(panel: model.about, onOpenLink: onOpenLink)
         }
+    }
+
+    /// Raise one of the confirm sheets, with what its "yes" does.
+    private func ask(_ sheet: ConfirmSheetModel, in overlay: SettingsOverlay, then action: @escaping () -> Void) {
+        pendingConfirm = PendingConfirm(sheet: sheet, action: action)
+        self.overlay = overlay
     }
 
     @ViewBuilder private var homeBody: some View {
@@ -317,13 +390,11 @@ struct SettingsScreen: View {
                     SettingsRow(row: row, divider: index < section.rows.count - 1, onTap: select)
                 }
             }
-            // The three appearance controls are not rows: they are the control
+            // The two appearance controls are not rows: they are the control
             // itself, shown inline under 语言 (ST1).
             if section.appearanceControls {
                 TextScaleSlider(model: model.textScale, onSelect: appearance.onTextScale)
                 SettingsSegmentedControl(model: model.theme, onSelect: { appearance.onTheme?($0) })
-                    .padding(.bottom, Tokens.Space.s12)
-                SettingsSegmentedControl(model: model.avatar, onSelect: { appearance.onAvatar?($0) })
             }
         }
 
@@ -356,11 +427,23 @@ struct SettingsScreen: View {
             // lie the moment the list went live: every row opened Ethereum's
             // page, so tapping Gnosis showed another chain's RPC under Gnosis's
             // name. `selectedNetwork` is what the detail is then built from.
-            SettingsNetworkRow(row: row, deleteLabel: model.addNetworkLabel) { id in
-                selectedNetwork = id
-                page = .networkDetail
-                if let chainId = row.chainId { networkActions.onOpenNetwork(chainId) }
-            }
+            SettingsNetworkRow(
+                row: row,
+                deleteLabel: loc.t(I18nKeys.SettingsUi.networkRemoveTitle),
+                onTap: { id in
+                    selectedNetwork = id
+                    page = .networkDetail
+                    if let chainId = row.chainId { networkActions.onOpenNetwork(chainId) }
+                },
+                // The bin asks, naming the network (spec 072 FR-010); it was a
+                // drawing of a bin until now.
+                onRemove: networkActions.isLive ? { id in
+                    let remove = networkActions.onRemoveNetwork
+                    ask(SettingsLive.removeNetworkConfirm(row, loc: loc), in: .removeNetwork) {
+                        remove(id)
+                    }
+                } : nil
+            )
         }
         // A link, not a CTA: adding a network is navigation, and accent is
         // reserved for actions that move value.
@@ -374,7 +457,21 @@ struct SettingsScreen: View {
         .frame(maxWidth: .infinity, minHeight: 44)
         .padding(.top, Tokens.Space.s24)
         .contentShape(Rectangle())
-        .onTapGesture { page = .addNetwork }
+        .onTapGesture { openAddNetwork() }
+    }
+
+    /// The wizard opens EMPTY: whatever was half-found the last time is the
+    /// core's to forget (`wizard_reset`), or the page reopens on a chain
+    /// nobody asked about this time.
+    private func openAddNetwork() {
+        networkActions.onOpenAddNetwork()
+        page = .addNetwork
+    }
+
+    /// The chain the detail page is about, for the events its fields raise.
+    private var selectedChainId: Int? {
+        guard let selectedNetwork else { return nil }
+        return model.networks.first { $0.id == selectedNetwork }?.chainId
     }
 
     /// The detail for the row that was tapped.
@@ -396,13 +493,15 @@ struct SettingsScreen: View {
         case "contacts": onOpenContacts()
         case "networks": page = .networks
         case "rpc-providers": page = .rpcProviders
-        case "add-network": page = .addNetwork
+        case "add-network": openAddNetwork()
         case "endpoints": page = .endpoints
         case "storage": page = .storage
         case "about": page = .about
         case "language": overlay = .language
         case "currency": overlay = .currency
         case SettingsFixtures.feeSpeedRow: overlay = .feeSpeed
+        case SettingsFixtures.signWithRow: overlay = .signWith
+        case SettingsFixtures.signerPageRow: if model.signerPage != nil { overlay = .signerPage }
         case "number-format": overlay = .numberFormat
         case "date-format": overlay = .dateFormat
         case "time-format": overlay = .timeFormat
@@ -411,6 +510,12 @@ struct SettingsScreen: View {
         default: break
         }
     }
+}
+
+/// A question a destructive action waits on, and what "yes" does.
+struct PendingConfirm {
+    let sheet: ConfirmSheetModel
+    let action: () -> Void
 }
 
 /// Back arrow + title + optional second line (ST9/ST9b/ST10/ST11/ST12/…).
@@ -452,6 +557,16 @@ private struct SettingsNavHeader: View {
 private struct NetworkDetailBody: View {
     @Environment(\.theme) private var theme
     let detail: NetworkDetailModel
+    /// The chain the fields edit; `nil` on a fixture board, whose fields stay
+    /// drawn.
+    var chainId: Int?
+    var actions = SettingsNetworkActions()
+
+    /// What is being typed, per field. Local for the reason every field here
+    /// is: a field bound straight to a machine loses characters on the round
+    /// trip. The core hears each keystroke (it probes as the person types)
+    /// and the blur — which is when it saves, behind its wrong-chain check.
+    @State private var drafts: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s24) {
@@ -468,10 +583,28 @@ private struct NetworkDetailBody: View {
                 Spacer()
                 StatusPill(pill: detail.badge)
             }
-            SettingsUrlField(field: detail.rpc)
+            field(detail.rpc)
             if let callout = detail.callout { SettingsCallout(callout: callout) }
-            SettingsUrlField(field: detail.explorer)
+            field(detail.explorer)
         }
+    }
+
+    private func field(_ model: UrlFieldModel) -> some View {
+        let live = actions.isLive ? chainId : nil
+        return SettingsUrlField(
+            field: model,
+            text: live.map { chainId in
+                Binding(
+                    get: { drafts[model.id] ?? model.value },
+                    set: { value in
+                        drafts[model.id] = value
+                        actions.onEditOverride(chainId, model.id, value)
+                    }
+                )
+            },
+            onCommit: { if let live { actions.onCommitOverride(live) } },
+            commitsOnBlur: true
+        )
     }
 }
 
@@ -522,6 +655,11 @@ private struct AddNetworkBody: View {
                 if let primary = panel.primary {
                     VelaButton(title: primary, kind: .primary) { actions.onConfirmAdd() }
                 }
+                // "Retry" is a check, not an add: the chain could not be
+                // reached, so nothing was learned that could let it in.
+                if let retry = panel.retry {
+                    VelaButton(title: retry, kind: .primary) { actions.onRecheck(customRpc) }
+                }
                 if let secondary = panel.secondary {
                     // "Open chain setup tool" — the one thing the wallet just
                     // told an incompatible chain's owner to do, and it did
@@ -534,13 +672,20 @@ private struct AddNetworkBody: View {
                     }
                 }
                 if let recheck = panel.recheck {
-                    Text(recheck)
-                        .typeRole(Typography.flowCaption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(theme.infoBase)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, Tokens.Space.s8)
-                        .onTapGesture { actions.onEditCustomRpc(customRpc) }
+                    // Checks the chain AGAIN, through the RPC typed above. It
+                    // used to hand the core the RPC and nothing else, so the
+                    // link took the tap and re-checked nothing.
+                    Button { actions.onRecheck(customRpc) } label: {
+                        Text(recheck)
+                            .typeRole(Typography.flowCaption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(theme.infoBase)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, Tokens.Space.s8)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!actions.isLive)
                 }
             } else {
                 SettingsUrlField(
@@ -580,9 +725,19 @@ private struct AddNetworkBody: View {
 struct SettingsNetworkActions {
     /// A network's detail page opened — the core probes it from here.
     var onOpenNetwork: (Int) -> Void = { _ in }
+    /// One field of that page (`rpc` / `explorer`), per keystroke, and its
+    /// commit — on Return or on leaving the field (spec 072).
+    var onEditOverride: (Int, String, String) -> Void = { _, _, _ in }
+    var onCommitOverride: (Int) -> Void = { _ in }
+    /// A custom network's bin, once the person has said yes.
+    var onRemoveNetwork: (String) -> Void = { _ in }
+    /// The wizard is opening — it starts empty.
+    var onOpenAddNetwork: () -> Void = {}
     var onSearch: (String) -> Void = { _ in }
     var onSelectChain: (Int) -> Void = { _ in }
     var onEditCustomRpc: (String) -> Void = { _ in }
+    /// "Re-check with this RPC" / "Retry", with the RPC typed.
+    var onRecheck: (String) -> Void = { _ in }
     var onConfirmAdd: () -> Void = {}
     /// `false` for fixtures — the fields render as `Text`, exactly as drawn.
     var isLive = false
@@ -594,6 +749,7 @@ private struct RpcProvidersBody: View {
     /// The live half. Absent in the gallery, where the page is a picture of
     /// keys somebody already entered.
     var actions: SettingsEndpointActions?
+    var onOpenLink: ((String) -> Void)?
 
     /// What is being typed, per provider. Local for the reason every field in
     /// this app is: a field bound straight to a machine loses characters on the
@@ -622,6 +778,7 @@ private struct RpcProvidersBody: View {
                         field: provider.field,
                         text: actions.map { _ in binding(for: provider.field) },
                         onCommit: { actions?.onBlurProvider(provider.field.id) },
+                        commitsOnBlur: true,
                         onAction: actions.map { a in { a.onTestProvider(provider.field.id) } }
                     )
                     if let support = provider.support {
@@ -646,18 +803,19 @@ private struct RpcProvidersBody: View {
                                 .foregroundStyle(theme.infoBase)
                         }
                     }
-                    if let actions, let test = provider.test {
-                        Button { actions.onTestProvider(provider.field.id) } label: {
-                            Text(verbatim: test)
-                                .typeRole(Typography.flowCaption)
-                                .foregroundStyle(theme.accentBase)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
                 }
             }
         }
+    }
+
+    /// The field's own action: no key yet → the provider's page to get one;
+    /// a key → test it.
+    private func action(for provider: ProviderCardModel) -> (() -> Void)? {
+        guard let actions else { return nil }
+        if let url = provider.linkUrl {
+            return onOpenLink.map { open in { open(url) } }
+        }
+        return { actions.onTestProvider(provider.field.id) }
     }
 
     private func binding(for field: UrlFieldModel) -> Binding<String> {
@@ -689,6 +847,9 @@ private struct EndpointsBody: View {
     @Environment(\.theme) private var theme
     let panel: EndpointsModel
     var actions: SettingsEndpointActions?
+    /// "Reset to defaults" — asked first by the screen (it replaces every
+    /// address typed here).
+    var onReset: (() -> Void)?
 
     @State private var drafts: [String: String] = [:]
 
@@ -712,17 +873,19 @@ private struct EndpointsBody: View {
                     // not on every keystroke: the core probes an endpoint when
                     // it is blurred, and probing each half-typed prefix would
                     // be a request per character.
-                    onCommit: { actions?.onBlurEndpoint(field.id) }
+                    onCommit: { actions?.onBlurEndpoint(field.id) },
+                    commitsOnBlur: true
                 )
             }
-            Button {
-                // What was typed is no longer what is stored, so the local
-                // drafts have to go with it: keeping them would leave the four
-                // boxes showing the replaced URLs over a core that had already
-                // restored the defaults — a reset that looks like it failed.
-                drafts.removeAll()
-                actions?.onResetEndpoints()
-            } label: {
+            // The local drafts go with the reset — otherwise the four boxes
+            // keep showing the replaced URLs over a core that has already
+            // restored the defaults, which reads as a reset that failed
+            // (main, spec 081). Here that happens by rebuilding the body:
+            // `onReset` bumps `endpointsGeneration`, the body is `.id`'d on it,
+            // and a fresh view has no drafts. The confirmation this button
+            // raises is 072 FR-010's — resetting four endpoints is destructive
+            // and asks first.
+            Button { onReset?() } label: {
                 HStack(spacing: Tokens.Space.s8) {
                     LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
                     Text(panel.reset).typeRole(Typography.flowCaption)
@@ -732,7 +895,7 @@ private struct EndpointsBody: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(actions == nil)
+            .disabled(onReset == nil)
             .padding(.top, Tokens.Space.s16)
         }
     }
@@ -781,6 +944,7 @@ private struct StorageBody: View {
 private struct AboutBody: View {
     @Environment(\.theme) private var theme
     let panel: AboutModel
+    var onOpenLink: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -803,7 +967,7 @@ private struct AboutBody: View {
             ForEach(panel.rows) { KeyValueRow(row: $0) }
 
             Spacer().frame(height: Tokens.Space.s24)
-            ForEach(panel.links) { KeyValueRow(row: $0) }
+            ForEach(panel.links) { KeyValueRow(row: $0, onOpen: onOpenLink) }
 
             Text(panel.footer)
                 .typeRole(Typography.label)

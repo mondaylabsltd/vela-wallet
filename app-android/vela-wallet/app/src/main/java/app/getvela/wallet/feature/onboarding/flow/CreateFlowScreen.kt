@@ -104,6 +104,8 @@ fun CreateFlowScreen(
                 canFinish = view.canFinish,
                 needsSecondKey = view.needsSecondKey,
                 busy = view.busy,
+                addMethods = view.addMethods,
+                addBlocked = view.addBlocked,
                 onAddKey = model::addKey,
                 onConfirmKey = model::confirmKey,
                 onRemoveKey = model::removeKey,
