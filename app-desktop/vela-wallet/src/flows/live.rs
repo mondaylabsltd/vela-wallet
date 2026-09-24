@@ -508,86 +508,245 @@ fn stamp(timestamp_sec: f64, s: &FlowStrings, locale: &str) -> String {
 /// added. This turns that into the drawing.
 #[must_use]
 pub fn add_token(view: &MtokView, s: &FlowStrings) -> crate::flows::fixtures::AddToken {
+    use crate::flows::fixtures::{AddTokenResult, StatusChip, StatusTone};
     let found = view.found.first();
+    let typed = !view.input_address.trim().is_empty();
+    // The web's `liveAddToken`, state for state (078 F-07): searching and
+    // not-found are a line, not a card; a found token is a card, with
+    // "Added" when it is already in the wallet; nothing typed says nothing.
+    let result = if view.detecting {
+        AddTokenResult::Note(s.searching_networks.clone())
+    } else if let Some(found) = found {
+        AddTokenResult::Token {
+            mark: TokenMark {
+                ticker: SharedString::from(found.symbol.clone()),
+                badge: tint(found.chain_id),
+                logos: crate::marks::token_logos(
+                    found.chain_id,
+                    &found.symbol,
+                    view.input_address.as_str().into(),
+                    &[],
+                ),
+            },
+            name: SharedString::from(found.name.clone()),
+            // The mock's own order: symbol, scale, network. The SCALE is on
+            // the card because adding a token at the wrong one renders every
+            // amount at the wrong magnitude, and this is the last screen where
+            // somebody can notice.
+            detail: SharedString::from(format!(
+                "{} · {} {} · {}",
+                found.symbol, s.label_decimals, found.decimals, found.network_name
+            )),
+            chip: found.added.then(|| StatusChip {
+                text: s.token_added.clone(),
+                tone: StatusTone::Success,
+            }),
+        }
+    } else if view.native_alias {
+        // A native coin that also answers an ERC-20 interface is FOUND by the
+        // probe and refused with a reason (spec 060) — not "not found".
+        AddTokenResult::Note(SharedString::from(format!(
+            "{} — {}",
+            s.native_alias_title, s.native_alias_message
+        )))
+    } else if view.not_found {
+        AddTokenResult::Note(SharedString::from(format!(
+            "{} — {}",
+            s.not_found_title, s.not_found_message
+        )))
+    } else {
+        AddTokenResult::Empty
+    };
     crate::flows::fixtures::AddToken {
         tab_erc20: s.tab_erc20.clone(),
         tab_native: s.tab_native.clone(),
-        // The native tab adds a NETWORK, which is the settings screen's job on
-        // this client. One tab, honestly labelled, beats a second that leads
-        // somewhere the desktop does not go.
         native: false,
         // No network row: the core searches EVERY network at once and reports
         // the ones where the contract resolved, so there is nothing to pick.
         network: None,
         field_label: s.token_address_label.clone(),
         field_value: SharedString::from(view.input_address.clone()),
-        result: match found {
-            Some(found) => crate::flows::fixtures::AddTokenResult::Token {
-                mark: TokenMark {
-                    ticker: SharedString::from(found.symbol.clone()),
-                    badge: tint(found.chain_id),
-                    logos: crate::marks::token_logos(
-                        found.chain_id,
-                        &found.symbol,
-                        view.input_address.as_str().into(),
-                        &[],
-                    ),
-                },
-                name: SharedString::from(found.name.clone()),
-                // The mock's own order and separators: symbol, scale, network.
-                // The SCALE is on the card because adding a token at the wrong
-                // one renders every amount at the wrong magnitude, and this is
-                // the last screen where somebody can notice.
-                detail: SharedString::from(format!(
-                    "{} · {} {} · {}",
-                    found.symbol, s.label_decimals, found.decimals, found.network_name
-                )),
-            },
-            // Nothing found yet — or nothing to find. The card states which,
-            // because "not found" and "not searched" are different answers and
-            // an empty card says neither.
-            None => crate::flows::fixtures::AddTokenResult::Token {
-                mark: TokenMark {
-                    ticker: SharedString::from(""),
-                    badge: gpui::rgb(0x8A_8F_98).into(),
-                    logos: crate::marks::Logos::default(),
-                },
-                // A native coin that also answers an ERC-20 interface is FOUND
-                // by the probe and refused by the core with a reason (spec
-                // 060) — "not found" would be the wrong words for it.
-                name: if view.native_alias {
-                    s.native_alias_title.clone()
-                } else if view.not_found {
-                    s.not_found_title.clone()
-                } else if view.detecting {
-                    s.searching_networks.clone()
-                } else {
-                    s.search_token_btn.clone()
-                },
-                detail: if view.native_alias {
-                    s.native_alias_message.clone()
-                } else if view.not_found {
-                    s.not_found_message.clone()
-                } else {
-                    SharedString::from("")
-                },
-            },
-        },
-        // The write failed — the core raises the flag and the corpus has the
-        // sentence; without it the button simply does nothing, twice.
-        notice: view.save_error.then(|| SendNotice {
-            dismiss: None,
-            title: Some(s.add_token_error_title.clone()),
-            body: s.add_token_error_save.clone(),
-            detail: None,
-            action: None,
-            error: true,
-        }),
-        cta: if view.saving {
-            s.searching_networks.clone()
+        field_placeholder: SharedString::from("0x…"),
+        // The field says what is wrong with it: a write that failed, or a
+        // string that is not a contract address.
+        field_error: if view.save_error {
+            Some(s.add_token_error_save.clone())
+        } else if typed && !view.address_valid {
+            Some(s.invalid_contract.clone())
         } else {
-            s.add_to_wallet.clone()
+            None
         },
+        result,
+        notice: None,
+        cta: s.add_to_wallet.clone(),
+        cta_disabled: found.is_none_or(|found| found.added) || view.saving,
+    }
+}
+
+/// The native tab — a NETWORK by name or chain ID (the web's
+/// `liveAddNetworkTab`, 078 F-07), driven by the same `network_admin` wizard
+/// the settings screen's Add Network runs. `added` is the chain this panel
+/// just added: the core resets its wizard on the add, so the panel keeps what
+/// it confirmed to say so.
+#[must_use]
+pub fn add_network_tab(
+    wizard: &vela_core::app::network_admin::NetWizardView,
+    query: &str,
+    added: Option<&vela_core::app::network_admin::NetChainInfo>,
+    s: &FlowStrings,
+) -> crate::flows::fixtures::AddToken {
+    use crate::flows::fixtures::{
+        AddTokenResult, FactLead, FactRow, NetworkSuggestion, StatusChip, StatusTone,
+    };
+    use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
+
+    let mark_of = |chain_id: u32, symbol: &str| TokenMark {
+        ticker: SharedString::from(symbol.to_owned()),
+        badge: tint(chain_id),
+        logos: crate::marks::token_logos(chain_id, symbol, None, &[]),
+    };
+    let facts = |chain_id: u32, symbol: &str| {
+        vec![
+            FactRow {
+                label: s.label_chain_id.clone(),
+                value: SharedString::from(chain_id.to_string()),
+                lead: FactLead::None,
+                mono: false,
+                copy: None,
+                note: None,
+            },
+            FactRow {
+                label: s.label_native_token.clone(),
+                value: SharedString::from(symbol.to_owned()),
+                lead: FactLead::None,
+                mono: false,
+                copy: None,
+                note: None,
+            },
+        ]
+    };
+    let info = wizard.chain_info.as_ref();
+    let card = |text: SharedString, tone: StatusTone, link: Option<SharedString>| {
+        let (chain_id, name, symbol) = match info {
+            Some(info) => (info.chain_id, info.name.clone(), info.native_symbol.clone()),
+            None => (0, query.to_owned(), String::new()),
+        };
+        AddTokenResult::Network {
+            mark: mark_of(chain_id, &symbol),
+            name: SharedString::from(name),
+            chip: StatusChip { text, tone },
+            link,
+            facts: if info.is_some() {
+                facts(chain_id, &symbol)
+            } else {
+                Vec::new()
+            },
+        }
+    };
+    let not_found = || {
+        AddTokenResult::Note(SharedString::from(
+            s.net_picker_empty.replace("{{query}}", query),
+        ))
+    };
+    let incompatible = || {
+        card(
+            s.not_compatible.clone(),
+            StatusTone::Error,
+            Some(SharedString::from(format!(
+                "{} · {}",
+                s.error_not_compatible, s.deploy_contracts
+            ))),
+        )
+    };
+
+    let mut can_add = false;
+    let result = if let Some(added) = added {
+        AddTokenResult::Network {
+            mark: mark_of(added.chain_id, &added.native_symbol),
+            name: SharedString::from(added.name.clone()),
+            chip: StatusChip {
+                text: s.network_added.clone(),
+                tone: StatusTone::Success,
+            },
+            link: None,
+            facts: facts(added.chain_id, &added.native_symbol),
+        }
+    } else if query.trim().is_empty() {
+        AddTokenResult::Empty
+    } else {
+        match wizard.phase {
+            NetWizardPhase::Searching => AddTokenResult::Note(s.searching_networks.clone()),
+            NetWizardPhase::Idle | NetWizardPhase::Suggested => {
+                if wizard.suggestions.is_empty() {
+                    not_found()
+                } else {
+                    AddTokenResult::Suggestions(
+                        wizard
+                            .suggestions
+                            .iter()
+                            .map(|entry| NetworkSuggestion {
+                                chain_id: entry.chain_id,
+                                mark: mark_of(entry.chain_id, &entry.native_currency_symbol),
+                                name: SharedString::from(entry.name.clone()),
+                                meta: SharedString::from(format!(
+                                    "{} {}",
+                                    s.label_chain_id, entry.chain_id
+                                )),
+                            })
+                            .collect(),
+                    )
+                }
+            }
+            NetWizardPhase::Resolving | NetWizardPhase::Checking => {
+                card(s.searching_networks.clone(), StatusTone::Info, None)
+            }
+            NetWizardPhase::Error => match &wizard.error {
+                None | Some(NetWizardErrorKind::NotFound { .. }) => not_found(),
+                Some(NetWizardErrorKind::AlreadyAdded { chain_id }) => {
+                    let symbol = info.map_or_else(
+                        || native_symbol(*chain_id),
+                        |info| info.native_symbol.clone(),
+                    );
+                    AddTokenResult::Network {
+                        mark: mark_of(*chain_id, &symbol),
+                        name: SharedString::from(
+                            info.map_or_else(|| chain_name(*chain_id), |info| info.name.clone()),
+                        ),
+                        chip: StatusChip {
+                            text: s.network_added.clone(),
+                            tone: StatusTone::Success,
+                        },
+                        link: None,
+                        facts: facts(*chain_id, &symbol),
+                    }
+                }
+                Some(_) => incompatible(),
+            },
+            NetWizardPhase::Checked => match &wizard.compat {
+                Some(compat) if compat.rpc_failure.is_none() && compat.compatible => {
+                    can_add = wizard.can_add;
+                    card(s.compatible.clone(), StatusTone::Success, None)
+                }
+                Some(compat) if compat.rpc_failure.is_none() => incompatible(),
+                // Inconclusive is never "not compatible" (invariant ③).
+                _ => card(s.unable_to_verify.clone(), StatusTone::Warning, None),
+            },
+        }
+    };
+
+    crate::flows::fixtures::AddToken {
+        tab_erc20: s.tab_erc20.clone(),
+        tab_native: s.tab_native.clone(),
+        native: true,
+        network: None,
+        field_label: s.net_search_label.clone(),
+        field_value: SharedString::from(query.to_owned()),
+        field_placeholder: s.net_search_placeholder.clone(),
+        field_error: None,
+        result,
+        notice: None,
+        cta: s.add_network_btn.clone(),
+        cta_disabled: !can_add,
     }
 }
 
@@ -4051,9 +4210,13 @@ mod tests {
         });
     }
 
-    /// The add-token card says which of three things is true, never nothing.
+    /// The add-token panel says which thing is true, the web's way (078
+    /// F-07): nothing typed says nothing; searching and not-found are a line;
+    /// a found token is a card, "Added" when it is already there; and the CTA
+    /// acts only when there is something new to add.
     #[test]
-    fn the_add_token_card_distinguishes_searching_from_not_found() {
+    fn the_add_token_panel_distinguishes_its_states() {
+        use crate::flows::fixtures::AddTokenResult;
         use vela_core::app::manage_tokens::{Event as MtokEvent, ManageTokens, MtokFound};
 
         let mut host = CoreHost::<ManageTokens>::new();
@@ -4061,39 +4224,36 @@ mod tests {
         let base = host.view();
         let s = strings();
 
-        // Nothing typed yet: the card invites a search.
         let idle = add_token(&base, &s);
         assert_eq!(idle.field_value, "");
-        match &idle.result {
-            crate::flows::fixtures::AddTokenResult::Token { name, .. } => {
-                assert_eq!(*name, s.search_token_btn);
-            }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => {
-                unreachable!("the ERC-20 tab does not draw a network card")
-            }
-        }
+        assert!(matches!(idle.result, AddTokenResult::Empty));
+        assert!(idle.cta_disabled, "nothing found, nothing to add");
+        assert_eq!(idle.field_error, None);
 
-        // Searching.
         let mut looking = base.clone();
         looking.detecting = true;
         looking.input_address = "0xaaa".to_owned();
         match &add_token(&looking, &s).result {
-            crate::flows::fixtures::AddTokenResult::Token { name, .. } => {
-                assert_eq!(*name, s.searching_networks);
-            }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+            AddTokenResult::Note(line) => assert_eq!(*line, s.searching_networks),
+            _ => unreachable!("searching is a line"),
         }
 
-        // Searched, and there is nothing there — which is a different answer
-        // from "not searched", and the card has to say which.
+        let mut bad = base.clone();
+        bad.input_address = "0xnope".to_owned();
+        bad.address_valid = false;
+        assert_eq!(
+            add_token(&bad, &s).field_error,
+            Some(s.invalid_contract.clone())
+        );
+
         let mut missing = base.clone();
         missing.not_found = true;
         match &add_token(&missing, &s).result {
-            crate::flows::fixtures::AddTokenResult::Token { name, detail, .. } => {
-                assert_eq!(*name, s.not_found_title);
-                assert_eq!(*detail, s.not_found_message);
+            AddTokenResult::Note(line) => {
+                assert!(line.contains(s.not_found_title.as_ref()));
+                assert!(line.contains(s.not_found_message.as_ref()));
             }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+            _ => unreachable!("not found is a line"),
         }
 
         // A native coin that also answers an ERC-20 interface: refused with
@@ -4101,15 +4261,13 @@ mod tests {
         let mut native = base.clone();
         native.native_alias = true;
         match &add_token(&native, &s).result {
-            crate::flows::fixtures::AddTokenResult::Token { name, detail, .. } => {
-                assert_eq!(*name, s.native_alias_title);
-                assert_eq!(*detail, s.native_alias_message);
-                assert_ne!(*name, s.not_found_title);
+            AddTokenResult::Note(line) => {
+                assert!(line.contains(s.native_alias_title.as_ref()));
+                assert!(!line.contains(s.not_found_title.as_ref()));
             }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+            _ => unreachable!(),
         }
 
-        // Found: the token, its network and its scale.
         let mut found = base;
         found.found = vec![MtokFound {
             chain_id: 100,
@@ -4121,17 +4279,68 @@ mod tests {
         }];
         let card = add_token(&found, &s);
         match &card.result {
-            crate::flows::fixtures::AddTokenResult::Token { mark, name, detail } => {
+            AddTokenResult::Token {
+                mark,
+                name,
+                detail,
+                chip,
+            } => {
                 assert_eq!(*name, "USD Coin");
                 assert_eq!(mark.ticker, "USDC");
                 assert!(detail.contains("Gnosis"));
-                // The scale is on the card, because adding a token at the wrong
-                // one renders every amount at the wrong magnitude.
                 assert!(detail.contains('6'), "no decimals: {detail}");
+                assert!(chip.is_none());
             }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+            _ => unreachable!(),
         }
-        assert_eq!(card.cta, s.add_to_wallet);
+        assert!(!card.cta_disabled);
+
+        found.found[0].added = true;
+        let card = add_token(&found, &s);
+        assert!(matches!(
+            &card.result,
+            AddTokenResult::Token { chip: Some(_), .. }
+        ));
+        assert!(card.cta_disabled, "an added token is not added twice");
+    }
+
+    /// The native tab: nothing typed says nothing and cannot add; a query the
+    /// index matches offers its chains; one it does not says so.
+    #[test]
+    fn the_native_tab_offers_the_chains_it_matched() {
+        use crate::flows::fixtures::AddTokenResult;
+        use vela_core::app::network_admin::{NetChainIndexEntry, NetWizardPhase};
+        let s = strings();
+        let mut wizard = CoreHost::<vela_core::app::network_admin::NetworkAdmin>::new()
+            .view()
+            .wizard;
+
+        let idle = add_network_tab(&wizard, "", None, &s);
+        assert!(idle.native);
+        assert!(matches!(idle.result, AddTokenResult::Empty));
+        assert!(idle.cta_disabled);
+
+        wizard.phase = NetWizardPhase::Suggested;
+        wizard.suggestions = vec![NetChainIndexEntry {
+            chain_id: 43_114,
+            name: "Avalanche".to_owned(),
+            short_name: "avax".to_owned(),
+            native_currency_symbol: "AVAX".to_owned(),
+            has_logo: true,
+        }];
+        match add_network_tab(&wizard, "aval", None, &s).result {
+            AddTokenResult::Suggestions(rows) => {
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].chain_id, 43_114);
+            }
+            _ => unreachable!("a match is offered"),
+        }
+
+        wizard.suggestions.clear();
+        match add_network_tab(&wizard, "zzz", None, &s).result {
+            AddTokenResult::Note(line) => assert!(line.contains("zzz")),
+            _ => unreachable!("no match says so"),
+        }
     }
 
     /// A transaction's detail, and the row order the listeners are bound in.

@@ -288,6 +288,17 @@ pub struct FlowStrings {
     pub add_network_btn: SharedString,
     pub add_token_error_title: SharedString,
     pub add_token_error_save: SharedString,
+    /// DT3L live, as the web's `liveAddToken` / `liveAddNetworkTab` word it
+    /// (078 F-07).
+    pub invalid_contract: SharedString,
+    pub token_added: SharedString,
+    /// Template carrying `{{query}}`.
+    pub net_picker_empty: String,
+    pub network_added: SharedString,
+    pub not_compatible: SharedString,
+    pub error_not_compatible: SharedString,
+    pub deploy_contracts: SharedString,
+    pub unable_to_verify: SharedString,
 
     // Send.
     /// The plain verb, not the "Send {{symbol}}" template — DSD4L's bar keeps
@@ -598,6 +609,14 @@ impl FlowStrings {
             add_network_btn: s("addToken.addNetworkBtn"),
             add_token_error_title: s("addToken.errorTitle"),
             add_token_error_save: s("addToken.errorSaveToken"),
+            invalid_contract: s("addToken.invalidAddress"),
+            token_added: s("addToken.tokenAdded"),
+            net_picker_empty: raw("addToken.netPickerEmpty"),
+            network_added: s("addToken.networkAdded"),
+            not_compatible: s("addToken.notCompatible"),
+            error_not_compatible: s("addToken.errorNotCompatible"),
+            deploy_contracts: s("addToken.deployContracts"),
+            unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
 
             send_action: s("componentsUi.dock.send"),
             select_token_title: s("send.selectTokenTitle"),

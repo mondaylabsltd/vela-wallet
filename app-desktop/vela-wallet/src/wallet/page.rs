@@ -545,6 +545,13 @@ pub struct WalletPage {
     /// validates the address and clears the found cards on every keystroke, so
     /// a second copy here would be a second opinion about what was typed.
     add_token_focus: gpui::FocusHandle,
+    /// DT3L: the native tab is up (078 F-07) — a network by name or chain ID,
+    /// through the `network_admin` wizard, instead of a contract address.
+    add_token_native: bool,
+    /// DT3L native: the chain this panel just added, and the query it was
+    /// found by. The core resets its wizard on the add; this is what lets the
+    /// panel go on saying "added" instead of going blank.
+    add_net_added: Option<(vela_core::app::network_admin::NetChainInfo, String)>,
     /// The flow list search (078 X-05): which panel the query was typed on,
     /// and the query. A different panel on top clears it, as leaving a
     /// screen on the web drops that screen's query.
@@ -1057,6 +1064,8 @@ impl WalletPage {
             tx_detail: None,
             asset_detail: None,
             add_token_focus: cx.focus_handle(),
+            add_token_native: false,
+            add_net_added: None,
             flow_query: (None, String::new()),
             flow_query_focus: cx.focus_handle(),
             scan_notice: None,
@@ -1377,15 +1386,17 @@ impl WalletPage {
         can_save: bool,
         on_save: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
     ) -> gpui::AnyElement {
-        let button = crate::flows::components::accent_button(theme, label).mt(px(8.));
         if can_save {
-            button
+            crate::flows::components::accent_button(theme, label)
+                .mt(px(8.))
                 .id(id)
                 .cursor_pointer()
                 .on_click(on_save)
                 .into_any_element()
         } else {
-            crate::flows::components::disabled_button(button).into_any_element()
+            crate::flows::components::disabled_accent_button(theme, label)
+                .mt(px(8.))
+                .into_any_element()
         }
     }
 
@@ -4603,6 +4614,101 @@ impl WalletPage {
         )
     }
 
+    /// DT3L's two tabs, and — on the native one — the network search in the
+    /// field, its suggestions and its CTA (078 F-07, the web's
+    /// `liveAddNetworkTab` handlers). The ERC-20 tab keeps the bindings
+    /// `flow_actions` gave it.
+    fn bind_add_token_tabs(&mut self, actions: &mut panels::PanelActions, cx: &mut Context<Self>) {
+        actions.add_token_tabs = Some((
+            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                if this.add_token_native {
+                    this.add_token_native = false;
+                    this.add_net_added = None;
+                    // A half-finished network search does not wait behind the
+                    // other tab: the web resets it on the same switch.
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        if !resident.view().wizard.query.is_empty() {
+                            resident.dispatch(NetEvent::WizardReset, cx);
+                        }
+                    });
+                    cx.notify();
+                }
+            })) as panels::Click,
+            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.add_token_native = true;
+                cx.notify();
+            })) as panels::Click,
+        ));
+        if !self.add_token_native {
+            return;
+        }
+
+        let wizard = resident::resident::<NetworkAdmin>(cx)
+            .read(cx)
+            .view()
+            .wizard;
+        let value = match &self.add_net_added {
+            Some((_, query)) => query.clone(),
+            None => wizard.query.clone(),
+        };
+        let page = cx.entity().downgrade();
+        actions.address_field = Some(panels::AddressField {
+            focus: self.add_token_focus.clone(),
+            value,
+            placeholder: self.flow_strings.net_search_placeholder.clone(),
+            on_change: Box::new(
+                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                    // A new search is a new question: the last add's card goes.
+                    let _ = page.update(cx, |this, _| this.add_net_added = None);
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(NetEvent::SearchInput { query: text }, cx);
+                    });
+                },
+            ),
+        });
+        actions.add_token_picks = wizard
+            .suggestions
+            .iter()
+            .map(|entry| {
+                let chain_id = entry.chain_id;
+                Box::new(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            NetEvent::ChainSelected {
+                                chain_id,
+                                keep_custom_rpc: false,
+                            },
+                            cx,
+                        );
+                    });
+                    cx.notify();
+                })) as panels::Click
+            })
+            .collect();
+        actions.add_to_wallet = Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            // Added on the core's word, not the press: `add_confirmed`
+            // refuses silently unless the wizard is Checked and
+            // compatible, and `last_added_chain_id` moving is the only
+            // sign it did not.
+            let now_iso = crate::executor::now_iso();
+            let added = resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                let view = resident.view();
+                let info = view.wizard.chain_info.clone()?;
+                let query = view.wizard.query.clone();
+                let before = view.last_added_chain_id;
+                resident.dispatch(NetEvent::AddConfirmed { now_iso }, cx);
+                (resident.view().last_added_chain_id != before).then_some((info, query))
+            });
+            if let Some(added) = added {
+                this.add_net_added = Some(added);
+                // A chain nobody has counted yet: the same forced read the
+                // settings dialog makes on its add.
+                crate::executor::balance_dashboard::refresh(cx);
+            }
+            cx.notify();
+        })) as panels::Click);
+    }
+
     /// Open a flow from the wallet home (spec 021 SC-002).
     fn enter_flow(&mut self, entry: FlowEntry, cx: &mut Context<Self>) {
         self.enter_flow_with(entry, SendOpenParams::default(), cx);
@@ -4620,6 +4726,17 @@ impl WalletPage {
         self.panel = PanelId::Flow;
         self.send_host = None;
         self.send_fee_picker = false;
+        if entry == FlowEntry::AddToken {
+            // Every add starts on ERC-20 with a clean network search, as the
+            // web's panel does on open.
+            self.add_token_native = false;
+            self.add_net_added = None;
+            if self.identity.is_some() {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(NetEvent::WizardReset, cx);
+                });
+            }
+        }
         if entry == FlowEntry::Send && self.identity.is_some() {
             // A fresh journey starts on the one-token list, whatever the last
             // one ended in.
@@ -5186,6 +5303,19 @@ impl WalletPage {
                         flow_fixtures::FlowBody::TxDetail,
                     )
             }
+            FlowPanel::Dt3 if self.add_token_native => {
+                let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+                let (added, query) = match &self.add_net_added {
+                    Some((info, query)) => (Some(info), query.as_str()),
+                    None => (None, view.wizard.query.as_str()),
+                };
+                flow_fixtures::FlowBody::AddToken(flows_live::add_network_tab(
+                    &view.wizard,
+                    query,
+                    added,
+                    &self.flow_strings,
+                ))
+            }
             FlowPanel::Dt3 => {
                 let view = resident::resident::<ManageTokens>(cx).read(cx).view();
                 flow_fixtures::FlowBody::AddToken(flows_live::add_token(&view, &self.flow_strings))
@@ -5366,6 +5496,8 @@ impl WalletPage {
             advance: bind(FlowStep::SendConfirm, cx).or(bind(FlowStep::SendReceipt, cx)),
             address_field: None,
             add_to_wallet: None,
+            add_token_tabs: None,
+            add_token_picks: Vec::new(),
             open_send_rows: Vec::new(),
             send_class_chips: Vec::new(),
             sweep_select_all: None,
@@ -13223,6 +13355,9 @@ impl WalletPage {
                         cx,
                     );
                     actions.search = Some(self.flow_search_field(panel, cx));
+                    if panel == FlowPanel::Dt3 && self.identity.is_some() {
+                        self.bind_add_token_tabs(&mut actions, cx);
+                    }
                     if panel == FlowPanel::Dsd4 {
                         self.tick_receipt(cx);
                     }

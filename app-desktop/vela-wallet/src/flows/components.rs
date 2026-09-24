@@ -496,15 +496,19 @@ pub fn filter_chips(theme: &Theme, chips: &[FilterChip], clicks: Vec<super::pane
 }
 
 /// The two-segment toggle — the ONE segmented control in the product.
+///
+/// `clicks` makes each half a press (left, right); `None` draws the mock's
+/// inert control.
 pub fn segmented_toggle(
     theme: &Theme,
+    id: &'static str,
     left: SharedString,
     right: SharedString,
     left_on: bool,
+    clicks: Option<(super::panels::Click, super::panels::Click)>,
 ) -> Div {
     let seg = |label: SharedString, on: bool| {
         let base = div()
-            .flex_1()
             .py(px(8.))
             .rounded(px(10.))
             .flex()
@@ -515,14 +519,32 @@ pub fn segmented_toggle(
             .text_color(if on { theme.fg_base } else { theme.fg_muted })
             .child(label)
     };
+    let (on_left, on_right) = match clicks {
+        Some((left, right)) => (Some(left), Some(right)),
+        None => (None, None),
+    };
     div()
         .flex()
         .gap(px(2.))
         .p(px(2.))
         .rounded(px(12.))
         .bg(theme.bg_sunken)
-        .child(seg(left, left_on))
-        .child(seg(right, !left_on))
+        .child(
+            super::panels::clickable(
+                gpui::ElementId::from((id, 0usize)),
+                on_left,
+                seg(left, left_on),
+            )
+            .flex_1(),
+        )
+        .child(
+            super::panels::clickable(
+                gpui::ElementId::from((id, 1usize)),
+                on_right,
+                seg(right, !left_on),
+            )
+            .flex_1(),
+        )
 }
 
 /// The monospace field. Addresses are compared character by character by the
@@ -1234,6 +1256,13 @@ pub fn max_chip(theme: &Theme, max: SharedString) -> Div {
 /// (`--text-xl`), hover at 0.92. The desktop's buttons were 37 high and 13
 /// regular, the largest single reason the flows read as a rough copy.
 fn button_base(label: SharedString) -> Div {
+    button_face(label).hover(|el| el.opacity(0.92))
+}
+
+/// The CTA's shape and type without its hover — gpui takes ONE hover style
+/// per element, so a button that must not react is built without it rather
+/// than given a second.
+fn button_face(label: SharedString) -> Div {
     div()
         .w_full()
         .min_h(px(52.))
@@ -1244,7 +1273,6 @@ fn button_base(label: SharedString) -> Div {
         .justify_center()
         .text_size(theme::text_button())
         .font_weight(gpui::FontWeight::SEMIBOLD)
-        .hover(|el| el.opacity(0.92))
         .child(label)
 }
 
@@ -1264,18 +1292,22 @@ pub fn secondary_button(theme: &Theme, label: SharedString) -> Div {
     ghost_button(theme, label).rounded(px(12.))
 }
 
-/// A button that cannot act yet: the same fill at `--opacity-disabled`, which
-/// hovering does not lift. The caller withholds the click and the pointer.
-pub fn disabled_button(button: Div) -> Div {
-    button
-        .opacity(theme::OPACITY_DISABLED)
-        .hover(|el| el.opacity(theme::OPACITY_DISABLED))
+/// The accent CTA that cannot act yet: the same fill at
+/// `--opacity-disabled`, with no hover to lift it. The caller withholds the
+/// click and the pointer. (It took the finished button once, and stacking a
+/// second hover on it panics a debug build.)
+pub fn disabled_accent_button(theme: &Theme, label: SharedString) -> Div {
+    accent_fill(button_face(label), theme).opacity(theme::OPACITY_DISABLED)
 }
 
 /// `primary`, `rounded`: the accent CTA. In this product the accent means
 /// "this moves the money" — and "done", on a receipt that has landed.
 pub fn accent_button(theme: &Theme, label: SharedString) -> Div {
-    button_base(label)
+    accent_fill(button_base(label), theme)
+}
+
+fn accent_fill(button: Div, theme: &Theme) -> Div {
+    button
         .rounded(px(12.))
         .bg(theme.accent)
         .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))

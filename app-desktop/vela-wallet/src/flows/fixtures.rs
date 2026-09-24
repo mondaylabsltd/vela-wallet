@@ -334,17 +334,37 @@ pub struct AssetsPanel {
 
 #[derive(Clone)]
 pub enum AddTokenResult {
+    /// Nothing typed: nothing to say (the web's `none`).
+    Empty,
+    /// One quiet line — searching, or not found and why (078 F-07). A card
+    /// with no token in it read as a token that failed to load.
+    Note(SharedString),
     Token {
         mark: TokenMark,
         name: SharedString,
         detail: SharedString,
+        /// "Added" when it is in the wallet already.
+        chip: Option<StatusChip>,
     },
+    /// The native tab's matches for a name or chain id, each one a pick.
+    Suggestions(Vec<NetworkSuggestion>),
     Network {
         mark: TokenMark,
         name: SharedString,
         chip: StatusChip,
+        /// Under the head: why an incompatible chain is so, and what fixes it.
+        link: Option<SharedString>,
         facts: Vec<FactRow>,
     },
+}
+
+/// One chain the native tab's search matched.
+#[derive(Clone)]
+pub struct NetworkSuggestion {
+    pub chain_id: u32,
+    pub mark: TokenMark,
+    pub name: SharedString,
+    pub meta: SharedString,
 }
 
 #[derive(Clone)]
@@ -356,7 +376,13 @@ pub struct AddToken {
     pub network: Option<(TokenMark, SharedString)>,
     pub field_label: SharedString,
     pub field_value: SharedString,
+    /// What the field is waiting for, and what is wrong with what it holds.
+    pub field_placeholder: SharedString,
+    pub field_error: Option<SharedString>,
     pub result: AddTokenResult,
+    /// The CTA cannot act: nothing found, found and already added, or a
+    /// network the checks have not passed (the web's `ctaDisabled`).
+    pub cta_disabled: bool,
     /// Live only: the write itself failed. A CTA that does nothing and says
     /// nothing is the same defect as a picker that silently drops a file.
     pub notice: Option<SendNotice>,
@@ -1096,6 +1122,9 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
         } else {
             USDT_CONTRACT.into()
         },
+        field_placeholder: SharedString::default(),
+        field_error: None,
+        cta_disabled: false,
         result: if native {
             AddTokenResult::Network {
                 mark: mark(avax.code, (avax.color)()),
@@ -1104,6 +1133,7 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
                     text: s.compatible.clone(),
                     tone: StatusTone::Success,
                 },
+                link: None,
                 facts: vec![
                     fact(&s.label_chain_id, avax.chain_id),
                     fact(&s.label_native_token, avax.code),
@@ -1114,6 +1144,7 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
                 mark: mark("USDT", chain_ethereum()),
                 name: "Tether USD".into(),
                 detail: format!("USDT · {} 6 · Ethereum", s.label_decimals).into(),
+                chip: None,
             }
         },
         notice: None,

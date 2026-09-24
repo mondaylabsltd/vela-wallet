@@ -19,10 +19,11 @@ use crate::wallet::components::{
 };
 
 use super::components::{
-    CopyButton, accent_button, address_card, danger_button, fact_row, fee_refresh_icon, fee_row,
-    fee_speed_note, fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search,
-    ghost_button, inline_mark, max_chip, mono_field, network_pill, network_row, qr_card,
-    recipient_card, search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
+    CopyButton, accent_button, address_card, danger_button, disabled_accent_button, fact_row,
+    fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option, fee_speed_summary, fee_stale_line,
+    filter_chips, flow_search, ghost_button, inline_mark, max_chip, mono_field, network_pill,
+    network_row, qr_card, recipient_card, search_empty, search_matches, segmented_toggle,
+    status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -97,6 +98,10 @@ pub struct PanelActions {
     pub address_field: Option<AddressField>,
     /// DT3L, live: "add to wallet" on the found card.
     pub add_to_wallet: Option<Click>,
+    /// DT3L, live: the ERC-20 and native halves of the toggle (078 F-07).
+    pub add_token_tabs: Option<(Click, Click)>,
+    /// DT3L native, live: one listener per suggested chain, in order.
+    pub add_token_picks: Vec<Click>,
     /// DSD1L, live: one listener per token row. Empty falls back to
     /// `open_send_form`, which the fixture gives to its first row.
     pub open_send_rows: Vec<Click>,
@@ -362,8 +367,12 @@ pub fn render(
             icons,
             identicons,
             window,
-            actions.address_field,
-            actions.add_to_wallet,
+            AddTokenActions {
+                field: actions.address_field,
+                submit: actions.add_to_wallet,
+                tabs: actions.add_token_tabs,
+                picks: actions.add_token_picks,
+            },
         ),
         FlowBody::SendPick(model) => send_pick(
             model,
@@ -922,20 +931,35 @@ fn assets(
     ))
 }
 
+/// DT3L's live bindings; every one `None`/empty in the gallery.
+struct AddTokenActions {
+    field: Option<AddressField>,
+    submit: Option<Click>,
+    tabs: Option<(Click, Click)>,
+    picks: Vec<Click>,
+}
+
 fn add_token(
     model: &AddToken,
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     window: &Window,
-    address_field: Option<AddressField>,
-    add_to_wallet: Option<Click>,
+    actions: AddTokenActions,
 ) -> Div {
+    let AddTokenActions {
+        field: address_field,
+        submit: add_to_wallet,
+        tabs,
+        picks,
+    } = actions;
     let mut col = column().child(segmented_toggle(
         theme,
+        "add-token-tab",
         model.tab_erc20.clone(),
         model.tab_native.clone(),
         !model.native,
+        tabs,
     ));
 
     if let Some((mark, name)) = &model.network {
@@ -967,18 +991,24 @@ fn add_token(
 
     col = col.child(match address_field {
         Some(field) => {
+            // The field's own error line, red under a red hairline — the
+            // text field's one error slot (the web's MonoField `error`).
             let strings = crate::ui::NameFieldStrings {
                 label: model.field_label.clone(),
-                placeholder: field.placeholder.clone(),
+                placeholder: if model.field_placeholder.is_empty() {
+                    field.placeholder.clone()
+                } else {
+                    model.field_placeholder.clone()
+                },
                 helper: SharedString::from(""),
-                too_long_hint: SharedString::from(""),
+                too_long_hint: model.field_error.clone().unwrap_or_default(),
             };
             crate::ui::text_field(
                 "add-token-address",
                 theme,
                 &strings,
                 &field.value,
-                false,
+                model.field_error.is_some(),
                 false,
                 &field.focus,
                 window,
@@ -992,9 +1022,44 @@ fn add_token(
         ),
     });
 
+    // The web's `.name` / `.detail`: a semibold title over a muted line.
+    let text = |name: &SharedString, detail: &SharedString| {
+        div()
+            .flex_1()
+            .min_w(px(0.))
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(name.clone()),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(detail.clone()),
+            )
+    };
     col = match &model.result {
-        AddTokenResult::Token { mark, name, detail } => col.child(
+        AddTokenResult::Empty => col,
+        // A line, not a card: nothing has been found to put in one.
+        AddTokenResult::Note(line) => col.child(
             div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(line.clone()),
+        ),
+        AddTokenResult::Token {
+            mark,
+            name,
+            detail,
+            chip,
+        } => {
+            let mut card = div()
                 .flex()
                 .items_center()
                 .gap(px(12.))
@@ -1008,30 +1073,51 @@ fn add_token(
                     mark.badge,
                     &mark.logos,
                 ))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.))
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .text_size(theme::text_row_title())
-                                .text_color(theme.fg_base)
-                                .child(name.clone()),
-                        )
-                        .child(
-                            div()
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.fg_muted)
-                                .child(detail.clone()),
-                        ),
-                ),
-        ),
+                .child(text(name, detail));
+            if let Some(chip) = chip {
+                card = card.child(status_chip(theme, chip));
+            }
+            col.child(card)
+        }
+        AddTokenResult::Suggestions(rows) => {
+            let mut list = div().flex().flex_col();
+            let mut picks = picks.into_iter();
+            for (index, row) in rows.iter().enumerate() {
+                let mut line = div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .py(px(8.))
+                    .child(token_icon_logos(
+                        theme,
+                        row.mark.ticker.as_ref(),
+                        row.mark.badge,
+                        &row.mark.logos,
+                    ))
+                    .child(text(&row.name, &row.meta))
+                    .child(icon_img(
+                        icons,
+                        Icon::ChevronRight,
+                        false,
+                        theme.fg_subtle,
+                        12.,
+                    ));
+                if index > 0 {
+                    line = line.border_t_1().border_color(theme.border_card);
+                }
+                list = list.child(clickable(
+                    ElementId::from(("add-token-pick", row.chain_id as usize)),
+                    picks.next(),
+                    line,
+                ));
+            }
+            col.child(list)
+        }
         AddTokenResult::Network {
             mark,
             name,
             chip,
+            link,
             facts,
         } => {
             let mut card = div()
@@ -1056,11 +1142,21 @@ fn add_token(
                             div()
                                 .flex_1()
                                 .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme.fg_base)
                                 .child(name.clone()),
                         )
                         .child(status_chip(theme, chip)),
                 );
+            if let Some(link) = link {
+                card = card.child(
+                    div()
+                        .pt(px(8.))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(link.clone()),
+                );
+            }
             for fact in facts {
                 card = card.child(fact_row(theme, icons, identicons, fact, None));
             }
@@ -1077,6 +1173,11 @@ fn add_token(
         col = col.child(notice_card(notice, theme, None, None));
     }
 
+    // Nothing new to add, and the button says so rather than taking a
+    // press that does nothing (the web's `ctaDisabled`).
+    if model.cta_disabled {
+        return col.child(disabled_accent_button(theme, model.cta.clone()));
+    }
     col.child(clickable(
         ElementId::from("add-token-cta"),
         add_to_wallet,
@@ -2206,52 +2307,14 @@ fn batch_import(
     window: &Window,
     mut actions: PanelActions,
 ) -> Div {
-    // Live: two clickable halves drawn exactly like the one segmented control;
-    // the mock keeps the component itself.
-    let toggle = match actions.batch_unit.take() {
-        Some((fiat, token)) => {
-            let seg = |label: SharedString, on: bool| {
-                let base = div()
-                    .py(px(8.))
-                    .rounded(px(10.))
-                    .flex()
-                    .items_center()
-                    .justify_center();
-                let base = if on { base.bg(theme.bg_raised) } else { base };
-                base.text_size(theme::text_row_sub())
-                    .text_color(if on { theme.fg_base } else { theme.fg_muted })
-                    .child(label)
-            };
-            div()
-                .flex()
-                .gap(px(2.))
-                .p(px(2.))
-                .rounded(px(12.))
-                .bg(theme.bg_sunken)
-                .child(
-                    clickable(
-                        "batch-unit-fiat",
-                        Some(fiat),
-                        seg(model.unit_fiat.clone(), model.fiat_on),
-                    )
-                    .flex_1(),
-                )
-                .child(
-                    clickable(
-                        "batch-unit-token",
-                        Some(token),
-                        seg(model.unit_token.clone(), !model.fiat_on),
-                    )
-                    .flex_1(),
-                )
-        }
-        None => segmented_toggle(
-            theme,
-            model.unit_fiat.clone(),
-            model.unit_token.clone(),
-            model.fiat_on,
-        ),
-    };
+    let toggle = segmented_toggle(
+        theme,
+        "batch-unit",
+        model.unit_fiat.clone(),
+        model.unit_token.clone(),
+        model.fiat_on,
+        actions.batch_unit.take(),
+    );
     let mut col = column()
         .child(toggle)
         .child(clickable(
