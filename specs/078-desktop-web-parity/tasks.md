@@ -39,7 +39,7 @@ screenshot checked against the web.
       Enter/Space, `accent_soft` fill, label fades.
 - [x] T021 G-03 refused request: one full-width Close, raw data hidden.
 - [x] T022 C-01 delete contact / group asks first (danger button).
-- [ ] T023 E-02 custom-group rows open their own site; unique ids.
+- [x] T023 E-02 custom-group rows open their own site; unique ids.
 - [x] T024 H-07 hero decimals split on the person's decimal mark.
 - [ ] T025 M-01 core: Max during the fee check or the credential load does not
       strand Continue; test in `tests/app_send.rs`.

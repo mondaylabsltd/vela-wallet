@@ -75,6 +75,21 @@ pub struct SiteModel {
     pub tint: Hsla,
     pub subtitle: Option<SharedString>,
     pub meta: Option<SharedString>,
+    /// What a click on the site opens: the history entry's URL, or the one a
+    /// favourite was pinned at. `None` for a drawn site, which opens its host.
+    pub url: Option<SharedString>,
+}
+
+impl SiteModel {
+    /// The address this site opens (078 E-02). Every row opens ITS site: a
+    /// drawn one opens its host rather than nothing — "nothing" is what let a
+    /// click fall through to whichever page was loaded last.
+    #[must_use]
+    pub fn open_url(&self) -> String {
+        self.url
+            .as_ref()
+            .map_or_else(|| format!("https://{}", self.host), ToString::to_string)
+    }
 }
 
 fn site(
@@ -92,6 +107,7 @@ fn site(
         tint,
         subtitle: None,
         meta: None,
+        url: None,
     }
 }
 

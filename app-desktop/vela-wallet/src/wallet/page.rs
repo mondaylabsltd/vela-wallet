@@ -11728,7 +11728,7 @@ impl WalletPage {
             .filter(|group| !(live_grid && group.id != "recent"))
             .chain(live_groups)
             .collect::<Vec<_>>();
-        for group in live_recent.into_iter().chain(groups) {
+        for (group_index, group) in live_recent.into_iter().chain(groups).enumerate() {
             let action = match group.action {
                 explore_fixtures::GroupAction::Clear => self.explore.clear.clone(),
                 explore_fixtures::GroupAction::Edit => self.explore.edit.clone(),
@@ -11760,7 +11760,14 @@ impl WalletPage {
             for (i, site) in group.sites.iter().enumerate() {
                 rows = rows.child(
                     explore_components::site_row(
-                        ElementId::from((group.id, i)),
+                        // By the group's place on the page, not its kind: every
+                        // custom group is "custom", and row 0 of each one
+                        // shared an id — gpui then treats them as one element
+                        // (078 E-02).
+                        ElementId::NamedInteger(
+                            SharedString::from(format!("explore-group-{group_index}")),
+                            i as u64,
+                        ),
                         theme,
                         &mut self.identicons,
                         site,
@@ -11781,23 +11788,19 @@ impl WalletPage {
                         })
                     })
                     .on_click({
-                        // Where the person left off, verbatim — that is what
-                        // the core stores the whole URL for. A row that opened
-                        // the origin instead would send somebody back to a
-                        // front page they had already navigated away from.
-                        let url = site.host.to_string();
+                        // The row's OWN site (078 E-02). A Recent row opens
+                        // where the person left off, verbatim — that is what
+                        // the core stores the whole URL for; a custom group's
+                        // row opens the url its site was pinned at. It used to
+                        // look every row up in the HISTORY by host, and a
+                        // pinned site nobody had visited yet found nothing —
+                        // yet the column still switched to the browser, onto
+                        // whatever page was loaded last.
+                        let url = site.open_url();
                         cx.listener(move |this, _, _, cx| {
-                            if let Some(entry) = resident::resident::<BrowserHistory>(cx)
-                                .read(cx)
-                                .view()
-                                .entries
-                                .iter()
-                                .find(|entry| entry.host == url)
-                            {
-                                this.browser_home = entry.url.clone();
-                                #[cfg(not(target_os = "linux"))]
-                                crate::webview::navigate(&entry.url);
-                            }
+                            this.browser_home = url.clone();
+                            #[cfg(not(target_os = "linux"))]
+                            crate::webview::navigate(&url);
                             this.browsing = true;
                             cx.notify();
                         })
