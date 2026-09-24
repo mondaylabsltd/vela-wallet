@@ -708,43 +708,108 @@ pub fn fetch_all_streaming(
     address: &str,
     arrived: &Arc<ChainSink>,
 ) -> (Vec<BalanceToken>, Vec<u32>) {
-    // One batched read on Ethereum mainnet, before the fan-out, so twelve
-    // threads share it instead of racing to fetch the same five feeds.
-    let mainnet_prices = chainlink::prices();
+    // One batched read on Ethereum mainnet, shared by every chain — but no
+    // longer a gate in front of the fan-out: it runs beside the chains, and a
+    // chain waits for it only when it gets to pricing, after its own balance
+    // and index are in (078 loading audit: every chain used to wait for this
+    // one mainnet round trip before asking its own endpoint anything).
+    let mainnet_prices: Arc<std::sync::OnceLock<HashMap<String, f64>>> =
+        Arc::new(std::sync::OnceLock::new());
+    {
+        let slot = Arc::clone(&mainnet_prices);
+        let started = thread::Builder::new()
+            .name("vela-balance-prices".to_owned())
+            .spawn(move || {
+                let _ = slot.set(chainlink::prices());
+            });
+        if started.is_err() {
+            let _ = mainnet_prices.set(chainlink::prices());
+        }
+    }
 
-    let mut handles = Vec::new();
+    // Past the web's per-chain limit (`wallet-api.ts`, 18 s) a chain is
+    // unreachable for this round: one whose endpoints are all dead used to
+    // hold the settle — the cache write, the failed-chain notice, the
+    // incoming-transfer scan — for as long as the pool kept trying.
+    const CHAIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(18);
+    // Set at the settle. A chain still out then may finish later; it must
+    // not report after the core has been given the whole picture.
+    // A lock, not a flag: the check and the report happen under it, so a
+    // chain cannot pass the check just before the settle and report after.
+    let settled = Arc::new(std::sync::Mutex::new(false));
+    let (tx, rx) = std::sync::mpsc::channel::<(u32, Option<Vec<BalanceToken>>)>();
+
+    let mut out: Vec<u32> = Vec::new();
     for (chain_id, symbol) in chains() {
         let address = address.to_owned();
-        let mainnet_prices = mainnet_prices.clone();
+        let mainnet_prices = Arc::clone(&mainnet_prices);
         let arrived = Arc::clone(arrived);
-        handles.push(
-            thread::Builder::new()
-                .name(format!("vela-balance-{chain_id}"))
-                .spawn(move || match native_raw(chain_id, &address) {
+        let settled = Arc::clone(&settled);
+        let tx = tx.clone();
+        let spawned = thread::Builder::new()
+            .name(format!("vela-balance-{chain_id}"))
+            .spawn(move || {
+                // The index is asked for beside the balance, not after it:
+                // the two are independent, and the web asks for them without
+                // waiting on each other. `chain_tokens::fetch` caches, so the
+                // read inside `chain_tokens_for` is the answer this warmed.
+                let index = thread::Builder::new()
+                    .name(format!("vela-index-{chain_id}"))
+                    .spawn(move || {
+                        let _ = chain_tokens::fetch(chain_id);
+                    })
+                    .ok();
+                let result = match native_raw(chain_id, &address) {
                     Some(raw) => {
-                        let found =
-                            chain_tokens_for(chain_id, &symbol, &address, &raw, &mainnet_prices);
+                        if let Some(index) = index {
+                            let _ = index.join();
+                        }
+                        let prices = mainnet_prices.wait();
+                        let found = chain_tokens_for(chain_id, &symbol, &address, &raw, prices);
                         // Reported from this thread, the moment this chain is
-                        // in — not after the eleven others.
-                        arrived(found.clone());
-                        (chain_id, Some(found))
+                        // in — not after the others — and never after the
+                        // settle.
+                        if let Ok(settled) = settled.lock()
+                            && !*settled
+                        {
+                            arrived(found.clone());
+                        }
+                        Some(found)
                     }
-                    None => (chain_id, None),
-                })
-                .ok(),
-        );
+                    None => None,
+                };
+                let _ = tx.send((chain_id, result));
+            });
+        if spawned.is_ok() {
+            out.push(chain_id);
+        }
     }
+    drop(tx);
 
     let mut tokens = Vec::new();
     let mut failed = Vec::new();
-    for handle in handles.into_iter().flatten() {
-        match handle.join() {
-            Ok((_, Some(found))) => tokens.extend(found),
-            Ok((chain_id, None)) => failed.push(chain_id),
-            // A panicked worker is a chain we did not read. It is not a reason
-            // to lose the eleven that answered.
-            Err(_) => {}
+    let deadline = std::time::Instant::now() + CHAIN_DEADLINE;
+    while !out.is_empty() {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        match rx.recv_timeout(left) {
+            Ok((chain_id, found)) => {
+                out.retain(|id| *id != chain_id);
+                match found {
+                    Some(found) => tokens.extend(found),
+                    None => failed.push(chain_id),
+                }
+            }
+            // Out of time: whoever has not answered is unreachable this round.
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                failed.append(&mut out);
+            }
+            // Every sender gone: a panicked worker is a chain we did not read.
+            // It is not a reason to lose the ones that answered.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
+    }
+    if let Ok(mut settled) = settled.lock() {
+        *settled = true;
     }
     inform_token_trust(address, &tokens);
     // Deterministic order: the core sorts for display, but a stable input makes
