@@ -1512,6 +1512,24 @@ fn send_form(
                     )),
             ));
         }
+        // The web's `RecipientField` scan button (078 F-01): after the book,
+        // the same 36 round button with an 18 glyph — the address that is on
+        // a screen, not in the book. Drawn only when a scan is bound: the
+        // gallery's form has no camera behind it.
+        if let Some(open_scan) = actions.open_scan.take() {
+            card = card.child(clickable(
+                "flow-scan-recipient",
+                Some(open_scan),
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(36.))
+                    .rounded_full()
+                    .hover(|el| el.bg(theme.bg_sunken))
+                    .child(icon_img(icons, Icon::QrCode, false, theme.fg_muted, 18.)),
+            ));
+        }
         col = col.child(
             div()
                 .flex()

@@ -51,7 +51,7 @@ screenshot checked against the web.
       identicon.
 - [x] T032 H-03 balance status line: RPC-fix dialog / balance breakdown; the
       web's text order and colours.
-- [ ] T033 F-01 scan from the send form (recipient card button, contact
+- [x] T033 F-01 scan from the send form (recipient card button, contact
       picker row) → scanner → `scan_resolved`.
 - [ ] T034 F-02 scanner notices; F-03 scanner look after `ScanSurface`.
 - [ ] T035 F-04 send receipt stages; G-04 dApp receipt.

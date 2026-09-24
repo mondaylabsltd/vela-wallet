@@ -4630,8 +4630,15 @@ impl WalletPage {
                 self.panel = PanelId::None;
                 return None;
             }
-            let panel = flows_live::send_panel(&host.read(cx).view, self.send_fee_picker);
+            let view = &host.read(cx).view;
+            let panel = flows_live::send_panel(view, self.send_fee_picker);
             self.flows = panel.stack();
+            // The core's scanner rides on top of whatever the send is on: the
+            // column keeps the form, and `scan_overlay` sees DS1 last and
+            // draws the modal over it (078 F-01).
+            if view.show_scanner {
+                self.flows.push(FlowPanel::Ds1);
+            }
             return Some(panel);
         }
         self.flows.last().copied()
@@ -5708,9 +5715,16 @@ impl WalletPage {
                         })
                         .collect();
                     actions.advance = Some(to_host(SendEvent::Continue));
+                    // The recipient field's scan (078 F-01). The scanner is the
+                    // CORE's state, as on the web: `OpenScanner` raises it and
+                    // `ScanResolved` fills the form and takes it down.
+                    actions.open_scan = Some(to_host(SendEvent::OpenScanner));
                 }
                 FlowPanel::Dsd2e => {
-                    actions.open_scan = None;
+                    // The picker's "scan to fill" row opens the same scanner;
+                    // the scan IS the pick, and the core closes the picker with
+                    // it (issue #270).
+                    actions.open_scan = Some(to_host(SendEvent::OpenScanner));
                     // A pick lands in the field AND closes the sheet. The core
                     // at this branch point leaves the sheet up after
                     // `PickedAddress`; spec 028's core closes it itself, after
@@ -13406,6 +13420,11 @@ impl WalletPage {
     /// form away with it and left its `send_host` behind.) The camera stops on
     /// the next frame, when `scan_overlay` sees DS1 is no longer on top.
     fn close_scanner(&mut self, cx: &mut Context<Self>) {
+        // Inside a live send the scanner is the core's; it takes it down, or
+        // the next frame's stack would put it straight back.
+        if let Some(host) = self.send_host.clone() {
+            host.update(cx, |host, cx| host.dispatch(SendEvent::CloseScanner, cx));
+        }
         self.flows.retain(|panel| *panel != FlowPanel::Ds1);
         if self.flows.is_empty() {
             self.panel = PanelId::None;
