@@ -109,11 +109,38 @@ pub fn detail(
     index: usize,
     feed: &vela_core::app::activity_feed::FeedView,
     wallet: &crate::wallet::WalletStrings,
+    flow: &crate::flows::FlowStrings,
+    all: bool,
     hidden: bool,
 ) -> Option<ContactDetailModel> {
     let contact = rows(view).into_iter().nth(index)?;
     let address = contact.address_full.to_string();
     let lower = address.to_lowercase();
+    // What this person and I have actually exchanged, from the same feed the
+    // home draws. Matched on the counterparty, which is the only thing that
+    // makes a row "theirs".
+    let items: Vec<_> = feed
+        .rows
+        .iter()
+        .filter_map(|row| match row {
+            vela_core::app::activity_feed::FeedRow::Item { item }
+                if item
+                    .counterparty
+                    .as_ref()
+                    .is_some_and(|other| other.to_lowercase() == lower) =>
+            {
+                Some(item)
+            }
+            _ => None,
+        })
+        .collect();
+    let activity_empty = items.is_empty();
+    // The web's three, until "view all activity" asks for the rest (078 C-04).
+    let shown = if all {
+        items.len()
+    } else {
+        RECENT_ACTIVITY_ROWS
+    };
     Some(ContactDetailModel {
         name: contact.name.clone(),
         // The ADDRESS, not the name: two contacts a person named the same must
@@ -132,28 +159,28 @@ pub fn detail(
             .map(|group| SharedString::from(group.name.clone()))
             .collect(),
         address_full: contact.address_full,
-        // What this person and I have actually exchanged, from the same feed
-        // the home draws. Matched on the counterparty, which is the only thing
-        // that makes a row "theirs".
-        activity: feed
-            .rows
-            .iter()
-            .filter_map(|row| match row {
-                vela_core::app::activity_feed::FeedRow::Item { item }
-                    if item
-                        .counterparty
-                        .as_ref()
-                        .is_some_and(|other| other.to_lowercase() == lower) =>
-                {
-                    Some(crate::wallet::live::activity_row(
-                        feed, item, wallet, hidden,
-                    ))
-                }
-                _ => None,
+        activity: items
+            .into_iter()
+            .take(shown)
+            .map(|item| {
+                let mut row = crate::wallet::live::activity_row(feed, item, wallet, hidden);
+                // On this person's own page "to Alice" is noise: the web's
+                // subtitle is the network and the day (`contactActivityRow`).
+                row.subtitle = SharedString::from(format!(
+                    "{} · {}",
+                    crate::flows::live::chain_name(item.chain_id),
+                    crate::flows::live::day_label(item.day_start_ms, flow),
+                ));
+                row
             })
             .collect(),
+        activity_empty,
     })
 }
+
+/// How many of a contact's rows 最近往来 shows before "view all" (the web's
+/// `RECENT_ACTIVITY_ROWS`).
+pub const RECENT_ACTIVITY_ROWS: usize = 3;
 
 /// The group rail: the person's own groups, with how many people are in each.
 ///
@@ -503,10 +530,11 @@ mod tests {
             ..host.view()
         };
         let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+        let flow = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
 
         // Row 1 is the cousin, and the panel must be about the cousin.
-        let cousin =
-            detail(&book, 1, &feed, &wallet, false).unwrap_or_else(|| unreachable!("row 1 exists"));
+        let cousin = detail(&book, 1, &feed, &wallet, &flow, false, false)
+            .unwrap_or_else(|| unreachable!("row 1 exists"));
         assert_eq!(cousin.name, "Cousin");
         assert_eq!(
             cousin.address_full,
@@ -520,14 +548,17 @@ mod tests {
         assert_eq!(cousin.activity.len(), 1);
 
         // Alice is in no group and has nothing with me.
-        let alice =
-            detail(&book, 0, &feed, &wallet, false).unwrap_or_else(|| unreachable!("row 0 exists"));
+        let alice = detail(&book, 0, &feed, &wallet, &flow, false, false)
+            .unwrap_or_else(|| unreachable!("row 0 exists"));
         assert_eq!(alice.name, "Alice");
         assert!(alice.chips.is_empty());
         assert!(alice.activity.is_empty());
+        // ...and the section says so rather than offering "all" of nothing.
+        assert!(alice.activity_empty);
+        assert!(!cousin.activity_empty);
 
         // The roster moved: no panel rather than the wrong one.
-        assert!(detail(&book, 9, &feed, &wallet, false).is_none());
+        assert!(detail(&book, 9, &feed, &wallet, &flow, false, false).is_none());
 
         // And a group's members are that group's.
         let (name, members) =
@@ -536,6 +567,59 @@ mod tests {
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].name, "Cousin");
         assert!(group_members(&book, 5).is_none());
+    }
+
+    /// 最近往来 shows the web's three until "view all" asks for the rest, and
+    /// each row says where and when rather than "to <this person>" (078 C-04).
+    #[test]
+    fn recent_activity_is_three_rows_until_all_is_asked_for() {
+        use vela_core::app::activity_feed::{
+            ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem, FeedRow, FeedView,
+        };
+        let book = view(vec![contact(
+            "0xBBB0000000000000000000000000000000000002",
+            Some("Cousin"),
+            None,
+        )]);
+        let mut host = crate::core_host::CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let item = |id: usize| FeedRow::Item {
+            item: FeedItem {
+                id: format!("t{id}"),
+                direction: FeedDirection::In,
+                counterparty: Some("0xbbb0000000000000000000000000000000000002".to_owned()),
+                alias: None,
+                value: Some("1".to_owned()),
+                symbol: "xDAI".to_owned(),
+                decimals: Some(18),
+                usd_value: 1.0,
+                chain_id: 100,
+                timestamp: 1_788_500_000.0,
+                day_start_ms: 0.0,
+                tx_hash: None,
+                batch: None,
+            },
+        };
+        let feed = FeedView {
+            rows: (0..5).map(item).collect(),
+            ..host.view()
+        };
+        let loc = crate::loc::Loc::from_env();
+        let wallet = crate::wallet::WalletStrings::resolve(&loc);
+        let flow = crate::flows::FlowStrings::resolve(&loc);
+
+        let recent = detail(&book, 0, &feed, &wallet, &flow, false, false)
+            .unwrap_or_else(|| unreachable!("row 0 exists"));
+        assert_eq!(recent.activity.len(), RECENT_ACTIVITY_ROWS);
+        assert!(!recent.activity_empty);
+        let subtitle = recent.activity[0].subtitle.to_string();
+        assert!(subtitle.starts_with("Gnosis · "), "{subtitle}");
+
+        let all = detail(&book, 0, &feed, &wallet, &flow, true, false)
+            .unwrap_or_else(|| unreachable!("row 0 exists"));
+        assert_eq!(all.activity.len(), 5);
     }
 
     /// The rail lists the person's own groups, with the id each row needs.

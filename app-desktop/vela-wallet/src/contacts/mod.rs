@@ -63,6 +63,8 @@ pub struct ContactsStrings {
     pub move_group: SharedString,
     pub recent_activity: SharedString,
     pub view_all_activity: SharedString,
+    /// 最近往来 with nothing in it (078 C-04) — the web's `noActivity`.
+    pub no_activity: SharedString,
     pub delete_contact: SharedString,
     pub delete: SharedString,
     pub edit: SharedString,
@@ -124,6 +126,7 @@ impl ContactsStrings {
             move_group: s("contacts.moveGroup"),
             recent_activity: s("contacts.recentActivity"),
             view_all_activity: s("contacts.viewAllActivity"),
+            no_activity: s("history.emptyTitle"),
             delete_contact: s("contacts.deleteContact"),
             delete: s("contacts.delete"),
             edit: s("contacts.edit"),

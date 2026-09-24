@@ -593,7 +593,20 @@ pub fn empty_state_cta(
     caption: SharedString,
     primary: SharedString,
     secondary: SharedString,
+    actions: Option<(MenuAction, MenuAction)>,
 ) -> Div {
+    let (on_primary, on_secondary) = match actions {
+        Some((primary, secondary)) => (Some(primary), Some(secondary)),
+        None => (None, None),
+    };
+    let mut add = accent_button("empty-add-contact", theme, icons, None, primary);
+    if let Some(action) = on_primary {
+        add = add.on_click(move |event, window, cx| action(event, window, cx));
+    }
+    let mut import = outline_button("empty-import-file", theme, icons, None, secondary);
+    if let Some(action) = on_secondary {
+        import = import.on_click(move |event, window, cx| action(event, window, cx));
+    }
     let artwork = empty_state(theme, icons, Icon::UsersRound, title, caption);
     div()
         .w(px(360.))
@@ -603,23 +616,5 @@ pub fn empty_state_cta(
         .gap(px(8.))
         .text_center()
         .child(artwork)
-        .child(
-            div()
-                .flex()
-                .gap(px(12.))
-                .child(accent_button(
-                    "empty-add-contact",
-                    theme,
-                    icons,
-                    None,
-                    primary,
-                ))
-                .child(outline_button(
-                    "empty-import-file",
-                    theme,
-                    icons,
-                    None,
-                    secondary,
-                )),
-        )
+        .child(div().flex().gap(px(12.)).child(add).child(import))
 }

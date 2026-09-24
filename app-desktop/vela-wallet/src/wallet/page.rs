@@ -810,6 +810,10 @@ pub struct WalletPage {
     identicon_viewer: Option<IdenticonViewer>,
     /// DC3: the fixture roster is empty.
     contacts_empty: bool,
+    /// The open contact's 最近往来 shows every row, not the first three
+    /// (078 C-04). Forgotten when another contact opens, as the web's `open`
+    /// resets `allActivity`.
+    contact_all_activity: bool,
     /// Open anchored menu: which fixture feeds it, the window-coordinate
     /// anchor point, and which of the card's corners sits on that point.
     menu: Option<(ContactsMenu, Point<Pixels>, Anchor)>,
@@ -1164,6 +1168,7 @@ impl WalletPage {
             dialog_scrolls: std::collections::HashMap::new(),
             identicon_viewer: None,
             contacts_empty: false,
+            contact_all_activity: false,
             menu: None,
             tab: match section {
                 Section::Wallet | Section::Explore => GalleryTab::D1,
@@ -3178,16 +3183,7 @@ impl WalletPage {
                     add,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
-                    // Only a real session saves anything: the fixture roster is
-                    // a picture, and a picture must not grow a row.
-                    if this.identity.is_none() {
-                        return;
-                    }
-                    this.contact_form = Some(ContactForm::default());
-                    // The address is the first thing to type, so it is the
-                    // first thing focused.
-                    window.focus(&this.contact_form_address_focus, cx);
-                    cx.notify();
+                    this.open_add_contact(window, cx);
                 })),
             )
             .child(
@@ -3218,23 +3214,47 @@ impl WalletPage {
             )
     }
 
+    /// Nobody in the book (078 C-03): the core's loaded, empty roster — or
+    /// the gallery's DC3, which draws it without one.
+    fn contacts_book_empty(&self, cx: &mut Context<Self>) -> bool {
+        if self.contacts_empty {
+            return true;
+        }
+        if self.identity.is_none() {
+            return false;
+        }
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        view.loaded && view.contacts.is_empty()
+    }
+
+    /// 添加联系人's form, opened on its address — the header's button and the
+    /// empty book's both.
+    fn open_add_contact(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Only a real session saves anything: the fixture roster is a
+        // picture, and a picture must not grow a row.
+        if self.identity.is_none() {
+            return;
+        }
+        self.contact_form = Some(ContactForm::default());
+        // The address is the first thing to type, so it is the first thing
+        // focused.
+        window.focus(&self.contact_form_address_focus, cx);
+        cx.notify();
+    }
+
     fn contacts_rail(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let all = self.contacts.all_contacts.clone();
         let groups_label = self.contacts.section_groups.clone();
         let new_group = self.contacts.group_new.clone();
         // The count beside 全部联系人. A real session counts its own book; the
         // mock's 12 under somebody's four contacts is the same small lie the
-        // group rail told.
+        // group rail told. The WHOLE book, as the web's `allCount`: the search
+        // narrows the list beside it, not what "all" means.
         let total = if self.contacts_empty {
             0
         } else if self.identity.is_some() {
-            u32::try_from(
-                self.contact_sections(cx)
-                    .iter()
-                    .map(|(_, rows)| rows.len())
-                    .sum::<usize>(),
-            )
-            .unwrap_or(u32::MAX)
+            let view = resident::resident::<Contacts>(cx).read(cx).view();
+            u32::try_from(view.contacts.len()).unwrap_or(u32::MAX)
         } else {
             contacts_fixtures::TOTAL_CONTACTS
         };
@@ -3333,9 +3353,13 @@ impl WalletPage {
         if self.identity.is_none() {
             return None;
         }
-        self.contact_sections(cx)
+        // The CORE's order, as `self.contact` is (`open_contact_by_address`).
+        // This read the A–Z sections — searched, at that — so with the panel
+        // on Alice, its copy button copied Bob, and its delete asked to delete
+        // Bob under Alice's name (found verifying 078 C-08).
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        contacts_live::rows(&view)
             .into_iter()
-            .flat_map(|(_, rows)| rows)
             .nth(self.contact)
             .map(|row| row.address_full)
     }
@@ -3383,7 +3407,15 @@ impl WalletPage {
             .view()
             .hidden;
         let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
-        contacts_live::detail(&view, self.contact, &feed, &self.strings, hidden)
+        contacts_live::detail(
+            &view,
+            self.contact,
+            &feed,
+            &self.strings,
+            &self.flow_strings,
+            self.contact_all_activity,
+            hidden,
+        )
     }
 
     /// The activity rows: the core's feed for a real session, the mock's
@@ -4091,6 +4123,9 @@ impl WalletPage {
         else {
             return false;
         };
+        if self.contact != index || self.panel != PanelId::ContactDetail {
+            self.contact_all_activity = false;
+        }
         self.contact = index;
         self.panel = PanelId::ContactDetail;
         self.menu = None;
@@ -4141,8 +4176,19 @@ impl WalletPage {
         cx.notify();
     }
 
-    /// DC3: the centred empty state with both CTAs.
-    fn contacts_empty_view(&mut self, theme: &Theme) -> Div {
+    /// DC3: the centred empty state with both CTAs — add opens the form,
+    /// import the file picker, as the web's `empty-primary` / `-secondary`.
+    fn contacts_empty_view(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        let actions = self.identity.is_some().then(|| {
+            (
+                Box::new(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
+                    this.open_add_contact(window, cx);
+                })) as contacts_components::MenuAction,
+                Box::new(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                    Self::import_contacts(None, cx);
+                })) as contacts_components::MenuAction,
+            )
+        });
         let title = self.contacts.empty.clone();
         let caption = self.contacts.empty_hint.clone();
         let primary = self.contacts.add_contact.clone();
@@ -4160,6 +4206,7 @@ impl WalletPage {
                 caption,
                 primary,
                 secondary,
+                actions,
             ))
     }
 
@@ -4172,8 +4219,10 @@ impl WalletPage {
     ) -> Div {
         let header = self.contacts_header(theme, caption, window, cx);
         let rail = self.contacts_rail(theme, cx);
-        let body: gpui::AnyElement = if self.contacts_empty {
-            self.contacts_empty_view(theme).into_any_element()
+        // Empty first, as the web orders it: a group opened on a book with
+        // nobody in it has nobody to list.
+        let body: gpui::AnyElement = if self.contacts_book_empty(cx) {
+            self.contacts_empty_view(theme, cx).into_any_element()
         } else if let Some(group) = self.group {
             self.contacts_group_view(theme, group, cx)
                 .into_any_element()
@@ -4349,13 +4398,26 @@ impl WalletPage {
         for row in &model.activity {
             activity = activity.child(activity_row(theme, &mut self.icons, row));
         }
-        activity = activity.child(div().pt(px(10.)).child(text_action(
-            "contact-view-all",
-            theme,
-            &mut self.icons,
-            None,
-            view_all,
-        )));
+        // The web: nothing between us says so; otherwise the link, which
+        // opens the whole history in place (078 C-04).
+        activity = if model.activity_empty {
+            activity.child(
+                div()
+                    .pt(px(8.))
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_muted)
+                    .child(self.contacts.no_activity.clone()),
+            )
+        } else {
+            activity.child(div().pt(px(10.)).child(
+                text_action("contact-view-all", theme, &mut self.icons, None, view_all).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.contact_all_activity = true;
+                        cx.notify();
+                    }),
+                ),
+            ))
+        };
 
         let footer = div()
             .flex()
@@ -6899,6 +6961,7 @@ impl WalletPage {
                 s_empty_hint,
                 s_add_contact,
                 s_import,
+                None,
             ))
             .child(empty_state(
                 theme,
@@ -14294,21 +14357,34 @@ impl WalletPage {
     /// The shell reads and PARSES; the core applies existing-wins and counts
     /// what happened. Which of those two halves is which is the reason
     /// `ImportParsed` takes already-parsed rows rather than a file.
-    fn import_contacts(cx: &mut Context<Self>) {
-        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: false,
-            prompt: None,
+    fn import_contacts(into_group: Option<String>, cx: &mut Context<Self>) {
+        // `VELA_IMPORT_FILE=<path>` answers the picker — the `VELA_SCAN_FILE`
+        // seam, for the same reason: a system file dialog is a window no
+        // verification pass can drive.
+        let pinned = std::env::var_os("VELA_IMPORT_FILE").map(std::path::PathBuf::from);
+        let paths = pinned.is_none().then(|| {
+            cx.prompt_for_paths(gpui::PathPromptOptions {
+                files: true,
+                directories: false,
+                multiple: false,
+                prompt: None,
+            })
         });
         cx.spawn(async move |page, cx| {
-            let Ok(Ok(Some(paths))) = paths.await else {
-                // Cancelled, or the platform declined. Nothing to report: the
-                // person closed a dialog.
-                return;
-            };
-            let Some(path) = paths.into_iter().next() else {
-                return;
+            let path = match (pinned, paths) {
+                (Some(path), _) => path,
+                (None, Some(paths)) => {
+                    let Ok(Ok(Some(paths))) = paths.await else {
+                        // Cancelled, or the platform declined. Nothing to
+                        // report: the person closed a dialog.
+                        return;
+                    };
+                    let Some(path) = paths.into_iter().next() else {
+                        return;
+                    };
+                    path
+                }
+                (None, None) => return,
             };
             let filename = path
                 .file_name()
@@ -14336,9 +14412,9 @@ impl WalletPage {
                         ContactEvent::ImportFile {
                             content,
                             filename,
-                            // 导入到本组 has no file path of its own yet; the
-                            // header's import is the whole book.
-                            into_group: None,
+                            // 导入到本组 names its group; the header's and the
+                            // empty book's import are the whole book.
+                            into_group: into_group.clone(),
                             now_ms,
                         },
                         cx,
@@ -14506,7 +14582,7 @@ impl WalletPage {
                 Some(Box::new(cx.listener(
                     |this, _: &gpui::ClickEvent, _, cx: &mut Context<Self>| {
                         this.menu = None;
-                        Self::import_contacts(cx);
+                        Self::import_contacts(None, cx);
                     },
                 )) as contacts_components::MenuAction),
                 Some(Box::new(cx.listener(

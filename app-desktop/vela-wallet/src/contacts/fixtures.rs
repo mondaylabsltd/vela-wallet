@@ -206,6 +206,9 @@ pub struct ContactDetailModel {
     pub chips: Vec<SharedString>,
     pub address_full: SharedString,
     pub activity: Vec<ActivityRowModel>,
+    /// Nothing has passed between us: the section says so instead of
+    /// offering to show "all" of nothing (078 C-04).
+    pub activity_empty: bool,
 }
 
 pub fn contact_detail(s: &ContactsStrings, c: &ContactFixture) -> ContactDetailModel {
@@ -219,6 +222,7 @@ pub fn contact_detail(s: &ContactsStrings, c: &ContactFixture) -> ContactDetailM
         } else {
             Vec::new()
         },
+        activity_empty: !c.has_activity,
     }
 }
 
