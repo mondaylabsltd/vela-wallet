@@ -44,8 +44,8 @@ use crate::flows::fixtures::{
     AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick,
     CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeSpeedModel,
     FeeSpeedOption, FeeTokenPick, FeeTokenRow, FilterChip, HistoryGroup, HistoryPanel, NetworkRow,
-    ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm, SendNotice,
-    ReceiptStage, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
+    ReceiptStage, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm,
+    SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
 };
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
@@ -331,7 +331,7 @@ pub fn history_ids(view: &FeedView) -> Vec<String> {
 /// Compared against the shell's own local day boundary, which is the same
 /// function the executor stamps records with — asking two different questions
 /// about which day it is here is how a row lands under the wrong heading.
-fn day_label(day_start_ms: f64, s: &FlowStrings) -> SharedString {
+pub(crate) fn day_label(day_start_ms: f64, s: &FlowStrings) -> SharedString {
     let today = crate::executor::day_start_ms(crate::executor::now_ms());
     const DAY_MS: f64 = 86_400_000.0;
     if (day_start_ms - today).abs() < DAY_MS / 2.0 {
@@ -2623,12 +2623,16 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             progress: Some(1.0),
             // The chain is the TOKEN's, never whichever one the wallet is
             // looking at now: a send can confirm after the person moved on.
-            explorer: send.tx_hash.as_ref().filter(|hash| !hash.is_empty()).map(|hash| {
-                (
-                    s.view_on_explorer.clone(),
-                    SharedString::from(format!("{}/tx/{hash}", explorer_root(chain_id))),
-                )
-            }),
+            explorer: send
+                .tx_hash
+                .as_ref()
+                .filter(|hash| !hash.is_empty())
+                .map(|hash| {
+                    (
+                        s.view_on_explorer.clone(),
+                        SharedString::from(format!("{}/tx/{hash}", explorer_root(chain_id))),
+                    )
+                }),
             cta_accent: true,
             breakdown_title: breakdown_title.clone(),
             breakdown: breakdown.clone(),
@@ -2698,8 +2702,12 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                     // is true (the web's `etaLines`).
                     let typical = u64::from(typical);
                     lines.push(if elapsed < typical {
-                        fill(&s.tx_remaining, "remaining", &(typical - elapsed).to_string())
-                            .into()
+                        fill(
+                            &s.tx_remaining,
+                            "remaining",
+                            &(typical - elapsed).to_string(),
+                        )
+                        .into()
                     } else if elapsed < typical * 2 {
                         fill(&s.tx_elapsed, "elapsed", &elapsed.to_string()).into()
                     } else {

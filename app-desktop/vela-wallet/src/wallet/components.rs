@@ -2,6 +2,7 @@
 //! out. No i18n keys, no page state, no window management — the same contract
 //! `ui/` established in spec 007.
 
+use gpui::AnimationExt as _;
 use gpui::{
     Div, ElementId, ImageSource, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     SharedString, Stateful, StatefulInteractiveElement as _, Styled, StyledImage as _, canvas, div,
@@ -413,7 +414,26 @@ pub fn balance_display(
                 .gap(px(8.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(div().w(px(8.)).h(px(8.)).rounded(px(4.)).bg(theme.success))
+                // The web's `.live-dot`: it breathes — opacity 1 to .35 and
+                // back over 800 ms — so the line reads as listening, not as
+                // a label (078 H-05).
+                .child(
+                    div()
+                        .w(px(8.))
+                        .h(px(8.))
+                        .rounded(px(4.))
+                        .bg(theme.success)
+                        .with_animation(
+                            "balance-live-dot",
+                            gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+                            |dot, delta| {
+                                // Out and back in one cycle: the web's
+                                // `alternate` over two 800 ms halves.
+                                let t = if delta < 0.5 { delta * 2. } else { 2. - delta * 2. };
+                                dot.opacity(1. - 0.65 * t)
+                            },
+                        ),
+                )
                 .child(live),
         );
     }

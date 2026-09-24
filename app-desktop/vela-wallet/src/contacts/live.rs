@@ -624,9 +624,21 @@ mod tests {
     #[test]
     fn a_search_narrows_by_name_resolved_name_or_address() {
         let view = view(vec![
-            contact("0xaaaa000000000000000000000000000000000001", Some("Alice"), None),
-            contact("0xbbbb000000000000000000000000000000000002", None, Some("bob.eth")),
-            contact("0xcccc000000000000000000000000000000000003", Some("Carol"), None),
+            contact(
+                "0xaaaa000000000000000000000000000000000001",
+                Some("Alice"),
+                None,
+            ),
+            contact(
+                "0xbbbb000000000000000000000000000000000002",
+                None,
+                Some("bob.eth"),
+            ),
+            contact(
+                "0xcccc000000000000000000000000000000000003",
+                Some("Carol"),
+                None,
+            ),
         ]);
         let names = |query: &str| -> Vec<String> {
             sections(&view, query)

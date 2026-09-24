@@ -58,6 +58,10 @@ pub struct ActivityRowModel {
     /// The chain's logo for the avatar's badge (§8.3; issue 201). `None` on a
     /// drawn row — the coloured dot is the fallback, not the intent.
     pub badge_logo: Option<SharedString>,
+    /// The day this row opens, when it is the first of its day — "Today",
+    /// "Yesterday", a date — drawn above it on the home (078 H-04). `None`
+    /// for every other row, and everywhere else the row is drawn.
+    pub day: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -235,6 +239,7 @@ fn row(
         positive,
         badge,
         badge_logo: None,
+        day: None,
     }
 }
 
@@ -243,7 +248,7 @@ fn row(
 pub fn activity_default(s: &WalletStrings) -> Vec<ActivityRowModel> {
     let today = s.today.as_ref();
     let yesterday = s.yesterday.as_ref();
-    vec![
+    let mut rows = vec![
         row(
             s,
             ActivityKind::Sent,
@@ -286,7 +291,11 @@ pub fn activity_default(s: &WalletStrings) -> Vec<ActivityRowModel> {
             true,
             chain_base(),
         ),
-    ]
+    ];
+    // The web's D1 files them under their days (spec 038 #E3).
+    rows[0].day = Some(s.today.clone());
+    rows[3].day = Some(s.yesterday.clone());
+    rows
 }
 
 /// Masked variants for the component board (H5's rule: dots, units kept).

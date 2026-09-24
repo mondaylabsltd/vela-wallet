@@ -234,9 +234,18 @@ mod tests {
             (s.total_balance.as_ref(), "home.totalBalance"),
             (s.no_price.as_ref(), "home.balanceDetailNoPrice"),
             (s.detail_title.as_ref(), "home.balanceDetailTitle"),
-            (s.detail_networks_label.as_ref(), "home.balanceDetailNetworksLabel"),
-            (s.detail_networks_note.as_ref(), "home.balanceDetailNetworksNote"),
-            (s.detail_retrying.as_ref(), "home.balanceDetailStatusRetrying"),
+            (
+                s.detail_networks_label.as_ref(),
+                "home.balanceDetailNetworksLabel",
+            ),
+            (
+                s.detail_networks_note.as_ref(),
+                "home.balanceDetailNetworksNote",
+            ),
+            (
+                s.detail_retrying.as_ref(),
+                "home.balanceDetailStatusRetrying",
+            ),
             (s.detail_failed.as_ref(), "home.balanceDetailStatusFailed"),
             (s.detail_retry.as_ref(), "home.balanceDetailRetry"),
             (s.detail_updated.as_ref(), "home.balanceDetailUpdatedLabel"),

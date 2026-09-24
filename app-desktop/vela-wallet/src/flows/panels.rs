@@ -19,11 +19,10 @@ use crate::wallet::components::{
 };
 
 use super::components::{
-    CopyButton, search_empty, search_matches,
-    accent_button, address_card, danger_button, fact_row, fee_refresh_icon, fee_row,
+    CopyButton, accent_button, address_card, danger_button, fact_row, fee_refresh_icon, fee_row,
     fee_speed_note, fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search,
     ghost_button, inline_mark, max_chip, mono_field, network_pill, network_row, qr_card,
-    recipient_card, segmented_toggle, status_chip, token_header_card,
+    recipient_card, search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -775,9 +774,11 @@ fn tx_detail(
         if i > 0 {
             col = col.child(divider(theme));
         }
-        let button = fact.copy.clone().zip(copy.as_ref()).map(|(text, copy)| {
-            copy.button(format!("fact:{i}"), text)
-        });
+        let button = fact
+            .copy
+            .clone()
+            .zip(copy.as_ref())
+            .map(|(text, copy)| copy.button(format!("fact:{i}"), text));
         col = col.child(fact_row(theme, icons, identicons, fact, button));
     }
     if !model.breakdown.is_empty() {
@@ -2567,7 +2568,9 @@ fn send_receipt(
                         .font_family(theme::font_mono())
                         .text_size(theme::text_label())
                         .text_color(theme.fg_base)
-                        .child(SharedString::from(crate::wallet::live::shorten_address(value))),
+                        .child(SharedString::from(crate::wallet::live::shorten_address(
+                            value,
+                        ))),
                 )
                 .child(clickable(
                     "receipt-hash-copy",
@@ -2863,26 +2866,22 @@ pub fn scan_modal(
             (false, false) => c.rounded_br(px(8.)),
         }
     };
-    let mut frame = div()
-        .relative()
-        .w_full()
-        .h(px(frame_h))
-        .child({
-            let well = div()
-                .absolute()
-                .inset_0()
-                .rounded(px(8.))
-                .overflow_hidden()
-                .bg(theme.bg_sunken);
-            match preview {
-                Some(image) => well.child(
-                    gpui::img(gpui::ImageSource::Render(image))
-                        .w_full()
-                        .h(px(frame_h)),
-                ),
-                None => well,
-            }
-        });
+    let mut frame = div().relative().w_full().h(px(frame_h)).child({
+        let well = div()
+            .absolute()
+            .inset_0()
+            .rounded(px(8.))
+            .overflow_hidden()
+            .bg(theme.bg_sunken);
+        match preview {
+            Some(image) => well.child(
+                gpui::img(gpui::ImageSource::Render(image))
+                    .w_full()
+                    .h(px(frame_h)),
+            ),
+            None => well,
+        }
+    });
     for (top, left) in [(true, true), (true, false), (false, true), (false, false)] {
         frame = frame.child(corner(top, left));
     }

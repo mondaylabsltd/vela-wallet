@@ -166,10 +166,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
                 &view.banner_chain_ids.len().to_string(),
             )),
         )),
-        [] if view.refreshing
-            || on_cache
-            || view.notice == Some(BalanceNotice::StillUpdating) =>
-        {
+        [] if view.refreshing || on_cache || view.notice == Some(BalanceNotice::StillUpdating) => {
             Some((StatusKind::Refreshing, s.balance_stale.clone()))
         }
         [] if view.notice == Some(BalanceNotice::Unpriced) => {
@@ -196,7 +193,14 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         },
         integer,
         decimals,
-        live: None,
+        // The web's "listening" line under a live zero (078 H-05): a wallet
+        // every chain has answered for, holding nothing, is waiting for its
+        // first deposit — and says so rather than looking empty.
+        live: (usd == 0.0
+            && !view.balance_unknown
+            && !view.balance_partial
+            && view.tokens.is_empty())
+        .then(|| s.live_indicator.clone()),
         status,
     }
 }
@@ -231,9 +235,8 @@ pub fn balance_detail(
     locale: &str,
     money: &Money,
 ) -> BalanceDetail {
-    let name = |chain_id: u32| {
-        SharedString::from(crate::executor::custom_tokens::network_name(chain_id))
-    };
+    let name =
+        |chain_id: u32| SharedString::from(crate::executor::custom_tokens::network_name(chain_id));
     let mask = || SharedString::from(crate::wallet::fixtures::MASK);
 
     let mut pending: Vec<DetailChain> = view
@@ -642,10 +645,18 @@ mod tests {
             ],
             Vec::new(),
         );
-        let rows = activity_rows(&view, &strings(), false);
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            false,
+        );
         assert_eq!(rows.len(), 2, "the header is not a row here");
         assert_eq!(rows[0].unit, SharedString::from("POL"));
         assert_eq!(rows[1].unit, SharedString::from("USDT"));
+        // …it rides on the first item of its day, and only there (078 H-04).
+        assert!(rows[0].day.is_some(), "the day opens on its first row");
+        assert_eq!(rows[1].day, None);
     }
 
     /// The sign is the direction's, and the minus is U+2212 — a hyphen does
@@ -663,7 +674,12 @@ mod tests {
             ],
             Vec::new(),
         );
-        let rows = activity_rows(&view, &strings(), false);
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            false,
+        );
         assert_eq!(rows[0].amount, SharedString::from("\u{2212}2"));
         assert!(!rows[0].positive);
         assert_eq!(rows[1].amount, SharedString::from("+120"));
@@ -680,7 +696,12 @@ mod tests {
             }],
             Vec::new(),
         );
-        let rows = activity_rows(&view, &strings(), false);
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            false,
+        );
         assert_eq!(rows[0].amount, SharedString::from("+1.5"));
     }
 
@@ -694,7 +715,12 @@ mod tests {
             }],
             Vec::new(),
         );
-        let rows = activity_rows(&view, &strings(), true);
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            true,
+        );
         assert_eq!(rows[0].unit, SharedString::from("USDT"), "the unit stays");
         assert!(
             !rows[0].amount.contains("120"),
@@ -714,7 +740,13 @@ mod tests {
             Vec::new(),
         );
         assert_eq!(
-            activity_rows(&view, &strings(), false)[0].amount,
+            activity_rows(
+                &view,
+                &strings(),
+                &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+                false
+            )[0]
+            .amount,
             SharedString::from("")
         );
     }
@@ -789,7 +821,10 @@ mod tests {
         down.notice = Some(BalanceNotice::Unpriced);
         let model = balance(&down, &s, "en", &money);
         let Some((StatusKind::Warning, text)) = model.status else {
-            panic!("an unreachable chain is a warning: {:?}", model.status.map(|s| s.1));
+            panic!(
+                "an unreachable chain is a warning: {:?}",
+                model.status.map(|s| s.1)
+            );
         };
         assert!(
             text.contains(&crate::executor::custom_tokens::network_name(1)),
@@ -1757,20 +1792,32 @@ pub(crate) fn badge(chain_id: u32) -> gpui::Hsla {
 
 /// The activity rows the home preview shows.
 ///
-/// **Headers are dropped here, not filtered out of the core.** `FeedView::rows`
-/// interleaves day headers with items because the full Activity screen draws
-/// them; the home preview is a short flat list and the mocks draw no headings in
-/// it. Asking the core for a different shape would move a render decision into
-/// the machine.
+/// `FeedView::rows` interleaves the core's day headers with the items. The
+/// home used to drop them ("the mocks draw no headings") — the web files its
+/// preview under its days (spec 038 #E3, 078 H-04), so a header now rides on
+/// the first item of its day as `day`, and row N is still feed item N.
 #[must_use]
-pub fn activity_rows(view: &FeedView, s: &WalletStrings, hidden: bool) -> Vec<ActivityRowModel> {
-    view.rows
-        .iter()
-        .filter_map(|row| match row {
-            FeedRow::Header { .. } => None,
-            FeedRow::Item { item } => Some(activity_row(view, item, s, hidden)),
-        })
-        .collect()
+pub fn activity_rows(
+    view: &FeedView,
+    s: &WalletStrings,
+    flow: &crate::flows::FlowStrings,
+    hidden: bool,
+) -> Vec<ActivityRowModel> {
+    let mut rows = Vec::new();
+    let mut day = None;
+    for row in &view.rows {
+        match row {
+            FeedRow::Header { day_start_ms, .. } => {
+                day = Some(crate::flows::live::day_label(*day_start_ms, flow));
+            }
+            FeedRow::Item { item } => {
+                let mut model = activity_row(view, item, s, hidden);
+                model.day = day.take();
+                rows.push(model);
+            }
+        }
+    }
+    rows
 }
 
 /// What kind of event a row is.
@@ -1845,6 +1892,7 @@ pub(crate) fn activity_row(
         unit: SharedString::from(item.symbol.clone()),
         positive: incoming,
         badge: badge(item.chain_id),
+        day: None,
     }
 }
 

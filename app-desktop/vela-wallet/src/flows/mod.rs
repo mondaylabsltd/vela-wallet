@@ -775,9 +775,15 @@ mod tests {
             (s.no_matching_tokens.as_ref(), "send.noMatchingTokens"),
             (s.scan_invalid.as_ref(), "home.invalidQrTitle"),
             (s.scan_no_qr.as_ref(), "componentsUi.scanner.noQrFoundMsg"),
-            (s.scan_permission.as_ref(), "componentsUi.scanner.permissionText"),
+            (
+                s.scan_permission.as_ref(),
+                "componentsUi.scanner.permissionText",
+            ),
             (s.scan_no_camera.as_ref(), "componentsUi.scanner.noCamera"),
-            (s.scan_unavailable.as_ref(), "componentsUi.scanner.cameraUnavailable"),
+            (
+                s.scan_unavailable.as_ref(),
+                "componentsUi.scanner.cameraUnavailable",
+            ),
             (
                 s.scan_from_gallery.as_ref(),
                 "componentsUi.scanner.fromGallery",

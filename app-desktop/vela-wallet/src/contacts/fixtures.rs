@@ -236,6 +236,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
             positive: true,
             badge: chain_ethereum(),
             badge_logo: None,
+            day: None,
         },
         ActivityRowModel {
             kind: ActivityKind::Sent,
@@ -246,6 +247,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
             positive: false,
             badge: chain_arbitrum(),
             badge_logo: None,
+            day: None,
         },
     ]
 }

@@ -237,7 +237,10 @@ mod tests {
             renamed: false,
             added_ms: 1.0,
         };
-        assert_eq!(tile_of(&pinned).open_url(), "https://polymarket.com/markets");
+        assert_eq!(
+            tile_of(&pinned).open_url(),
+            "https://polymarket.com/markets"
+        );
         assert_eq!(
             super::super::fixtures::uniswap().open_url(),
             format!("https://{}", super::super::fixtures::uniswap().host)

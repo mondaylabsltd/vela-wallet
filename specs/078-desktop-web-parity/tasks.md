@@ -62,7 +62,7 @@ screenshot checked against the web.
       picker row) → scanner → `scan_resolved`.
 - [x] T034 F-02 scanner notices; F-03 scanner look after `ScanSurface`.
 - [x] T035 F-04 send receipt stages; G-04 dApp receipt.
-- [ ] T036 H-04 activity day headers; H-05 listening line.
+- [x] T036 H-04 activity day headers; H-05 listening line.
 - [ ] T037 H-06 asset detail parity (logo + name, facts, copy, explorer).
 - [ ] T038 F-05 sweep form; F-06 split rows editable; F-08 recipient label.
 - [ ] T039 F-07 add token parity.

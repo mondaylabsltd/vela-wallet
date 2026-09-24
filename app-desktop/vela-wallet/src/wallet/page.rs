@@ -1666,7 +1666,12 @@ impl WalletPage {
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.copy_text(CONTACT_QR_COPY, address.to_string(), CONTACTS_COPY_HOLD, cx);
+                        this.copy_text(
+                            CONTACT_QR_COPY,
+                            address.to_string(),
+                            CONTACTS_COPY_HOLD,
+                            cx,
+                        );
                     }))
                     .child(copy_label),
             );
@@ -2585,10 +2590,7 @@ impl WalletPage {
     /// A dialog's body scroll, kept per dialog so two stacked ones do not
     /// share a position.
     fn dialog_scroll(&mut self, id: &'static str) -> gpui::ScrollHandle {
-        self.dialog_scrolls
-            .entry(id)
-            .or_default()
-            .clone()
+        self.dialog_scrolls.entry(id).or_default().clone()
     }
 
     /// Escape: the dialog on top goes, and only that one — the same order
@@ -2871,6 +2873,17 @@ impl WalletPage {
         let fresh = self.celebrated_row(&home_tx_ids, cx);
         let mut activity_col = div().flex().flex_col();
         for (i, row) in activity.iter().enumerate() {
+            // The day a group files under (the web's `.day`: 11, subtle,
+            // 4 above and below) — spec 038 #E3, 078 H-04.
+            if let Some(day) = row.day.clone() {
+                activity_col = activity_col.child(
+                    div()
+                        .py(px(4.))
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(day),
+                );
+            }
             activity_col = activity_col.child(
                 div()
                     .id(ElementId::from(("activity", i)))
@@ -2976,7 +2989,8 @@ impl WalletPage {
                         self.identity.is_some().then(|| {
                             Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                                 this.open_balance_status(cx);
-                            })) as crate::wallet::components::BalanceToggle
+                            }))
+                                as crate::wallet::components::BalanceToggle
                         }),
                     ))
                     .child(
@@ -3372,7 +3386,7 @@ impl WalletPage {
             .view()
             .hidden;
         let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
-        wallet_live::activity_rows(&feed, &self.strings, hidden)
+        wallet_live::activity_rows(&feed, &self.strings, &self.flow_strings, hidden)
     }
 
     /// The core-list indices behind the home's asset strip, in drawn order.
@@ -3803,7 +3817,13 @@ impl WalletPage {
                 .flex()
                 .items_center()
                 .cursor_pointer()
-                .child(icon_img(&mut self.icons, Icon::X, false, theme.fg_subtle, 14.))
+                .child(icon_img(
+                    &mut self.icons,
+                    Icon::X,
+                    false,
+                    theme.fg_subtle,
+                    14.,
+                ))
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.contacts_query.clear();
                     // The web's clear leaves the person where they were
@@ -13152,12 +13172,18 @@ impl WalletPage {
         };
         let row = |line: &wallet_live::DetailChain, retry: Option<gpui::AnyElement>| {
             let name = crate::executor::custom_tokens::network_name(line.chain_id);
-            let mut text = div().flex().flex_col().gap(px(2.)).flex_1().min_w(px(0.)).child(
-                div()
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_base)
-                    .child(line.name.clone()),
-            );
+            let mut text = div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .flex_1()
+                .min_w(px(0.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(line.name.clone()),
+                );
             if let Some((status, failed)) = &line.status {
                 text = text.child(
                     div()
@@ -13201,16 +13227,14 @@ impl WalletPage {
                 .text_color(theme.fg_subtle)
                 .child(detail.summary.clone()),
         );
-        body = body
-            .child(section(s.detail_networks_label.clone()))
-            .child(
-                div()
-                    .mb(px(8.))
-                    .text_size(theme::text_label())
-                    .line_height(gpui::relative(1.4))
-                    .text_color(theme.fg_subtle)
-                    .child(s.detail_networks_note.clone()),
-            );
+        body = body.child(section(s.detail_networks_label.clone())).child(
+            div()
+                .mb(px(8.))
+                .text_size(theme::text_label())
+                .line_height(gpui::relative(1.4))
+                .text_color(theme.fg_subtle)
+                .child(s.detail_networks_note.clone()),
+        );
         for line in &detail.pending {
             let retry = line.retry.then(|| {
                 let chain_id = line.chain_id;
@@ -13226,9 +13250,7 @@ impl WalletPage {
                         // failure and force one read — the core's own retry
                         // is throttled like any other fetch.
                         crate::executor::balance_dashboard::dispatch(
-                            vela_core::app::balance_dashboard::Event::FixChainResolved {
-                                chain_id,
-                            },
+                            vela_core::app::balance_dashboard::Event::FixChainResolved { chain_id },
                             cx,
                         );
                         crate::executor::balance_dashboard::refresh(cx);
@@ -13301,7 +13323,12 @@ impl WalletPage {
             copied: self.copied.clone(),
             on_copy: std::rc::Rc::new(move |key, text, _, cx| {
                 let _ = page.update(cx, |this, cx| {
-                    this.copy_text(key, text.to_string(), std::time::Duration::from_millis(150), cx);
+                    this.copy_text(
+                        key,
+                        text.to_string(),
+                        std::time::Duration::from_millis(150),
+                        cx,
+                    );
                 });
             }),
         }
@@ -13383,12 +13410,7 @@ impl WalletPage {
     /// with the ring, confirmed with its transaction hash and explorer, or
     /// failed. Nothing here answers the request: the site was answered before
     /// this was drawn, so Done closes a surface, never a conversation.
-    fn dapp_receipt_body(
-        &mut self,
-        theme: &Theme,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> Div {
+    fn dapp_receipt_body(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         use crate::flows::fixtures::ReceiptStage;
         use vela_core::app::tx_tracker::TrackStatus;
         let Some(landing) = self.dapp_landing.clone() else {
@@ -13405,7 +13427,13 @@ impl WalletPage {
         // not the chain saying no, and a cross for it would be a verdict this
         // wallet does not have.
         let (stage, title, captions, hash, explorer) = match entry.as_ref() {
-            None => (ReceiptStage::Submitting, s.receipt_confirming.clone(), vec![], None, None),
+            None => (
+                ReceiptStage::Submitting,
+                s.receipt_confirming.clone(),
+                vec![],
+                None,
+                None,
+            ),
             Some(entry) => match (entry.status, entry.tx_hash.clone()) {
                 (TrackStatus::Confirmed, Some(tx)) => {
                     let url = crate::executor::custom_tokens::explorer_base(landing.chain_id)
@@ -13444,9 +13472,8 @@ impl WalletPage {
                     .and_then(|entry| entry.submitted_at_ms)
                     .unwrap_or(landing.raised_at_ms);
                 let elapsed = ((crate::executor::now_ms() - since) / 1000.).max(0.) as u64;
-                vela_core::app::network_admin::typical_inclusion_s(landing.chain_id).and_then(
-                    |typical| flows_live::ring_progress(elapsed, u64::from(typical)),
-                )
+                vela_core::app::network_admin::typical_inclusion_s(landing.chain_id)
+                    .and_then(|typical| flows_live::ring_progress(elapsed, u64::from(typical)))
             }
             ReceiptStage::Confirmed => Some(1.),
             _ => None,
@@ -13488,8 +13515,16 @@ impl WalletPage {
                     .child(
                         div()
                             .font_family(theme::font_mono())
-                            .text_color(if copied { theme.success_base } else { theme.fg_base })
-                            .child(SharedString::from(if copied { "✓".to_owned() } else { short })),
+                            .text_color(if copied {
+                                theme.success_base
+                            } else {
+                                theme.fg_base
+                            })
+                            .child(SharedString::from(if copied {
+                                "✓".to_owned()
+                            } else {
+                                short
+                            })),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.copy_text(
