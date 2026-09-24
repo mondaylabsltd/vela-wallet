@@ -390,6 +390,9 @@ pub struct FlowStrings {
     /// Spec 038 #D3: the two lines beside the usual-time sentence.
     pub tx_slow_confirm: SharedString,
     pub tx_elapsed: String,
+    /// Template carrying `{{remaining}}`: inside the chain's usual time the
+    /// receipt counts DOWN (078 F-04, the web's `etaLines`).
+    pub tx_remaining: String,
     pub recipient_count_other: String,
     pub tx_close_background: SharedString,
     pub tx_hash: SharedString,
@@ -667,6 +670,7 @@ impl FlowStrings {
             tx_typical_time: raw("send.txTypicalTime"),
             tx_slow_confirm: s("send.txSlowConfirm"),
             tx_elapsed: raw("send.txElapsed"),
+            tx_remaining: raw("send.txRemaining"),
             recipient_count_other: raw("send.recipientCount_other"),
             tx_close_background: s("send.txCloseBackground"),
             tx_hash: s("componentsTx.receipt.txHash"),

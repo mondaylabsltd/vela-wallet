@@ -397,9 +397,17 @@ pub fn render(
             actions.notice_action,
             actions.notice_dismiss,
         ),
-        FlowBody::SendReceipt(model) => {
-            send_receipt(model, theme, icons, identicons, actions.advance)
-        }
+        FlowBody::SendReceipt(model) => send_receipt(
+            model,
+            theme,
+            icons,
+            identicons,
+            // The column's height, less its header and bottom padding: what
+            // the receipt centres itself in.
+            f32::from(window.viewport_size().height) - 120.,
+            actions.copy,
+            actions.advance,
+        ),
         // The page routes this away before it gets here; a column-shaped
         // viewfinder is the thing DS1L exists to avoid.
         FlowBody::Scan(model) => scan_placeholder(model, theme),
@@ -2499,43 +2507,267 @@ fn send_receipt(
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
+    column_h: f32,
+    copy: Option<CopyAction>,
     advance: Option<Click>,
 ) -> Div {
-    let mut col = column().child(
-        div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(6.))
-            .py(px(24.))
-            .child(
-                div()
-                    .w(px(88.))
-                    .h(px(88.))
-                    .rounded(px(44.))
-                    .bg(theme.bg_sunken)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(icon_img(icons, Icon::RefreshCw, false, theme.fg_muted, 26.)),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(model.title.clone()),
-            ),
-    );
+    let mut col = column().child(status_hero(
+        theme,
+        icons,
+        model.stage,
+        model.progress,
+        &model.title,
+        &model.captions,
+    ));
 
-    for (i, caption) in model.captions.iter().enumerate() {
-        col = col.child(
+    if !model.breakdown.is_empty() {
+        col = col.child(div().pt(px(12.)).child(breakdown_list(
+            theme,
+            identicons,
+            model.breakdown_title.as_ref(),
+            &model.breakdown,
+        )));
+    }
+
+    // The foot (`SendReceipt.svelte`): the hash's two ends with a copy that
+    // ticks — the whole hash on the clipboard, 66 characters on one line ran
+    // off the column — then the explorer, then the one button.
+    let mut foot = div().flex().flex_col().gap(px(8.)).pt(px(24.)).pb(px(16.));
+    if let Some((label, value)) = &model.hash {
+        let button = copy
+            .as_ref()
+            .map(|copy| copy.button("receipt-hash", value.clone()));
+        let copied = button.as_ref().is_some_and(|button| button.copied);
+        let glyph = icon_img(
+            icons,
+            if copied { Icon::Check } else { Icon::Copy },
+            false,
+            if copied {
+                theme.success_base
+            } else {
+                theme.fg_subtle
+            },
+            14.,
+        );
+        foot = foot.child(
             div()
                 .flex()
+                .items_center()
                 .justify_center()
-                .text_size(theme::text_row_sub())
-                // The second caption is the one that says "you can leave" —
-                // true, useful, and not what the person is waiting to read.
+                .gap(px(4.))
+                .pb(px(8.))
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(label.clone()),
+                )
+                .child(
+                    div()
+                        .font_family(theme::font_mono())
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_base)
+                        .child(SharedString::from(crate::wallet::live::shorten_address(value))),
+                )
+                .child(clickable(
+                    "receipt-hash-copy",
+                    button.map(|button| button.on_click),
+                    div().flex().items_center().child(glyph),
+                )),
+        );
+    }
+    if let Some((label, url)) = &model.explorer {
+        foot = foot.child(explorer_button(
+            "receipt-explorer",
+            theme,
+            label.clone(),
+            Some(url),
+        ));
+    }
+    // The CTA is the accent "Done" once the money has landed, and the quiet
+    // "Close · keep running" before — load-bearing copy: the transaction does
+    // not depend on this panel staying open.
+    foot = foot.child(clickable(
+        "flow-receipt-cta",
+        advance,
+        if model.cta_accent {
+            accent_button(theme, model.cta.clone())
+        } else {
+            ghost_button(theme, model.cta.clone())
+        },
+    ));
+    // Issue 199 (the web's `layout="column"`): in a window-tall column the
+    // status and the button pinned apart are most of a screen away from each
+    // other. One group, 2:3 above the middle — the optical centre, where a
+    // dialog would sit. A long split outgrows it and the spacers give way.
+    div()
+        .min_h(px(column_h.max(0.)))
+        .flex()
+        .flex_col()
+        .child(div().flex_1().flex_grow(2.))
+        .child(col.child(foot))
+        .child(div().flex_1().flex_grow(3.))
+}
+
+/// The receipt's centrepiece — the web's `StatusHero`: one 88 disc for all
+/// four stages, so the mark does not resize as the transaction moves — a
+/// spinner while submitting, a clock while submitted, a tick once confirmed,
+/// a cross on failure. Submitted and confirmed wear a ring OUTSIDE the disc
+/// (104 across, 2.5 stroke): it fills as the chain's usual time passes and is
+/// the same ring that closes and turns green on the confirmation, so the tick
+/// arrives as the end of what the person was watching. Without an estimate
+/// the ring roams rather than filling.
+fn status_hero(
+    theme: &Theme,
+    icons: &mut IconCache,
+    stage: crate::flows::fixtures::ReceiptStage,
+    progress: Option<f32>,
+    title: &SharedString,
+    captions: &[SharedString],
+) -> Div {
+    use crate::flows::fixtures::ReceiptStage;
+    use gpui::{Animation, AnimationExt as _, PathBuilder, Point, canvas};
+
+    let (bg, fg) = match stage {
+        ReceiptStage::Submitting => (theme.bg_sunken, theme.accent),
+        ReceiptStage::Submitted => (theme.bg_sunken, theme.fg_muted),
+        ReceiptStage::Confirmed => (theme.success_soft, theme.success_base),
+        ReceiptStage::Failed => (theme.error_soft, theme.error_base),
+    };
+    let mark: gpui::AnyElement = match stage {
+        ReceiptStage::Submitting => crate::ui::spinner(fg, px(30.), px(1.5)),
+        ReceiptStage::Submitted => icon_img(icons, Icon::Clock, false, fg, 26.).into_any_element(),
+        ReceiptStage::Confirmed => icon_img(icons, Icon::Check, false, fg, 26.).into_any_element(),
+        ReceiptStage::Failed => icon_img(icons, Icon::X, false, fg, 26.).into_any_element(),
+    };
+
+    // An arc of `sweep` (0–1 of a turn) from `start` (0–1, 0 = 12 o'clock),
+    // clockwise, on a circle of radius `r` about the bounds' centre.
+    fn paint_arc(
+        bounds: gpui::Bounds<gpui::Pixels>,
+        start: f32,
+        sweep: f32,
+        color: gpui::Hsla,
+        window: &mut Window,
+    ) {
+        let stroke = 2.5_f32;
+        let cx = f32::from(bounds.origin.x) + f32::from(bounds.size.width) / 2.;
+        let cy = f32::from(bounds.origin.y) + f32::from(bounds.size.height) / 2.;
+        let r = f32::from(bounds.size.width) / 2. - stroke;
+        let at = |turn: f32| {
+            let a = (turn - 0.25) * std::f32::consts::TAU;
+            Point::new(px(cx + r * a.cos()), px(cy + r * a.sin()))
+        };
+        let sweep = sweep.clamp(0., 1.);
+        if sweep <= 0.001 {
+            return;
+        }
+        let mut pb = PathBuilder::stroke(px(stroke));
+        pb.move_to(at(start));
+        // Two halves when it is more than half a turn: one SVG arc cannot
+        // draw a full circle.
+        let mut from = 0_f32;
+        while from < sweep {
+            let to = (from + 0.49).min(sweep);
+            pb.arc_to(
+                Point::new(px(r), px(r)),
+                px(0.),
+                false,
+                true,
+                at(start + to),
+            );
+            from = to;
+        }
+        if let Ok(path) = pb.build() {
+            window.paint_path(path, color);
+        }
+    }
+
+    let track = theme.border_card;
+    let (arc_color, ringed) = match stage {
+        ReceiptStage::Submitted => (theme.accent, true),
+        ReceiptStage::Confirmed => (theme.success_base, true),
+        _ => (theme.accent, false),
+    };
+    let mut disc = div()
+        .relative()
+        .size(px(88.))
+        .flex_none()
+        .rounded_full()
+        .bg(bg)
+        .flex()
+        .items_center()
+        .justify_center()
+        .mb(px(16.));
+    if ringed {
+        let confirmed = stage == ReceiptStage::Confirmed;
+        let ring = div().absolute().top(px(-8.)).left(px(-8.)).size(px(104.));
+        disc = disc.child(match (confirmed, progress) {
+            (false, None) => ring
+                .with_animation(
+                    "receipt-ring-roam",
+                    Animation::new(std::time::Duration::from_millis(2400)).repeat(),
+                    move |el, delta| {
+                        el.child(
+                            canvas(
+                                |_, _, _| (),
+                                move |bounds, _, window, _| {
+                                    paint_arc(bounds, 0., 1., track, window);
+                                    paint_arc(bounds, delta, 0.25, arc_color, window);
+                                },
+                            )
+                            .size_full(),
+                        )
+                    },
+                )
+                .into_any_element(),
+            (_, drawn) => {
+                let drawn = if confirmed { 1. } else { drawn.unwrap_or(0.25) };
+                ring.child(
+                    canvas(
+                        |_, _, _| (),
+                        move |bounds, _, window, _| {
+                            if !confirmed {
+                                paint_arc(bounds, 0., 1., track, window);
+                            }
+                            paint_arc(bounds, 0., drawn, arc_color, window);
+                        },
+                    )
+                    .size_full(),
+                )
+                .into_any_element()
+            }
+        });
+    }
+    disc = disc.child(mark);
+
+    let mut hero = div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(px(4.))
+        .pt(px(48.))
+        .pb(px(24.))
+        .child(disc)
+        .child(
+            div()
+                .text_size(theme::text_panel_title())
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(theme.fg_base)
+                .text_center()
+                .child(title.clone()),
+        );
+    for (i, caption) in captions.iter().enumerate() {
+        // The first caption is what the person is waiting to read; the rest
+        // say "you can leave" and count — true, useful, and quieter.
+        hero = hero.child(
+            div()
+                .text_center()
+                .text_size(if i == 0 {
+                    theme::text_row_sub()
+                } else {
+                    theme::text_label()
+                })
                 .text_color(if i == 0 {
                     theme.fg_muted
                 } else {
@@ -2544,46 +2776,7 @@ fn send_receipt(
                 .child(caption.clone()),
         );
     }
-
-    if !model.breakdown.is_empty() {
-        col = col.child(breakdown_list(
-            theme,
-            identicons,
-            model.breakdown_title.as_ref(),
-            &model.breakdown,
-        ));
-    }
-
-    if let Some((label, value)) = &model.hash {
-        col = col.child(
-            div()
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(px(6.))
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_subtle)
-                        .child(label.clone()),
-                )
-                .child(
-                    div()
-                        .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
-                        .text_color(theme.fg_base)
-                        .child(value.clone()),
-                ),
-        );
-    }
-
-    // "Close · keep running" is load-bearing copy: the transaction does not
-    // depend on this panel staying open.
-    col.child(clickable(
-        "flow-receipt-cta",
-        advance,
-        ghost_button(theme, model.cta.clone()),
-    ))
+    hero
 }
 
 /// DS1L's body if it ever reached the column. It does not — the page draws the

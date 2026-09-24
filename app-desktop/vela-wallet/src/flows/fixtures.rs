@@ -661,6 +661,17 @@ pub struct SendConfirm {
 
 #[derive(Clone)]
 pub struct SendReceipt {
+    /// Which of the four the receipt is in — the disc's colour and mark
+    /// (078 F-04, the web's `StatusHero`).
+    pub stage: ReceiptStage,
+    /// 0–1, how much of the ring round the disc is drawn while submitted;
+    /// `None` without an estimate for the chain, and the ring roams instead.
+    pub progress: Option<f32>,
+    /// "View on Explorer" and where it leads — once there is a hash.
+    pub explorer: Option<(SharedString, SharedString)>,
+    /// The CTA is the accent "Done" once confirmed; before that it is the
+    /// quiet "Close · keep running".
+    pub cta_accent: bool,
     pub title: SharedString,
     pub captions: Vec<SharedString>,
     /// Spec 038 #D2 — a split: "N recipients", then every one of them, on
@@ -678,6 +689,15 @@ pub struct ScanModal {
     /// A desktop webcam has no torch, so the modal offers two tools where the
     /// phone offers three.
     pub tools: Vec<SharedString>,
+}
+
+/// The receipt's four states (`ReceiptStage` on the web).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReceiptStage {
+    Submitting,
+    Submitted,
+    Confirmed,
+    Failed,
 }
 
 /// Everything a flow panel can hold. The page matches on this, so a panel body
@@ -1372,6 +1392,12 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
 
 fn send_receipt(s: &FlowStrings) -> SendReceipt {
     SendReceipt {
+        stage: ReceiptStage::Submitted,
+        // The mock has no estimate for its chain, so its ring roams — as the
+        // web's `dsd4` does.
+        progress: None,
+        explorer: None,
+        cta_accent: false,
         breakdown_title: None,
         breakdown: Vec::new(),
         title: s.tx_submitted_title.clone(),

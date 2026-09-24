@@ -533,6 +533,9 @@ pub struct WalletPage {
     scan_quiet_until: Option<std::time::Instant>,
     /// Why the camera is not running, as the last frame reported it.
     scan_camera_failure: Option<crate::executor::camera::CameraFailure>,
+    /// A once-a-second redraw is running for a waiting receipt (078 F-04):
+    /// the countdown and the ring move with the clock, not with the core.
+    receipt_ticking: bool,
     /// The contacts header search (078 X-05 / C-02): the web filters the
     /// A–Z list as it is typed, in the shell (`letterSections`).
     contacts_query: String,
@@ -1021,6 +1024,7 @@ impl WalletPage {
             scan_notice: None,
             scan_quiet_until: None,
             scan_camera_failure: None,
+            receipt_ticking: false,
             contacts_query: String::new(),
             balance_detail_open: false,
             contacts_query_focus: cx.focus_handle(),
@@ -13022,6 +13026,9 @@ impl WalletPage {
                         cx,
                     );
                     actions.search = Some(self.flow_search_field(panel, cx));
+                    if panel == FlowPanel::Dsd4 {
+                        self.tick_receipt(cx);
+                    }
                     actions.copy = Some(self.flow_copy_action(cx));
                     let rendered = panels::render(
                         &body,
@@ -13265,6 +13272,47 @@ impl WalletPage {
                         .child(self.contacts.copied.clone()),
                 ),
         )
+    }
+
+    /// Keep a submitted receipt counting: redraw once a second while the send
+    /// sits on its receipt with the relay holding the op — "~9s remaining" is
+    /// a number a person reads, and it has to change (the web's `setInterval`).
+    /// Stops by itself once the receipt settles or the panel goes.
+    fn tick_receipt(&mut self, cx: &mut Context<Self>) {
+        fn waiting(this: &WalletPage, cx: &gpui::App) -> bool {
+            this.flows.last() == Some(&FlowPanel::Dsd4)
+                && this.send_host.as_ref().is_some_and(|host| {
+                    host.read(cx).view.receipt.as_ref().is_some_and(|receipt| {
+                        receipt.status == vela_core::app::send::SendReceiptStatus::Submitted
+                    })
+                })
+        }
+        if self.receipt_ticking || !waiting(self, cx) {
+            return;
+        }
+        self.receipt_ticking = true;
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(1))
+                    .await;
+                let go_on = page
+                    .update(cx, |this, cx| {
+                        let go_on = waiting(this, cx);
+                        if go_on {
+                            cx.notify();
+                        } else {
+                            this.receipt_ticking = false;
+                        }
+                        go_on
+                    })
+                    .unwrap_or(false);
+                if !go_on {
+                    return;
+                }
+            }
+        })
+        .detach();
     }
 
     /// The query under the flow panel on top, as the field the panel draws.

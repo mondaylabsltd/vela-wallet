@@ -45,7 +45,7 @@ use crate::flows::fixtures::{
     CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeSpeedModel,
     FeeSpeedOption, FeeTokenPick, FeeTokenRow, FilterChip, HistoryGroup, HistoryPanel, NetworkRow,
     ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm, SendNotice,
-    SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
+    ReceiptStage, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
 };
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
@@ -2599,6 +2599,10 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
 
     if status == Some(SendReceiptStatus::Failed) || send.tx_status == SendTxStatus::Error {
         return SendReceipt {
+            stage: ReceiptStage::Failed,
+            progress: None,
+            explorer: None,
+            cta_accent: false,
             breakdown_title: None,
             breakdown: Vec::new(),
             title: tx_error_text(send, s).unwrap_or_else(|| s.tx_error_generic.clone()),
@@ -2615,6 +2619,17 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             .filter(|amount| !amount.is_empty())
             .unwrap_or_else(|| send.confirm_amount.clone());
         return SendReceipt {
+            stage: ReceiptStage::Confirmed,
+            progress: Some(1.0),
+            // The chain is the TOKEN's, never whichever one the wallet is
+            // looking at now: a send can confirm after the person moved on.
+            explorer: send.tx_hash.as_ref().filter(|hash| !hash.is_empty()).map(|hash| {
+                (
+                    s.view_on_explorer.clone(),
+                    SharedString::from(format!("{}/tx/{hash}", explorer_root(chain_id))),
+                )
+            }),
+            cta_accent: true,
             breakdown_title: breakdown_title.clone(),
             breakdown: breakdown.clone(),
             title: fill(
@@ -2643,7 +2658,16 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         };
     }
     if status == Some(SendReceiptStatus::Submitted) {
+        let eta = send.receipt.as_ref().and_then(|receipt| {
+            let (at, typical) = (receipt.submitted_at_ms?, receipt.typical_inclusion_s?);
+            let elapsed = ((crate::executor::now_ms() - at) / 1000.0).max(0.0) as u64;
+            Some((elapsed, u64::from(typical)))
+        });
         return SendReceipt {
+            stage: ReceiptStage::Submitted,
+            progress: eta.and_then(|(elapsed, typical)| ring_progress(elapsed, typical)),
+            explorer: None,
+            cta_accent: false,
             breakdown_title: breakdown_title.clone(),
             breakdown: breakdown.clone(),
             title: s.tx_submitted_title.clone(),
@@ -2668,10 +2692,18 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                         )
                         .into(),
                     );
-                    lines.push(if elapsed >= u64::from(typical) * 2 {
-                        s.tx_slow_confirm.clone()
-                    } else {
+                    // Inside the usual time the line counts DOWN — "~9s
+                    // remaining" is a promise with an end; "almost there"
+                    // waits until the usual time has passed, which is when it
+                    // is true (the web's `etaLines`).
+                    let typical = u64::from(typical);
+                    lines.push(if elapsed < typical {
+                        fill(&s.tx_remaining, "remaining", &(typical - elapsed).to_string())
+                            .into()
+                    } else if elapsed < typical * 2 {
                         fill(&s.tx_elapsed, "elapsed", &elapsed.to_string()).into()
+                    } else {
+                        s.tx_slow_confirm.clone()
                     });
                 }
                 lines
@@ -2686,6 +2718,10 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
     }
     // Signing or submitting: nothing has been accepted yet.
     SendReceipt {
+        stage: ReceiptStage::Submitting,
+        progress: None,
+        explorer: None,
+        cta_accent: false,
         breakdown_title,
         breakdown,
         title: s.tx_submitting.clone(),
@@ -2693,6 +2729,20 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         hash: None,
         cta: s.tx_close_background.clone(),
     }
+}
+
+/// The ring round the receipt's disc while a transaction is on its way — the
+/// web's `ringProgress`, one curve for both receipts: it eases toward full and
+/// never gets there (about 70% at the chain's typical time, 86% at twice it, a
+/// 92% ceiling), so only the confirmation closes the ring. `None` without a
+/// typical time, and the ring roams instead of filling.
+#[must_use]
+pub fn ring_progress(elapsed_s: u64, typical_s: u64) -> Option<f32> {
+    if typical_s == 0 {
+        return None;
+    }
+    let elapsed = elapsed_s as f32;
+    Some(0.92 * (1. - (-1.4 * elapsed / typical_s.max(1) as f32).exp()))
 }
 
 /// Spec 038 #D2: a split's parts on the receipt as on the confirm — from the
@@ -3348,6 +3398,37 @@ mod tests {
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
         })
+    }
+
+    /// 078 F-04: each receipt state is its own stage — the disc's colour and
+    /// mark — and only a confirmation wears the accent "Done" and a full ring.
+    #[test]
+    fn each_receipt_state_draws_its_own_stage() {
+        use vela_core::app::send::SendReceiptStatus;
+        let confirmed = receipt_with(SendReceiptStatus::Confirmed, None);
+        assert_eq!(confirmed.stage, ReceiptStage::Confirmed);
+        assert!(confirmed.cta_accent);
+        assert_eq!(confirmed.progress, Some(1.0));
+
+        let submitted = receipt_with(SendReceiptStatus::Submitted, None);
+        assert_eq!(submitted.stage, ReceiptStage::Submitted);
+        assert!(!submitted.cta_accent);
+        assert_eq!(submitted.progress, None, "no estimate: the ring roams");
+
+        let failed = receipt_with(SendReceiptStatus::Failed, None);
+        assert_eq!(failed.stage, ReceiptStage::Failed);
+        assert!(failed.explorer.is_none() && failed.hash.is_none());
+    }
+
+    /// The ring eases toward full and never reaches it by waiting: ~70% at
+    /// the chain's usual time, under the 92% ceiling at any length.
+    #[test]
+    fn the_ring_never_closes_by_itself() {
+        assert_eq!(ring_progress(10, 0), None);
+        assert_eq!(ring_progress(0, 12), Some(0.0));
+        let at_typical = ring_progress(12, 12).unwrap_or_default();
+        assert!((0.65..0.72).contains(&at_typical), "{at_typical}");
+        assert!(ring_progress(10_000, 12).unwrap_or_default() <= 0.92);
     }
 
     /// Spec 038 #D2: a split's receipt lists every recipient the core froze,
