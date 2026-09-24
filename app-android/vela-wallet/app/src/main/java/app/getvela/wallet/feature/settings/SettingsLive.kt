@@ -330,14 +330,29 @@ object SettingsLive {
                 } else {
                     null
                 },
-                // Why the wizard stopped, or why this chain cannot be added —
-                // said, not just badged.
+                // Why the wizard stopped, why this chain cannot be added, or —
+                // when it can — what adding it still will not do. Said, not
+                // just badged, and only ONE of the three: a callout is the
+                // sentence under the pill, and two would contradict.
+                //
+                // The stop comes first because it is why nothing more happened.
+                // The last arm is spec 081 FR-009: two of the contracts above
+                // matter only to a wallet holding more than one passkey, so
+                // when those are the only ones missing the core says
+                // "compatible" — truthfully — and this is the rest of that
+                // sentence. Without it the pill says Compatible while two rows
+                // carry a red cross. It cannot collide with the arm above it:
+                // that one needs `!compatible`, this one needs `compatible`.
                 callout = when {
                     stopped -> CalloutModel(
                         CalloutTone.Warning,
                         strings.t(if (inconclusive) "settingsModals.addNetwork.unableToVerify" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
                     )
                     checked && !compatible && !unverified -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
+                    compat?.let { it.compatible && !it.multi_key_ready } == true -> CalloutModel(
+                        tone = CalloutTone.Warning,
+                        text = strings.t(I18nKeys.SettingsUi.ADD_SINGLE_KEY_ONLY),
+                    )
                     else -> null
                 },
                 // Only offered when the core says this chain can be added — or,
@@ -976,17 +991,31 @@ object SettingsLive {
         )
     }
 
-    /** The backup as a row: one line, three states, a chevron only when there is something to do. */
+    /**
+     * The backup as a row: one line, four states, and an affordance only where
+     * a tap does something.
+     *
+     * Two of those states have nothing to offer — the check is still running,
+     * or it came back "backed up" — so the row is inert there: no chevron, and
+     * (dead-controls #8) no ripple either, because it took taps in every state
+     * while only `NotBackedUp` carried an action.
+     *
+     * "Could not check" is the state a person actually taps, and what they
+     * want is another attempt (founder's ruling, 2026-09-23). So it is
+     * actionable, with the glyph that says "ask again" rather than the chevron
+     * that promises a page: the tap re-runs the very check this screen runs
+     * when it opens.
+     */
     fun ethereumBackupRow(
         state: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
         strings: VelaStrings,
     ): SettingsRowModel? {
         val k = I18nKeys.SettingsUi
-        val (subtitle, actionable) = when (state) {
-            null -> strings.t(k.BACKUP_CHECKING) to false
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.BackedUp -> strings.t(k.BACKUP_BACKED_UP) to false
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotBackedUp -> strings.t(k.BACKUP_NOT_BACKED_UP) to true
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.CouldNotCheck -> strings.t(k.BACKUP_COULD_NOT_CHECK) to false
+        val (subtitle, trailing) = when (state) {
+            null -> strings.t(k.BACKUP_CHECKING) to RowTrailing.None
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.BackedUp -> strings.t(k.BACKUP_BACKED_UP) to RowTrailing.None
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotBackedUp -> strings.t(k.BACKUP_NOT_BACKED_UP) to RowTrailing.Chevron
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.CouldNotCheck -> strings.t(k.BACKUP_COULD_NOT_CHECK) to RowTrailing.Retry
             app.getvela.wallet.feature.settings.core.RegistryBackup.State.Unavailable,
             app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotRegistered -> return null
         }
@@ -995,7 +1024,8 @@ object SettingsLive {
             title = strings.t(k.BACKUP_TITLE),
             icon = SettingsIcon.Upload,
             subtitle = subtitle,
-            trailing = if (actionable) RowTrailing.Chevron else RowTrailing.None,
+            trailing = trailing,
+            actionable = trailing != RowTrailing.None,
         )
     }
 

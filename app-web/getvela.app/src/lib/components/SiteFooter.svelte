@@ -40,14 +40,15 @@
 			</div>
 			<div class="col">
 				<h3>{m.chrome.footer.columns.infrastructure}</h3>
+				<a href={L('/docs/self-hosting')}>{m.chrome.footer.links.selfHosting}</a>
 				<a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener"
 					>Vela Relay</a
 				>
-				<a href="https://ethereum-data.getvela.app/" target="_blank" rel="noopener"
-					>Chain Data Index</a
-				>
-				<a href="https://webauthnp256-publickey-index.biubiu.tools/" target="_blank" rel="noopener"
+				<a href="https://github.com/mondaylabsltd/p256-index" target="_blank" rel="noopener"
 					>Passkey Index</a
+				>
+				<a href="https://github.com/atshelchin/ethereum-data" target="_blank" rel="noopener"
+					>Chain Data Index</a
 				>
 				<a href="https://github.com/mondaylabsltd/vela-currency" target="_blank" rel="noopener"
 					>Vela Currency</a

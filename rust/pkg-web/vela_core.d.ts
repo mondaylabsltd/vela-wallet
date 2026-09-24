@@ -1053,6 +1053,23 @@ export function typicalInclusionSeconds(chain_id: number): number;
 export function validateClientData(kind: string, client_data_json: Uint8Array, authenticator_data: Uint8Array): void;
 
 /**
+ * **Does this name actually belong to this address — the next step of the
+ * check.**
+ *
+ * A reverse record (`addr.reverse`) is written by the address itself, so it is
+ * a CLAIM: anyone who funds an address can name it after whoever their victim
+ * is about to pay. `vela_core::app::name_verify` resolves the claimed name
+ * forward and compares, and nothing but `verified` may be drawn (spec 081,
+ * FR-010).
+ *
+ * `answers_json` is the transcript so far (`LookupAnswer[]`, the same shape
+ * `registryNameStep` uses); the return is a `VerifyStep` as JSON: `eth_call`s
+ * to perform, or the verdict plus the name exactly as it was proven. The
+ * shell owns the transport; every rule is the core's.
+ */
+export function verifiedNameStep(chain_id: number, registry: string, address: string, name: string, answers_json: string): string;
+
+/**
  * Which passkeys control the wallet at `address` — the Settings keys view
  * (spec 062). `device_keys_json` is the account record's `keys` array (or a
  * one-element array built from the legacy scalars); the answer is `ask` with
@@ -1301,6 +1318,7 @@ export interface InitOutput {
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
     readonly typicalInclusionSeconds: (a: number) => number;
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;

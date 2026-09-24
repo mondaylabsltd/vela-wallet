@@ -61,11 +61,11 @@ struct PoolRelayPort: RelayPort {
     func bestRpcUrl(chainId: Int) async -> String? { await pool.bestRpcUrl(chainId: chainId) }
 
     func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer {
-        await CoreHTTP.getREST(
-            url,
-            headers: xRpcUrl.map { ["X-Rpc-Url": $0] } ?? [:],
-            timeout: CoreHTTP.Timeout.networkCheck
-        )
+        // Spec 081 FR-007: the wallet no longer names its preferred RPC endpoint
+        // to the relay — that URL can carry a provider API key, and the relay
+        // reads `x-vela-rpc-url`, never this header.
+        _ = xRpcUrl
+        return await CoreHTTP.getREST(url, headers: [:], timeout: CoreHTTP.Timeout.networkCheck)
     }
 }
 

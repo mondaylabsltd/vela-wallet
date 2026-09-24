@@ -41,7 +41,7 @@
       "bundlerHint": "Se requiere un endpoint compatible con Vela Relay",
       "fiatLabel": "TIPOS DE CAMBIO FIAT",
       "fiatHint": "Tipos de cambio en USD que definen la lista de monedas — cámbialo para mayor cobertura.",
-      "resetToDefaults": "Restablecer a los valores predeterminados",
+      "resetToDefaults": "Restablecer los cuatro",
       "selfHostGuide": "Guía de autoalojamiento →",
       "resetTitle": "¿Restablecer los endpoints de servicio?",
       "resetBody": "Los cuatro servicios vuelven a las direcciones de Vela. Las direcciones que ingresaste aquí se descartan.",
@@ -72,8 +72,9 @@
       "compatible": "Compatible",
       "incompatible": "Incompatible",
       "checkSafe": "Contratos Safe L2",
-      "checkSigner": "Módulo de firma WebAuthn",
-      "checkRemaining": "otros {{count}} contratos"
+      "checkSigner": "Precompilado P-256",
+      "checkRemaining": "otros {{count}} contratos",
+      "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad."
     },
     "treasury": {
       "modalTitle": "Tesorería",

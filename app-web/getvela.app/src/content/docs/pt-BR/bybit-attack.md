@@ -1,101 +1,131 @@
 ---
-title: O ataque à Bybit
-description: Em fevereiro de 2025 a Bybit perdeu cerca de US$ 1,5 bilhão. Os contratos Safe não quebraram — a interface quebrou. Esta página explica o caminho usado e o que o desenho da Vela fecha.
+title: O ataque à Bybit e o caminho que ele usou
+description: "Em fevereiro de 2025, a Bybit perdeu cerca de US$ 1,5 bilhão. Os contratos Safe não foram quebrados — a interface foi. Esta página explica o caminho do ataque e o que no design da Vela o fecha."
+source: 14ae76da6694
 ---
 
-# O ataque à Bybit
+# O ataque à Bybit e o caminho que ele usou
 
 Em 21 de fevereiro de 2025, a Bybit perdeu cerca de **US$ 1,5 bilhão** de uma
-carteira fria multisig da Safe. É o maior roubo da história do setor, e vale ler com
-calma, porque quase tudo ali estava *correto*, menos uma coisa.
+carteira fria multisig Safe. É o maior roubo da história do setor, e vale a pena
+ler com atenção, porque quase tudo nele estava *correto*, exceto uma coisa.
 
 ## O que aconteceu
 
-A versão curta, a partir dos post-mortems públicos:
+A versão curta, a partir das análises públicas pós-incidente:
 
 1. Um atacante comprometeu a **máquina de um desenvolvedor da `Safe{Wallet}`** e
    injetou JavaScript malicioso no bucket AWS S3 que servia o front-end da
-   `Safe{Wallet}`. O código entrou em 19 de fevereiro e foi acionado em 21, mirando
-   o Safe específico da Bybit.
-2. Os signatários da Bybit abriram a interface e revisaram uma transação que parecia
-   comum.
-3. O que de fato chegou às **carteiras de hardware** deles não era aquela
-   transação. Era um `delegatecall` que sobrescrevia a `masterCopy` do proxy do Safe
-   — o slot 0 — trocando toda a implementação da conta pela do atacante.
-4. Os signatários aprovaram. As assinaturas eram válidas. O contrato fez exatamente
-   o que foi mandado.
+   `Safe{Wallet}`. O código entrou em 19 de fevereiro e foi acionado em 21 de
+   fevereiro, direcionado ao Safe específico da Bybit.
+2. Os signatários da Bybit abriram a interface e revisaram uma transação que
+   parecia comum.
+3. O payload que de fato foi enviado para as **carteiras de hardware** deles não era
+   essa transação. Era um `delegatecall` que sobrescrevia o `masterCopy` do proxy do
+   Safe — o slot 0 —, trocando toda a implementação da conta pela do atacante.
+4. Os signatários aprovaram. As assinaturas eram válidas. O contrato fez
+   exatamente o que mandaram.
 
-A atribuição pública apontou atividade ligada à Coreia do Norte (o FBI citou o grupo
-TraderTraitor).
+A autoria foi atribuída publicamente a atividades ligadas à Coreia do Norte (o FBI
+apontou o grupo TraderTraitor).
 
-## O que *não* quebrou
+## O que *não* foi quebrado
 
-- **Não foram os contratos Safe.** Eles executaram uma instrução assinada de forma
-  válida. Nenhum bug da Safe foi explorado.
-- **Não foi a criptografia.** Todas as assinaturas eram genuínas.
-- **Não foram as carteiras de hardware.** Havia dispositivos Ledger no caminho e eles
+- **Não os contratos Safe.** Eles executaram uma instrução assinada de forma
+  válida. Nenhum bug do Safe foi explorado.
+- **Não a criptografia.** Todas as assinaturas eram autênticas.
+- **Não as carteiras de hardware.** Havia aparelhos Ledger no processo, e eles
   assinaram mesmo assim — porque uma carteira de hardware mostra o que recebe, e o
-  que recebeu foi a carga maliciosa. Um aparelho que não consegue traduzir um
-  `delegatecall` em algo que um humano avalie protege a *chave*, não a *decisão*.
+  que ela recebeu foi o payload malicioso. Um aparelho que não consegue decodificar
+  um `delegatecall` em algo que uma pessoa consiga avaliar protege a *chave*, não a
+  *decisão*.
 
-O que quebrou foi a suposição embaixo de toda interface de carteira: **que a tela
-descrevendo uma transação e os bytes sendo assinados são a mesma coisa.**
+O que foi quebrado é a premissa por trás de toda interface de carteira: **a de que
+a tela que descreve uma transação e os bytes que estão sendo assinados são a mesma
+coisa.**
 
-## Por que esse é o caso geral, não um evento esquisito
+## Por que esse é o caso geral, e não um acidente isolado
 
-Toda assinatura que você já produziu numa carteira web se apoiou nessa suposição. A
-interface monta a carga, a interface desenha o resumo, e nada independente confere
-se um bate com o outro. Se o código que serve essa interface for substituído — uma
-pipeline de build comprometida, um CDN sequestrado, uma dependência maliciosa, uma
-credencial de deploy roubada — o resumo vira o que o atacante quiser, e a sua
-assinatura é real.
+A maioria das assinaturas feitas numa carteira web se apoia nessa premissa. A
+interface monta o payload, a interface exibe o resumo, e nada independente confere
+se um corresponde ao outro. Se o código que serve essa interface for trocado — por
+um pipeline de build comprometido, uma CDN sequestrada, uma dependência maliciosa,
+uma credencial de deploy roubada —, o resumo passa a ser o que o atacante quiser, e
+a sua assinatura é real.
 
-É esse o risco que o desenho de assinatura da Vela mira. Não phishing. Não uma chave
-vazada. **Uma tela de assinatura que está mentindo para você.**
+Esse é o risco para o qual o design de assinatura da Vela aponta. Não phishing. Não
+uma chave vazada. **Uma tela de assinatura que está mentindo para você.**
 
 ## O que a Vela faz a respeito
 
-**Assinatura legível, até a calldata.** Toda transação é traduzida em intenção
-legível antes de você aprovar — valor, destinatário, o que a chamada realmente faz
-([ERC-7730](/pt-BR/docs/clear-signing)). Uma chamada que não conseguimos decodificar
-é **sinalizada como indecodificável**, não desenhada em silêncio como se estivesse
-tudo bem. A carga da Bybit era um `delegatecall` que trocava um endereço de
-implementação; é exatamente o tipo de coisa que deveria travar um signatário na
-hora, e escondê-la atrás de um resumo simpático é a razão de não ter travado.
+**Assinatura legível, até a calldata.** Cada transação é decodificada numa intenção
+legível antes de você aprovar — valor, destinatário, o que a chamada faz de fato
+([ERC-7730](/pt-BR/docs/clear-signing)). Uma chamada que não conseguimos
+decodificar é **sinalizada como não decodificável**, e não exibida discretamente
+como se estivesse tudo bem. O payload da Bybit era um `delegatecall` que trocava um
+endereço de implementação; é exatamente o tipo de coisa que deveria fazer um
+signatário parar na hora, e escondê-lo atrás de um resumo amigável foi o que
+impediu isso.
 
-**Um caminho independente capaz de conferir a interface.** A Vela está construindo
-uma página de assinatura sem build e sem dependências, que desenha a intenção e faz
-a assinatura WebAuthn por conta própria — uma única pasta de arquivos estáticos que
-você pode ler de ponta a ponta, servir você mesmo ou rodar como extensão do
-navegador. O propósito inteiro dela é ser uma segunda opinião que não compartilha a
-cadeia de suprimentos do app principal. *Status: construída e testada, ainda não
-publicada.* Quando sair será opcional, e esta página vai dizer isso com todas as
-letras quando mudar.
+Duas coisas, para sermos exatos. Um dApp não consegue pedir à Vela um
+`delegatecall` diretamente — as solicitações que uma página pode fazer geram
+chamadas comuns —, então o próprio payload da Bybit não poderia chegar por esse
+caminho. E uma página que pede uma chamada do seu Safe para ele mesmo é
+**recusada, não apenas decodificada**: `enableModule`, `addOwnerWithThreshold`,
+`swapOwner`, `setFallbackHandler`, `setGuard` e o resto dessa família são bloqueados
+quando o destino é a sua própria carteira, inclusive dentro de um lote e dentro de um
+`MultiSend`, assim como qualquer trecho que carregue um `delegatecall`, seja qual for
+o alvo, e uma assinatura de dados tipados `SafeTx`. A carteira diz qual chamada
+recusou e não oferece nada para assinar. Qualquer uma delas, assinada uma única vez,
+entregaria a conta tão completamente quanto o payload da Bybit entregou — um módulo
+habilitado pode, depois, executar um `delegatecall` por conta própria. E, se o
+próprio código da Vela fosse trocado, como aconteceu com o da `Safe{Wallet}`, a
+decodificação também seria a do atacante — e é para isso que serve o próximo
+ponto.
 
-**Nenhum contrato que a gente possa atualizar.** A carga da Bybit funcionou
-substituindo a implementação da conta. As contas da Vela são
-[Safe v1.4.1 sem modificações](/pt-BR/docs/account-contract) e a Vela não tem
-nenhum papel privilegiado nelas: sem chave de administrador, sem caminho de upgrade
-que possam nos obrigar ou comprometer a usar.
+**Um caminho independente que pode conferir a interface.** A Vela construiu uma
+[página de assinatura](/pt-BR/docs/clear-signing-self-host) sem build e sem
+dependências que decodifica a solicitação e faz a assinatura WebAuthn por conta
+própria — uma única pasta de arquivos estáticos que você pode ler do começo ao fim,
+servir você mesmo ou carregar como extensão de navegador. O objetivo dela é ser uma
+segunda opinião que não compartilha a cadeia de suprimentos do app principal.
+*Situação: pronta e testada; não publicada, e nenhum app da Vela envia solicitações
+para ela ainda.* Esta página vai dizer isso com todas as letras quando mudar.
 
-**Uma checagem biométrica nova a cada assinatura.** Não existe chave de sessão de
-vida longa, então não existe janela em que algo assine no seu lugar sem você.
+**Nenhum papel de administrador para perdermos.** As contas da Vela são
+[Safe v1.4.1 sem modificações](/pt-BR/docs/account-contract), e a Vela não tem
+nenhum papel privilegiado nelas — nenhuma chave de administrador e nenhum caminho
+de atualização nosso que pudéssemos ser coagidos ou comprometidos a usar. Mas fique
+claro o que isso *não* elimina: a primitiva que os atacantes da Bybit usaram — um
+`delegatecall` assinado por um proprietário que reescreve a implementação da conta —
+continua existindo em todo Safe, inclusive nos da Vela (as transações em lote da
+própria Vela usam `delegatecall` para o MultiSend da Safe). Ela exige uma assinatura
+válida de uma das suas chaves. As defesas contra ser convencido a dar essa
+assinatura são a decodificação acima e a conferência independente.
 
-**Auto-hospedagem como rede de proteção.** O app e todos os serviços de backend são
-código aberto. Se você não quer confiar na nossa pipeline de build, rode a sua — é a
-única resposta a essa classe de ataque que não exige confiar em alguém.
+**Uma confirmação nova a cada assinatura.** Toda assinatura exige a confirmação da
+própria chave — Face ID, digital, PIN, ou um toque e o PIN numa chave de segurança.
+Não existe chave de sessão de longa duração, então não existe uma janela em que
+algo possa assinar em seu nome sem você presente.
+
+**Auto-hospedagem como última linha de defesa.** Os apps e os serviços de backend
+são de código aberto. Se você não quer confiar de jeito nenhum no nosso pipeline de
+build, compile a extensão ou um app você mesmo e rode os serviços de que precisar —
+o [guia de auto-hospedagem](/pt-BR/docs/self-hosting) mostra como. Isso tira o nosso
+pipeline de build da cadeia de confiança; você continua confiando no código que
+compila, então leia esse código.
 
 ## O que a Vela não afirma
 
 O front-end da Vela poderia ser comprometido do mesmo jeito que o da
-`Safe{Wallet}`. Nosso código não é auditado. Dizer outra coisa seria exatamente o
-tipo de garantia que esse incidente deveria ter encerrado.
+`Safe{Wallet}` foi. O nosso código não é auditado. Dizer o contrário seria
+exatamente o tipo de garantia que este incidente deveria ter enterrado.
 
-O que o desenho tenta fazer é estreitar o caminho: tornar a carga legível em vez de
-opaca, remover a primitiva de upgrade de que o ataque dependeu, e te dar um jeito de
-conferir com algo que não somos nós. O resumo honesto é que **essa classe de ataque
-é mitigada por design, não eliminada** — e as partes que a deixariam mais dura estão
-listadas, inacabadas, em
+O que o design tenta fazer é estreitar o caminho: tornar o payload legível em vez
+de opaco, não ter nenhum papel de administrador que possa ser usado contra você e
+dar a você uma forma de conferir com algo que não somos nós. O resumo honesto é que
+**esse tipo de ataque é mitigado pelo design, não eliminado**, e as partes que o
+endureceriam ainda mais estão listadas, inacabadas, em
 [auditorias e problemas conhecidos](/pt-BR/docs/security-audits).
 
 ## Fontes

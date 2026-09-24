@@ -1,4 +1,4 @@
-> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
+> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及 `scripts/package.json` 里的工具脚本（根目录不放任何 npm 文件）。正文按原样保留，作为历史记录。
 
 nnmpmpnpsp
 
@@ -15,6 +15,17 @@ nnmpmpnpsp
 ---
 
 ## ⚠️ Content-Accuracy Guardrails (read before writing anything)
+
+> **Superseded facts — spec 080, 2026-09-22.** The public site and docs at getvela.app were re-verified against the code and the service repositories. Where this document disagrees with [`specs/080-site-content-accuracy/claim-ledger.md`](../specs/080-site-content-accuracy/claim-ledger.md), **the claim ledger wins**. The corrections most likely to be reintroduced from the clues below:
+> - **24 built-in networks**, not 12 (clue 14 and elsewhere).
+> - **Keys**: one to seven per wallet, any one signs (1-of-n), fixed at creation; kinds are synced passkeys, another phone (QR), and hardware security keys. A single unsynced key needs a second. Not "a passkey in the secure enclave unlocked by your face".
+> - **Fees**: in-band payment to the relay = `3 × padded gas limits × max(wallet price, relay tier price)` (default tier *fast*), min ≈ $0.01. **Not** "≈2×", and no "split" shown — the confirm screen shows one amount. Say it this way: the exact fee is shown before you sign and can't change; it goes to the relay that submits the transaction (Vela's by default); you can switch to another vela-relay or run your own. Don't lead with a multiple of the on-chain cost. **There is no gas-account / activation deposit any more.**
+> - **dApps**: injected provider (extension; built-in browsers on desktop macOS/Windows, iOS, Android). **WalletPair was dropped**; there is no WalletConnect.
+> - **Self-hosting**: the passkey rpId `getvela.app` cannot be replaced; a web copy on another domain is a different wallet. Existing wallets survive via the extension or self-built apps (phone QR / security key). The relay's chain directory is `VELA_RELAY_CHAIN_DIRECTORY_URL` (vela-relay v0.9.6, PR #12). Guide: `/docs/self-hosting`.
+> - **Licences**: wallet, relay, p256-index (p256-index#7, 2026-09-22), currency, ethereum-data — all MIT.
+> - **Audience (founder, 2026-09-22)**: the paying customer is the technical user who self-hosts and compiles. Lead with running it yourself; don't write for newcomers.
+> - **The signing page** (`app-web/clearsigning`) is built but not published and not yet connected to any app.
+> - **Audit**: also say Vela's *own* code (apps, services, registry contract) is unaudited, none scheduled. The 4337 module has an acknowledged, unfixed Certora Medium (M-01).
 
 These come straight from the codebase and override intuition. Violating them produces factually wrong content.
 
@@ -53,13 +64,13 @@ These come straight from the codebase and override intuition. Violating them pro
 
 **10. Audit status (mandated phrasing).** Safe contracts are independently audited; **Vela's own integration has NOT had a third-party audit and none is scheduled** — "a goal for when the project can fund one, not a commitment with a date." Source: whitepaper.md, `docs/store-submission/privacy-and-review.md`. See guardrails above.
 
-**11. Fully open source and self-hostable.** App + all three backend services are **MIT-licensed and self-hostable** via Settings → Advanced → Service Endpoints. Source: whitepaper.md, [README.md](../README.md). This "self-hostable wallet" claim is uniquely defensible — competitors can't match it.
+**11. Fully open source and self-hostable.** App + all four backend services (relay, p256-index, chain data, exchange rates) are **MIT-licensed and self-hostable** via Settings → Advanced → Service Endpoints. Source: whitepaper.md, [README.md](../README.md). This "self-hostable wallet" claim is uniquely defensible — competitors can't match it.
 
 **12. Clear signing, not blind signing (ERC-7730).** Vela decodes both calldata *and* EIP-712 typed data into human-readable **Intent / Substance / Details**, color-coded by risk. Undecodable calls get an explicit blind-sign warning instead of a fake summary. Source: [src/services/clear-signing.ts](../src/services/clear-signing.ts), `docs/clear-signing.md`. **Keywords:** clear signing, no blind signing, ERC-7730, readable transactions.
 
 **13. "Does less on purpose" — deliberate minimalism.** No NFT gallery, no built-in swaps, no DeFi dashboard, no in-app dApp browser. "Fewer paths to attack, fewer moving parts to audit." dApp connection is delegated to WalletPair rather than an embedded browser. Source: `+page.svelte`. Turns a feature gap into a security virtue.
 
-**14. 12 EVM networks + custom networks.** Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, **Unichain, Tempo, Monad, World Chain** — plus user-added custom chains. Source: [src/models/chains.ts](../src/models/chains.ts):42-119. (README's "8 networks" is stale.)
+**14. 24 EVM networks + custom networks.** Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM — plus any chain that passes the wallet's own admission check. Source: [app-web/vela-wallet/src/lib/services/chains.ts](../app-web/vela-wallet/src/lib/services/chains.ts). (Counted, not remembered: it was 12 when this file was written and "8" before that.)
 
 **15. Web-first, MIT-licensed, native apps coming.** Runs in the browser with nothing to download (web wallet free); native iOS/Android share one React Native + Expo codebase and are in device testing ahead of store release. License: MIT. Source: [README.md](../README.md), `roadmap/+page.svelte`. **Keywords:** browser wallet, no download, open source crypto wallet.
 
@@ -71,7 +82,7 @@ These come straight from the codebase and override intuition. Violating them pro
 
 **16. "Don't trust us — verify."** Every wallet is on-chain, every line is on GitHub, every claim is checkable. The homepage even shows a **live on-chain "wallets created" counter** read from the Passkey Index contract on Gnosis (`0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3`) through an auto-failover pool of public RPCs — the page demonstrates the architecture. Source: `app-web/getvela.app/src/routes/+page.svelte`:92-206.
 
-**17. Transparent, capped fee model.** Gas is paid from **your own wallet's native-token balance** (no paymaster). The **bundler is the single source of truth for gas price** (wallet never marks it up); you pay roughly **2× the raw on-chain cost** (network fee + relayer fee, shown split before you confirm), and the wallet **refuses any quote above ~3× the network rate** (`GasQuoteTooHighError`, `MAX_QUOTE_VS_CHAIN_MULTIPLE = 3n`). Source: [src/services/safe-transaction.ts](../src/services/safe-transaction.ts):1305,1373-1378; whitepaper.md. (README's "60% markup" is stale.)
+**17. Transparent, capped fee model.** ⚠️ *Superseded (spec 080): the fee is `3 × padded gas limits × max(wallet price, relay tier price)`, paid in band to the relay, shown as one amount before signing — see the guardrails above.* Gas is paid from **your own wallet's balance** (no paymaster), and the wallet **refuses any quote above ~3× the network rate** (`GasQuoteTooHighError`, `MAX_QUOTE_VS_CHAIN_MULTIPLE = 3n`). Source: [src/services/safe-transaction.ts](../src/services/safe-transaction.ts):1305,1373-1378; whitepaper.md. (README's "60% markup" is stale.)
 
 **18. Per-Safe, per-chain "gas account" (relayer EOA).** The first tx on each network activates a dedicated relayer account. New users may get **Free Activation (sponsored)**; the deposit is **non-refundable**, tops up from gas refunds, and can run down / need re-activation. Sponsorship is capped per wallet, depends on Vela's per-chain treasury, and is **never offered on custom/test networks** (server-gated on nonce ≤ 3 + WebAuthn registration + treasury balance). Source: [src/services/bundler-service.ts](../src/services/bundler-service.ts):118-227.
 
@@ -133,7 +144,7 @@ These come straight from the codebase and override intuition. Violating them pro
 
 **44. `clientDataFields` is extracted, not reconstructed.** The verifier contract templates the JSON, so Vela takes only the trailing fields after the challenge (e.g. `"origin":"https://getvela.app","crossOrigin":false`). Source: [safe-transaction.ts](../src/services/safe-transaction.ts):982-1007.
 
-**45. On-chain P-256 verification via the RIP-7212 precompile.** The WebAuthn signer is configured with `verifiers = 0x100`, selecting the RIP-7212 P-256 precompile. Adding any custom network requires this precompile to exist (validated two ways). Source: [safe-address.ts](../src/services/safe-address.ts):120, [network-checker.ts](../src/services/network-checker.ts):191-212. **Keywords:** RIP-7212, P-256 precompile, on-chain passkey verification.
+**45. On-chain P-256 verification via the EIP-7951 / RIP-7212 precompile** (EIP-7951 = Ethereum since Fusaka, Dec 2025, supersedes RIP-7212 with the same interface at `0x100`; rollups ship RIP-7212). The WebAuthn signer is configured with `verifiers = 0x100`, selecting the RIP-7212 P-256 precompile. Adding any custom network requires this precompile to exist (validated two ways). Source: [safe-address.ts](../src/services/safe-address.ts):120, [network-checker.ts](../src/services/network-checker.ts):191-212. **Keywords:** RIP-7212, P-256 precompile, on-chain passkey verification.
 
 **46. Hand-rolled crypto shared across iOS / Android / Web.** Bespoke Keccak-256 (0x01 padding, not SHA-3's 0x06) and a minimal CBOR parser extract the COSE P-256 key (`{1:2, 3:-7, -1:1, -2:x, -3:y}`) from the attestation — no native crypto dependency, identical address derivation on three platforms, locked by golden test vectors. Source: [eth-crypto.ts](../src/services/eth-crypto.ts):110-146, [attestation-parser.ts](../src/services/attestation-parser.ts):23-45.
 
@@ -286,7 +297,7 @@ Each cluster below is a writeable document. Pull facts only from the cited clues
 
 - **Taglines:** "An Ethereum wallet you actually own." (zh: "真正属于你的以太坊钱包") · "A wallet that does less — on purpose." · "We can't access your keys. Not 'we promise not to' — we architecturally can't." · "You're paying for convenience, not access." · "Don't trust us — verify."
 - **One-line ICP:** *"For people who want real self-custody without the footgun of seed-phrase management — if you can unlock your phone, you can use Vela safely."* (`docs/introduction.md`)
-- **High-value technical keyword set:** Safe smart account, ERC-4337 (EntryPoint v0.7), WebAuthn passkey, P-256 / RIP-7212, EIP-1271, ERC-7730 clear signing, EIP-5792 batch calls, counterfactual / CREATE2 address, EIP-7708.
+- **High-value technical keyword set:** Safe smart account, ERC-4337 (EntryPoint v0.7), WebAuthn passkey, P-256 / EIP-7951 / RIP-7212, EIP-1271, ERC-7730 clear signing, EIP-5792 batch calls, counterfactual / CREATE2 address, EIP-7708.
 
 ---
 

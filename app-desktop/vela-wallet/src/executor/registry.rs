@@ -21,6 +21,7 @@ use serde_json::json;
 
 use vela_core::app::{RegistryPublishMember, RegistryUnitMember};
 use vela_core::registry_proof::{RegistryProof, build_group_proof, build_member_proof};
+use vela_core::trusted_signer::ceremony::RegistryDeployment;
 
 use super::passkey::{self, Ceremony, RELYING_PARTY};
 
@@ -714,6 +715,45 @@ struct Health {
     service: String,
     #[serde(default)]
     status: String,
+}
+
+/// Which deployment this registry serves — the chain and the `domainRegistry`
+/// contract, as `/api/health` names them.
+///
+/// The Trusted Signer page needs both to compute a member challenge, and it
+/// cannot ask for them itself: the published page carries `default-src 'none'`
+/// inside its hashed bytes (spec 076), so it reaches no network at all. The
+/// page does not trust what arrives either — it computes the challenge from
+/// these and signs only what it computed, so a wrong answer here produces a
+/// challenge this wallet did not ask for and the assertion is refused
+/// (`expected_member_challenge`).
+///
+/// `None` when the registry did not say, or could not be reached: the page is
+/// then told plainly that the requester named no deployment, rather than being
+/// handed half of one.
+#[must_use]
+pub fn deployment() -> Option<RegistryDeployment> {
+    // The same cache-buster the health probe uses: a stale 200 from a proxy
+    // must not name a deployment this registry has moved off.
+    let nonce = Instant::now().elapsed().as_nanos();
+    let health: Deployment =
+        get_json(&format!("/api/health?_t={nonce}"), "Health", READ_TIMEOUT).ok()?;
+    let contract = health.domain_registry?;
+    let chain_id = health.chain_id.filter(|id| *id > 0)?;
+    let hex = contract.strip_prefix("0x")?;
+    (hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then_some(RegistryDeployment { chain_id, contract })
+}
+
+/// The two fields of `/api/health` a member proof is bound to. Both optional:
+/// an index that does not name its deployment is not an error here, it is a
+/// `None`.
+#[derive(Debug, Deserialize)]
+struct Deployment {
+    #[serde(rename = "chainId", default)]
+    chain_id: Option<u64>,
+    #[serde(rename = "domainRegistry", default)]
+    domain_registry: Option<String>,
 }
 
 /// What one health probe found.

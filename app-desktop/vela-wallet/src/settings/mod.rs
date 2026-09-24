@@ -150,6 +150,11 @@ pub struct SettingsStrings {
     pub check_safe: SharedString,
     pub check_signer: SharedString,
     pub check_remaining: String,
+    /// Spec 081 FR-009: the chain works, but only for a one-key wallet —
+    /// Safe's passkey signer factory is not deployed here. Shown beside a
+    /// "Compatible" badge, which without it reads as a contradiction of the
+    /// two crossed rows above.
+    pub single_key_only: SharedString,
     pub custom_rpc_title: SharedString,
     pub custom_rpc_placeholder: SharedString,
     pub best_rpc: String,
@@ -182,6 +187,11 @@ pub struct SettingsStrings {
     /// The wizard's retry, for a chain the probe could not reach — never a
     /// condemnation (the core's invariant ③).
     pub recheck: SharedString,
+    /// Spec 081: the two ways out of an INCOMPATIBLE verdict, which the web
+    /// has always offered and desktop did not — a person could type a custom
+    /// RPC under a red verdict and have nothing to press.
+    pub recheck_with_rpc: SharedString,
+    pub open_chain_setup_tool: SharedString,
     /// What the wizard is DOING between a click and a verdict. The dialog is
     /// otherwise inert while the index resolves and the probes run, which is
     /// the specific silence phase 6 found on the send screen: a screen that
@@ -371,6 +381,7 @@ impl SettingsStrings {
             check_safe: s("settingsModals.addNetwork.checkSafe"),
             check_signer: s("settingsModals.addNetwork.checkSigner"),
             check_remaining: raw("settingsModals.addNetwork.checkRemaining"),
+            single_key_only: s("settingsModals.addNetwork.singleKeyOnly"),
             custom_rpc_title: s("settingsModals.addNetwork.customRpcTitle"),
             custom_rpc_placeholder: s("settingsModals.addNetwork.customRpcPlaceholder"),
             best_rpc: raw("settingsModals.addNetwork.bestRpc"),
@@ -395,6 +406,8 @@ impl SettingsStrings {
             health_offline: s("settingsModals.health.offline"),
             health_invalid: s("settingsModals.health.invalid"),
             recheck: s("settingsModals.addNetwork.recheck"),
+            recheck_with_rpc: s("settingsModals.addNetwork.recheckWithRpc"),
+            open_chain_setup_tool: s("settingsModals.addNetwork.openChainSetupTool"),
             wizard_searching: s("settingsModals.addNetwork.searching"),
             wizard_checking: s("settingsModals.addNetwork.checkingCompatibility"),
             wizard_already_added: s("addToken.errorAlreadyAdded"),

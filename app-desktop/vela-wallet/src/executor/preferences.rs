@@ -58,7 +58,18 @@ pub fn load() {
 }
 
 fn apply(read: Prefs) {
-    crate::theme::set_text_scale(prefs::text_scale_factor(read.text_scale));
+    // The text size the person chose, into the ONE store that holds it
+    // (`appearance_prefs`, main's). `theme::scaled` reads it there, so a
+    // second copy here would be a preference that disagrees with itself.
+    crate::executor::appearance_prefs::set_text_scale(
+        crate::executor::appearance_prefs::TEXT_SCALES
+            .iter()
+            .copied()
+            .find(|scale| {
+                (f64::from(scale.factor()) - prefs::text_scale_factor(read.text_scale)).abs() < 1e-6
+            })
+            .unwrap_or_default(),
+    );
     *cell().lock().unwrap_or_else(PoisonError::into_inner) = read;
 }
 

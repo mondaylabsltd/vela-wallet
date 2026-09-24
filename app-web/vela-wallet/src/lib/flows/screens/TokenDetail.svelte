@@ -16,12 +16,11 @@
 		model: TokenDetailModel;
 		onreceive?: () => void;
 		onsend?: () => void;
-		onexplorer?: () => void;
 		/** A transaction row was tapped (spec 038 #E2). */
 		onselect?: (index: number) => void;
 	}
 
-	let { model, onreceive, onsend, onexplorer, onselect }: Props = $props();
+	let { model, onreceive, onsend, onselect }: Props = $props();
 
 	let copiedIndex = $state(-1);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -77,7 +76,11 @@
 			{model.viewOnExplorer}
 		</a>
 	{:else}
-		<button type="button" class="explorer" onclick={onexplorer}>{model.viewOnExplorer}</button>
+		<!-- A custom chain whose entry names no explorer: there is no page to
+		     open, and until now this was drawn exactly like the link that opens
+		     one (spec 081, dead-controls #18). Still said, so the absence is
+		     legible — dimmed, and refusing the pointer. -->
+		<button type="button" class="explorer" disabled>{model.viewOnExplorer}</button>
 	{/if}
 </div>
 
@@ -168,5 +171,11 @@
 		color: var(--color-fg-muted);
 		cursor: pointer;
 		text-decoration: none;
+	}
+
+	/* The system's one look for an action that is not available. */
+	.explorer:disabled {
+		opacity: var(--opacity-disabled);
+		cursor: default;
 	}
 </style>

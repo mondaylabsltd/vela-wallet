@@ -77,5 +77,29 @@ class ThemePreferenceRepository(
 
     companion object {
         const val KEY = "vela.theme"
+
+        /**
+         * Delete the DataStore this preference USED to live in — the erase
+         * path's, and nothing else's (spec 081 FR-017).
+         *
+         * The choice itself is `vela.theme` in the shared store now (spec 072),
+         * so an erase already takes it: the core's catalog says it is erasable
+         * and `DeviceStorage.erase` sweeps the namespace. What is left is this
+         * file. A device that has been opened since 072 migrated its value over
+         * and removed the key, but the FILE remains, and a device that never
+         * loaded the preference still has the value in it — so an erase that
+         * skipped it could hand a reset wallet the old owner's theme.
+         *
+         * On the companion rather than an instance, because the erase path has
+         * no repository and must not build one: constructing it launches a read
+         * of the very store that is being emptied.
+         *
+         * Whole-file `clear()`, not `remove(key)`: anything else that was ever
+         * written here is equally the old owner's.
+         *
+         * @return false when the platform refused; the caller reports the survivor.
+         */
+        suspend fun clearLegacy(context: Context): Boolean =
+            runCatching { context.settingsDataStore.edit { it.clear() } }.isSuccess
     }
 }

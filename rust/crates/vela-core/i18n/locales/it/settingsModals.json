@@ -41,7 +41,7 @@
       "bundlerHint": "È richiesto un endpoint compatibile con Vela Relay",
       "fiatLabel": "TASSI FIAT",
       "fiatHint": "Tassi di cambio in USD che definiscono l’elenco delle valute — sostituibile per una copertura più ampia.",
-      "resetToDefaults": "Ripristina i valori predefiniti",
+      "resetToDefaults": "Ripristina tutti e quattro",
       "selfHostGuide": "Guida al self-hosting →",
       "resetTitle": "Ripristinare gli endpoint dei servizi?",
       "resetBody": "I quattro servizi tornano agli indirizzi di Vela. Gli indirizzi inseriti qui vengono dimenticati.",
@@ -72,8 +72,9 @@
       "compatible": "Compatibile",
       "incompatible": "Non compatibile",
       "checkSafe": "Contratti Safe L2",
-      "checkSigner": "Modulo di firma WebAuthn",
-      "checkRemaining": "altri {{count}} contratti"
+      "checkSigner": "Precompilato P-256",
+      "checkRemaining": "altri {{count}} contratti",
+      "singleKeyOnly": "Un wallet con più di una passkey non può essere creato su questa rete: la factory dei signer passkey di Safe non è deployata qui.\nUn wallet con una sola passkey funziona normalmente."
     },
     "treasury": {
       "modalTitle": "Treasury",

@@ -1,66 +1,87 @@
 ---
-title: Crie sua carteira
-description: Crie uma carteira Vela autocustodiada em cerca de um minuto com uma passkey — sem frase-semente. Sua carteira é uma conta inteligente Safe com o mesmo endereço em todas as redes.
+title: Criar sua carteira
+description: "Crie uma carteira Vela com uma a sete chaves — o que cada passo faz, por que as chaves ficam definidas na criação, o que se torna público e o que a sua carteira é de fato."
+source: a2edda21a075
 ---
 
 <script>
 	import Callout from '$lib/components/Callout.svelte';
 </script>
 
-# Crie sua carteira
+# Criar sua carteira
 
-Criar uma carteira leva cerca de um minuto e uma única confirmação biométrica. Abra
-a carteira web em [wallet.getvela.app](https://wallet.getvela.app/) e escolha
-**Criar uma carteira**.
+Criar uma carteira leva um ou dois minutos. Abra a carteira web em
+[wallet.getvela.app](https://wallet.getvela.app/) — ou a extensão, o app de
+desktop ou o de celular — e escolha **Criar carteira**.
 
-## Os passos
+## Passo a passo
 
-1. **Dê um nome à carteira.** Escolha um nome para reconhecer a conta depois,
-   inclusive ao entrar de outro aparelho. Ele fica guardado ao lado da sua chave
-   pública, então trate como informação pública — não coloque nada privado ali.
-2. **Confirme o básico.** Uma lista curta confirma que você entendeu que a Vela é
-   autocustodiada e ainda está em alfa, com links para a
-   [política de privacidade](/privacy) e os [termos](/terms).
-3. **Crie sua passkey.** Quando aparecer o pedido, autentique-se com **Face ID,
-   Touch ID ou sua digital**. Isso cria uma passkey WebAuthn (P-256) que seu
-   aparelho guarda e que a Vela nunca vê. Não existe a etapa «anote a
-   frase-semente», porque não existe frase-semente.
-4. **Pronto.** A Vela mostra o endereço da sua carteira e você já está dentro. Dá
-   para conferir o endereço e depois entrar para cair na sua carteira.
+1. **Dê um nome à carteira.** O nome ajuda você a reconhecê-la, e ele é gravado num
+   registro público junto com as suas chaves — trate-o como público e não coloque
+   nada pessoal nele.
+2. **Confirme o que vai acontecer.** Você marca que as suas chaves públicas e o
+   nome da carteira são gravados on-chain, que as suas chaves privadas ficam nos
+   seus aparelhos ou chaves de segurança e que concorda com os [termos](/terms) e a
+   [política de privacidade](/privacy).
+3. **Crie a primeira chave.** Escolha como: **este aparelho** (Face ID, Touch ID,
+   digital, Windows Hello), **um celular ou tablet** (escaneie um QR code e crie a
+   chave lá, onde o app oferecer essa opção) ou uma **chave de segurança USB**. O
+   aparelho cria a passkey e assina uma vez com ela, para que o app saiba que a
+   chave funciona de verdade antes de continuar.
+4. **Adicione mais chaves, se quiser.** Até sete no total, de qualquer tipo.
+   Qualquer uma delas vai poder assinar sozinha. Se a sua única chave não está
+   sincronizada em lugar nenhum — uma chave de segurança, ou o Windows Hello —, o
+   app pede uma segunda, porque com uma única chave não sincronizada basta perder um
+   aparelho para perder a carteira.
+5. **Crie.** O app calcula o endereço da carteira a partir do conjunto completo de
+   chaves e publica esse conjunto no registro público na Gnosis Chain. Quando esse
+   registro estiver on-chain, a carteira abre.
 
-## O que a sua carteira é de fato
-
-Esta é a parte que a maioria das carteiras não explica — e ela define como a Vela
-funciona.
-
-Sua carteira Vela é uma **conta inteligente Safe** (um contrato), e não uma simples
-«conta de propriedade externa». Sua passkey é a dona dessa conta; um arranjo
-ERC-4337 deixa você operá-la só com o rosto ou a digital.
-
-<Callout type="info" title="Seu endereço é o mesmo em todas as redes">
-A Vela deriva seu endereço da chave pública da sua passkey, então ele é idêntico em
-Ethereum, Base, Arbitrum, Gnosis e em todas as outras redes suportadas. Você passa
-um endereço só, em qualquer lugar.
+<Callout type="warning" title="Escolha suas chaves agora">
+Seu endereço é calculado a partir das chaves com que você termina a criação, então
+não dá para adicionar, remover nem trocar chaves depois.
+[Signatários e chaves de segurança](/pt-BR/docs/signers) explica por quê, e como
+escolher.
 </Callout>
 
-Uma consequência útil: o endereço é **contrafactual**. Ele é calculado antes de
-qualquer coisa ser implantada on-chain, então **você pode receber fundos antes
-mesmo de o contrato da sua carteira existir**. O contrato se implanta sozinho —
-pagando do próprio saldo — na sua primeira transação em cada rede.
+## O que é a sua carteira
 
-## O que acabou de acontecer com suas chaves
+Sua carteira é uma **conta inteligente Safe** — um contrato, não uma conta comum
+com uma única chave privada. As suas chaves são as proprietárias dela, e qualquer
+uma pode autorizar uma transação. [O contrato da conta](/pt-BR/docs/account-contract)
+lista todos os contratos envolvidos.
 
-- Seu aparelho gerou um **par de chaves de passkey**.
-- A **chave privada** fica com o serviço de passkeys do seu sistema (Chaveiro do
-  iCloud ou Gerenciador de senhas do Google), criptografada de ponta a ponta e
-  sincronizada entre seus aparelhos — nenhum app, nem a Vela, chega a vê-la.
-- A **chave pública e o nome que você escolheu** são publicados no índice de
-  passkeys da Vela, que também grava a chave em um registro publicamente legível na
-  Gnosis Chain, para que sua conta possa ser encontrada de novo em um aparelho
-  novo. Veja [recuperação e login](/pt-BR/docs/recovery).
+O endereço é **o mesmo em todas as redes** e é **contrafactual**: ele é calculado
+antes de qualquer coisa ser implantada, então você pode receber fundos em qualquer
+rede na hora. O contrato se implanta sozinho na primeira vez que você envia algo
+numa rede, e a taxa dessa primeira transação inclui a implantação. Criar a carteira
+não custa nada.
+
+## O que é público
+
+<span id="what-is-public"></span>
+
+Criar uma carteira grava um registro permanente num contrato de registro público
+na Gnosis Chain, que qualquer pessoa pode ler e que não pode ser editado nem
+apagado:
+
+- a **chave pública** de cada chave (nunca a chave privada) e o seu **ID de
+  credencial**;
+- o **modelo do autenticador** de cada chave (qual gerenciador de senhas ou chave
+  de segurança a criou) e indicadores que dizem se você foi verificado e se a chave
+  é sincronizada;
+- o **nome da carteira** e um **nome para cada chave**;
+- o **endereço da carteira** e quando ela foi criada;
+- os próprios **dados de registro assinados**.
+
+O índice de chaves públicas da Vela envia o registro e paga o gas dele, então é o
+primeiro a ver esse registro. Nada ali permite mover os seus fundos; é o que deixa
+qualquer uma das suas chaves encontrar a carteira de novo num aparelho novo
+([recuperação](/pt-BR/docs/recovery)). A [política de privacidade](/privacy) traz a
+lista completa, e a [página do registro](/registry) mostra todos os registros.
 
 ## Próximos passos
 
-- [Receber seus primeiros tokens](/pt-BR/docs/send-and-receive)
-- [Entender redes e taxas](/pt-BR/docs/networks-and-fees)
-- [Ler por que as passkeys tornam isso seguro](/pt-BR/docs/passkeys)
+- [Receba seus primeiros tokens](/pt-BR/docs/send-and-receive)
+- [Entenda redes e taxas](/pt-BR/docs/networks-and-fees)
+- [O que fazer se você perder um aparelho](/pt-BR/docs/recovery)

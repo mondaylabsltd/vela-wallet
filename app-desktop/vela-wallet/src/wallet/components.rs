@@ -306,7 +306,12 @@ pub fn balance_display(
             .text_size(theme::text_label())
             .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(theme.fg_subtle)
-            .child(SharedString::from(format!("{} · USD", model.label))),
+            // The code the figure beneath is DRAWN in, not a constant: the
+            // hero said `总余额 · USD` over `ZAR 157.34` until 2026-09-23.
+            .child(SharedString::from(format!(
+                "{} · {}",
+                model.label, model.currency
+            ))),
     );
 
     root = match model.state {

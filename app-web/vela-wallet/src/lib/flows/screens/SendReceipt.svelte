@@ -31,11 +31,10 @@
 		 * keeps them one group and sets the group a little above the middle.
 		 */
 		layout?: 'screen' | 'column';
-		onexplorer?: () => void;
 		oncta?: () => void;
 	}
 
-	let { model, layout = 'screen', onexplorer, oncta }: Props = $props();
+	let { model, layout = 'screen', oncta }: Props = $props();
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -111,7 +110,15 @@
 		{/if}
 
 		{#if model.viewOnExplorer !== undefined}
-			<Button variant="secondary" onclick={onexplorer}>{model.viewOnExplorer}</Button>
+			<!--
+				An `href`, not a handler: the screens that link an explorer do it
+				this way (`TxDetail`, `TokenDetail`), and a receipt that offered
+				the button through an `onexplorer` nobody passed is how this one
+				came to be drawn and dead.
+			-->
+			<Button variant="secondary" href={model.explorerUrl} external>
+				{model.viewOnExplorer}
+			</Button>
 		{/if}
 
 		<Button

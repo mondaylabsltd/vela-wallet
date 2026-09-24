@@ -29,7 +29,7 @@ anti-scam / anti-speculation signal that counter-positions against airdrop-bait 
 
 ## 4. Functional requirements
 
-- **FR-1** — App bundle contains **no analytics/crash/tracking dependency**; `NSPrivacyTracking=false`; only the Camera permission is declared.
+- **FR-1** — App bundle contains **no analytics/crash/tracking dependency**; `NSPrivacyTracking=false`. Permissions are limited to what a declared feature needs: camera (QR), photo-library add (save a receive code), vibrate and notifications on Android, and Bluetooth for the hybrid/caBLE passkey transport. None of them feeds a tracker.
 - **FR-2** — No account, email, phone, or KYC is ever collected or required.
 - **FR-3** — Servers persist only the passkey public key + account name (on-chain by design, B08); nothing else about the user.
 - **FR-4** — Diagnostics are in-memory only (N05); **no data leaves the device** unless the user files a report (N04).
@@ -37,7 +37,7 @@ anti-scam / anti-speculation signal that counter-positions against airdrop-bait 
 
 ## 5. Non-functional requirements
 
-- **NFR-1** — Verifiable: the "no tracking" claim is checkable from `package.json` and native config (open source).
+- **NFR-1** — Verifiable: the "no tracking" claim is checkable from each shell's dependency manifest (`app-web/vela-wallet/package.json`, `rust/Cargo.toml`, the Gradle and SPM files) and the native config, all open source.
 - **NFR-2** — The marketing site's analytics are cookieless/self-hosted (Rybbit) — separate from the app, which has none.
 
 ## 6. UX / flow notes
@@ -47,7 +47,7 @@ No consent/tracking prompts exist because there is nothing to consent to. Bug re
 ## 7. Acceptance criteria
 
 - [ ] **AC-1** — A dependency scan finds no analytics/crash/telemetry SDK in the app.
-- [ ] **AC-2** — Native manifests declare only Camera; `NSPrivacyTracking=false`.
+- [ ] **AC-2** — Every permission in the native manifests traces to a shipped feature, and none to a tracker; `NSPrivacyTracking=false`.
 - [ ] **AC-3** — With no bug report filed, the app makes no request to any first-party telemetry endpoint.
 
 ## 8. Out of scope / non-goals

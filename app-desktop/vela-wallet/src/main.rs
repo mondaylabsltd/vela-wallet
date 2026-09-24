@@ -353,6 +353,14 @@ fn main() {
         // style removed), then the theme, the language and the text size are
         // in force for the first frame rather than the second.
         crate::executor::preferences::boot();
+        // Spec 081 FR-002: the person's own public-key index, applied before
+        // anything asks one a question. This used to happen inside
+        // `OnboardingPage::new`, so a session that started already signed in —
+        // the common case — looked names up against ours no matter what
+        // Settings said.
+        if let Some(url) = crate::executor::storage::load_registry_endpoint() {
+            crate::executor::registry::set_registry_url(&url);
+        }
         session::boot(cx);
 
         cx.on_action(|_: &Quit, cx| cx.quit());

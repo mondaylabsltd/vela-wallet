@@ -84,7 +84,7 @@ class RegistryBackupTest {
     private val model by lazy { SettingsFixtures.buildState(SettingsScreenState.ST1, strings) }
 
     @Test
-    fun `the backup row - three states, a chevron only when there is something to do, nothing when dark`() {
+    fun `the backup row - four states, an affordance only where a tap does something, nothing when dark`() {
         fun row(state: RegistryBackup.State?) = SettingsLive.ethereumBackupRow(state, strings)
         assertNull(row(RegistryBackup.State.Unavailable))
         assertNull(row(RegistryBackup.State.NotRegistered))
@@ -93,7 +93,17 @@ class RegistryBackupTest {
         assertEquals("Checking…" to RowTrailing.None, row(null)!!.let { it.subtitle to it.trailing })
         assertEquals("Backed up on Ethereum" to RowTrailing.None, row(RegistryBackup.State.BackedUp)!!.let { it.subtitle to it.trailing })
         assertEquals("Not backed up yet" to RowTrailing.Chevron, row(RegistryBackup.State.NotBackedUp)!!.let { it.subtitle to it.trailing })
-        assertEquals("Could not check" to RowTrailing.None, row(RegistryBackup.State.CouldNotCheck)!!.let { it.subtitle to it.trailing })
+        // The retry (dead-controls #8): the one state where a tap is worth
+        // taking, wearing the glyph that says "ask again" rather than a
+        // chevron that would promise a page.
+        assertEquals("Could not check" to RowTrailing.Retry, row(RegistryBackup.State.CouldNotCheck)!!.let { it.subtitle to it.trailing })
+        // And the ripple goes exactly where the action is: a row with nothing
+        // to do takes no taps at all.
+        assertEquals(
+            listOf(false, false, true, true),
+            listOf(null, RegistryBackup.State.BackedUp, RegistryBackup.State.NotBackedUp, RegistryBackup.State.CouldNotCheck)
+                .map { row(it)!!.actionable },
+        )
     }
 
     private fun key(name: String = "", provider: String = "", method: KeyMethod = KeyMethod.Platform, synced: Boolean? = true) = WalletKeys.Row(

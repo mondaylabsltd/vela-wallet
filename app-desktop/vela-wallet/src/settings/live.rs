@@ -117,32 +117,6 @@ pub fn picked_language(index: usize) -> Option<&'static str> {
     }
 }
 
-/// The currency menu and the code each row picks: the drawn eight, plus the
-/// committed code when it is none of them — a choice never disappears from
-/// the list that shows it.
-#[must_use]
-pub fn currency_menu(view: &CurrencyView) -> (Vec<MenuRow>, Vec<String>) {
-    let mut codes: Vec<String> = crate::settings::fixtures::CURRENCY_CODES
-        .iter()
-        .map(|code| (*code).to_owned())
-        .collect();
-    if !codes.contains(&view.code) && !view.code.is_empty() {
-        codes.push(view.code.clone());
-    }
-    let rows = codes
-        .iter()
-        .map(|code| {
-            let symbol = symbol_for(code);
-            (
-                SharedString::from(code.clone()),
-                (symbol != code).then(|| SharedString::from(symbol.to_owned())),
-                *code == view.code,
-            )
-        })
-        .collect();
-    (rows, codes)
-}
-
 /// One account's total in the display currency (spec 072).
 ///
 /// Converted only when the core priced the currency: `rate: None` is not 1,
@@ -332,13 +306,12 @@ impl FieldCommit {
 
 /// Symbols for the codes a person can actually reach today.
 ///
-/// Deliberately small. The shell owns the currency catalog — that is the core's
-/// division of labour, stated in `display_currency.rs` — but a full catalog is
-/// only *useful* once rates exist, because until then no code but USD can be
-/// priced at all. It arrives with the rates in spec 031. Unknown codes fall back
-/// to the code itself, which `format_fiat` spaces correctly (`CHF 1,234.56`)
-/// because CLDR's `currencySpacing` keys off the symbol being alphabetic.
-fn symbol_for(code: &str) -> &str {
+/// Deliberately small, and it does not need to be big: an unknown code falls
+/// back to the code itself, which `format_fiat` spaces correctly
+/// (`CHF 1,234.56`) because CLDR's `currencySpacing` keys off the symbol being
+/// alphabetic. The rate endpoint prices about thirty currencies and most of
+/// them have no symbol anybody would recognise anyway.
+pub fn symbol_for(code: &str) -> &str {
     match code {
         "USD" => "$",
         "EUR" => "€",
@@ -378,9 +351,99 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
     }
 }
 
+/// `1.0 MB`, `42 KB`, `0 KB`. The page's other figure (`human_bytes`) splits
+/// amount from unit for the hero; a row wants one string.
+#[must_use]
+pub fn human_size_public(bytes: usize) -> String {
+    human_size(bytes)
+}
+
+fn human_size(bytes: usize) -> String {
+    #[allow(clippy::cast_precision_loss)]
+    let kb = bytes as f64 / 1024.0;
+    if kb >= 1024.0 {
+        format!("{:.1} MB", kb / 1024.0)
+    } else {
+        format!("{} KB", kb.round() as u64)
+    }
+}
+
+/// The 货币 dropdown: every currency the rate endpoint can price, each beside
+/// what the row's sample figure looks like in it.
+///
+/// The sample is the point. A list of three-letter codes asks a person to
+/// remember what ₩ is worth; `KRW · ₩1,712,430` tells them. It is illustrative
+/// — the rate that converts money is fetched when it is needed — so a stale
+/// sample costs a wrong-looking preview and never a wrong payment.
+///
+/// Codes with no rate are not offered at all, which is the same rule the row
+/// value follows: the wallet does not put a currency in front of somebody when
+/// nothing could price it.
+#[must_use]
+pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> Vec<MenuRow> {
+    let mut rows: Vec<MenuRow> = priced
+        .iter()
+        .map(|(code, rate)| {
+            let sample = format_fiat(
+                SAMPLE * rate,
+                code,
+                symbol_for(code),
+                locale,
+                crate::executor::format_prefs::fiat_options(),
+            );
+            (
+                SharedString::from(code.clone()),
+                Some(SharedString::from(sample)),
+                code.eq_ignore_ascii_case(selected),
+            )
+        })
+        .collect();
+    // A code the person committed stays on the list even when nothing could
+    // price it — with no sample beside it, because there is none. Dropping it
+    // would take their own choice off the picker that is supposed to show it,
+    // and leave nothing ticked.
+    if !selected.is_empty() && !rows.iter().any(|row| row.0.eq_ignore_ascii_case(selected)) {
+        rows.push((SharedString::from(selected.to_uppercase()), None, true));
+    }
+    rows
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The menu offers what can be priced, says what each one looks like, and
+    /// ticks the one in force. The desktop had no currency picker at all until
+    /// 2026-09-23 — the row opened a menu that was never built, so
+    /// `Event::UserChose` had no sender on this shell.
+    #[test]
+    fn the_currency_menu_shows_a_sample_and_marks_the_choice() {
+        let priced = [
+            ("USD".to_owned(), 1.0),
+            ("EUR".to_owned(), 0.92),
+            ("JPY".to_owned(), 157.0),
+        ];
+        let rows = currency_menu(&priced, "eur", "en");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].0, "USD");
+        assert!(
+            rows[0].1.as_ref().is_some_and(|s| s.contains("1,234")),
+            "the sample is the row's point: {:?}",
+            rows[0].1
+        );
+        // JPY is zero-decimal, and the core's formatter knows it.
+        assert!(
+            rows[2].1.as_ref().is_some_and(|s| !s.contains('.')),
+            "a yen figure has no cents: {:?}",
+            rows[2].1
+        );
+        assert_eq!(
+            rows.iter().filter(|(_, _, selected)| *selected).count(),
+            1,
+            "exactly one tick"
+        );
+        assert!(rows[1].2, "the chosen code is matched case-insensitively");
+    }
 
     use crate::core_host::CoreHost;
     use vela_core::app::network_admin::{Event as NetEvent, NetNetworkRow, NetworkAdmin};
@@ -610,10 +673,13 @@ pub fn compat_checks(
     if compat.rpc_failure.is_some() {
         return None;
     }
+    // The multi-key pair is reported on its own line (`single_key_only`), not
+    // folded into these rows: a chain that is missing only those is a working
+    // chain for a one-key wallet, and a red "Safe contracts" row would say the
+    // opposite.
+    let core_contracts = || compat.contracts.iter().filter(|c| !c.multi_key_only);
     let deployed = |name: &str| {
-        compat
-            .contracts
-            .iter()
+        core_contracts()
             .find(|contract| contract.name.contains(name))
             .is_some_and(|contract| contract.deployed)
     };
@@ -630,19 +696,27 @@ pub fn compat_checks(
     if let Some(available) = compat.p256_available {
         rows.push((s.check_signer.clone(), available));
     }
-    let remaining = compat
+    let others =
+        || core_contracts().filter(|c| !c.name.contains("EntryPoint") && !c.name.contains("Safe"));
+    // The multi-key pair gets its OWN row rather than being folded into the
+    // aggregates above — the callout beside the list says what it means, but a
+    // list in which nothing is crossed while a warning sits under it reads as
+    // a warning about nothing (measured on the live dialog, spec 081 FR-009).
+    // A product name, like EntryPoint's: translating it would make the row lie.
+    let multi_key: Vec<_> = compat
         .contracts
         .iter()
-        .filter(|contract| !contract.name.contains("EntryPoint") && !contract.name.contains("Safe"))
-        .count();
+        .filter(|c| c.multi_key_only)
+        .collect();
+    if !multi_key.is_empty() {
+        rows.push((
+            SharedString::from("Safe Passkey Signer"),
+            multi_key.iter().all(|contract| contract.deployed),
+        ));
+    }
+    let remaining = others().count();
     if remaining > 0 {
-        let ok = compat
-            .contracts
-            .iter()
-            .filter(|contract| {
-                !contract.name.contains("EntryPoint") && !contract.name.contains("Safe")
-            })
-            .all(|contract| contract.deployed);
+        let ok = others().all(|contract| contract.deployed);
         rows.push((
             SharedString::from(crate::wallet::fill(
                 &s.check_remaining,
@@ -1075,11 +1149,13 @@ mod endpoint_tests {
             name: name.to_owned(),
             address: "0xaaa".to_owned(),
             deployed,
+            multi_key_only: false,
         };
         let compat =
             |rpc_failure: Option<NetRpcFailureKind>, p256: Option<bool>| NetCompatibility {
                 chain_id: 7_777_777,
                 compatible: rpc_failure.is_none(),
+                multi_key_ready: rpc_failure.is_none(),
                 contracts: vec![
                     contract("EntryPoint v0.7", true),
                     contract("Safe v1.4.1", true),
@@ -1113,6 +1189,58 @@ mod endpoint_tests {
         let unprobed = compat_checks(&compat(None, None), &s)
             .unwrap_or_else(|| unreachable!("a reached verdict has rows"));
         assert!(!unprobed.iter().any(|(label, _)| *label == s.check_signer));
+    }
+
+    /// Spec 081 FR-009. The two passkey-signer contracts belong to a wallet
+    /// with more than one key. When they are the only thing missing, the rows
+    /// above must stay green — folding them into "Safe contracts" would tell
+    /// a one-key owner their chain is broken when it is not.
+    #[test]
+    fn the_multi_key_contracts_do_not_redden_the_rows_a_one_key_wallet_needs() {
+        use vela_core::app::network_admin::NetContractStatus;
+        let s = strings();
+        let contract = |name: &str, deployed: bool, multi_key_only: bool| NetContractStatus {
+            name: name.to_owned(),
+            address: "0xaaa".to_owned(),
+            deployed,
+            multi_key_only,
+        };
+        let compat = NetCompatibility {
+            chain_id: 7_777_777,
+            compatible: true,
+            multi_key_ready: false,
+            contracts: vec![
+                contract("EntryPoint v0.7", true, false),
+                contract("Safe L2", true, false),
+                contract("MultiSend", true, false),
+                contract("Safe Passkey Signer Factory", false, true),
+                contract("Safe Passkey Signer Singleton", false, true),
+            ],
+            p256_available: Some(true),
+            best_rpc_url: None,
+            best_rpc_latency_ms: None,
+            rpc_failure: None,
+        };
+
+        let rows = compat_checks(&compat, &s)
+            .unwrap_or_else(|| unreachable!("a reached verdict has rows"));
+        let multi_key_row = rows
+            .iter()
+            .find(|(label, _)| label.contains("Passkey"))
+            .unwrap_or_else(|| unreachable!("the multi-key pair has its own row"));
+        assert!(!multi_key_row.1, "and it is the one that is crossed");
+        assert!(
+            rows.iter()
+                .filter(|(label, _)| !label.contains("Passkey"))
+                .all(|(_, ok)| *ok),
+            "every row a one-key wallet depends on is satisfied: {rows:?}"
+        );
+        // And the count in the "N more" row counts only those contracts.
+        assert!(
+            rows.iter()
+                .any(|(label, _)| label.contains('1') && !label.contains('3')),
+            "one remaining contract, not three: {rows:?}"
+        );
     }
 
     /// A key's support line waits for the test to finish, and averages only
@@ -1622,17 +1750,21 @@ mod parity_tests {
     /// eight is still on the list that shows it.
     #[test]
     fn the_currency_menu_ticks_the_committed_code_and_keeps_it() {
-        let (rows, codes) = currency_menu(&currency("JPY", Some(150.0)));
-        assert_eq!(codes.len(), crate::settings::fixtures::CURRENCY_CODES.len());
+        let priced = [("USD".to_owned(), 1.0), ("JPY".to_owned(), 150.0)];
+        let rows = currency_menu(&priced, "JPY", "en");
         let ticked: Vec<&str> = rows
             .iter()
             .filter(|row| row.2)
             .map(|row| row.0.as_ref())
             .collect();
         assert_eq!(ticked, ["JPY"]);
-        let (rows, codes) = currency_menu(&currency("CHF", None));
-        assert_eq!(codes.last().map(String::as_str), Some("CHF"));
-        assert!(rows.last().is_some_and(|row| row.2));
+        // …and a committed code nothing could price is still on the list that
+        // shows it, ticked, with no sample beside it.
+        let rows = currency_menu(&priced, "CHF", "en");
+        let last = rows.last().expect("the committed code is kept");
+        assert_eq!(last.0.as_ref(), "CHF");
+        assert!(last.1.is_none(), "nothing priced it, so there is no sample");
+        assert!(last.2, "the person's own choice is what is ticked");
     }
 
     /// The stored words and the drawn cells agree.

@@ -12,6 +12,7 @@
  */
 
 import { loadCore, registryResolveKeyStep, registryResolveUnitStep } from '$lib/core/client';
+import { getPasskeyIndexURL } from '$lib/services/endpoints';
 import { PUBLIC_RPCS } from '$lib/services/rpc-pool-endpoints';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
@@ -59,18 +60,23 @@ export type UnitDetail = { metadataHex: string; members: RegistryUnitMember[] };
  *  ours and must never be reconstructed into an account. */
 const MAX_UNIT_MEMBERS = 7;
 
-let baseUrl = DEFAULT_REGISTRY_URL;
-
-export function setRegistryUrl(url: string): void {
-	baseUrl =
-		url
+/**
+ * The index this wallet is configured to use, read at the moment of the call.
+ *
+ * Spec 081 FR-002: this used to be a module-global seeded at import time, with
+ * a `setRegistryUrl` nobody ever called — so Settings → Service Endpoints could
+ * name a self-hosted index and creating a wallet still registered its key with
+ * ours. Read-through is the pattern `services/core-walk.ts` already uses for
+ * the same endpoint; the empty-means-default rule lives in
+ * `services/endpoints.ts`, and matches the core's `NetServiceEndpoints::effective`.
+ */
+export function registryUrl(): string {
+	return (
+		getPasskeyIndexURL()
 			.trim()
 			.replace(/[\r\n]/g, '')
-			.replace(/\/$/, '') || DEFAULT_REGISTRY_URL;
-}
-
-export function registryUrl(): string {
-	return baseUrl;
+			.replace(/\/$/, '') || DEFAULT_REGISTRY_URL
+	);
 }
 
 async function request<T>(
@@ -83,7 +89,7 @@ async function request<T>(
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	let response: Response;
 	try {
-		response = await fetch(`${baseUrl}${path}`, { ...init, signal: controller.signal });
+		response = await fetch(`${registryUrl()}${path}`, { ...init, signal: controller.signal });
 	} catch (error) {
 		// Transport failure or abort: the request never arrived.
 		throw new RegistryError(`${label} failed: ${describe(error)}`, true);
@@ -291,7 +297,9 @@ async function resolve<T>(
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
 		try {
-			const response = await fetch(`${baseUrl}${request.path}`, { signal: controller.signal });
+			const response = await fetch(`${registryUrl()}${request.path}`, {
+				signal: controller.signal
+			});
 			if (!response.ok) {
 				// The server answered — a refusal. Remembered, and the chain is asked.
 				indexFailure = new RegistryError(`${label} failed: ${response.status}`, false);

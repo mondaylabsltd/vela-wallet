@@ -20,21 +20,39 @@
 //! The core says so (`ContactShellResult::IdentityResolved`, invariant ⑦) and it
 //! matters: a name registered a minute after somebody looked would otherwise be
 //! invisible for a day. A miss costs a lookup; a cached miss costs the truth.
+//!
+//! ## A reverse record is a claim, not a name (spec 081, FR-010)
+//!
+//! `addr.reverse` is writable by the address itself, so an attacker who funds
+//! an address can name it after the contact somebody is about to pay. Every
+//! name a name service returns is therefore put to `vela_core::app::name_verify`
+//! — which resolves it FORWARD and compares — and only a `Verified` one is
+//! shown or cached. The rule is the core's; this file performs its `eth_call`s.
 
 use serde_json::{Value, json};
 
 use vela_core::app::contacts::ContactIdentity;
+use vela_core::app::name_verify::{self, ForwardState, VerifyStep};
 use vela_core::primitives::keccak256;
+use vela_core::registry_lookup::{LookupAnswer, LookupOutcome, LookupRequest};
 
 use crate::executor::{pool, registry, storage};
 
-/// `vela.recipientIdentity` — `{ "0xlowercase": { name, source, at } }`.
+/// `vela.recipientIdentity.v2` — `{ "0xlowercase": { name, source, at } }`.
 ///
 /// One document rather than the web's key-per-address, because this store is a
 /// single JSON file and a key per recipient would grow it without bound.
-const CACHE_KEY: &str = "vela.recipientIdentity";
+///
+/// The `.v2` is the forward-verification rule arriving (FR-010): everything the
+/// old key holds was cached under no rule at all, so a poisoned name could sit
+/// there for a day after the fix shipped. A new key retires the lot at once,
+/// which costs one lookup per contact and buys back the guarantee.
+const CACHE_KEY: &str = "vela.recipientIdentity.v2";
 /// 24 hours (`recipient-identity.ts:75`).
 const CACHE_TTL_MS: f64 = 24.0 * 60.0 * 60.0 * 1000.0;
+/// Verification is three `eth_call`s at the very most; this only stops a
+/// contract bug from spinning.
+const MAX_VERIFY_ROUNDS: usize = 8;
 
 /// An ENS-compatible registry: `registry.resolver(node)` then `resolver.name(node)`.
 struct NameService {
@@ -131,7 +149,8 @@ fn eth_call(chain_id: u32, to: &str, data: &str) -> Option<String> {
     (hex != "0x").then(|| hex.to_owned())
 }
 
-/// One service's answer for one address, or `None`.
+/// One service's answer for one address, forward-verified, or `None`. A name
+/// this returns has been proven to resolve back to `address`.
 fn reverse_resolve(address: &str, service: &NameService) -> Option<String> {
     let stripped = address.trim_start_matches("0x").to_lowercase();
     let reverse_node = match service.reverse_registrar {
@@ -163,7 +182,88 @@ fn reverse_resolve(address: &str, service: &NameService) -> Option<String> {
         &format!("0x{resolver_address}"),
         &format!("0x{SEL_NAME}{node}"),
     )?;
-    decode_name(&answer)
+    // What the address CLAIMS to be called. Nothing may draw it yet.
+    let claimed = decode_name(&answer)?;
+    forward_verified(address, service, &claimed)
+}
+
+/// Perform one `eth_call` the core handed over. Every failure is `Failed`, and
+/// the core decides what a failure means — here, that the name stays unshown.
+fn perform(request: &LookupRequest) -> LookupAnswer {
+    let LookupRequest::EthCall {
+        id,
+        chain_id,
+        to,
+        data,
+    } = request
+    else {
+        // This walk only ever asks for `eth_call`; anything else is a core the
+        // shell is too old for, and silence is the safe reading of it.
+        return LookupAnswer {
+            id: String::new(),
+            outcome: LookupOutcome::Failed,
+            body: None,
+        };
+    };
+    // The RAW result, a bare `0x` included: a chain without the contract is an
+    // ANSWER ("not here"), not a silence, and the core's verdicts differ.
+    match eth_call_raw(*chain_id, to, data) {
+        Some(body) => LookupAnswer {
+            id: id.clone(),
+            outcome: LookupOutcome::Ok,
+            body: Some(body),
+        },
+        None => LookupAnswer {
+            id: id.clone(),
+            outcome: LookupOutcome::Failed,
+            body: None,
+        },
+    }
+}
+
+/// Like [`eth_call`], but `0x` comes back as the answer it is rather than as
+/// `None`.
+fn eth_call_raw(chain_id: u32, to: &str, data: &str) -> Option<String> {
+    let result = pool::call(
+        chain_id,
+        "eth_call",
+        json!([{ "to": to, "data": data }, "latest"]),
+    )
+    .ok()?;
+    result
+        .get("result")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
+/// The claimed name, but only if resolving it forward lands back on `address`.
+///
+/// The rule — what is asked, in what order, what an unanswered call means, and
+/// the comparison itself — is `vela_core::app::name_verify`, shared with the
+/// other three shells. `None` covers both "this name is somebody else's" and
+/// "nobody answered": either way the shell shows the address alone, because
+/// failing open would let whoever poisons the record choose the moment.
+fn forward_verified(address: &str, service: &NameService, claimed: &str) -> Option<String> {
+    let mut answers: Vec<LookupAnswer> = Vec::new();
+    for _ in 0..MAX_VERIFY_ROUNDS {
+        match name_verify::step(
+            service.chain_id,
+            service.registry,
+            address,
+            claimed,
+            &answers,
+        ) {
+            VerifyStep::Ask { requests } => {
+                answers.extend(requests.iter().map(perform));
+            }
+            VerifyStep::Done {
+                forward_state: ForwardState::Verified,
+                name,
+            } => return name,
+            VerifyStep::Done { .. } => return None,
+        }
+    }
+    None
 }
 
 /// An ABI `string` return, bounded and validated.
@@ -435,12 +535,14 @@ mod tests {
         });
     }
 
-    /// The live waterfall against a name that exists.
+    /// The live waterfall against a name that exists — and, since FR-010, one
+    /// that survives being resolved forward again.
     #[test]
     #[ignore = "reads the passkey index and five name services"]
     fn a_real_ens_name_resolves_and_a_nameless_address_does_not() {
         storage::tests::with_temp_state("identity-live", || {
-            // vitalik.eth — a reverse record that has existed for years.
+            // vitalik.eth — a reverse record that has existed for years, and
+            // whose forward record points back at the same address.
             const NAMED: &str = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
             let identity = resolve(NAMED);
             println!("  {NAMED} → {identity:?}");

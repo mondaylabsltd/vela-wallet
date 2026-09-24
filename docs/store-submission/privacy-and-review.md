@@ -3,9 +3,19 @@
 
 Copy-paste-ready answers for the **Apple App Privacy (Nutrition Label)**, **Google Play Data Safety** form, and the **App Review notes** for both stores.
 
-Everything below is grounded in the actual app behavior (`package.json` has **no analytics/crash/tracking SDK**), the published privacy policy (getvela.app/privacy), and the bug-report code (`src/services/bug-report.ts`). Operator / data controller: **MONDAY LABS LTD**, UK.
+Everything below is grounded in the actual app behavior, the published privacy policy (getvela.app/privacy), and the service code.
+Operator / data controller: **MONDAY LABS LTD**, UK.
 
-> ⚠️ These forms are legal attestations you personally sign. I've flagged the 3 genuine judgment calls with **【你来定】**. Everything else is a factual mapping of what the code does.
+> ⚠️ These forms are legal attestations you personally sign. I've flagged the genuine judgment calls with **【你来定】**. Everything else is a factual mapping of what the code does.
+
+> 🔴 **Re-checked 2026-09-23 against the service code. See [`privacy-evidence.md`](privacy-evidence.md) — it supersedes this file wherever the two disagree.**
+> The audit overturned this sheet's central premise. It said Vela's own servers do not store the wallet address. They do:
+> the relay **logs the sender address on every accepted transaction** (`vela-relay-cf/src/admission.rs:203-205`) and stores
+> the full signed UserOperation for up to **14 days** (`lane_do.rs:1400-1412`, `:1784-1787`); the passkey index stores the
+> wallet address and the user-typed wallet/key names for **7–30 days** (`p256-index-cf/src/submitter.rs:399-411`, `:57-58`)
+> and then **publishes them permanently to Gnosis Chain** (`p256-registrar/src/protocol.rs:27,88`). Declaring Identifiers →
+> User ID and Financial Info → Other Financial Info, both **Linked**, is now the *accurate* answer, not the cautious one.
+> The other corrections are marked ⚠️ inline below.
 
 ---
 
@@ -16,14 +26,18 @@ Everything below is grounded in the actual app behavior (`package.json` has **no
 | -------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------- | --------------------------------------- | ----------------------------------------- | ----------------------------------------- |
 | Passkey**public key**                                                    | Yes                             | Vela Passkey Index → Gnosis chain (publicly readable) | No — pseudonymous, cannot move funds | Wallet creation + cross-device recovery | Required                                |
 | **Account name** (user-chosen label)                                     | Yes                             | Vela Passkey Index (off-chain + on-chain)              | No — user told to keep pseudonymous  | Identify wallet during recovery         | Required                                |
-| **Wallet address**                                                       | Yes (in queries / signed tx)    | Third-party RPC nodes, Vela Relay                    | No — on-chain pseudonymous           | Read balances, submit transactions      | Required (functional)                   |
-| **IP address**                                                           | Yes (implicit in every request) | RPC / Bundler / Passkey Index / getvela.app            | No — ephemeral, connection only      | Network connectivity, rate-limiting     | Functional                              |
-| **Diagnostics** (app version, OS version, language, RPC-failure metrics) | Only if user files a bug        | getvela.app → GitHub issue                            | No — scrubbed, no address/keys       | Bug fixing                              | Optional, user-initiated, preview shown |
+| **Wallet address** ⚠️                                                     | Yes (in queries / signed tx)    | Third-party RPC nodes, **Vela Relay (logged + stored ≤14d)**, **Vela Index (stored 7–30d, then published on-chain forever)** | No — on-chain pseudonymous           | Read balances, submit transactions      | Required (functional)                   |
+| **Transaction content** ⚠️ (calldata: recipients + amounts, signature, receipt logs) | Yes | **Vela Relay — stored ≤14 days** (`lane_do.rs:1400-1412`) | No — pseudonymous | Submit and retry the transaction | Required (functional) |
+| **Token contract addresses held** ⚠️                                      | Yes (one logo GET per token)    | `ethereum-data.getvela.app` (static assets + Cloudflare edge) | No — but the path sequence approximates holdings | Render token logos | Functional |
+| **IP address**                                                           | Yes (implicit in every request) | RPC / Relay / Index / chain-data / rates; Cloudflare as processor | No — relay reads none at all; index keeps a salted 64-bit hash ≤60 s for rate limits | Network connectivity, rate-limiting     | Functional                              |
+| **Diagnostics** (app version, OS version, language, RPC-failure metrics) ⚠️ | Only if user files a bug — **and then only by the user's own browser, not by the app** | github.com (public issue), via a prefilled URL the OS browser opens | No — no address/keys/balances       | Bug fixing                              | Optional, user-initiated, preview shown |
 | Private keys / seed phrases / tx contents                                | **Never leaves device**         | —                                                     | —                                    | —                                      | Not collected                           |
 | Name / email / phone / gov ID                                            | **Never asked**                 | —                                                     | —                                    | —                                      | Not collected                           |
-| Balances / tx history / RPC prefs                                        | No — on-device`AsyncStorage`   | —                                                     | —                                    | —                                      | Not collected                           |
+| Contacts, browsing history, settings, RPC prefs                          | No — on-device store (`vela.*` keys) | —                                                     | —                                    | —                                      | Not collected                           |
 
-**No tracking anywhere.** No advertising ID, no third-party analytics SDK, no cross-app tracking. `NSPrivacyTracking=false` already set in `ios/VelaWallet/PrivacyInfo.xcprivacy`.
+**No tracking anywhere.** No advertising ID, no third-party analytics SDK, no crash reporter, no cross-app tracking — proven from the dependency manifests of all four shells (privacy-evidence.md §4). iOS ships exactly one third-party package (`lottie-ios`); Android's merged manifest contains **no `com.google.android.gms.permission.AD_ID`**.
+
+`NSPrivacyTracking=false` is set in **`app-ios/VelaWallet/VelaWallet/PrivacyInfo.xcprivacy`** (the old `ios/…` path belonged to the Expo tree, where no manifest ever existed). That file **is** on `main` — it landed with PR #309 (`505dc3e2`); an earlier reading of this said otherwise because it was checking a stale local `main`. What still needs doing is reconciling its contents with §1 below: `Linked` must be `true`, and a second `NSPrivacyCollectedDataTypeUserID` entry is needed, because a manifest that disagrees with the nutrition label is itself a rejection reason (privacy-evidence.md §6.3). The same file declares the one required-reason API the archived binary imports (`NSPrivacyAccessedAPICategoryUserDefaults`, reason `CA92.1`), and `.github/workflows/ios-package.yml` re-measures the archive with `nm -u` on every build.
 
 Website analytics (cookieless, self-hosted) covers **getvela.app**, not the app — it is **not** part of either app-store data form. It belongs only in the privacy policy (already there).
 
@@ -43,17 +57,19 @@ For every category Apple asks: *Collected? · Linked to the user? · Used for tr
 - Purpose: **App Functionality** (account creation + cross-device recovery)
 - What it is: the passkey **public key** and the user-chosen **account name** stored on the Passkey Index.
 
-**B. Financial Info → Other Financial Info** 【你来定】
+**B. Financial Info → Other Financial Info** ⚠️ *(the judgement is settled — declare it)*
 
-- Collected: **Yes** (recommended)
+- Collected: **Yes**
 - Linked: **Yes** · Tracking: **No** · Purpose: **App Functionality**
-- What it is: the **wallet address**, transmitted to third-party RPC nodes / the bundler to read balances and submit transactions.
-- **Judgment call:** Vela's own servers do **not** store the wallet address — it's only sent in-transit to third-party infrastructure to make the wallet work. Apple still expects disclosure of data handled by integrated third parties, so declaring it (App Functionality, not tracking) is the safe, honest answer. Choosing *not* to declare is defensible only if you treat RPC nodes purely as user-directed infrastructure. **Recommend: declare it.**
+- What it is: the **wallet address and the transactions sent from it**.
+- ⚠️ **The old rationale here was wrong.** It said "Vela's own servers do not store the wallet address." They do. The relay logs the sender on every accepted submit (`vela-relay-cf/src/admission.rs:203-205`) and stores the full signed UserOperation — sender, calldata with recipients and amounts, signature, and the on-chain receipt logs — for up to **14 days** (`lane_do.rs:1400-1412`, `:1784-1787`). Declaring is now the accurate answer, not the conservative one, and the published privacy policy already says the same thing (`privacy/+page.svelte:110-117`), so a reviewer can check it in two minutes.
+- The remaining judgement is only about the **RPC nodes** (partners or user-directed infrastructure?) — see privacy-evidence.md §6.5 #3. It changes the review-notes wording, not what gets ticked.
 
-**C. Diagnostics → Other Diagnostic Data** (and Crash Data if you ever add crash capture — you don't today)
+**C. Diagnostics → Other Diagnostic Data** ⚠️ *(changed to Not Collected)*
 
-- Collected: **Yes** · Linked: **No** · Tracking: **No** · Purpose: **App Functionality**
-- What it is: optional, user-initiated bug reports (app version, OS version, language, RPC-failure metrics). Scrubbed of keys/addresses; user sees a preview before sending.
+- Collected: **No** · (Crash Data: **No** — there is no crash reporter.)
+- ⚠️ **No shipped store binary transmits diagnostics.** A repo-wide grep for `api/bug-report` finds **zero call sites** in `rust/`, `app-android/`, `app-ios/`, `app-desktop/`, `app-web/vela-wallet/`. iOS's feedback sheet has **no send action at all** (`SettingsSheet.swift:307-330`); Android builds a prefilled `github.com/…/issues/new` URL and hands it to the **system browser** (`VelaNavHost.kt:1693-1699`) — the app itself sends nothing, and the user reviews the body first. Android's local `VelaLog` is a no-op in release builds (`VelaLog.kt:37`).
+- **If** the in-app reporter is ever wired to `getvela.app/api/bug-report`, flip this to Collected / Not Linked / App Functionality **in that same release** — and re-implement the scrubbing server-side first, because the client that guaranteed "never keys, addresses or balances" was deleted with the Expo tree.
 
 ### Declare these as NOT collected (verify each is "Not Collected" in the form):
 
@@ -62,12 +78,12 @@ Contact Info (name/email/phone/address), Health, Location, Sensitive Info, Conta
 ### Export compliance (separate question, every build)
 
 - "Does your app use encryption?" → **Yes**, but only **standard/exempt** encryption (HTTPS/TLS + OS-provided passkey crypto). Qualifies for the exemption.
-- ✅ **Done:** `"ITSAppUsesNonExemptEncryption": false` is now set in `app.json` → `ios.infoPlist` and the committed `ios/VelaWallet/Info.plist`, so it stops asking every upload.
+- ✅ **Done (2026-09-23).** It had regressed: the key lived in the Expo `app.json`, which spec 039 deleted, and the old "✅ Done" was describing that. `ITSAppUsesNonExemptEncryption = false` is now in the hand-maintained `app-ios/VelaWallet/VelaWallet/Info.plist`, so App Store Connect stops asking on every upload.
 
 ### Account deletion (Guideline 5.1.1(v))
 
-- In-app path exists: **Settings → Remove/Reset wallet** clears all on-device data.
-- Caveat to put in review notes: the Passkey Index **public key is written to an immutable public blockchain** (Gnosis) — it's pseudonymous and cannot move funds, so it cannot be "deleted." The off-chain account-name record can be removed on request at **hello@mondaylabs.ltd**. Don't hide this — explain it.
+- In-app path exists: **Settings → Erase this device** clears on-device data. ⚠️ **Erasing is not yet complete on iPhone** (`privacy/+page.svelte:172-177`) — do not claim a full in-app deletion path on the iOS form until it is; uninstalling removes the rest.
+- Caveat to put in review notes: the registry record on Gnosis is **append-only and permanent** (`p256-registrar/src/protocol.rs:5-6`) and contains the **public key, credential ID, AAGUID, wallet address, wallet name and each key's label** — pseudonymous, cannot move funds, and deletable by nobody, including us. The off-chain copy expires by itself (7 days after success, 30 after failure) and can be removed on request at **hello@mondaylabs.ltd**. Don't hide this — explain it.
 
 ---
 
@@ -78,7 +94,7 @@ Contact Info (name/email/phone/address), Health, Location, Sensitive Info, Conta
 ### Security practices
 
 - **All user data encrypted in transit?** → **Yes** (HTTPS/TLS everywhere).
-- **Do you provide a way to request data deletion?** → **Yes** — uninstall removes on-device data; account-name record removable on request at **hello@mondaylabs.ltd**. (On-chain public key is immutable + pseudonymous — note it.)
+- **Do you provide a way to request data deletion?** → **Yes** — Settings → Erase this device, or uninstall, removes on-device data; the off-chain index record expires on its own (7 d after success, 30 d after failure) and is removable on request at **hello@mondaylabs.ltd**. ⚠️ The on-chain registry record is **append-only and cannot be deleted by anyone** — say so rather than implying full erasure.
 - **Independent security review?** → **No.** ⚠️ Do **not** claim an audit — none exists and none is scheduled.
 - **Committed to Play Families policy?** → **No** (not directed at children).
 
@@ -87,17 +103,19 @@ Contact Info (name/email/phone/address), Health, Location, Sensitive Info, Conta
 
 | Play data type                                                           | Collected | Shared                       | Ephemeral?                         | Req/Opt      | Purpose                               |
 | -------------------------------------------------------------------------- | ----------- | ------------------------------ | ------------------------------------ | -------------- | --------------------------------------- |
-| **Financial info → Other financial info** (wallet public key / address) | Yes       | **Yes** 【你来定】           | No (public key is stored on-chain) | Required     | App functionality, Account management |
-| **Personal info → User IDs / Other info** (account name)                | Yes       | **Yes** (published on-chain) | No                                 | Required     | Account management, App functionality |
-| **App info & performance → Diagnostics** (+ Other app performance data) | Yes       | No                           | No (becomes a GitHub issue)        | **Optional** | App functionality (bug fixing)        |
+| **Financial info → Other financial info** (wallet address + the transactions sent from it) | Yes       | **Yes**                      | **No** — relay stores the operation 1 h–14 d; the address is published on-chain | Required     | App functionality, Account management |
+| **Personal info → User IDs** (wallet address as account id, passkey public key, credential ID) | Yes | **Yes** (published on-chain) | No                                 | Required     | Account management, App functionality |
+| **Personal info → Other info** (user-chosen wallet name and per-key labels)                | Yes       | **Yes** (published on-chain) | No                                 | Required     | Account management, App functionality |
+| ~~**App info & performance → Diagnostics**~~ ⚠️                          | **No**    | —                            | —                                  | —            | — (no shipped binary transmits diagnostics — see §1.C) |
 
-- **"Shared" judgment call 【你来定】:** Google's definition of *Shared* **excludes** transfers to "service providers processing on your behalf" and "user-initiated" transfers — which could cover RPC nodes/bundler. **But** the Passkey Index publishes the public key + account name to a **public blockchain**, which is unambiguously public sharing. So mark the public key + account name as **Shared**. Wallet-address-to-RPC alone is the borderline part; marking it shared is the conservative honest choice.
+- ⚠️ **"Shared" is no longer a judgment call — it is Yes.** The index publishes the wallet address, the wallet name, every key label, every public key and every credential ID to **Gnosis Chain, permanently** (`p256-registrar/src/protocol.rs:27,88`; `p256-index-cf/src/chain.rs:465-470`). That is unambiguously public sharing and it covers the address too, not just the public key. Whether address-to-RPC *alone* would count no longer matters, because the on-chain publication already forces the answer. (If `ALCHEMY_API_KEY` is set on the relay or index, Alchemy is an additional recipient — confirm from the secret store, privacy-evidence.md §7 #3.)
 
 ### Data types — declare NOT collected:
 
-Location, Contacts, Calendar, Photos/Videos, Audio (the unused `RECORD_AUDIO` permission has been removed), SMS/Call logs, Health, **Device or other IDs** (no advertising ID, no device ID), Web browsing history, Installed apps.
+Location, Contacts, Calendar, Photos/Videos, Audio (no `RECORD_AUDIO`), SMS/Call logs, Health, **Device or other IDs** (no advertising ID, no device ID — `AD_ID` is absent from the merged manifest), Web browsing history (the in-app browser's history stays on device — `browser_history.rs:11-16`), Installed apps, App activity.
 
-- **IP address 【你来定】:** used only for connectivity + in-memory rate-limiting (not stored, not linked). Google lets you treat purely-ephemeral connection data as not collected; it's disclosed in the privacy policy. **Recommend: do not declare** as collected, keep the privacy-policy mention.
+- ⚠️ **Location:** still **Not collected**, but be ready to explain the permission. `ACCESS_FINE_LOCATION` is declared at `maxSdkVersion="30"` and `BLUETOOTH_SCAN` carries `neverForLocation` — both exist only because pre-API-31 BLE scanning required them, for the caBLE "sign in with your phone" passkey flow. No location value is ever read or transmitted. (`AndroidManifest.xml:59-71`)
+- **IP address 【你来定】:** the relay reads **no** client IP at all; the index keeps a salted, 64-bit-truncated hash for a **60-second** rate-limit window and never stores the raw value (`p256-index-cf/src/edge.rs:758-766`, `submitter.rs:630-649`). Cloudflare, as processor, sees it regardless. Google lets you treat purely-ephemeral connection data as not collected. **Recommend: do not declare** as collected, keep the privacy-policy mention.
 
 ---
 
@@ -106,7 +124,7 @@ Location, Contacts, Calendar, Photos/Videos, Audio (the unused `RECORD_AUDIO` pe
 - **Financial features declaration** → declare: **"Provides a non-custodial crypto wallet (stores/holds crypto)."** Do **NOT** check exchange/buy/sell/trade — Vela has no fiat on-ramp and no exchange. Exchange checkboxes can trigger regional licensing requirements you don't need.
 - **Target audience & content** → adults (18+); not designed for or appealing to children.
 - **Content rating (IARC questionnaire)** → finance utility, no objectionable content. Answer honestly; expect a low rating with a finance note.
-- **Permissions** → **Camera (QR scanning) only.** Bluetooth, location, microphone, and the draw-over-apps permission have all been removed from the app, so **no high-risk permissions declaration form is required.**
+- ⚠️ **Permissions** → this is no longer "Camera only". The shipped manifest declares `INTERNET`, `CAMERA`, `VIBRATE`, `POST_NOTIFICATIONS`, `BLUETOOTH_SCAN` (`neverForLocation`), `BLUETOOTH_CONNECT`, and legacy `BLUETOOTH` / `BLUETOOTH_ADMIN` / `ACCESS_FINE_LOCATION` capped at `maxSdkVersion="30"` (`AndroidManifest.xml:26-71`). Bluetooth and the capped location permission came back with spec 019's caBLE passkey flow. Microphone and draw-over-apps are still gone. None of these is in Play's *high-risk / sensitive permissions* set (that list is SMS, Call Log, `MANAGE_EXTERNAL_STORAGE`, `AccessibilityService`, `QUERY_ALL_PACKAGES`, full-screen intent), so no special declaration form is triggered — but do not tell a reviewer the app has no Bluetooth.
 - **Ads** → app contains **no ads** → declare "No ads."
 - **Government / News / COVID** → N/A.
 
@@ -134,9 +152,17 @@ HOW TO TEST:
    to the displayed address, OR contact us and we will pre-fund the review wallet.
    We can also provide a testnet build on request.
 
-DAPP CONNECT (optional): pairs with a desktop dApp by scanning a pairing QR code
-(WalletConnect-style relay over HTTPS/WebSocket). No Bluetooth. It is optional and
-not needed to use the wallet. Steps/extension link available on request.
+DAPPS (optional): the app has a built-in browser. Connecting to a site and signing
+happen in-app; there is no pairing step and no separate companion app.
+
+BLUETOOTH: used for one thing only — the standard WebAuthn/caBLE "sign in with
+your phone" flow, where this device shows a QR code and the phone that scans it
+is reached over a Bluetooth proximity channel. It is optional; a passkey on this
+device needs no Bluetooth. The usage string explains it at the first scan.
+
+BACKGROUND TASK: the identifier app.getvela.VelaWallet.tracker is the
+transaction-receipt tracker (it checks whether a submitted transaction confirmed).
+It is not an advertising or analytics tracker; the app contains neither.
 
 COMPLIANCE (Guideline 3.1.5(b)): Vela is storage-only / self-custodial. It does
 NOT facilitate cryptocurrency exchange or trading, has NO fiat on-ramp, NO in-app
@@ -144,10 +170,21 @@ purchases, and NO mining.
 
 ENCRYPTION: standard HTTPS/TLS + OS passkey cryptography only (exempt).
 
-PRIVACY: see https://getvela.app/privacy. The app contains no analytics SDK and
-collects no personal identity data. Account/data deletion: Settings → Remove
-Wallet clears all on-device data; the on-chain passkey public key is immutable,
-pseudonymous, and cannot move funds. Deletion requests: hello@mondaylabs.ltd.
+PRIVACY: see https://getvela.app/privacy, which describes every server the app
+talks to. The app contains no analytics SDK, no crash reporter and no advertising
+identifier, and never asks for a name, email, phone number or ID.
+
+Creating a wallet writes a public record (passkey public keys, credential IDs,
+the wallet address and the name the user chose) to an append-only registry
+contract on Gnosis Chain. That is how the wallet can be recovered on another
+device. It is pseudonymous, it cannot move funds, and — because it is on a public
+blockchain — nobody, including us, can delete it. The user is told this before
+they create a wallet. Account/data deletion: Settings → Erase this device clears
+on-device data; deletion requests for our own off-chain records (which expire by
+themselves within 7–30 days): hello@mondaylabs.ltd.
+
+Note: the marketing website getvela.app uses a cookieless analytics tool. The app
+does not — no analytics reaches this binary.
 
 Contact for review: hello@mondaylabs.ltd
 ```
@@ -167,8 +204,13 @@ Receive shows the address. Send needs on-chain funds; contact us to pre-fund or 
 a testnet build.
 
 Crypto: non-custodial software wallet (store/hold only). No exchange, no fiat
-on-ramp, no in-app purchases. dApp Connect pairs over an HTTPS/WebSocket relay
-(scan a QR code) — no Bluetooth.
+on-ramp, no in-app purchases. dApps are used through the app's built-in browser.
+
+Bluetooth + the capped ACCESS_FINE_LOCATION (maxSdkVersion=30) exist for one
+purpose: the standard WebAuthn/caBLE "sign in with your phone" passkey flow,
+where this device shows a QR code and reaches the scanning phone over a Bluetooth
+proximity channel. BLUETOOTH_SCAN carries neverForLocation; no location is ever
+read or transmitted.
 
 Privacy policy: https://getvela.app/privacy
 Contact / data deletion: hello@mondaylabs.ltd
@@ -178,9 +220,16 @@ Contact / data deletion: hello@mondaylabs.ltd
 
 ---
 
-## 6. Repo changes already made so the forms stay true (2026-06-30)
+## 6. Repo changes made so the forms stay true (2026-06-30) — ⚠️ HISTORICAL, PARTLY REVERSED
 
-Bluetooth was dropped entirely (dApp Connect now runs over the WalletPair HTTPS/WebSocket relay), along with the other unneeded permissions:
+> ⚠️ **Read the 2026-09-23 note first.** This section describes the Expo-era binary. Three of its claims are no longer true of what ships:
+> - **Bluetooth is back**, on both platforms, for the caBLE passkey flow (spec 019): `AndroidManifest.xml:59-71`, `app-ios/VelaWallet/VelaWallet/Info.plist:93-94`.
+> - **`ACCESS_FINE_LOCATION` is back**, capped at `maxSdkVersion="30"`, as a pre-API-31 BLE-scan prerequisite.
+> - **`ITSAppUsesNonExemptEncryption` was gone** — it lived in `app.json`, which spec 039 deleted — and is back in `Info.plist` as of 2026-09-23.
+>
+> Still true: no `RECORD_AUDIO`, no `SYSTEM_ALERT_WINDOW`, no microphone usage string, and the deletion channel.
+
+Bluetooth was dropped entirely (dApp Connect then ran over the WalletPair HTTPS/WebSocket relay), along with the other unneeded permissions:
 
 - ✅ Removed all `BLUETOOTH*` permissions + iOS Bluetooth usage strings + the `bluetooth-peripheral` background mode (`app.json`, `plugins/with-native-modules.js`, committed `Info.plist` + `AndroidManifest.xml`).
 - ✅ Removed `RECORD_AUDIO` (disabled expo-camera mic via `recordAudioAndroid:false` + strip `NSMicrophoneUsageDescription`), `ACCESS_FINE_LOCATION` (only existed for BLE scanning), and `SYSTEM_ALERT_WINDOW`.

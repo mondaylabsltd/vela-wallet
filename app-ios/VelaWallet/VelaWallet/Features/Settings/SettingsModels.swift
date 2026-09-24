@@ -296,9 +296,12 @@ struct ProviderCardModel: Identifiable {
     let field: UrlFieldModel
     var support: String?
     var link: String?
-    /// Where "Get a key" goes — the provider's own page. Set only while no key
-    /// is saved; with one, the field's own action ("Check key") is the test.
+    /// Where `link` goes. Android has carried this since 046; iOS drew the
+    /// words in link blue, twice, and neither was tappable.
     var linkUrl: String?
+    /// 测试 — the core asks the provider whether the key works. Absent in the
+    /// gallery, where nothing can be asked.
+    var test: String?
 }
 
 struct RpcProvidersModel {
@@ -356,6 +359,12 @@ struct KeyValueRowModel: Identifiable {
     let value: String
     var mono: Bool = false
     var external: Bool = false
+    /// Where an external row GOES. A row wearing the external-link glyph and
+    /// opening nothing is the worst of both: it advertises a place and then
+    /// refuses to go there. The host is what a person reads; this is what the
+    /// row does, and they are kept side by side so one cannot drift from the
+    /// other.
+    var link: String?
 }
 
 struct AboutModel {
@@ -506,7 +515,11 @@ struct WalletKeyRowModel: Identifiable {
 struct SettingsScreenModel {
     let state: SettingsStateId
     let title: String
-    let page: SettingsPage
+    /// Which page it OPENS on. A `var` because a screen elsewhere can send
+    /// somebody here for one thing — the add-token sheet's 原生 tab means
+    /// "add the network that coin lives on" — and landing them on the settings
+    /// home to find it themselves is most of the way to not going at all.
+    var page: SettingsPage
     let overlay: SettingsOverlay
     /// SR states sit on the 钱包 tab, over another screen.
     let rescue: Bool
@@ -533,7 +546,9 @@ struct SettingsScreenModel {
     var networkDetails: [String: NetworkDetailModel] = [:]
     var addNetwork: AddNetworkModel
     var rpcProviders: RpcProvidersModel
-    /// `var` since 072: the four fields are the core's view, not the drawing.
+    /// `var` since 081: the four service endpoints are the core's now, values
+    /// and health both, so the page can be swapped onto the drawing the way
+    /// every other live surface is.
     var endpoints: EndpointsModel
     /// `var` since 058: both are MEASURED now — the storage page from the
     /// store's own keys, the about page from the running build.
@@ -552,7 +567,9 @@ struct SettingsScreenModel {
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel
     let clearCachesSheet: ConfirmSheetModel
-    /// `var` since 072: an erase that left something behind says so here.
+    /// `var` since 081: a partial wipe names what survived in this sheet, so
+    /// the person is told where they are looking rather than sent away with a
+    /// phone that was not erased (FR-017).
     var eraseSheet: ConfirmSheetModel
     let feedback: FeedbackModel
     let rpcBanner: RpcBannerModel?

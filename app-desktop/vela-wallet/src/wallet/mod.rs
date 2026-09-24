@@ -90,6 +90,9 @@ pub struct WalletStrings {
     pub address_label: SharedString,
     pub copy_address: SharedString,
     pub qr_caption: SharedString,
+    /// 关闭 — for a dialog that is only ever LOOKED at. "取消" would be wrong:
+    /// nothing is being cancelled by closing a picture.
+    pub close_viewer: SharedString,
     pub warning_title: SharedString,
     pub warning_reminder: SharedString,
     /// Template carrying `{{count}}`.
@@ -165,6 +168,7 @@ impl WalletStrings {
             receive_title: s("receive.title"),
             address_label: s("receive.addressLabel"),
             copy_address: s("componentsUi.identiconViewer.copyAddress"),
+            close_viewer: s("componentsUi.identiconViewer.close"),
             qr_caption: s("componentsUi.qrPlaceholder.caption"),
             warning_title: s("receive.warningTitle"),
             warning_reminder: s("receive.warningReminder"),

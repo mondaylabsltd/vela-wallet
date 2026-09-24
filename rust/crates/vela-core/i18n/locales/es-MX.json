@@ -110,7 +110,7 @@
       "subtitle": "Elimina todo lo que Vela guardó aquí",
       "desc": "Se borra todo lo que Vela guardó en este dispositivo. No hay respaldo ni forma de deshacerlo.",
       "loses": "Pierdes: historial de transacciones, contactos y grupos, historial de navegación, permisos de dApps, tokens y redes personalizados, ajustes de RPC y endpoints, y todas las preferencias.",
-      "keeps": "No pierdes la billetera. Tu passkey sigue en Face ID / huella: elige “Ya tengo una billetera” y vuelve la misma dirección, solo que sin historial.",
+      "keeps": "No pierdes la billetera. El borrado no alcanza tus passkeys: las guarda tu proveedor de passkeys (Face ID / huella, un gestor de contraseñas o una llave de seguridad), no esta app. Elige “Ya tengo una billetera” y vuelve la misma dirección, solo que sin historial.",
       "confirm": "Borrar todo",
       "cancel": "Cancelar",
       "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo."

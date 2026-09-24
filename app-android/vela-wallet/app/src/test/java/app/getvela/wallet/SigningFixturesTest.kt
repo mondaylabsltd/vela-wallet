@@ -40,7 +40,7 @@ class SigningFixturesTest {
     private fun stringsOf(model: SigningScreenModel): List<String> {
         val out = mutableListOf(
             model.dappName, model.dappHost, model.networkName,
-            model.signerLabel, model.signerName, model.confirmHint, model.confirmAction,
+            model.signerLabel, model.signerName,
             model.panelTitle, model.tech.title,
         )
         model.blocks.forEach { block ->
@@ -85,8 +85,12 @@ class SigningFixturesTest {
                 fee.options.forEach { out += listOf(it.name, it.balance, it.fee) }
             }
             is FeeModel.OffChain -> out += fee.note
-            FeeModel.Hidden -> Unit
+            // A refused request carries no fee at all (spec 081); Hidden is
+            // the off-chain case that shows the row with nothing in it.
+            FeeModel.Hidden, null -> Unit
         }
+        model.confirmHint?.let { out += it }
+        model.confirmAction?.let { out += it }
         return out
     }
 
@@ -120,8 +124,10 @@ class SigningFixturesTest {
         val zh = zhStrings()
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zh)
-            assertTrue("$state has no slide hint", model.confirmHint.isNotBlank())
-            assertTrue("$state has no slide action", model.confirmAction.isNotBlank())
+            // Every DRAWN state offers the slide; the refusal state has no
+            // fixture, because it is reached from the core, not the gallery.
+            assertTrue("$state has no slide hint", model.confirmHint?.isNotBlank() == true)
+            assertTrue("$state has no slide action", model.confirmAction?.isNotBlank() == true)
         }
     }
 

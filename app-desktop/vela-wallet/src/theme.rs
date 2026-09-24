@@ -5,8 +5,6 @@
 //! clustering (specs/007-desktop-onboarding-gpui/research.md D3); geometry from
 //! the same mocks at their 1280×800 logical size (D5).
 
-use std::sync::atomic::{AtomicU32, Ordering};
-
 use gpui::{Hsla, Pixels, Window, px, rgb};
 
 /// Which palette is active. Follows the OS appearance unless `VELA_THEME`
@@ -323,6 +321,24 @@ pub const CONTACTS_RAIL_W: f32 = 216.;
 /// reason — it is the same column, doing the same job, one section over.
 pub const SETTINGS_NAV_W: f32 = 216.;
 
+/// The same column, at the person's text size.
+///
+/// This column exists to hold labels and nothing else, so it grows with them.
+/// Left at 216 it could not: at `xlarge` in German,
+/// "Transaktionsgeschwindigkeit" ran out of the column, across the divider and
+/// onto the network list behind it — measured, not imagined. Truncation in the
+/// row is still the backstop; this is what stops it having to.
+///
+/// It only ever GROWS. Multiplying it down at the smaller stops bought
+/// nothing — the panel beside it has room to spare either way — and cost two
+/// German labels their endings at `compact`, where a 216px column would have
+/// held them whole.
+#[must_use]
+pub fn settings_nav_w() -> f32 {
+    let factor = crate::executor::appearance_prefs::text_factor();
+    (SETTINGS_NAV_W * factor.max(1.0)).round()
+}
+
 /// One row of that column.
 pub const SETTINGS_NAV_ROW_H: f32 = 36.;
 
@@ -393,42 +409,21 @@ pub const CONTACTS_MOTION_CROSSFADE_MS: u64 = 150;
 )]
 pub const CONTACTS_MOTION_HOVER_MS: u64 = 120;
 
-/// The person's text size (spec 072: `vela.textScale`), as the factor every
-/// text token below is multiplied by — the six stops of
-/// `vela_core::prefs::TEXT_SCALE_LEVELS`, 0.82 to 1.35. Stored as `f32` bits
-/// because every text in every frame reads it; `1.0` until the preference is
-/// read at launch.
-static TEXT_SCALE: AtomicU32 = AtomicU32::new(0x3f80_0000);
-
-/// Put a text size in force. The next frame draws every token at it.
-pub fn set_text_scale(factor: f64) {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "a factor between 0.82 and 1.35"
-    )]
-    let factor = factor as f32;
-    let factor = if factor.is_finite() && factor > 0. {
-        factor
-    } else {
-        1.
-    };
-    TEXT_SCALE.store(factor.to_bits(), Ordering::Relaxed);
-}
-
-/// The factor in force.
-pub fn text_scale() -> f32 {
-    f32::from_bits(TEXT_SCALE.load(Ordering::Relaxed))
-}
-
-/// A mock-measured text size at the person's scale. Only TEXT scales — the
-/// geometry around it is the design's, exactly as the web's `textScale`
-/// multiplies the type tokens and nothing else.
-fn scaled(size: f32) -> Pixels {
-    scaled_by(size, text_scale())
-}
-
-fn scaled_by(size: f32, factor: f32) -> Pixels {
-    px(size * factor)
+/// One type size, through the person's text-size setting.
+///
+/// Every `text_*` below is mock-measured at 100%; this is the only place the
+/// multiplier is applied, so a new size cannot forget it. Rounded to whole
+/// pixels because a glyph drawn at 13.94px against a hairline measured in
+/// whole pixels is how a row starts looking half a pixel wrong.
+///
+/// **What this does NOT scale** — and the reason the setting was worth wiring
+/// carefully: every fixed `px` row height, button height and dialog width in
+/// this shell stays put. At the larger stops the type grows inside boxes that
+/// do not, which is exactly the class of bug issues 195/198 were. The settings
+/// dialog was given a scrolling body for this reason; the rest is seen, not
+/// assumed.
+fn scaled(base: f32) -> Pixels {
+    px((base * crate::executor::appearance_prefs::text_factor()).round())
 }
 
 /// Wallet type scale (mock-measured).
@@ -885,14 +880,23 @@ mod tests {
     /// and "standard" is the design exactly.
     #[test]
     fn a_text_size_multiplies_the_token() {
-        let factor = |level: &str| {
-            #[allow(clippy::cast_possible_truncation, reason = "a small factor")]
-            let factor = vela_core::prefs::text_scale_factor(level) as f32;
-            factor
-        };
-        assert_eq!(scaled_by(13., factor("standard")), px(13.));
-        assert_eq!(scaled_by(20., factor("xlarge")), px(20. * 1.35));
-        assert!(scaled_by(13., factor("compact")) < px(13.));
+        // Through the ONE store the setting lives in (`appearance_prefs`), which
+        // is what `scaled` reads — there is no second copy of the factor to
+        // test against, and that is the point of the merge that unified them.
+        use crate::executor::appearance_prefs::{TextScale, set_text_scale};
+        set_text_scale(TextScale::Standard);
+        assert_eq!(scaled(13.), px(13.));
+        set_text_scale(TextScale::XLarge);
+        assert_eq!(scaled(20.), px((20. * 1.35f32).round()));
+        set_text_scale(TextScale::Compact);
+        assert!(scaled(13.) < px(13.));
+        // …and every size is a whole pixel: a glyph at 13.94px against a
+        // hairline measured in whole pixels is how a row starts looking half a
+        // pixel wrong.
+        set_text_scale(TextScale::Comfortable);
+        let size: f32 = scaled(13.).into();
+        assert_eq!(size, size.round());
+        set_text_scale(TextScale::Standard);
     }
 
     /// The accent is the brand constant and identical across modes (research D3).

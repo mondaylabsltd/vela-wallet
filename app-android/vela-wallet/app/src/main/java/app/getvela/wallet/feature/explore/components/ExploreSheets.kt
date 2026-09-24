@@ -132,7 +132,18 @@ fun ConnectionPanel(
     onClose: () -> Unit,
     onDisconnect: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Spec 070: the account row opens the account picker; `null` = drawn only. */
+    /**
+     * "Switch account" — the account picker (spec 070). Absent where there is
+     * nothing to switch to — the consent card, and the gallery — and then the
+     * row is not clickable, because a row with a chevron that does nothing is
+     * the same lie the chevron is there to prevent.
+     *
+     * What it means: the grant is pinned to the address it was given to, so
+     * switching cannot happen behind a site's back. Doing it deliberately
+     * re-pins it — `AccountSwitched` in the core writes the new grant and
+     * tells the page — which is a decision a person can make, and could not
+     * reach from here until 2026-09-23.
+     */
     onSwitchAccount: (() -> Unit)? = null,
     /** Spec 070: the network row picks the site's chain; `null` = drawn only. */
     onNetwork: (() -> Unit)? = null,
@@ -187,7 +198,8 @@ fun ConnectionPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = onSwitchAccount != null) { onSwitchAccount?.invoke() },
+                .clickable(enabled = onSwitchAccount != null) { onSwitchAccount?.invoke() }
+                .padding(vertical = VelaSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
@@ -207,16 +219,18 @@ fun ConnectionPanel(
                     fontSize = VelaTextSize.base,
                 )
             }
-            Text(
-                text = connection.switchLabel,
-                color = colors.fgMuted,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-            )
-            Icon(
-                VelaIcons.ChevronRight, null, tint = colors.fgMuted,
-                modifier = Modifier.size(VelaIconSize.sm),
-            )
+            if (onSwitchAccount != null) {
+                Text(
+                    text = connection.switchLabel,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                )
+                Icon(
+                    VelaIcons.ChevronRight, null, tint = colors.fgMuted,
+                    modifier = Modifier.size(VelaIconSize.sm),
+                )
+            }
         }
 
         Divider()

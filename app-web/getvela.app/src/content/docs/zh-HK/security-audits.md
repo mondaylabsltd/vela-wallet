@@ -1,156 +1,166 @@
 ---
-title: 審計同已知問題
-description: Vela 依賴嘅每一份鏈上合約、邊個審計、被審計嘅版本同實際部署嘅係咪一致，以及邊啲部分根本冇審計。
+title: 審計與已知問題
+description: "Vela 依賴的每一份合約、誰審計了哪個版本、審計的版本是否就是部署的版本、我們正在關注的未解決發現，以及哪些東西根本沒有經過審計。"
+source: d0bb95c016da
 ---
 
-「審計過」係一個關於某段特定代碼某個特定版本嘅講法，所以呢一頁唔會攞呢個詞嚟揈兩下
-就算——佢列出確切嘅報告、確切嘅部署地址，以及被審計版本同被部署版本之間嘅差異。
-佢同時列出邊啲**冇**被審計，因為後面呢份清單同前面嗰份一樣咁重要。
+「經過審計」是針對特定版本的特定程式碼而言的，所以本頁會引用具體的報告、提交紀錄和部署地址——也會列出
+**沒有**經過審計的東西，這同樣重要。
 
-最近一次核對：2026 年 8 月。如果你喺呢度搵到錯，話我哋知，我哋會改。
+最後核對日期：2026 年 9 月 22 日。如發現錯誤，請告訴我們，我們會更正。
 
 ## 資金路徑
 
-有四層合約掂得到你啲錢。四層全部係有公開審計報告嘅第三方合約，而且每一處部署地址
-都係官方嘅標準部署。
+每一份能接觸你資金的合約，都是第三方程式碼的官方部署，並且有公開的審查報告。
 
-### Safe v1.4.1 —— 帳戶本身
+### Safe v1.4.1——帳戶本身
 
-你個錢包係一個 [Safe](https://github.com/safe-global/safe-smart-account) 代理：
-SafeL2 單例、代理工廠、兼容性 fallback handler，以及用嚟批次交易嘅 MultiSend。
+你的錢包是一個 [Safe](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) 代理合約，使用 SafeL2
+單例合約（singleton）和 SafeProxyFactory。批量交易經由 MultiSend 執行。
 
-[Ackee Blockchain 審計咗 Safe v1.4.0](https://github.com/safe-global/safe-smart-account/blob/main/docs/audit_1_4_0.md)
-（終版報告係 2023 年 3 月）：11 項發現，冇關鍵級或者高危。我哋部署嘅 v1.4.1 同被
-審計嘅 v1.4.0 之間，淨係差一處單行嘅 ERC-4337 兼容性修正
-（[PR #572](https://github.com/safe-global/safe-smart-account/pull/572)）。
-MultiSend 嘅邏輯由[經 G0 Group 審計嘅 v1.3.0](https://github.com/safe-global/safe-smart-account/tree/main/docs)
-以嚟冇變過。所有地址都同
-[safe-deployments](https://github.com/safe-global/safe-deployments) 入面嘅標準部署
-一致，而且呢啲合約喺 [Safe Foundation 嘅漏洞賞金](https://docs.safefoundation.org/security/bug-bounty)
-範圍內（關鍵級最高 100 萬美元）。
+[Ackee Blockchain 審計了 Safe v1.4.0](https://github.com/safe-global/safe-smart-account/blob/main/docs/audit_1_4_0.md)
+（最終報告 2023 年 3 月 16 日，修正覆核 3 月 28 日）：共 11 項發現，沒有嚴重或高風險級別；兩項中風險發現
+獲確認但沒有修改。審計範圍是 SafeL2、SafeProxyFactory、CompatibilityFallbackHandler、MultiSendCallOnly 和
+SignMessageLib。v1.4.1 與 v1.4.0 只有一行功能性差異，是模組設定中的一項 ERC-4337 兼容性修正
+（[PR #572](https://github.com/safe-global/safe-smart-account/pull/572)）；Safe 諮詢了 Ackee，結論是無需
+重新審計。MultiSend 的邏輯自 v1.3.0 起沒有改變，而 v1.3.0 由
+[G0 Group 審計](https://github.com/safe-global/safe-smart-account/tree/main/docs)。所有地址都與
+[safe-deployments](https://github.com/safe-global/safe-deployments) 相符。核心合約屬於
+[Safe Foundation 漏洞賞金計劃](https://docs.safefoundation.org/security/bug-bounty)的範圍，最高一級的賞金
+可達 1,000,000 美元。
 
-有一樣嘢審計覆蓋唔到：2025 年嘅 Bybit 事件。嗰次攻擊攻陷嘅係 Safe 官方網頁前端嘅
-建置流程，唔係合約——
-[官方鑑證結論](https://safefoundation.org/blog/safe-ecosystem-foundation-statement)
-認為 Safe 智能合約入面冇漏洞。我哋將佢讀成一堂關於網頁同維運層嘅課，而嗰一層，
-正正就係你都應該攞嚟審視我哋嘅地方。
+2025 年的 Bybit 事件並非合約層面的發現：攻擊者篡改了 Safe 網頁介面所載入的 JavaScript，而 Safe 的
+[調查聲明](https://safefoundation.org/blog/safe-ecosystem-foundation-statement)沒有發現合約存在漏洞。
+[我們關於此事的頁面](/zh-HK/docs/bybit-attack)解釋了為甚麼同一類攻擊與每一個錢包介面都有關，包括我們的。
 
-### Safe4337Module v0.3.0 —— ERC-4337 轉接層
+### Safe4337Module v0.3.0——ERC-4337 轉接器
 
-部署喺 `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226`，即係 v0.3.0 嘅標準地址
-（Sourcify 精確比對——鏈上位元組碼就係被審計嗰份代碼）。
-[由 Ackee Blockchain 審計](https://github.com/safe-global/safe-modules/blob/main/modules/4337/docs/v0.3.0/audit.md)
-（終版報告係 2024 年 3 月），冇任何高過「提示級」嘅未解決發現。我哋用嘅
-v0.3.0 + EntryPoint v0.7 + Safe ≥1.4.1 呢個組合，正正係審計報告同發布說明所描述嘅
-配置。
+部署於 `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226`（Sourcify 完全相符），同時也被設為你 Safe 的後備處理器
+（fallback handler）。它經過三次審查——
+[報告在此](https://github.com/safe-global/safe-modules/blob/main/modules/4337/docs/v0.3.0/audit.md)：
 
-呢個模組嘅歷史上有一個已披露嘅問題：v0.1.0（2023 年）冇為 `initCode` 同
-`paymasterAndData` 簽名，構成一個 gas 騷擾向量。佢
-[已喺 v0.2.0 修正](https://safefoundation.org/blog/strengthening-security-addressing-the-incident-of-the-canonical-4337-module)，
-而且 v0.1.0 從來冇離開過測試網。我哋用嘅係 v0.3.0，佢繼承咗呢個修正。
+- **Ackee Blockchain**，最終報告 2024 年 3 月：一項警告（使用編譯器優化器）已獲確認，沒有更高級別的未解決
+  問題。
+- **Certora**，2026 年 8 月：一項**中風險**發現，已獲確認，但在 v0.3.0 中**沒有修正**——*授權變更不會令
+  同一批次中已通過驗證的後續 UserOperation 失效*。見下文「已知問題」。
+- **Nethermind**，2026 年 8 月：沒有發現。
 
-### SafeWebAuthnSharedSigner v0.2.1 —— 通行密鑰簽署器
+在錢包部署時啟用該模組的 SafeModuleSetup v0.3.0（`0x2dd6…5b47`），也在 Certora 和 Nethermind 的審查範圍內。
 
-部署喺 `0x94a4F6affBd8975951142c3999aEAB7ecee555c2`，即係 v0.2.1 嘅標準地址
-（經 Safe 嘅單例工廠，喺每條鏈上面都一樣）。
+這個模組曾有一個已披露的問題：v0.1.0 沒有簽署 `initCode` 和 `paymasterAndData`，構成一個惡意消耗 gas
+的攻擊途徑，[已在 v0.2.0 修正](https://safefoundation.org/blog/strengthening-security-addressing-the-incident-of-the-canonical-4337-module)；
+據 Safe 表示，v0.1.0 沒有在測試網以外使用。Vela 使用 v0.3.0，配合 EntryPoint v0.7 和 Safe 1.4.1，正是
+該模組發佈說明所描述的配置。
 
-「shared（共用）」係乜意思、唔係乜意思：共用嘅係*呢份合約部署*，就好似 Safe 嘅
-單例俾人共用咁。你把鎖匙冇共用。每一個 Safe 都經 delegatecall 呼叫 `configure()`，
-將自己嘅 P-256 公鑰擺入自己嘅儲存空間。一個簽署器實例對應嘅，啱啱好就係每個 Safe
-一把通行密鑰，人哋個 Safe 用唔到你嗰把。
+### Safe 通行密鑰模組 v0.2.1——簽署器
 
-呢度版本好緊要。v0.2.0 嘅審計報告
-[明確寫明](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.0/audit.md)
-共用簽署器唔喺範圍內——嗰陣呢份合約仲未存在。覆蓋我哋所部署內容嘅，係 v0.2.1 嗰幾份：
-一場 [Hats Finance 審計比賽](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit-competition-report-hats.md)
-（2024 年 6–7 月：零高危、零中危、三項低危——全部已修正），加上
-[Certora 對發布 commit 嘅複核](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit.md)，
-冇新發現。由發布以嚟冇任何合約級漏洞俾人披露；通行密鑰相關合約亦喺 Safe Foundation
-嘅賞金範圍內。
+你的第一把鑰匙由位於 `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` 的 **SafeWebAuthnSharedSigner** 驗證。
+「共享」指的是合約部署是共享的，就像 Safe 單例合約一樣；你的鑰匙並不共享。每個 Safe 都把自己的 P-256
+公鑰存放在自己的儲存空間中。
 
-Safe 自己嘅文件建議：將通行密鑰嘅擁有權同一條復原路徑夾埋用，而唔係當單一憑證係
-帳戶唯一嘅鎖匙。Vela 點處理呢件事，記喺[復原同登入](/zh-HK/docs/recovery)。
+其餘每把鑰匙都有自己的簽署器合約，由位於 `0x1d31F259eE307358a26dFb23EB365939E8641195` 的
+**SafeWebAuthnSignerFactory** 建立，作為指向位於 `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` 的
+**SafeWebAuthnSigner 單例合約**的代理。
 
-鏈上嘅 P-256 驗證直接用 RIP-7212 預編譯，冇 Solidity 嘅後備驗證器。喺啟用任何網絡
-之前，應用都會用一個真實簽名去探測呢個預編譯，驗證失敗就拒絕嗰條網絡。有兩句老實
-話：最初嘅 RIP-7212 規範有啲邊緣情況缺陷，
-[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) 就係為咗修正佢哋而寫
-（佢哋唔影響格式正確嘅 WebAuthn 簽名）；而一次探測，亦唔可能覆蓋某條鏈嘅實作喺
-唔尋常執行情境下可能有偏差嘅每一種方式。
+涵蓋這些合約 v0.2.1 版本的審查
+（[報告](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit.md)）：
 
-### EntryPoint v0.7 —— ERC-4337 嘅入口點
+- 一次 [Hats Finance 審計競賽](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit-competition-report-hats.md)
+  （2024 年 6 月至 7 月）：沒有高風險或中風險發現；三項低風險，全部已修正。
+- **Certora** 對發佈提交的審查：沒有新發現。（較早的 v0.2.0 審計註明共享簽署器當時尚未審計——它是在那次
+  審計之後才加入的。）
+- **Nethermind**，2026 年 8 月：沒有發現。
 
-部署喺 `0x0000000071727De22E5E9d8BAf0edAc6f37da032`，即係
-[v0.7.0 嘅標準部署](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)。
-[由 OpenZeppelin 審計](https://www.openzeppelin.com/news/erc-4337-account-abstraction-incremental-audit)
-（受以太坊基金會委託，2024 年 1 月）：零關鍵級、零高危、五項中危，全部已解決——
-而且被審計嗰個 commit 就係被部署嘅版本。EntryPoint v0.7.0 喺以太坊基金會嘅
-[ERC-4337 漏洞賞金](https://docs.erc4337.io/community/bug-bounty)範圍內
-（最高 25 萬美元）。
+發佈以來沒有披露過合約層面的漏洞，通行密鑰合約也屬於 Safe Foundation 賞金計劃的範圍。
 
-## 我哋盯緊嘅已知問題
+通行密鑰簽名由鏈上的 **EIP-7951 / RIP-7212** 預編譯合約驗證，沒有後備驗證器。啟用一條網絡之前，App 會用一個真實
+簽名檢查預編譯合約。有兩點需要留意：原本的 RIP-7212 規範有一些邊緣情況的缺陷，已由
+[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) 修正（只影響本來就應該驗證失敗的輸入，不影響格式正確
+的 WebAuthn 簽名）；另外，一次探測無法發現某條鏈的實作可能出現偏差的所有情況。
 
-### EntryPoint 嘅騷擾向量
+### EntryPoint v0.7——執行你的操作
 
-2026 年 2 月，Trust Security 嘅保安研究員
-[披露](https://erc4337.substack.com/p/improving-useroperation-execution)
-咗一個影響 v0.9 之前所有 EntryPoint 嘅騷擾同審查向量，包括我哋用緊嘅 v0.7。
-攻擊者如果喺一個已簽名嘅 UserOperation 上鏈之前截到佢，就可以將佢放入自己控制嘅
-呼叫框架度執行，並強制內層執行回滾——呢筆操作失敗咗，但 gas 照扣。以太坊基金會
-為呢個發現畀咗 5 萬美元賞金；基金會將佢歸類為審查／騷擾向量，而唔係偷錢嘅向量，
-而且佢從來冇俾人真正利用過。
+部署於 `0x0000000071727De22E5E9d8BAf0edAc6f37da032`，即
+[官方 v0.7.0 版本](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)。由
+[OpenZeppelin 為以太坊基金會審計](https://www.openzeppelin.com/news/erc-4337-account-abstraction-incremental-audit)
+（2024 年 1 月）：沒有嚴重或高風險發現，五項中風險，全部 24 項發現均已解決；修正覆核的提交與發佈版本一致。
+它屬於以太坊基金會 [ERC-4337 漏洞賞金計劃](https://docs.erc4337.io/community/bug-bounty)的範圍（最高
+250,000 美元）。
 
-佢做得到嘅：嘥一筆手續費、拖延一筆交易。佢做唔到嘅：偷走資金，或者偽造簽名。
-Vela 嘅暴露面好窄，因為 UserOperation 係直接送去中繼嘅，唔經公開記憶池，
-所以幾乎冇機會俾人截——而最壞情況亦由你早就同意咗嗰筆費用封頂。修正淨係存在於
-EntryPoint v0.9（2025 年 11 月）；v0.7 本身補唔到。我哋預計會隨住周邊技術棧——
-特別係 Safe 嘅 4337 模組系列——支援 v0.9 而遷移過去，到時會喺呢度講。
+## 我們正在關注的已知問題
 
-## 邊啲冇審計
+### 同一批次內的授權變更（Safe4337Module，Certora M-01）
 
-- **Vela 自己嘅合約。** 我哋自己寫嘅兩份細合約，部署喺 Gnosis：
-  [通行密鑰公鑰索引](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools)
-  （一份只追加嘅登記表，幫你啲裝置搵到你個公鑰）同佢嘅批次輔助合約。佢哋冇經過
-  審計。由結構上講，佢哋唔持有任何資金、冇擁有者，亦升唔到級——佢哋係一層發現機制，
-  唔係一層授權機制。使錢嘅權限永遠嚟自設定喺你個 Safe 入面嗰把通行密鑰。現實中最壞
-  嘅故障係騷擾（有人霸咗一條索引紀錄），咁會令復原冇咁方便，但郁唔到錢。早期費用
-  設計嗰份 gas 結算拆分合約，已經唔喺交易流程入面。
-- **Multicall3。** 佢自己個 README [直說](https://github.com/mds1/multicall3)：
-  「本合約未經審計。」我哋用佢嘅方式，正正係佢作者形容為安全嗰種——批次唯讀呼叫，
-  用嚟讀餘額、代幣中繼資料同價格。Vela 從來唔會畀佢任何授權，佢亦從來唔持有資金。
-  出 bug 嘅最壞情況係讀到一個唔啱嘅數值。
-- **CREATE2 部署器。**
-  [Arachnid 確定性部署代理](https://github.com/Arachnid/deterministic-deployment-proxy)
-  係生態標準嘅無狀態部署器；佢冇正式審計。如果某條鏈上面佢唔見咗或者俾人改過，
-  我哋嘅網絡檢查會直接判失敗。
-- **Tempo 同 pathUSD。** Tempo 係我哋十二條內置網絡之一，佢冇原生幣；嗰度嘅 gas
-  用 pathUSD 穩定幣結算。截至 2026 年 8 月，Tempo 嘅核心協定同 pathUSD 都冇公開嘅
-  保安審計，亦冇漏洞賞金，而且一份獨立嘅
-  [DefiLlama 抵押品評估](https://artifacts.llama.fi/md-exports/pathusd-collateral-assessment-april2026-1776332825042.md)
-  （2026 年 4 月）將 pathUSD 評為高風險。呢個係鏈一級嘅風險，任何錢包都緩解唔到：
-  你放喺 Tempo 上面嘅錢，以及喺嗰度嘅 gas 結算，都會繼承佢。請將 Tempo 當成呢張
-  名單上面最新、亦最未經考驗嗰條鏈，並據此控制你嘅餘額規模。等審計出咗，
-  我哋會更新呢一節。
-- **Vela 本身。** 我哋嘅應用同後端服務冇做過第三方審計。呢個係呢一頁上面最大嗰條
-  保留，我哋將佢寫喺網站頂部，老實嘅細節喺
-  [Vela 仲喺測試階段](/blog/vela-is-in-alpha)。請由細額開始。去讀代碼。
+EntryPoint 會先驗證一個批次中的所有操作，然後才執行其中任何一個。所以如果某個操作移除了一個擁有者，一個
+由該擁有者簽署、排在同一批次後面的操作仍然會通過驗證並執行。Safe 確認了這一點，沒有修改 v0.3.0。
 
-## 自己去查
+Vela 的 App 從不建構更換擁有者的操作，dApp 若是請求一個，亦會被直接拒絕，
+所以 Vela 本身不會觸發這個問題。但對透過其他 Safe 工具移除一把已外洩鑰匙的人來說，
+這件事仍然重要：他們不能指望那把鑰匙在同一批次中就被切斷。
 
-上面每一個地址都係公開嘅標準部署，你可以對住官方登記去查——
+### 已簽署操作被攔截（v0.9 之前的 EntryPoint）
+
+2026 年 2 月，研究人員[披露](https://erc4337.substack.com/p/improving-useroperation-execution)了一種影響
+v0.9 之前所有 EntryPoint（包括 v0.7）的惡意干擾及審查手法。有人若在操作上鏈前取得已簽署的操作，就可以
+在自己控制的呼叫中執行它，並迫使內部執行回退：操作失敗，需要重新簽署。（在 Vela 的帶內手續費模式下，
+手續費轉賬也會隨之回退，所以承擔 gas 的是中繼而不是你。）它影響的是呼叫有重入保護的合約、或可因暫時
+狀態而被迫回退的操作；簡單轉賬不受影響。若反覆針對提款流程使用，可能令資金在一段時間內無法動用。它無法
+偽造簽名，也無法改變資金去向。
+
+Vela 的中繼直接提交操作，而不是經過共享的記憶池（mempool）；但待處理的 `handleOps` 交易在公共記憶池中
+仍然可見，所以這只是縮小了風險範圍，並沒有消除。修正只存在於 EntryPoint v0.9（2025 年 11 月）；v0.7
+無法修補。遷移要視乎 Safe 的 4337 模組何時支援 v0.9，屆時本頁會說明。
+
+### Vela 自身防禦的缺口
+
+這些不是合約層面的發現，而是錢包對你的保護不及你可能以為的地方。每一項都已記錄在案，有待修正：
+
+- **授權防護只會攔截「無限」金額**（2^200 或以上；Permit2 為 2^152）。金額龐大但有上限的授權、簽名式
+  授權，或 NFT 的 `setApprovalForAll`，只會顯示警示，不會被攔截。
+- **獨立簽名頁尚未接入**任何 App。
+- **網站在通行密鑰所屬的同一域名上載入第三方分析程式碼。**網站透過 Permissions-Policy 標頭禁止自己的頁面
+  使用通行密鑰，並且不會在持有鑰匙的頁面上載入該程式碼。
+
+## 沒有經過審計的部分
+
+- **Vela 自己的合約。**位於 `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` 的
+  [公鑰註冊表](https://github.com/mondaylabsltd/p256-index/tree/main/contracts)（Gnosis；在以太坊和 Base
+  上地址相同）、位於 `0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf` 的最初註冊表部署（它的地址是每次登記的
+  簽署域的一部分），以及被它們取代的早期索引（`0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3`，只作唯讀
+  歷史紀錄）。它們都沒有經過審計。它們不持有資金、沒有擁有者，也不能升級；它們是發現層，而不是授權層。
+  動用資金的權力只來自你 Safe 中設定的鑰匙。現實中最壞的情況，是錢包在新裝置上較難被找到，而不是資金
+  被轉走。
+- **Multicall3。**它的 README [寫明](https://github.com/mds1/multicall3)「This contract is unaudited.」
+  Vela 只用它進行批量讀取——餘額、代幣資料、報價——從不涉及授權或資金。
+- **確定性部署器**（Arachnid 的 CREATE2 代理和 Safe 的單例工廠）——業界標準、無狀態，沒有正式審計。
+  如果它們不存在，Vela 的網絡檢查會直接判定不通過；檢查的是該地址上是否有程式碼，而不是逐個位元組比對。
+- **Tempo。**24 條內置網絡之一，沒有原生幣；Vela 在那裏用 pathUSD 穩定幣支付 gas。截至 2026 年 9 月，
+  Tempo 的[安全政策](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)表示協議仍在審計中，也沒有
+  生效中的漏洞賞金計劃。存放在 Tempo 上的資金，以及在那裏支付的 gas，都帶有這種鏈層面的風險；請把它視為
+  列表中最新、最未經考驗的一條鏈。
+- **Vela 本身。**各個 App、後端服務和上述合約都沒有經過第三方審計，目前亦沒有排期。這是本頁最大的保留。
+  詳情見 [Vela is in alpha](/blog/vela-is-in-alpha)。請先用小額，並閱讀程式碼。
+
+## 親自核對
+
+以下每一個地址都是公開的官方部署。你可以對照
 [safe-deployments](https://github.com/safe-global/safe-deployments)、
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
-同 [EntryPoint 嘅發布說明](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)：
+和 [EntryPoint 發佈頁面](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)核實：
 
-| 合約 | 地址 |
-| ----------------------------------- | -------------------------------------------- |
-| SafeL2 singleton v1.4.1 | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1 | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| CompatibilityFallbackHandler v1.4.1 | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| MultiSend v1.4.1 | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| SafeModuleSetup v0.3.0 | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0 | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1 | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3 | `0xcA11bde05977b3631167028862bE2a173976CA11` |
-| 通行密鑰公鑰索引（Gnosis） | `0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3` |
+| 合約                                      | 地址                                         |
+| ----------------------------------------- | -------------------------------------------- |
+| SafeL2 單例合約 v1.4.1                    | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| SafeWebAuthnSigner 單例合約 v0.2.1        | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| 公鑰註冊表（Vela，未經審計）              | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
+
+¹ 加入網絡時會檢查它；你的 Safe 實際以 4337 模組作為後備處理器。

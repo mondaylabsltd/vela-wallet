@@ -110,7 +110,7 @@
       "subtitle": "Elimina tutto ciò che Vela ha salvato qui",
       "desc": "Tutto ciò che Vela ha salvato su questo dispositivo viene eliminato. Non esiste un backup né un modo per annullare.",
       "loses": "Perdi: cronologia delle transazioni, contatti e gruppi, cronologia di navigazione, autorizzazioni dApp, token e reti personalizzati, impostazioni RPC e degli endpoint e ogni preferenza.",
-      "keeps": "Non perdi il wallet. La tua passkey resta in Face ID / impronta digitale: scegli «Ho già un wallet» e ritrovi lo stesso indirizzo, solo senza cronologia.",
+      "keeps": "Il wallet non si perde. La cancellazione non arriva alle tue passkey: le conserva il tuo provider di passkey (Face ID / impronta, un gestore di password o una chiave di sicurezza), non questa app. Scegli “Ho già un wallet” e torna lo stesso indirizzo, solo senza cronologia.",
       "confirm": "Cancella tutto",
       "cancel": "Annulla",
       "failed": "La cancellazione non è stata completata. Sul dispositivo ci sono ancora dati e l'accesso è ancora attivo: riprova."

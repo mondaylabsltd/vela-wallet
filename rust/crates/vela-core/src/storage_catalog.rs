@@ -103,6 +103,10 @@ pub const ITEMS: [StorageItem; 8] = [
             "recipient_id:",
             "vela.scan",
             "vela.receiveWatch",
+            // What a scan learned to trust. Filed here on main's desktop
+            // mapping before this catalog replaced it (spec 081); unfiled, it
+            // would be storage a person is shown a total for and cannot clear.
+            "vela.trust",
         ],
     },
     StorageItem {
@@ -213,6 +217,7 @@ mod tests {
         assert_eq!(row("vela.tokenMeta.100:0xabc"), Some("scan"));
         assert_eq!(row("recipient_id:0xabc"), Some("scan"));
         assert_eq!(row("vela.receiveWatch.0xabc"), Some("scan"));
+        assert_eq!(row("vela.trust"), Some("scan"));
         assert_eq!(row("vela.perm.https://app.uniswap.org"), Some("dapps"));
         assert_eq!(row("vela.chain.https://app.uniswap.org"), Some("dapps"));
     }

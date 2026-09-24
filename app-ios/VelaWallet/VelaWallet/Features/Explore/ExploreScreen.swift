@@ -55,6 +55,13 @@ struct ExploreScreen: View {
     var onScanPayment: (String) -> Void = { _ in }
     /// The connection panel's "Switch account": the wallet's one switcher,
     /// presented by the container once the panel is out of the way.
+    ///
+    /// What it MEANS is the reason it took until 2026-09-23: a grant is pinned
+    /// to the address it was given to, deliberately, so that switching the
+    /// wallet's account cannot silently hand a site a different identity. An
+    /// explicit switch is not silent, and the core already does the right
+    /// thing with it — `AccountSwitched` re-pins the grant to the new address,
+    /// writes it, and emits `accountsChanged` to the page.
     var onSwitchAccount: () -> Void = {}
     /// Whether that switcher is up. Watched so a site still ASKING gets its
     /// sheet back when the switcher closes.
@@ -67,6 +74,10 @@ struct ExploreScreen: View {
     /// for a site that is still asking. Android found the same bug on its
     /// group sheet; this one was device-found here.
     @State private var sheet: ExploreSheetKind?
+    /// The switcher is opened AFTER this sheet is really gone. Presenting one
+    /// sheet in the same breath as dismissing another is how iOS ends up
+    /// showing neither.
+    @State private var switchAfterDismiss = false
     @State private var signingUp = false
     /// Groups hidden here rather than in the fixture: hiding is something a
     /// person does, and the sheet has to show it happening.
@@ -261,6 +272,10 @@ struct ExploreScreen: View {
             if consentOpen {
                 consentOpen = false
                 controller?.consentRejected()
+            }
+            if switchAfterDismiss {
+                switchAfterDismiss = false
+                onSwitchAccount()
             }
         }) { sheet in
             sheetContent(sheet)

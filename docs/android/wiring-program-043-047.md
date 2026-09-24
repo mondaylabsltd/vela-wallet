@@ -1,3 +1,13 @@
+> **History (2026-09-23).** This is the plan as it stood at the close of spec 042, written in the
+> present tense about an Android shell that could not yet send, sign or open a dApp. **Specs
+> 043–049 delivered all of it**, each verified on the device: Android now drives `send`,
+> `fee_policy`, `fee_speed`, `tx_tracker`, `sign_request`, `clear_signing`, `approval_guard`,
+> `dapp_permissions`, `explore_sites`, `browser_history`, `batch_import`, `contacts_io`, the
+> scanner and the simulation deltas — see `app-android/vela-wallet/app/src/main/java/app/getvela/wallet/`
+> and `docs/PARITY-2026-09-21.md`. The machine counts below are also out of date (the core now has
+> 33 modules under `rust/crates/vela-core/src/app/`). Kept as the record of the program's shape and
+> its device rule, which still stands.
+
 # The Android wiring program, 043–047
 
 **Written**: 2026-09-12, at the close of 042 (the merge with `main`).

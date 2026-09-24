@@ -1,5 +1,5 @@
-//! The Trusted Signer on the desktop: a **loopback WebSocket** on this device
-//! (specs 071 and 075).
+//! The Trusted Signer on the desktop: the page answers over **`velawallet://`**
+//! (specs 071, 075 and 076).
 //!
 //! The fourth passkey route is a page, not a key. `app-web/trusted-signer`,
 //! opened in the person's default browser, is told a request, derives what it
@@ -8,40 +8,44 @@
 //!
 //! - the request is the core's (`trusted_signer::request` for a signature,
 //!   `trusted_signer::ceremony::request` for a create / sign-in / proof);
-//! - the wire is the core's too — [`ws::Connection`] frames every byte of the
-//!   loopback socket;
+//! - it rides out in the launch URL's **fragment** — never its query, which a
+//!   server would see and log — and the answer comes back as a
+//!   `velawallet://sign-result?…` the OS hands this app
+//!   (`trusted_signer::url_launch`, then `parse_callback`);
 //! - whether an answer is this wallet's signature over this request
 //!   (`trusted_signer::verify`) or a ceremony the page was allowed to run
 //!   (`ceremony::verify`) is the core's.
 //!
-//! What is left here is a listener, a socket, a clock, and the screen.
+//! What is left here is a URL, a clock, and the screen.
 //!
-//! ## Spec 075: the desktop moved off the URL fragment
+//! ## Spec 076: why there is no socket
 //!
-//! 071 put the request in the URL's fragment and took the answer on a loopback
-//! HTTP callback. That carried exactly one request per page visit, which a
-//! create (key, then member proof) and a sign-in (assertion, then recovery's
-//! two proofs) cannot use: each would open a new tab and ask for the passkey
-//! again. The owner's call — "我觉得任何端都能接入 websocket 吧" — is the phones'
-//! channel for every shell, so the desktop speaks it too: **one page visit per
-//! flow**, several requests in turn over one socket, `bye` at the end. The page
-//! still supports the fragment; nothing here uses it.
+//! 071 put the request in the fragment and took the answer on a loopback HTTP
+//! callback; 075 replaced both with a loopback WebSocket, so that one page visit
+//! could carry a create's two requests. On the PUBLISHED page that cannot work,
+//! and it was measured: `default-src 'none'` is inside the bytes the page is
+//! addressed by, so the page may not open a socket at all — the wallet's own
+//! listener saw no byte arrive. The owner's call was to drop it ("回环 WebSocket
+//! 不做呀,现在就是纯 custome schema"), so the desktop speaks what the phones
+//! speak. A navigation to a custom scheme is governed by no CSP, and the OS
+//! delivers it even when this app is not in front.
 //!
-//! ## Who may talk to the listener
+//! A URL carries exactly one request, so a flow's several operations are several
+//! visits; what makes them one flow is this side, not the channel ([`Flow`]).
 //!
-//! Bound to 127.0.0.1 on a port the OS picks — never another interface — one
-//! listener per page visit. The core's [`ws::Connection`] refuses any upgrade
-//! whose `Origin` is not the signer page's, and then any `hello` that does not
-//! carry this visit's one-time token: such a connection is closed and has no
-//! outcome, so a stray program on this machine cannot end a flow.
+//! ## Who may answer
 //!
-//! The token belongs to the VISIT, not to a request — which is what makes
-//! "Open the page again" work, and means an earlier tab of the same visit can
-//! still answer. That is deliberate; what it must not do is cost the person
-//! their signature, so an answer always beats a close in the same breath
-//! ([`keep_best`]) and the tab in front of them is never the one hung up on
-//! ([`Loopback::accept`]). Connections are read without blocking, so one that
-//! never finishes its handshake cannot hold the real answer up behind it.
+//! A fresh one-time token per REQUEST — random, and forgotten the moment that
+//! request ends. Whether a URL is a callback at all, and which attempt it names,
+//! are both the core's (`callback_of`, `callback_token`), so the shells that
+//! receive one cannot answer those questions three slightly different ways; an
+//! answer for a token nothing is waiting on is dropped in silence. Nothing is
+//! listened on: no port, no interface, nothing on this machine to connect to.
+//!
+//! macOS delivers the callback as an Apple Event to the running app
+//! (`on_open_urls`); Windows and Linux start the app with the URL as an
+//! argument, which `main` reads. The warm-start gap there is written down in
+//! `main.rs` rather than left to be discovered.
 //!
 //! ## What the screen sees
 //!
@@ -53,8 +57,6 @@
 //! words the ending; the core hears a cancelled passkey, so the request stays
 //! open to be answered another way.
 
-use std::io::{self, Read as _, Write as _};
-use std::net::{Ipv4Addr, Shutdown, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -77,12 +79,6 @@ use crate::executor::passkey::{self, PasskeyFailure};
 pub const TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// How often a wait looks at the socket, the clock and the screen's buttons.
 pub(crate) const POLL: Duration = Duration::from_millis(50);
-/// Connections held open at once on one visit's listener. Past this the
-/// oldest is hung up on — see [`Loopback::accept`].
-const CANDIDATES: usize = 4;
-/// How long one write to a socket on this machine may take before it counts
-/// as gone.
-const WRITE_DEADLINE: Duration = Duration::from_secs(1);
 
 // ---------------------------------------------------------------------------
 // What the person is told
@@ -666,266 +662,6 @@ impl Line for SchemeLine {
 }
 
 // ---------------------------------------------------------------------------
-// This device: the loopback WebSocket
-// ---------------------------------------------------------------------------
-
-/// The wallet's listener for one page visit, and the page's socket on it.
-pub struct Loopback {
-    listener: TcpListener,
-    page: String,
-    token: String,
-    url: String,
-    /// Connections that have not closed themselves. The one that answers
-    /// becomes the session's and the rest are dropped.
-    wires: Vec<Wire>,
-    /// The request a connection arriving now is to be given — the first of the
-    /// visit, or the one after a page that had to be reopened.
-    pending: Option<(String, Value)>,
-    seq: u64,
-}
-
-struct Wire {
-    stream: TcpStream,
-    conn: ws::Connection,
-}
-
-impl Loopback {
-    /// A port the OS picks, on this machine's loopback and nowhere else.
-    pub fn open(page: &str) -> io::Result<Self> {
-        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
-        // Accepting never blocks: between connections the wait looks at the
-        // clock and at the screen's buttons.
-        listener.set_nonblocking(true)?;
-        let port = listener.local_addr()?.port();
-        let token = to_base64url(&passkey::random(16));
-        let url = trusted_signer::ws_launch(page, port, &token);
-        Ok(Self {
-            listener,
-            page: page.to_owned(),
-            token,
-            url,
-            wires: Vec::new(),
-            pending: None,
-            seq: 0,
-        })
-    }
-
-    /// Take every connection waiting. A connection arriving when nothing is
-    /// being asked for is not this visit's and is dropped.
-    ///
-    /// **Past the cap the OLDEST goes, not the newest.** Refusing the newest
-    /// was the wrong way round: nothing in this list has answered (a wire that
-    /// answers ends the request), so the newest is the likeliest to be the tab
-    /// the person is looking at. A person who presses "Open the page again"
-    /// four times — the natural thing to do when nothing seems to happen —
-    /// would have filled every slot with abandoned tabs and had the fifth, the
-    /// live one, hung up on.
-    fn accept(&mut self) {
-        while let Ok((stream, _)) = self.listener.accept() {
-            let Some((id, request)) = self.pending.clone() else {
-                let _ = stream.shutdown(Shutdown::Both);
-                continue;
-            };
-            if stream.set_nonblocking(true).is_err() {
-                let _ = stream.shutdown(Shutdown::Both);
-                continue;
-            }
-            while self.wires.len() >= CANDIDATES {
-                let stale = self.wires.remove(0);
-                let _ = stale.stream.shutdown(Shutdown::Both);
-            }
-            self.wires.push(Wire {
-                stream,
-                conn: ws::Connection::new(&self.page, &self.token, &id, &request),
-            });
-        }
-    }
-
-    /// Read every wire once. `Some` when one of them settled this request.
-    fn pump(&mut self) -> Option<Result<Value, TrustedSignerError>> {
-        let mut settled: Option<(usize, Result<Value, TrustedSignerError>)> = None;
-        let mut dead: Vec<usize> = Vec::new();
-        for (index, wire) in self.wires.iter_mut().enumerate() {
-            let mut buffer = [0u8; 8192];
-            loop {
-                match wire.stream.read(&mut buffer) {
-                    Ok(0) => {
-                        if let Some(error) = wire.conn.closed() {
-                            keep_best(&mut settled, index, Err(error));
-                        }
-                        dead.push(index);
-                        break;
-                    }
-                    Ok(read) => {
-                        let step = wire.conn.feed(&buffer[..read]);
-                        if !write_all(&mut wire.stream, &step.write) || step.close {
-                            dead.push(index);
-                        }
-                        if let Some(outcome) = step.outcome {
-                            keep_best(&mut settled, index, outcome);
-                        }
-                        if step.close {
-                            break;
-                        }
-                    }
-                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
-                    Err(_) => {
-                        if let Some(error) = wire.conn.closed() {
-                            keep_best(&mut settled, index, Err(error));
-                        }
-                        dead.push(index);
-                        break;
-                    }
-                }
-            }
-        }
-        match settled {
-            // The wire that answered is the session's; the others — an old tab
-            // still holding a socket after "Open the page again" — are dropped.
-            Some((index, outcome)) => {
-                let kept = self.wires.swap_remove(index);
-                self.wires.clear();
-                self.wires.push(kept);
-                self.pending = None;
-                Some(outcome)
-            }
-            None => {
-                // A wire that closed before proving itself changes nothing —
-                // UNLESS it was the only one left, in which case the page
-                // really did go away and the next ask reopens it.
-                dead.sort_unstable();
-                dead.dedup();
-                for index in dead.into_iter().rev() {
-                    if index < self.wires.len() {
-                        self.wires.swap_remove(index);
-                    }
-                }
-                None
-            }
-        }
-    }
-}
-
-/// Which of two verdicts in one pump is this request's.
-///
-/// **An answer beats a refusal, whatever order they arrive in.** Two wires
-/// exist exactly when the person pressed "Open the page again", and both were
-/// handed the same request — so the tab they signed on can answer in the same
-/// 50 ms in which the tab they abandoned closes. A single slot, overwritten,
-/// threw the signature away and told them they had closed the page. For a
-/// create that is a passkey minted in the browser and then dropped.
-///
-/// Between two of a kind the first wins: whoever got there is the answer.
-fn keep_best(
-    settled: &mut Option<(usize, Result<Value, TrustedSignerError>)>,
-    index: usize,
-    outcome: Result<Value, TrustedSignerError>,
-) {
-    let better = matches!(
-        (settled.as_ref(), &outcome),
-        (None, _) | (Some((_, Err(_))), Ok(_))
-    );
-    if better {
-        *settled = Some((index, outcome));
-    }
-}
-
-/// Write every byte, or say the socket is gone.
-fn write_all(stream: &mut TcpStream, bytes: &[u8]) -> bool {
-    if bytes.is_empty() {
-        return true;
-    }
-    // The socket is non-blocking for reads; a short write on a loopback
-    // socket carrying a few kilobytes is rare but not impossible. A second is
-    // already an eternity for a write to this machine — and `end` walks every
-    // wire, so a longer wait would be paid several times over on a teardown.
-    let deadline = Instant::now() + WRITE_DEADLINE;
-    let mut at = 0;
-    while at < bytes.len() {
-        match stream.write(&bytes[at..]) {
-            Ok(0) => return false,
-            Ok(wrote) => at += wrote,
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                if Instant::now() >= deadline {
-                    return false;
-                }
-                std::thread::sleep(POLL);
-            }
-            Err(_) => return false,
-        }
-    }
-    let _ = stream.flush();
-    true
-}
-
-impl Line for Loopback {
-    fn next_id(&mut self) -> String {
-        self.seq += 1;
-        format!("d{}", self.seq)
-    }
-
-    fn ask(
-        &mut self,
-        id: &str,
-        request: &Value,
-        channel: &Channel,
-        deadline: Instant,
-    ) -> Result<Value, Refusal> {
-        // Asked before a byte goes out: a person who pressed Cancel in the
-        // breath before this would otherwise get a passkey prompt on the page
-        // for a request the wallet has already given up on.
-        if channel.stopped() {
-            return Err(Refusal::Closed);
-        }
-        // A session already up takes the next request on the same socket; the
-        // page leaves its done card for the new one without being reopened.
-        if let Some(wire) = self.wires.first_mut() {
-            let step = wire.conn.send(id, request);
-            let delivered = !step.write.is_empty() && write_all(&mut wire.stream, &step.write);
-            if !delivered {
-                self.wires.clear();
-            }
-        }
-        let reopening = self.wires.is_empty();
-        if reopening {
-            self.pending = Some((id.to_owned(), request.clone()));
-        }
-        if !channel.begin(self.url.clone(), reopening) {
-            return Err(Refusal::Closed);
-        }
-        loop {
-            if channel.stopped() {
-                return Err(Refusal::Closed);
-            }
-            if Instant::now() >= deadline {
-                return Err(Refusal::TimedOut);
-            }
-            self.accept();
-            if let Some(outcome) = self.pump() {
-                channel.rest();
-                return outcome.map_err(|error| {
-                    if !matches!(error, TrustedSignerError::Declined) {
-                        eprintln!("[vela-wallet] trusted signer: answer not accepted: {error}");
-                    }
-                    Refusal::of(&error)
-                });
-            }
-            std::thread::sleep(POLL);
-        }
-    }
-
-    fn end(&mut self) {
-        for wire in &mut self.wires {
-            let step = wire.conn.end();
-            write_all(&mut wire.stream, &step.write);
-            let _ = wire.stream.shutdown(Shutdown::Both);
-        }
-        self.wires.clear();
-        self.pending = None;
-    }
-}
-
-// ---------------------------------------------------------------------------
 // The flow's page visit
 // ---------------------------------------------------------------------------
 
@@ -1190,7 +926,15 @@ fn ceremony_on_flow(
     };
 
     let id = visit.line.next_id();
-    let request = core_ceremony::request(ceremony, &id, wallet_name, registry);
+    // A member proof needs the registry's deployment: the page computes the
+    // challenge itself now, and the published page reaches no network to look it
+    // up (spec 076 — the create's second step failed at 「注册表没有应答」 until
+    // the wallet carried it). Fetched only for the ceremony that needs it, so no
+    // other one waits on a round trip.
+    let deployment = matches!(ceremony, core_ceremony::Ceremony::SignMemberProof { .. })
+        .then(crate::executor::registry::deployment)
+        .flatten();
+    let request = core_ceremony::request(ceremony, &id, wallet_name, registry, deployment.as_ref());
     let answered = visit.line.ask(&id, &request, channel, deadline);
     let outcome = answered.and_then(|answer| {
         core_ceremony::verify(ceremony, &answer, page, expected_member_challenge).map_err(|error| {
@@ -1333,24 +1077,6 @@ pub(crate) mod tests {
         })
     }
 
-    /// The page's answer to a CEREMONY: an assertion over the challenge the
-    /// page derived, in the ceremony reply's field shapes (§10.3).
-    pub(crate) fn page_assertion(
-        signing: &SigningKey,
-        credential: &[u8],
-        challenge: &[u8],
-    ) -> Value {
-        let (authenticator_data, client, signature) = signed(signing, challenge, "webauthn.get");
-        json!({
-            "credentialId": to_base64url(credential),
-            "signatureDer": to_hex(&signature, false),
-            "authenticatorData": to_hex(&authenticator_data, false),
-            "clientDataJSON": to_hex(client.as_bytes(), false),
-            "userHandle": Value::Null,
-            "authenticatorAttachment": "platform",
-        })
-    }
-
     fn signed(signing: &SigningKey, challenge: &[u8], kind: &str) -> (Vec<u8>, String, Vec<u8>) {
         let mut authenticator_data = sha256(b"getvela.app");
         authenticator_data.push(0x05);
@@ -1364,22 +1090,6 @@ pub(crate) mod tests {
             .sign_prehash(&prehash)
             .unwrap_or_else(|e| unreachable!("{e}"));
         (authenticator_data, client, signature.to_bytes().to_vec())
-    }
-
-    // -- the page, as a test drives it ---------------------------------------
-
-    /// The port and the token out of a `ch=ws` launch URL's fragment.
-    pub(crate) fn launch_of(url: &str) -> (u16, String) {
-        assert!(url.contains("sign.html?ch=ws#"), "{url}");
-        let fragment = url.split_once('#').map_or("", |(_, f)| f);
-        let field = |name: &str| {
-            fragment
-                .split('&')
-                .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
-                .unwrap_or_default()
-                .to_owned()
-        };
-        (field("p").parse().unwrap_or_default(), field("t"))
     }
 
     /// Wait for an attempt on `channel` to hand the screen its page.
@@ -1444,161 +1154,8 @@ pub(crate) mod tests {
             .to_owned()
     }
 
-    /// A stand-in signer page on the wallet's loopback socket: the RFC 6455
-    /// client half, and the session's messages.
-    pub(crate) struct FakePage {
-        stream: TcpStream,
-        inbox: Vec<u8>,
-    }
+    // -- cancel, the launch URL, and the callback -----------------------------
 
-    impl FakePage {
-        /// Connect as the page does — the signer page's `Origin`, and the
-        /// token out of the fragment.
-        pub(crate) fn connect(port: u16, token: &str, origin: &str) -> Self {
-            let stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port))
-                .unwrap_or_else(|e| unreachable!("{e}"));
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(20)));
-            let mut page = Self {
-                stream,
-                inbox: Vec::new(),
-            };
-            let head = format!(
-                "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\n\
-                 Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                 Sec-WebSocket-Version: 13\r\nOrigin: {origin}\r\n\r\n"
-            );
-            page.write(head.as_bytes());
-            let response = page.read_head();
-            assert!(
-                response.starts_with("HTTP/1.1 101"),
-                "the wallet refused the upgrade: {response}"
-            );
-            page.say(&json!({ "v": 1, "t": "hello", "token": token }));
-            page
-        }
-
-        /// The upgrade attempt alone, for a page the wallet must turn away.
-        pub(crate) fn refused(port: u16, origin: &str) -> String {
-            let stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port))
-                .unwrap_or_else(|e| unreachable!("{e}"));
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(20)));
-            let mut page = Self {
-                stream,
-                inbox: Vec::new(),
-            };
-            let head = format!(
-                "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\n\
-                 Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-                 Sec-WebSocket-Version: 13\r\nOrigin: {origin}\r\n\r\n"
-            );
-            page.write(head.as_bytes());
-            page.read_head()
-        }
-
-        fn write(&mut self, bytes: &[u8]) {
-            let _ = self.stream.write_all(bytes);
-            let _ = self.stream.flush();
-        }
-
-        fn read_head(&mut self) -> String {
-            let mut chunk = [0u8; 4096];
-            loop {
-                if let Some(end) = self
-                    .inbox
-                    .windows(4)
-                    .position(|window| window == b"\r\n\r\n")
-                {
-                    let head = String::from_utf8_lossy(&self.inbox[..end]).into_owned();
-                    self.inbox.drain(..end + 4);
-                    return head;
-                }
-                match self.stream.read(&mut chunk) {
-                    Ok(0) | Err(_) => return String::from_utf8_lossy(&self.inbox).into_owned(),
-                    Ok(read) => self.inbox.extend_from_slice(&chunk[..read]),
-                }
-            }
-        }
-
-        /// One text message, masked as every client frame must be (§5.1).
-        pub(crate) fn say(&mut self, message: &Value) {
-            let payload = message.to_string().into_bytes();
-            let mut frame = vec![0x81];
-            match payload.len() {
-                n if n < 126 => frame.push(0x80 | n as u8),
-                n if n <= 0xFFFF => {
-                    frame.push(0x80 | 126);
-                    frame.extend_from_slice(&(n as u16).to_be_bytes());
-                }
-                n => {
-                    frame.push(0x80 | 127);
-                    frame.extend_from_slice(&(n as u64).to_be_bytes());
-                }
-            }
-            let mask = [0x37, 0xfa, 0x21, 0x3d];
-            frame.extend_from_slice(&mask);
-            frame.extend(
-                payload
-                    .iter()
-                    .enumerate()
-                    .map(|(i, byte)| byte ^ mask[i % 4]),
-            );
-            self.write(&frame);
-        }
-
-        /// The next message the wallet sent, as JSON. `None` when the socket
-        /// closed first.
-        pub(crate) fn next(&mut self) -> Option<Value> {
-            let mut chunk = [0u8; 8192];
-            loop {
-                if let Some(message) = self.take_frame() {
-                    return message;
-                }
-                match self.stream.read(&mut chunk) {
-                    Ok(0) | Err(_) => return None,
-                    Ok(read) => self.inbox.extend_from_slice(&chunk[..read]),
-                }
-            }
-        }
-
-        /// A whole server frame off the front of the inbox, if one is there:
-        /// `Some(Some(json))` for text, `Some(None)` for a close.
-        fn take_frame(&mut self) -> Option<Option<Value>> {
-            if self.inbox.len() < 2 {
-                return None;
-            }
-            let opcode = self.inbox[0] & 0x0F;
-            let (length, at) = match self.inbox[1] & 0x7F {
-                126 => (
-                    u16::from_be_bytes(self.inbox.get(2..4)?.try_into().ok()?) as usize,
-                    4,
-                ),
-                127 => (
-                    u64::from_be_bytes(self.inbox.get(2..10)?.try_into().ok()?) as usize,
-                    10,
-                ),
-                short => (short as usize, 2),
-            };
-            let payload = self.inbox.get(at..at + length)?.to_vec();
-            self.inbox.drain(..at + length);
-            match opcode {
-                0x1 => Some(serde_json::from_slice(&payload).ok()),
-                0x8 => Some(None),
-                // A ping or a pong is not a message.
-                _ => self.take_frame(),
-            }
-        }
-
-        pub(crate) fn hang_up(&mut self) {
-            let _ = self.stream.shutdown(Shutdown::Both);
-        }
-    }
-
-    // -- the listener --------------------------------------------------------
-
-    /// "Cancel" ends the attempt as the person declining: a cancelled passkey
-    /// to the core, "closed" to the sheet — and a screen that is gone starts
-    /// no attempt at all.
-    #[test]
     /// Cancel, then try again. The second attempt must be a real attempt.
     ///
     /// `begin` reset `waiting`, `open` and `ended` but not `cancelled`, and
@@ -1887,13 +1444,17 @@ pub(crate) mod tests {
             let page = signer_page_for(&proof);
             assert_eq!(page, HOSTED, "the path was dropped");
 
-            let loopback = Loopback::open(&page).unwrap_or_else(|e| unreachable!("{e}"));
+            // The launch URL the visit would open, built by the core that builds
+            // it — no socket, no browser. The property under test is the PATH.
+            let launch = trusted_signer::url_launch(
+                &page,
+                &serde_json::json!({ "t": "req" }),
+                trusted_signer::CALLBACK_URL,
+                "token",
+            );
             assert!(
-                loopback
-                    .url
-                    .starts_with("http://localhost:8140/clearsigning/sign.html?ch=ws#p="),
-                "the launch URL is a 404: {}",
-                loopback.url
+                launch.starts_with("http://localhost:8140/clearsigning/sign.html?ch=url#i="),
+                "the launch URL is a 404: {launch}"
             );
             // And it is the SAME visit the create opened, so nothing is torn
             // down between the two ceremonies.
@@ -1927,59 +1488,4 @@ pub(crate) mod tests {
     }
 
     // -- the ceremonies ------------------------------------------------------
-
-    /// A registration the page could really have returned: `fmt:"none"`, an
-    /// authData carrying the credential id and the key as a COSE_Key, over a
-    /// `webauthn.create` client data from the signer page's origin. The core
-    /// parses the attestation to a P-256 key before it accepts anything, so a
-    /// hand-waved blob would not do.
-    fn page_registration(signing: &SigningKey, credential: &[u8]) -> Value {
-        let point = signing.verifying_key().to_encoded_point(false);
-        let (x, y) = (
-            point.x().unwrap_or_else(|| unreachable!("x")),
-            point.y().unwrap_or_else(|| unreachable!("y")),
-        );
-        let mut cose = vec![0xa5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20];
-        cose.extend_from_slice(x);
-        cose.extend_from_slice(&[0x22, 0x58, 0x20]);
-        cose.extend_from_slice(y);
-
-        let mut auth_data = sha256(b"getvela.app");
-        // UP | UV | AT
-        auth_data.push(0x45);
-        auth_data.extend_from_slice(&[0, 0, 0, 1]);
-        auth_data.extend_from_slice(&[0u8; 16]);
-        auth_data.extend_from_slice(&[
-            (credential.len() >> 8) as u8,
-            u8::try_from(credential.len()).unwrap_or(0),
-        ]);
-        auth_data.extend_from_slice(credential);
-        auth_data.extend_from_slice(&cose);
-
-        let cbor_text = |text: &str| {
-            let mut out = vec![0x60 | u8::try_from(text.len()).unwrap_or(0)];
-            out.extend_from_slice(text.as_bytes());
-            out
-        };
-        let mut attestation = vec![0xa3];
-        attestation.extend(cbor_text("fmt"));
-        attestation.extend(cbor_text("none"));
-        attestation.extend(cbor_text("attStmt"));
-        attestation.push(0xa0);
-        attestation.extend(cbor_text("authData"));
-        attestation.extend_from_slice(&[0x59, (auth_data.len() >> 8) as u8, auth_data.len() as u8]);
-        attestation.extend_from_slice(&auth_data);
-
-        let client = format!(
-            r#"{{"type":"webauthn.create","challenge":"{}","origin":"https://sign.getvela.app","crossOrigin":false}}"#,
-            to_base64url(&[0x5c; 32])
-        );
-        json!({
-            "credentialId": to_base64url(credential),
-            "attestationObject": to_hex(&attestation, false),
-            "clientDataJSON": to_hex(client.as_bytes(), false),
-            "authenticatorAttachment": "platform",
-            "transports": "internal",
-        })
-    }
 }

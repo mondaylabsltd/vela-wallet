@@ -136,6 +136,15 @@ pub enum FeeModel {
         label: SharedString,
         value: SharedString,
         selector: Option<(SharedString, Vec<FeeTokenOption>)>,
+        /// The row has something to DO when it is pressed: ask a failed quote
+        /// again, or open the list of coins that can pay. On a chain with one
+        /// fee coin and a quote in hand there is nothing to choose — so the
+        /// row is a fact, not a control, and is drawn without the chevron it
+        /// cannot honour. The handler has said this since 032
+        /// (`signing_host::fee_tapped`, "One coin and a quote: nothing to
+        /// choose"); only the drawing kept the chevron. Android's `tappable`
+        /// and the web's are the same flag, same rule.
+        tappable: bool,
         /// Under the row, in the error colour: why the slide is shut when
         /// the coin the fee was quoted in cannot pay it (issue #262).
         warning: Option<SharedString>,
@@ -280,6 +289,7 @@ fn base(
             value: "~0.0021 ETH ≈ $5.40".into(),
             selector: None,
             warning: None,
+            tappable: true,
         },
         signer_label: s.signing_account.clone(),
         signer_name: WALLET_NAME.into(),
@@ -874,6 +884,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                 m.fee = FeeModel::OnChain {
                     label: s.fee_label.clone(),
                     value: "~0.0021 ETH ≈ $5.40".into(),
+                    tappable: true,
                     selector: Some((
                         s.fee_token_title.clone(),
                         vec![

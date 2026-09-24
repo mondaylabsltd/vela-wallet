@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Epic** | K — dApp Connect (WalletPair) |
+| **Epic** | K — dApp Connect |
 | **Status** | ✅ Shipped |
 | **Owner** | Shelchin |
 | **Depends on** | G01 |

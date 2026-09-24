@@ -94,42 +94,78 @@ use ts_rs::TS;
 /// biubiu.tools Vela Wallet Chain Setup listing. A chain missing ANY of these
 /// (or the P256 precompile) can accept deposits the wallet can never sign out
 /// of — invariant ②.
-pub const REQUIRED_CONTRACTS: [(&str, &str); 11] = [
+/// Spec 081 (FR-009): twelve, and the third field says whether an entry is
+/// needed only by a wallet with more than one key.
+///
+/// Two changes from the eleven this list carried since it was ported:
+/// - **added** Safe's passkey signer factory and its singleton. Keys two to
+///   seven are signer contracts the factory creates inside the Safe's setup
+///   (`safe.rs`), so on a chain without them a multi-key wallet cannot be
+///   deployed at all — and the old check called that chain compatible.
+/// - **removed** the CompatibilityFallbackHandler. Vela wallets set the 4337
+///   module as their fallback handler; nothing here ever used that address, so
+///   requiring it turned away chains the wallet works on perfectly.
+pub const REQUIRED_CONTRACTS: [(&str, &str, bool); 12] = [
     (
         "Deterministic Deployment Proxy",
         "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+        false,
     ),
     (
         "Safe Singleton Factory",
         "0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7",
+        false,
     ),
-    ("Multicall3", "0xcA11bde05977b3631167028862bE2a173976CA11"),
+    (
+        "Multicall3",
+        "0xcA11bde05977b3631167028862bE2a173976CA11",
+        false,
+    ),
     (
         "EntryPoint v0.7",
         "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+        false,
     ),
-    ("Safe L2", "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762"),
+    (
+        "Safe L2",
+        "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
+        false,
+    ),
     (
         "Safe Proxy Factory",
         "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+        false,
     ),
     (
         "Safe 4337 Module",
         "0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226",
+        false,
     ),
     (
         "Safe Module Setup",
         "0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47",
+        false,
     ),
     (
         "WebAuthn Signer",
         "0x94a4F6affBd8975951142c3999aEAB7ecee555c2",
+        false,
     ),
     (
-        "Fallback Handler",
-        "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99",
+        "MultiSend",
+        "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526",
+        false,
     ),
-    ("MultiSend", "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526"),
+    (
+        "Safe Passkey Signer Factory",
+        "0x1d31F259eE307358a26dFb23EB365939E8641195",
+        true,
+    ),
+    (
+        "Safe Passkey Signer Singleton",
+        "0x4E27b51350e6c2083EE19011120F50DAfEc5CA50",
+        true,
+    ),
 ];
 
 /// RIP-7212 P256 precompile address (network-checker.ts:180).
@@ -639,6 +675,25 @@ impl Default for NetServiceEndpoints {
 }
 
 impl NetServiceEndpoints {
+    /// The URL a caller should actually use for `field`: the configured one,
+    /// or the default when it is unset or blank — the `||` of
+    /// `getEthereumDataURL()` and its three siblings (storage.ts:194-210),
+    /// written once here so no shell has to remember it.
+    ///
+    /// Spec 081 FR-002: three shells had each re-implemented "empty means the
+    /// default" beside a cached URL, and one of them cached it for the life of
+    /// the process — so a person could change their public-key index in
+    /// Settings and still be registered against ours.
+    #[must_use]
+    pub fn effective(&self, field: NetEndpointField) -> &str {
+        let configured = self.get(field).trim();
+        if configured.is_empty() {
+            default_endpoint(field)
+        } else {
+            self.get(field)
+        }
+    }
+
     fn get(&self, field: NetEndpointField) -> &str {
         match field {
             NetEndpointField::EthereumData => &self.ethereum_data_url,
@@ -655,6 +710,18 @@ impl NetServiceEndpoints {
             NetEndpointField::BundlerService => self.bundler_service_url = value,
             NetEndpointField::FiatRates => self.fiat_rates_url = value,
         }
+    }
+}
+
+/// The shipped default for one endpoint. Every "unset means this" answer in
+/// the wallet comes from here.
+#[must_use]
+pub fn default_endpoint(field: NetEndpointField) -> &'static str {
+    match field {
+        NetEndpointField::EthereumData => DEFAULT_ETHEREUM_DATA_URL,
+        NetEndpointField::PasskeyIndex => DEFAULT_PASSKEY_INDEX_URL,
+        NetEndpointField::BundlerService => DEFAULT_BUNDLER_SERVICE_URL,
+        NetEndpointField::FiatRates => DEFAULT_FIAT_RATES_URL,
     }
 }
 
@@ -760,6 +827,8 @@ pub struct NetContractStatus {
     pub name: String,
     pub address: String,
     pub deployed: bool,
+    /// Spec 081: only a wallet with more than one key needs this one.
+    pub multi_key_only: bool,
 }
 
 /// Why the compatibility check could not reach a verdict. Distinct from
@@ -781,7 +850,12 @@ pub enum NetRpcFailureKind {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct NetCompatibility {
     pub chain_id: u32,
+    /// A one-key wallet can be created and can sign here.
     pub compatible: bool,
+    /// Spec 081: and a wallet with two to seven keys can too — it also needs
+    /// Safe's passkey signer factory and its singleton. `compatible` without
+    /// this is a real state: the chain works, but only for a single-key wallet.
+    pub multi_key_ready: bool,
     pub contracts: Vec<NetContractStatus>,
     /// `None` = never probed (RPC failure short-circuited).
     pub p256_available: Option<bool>,
@@ -1289,6 +1363,9 @@ pub struct Model {
     endpoint_gen: u64,
     override_gens: BTreeMap<u32, u64>,
     provider_gens: BTreeMap<NetProviderId, u64>,
+    /// Somebody opened Service Endpoints before the store answered, so the
+    /// probes are owed and will run the moment the real URLs land.
+    probe_when_loaded: bool,
 }
 
 fn next_gen(model: &mut Model) -> u64 {
@@ -1827,12 +1904,14 @@ fn conclude_rpc_failure(
     let compat = NetCompatibility {
         chain_id,
         compatible: false,
+        multi_key_ready: false,
         contracts: REQUIRED_CONTRACTS
             .iter()
-            .map(|(name, address)| NetContractStatus {
+            .map(|(name, address, multi_key_only)| NetContractStatus {
                 name: (*name).to_owned(),
                 address: (*address).to_owned(),
                 deployed: false,
+                multi_key_only: *multi_key_only,
             })
             .collect(),
         p256_available: None,
@@ -1892,7 +1971,7 @@ fn wizard_probed(
 
     let mut ops: Vec<NetOperation> = REQUIRED_CONTRACTS
         .iter()
-        .map(|(_, address)| NetOperation::RpcGetCode {
+        .map(|(_, address, _)| NetOperation::RpcGetCode {
             url: best_url.clone(),
             address: (*address).to_owned(),
         })
@@ -1976,7 +2055,10 @@ fn wizard_code(
         if *p256 == P256Probe::AwaitingCode {
             *p256 = P256Probe::Done(is_code_deployed(code.as_deref()));
         }
-    } else if let Some(index) = REQUIRED_CONTRACTS.iter().position(|(_, a)| *a == address) {
+    } else if let Some(index) = REQUIRED_CONTRACTS
+        .iter()
+        .position(|(_, a, _)| *a == address)
+    {
         if let Some(slot) = deployed.get_mut(index) {
             if slot.is_none() {
                 *slot = Some(is_code_deployed(code.as_deref()));
@@ -2038,19 +2120,30 @@ fn maybe_finish_contracts(model: &mut Model) -> Command<NetEffect, Event> {
     let contracts: Vec<NetContractStatus> = REQUIRED_CONTRACTS
         .iter()
         .zip(deployed.iter())
-        .map(|((name, address), status)| NetContractStatus {
-            name: (*name).to_owned(),
-            address: (*address).to_owned(),
-            deployed: status.unwrap_or(false),
-        })
+        .map(
+            |((name, address, multi_key_only), status)| NetContractStatus {
+                name: (*name).to_owned(),
+                address: (*address).to_owned(),
+                deployed: status.unwrap_or(false),
+                multi_key_only: *multi_key_only,
+            },
+        )
         .collect();
-    let all_deployed = contracts.iter().all(|c| c.deployed);
-    // Invariant ②: ALL 11 contracts AND the P256 precompile, or no entry.
-    let compatible = all_deployed && p256_available;
+    // Invariant ②, split by spec 081: a one-key wallet needs the ten common
+    // contracts and the P256 precompile; a multi-key wallet needs the signer
+    // factory and its singleton as well, because its extra keys are signer
+    // contracts created inside the Safe's setup.
+    let single_key_deployed = contracts
+        .iter()
+        .filter(|c| !c.multi_key_only)
+        .all(|c| c.deployed);
+    let compatible = single_key_deployed && p256_available;
+    let multi_key_ready = compatible && contracts.iter().all(|c| c.deployed);
 
     let compat = NetCompatibility {
         chain_id,
         compatible,
+        multi_key_ready,
         contracts,
         p256_available: Some(p256_available),
         best_rpc_url: Some(best_url.clone()),
@@ -2419,22 +2512,19 @@ fn commit_override(model: &mut Model, chain_id: u32) -> Command<NetEffect, Event
 /// `getEthereumDataURL()` — the configured value, or the default when unset
 /// or empty (`||` semantics, storage.ts:194-196).
 fn effective_ethereum_data_url(model: &Model) -> &str {
-    let configured = &model.endpoints.ethereum_data_url;
-    if configured.is_empty() {
-        DEFAULT_ETHEREUM_DATA_URL
-    } else {
-        configured
-    }
+    model.endpoints.effective(NetEndpointField::EthereumData)
 }
 
 /// `getBundlerServiceURL()` (storage.ts:202-204).
 fn effective_bundler_service_url(model: &Model) -> &str {
-    let configured = &model.endpoints.bundler_service_url;
-    if configured.is_empty() {
-        DEFAULT_BUNDLER_SERVICE_URL
-    } else {
-        configured
-    }
+    model.endpoints.effective(NetEndpointField::BundlerService)
+}
+
+/// `getPasskeyIndexURL()` (storage.ts:198-200). Spec 081 FR-002 — the one
+/// endpoint no shell was asking the core about.
+#[must_use]
+pub fn effective_passkey_index_url(model: &Model) -> &str {
+    model.endpoints.effective(NetEndpointField::PasskeyIndex)
 }
 
 /// The HTTPS exception: `/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/`
@@ -2468,6 +2558,21 @@ pub fn clean_endpoint_value(value: &str) -> String {
 
 /// Probe all four endpoint fields — a fresh wave.
 fn endpoint_probe_wave(model: &mut Model) -> Command<NetEffect, Event> {
+    // Nothing is known about the person's endpoints until the store has
+    // answered, and probing before it does asks about the DEFAULTS. The
+    // stored values then land and replace the text while these verdicts stay,
+    // so the page shows a configured URL beside the default's health. Measured
+    // on an iPhone: `https://index.invalid` with a green "645 ms" next to it.
+    // `endpoint_blurred` and `reset_endpoints` have had this guard all along;
+    // this one did not, and iOS is the shell that opens the page in the same
+    // breath as the load.
+    if !model.loaded {
+        // Owed, not dropped: the page would otherwise sit with four blank
+        // badges forever, which is a smaller lie but still one.
+        model.probe_when_loaded = true;
+        return Command::done();
+    }
+    model.probe_when_loaded = false;
     model.endpoint_gen = next_gen(model);
     let mut ops = Vec::new();
     for &field in &ENDPOINT_FIELDS {
@@ -2817,6 +2922,11 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             model.endpoint_drafts = model.endpoints.clone();
             model.provider_keys = provider_keys;
             model.loaded = true;
+            if model.probe_when_loaded {
+                // The page is already on screen, waiting. Now we know what to
+                // ask about, so ask.
+                return endpoint_probe_wave(model);
+            }
             render()
         }
 

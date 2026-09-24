@@ -140,6 +140,16 @@ struct SettingsUrlField: View {
     @Environment(\.theme) private var theme
     let field: UrlFieldModel
 
+    /// Whether this box is the one being typed into.
+    ///
+    /// Spec 081: the doc on `onCommit` below has always said "on submit **or
+    /// on losing focus**", and only `.onSubmit` was wired — so a person who
+    /// typed an endpoint and tapped anywhere else had saved nothing, while the
+    /// health badge went on reporting the OLD host as online. Only the
+    /// keyboard's Done key committed. The core persists on `EndpointBlurred`;
+    /// `EndpointEdited` sets a draft and nothing more.
+    @FocusState private var focused: Bool
+
     /// The editable mode (spec 050).
     ///
     /// **`nil` is the drawn state and renders exactly as it always has** — a
@@ -167,8 +177,6 @@ struct SettingsUrlField: View {
     /// The blue action inside the field — "Check key", "Get a key" — as a
     /// button. `nil` leaves it the drawn label.
     var onAction: (() -> Void)?
-
-    @FocusState private var focused: Bool
 
     private var border: Color {
         switch field.tone {
@@ -216,8 +224,12 @@ struct SettingsUrlField: View {
                         .submitLabel(.done)
                         .focused($focused)
                         .onSubmit(onCommit)
-                        .onChange(of: focused) { _, isFocused in
-                            if commitsOnBlur, !isFocused { onCommit() }
+                        .focused($focused)
+                        .onChange(of: focused) { wasFocused, isFocused in
+                            // Losing focus IS the blur the core waits for — and
+                            // only a field that HAD focus can lose it, so a box
+                            // nobody touched does not commit (main, 081).
+                            if commitsOnBlur, wasFocused, !isFocused { onCommit() }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -228,18 +240,24 @@ struct SettingsUrlField: View {
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if let action = field.action, let onAction {
-                    Button(action: onAction) {
+                if let action = field.action {
+                    // Drawn in link blue since 023 and tappable nowhere. It is
+                    // a control on Android (`EditableUrlField(onAction:)`,
+                    // which tests the key), so it is one here too; where no
+                    // handler is given — the gallery — it stays a label rather
+                    // than a button that does nothing.
+                    if let onAction {
+                        Button(action: onAction) {
+                            Text(action)
+                                .typeRole(Typography.body)
+                                .foregroundStyle(theme.infoBase)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
                         Text(action)
                             .typeRole(Typography.body)
                             .foregroundStyle(theme.infoBase)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                } else if let action = field.action {
-                    Text(action)
-                        .typeRole(Typography.body)
-                        .foregroundStyle(theme.infoBase)
                 }
             }
             .padding(.horizontal, Tokens.Space.s12)

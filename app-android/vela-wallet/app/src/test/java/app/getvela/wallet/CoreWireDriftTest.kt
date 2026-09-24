@@ -927,6 +927,7 @@ class CoreWireDriftTest {
         assertStringUnion<ClearFieldRole>("ClearFieldRole")
         assertStringUnion<ClearSignType>("ClearSignType")
         assertStringUnion<ClearSignMethod>("ClearSignMethod")
+        assertStringUnion<ClearProvenance>("ClearProvenance")
         assertStringUnion<ClearRisk>("ClearRisk")
         assertStringUnion<ClearDangerClass>("ClearDangerClass")
         assertStringUnion<ClearSurface>("ClearSurface")

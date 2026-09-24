@@ -1,7 +1,8 @@
 # "Why We Charge $39.99" — 宣言初稿
 
 > 用途:getvela.app 博客 + Show HN / Crypto Twitter 投放 + 商店 listing 与官网定价区的叙事底稿。
-> 语气:创始人第一人称,honest-alpha。所有事实句均对应 whitepaper 行号(见文末核对表)。
+> 语气:创始人第一人称,honest-alpha。所有事实句均对应 claim ledger 条目(见文末核对表)。
+> 2026-09-22 按 spec 080 更正:手续费按代码写(预留 gas × 3 × 所选速度价格,签名前显示,付给中继,中继可换可自建),去掉"约 2×/拆分显示";去掉"Apple Pay 同款芯片、私钥不出芯片";网页版不连 dApp;服务许可证按实际写。
 > 红线检查:✅ 未称"已审计/审计排期" ✅ 未写 "free app" ✅ "先用小额"当卖点 ✅ 未点名贬低具体竞品。
 
 ---
@@ -22,21 +23,21 @@ I wanted a business model I could explain in two sentences, to anyone, without f
 
 **One:** the mobile app costs $39.99, once. No subscription, no upgrade fees, all features, updates included.
 
-**Two:** when you send a transaction, Vela's relayer charges roughly the network fee itself — you pay about twice the raw on-chain cost, and the wallet shows you the split, side by side, before you confirm.
+**Two:** every transaction pays a fee to the relay that submits it — ours, unless you switch to another relay or run your own. The wallet sets it at three times the gas it reserves for the transaction, priced for the speed you pick, with a one-cent minimum, and shows you the exact amount before you sign. It can't change after you do.
 
-That's it. There is no token — nothing to buy, farm, or speculate on. There are no ads. Our servers see your public key and a name you choose; there is nothing else to monetize. You pay, so you are the customer. The incentives point one way: at you.
+That's it. There is no token — nothing to buy, farm, or speculate on. There are no ads. Our servers see only what running your wallet requires — your public keys, and the transactions our relay submits for you — and there is no ad or data business to feed. You pay, so you are the customer. The incentives point one way: at you.
 
 ## What $39.99 actually buys
 
-Your phone already contains a dedicated security chip — the same hardware that guards Apple Pay. Vela turns it into your signing device: your key is generated inside it, never leaves it, and every transaction requires your face or fingerprint.
+Your phone can already hold a passkey — a key your operating system or password manager keeps end-to-end encrypted, which signs only after your face, fingerprint or PIN. Vela makes that your signing key, and its private key never goes to us. If you want a key that never leaves one piece of hardware, add a security key when you create the wallet; a wallet can have up to seven keys.
 
-The cheapest hardware wallets start around fifty dollars. They are good products. But they are a second device — one more thing to buy, charge, carry, hide, and lose. $39.99 buys the hardware-wallet security model on hardware you already own, with clear signing, spending caps on every approval (the app will not let you sign an unlimited one), and a balance preview before every signature.
+The cheapest hardware wallets start around fifty dollars. They are good products. But they are a second device — one more thing to buy, charge, carry, hide, and lose. $39.99 buys a wallet whose keys live on hardware you already own, with clear signing, a block on unlimited-level approvals until you pick an amount, and a preview of what leaves and enters your wallet before you sign.
 
 One bad blind signature costs more than every app you have ever bought, combined. That is the comparison that matters — not what other apps charge.
 
 ## Try everything free first
 
-The web version at getvela.app is free, full-featured, forever. It is not a demo. Create a wallet in your browser, put in a small amount — small amounts first is genuinely how we think you should start — connect a dApp, send a transaction, read every screen.
+The web version at wallet.getvela.app is free, forever — and so are the browser extension and the desktop apps. It is not a demo. Create a wallet in your browser, put in a small amount — small amounts first is genuinely how we think you should start — send a transaction, connect a dApp through the extension, read every screen.
 
 If, and only if, it earns your trust: the mobile app is there. The web version is our refund policy — you will know exactly what you are paying for before you pay.
 
@@ -44,7 +45,7 @@ If, and only if, it earns your trust: the mobile app is there. The web version i
 
 Vela is alpha software, built in the open by a very small team. The Safe smart contracts it stands on are audited and battle-tested, securing billions. Vela's own integration around them has not undergone an independent third-party audit, and none is currently scheduled — a professional audit is a goal for when the project can fund one, not a commitment I can honestly make today.
 
-Everything is MIT open source — the app and all three backend services. You can read the code, build it yourself, and point the app at your own servers. If Vela the company disappears tomorrow, your funds sit in your Safe on-chain, controlled by your passkey, and the docs explain how to keep going without us.
+Everything is open source under MIT: the apps, the relay, the public-key index, the exchange-rate service and the chain data. You can read the code, build it yourself, and point the apps at your own servers — the relay included. If Vela the company disappears tomorrow, your funds sit in your Safe on-chain, controlled by your keys, and the self-hosting guide explains how to keep going without us. One limit it states plainly: your passkeys belong to getvela.app, so you keep signing through the browser extension or an app you build.
 
 I would rather earn your $39.99 with that paragraph than with a security badge I have not paid for yet.
 
@@ -73,16 +74,16 @@ You pay once. You get a signing device you already carry, a business model with 
 
 | 正文声明 | 来源 |
 |---|---|
-| relayer ≈ 网络费本身,约 2× 原始链上成本,确认前显示拆分 | whitepaper.md L119-125 |
+| 手续费 = 预留 gas × 3 × 所选速度价格,最低 1 美分,签名前显示确切金额,付给中继;中继可换可自建 | claim ledger C-fee-1;`fee_policy.rs` `INBAND_MARKUP = 3` |
 | 无代币,"nothing to buy, farm, or speculate on" | whitepaper.md L227-228 |
 | Safe 合约已审计;Vela 自身集成**未**审计且无排期;审计是"有钱后的目标非承诺" | whitepaper.md L230-239 |
-| 服务端只见公钥+名字 | FAQ(leads #24) |
+| 服务端只见公钥与经中继提交的交易 | privacy policy;claim ledger |
 | "If Vela disappears" 自续方案 | whitepaper.md L197 |
-| MIT,三个后端全开源可自托管 | leads #6/#25 |
-| 永不无限授权(签不出 unlimited) | approval-guard.ts,leads #17 |
+| 许可证:App/中继/公钥索引/汇率/链数据全部 MIT(p256-index#7);中继链目录可配置 | claim ledger C-lic-1、C-selfhost-2 |
+| "无限"级授权(≥2^200)须改成具体金额才能提交 | claim ledger C-approve-1 |
 | 最便宜硬件钱包 ~$50 起 | Trezor Safe 3 $59 / Nano S Plus ≈$44(pricing-analysis.md 已核实) |
-| Web 版免费、全功能 | 创始人定价决策 2026-07-02 |
-| ⚠️ "guards Apple Pay" 类比 | leads #22 既有话术;iOS 成立,Android 对应 StrongBox——若在 Android 商店页复用,把 Apple Pay 换成 "hardware-backed keystore" |
+| Web 版、扩展、桌面版免费;网页版不连 dApp(扩展连) | 创始人定价决策;claim ledger C-dapp-1 |
+| 通行密钥由系统/密码管理器端到端加密保管,私钥不交给 Vela;要"不出硬件"就加安全密钥 | claim ledger C-sign-1、C-keys-1(已删 "Apple Pay 同款芯片/私钥不出芯片":同步的通行密钥会离开设备) |
 
 ## 发布注意
 

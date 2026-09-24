@@ -53,6 +53,13 @@ pub use crate::theme::FLOW_COLUMN_W;
 /// because they are the marketing site's pages and not app routes.
 pub const PRIVACY_URL: &str = "https://getvela.app/privacy";
 pub const TERMS_URL: &str = "https://getvela.app/terms";
+/// Spec 081 FR-004. The endpoints panel offers a "Self-hosting guide →" that
+/// was plain text: an arrow that went nowhere, on the one screen whose whole
+/// subject is running these services yourself.
+pub const SELF_HOSTING_URL: &str = "https://getvela.app/docs/self-hosting";
+/// Where a chain that the wallet refuses can be made ready: the page deploys
+/// everything anyone can deploy, and says who has to do the rest.
+pub const CHAIN_SETUP_URL: &str = "https://getvela.app/chain-setup";
 
 // ---------------------------------------------------------------------------
 // Screen selection — the whole of the create UI's logic

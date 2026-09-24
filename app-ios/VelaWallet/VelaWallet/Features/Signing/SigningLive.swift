@@ -167,15 +167,27 @@ enum SigningLive {
         let facts = SigningController.firstCall(paramsJson: request.paramsJson)
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
-        let blocks = statusBlocks(sign: sign, loc: loc)
-            + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
-            + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
-                          dataBytes: dataBytes, context: context)
-            // Only a TRANSACTION has balances to change. A message moves
-            // nothing, and a balance block on a signature would answer a
-            // question nobody asked.
-            + balanceBlocks(isTransaction: facts != nil, context: context)
-            + guardBlocks(guardView, loc: loc)
+        // Spec 081: a refused request gets the refusal and nothing else. The
+        // decoded body, the balances and the guard all describe a transaction
+        // that will never be signed, and reading them invites the question
+        // "so why can't I?" — which the sentence above already answers.
+        //
+        // The Trusted Signer's notice stays either way (071): it says why the
+        // last attempt on the page signed nothing, which is the one thing a
+        // person does need on a refused card as much as on a live one.
+        let refused = sign.blocked != nil
+        let blocks = refused
+            ? statusBlocks(sign: sign, loc: loc)
+                + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
+            : statusBlocks(sign: sign, loc: loc)
+                + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
+                + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
+                              dataBytes: dataBytes, context: context)
+                // Only a TRANSACTION has balances to change. A message moves
+                // nothing, and a balance block on a signature would answer a
+                // question nobody asked.
+                + balanceBlocks(isTransaction: facts != nil, context: context)
+                + guardBlocks(guardView, loc: loc)
 
         var model = SigningModel(
             id: fallback.id,
@@ -190,24 +202,32 @@ enum SigningLive {
             blocks: blocks,
             tech: TechModel(
                 title: fallback.tech.title,
-                summary: clear.result?.contractName,
-                fn: clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
+                summary: refused ? nil : clear.result?.contractName,
+                fn: refused
+                    ? nil
+                    : clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
                 params: [],
                 identities: [],
                 simResult: nil,
-                raw: dataBytes > 0 ? facts?.data.map { (label: s(loc, "techRawData"), hex: $0) } ?? nil : nil,
+                raw: !refused && dataBytes > 0
+                    ? facts?.data.map { (label: s(loc, "techRawData"), hex: $0) } ?? nil
+                    : nil,
                 copyLabel: fallback.tech.copyLabel,
                 explorerLabel: fallback.tech.explorerLabel
             ),
             techOpen: false,
-            fee: feeModel(clear: clear, fee: fee, context: context, speedTier: speed?.view.tier),
+            fee: refused
+                ? nil
+                : feeModel(clear: clear, fee: fee, context: context, speedTier: speed?.view.tier),
             signer: (label: s(loc, "signingAccount"),
                      name: context.walletName,
                      seed: context.walletAddress),
-            confirm: (hint: s(loc, "slideToConfirm"),
-                      action: confirmLabel(clear: clear, loc: loc),
-                      enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear,
-                                              speedTier: speed?.view.tier)),
+            confirm: refused
+                ? nil
+                : (hint: s(loc, "slideToConfirm"),
+                   action: confirmLabel(clear: clear, loc: loc),
+                   enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear,
+                                           speedTier: speed?.view.tier)),
             panelTitle: s(loc, "signatureRequest")
         )
         // The wallet's own request (the key backup) is not a site: its own mark
@@ -266,15 +286,43 @@ enum SigningLive {
     static func statusBlocks(sign: SignViewWire, loc: Loc) -> [SigningBlock] {
         var blocks: [SigningBlock] = []
 
-        if let funding = sign.funding {
-            blocks.append(.warning(
-                tone: .caution,
-                text: loc.t("componentsUi.funding.lead", vars: ["symbol": funding.data.nativeSymbol])
-            ))
+        // Spec 081: the core refused this request outright — it would have
+        // changed who controls the account. Nothing else on the sheet matters,
+        // and `confirmGateOpen` is already false, so say it and stop.
+        if let blocked = sign.blocked {
+            blocks.append(.intent(text: s(loc, "selfCallBlockedTitle"), tone: .danger))
+            let text: String
+            if blocked.function == "SafeTx" {
+                text = s(loc, "selfCallBlockedSafeTx")
+            } else if let leg = blocked.legIndex {
+                text = s(loc, "selfCallBlockedLegBody", [
+                    "index": String(leg), "function": blocked.function,
+                ])
+            } else {
+                text = s(loc, "selfCallBlockedBody", ["function": blocked.function])
+            }
+            blocks.append(.warning(tone: .danger, text: text))
+            return blocks
+        }
+
+        // Founder, 2026-09-22: this surface means THE RELAY HAS NO GAS ON THIS
+        // CHAIN. The `componentsUi.funding.*` line it used to show — "your
+        // transactions run on a small fee reserve… later transactions top it
+        // back up" — describes the retired per-wallet deposit, and was false
+        // about whose money this is. The second line is the one the surface
+        // never had: it is non-refundable and it goes to the bundler operator,
+        // not to Vela.
+        if sign.funding != nil {
+            blocks.append(.warning(tone: .caution, text: loc.t("componentsUi.treasuryBootstrap.lead")))
+            blocks.append(
+                .warning(tone: .caution, text: loc.t("componentsUi.treasuryBootstrap.disclaimer"))
+            )
         }
         if let error = sign.error {
             let text: String = switch error.kind {
             case .unlimitedApproval: a(loc, "unlimitedDisabled")
+            // The blocked sheet above already says it, in full.
+            case .selfCallBlocked: ""
             case .unsupportedChain: loc.t("send.lock.netNotFound")
             // Neither of these is an error a person needs to read: one is
             // their own decision and the other is the wallet's.
@@ -498,6 +546,15 @@ enum SigningLive {
         }
         if result.bestEffort { blocks.append(.warning(tone: .caution, text: s(loc, "bestEffortWarning"))) }
         if result.partial { blocks.append(.warning(tone: .caution, text: s(loc, "partialWarning"))) }
+        // Spec 081 FR-008: the descriptor service answered, over plain HTTP,
+        // from a base URL the person can edit, and nothing signed the answer.
+        // The other sources say nothing here: built in and pinned are what
+        // "verified" means, a token-standard shape is the standard doing its
+        // job, the 4-byte database has its own line above, and a deployment
+        // claims nothing to doubt.
+        if result.provenance == .fetched {
+            blocks.append(.warning(tone: .caution, text: s(loc, "descriptorFetchedWarning")))
+        }
         if result.fields.contains(where: \.unverified) {
             blocks.append(.warning(tone: .caution, text: s(loc, "unverifiedWarning")))
         }
@@ -764,8 +821,11 @@ enum SigningLive {
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
         }
+        // The same condition `SigningController.feeTapped` acts on, decided
+        // once here so the chevron and the handler cannot disagree.
+        let tappable = fee?.failed != nil || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
-                        selector: selector, warning: warning)
+                        selector: selector, warning: warning, tappable: tappable)
     }
 
     /// The slide's verb: the core's intent id, **in the corpus's words**.

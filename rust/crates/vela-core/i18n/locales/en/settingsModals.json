@@ -41,7 +41,7 @@
       "bundlerHint": "Vela Relay compatible endpoint required",
       "fiatLabel": "FIAT RATES",
       "fiatHint": "USD-based exchange rates that drive the currency list — swap for wider coverage.",
-      "resetToDefaults": "Reset to Defaults",
+      "resetToDefaults": "Reset all four to defaults",
       "selfHostGuide": "Self-hosting guide →",
       "resetTitle": "Reset the service endpoints?",
       "resetBody": "All four services go back to Vela's own addresses. The addresses you entered here are forgotten.",
@@ -72,8 +72,9 @@
       "compatible": "Compatible",
       "incompatible": "Incompatible",
       "checkSafe": "Safe L2 contracts",
-      "checkSigner": "WebAuthn signer module",
-      "checkRemaining": "{{count}} more contracts"
+      "checkSigner": "P-256 precompile",
+      "checkRemaining": "{{count}} more contracts",
+      "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally."
     },
     "treasury": {
       "modalTitle": "Treasury",

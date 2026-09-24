@@ -41,7 +41,8 @@ struct BrowserToolbarView: View {
             Button(action: onAccount) {
                 HStack(spacing: Tokens.Space.s8) {
                     IdenticonAvatar(seed: browser.account.seed,
-                                    size: ExploreGeometry.accountChipAvatar)
+                                    size: ExploreGeometry.accountChipAvatar,
+                                    tappable: false)
                     if browser.connected {
                         Circle()
                             .fill(theme.successBase)

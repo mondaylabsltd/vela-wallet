@@ -220,6 +220,13 @@
 				// repeat this (spec 077, the invariant).
 				owing = null;
 				void answerRequest(incoming.rid, error ? { error } : { result });
+				// A request the CORE refuses outright is answered the moment it
+				// arrives — so the page never hangs — but the sheet is still
+				// explaining WHY to the person in front of us. Leaving on the
+				// grace timer would take the explanation away before it could be
+				// read, so their dismissal is what leaves instead (main, spec
+				// 081; `onCancel` already answers and leaves).
+				if (error?.kind === 'self_call_blocked') return;
 				// A transaction the wallet can watch stays on screen and lands,
 				// as a send does: the sheet raises its receipt and calls
 				// `onlanding`, and the person's Done is what leaves. Anything

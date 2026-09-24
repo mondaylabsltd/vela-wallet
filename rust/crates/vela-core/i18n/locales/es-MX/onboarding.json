@@ -7,7 +7,7 @@
       "desktopTagline": "Tus llaves, tus activos",
       "featureNoMnemonicTitle": "Sin frase semilla",
       "featureNoMnemonicBody": "Crea e inicia sesión con una passkey en tu dispositivo — sin 12 palabras que anotar y resguardar.",
-      "featureOneAddressTitle": "Una dirección, 12+ redes",
+      "featureOneAddressTitle": "Una dirección, 24 redes",
       "featureOneAddressBody": "La misma dirección funciona en todas las redes compatibles, y puedes agregar las tuyas.",
       "featureOpenSourceTitle": "Código abierto y autohospedable",
       "featureOpenSourceBody": "La app y los servicios de backend son de código abierto — puedes desplegar una infraestructura completamente tuya.",
@@ -30,12 +30,12 @@
       "custodyTitle": "Las llaves se quedan contigo",
       "custodyBody": "Tus llaves de acceso viven donde tú las guardas: el gestor de contraseñas del dispositivo o una llave de seguridad física. Vela no puede tocarlas ni gastar por ti.",
       "chainsTitle": "Una dirección, todas las redes",
-      "chainsBody": "La misma dirección sirve en más de 12 redes y las comisiones se pagan con stablecoins: no hace falta guardar la moneda nativa de cada cadena."
+      "chainsBody": "La misma dirección sirve en 24 redes y las comisiones se pagan con stablecoins: no hace falta guardar la moneda nativa de cada cadena."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — la billetera con passkey",
-        "description": "Una billetera con passkey y sin frase de recuperación: una sola dirección para más de 12 redes, contratos Safe v1.4.1 auditados, gas pagadero con stablecoins, todo de código abierto y autoalojable."
+        "description": "Una billetera con passkey y sin frase de recuperación: una sola dirección para 24 redes, contratos Safe v1.4.1 auditados, gas pagadero con stablecoins, todo de código abierto y autoalojable."
       },
       "tagline": "Tus llaves, tus activos",
       "passkeyIndexLink": "Configurar el servicio de índice de passkeys",
@@ -45,7 +45,7 @@
           "description": "Crea e inicia sesión con la passkey de tu dispositivo — no hay 12 palabras que copiar y resguardar."
         },
         "oneAddress": {
-          "title": "Una dirección, más de 12 redes",
+          "title": "Una dirección, 24 redes",
           "description": "La misma dirección funciona en todas las redes compatibles, y puedes agregar las tuyas."
         },
         "openSource": {

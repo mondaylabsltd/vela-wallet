@@ -35,7 +35,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -136,6 +139,8 @@ data class SettingsActions(
     val onConfirmAddNetwork: () -> Unit = {},
     /** 恢复默认 on the service-endpoints page. */
     val onResetEndpoints: () -> Unit = {},
+    /** The endpoints page opened: probe every service (the web's `endpoints_opened`). */
+    val onEndpointsOpened: () -> Unit = {},
     // Spec 047 US1: the rows that do what they say.
     val onSegment: (group: String, id: String) -> Unit = { _, _ -> },
     val onTextScale: (Int) -> Unit = {},
@@ -206,7 +211,12 @@ fun SettingsRoute(
                 "networks" -> page = SettingsPage.Networks
                 "rpc-providers" -> page = SettingsPage.RpcProviders
                 "add-network" -> page = SettingsPage.AddNetwork
-                "endpoints" -> page = SettingsPage.Endpoints
+                "endpoints" -> {
+                    page = SettingsPage.Endpoints
+                    // Without this the pills had nothing to say: the probe wave
+                    // (`openEndpoints`) was defined and never called (device-found).
+                    actions.onEndpointsOpened()
+                }
                 "storage" -> page = SettingsPage.Storage
                 "about" -> page = SettingsPage.About
                 "language" -> overlay = SettingsOverlay.Language
@@ -370,7 +380,22 @@ fun SettingsScreen(
     // the body behind them is a dimmed title rather than the settings list.
     val rescue = model.selectedTab == "wallet"
 
-    Box(modifier = modifier.fillMaxSize().background(colors.bgBase)) {
+    // Spec 081: tapping the page is how a person leaves a field they have
+    // finished typing in, and Compose keeps focus until something takes it.
+    // An endpoint commits on focus loss, so without this a typed URL sat
+    // uncommitted while the health badge went on reporting the OLD host as
+    // online — measured on the Xiaomi, showing "Online · 779ms" for
+    // `https://index.invalid`. Back only hides the keyboard; it does not
+    // clear focus either.
+    val focusManager = LocalFocusManager.current
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.bgBase)
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { focusManager.clearFocus() })
+            },
+    ) {
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(
                 modifier = Modifier

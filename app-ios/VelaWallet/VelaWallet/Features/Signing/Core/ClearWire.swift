@@ -70,6 +70,19 @@ struct ClearSignFieldWire: Decodable, Equatable {
     let usdValue: Double?
 }
 
+/// Where a description came from (spec 081 FR-008) — the ground `verified`
+/// stands on. `fetched` is the descriptor service's word, over plain HTTP,
+/// from a base URL the person can edit; `none` is a sheet that no descriptor
+/// described at all.
+enum ClearProvenance: String, Decodable {
+    case builtIn = "built_in"
+    case pinnedMatch = "pinned_match"
+    case fetched
+    case standard
+    case selectorDb = "selector_db"
+    case none
+}
+
 /// The resolved result, ready to draw.
 struct ClearSignResultWire: Decodable, Equatable {
     /// The canonical English key — the shell localises it. Printing this
@@ -81,7 +94,9 @@ struct ClearSignResultWire: Decodable, Equatable {
     var fields: [ClearSignFieldWire]
     let risk: ClearRisk
     let contractAddress: String?
+    /// Derived by the core from `provenance`, never claimed on its own.
     let verified: Bool
+    let provenance: ClearProvenance
     let signType: ClearSignType
     /// The descriptor declared more fields than resolved. Say "incomplete"
     /// loudly rather than showing a partial list as if it were whole.

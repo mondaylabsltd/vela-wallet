@@ -29,7 +29,7 @@ cargo build --release -p vela-core-uniffi
 LIB_FILE="target/release/libvela_core_uniffi.dylib"
 
 echo "build-ios-xcframework: generating Swift bindings"
-cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
   --library "$LIB_FILE" --language swift --out-dir bindings/swift
 
 echo "build-ios-xcframework: building the device static library"
@@ -62,5 +62,9 @@ xcodebuild -create-xcframework \
 echo "build-ios-xcframework: refreshing the committed Swift bindings"
 mkdir -p "$KIT_DIR/Sources/VelaCore"
 cp bindings/swift/vela_core_uniffi.swift "$KIT_DIR/Sources/VelaCore/vela_core_uniffi.swift"
+
+# Stamp WHAT was built, so check-ios-core-fresh.sh can answer the only
+# question a device test needs answered first: is this the core in my tree?
+"$RUST_DIR/scripts/core-fingerprint.sh" > "$KIT_DIR/Artifacts/.core-fingerprint"
 
 echo "build-ios-xcframework: done — $XCFRAMEWORK"

@@ -189,6 +189,16 @@ export type FeeModel =
 			/** Present only while the selector is open (cs33). */
 			selector?: { title: string; options: FeeTokenOption[] };
 			/**
+			 * The row has something to DO when it is pressed: ask a failed quote
+			 * again, or open the list of coins that can pay. On a chain with one
+			 * fee coin and a quote in hand there is nothing to choose — so the row
+			 * is a fact, not a control, and is drawn without the chevron and
+			 * without the pointer it cannot honour. Android's `tappable`, same
+			 * rule (`SigningLive.kt`); the desktop and iOS say the same thing in
+			 * their handlers and only forget to say it in the drawing.
+			 */
+			tappable?: boolean;
+			/**
 			 * The speed control under the fee (spec 069) — the send form's, so
 			 * a dApp transaction is priced at a speed the person can see and
 			 * change for this one request. Absent in the gallery.
@@ -258,6 +268,12 @@ export interface SigningModel {
 	 * closing the sheet is the rejection (product contract, SPEC 签名).
 	 */
 	confirm: { hint: string; action: string; enabled: boolean };
+	/**
+	 * Spec 081: the request was refused outright (it would have changed who
+	 * controls the account). There is no fee to show and nothing to slide —
+	 * the only thing the sheet offers is the way out, labelled with this word.
+	 */
+	dismissOnly?: string;
 	/** Desktop third-column heading — "签名请求". */
 	panelTitle: string;
 }

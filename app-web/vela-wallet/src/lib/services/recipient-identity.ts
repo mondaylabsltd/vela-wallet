@@ -17,7 +17,20 @@
  * The consumers are executors: contacts `resolve_identity`, the feed's alias
  * arm. The core decides what a name means (display, trust line); this file
  * only finds one.
+ *
+ * ## A reverse record is a claim, not a name (spec 081, FR-010)
+ *
+ * `addr.reverse` is writable by the address itself, so whoever controls an
+ * address controls the string this file used to hand the UI: fund a fresh
+ * address, name it after the contact somebody is about to pay, and the wallet
+ * drew that name beside the payment. Every name a service returns is now put to
+ * `vela_core::app::name_verify`, which resolves it FORWARD and compares; only a
+ * verified name is shown or cached. The rule is the core's, for all four
+ * shells; what is left here is the transport (`core-walk.ts`, the same one the
+ * registry walk uses).
  */
+import * as core from '$lib/core/client';
+import { runWalk } from './core-walk';
 import { namehash } from './ens';
 import { queryWalletName } from './public-key-index';
 import { poolRpcCall } from './rpc-pool';
@@ -67,7 +80,13 @@ const NAME_SERVICES: NameServiceConfig[] = [
 // Cache (KV, positive results only)
 // ---------------------------------------------------------------------------
 
-const CACHE_PREFIX = 'recipient_id:';
+/**
+ * The `.v2` is the forward-verification rule arriving (FR-010). Everything the
+ * old prefix holds was written under no rule at all, so a poisoned name would
+ * have kept its place for a day after the fix shipped. A new prefix retires the
+ * lot at once: one extra lookup per contact, and the guarantee back.
+ */
+const CACHE_PREFIX = 'recipient_id.v2:';
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 interface CachedEntry {
@@ -153,8 +172,98 @@ async function reverseResolveRegistry(
 			config.chainId
 		);
 		if (!nameWord) return null;
-		const name = decodeString(nameWord);
-		return name && name.length > 0 ? name : null;
+		// What the address CLAIMS to be called. Nothing may draw it yet.
+		const claimed = decodeString(nameWord);
+		if (!claimed) return null;
+		return await forwardVerified(claimed, address, config);
+	} catch {
+		return null;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Forward verification (FR-010) — the core's rule, this shell's transport
+// ---------------------------------------------------------------------------
+
+/**
+ * `vela_core::app::name_verify::step_json` as the wasm binding exposes it:
+ * transcript in, next step out.
+ */
+type VerifiedNameStep = (
+	chainId: number,
+	registry: string,
+	address: string,
+	name: string,
+	answersJson: string
+) => string;
+
+/** `name_verify::VerifyStep::Done`. */
+interface VerifyDone {
+	type: 'done';
+	forward_state: 'unchecked' | 'verified' | 'mismatch' | 'unavailable';
+	/** The name exactly as the core PROVED it, normalised. */
+	name: string | null;
+}
+
+/**
+ * The core's verifier, if the loaded build carries it.
+ *
+ * Looked up rather than imported by name because the wasm bindings are a
+ * GENERATED artifact: `rust/pkg-web` is rebuilt by `build:wasm`, and a build
+ * that predates this rule simply has no such function. A static named import of
+ * a missing export does not degrade — it fails the module link and takes the
+ * whole app with it — so the function is read off the module instead, and its
+ * absence is treated as exactly what it is: a check that cannot be made, no
+ * different from a resolver that did not answer, and the address shown alone.
+ *
+ * The facade is asked first, because `$lib/core/client` is where the core's
+ * functions are named and where this one belongs once it exists; the generated
+ * module is the fallback so that regenerating the bindings is enough to switch
+ * the rule on, with no second edit to remember.
+ */
+async function coreVerifier(): Promise<VerifiedNameStep | undefined> {
+	const named = (core as Record<string, unknown>).verifiedNameStep;
+	if (typeof named === 'function') return named as VerifiedNameStep;
+	try {
+		// Imported dynamically: `loadCore()` has already instantiated this
+		// module, and nothing that was not loading the core should start.
+		const wasm = (await import('../../../../../rust/pkg-web/vela_core.js')) as unknown as Record<
+			string,
+			unknown
+		>;
+		const step = wasm.verifiedNameStep;
+		return typeof step === 'function' ? (step as VerifiedNameStep) : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * `claimed`, but only if resolving it forward lands back on `address`.
+ *
+ * Which calls are made, in what order, what an unanswered one means and the
+ * comparison itself are all `name_verify`'s; this drives the transcript and
+ * performs the `eth_call`s. `null` covers both "this name is somebody else's"
+ * and "nobody answered" — failing open on the second would let whoever poisons
+ * a record choose the moment.
+ */
+async function forwardVerified(
+	claimed: string,
+	address: string,
+	config: NameServiceConfig
+): Promise<string | null> {
+	try {
+		await core.loadCore();
+		const verify = await coreVerifier();
+		if (!verify) return null;
+		const done = await runWalk<VerifyDone>((answers) =>
+			verify(config.chainId, config.registry, address, claimed, answers)
+		);
+		if (done === null || done.forward_state !== 'verified') return null;
+		// The core hands back the name it PROVED, normalised. Drawing that and
+		// not the reverse record's own spelling is what keeps what is shown and
+		// what was checked from drifting apart.
+		return done.name;
 	} catch {
 		return null;
 	}
@@ -231,6 +340,11 @@ async function runWaterfall(address: string): Promise<RecipientIdentity | null> 
 
 	// The passkey index, by address — three hops and its own long-lived cache
 	// (`public-key-index.ts`); it never throws.
+	//
+	// Not forward-verified, and not an omission: a Vela wallet name is a LABEL
+	// its owner registered beside their own founding key, proved by the chain's
+	// answer about THIS address (`registry_lookup`). It is not a record anything
+	// resolves, so it has no forward direction to check — `Unchecked`, and shown.
 	const record = await queryWalletName(address);
 	if (record !== null) {
 		const identity: RecipientIdentity = { name: record.name, source: 'passkey' };

@@ -9,7 +9,7 @@ the parallel space, and `adb`.
 ```sh
 # 1. Rust bindings (gitignored; needed by the JVM tests and the device build)
 cd rust && cargo build --release -p vela-core-uniffi && \
-  cargo run -q -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+  cargo run -q -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
     --library target/release/libvela_core_uniffi.dylib --language kotlin \
     --out-dir bindings/kotlin --no-format
 # 2. The app (Android Studio's JBR has jlink; a stale daemon on another JVM fails)

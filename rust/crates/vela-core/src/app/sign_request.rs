@@ -63,6 +63,7 @@ use serde_json::{json, Value};
 
 use super::approval_guard::enforce_no_unlimited;
 use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
+use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -195,6 +196,10 @@ pub enum SignErrorKind {
     UnsupportedCapability,
     /// -32603 — `enforce_no_unlimited` refused the final params (fail-closed).
     UnlimitedApproval,
+    /// -32603 — the request would have rewritten who controls the account
+    /// (spec 081, `self_call_guard`). Never 4001: the user did not reject it,
+    /// the wallet refused it.
+    SelfCallBlocked,
     /// -32603 — 'Gas account funding cancelled'.
     FundingCancelled,
     /// -32603 — submission failed; `detail` echoes the shell's own message.
@@ -798,6 +803,8 @@ pub struct Model {
     pending_op_hash: Option<String>,
     tracker_handoff: Option<SignTrackerHandoff>,
     notice: Option<SignNotice>,
+    /// Set with `pending` when the self-call guard refuses a request.
+    blocked: Option<SignBlockedView>,
     /// Same-session rid → outcome; a settled rid never signs twice (⑧).
     settled: Vec<(String, SignSettledOutcome)>,
     /// Bumped when a pre-submit pipeline is killed (reject / chain switch).
@@ -844,6 +851,7 @@ impl Model {
 
     fn clear_sheet(&mut self) {
         self.pending = None;
+        self.blocked = None;
         self.funding = None;
         self.funding_pinned_rid = None;
         self.sign_error = None;
@@ -916,6 +924,19 @@ pub struct SignRequestView {
     pub signer_address: Option<String>,
 }
 
+/// Why a request is refused outright, for the sheet to explain (spec 081).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SignBlockedView {
+    /// Stable wire name of the Safe function, e.g. `enableModule`.
+    pub function: String,
+    pub selector: String,
+    /// 1-based position in a batch, when that is where it was found.
+    pub leg_index: Option<u32>,
+    /// Found inside a `multiSend` or `execTransaction` payload.
+    pub nested: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SignView {
@@ -936,6 +957,9 @@ pub struct SignView {
     pub tracker_handoff: Option<SignTrackerHandoff>,
     pub notice: Option<SignNotice>,
     pub global_chain_id: u32,
+    /// Present when the request was refused because it would have changed who
+    /// controls the account; the sheet shows it and offers only Dismiss.
+    pub blocked: Option<SignBlockedView>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1094,6 +1118,9 @@ impl App for SignRequest {
         SignView {
             surface,
             confirm_gate_open: model.pending.is_some()
+                // Spec 081: a refused request is never signable, however the
+                // shell asks.
+                && model.blocked.is_none()
                 && model.inflight.is_none()
                 && model.funding.is_none()
                 && model.reconciled
@@ -1113,6 +1140,7 @@ impl App for SignRequest {
             tracker_handoff: model.tracker_handoff.clone(),
             notice: model.notice,
             global_chain_id: model.global_chain_id(),
+            blocked: model.blocked.clone(),
         }
     }
 }
@@ -1124,6 +1152,16 @@ fn swipe_action(model: &Model) -> SignSwipeAction {
     }
     if model.funding.is_some() {
         return SignSwipeAction::FundingCancel;
+    }
+    // Spec 081: a REFUSED request must still be answered, and dismissing the
+    // sheet is how a person closes it. `sign_error` is set on a refusal too,
+    // so without this the check below turned the dismissal into `Dismiss` —
+    // which sends nothing. The dApp then waited forever and every later
+    // request got "another request is open", app-wide, until the process was
+    // killed. Found on a device (FR-019); the shells send `SwipeDismissed`,
+    // not `RejectTapped`, which is why the unit test missed it.
+    if model.blocked.is_some() {
+        return SignSwipeAction::Reject;
     }
     if model.sign_error.is_some() || model.pending_op_hash.is_some() || {
         model.inflight_matches_pending()
@@ -1150,6 +1188,15 @@ fn respond_op(transport_id: &str, id: &str, payload: SignResponsePayload) -> Sig
         transport_id: transport_id.to_owned(),
         id: id.to_owned(),
         payload,
+    }
+}
+
+fn blocked_view(block: &SelfCallBlock) -> SignBlockedView {
+    SignBlockedView {
+        function: block.function.as_str().to_owned(),
+        selector: block.selector.clone(),
+        leg_index: block.leg_index,
+        nested: block.nested,
     }
 }
 
@@ -1304,6 +1351,53 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             ));
         }
     }
+
+    // Spec 081 FR-005: a dApp may not ask this account to rewrite who controls
+    // it. Decided here, before the request is reviewable, so the sheet opens
+    // already refused — and answered, so the page is never left hanging.
+    let signer = model
+        .accounts
+        .get(sign_account_index(
+            &model.accounts,
+            model.active_index,
+            arrival.granted_address.as_deref(),
+        ) as usize)
+        .map(|a| a.address.clone())
+        .unwrap_or_default();
+    let refusal = serde_json::from_str::<Value>(&arrival.params_json)
+        .ok()
+        .and_then(|params| detect_self_call(&arrival.method, Some(&params), &signer));
+    if let Some(block) = refusal {
+        // The sheet opens refused, and the answer waits for the dismissal.
+        //
+        // Answering here instead would be tidier for the page — but the window
+        // that shows this sheet IS the answer surface: the extension worker
+        // closes it the moment the request settles (`background.js`, "a window
+        // closed without a decision answers 4001"). An immediate answer
+        // therefore took the explanation off the screen before anyone could
+        // read it, which is the whole point of refusing visibly. So the
+        // request stays pending, unsignable, until the person closes it —
+        // exactly like every other request that waits for a decision.
+        model.blocked = Some(blocked_view(&block));
+        model.sign_error = Some(SignErrorNotice {
+            kind: SignErrorKind::SelfCallBlocked,
+            detail: Some(block.function.as_str().to_owned()),
+        });
+        model.pending = Some(Pending {
+            id: arrival.id,
+            method: arrival.method,
+            params_json: arrival.params_json,
+            origin: arrival.origin,
+            transport_id: arrival.transport_id,
+            dedicated_transport: arrival.dedicated_transport,
+            per_request_chain: arrival.per_request_chain,
+            dapp: arrival.dapp,
+            responded: false,
+        });
+        commands.push(render());
+        return Command::all(commands);
+    }
+    model.blocked = None;
 
     // Ported quirk: a lingering `signError` from a previous request is NOT
     // cleared by an arrival (`handleIncoming` never touches it) — the sheet
@@ -1601,6 +1695,23 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
         );
     };
 
+    // Spec 081 FR-005 again, on the FINAL params: the shell may hand back a
+    // rewritten `params_override_json`, and those are the bytes that get signed.
+    let signer = model
+        .accounts
+        .get(model.active_index as usize)
+        .map(|a| a.address.clone())
+        .unwrap_or_default();
+    if let Err(block) = enforce_no_self_call(&fl.method, Some(&parsed), &signer) {
+        model.blocked = Some(blocked_view(&block));
+        return fail_inflight(
+            model,
+            CODE_INTERNAL,
+            SignErrorKind::SelfCallBlocked,
+            Some(block.function.as_str().to_owned()),
+        );
+    }
+
     if let Err(refusal) = enforce_no_unlimited(&fl.method, Some(&parsed)) {
         return fail_inflight(
             model,
@@ -1731,11 +1842,25 @@ fn reject(model: &mut Model) -> Command<SignEffect, Event> {
     if pending.responded {
         return dismiss(model);
     }
-    let op = respond_op(
-        &pending.transport_id,
-        &pending.id,
-        err_payload(CODE_USER_REJECTED, SignErrorKind::UserRejected, None),
-    );
+    // Spec 081: the wallet refused this one, not the person — the dApp is told
+    // which, so a page cannot report "user rejected" for a decision the user
+    // was never offered.
+    let op = match model.blocked.as_ref() {
+        Some(blocked) => respond_op(
+            &pending.transport_id,
+            &pending.id,
+            err_payload(
+                CODE_INTERNAL,
+                SignErrorKind::SelfCallBlocked,
+                Some(blocked.function.clone()),
+            ),
+        ),
+        None => respond_op(
+            &pending.transport_id,
+            &pending.id,
+            err_payload(CODE_USER_REJECTED, SignErrorKind::UserRejected, None),
+        ),
+    };
     model.settle(&pending.id, SignSettledOutcome::Rejected);
     // BUG-2: a reject DURING the pre-check/sponsorship aborts the pipeline
     // before it can submit (`signCancelledRef`, `dapp-connection.tsx:701-709`).

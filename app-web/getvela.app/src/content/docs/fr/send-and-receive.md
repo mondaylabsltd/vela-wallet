@@ -1,6 +1,7 @@
 ---
 title: Envoyer et recevoir
-description: Comment recevoir et envoyer des tokens dans Vela — une seule adresse sur tous les réseaux, des transactions signées lisiblement, et comment l'abstraction de compte déplace réellement vos fonds.
+description: "Recevoir et envoyer avec Vela — une seule adresse sur tous les réseaux, envoyer à une ou plusieurs personnes, d'où viennent les noms des destinataires, ce que vous confirmez, et comment le relais transmet vos fonds."
+source: 9e280dfc853b
 ---
 
 <script>
@@ -11,74 +12,106 @@ description: Comment recevoir et envoyer des tokens dans Vela — une seule adre
 
 ## Recevoir
 
-1. Ouvrez votre portefeuille et appuyez sur **Recevoir**.
-2. Partagez votre adresse — copiez-la, ou laissez l'expéditeur scanner le QR code.
-3. Quand le transfert est confirmé on-chain, le solde apparaît dans votre
-   portefeuille.
+1. Ouvrez votre portefeuille et touchez **Recevoir**.
+2. Partagez votre adresse — copiez-la ou affichez le QR code. Le portefeuille web
+   peut aussi créer une demande de paiement qui inclut un montant.
+3. Une fois le transfert confirmé on-chain, il apparaît dans votre solde.
 
-Deux choses valent d'être sues :
-
-- Votre adresse est **la même sur tous les réseaux pris en charge**, vous ne
-  partagez donc qu'une seule adresse — assurez-vous simplement que l'expéditeur
-  utilise le bon réseau.
-- Vous pouvez **recevoir avant que votre portefeuille soit déployé**. Les comptes
-  Vela sont des comptes intelligents contrefactuels : les fonds peuvent arriver à
-  votre adresse avant que le contrat existe sur une chaîne donnée ; il se déploie
-  tout seul lors de votre premier envoi.
+- Votre adresse est **la même sur tous les réseaux** : vous ne donnez qu'une
+  seule adresse — mais l'expéditeur doit tout de même utiliser un réseau que Vela
+  prend en charge, ou que vous avez ajouté.
+- Vous pouvez **recevoir avant que votre portefeuille soit déployé** sur un
+  réseau. Il se déploie de lui-même lors de votre premier envoi sur ce réseau.
 
 ## Envoyer
 
-1. Appuyez sur **Envoyer** et choisissez le **token**.
-2. Saisissez le **montant** (vous pouvez basculer entre le token et votre devise
-   d'affichage) et le **destinataire**. Quand il le peut, Vela résout les
-   destinataires connus en un nom — un compte Vela, un nom ENS, un Basename, etc.
-3. **Vérifiez et confirmez.** Vela affiche le transfert, puis demande votre
-   passkey (Face ID / Touch ID / empreinte).
+1. Touchez **Envoyer** et choisissez le **jeton**.
+2. Saisissez le **montant** (en jeton ou dans votre devise d'affichage) et
+   l'**adresse du destinataire**, en la collant, en scannant un QR code ou en
+   choisissant un contact.
+3. **Vérifiez.** Vela affiche ce qui va se passer, les frais, et le nom trouvé pour
+   le destinataire, s'il y en a un.
+4. **Confirmez** avec l'une de vos clés — Face ID, une empreinte, un code PIN, ou
+   un appui et un code PIN sur votre clé de sécurité.
+
+### Envoyer à plusieurs personnes, ou tout regrouper
+
+- **Répartition** — envoyez un même jeton à plusieurs personnes en une seule
+  transaction. Vous pouvez coller une liste ou importer un tableur, et saisir les
+  montants dans votre devise.
+- **Regroupement** — envoyez plusieurs jetons vers une seule adresse en une seule
+  transaction.
+
+Dans les deux cas, vous signez une seule fois, et la transaction ne paie qu'une
+seule fois des frais.
+
+### Les noms des adresses
+
+Quand vous saisissez une adresse, Vela lui cherche un nom : d'abord dans son propre
+registre (le nom d'un autre portefeuille Vela), puis dans les enregistrements
+inverses `.bnb`, `.arb`, `.g`, Basename et ENS, lus directement sur chaque chaîne.
+Cela ne fonctionne que dans un sens — Vela nomme une adresse que vous avez saisie.
+Taper un nom comme `alice.eth` ne permet pas de trouver une adresse. Vos
+**contacts** enregistrés affichent aussi leur nom.
+
+Un nom issu de ces enregistrements inverses n'est affiché que s'il **résout à
+l'endroit vers la même adresse**. N'importe qui peut donner à son propre
+enregistrement inverse la chaîne de caractères de son choix : l'enregistrement seul
+ne prouve donc rien ; le portefeuille demande au service de noms vers quelle adresse
+ce nom pointe, et n'affiche le nom que si les deux concordent. Si la vérification ne
+peut pas être faite — un point d'accès qui ne répond pas, un resolver qui échoue —,
+vous voyez l'adresse et aucun nom, jamais un nom non vérifié.
+
+### Monnaie des frais et vitesse
+
+L'écran de confirmation affiche les frais dans la monnaie de paiement choisie et
+dans votre devise. Vous pouvez payer avec la monnaie native du réseau ou, là où le
+relais l'accepte, avec un stablecoin en dollars, et choisir une vitesse (par
+défaut : rapide). Quand vous envoyez le **maximum** d'une monnaie native, Vela
+garde de côté de quoi payer les frais. [Comment les frais sont calculés](/fr/docs/networks-and-fees).
 
 ### Ce qui se passe quand vous confirmez
 
-Vela ne se contente pas de « diffuser » une transaction. Sous le capot :
+1. Vela construit une **UserOperation** ERC-4337 pour votre Safe, qui inclut le
+   paiement des frais au relais.
+2. Votre clé la signe avec une assertion **WebAuthn (P-256)** après vous avoir
+   vérifié.
+3. L'opération signée part vers le **relais**, qui la soumet à l'EntryPoint ; votre
+   Safe vérifie la signature P-256 on-chain, puis exécute.
 
-1. Il construit une **UserOperation** ERC-4337 pour votre compte Safe.
-2. Votre appareil la signe avec une assertion **WebAuthn (P-256)** après votre
-   contrôle biométrique.
-3. L'opération signée part vers le **relais**, qui la soumet à l'EntryPoint ;
-   votre Safe vérifie la signature P-256 **on-chain** puis exécute.
-
-<Callout type="info" title="Le relais ne peut pas altérer votre transaction">
-Le relais reçoit une UserOperation <strong>déjà signée</strong>. Il peut retarder
-ou refuser de relayer, mais il ne peut changer ni le destinataire, ni le montant,
-ni aucun autre champ — toute modification invalide votre signature. C'est une aide
-à la disponibilité, pas un dépositaire, et c'est open source : vous pouvez faire
-tourner le vôtre.
+<Callout type="info" title="Le relais ne peut pas modifier votre transaction">
+Le relais reçoit une opération déjà signée. Il ne peut modifier ni le
+destinataire, ni le montant, ni les frais — toute modification invalide votre
+signature. Il peut la retarder ou la refuser, et c'est lui qui décide du moment où
+elle est incluse. Il est open source, et vous pouvez
+[faire tourner le vôtre](/fr/docs/self-hosting#relay).
 </Callout>
 
-### Signature lisible — aucune approbation à l'aveugle
+Avant que vous signiez, Vela décode ce que fait la transaction et vous avertit de ce
+qu'il ne parvient pas à décoder ; voir la [signature lisible](/fr/docs/clear-signing).
 
-Avant que vous signiez, Vela décode la transaction à l'aide des descripteurs
-**ERC-7730** et affiche l'**intention** (Envoyer, Approuver, Échanger…), les
-**montants et adresses**, et une indication de risque — pas de l'hexadécimal
-opaque. Quand il ne peut pas décoder complètement un appel, il affiche un
-**avertissement explicite de signature à l'aveugle** au lieu de faire semblant de
-comprendre. Une approbation de token illimitée n'est pas seulement signalée : Vela
-la réécrit en un montant fini et refuse de soumettre une approbation qui resterait
-illimitée.
+## Avant d'appuyer sur Envoyer
 
-## Avant d'appuyer sur envoyer
-
-- **Vérifiez les premiers et derniers caractères de l'adresse.** Les logiciels
-  malveillants qui remplacent les adresses existent vraiment.
-- **Confirmez le réseau.** Envoyer sur le mauvais réseau est l'erreur coûteuse la
-  plus fréquente. Voir [Réseaux et frais](/fr/docs/networks-and-fees).
+- **Vérifiez le début et la fin de l'adresse.** Les logiciels malveillants qui
+  remplacent les adresses existent bel et bien, tout comme les adresses
+  ressemblantes glissées dans votre historique.
+- **Vérifiez le réseau.** Envoyer sur le mauvais réseau est une erreur courante, et
+  coûteuse.
 - **Commencez petit avec un nouveau destinataire.** Un minuscule transfert de test
   est une assurance bon marché.
 
-Les transactions sont irréversibles. Aucun service client ne peut récupérer un
-envoi à la mauvaise adresse — c'est la nature de l'auto-conservation.
+Les transactions sont irréversibles. Personne ne peut récupérer un envoi à la
+mauvaise adresse — c'est la nature même de l'auto-conservation.
 
-## Lire votre historique
+## Votre activité
 
-Les soldes et l'historique sont lus en direct depuis un pool de points de
-terminaison RPC publics, avec bascule automatique. Si le réseau est lent,
-l'historique peut prendre un instant — un indicateur qui tourne veut dire « on
-récupère encore », pas « les fonds ont disparu ».
+Votre activité combine ce que vous avez envoyé depuis cet appareil et les
+transferts de jetons lus dans les logs de chaque chaîne. Sur certains réseaux, un
+simple transfert de monnaie native qui vous arrive via un autre contrat (certains
+retraits de plateformes d'échange, par exemple) peut ne produire aucun log : il
+peut alors apparaître dans votre solde sans figurer dans votre activité. Les soldes
+sont lus en direct via un ensemble de points d'accès RPC avec bascule automatique ;
+un indicateur de chargement signifie « encore en cours de lecture », pas « fonds
+disparus ».
+
+Ensuite : [réseaux et frais](/fr/docs/networks-and-fees).

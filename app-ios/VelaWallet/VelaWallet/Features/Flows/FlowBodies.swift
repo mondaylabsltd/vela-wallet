@@ -416,7 +416,11 @@ struct AddTokenBody: View {
 
     let model: AddTokenModel
     var onTab: (String) -> Void = { _ in }
-    var onNetwork: () -> Void = {}
+    /// Absent where there is nothing to pick — which is everywhere today: the
+    /// lookup spans every network, so the row REPORTS where the token was
+    /// found rather than choosing where to look. Drawn as a button with no
+    /// handler it was a chevron that did nothing.
+    var onNetwork: (() -> Void)?
     var onSubmit: () -> Void = {}
     /// Present only when a machine owns the field. The gallery passes nothing
     /// and keeps its picture.
@@ -437,24 +441,30 @@ struct AddTokenBody: View {
             )
 
             if let network = model.network {
-                Button(action: onNetwork) {
-                    HStack(spacing: Tokens.Space.s8) {
-                        InlineTokenMark(mark: network.mark)
-                        Text(verbatim: network.name)
-                            .typeRole(Typography.rowTitle.scaled(textScale))
-                            .foregroundStyle(theme.fgBase)
-                        Spacer(minLength: Tokens.Space.s8)
+                let row = HStack(spacing: Tokens.Space.s8) {
+                    InlineTokenMark(mark: network.mark)
+                    Text(verbatim: network.name)
+                        .typeRole(Typography.rowTitle.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                    Spacer(minLength: Tokens.Space.s8)
+                    // The chevron belongs to the picker, so it only appears
+                    // where there is one.
+                    if onNetwork != nil {
                         LucideIcon(.chevronDown, size: LucideIconSize.nameChevron)
                             .foregroundStyle(theme.fgMuted)
                     }
-                    .padding(Tokens.Space.s12)
-                    .background(
-                        RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised)
-                    )
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(network.pickLabel)
+                .padding(Tokens.Space.s12)
+                .background(
+                    RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised)
+                )
+                if let onNetwork {
+                    Button(action: onNetwork) { row.contentShape(Rectangle()) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(network.pickLabel)
+                } else {
+                    row
+                }
             }
 
             if let input {

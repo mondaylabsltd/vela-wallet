@@ -193,6 +193,47 @@ test.describe('signing for a dApp', () => {
 		await context.close();
 	});
 
+	/**
+	 * Spec 081: a page may ask the wallet to change who controls it. The core
+	 * refuses, and the person must be able to read WHY — the sheet used to
+	 * render no error at all, which would have made this look like a wallet
+	 * that simply stopped working.
+	 */
+	test('a request that would hand over the wallet is refused, and says so', async () => {
+		const context = await loadExtension();
+		const id = extensionId();
+		await seedWallet(context, id);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		await connect(context, page);
+
+		const asked = page.evaluate(() => {
+			const self = window.ethereum.selectedAddress;
+			const data = `0x610b5925${self.replace(/^0x/, '').padStart(64, '0')}`;
+			return window.__ask('eth_sendTransaction', [
+				{ from: self, to: self, data, value: '0x0' }
+			]);
+		}) as Promise<AskResult>;
+
+		const win = await requestWindow(context);
+		// The sheet explains it in the reader's own words…
+		await expect(win.getByText(/can’t sign this|cannot sign this/i)).toBeVisible({
+			timeout: 30_000
+		});
+		await expect(win.getByText(/who controls your wallet/i)).toBeVisible();
+		await expect(win.getByText('enableModule')).toBeVisible();
+
+		// Closing the sheet answers the dApp — and says the wallet refused it,
+		// not the person, who was never offered the choice.
+		// A refused request offers no fee and no slider — only the way out.
+		await expect(win.getByText(/Slide to confirm/i)).toHaveCount(0);
+		await win.getByRole('button', { name: /^close$/i }).click();
+		const answer = await asked;
+		expect(answer.ok).toBe(false);
+		expect(answer.code).toBe(-32603);
+		await context.close();
+	});
+
 	test('an ungranted origin cannot ask for a signature at all', async () => {
 		const context = await loadExtension();
 		const id = extensionId();
@@ -215,5 +256,6 @@ test.describe('signing for a dApp', () => {
 declare global {
 	interface Window {
 		__ask(method: string, params?: unknown[]): Promise<AskResult>;
+		ethereum: { selectedAddress: string };
 	}
 }

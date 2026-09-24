@@ -19,6 +19,7 @@
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 	import type {
 		ConfirmSheetModel,
+		FeedbackResult,
 		SettingsHomeModel,
 		SettingsOverlayId,
 		SettingsPageId
@@ -89,6 +90,17 @@
 		onaccountsopen?: (open: boolean) => void;
 		/** The storage page's "clear all caches" was confirmed. Absent in the gallery. */
 		onclearcaches?: () => void;
+		/**
+		 * 发送 in the report sheet (spec 081 FR-016). Absent in the gallery —
+		 * and, until 081, absent everywhere: `FeedbackBody` has always taken an
+		 * `onsend`, and nothing ever passed one, so the button was inert on the
+		 * real screen while the sheet promised a report was being filed.
+		 */
+		onfeedbacksend?: (report: { what: string; steps: string }) => void;
+		/** The route is waiting on the bug-report endpoint. */
+		feedbackSending?: boolean;
+		/** How the last send ended: filed (with its issue) or fell back. */
+		feedbackResult?: FeedbackResult;
 	}
 
 	let {
@@ -106,7 +118,10 @@
 		onaccountcreate,
 		onaccountsignin,
 		onaccountsopen,
-		onclearcaches
+		onclearcaches,
+		onfeedbacksend,
+		feedbackSending = false,
+		feedbackResult
 	}: Props = $props();
 
 	// Seeds, not bindings: a gallery state pins where this opens, and a person
@@ -558,7 +573,15 @@
 						oncancel={close}
 					/>
 				{:else if overlay === 'feedback'}
-					<FeedbackBody panel={model.feedback} />
+					<!-- The sheet stays open across the send: the outcome — the issue
+					     number, or the fallback form — is what the person came for,
+					     and a sheet that closed on tap would take it away. -->
+					<FeedbackBody
+						panel={model.feedback}
+						onsend={onfeedbacksend}
+						sending={feedbackSending}
+						result={feedbackResult}
+					/>
 				{:else if overlay === 'rpc-fix'}
 					<RpcFixBody panel={model.rpcFix} onprimary={close} />
 				{:else if overlay === 'balance-detail'}

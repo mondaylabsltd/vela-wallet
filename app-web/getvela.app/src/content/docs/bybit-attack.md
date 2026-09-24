@@ -46,8 +46,7 @@ screen describing a transaction and the bytes being signed are the same thing.**
 
 ## Why this is the general case, not a freak event
 
-Every signature you have ever produced in a web wallet rested on that
-assumption. The interface builds the payload, the interface renders the
+Most signatures produced in a web wallet rest on that assumption. The interface builds the payload, the interface renders the
 summary, and nothing independent checks that one matches the other. If the code
 serving that interface is replaced — by a compromised build pipeline, a hijacked
 CDN, a malicious dependency, a stolen deploy credential — the summary becomes
@@ -66,28 +65,49 @@ payload was a `delegatecall` that swapped an implementation address; that is
 precisely the shape of thing that should stop a signer dead, and hiding it
 behind a friendly summary is how it did not.
 
-**An independent path that can check the interface.** Vela is building a
-zero-build, zero-dependency signing page that renders the intent and performs
-the WebAuthn signature on its own — a single folder of static files you can
-read end to end, serve yourself, or run as a browser extension. Its whole
-purpose is to be a second opinion that does not share the main app's supply
-chain. *Status: built and tested, not yet deployed.* When it ships it is
-opt-in, and this page will say so plainly when that changes.
+Two things to be exact about. A dApp cannot ask Vela for a `delegatecall`
+directly — the requests a page can make produce ordinary calls — so the Bybit
+payload itself could not arrive that way. And a page that asks for a call from
+your Safe to itself is **refused, not merely decoded**: `enableModule`,
+`addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` and the
+rest of that family are blocked when the target is your own wallet, inside a
+batch and inside a `MultiSend` as well, as is any leg carrying a `delegatecall`
+whatever it targets, and a `SafeTx` typed-data signature. The wallet says which
+call it refused and offers nothing to sign. Any one of those, signed once, would
+hand over the account as completely as the Bybit payload did — an enabled module
+can then run a `delegatecall` of its own. And if Vela's own code were replaced,
+as `Safe{Wallet}`'s was, the decoding would be the attacker's too — which is what
+the next point is for.
 
-**No contract we can upgrade.** The Bybit payload worked by replacing the
-account's implementation. Vela's accounts are
-[unmodified Safe v1.4.1](/docs/account-contract) and Vela holds no privileged
-role on them — no admin key, no upgrade path we could be coerced or
-compromised into using.
+**An independent path that can check the interface.** Vela has built a
+zero-build, zero-dependency [signing page](/docs/clear-signing-self-host) that
+decodes the request and performs the WebAuthn signature on its own — a single
+folder of static files you can read end to end, serve yourself, or load as a
+browser extension. Its purpose is to be a second opinion that does not share the
+main app's supply chain. *Status: built and tested; not published, and no Vela
+app sends requests to it yet.* This page will say so plainly when that changes.
 
-**A fresh biometric for every signature.** There is no long-lived session key,
-so there is no window in which something can sign on your behalf without you
-present.
+**No admin role for us to lose.** Vela's accounts are
+[unmodified Safe v1.4.1](/docs/account-contract), and Vela holds no privileged
+role on them — no admin key and no upgrade path of ours that we could be coerced
+or compromised into using. Be clear about what that does *not* remove: the
+primitive Bybit's attackers used — an owner-signed `delegatecall` that rewrites
+the account's implementation — still exists in every Safe, Vela's included
+(Vela's own batched transactions use `delegatecall` into Safe's MultiSend). It
+takes a valid signature from one of your keys. The defences against being
+talked into giving one are the decoding above and the independent check.
 
-**Self-hosting as the backstop.** The app and every backend service are open
-source. If you do not want to trust our build pipeline at all, run your own —
-that is the only answer to this class of attack that does not require trusting
-somebody.
+**A fresh check for every signature.** Every signature needs your key's own
+confirmation — Face ID, a fingerprint, a PIN, or a touch and PIN on a security key.
+There is no long-lived session key, so there is no window in which something can
+sign on your behalf without you present.
+
+**Self-hosting as the backstop.** The apps and the backend services are open
+source. If you do not want to trust our build pipeline at all, build the
+extension or an app yourself and run the services you need — the
+[self-hosting guide](/docs/self-hosting) walks through it. That takes our build
+pipeline out of the chain of trust; you still trust the code you build, so read
+it.
 
 ## What Vela does not claim
 
@@ -96,8 +116,8 @@ is not audited. Saying otherwise would be exactly the kind of assurance this
 incident should have ended.
 
 What the design tries to do is narrow the path: make the payload legible
-instead of opaque, remove the upgrade primitive the attack relied on, and give
-you a way to verify with something that is not us. The honest summary is that
+instead of opaque, hold no admin role that could be abused on your behalf, and
+give you a way to verify with something that is not us. The honest summary is that
 **this class of attack is mitigated by design, not eliminated**, and the parts
 that would harden it further are listed, unfinished, in
 [audits & known issues](/docs/security-audits).

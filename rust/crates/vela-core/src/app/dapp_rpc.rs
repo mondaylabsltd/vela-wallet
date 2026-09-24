@@ -374,6 +374,71 @@ pub fn error_body_json(doc: &str, id: &str, error: &Value) -> String {
     json!({ "doc": doc, "dir": "res", "id": id, "error": body }).to_string()
 }
 
+/// The error answer for a SIGNING refusal: the same envelope, plus the core's
+/// own `kind` beside the code.
+///
+/// **Why `kind` is on the wire.** `SignErrorKind` is the vocabulary the core
+/// refuses in, and a page — or the shell hosting it — has to be able to act on
+/// WHICH refusal this was without matching on English. The web shell has sent
+/// it since spec 081 (`sign-executor.ts`: `{code, kind, message}`) and reads it
+/// back (`DappRequestHost`: a `self_call_blocked` sheet stays up to explain
+/// itself instead of leaving on the grace timer). Spec 070 moved the in-app
+/// browser's answer in here, and this restores that half of the contract for
+/// it: the message is for a developer to read, `kind` is for code to branch on.
+pub fn sign_error_json(
+    doc: &str,
+    id: &str,
+    code: i64,
+    kind: SignErrorKind,
+    detail: Option<&str>,
+) -> String {
+    json!({
+        "doc": doc,
+        "dir": "res",
+        "id": id,
+        "error": {
+            "code": code,
+            "kind": sign_error_kind_name(kind),
+            "message": sign_error_words(kind, detail),
+        },
+    })
+    .to_string()
+}
+
+/// The snake_case name of a kind — what `#[serde(rename_all = "snake_case")]`
+/// writes, stated once so the wire cannot drift from the enum.
+pub fn sign_error_kind_name(kind: SignErrorKind) -> String {
+    serde_json::to_value(kind)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+        // Unreachable for a unit variant, and a refusal must still be
+        // answerable if it ever were: an empty kind is a missing field, not a
+        // lie about which refusal this was.
+        .unwrap_or_default()
+}
+
+/// What a page is told when signing ended in a refusal the core named.
+///
+/// A `detail` is a FACT, not a sentence — the refused function, the capability
+/// that is not supported, the token an unlimited approval was for. Putting it
+/// on the wire ALONE is the defect spec 081 found on a device: a page asked for
+/// `addOwnerWithThreshold` and was answered `addOwnerWithThreshold`, which
+/// reads as a label rather than an answer. So the sentence says what happened
+/// and the detail is named inside it, which is what the web shell does
+/// (`signErrorMessage`).
+///
+/// `SubmitFailed` is the exception and keeps its detail verbatim: there the
+/// detail IS the message — the node's or the shell's own words for why a
+/// submission failed — and no sentence of ours improves on it.
+pub fn sign_error_words(kind: SignErrorKind, detail: Option<&str>) -> String {
+    let detail = detail.map(str::trim).filter(|d| !d.is_empty());
+    match (kind, detail) {
+        (SignErrorKind::SubmitFailed, Some(detail)) => detail.to_owned(),
+        (kind, Some(detail)) => format!("{} ({detail})", sign_error_message(kind)),
+        (kind, None) => sign_error_message(kind).to_owned(),
+    }
+}
+
 /// An EIP-1193 event (`accountsChanged`, `chainChanged`, `disconnect`).
 pub fn event_json(doc: &str, event: &str, data: Option<Value>) -> String {
     let mut body = json!({ "doc": doc, "dir": "evt", "event": event });
@@ -394,6 +459,14 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         SignErrorKind::InvalidParams => "Invalid params",
         SignErrorKind::UnsupportedCapability => "Unsupported capability",
         SignErrorKind::UnlimitedApproval => "Unlimited approvals are disabled",
+        // Spec 081's self-call guard, brought in by the 075 merge. The NOTICE
+        // carries the refused function in `detail` — that is what a page is
+        // told, because it is the specific fact — and this is the sentence for
+        // the case with no detail to give. Never 4001: the person did not
+        // reject it, the wallet refused it.
+        SignErrorKind::SelfCallBlocked => {
+            "The wallet refused a call that would change who controls the account"
+        }
         SignErrorKind::FundingCancelled => "Gas account funding cancelled",
         SignErrorKind::SubmitFailed => "The transaction could not be submitted",
         SignErrorKind::StaleFeeQuote => "The fee quote expired",
@@ -583,6 +656,92 @@ pub fn provider_script(host: ProviderHost) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// Spec 081, device-found: a refusal must say what happened AND carry the
+    /// kind. The page used to be answered with the refused function's name on
+    /// its own, which reads as a label.
+    #[test]
+    fn a_refused_request_is_answered_with_a_sentence_and_a_kind() {
+        let answer = sign_error_json(
+            "doc-1",
+            "rid-1",
+            -32603,
+            SignErrorKind::SelfCallBlocked,
+            Some("addOwnerWithThreshold"),
+        );
+        let answer: Value = serde_json::from_str(&answer).unwrap_or_default();
+        let error = &answer["error"];
+        assert_eq!(error["code"], -32603);
+        assert_eq!(error["kind"], "self_call_blocked");
+        let message = error["message"].as_str().unwrap_or_default();
+        // The sentence, with the refused function named inside it — not instead
+        // of it.
+        assert!(
+            message.starts_with("The wallet refused a call that would change who controls"),
+            "{message}"
+        );
+        assert!(message.contains("addOwnerWithThreshold"), "{message}");
+        // The envelope is the same one every other answer rides.
+        assert_eq!(answer["doc"], "doc-1");
+        assert_eq!(answer["dir"], "res");
+        assert_eq!(answer["id"], "rid-1");
+    }
+
+    /// The detail is folded in where it is a fact, and kept verbatim where it
+    /// IS the message.
+    #[test]
+    fn a_refusal_with_nothing_to_add_is_just_the_sentence() {
+        assert_eq!(
+            sign_error_words(SignErrorKind::UserRejected, None),
+            "User rejected the request"
+        );
+        // Empty is not a detail.
+        assert_eq!(
+            sign_error_words(SignErrorKind::UserRejected, Some("  ")),
+            "User rejected the request"
+        );
+        // A submission failure's detail is the node's own words; ours would
+        // only get in the way.
+        assert_eq!(
+            sign_error_words(SignErrorKind::SubmitFailed, Some("AA21 didn't pay prefund")),
+            "AA21 didn't pay prefund"
+        );
+        assert_eq!(
+            sign_error_words(
+                SignErrorKind::UnsupportedCapability,
+                Some("paymasterService")
+            ),
+            "Unsupported capability (paymasterService)"
+        );
+    }
+
+    /// Every kind's wire name is the serde one, so a kind added next year
+    /// cannot reach a page under a name nothing branches on.
+    #[test]
+    fn a_kinds_wire_name_is_the_one_serde_writes() {
+        for kind in [
+            SignErrorKind::UserRejected,
+            SignErrorKind::WalletSwitchedChains,
+            SignErrorKind::UnsupportedChain,
+            SignErrorKind::UnauthorizedAccount,
+            SignErrorKind::InvalidParams,
+            SignErrorKind::UnsupportedCapability,
+            SignErrorKind::UnlimitedApproval,
+            SignErrorKind::SelfCallBlocked,
+            SignErrorKind::FundingCancelled,
+            SignErrorKind::SubmitFailed,
+            SignErrorKind::StaleFeeQuote,
+        ] {
+            let name = sign_error_kind_name(kind);
+            assert_eq!(
+                serde_json::to_string(&kind).unwrap_or_default(),
+                format!("\"{name}\""),
+                "{kind:?}"
+            );
+            assert!(!name.is_empty(), "{kind:?}");
+            assert!(!name.contains(char::is_uppercase), "{kind:?} → {name}");
+        }
+    }
     use super::*;
 
     #[test]

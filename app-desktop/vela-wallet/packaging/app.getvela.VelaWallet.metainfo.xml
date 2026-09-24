@@ -38,7 +38,7 @@
     <ul>
       <li>Passkey authentication instead of seed phrases or key files</li>
       <li>Safe smart accounts with ERC-4337 account abstraction</li>
-      <li>Balances and USD prices across 12 EVM networks in one view</li>
+      <li>Balances and USD prices across 24 EVM networks in one view</li>
       <li>On-chain pricing from DEX quotes with a Chainlink oracle fallback</li>
       <li>Pair with dApps over an encrypted relay to sign from the desktop</li>
       <li>Fully self-hostable backend services</li>

@@ -110,7 +110,7 @@
       "subtitle": "Löscht alles, was Vela hier gespeichert hat",
       "desc": "Alles, was Vela auf diesem Gerät gespeichert hat, wird gelöscht. Es gibt keine Sicherung und kein Zurück.",
       "loses": "Sie verlieren: Transaktionsverlauf, Kontakte und Gruppen, Browserverlauf, dApp-Berechtigungen, eigene Token und Netzwerke, RPC- und Endpunkt-Einstellungen sowie sämtliche Präferenzen.",
-      "keeps": "Die Wallet verlieren Sie nicht. Ihr Passkey bleibt in Face ID / Fingerabdruck — wählen Sie „Ich habe bereits eine Wallet“, und dieselbe Adresse kommt zurück, nur ohne Verlauf.",
+      "keeps": "Die Wallet verlieren Sie nicht. Das Löschen kommt an Ihre Passkeys nicht heran — sie liegen bei Ihrem Passkey-Anbieter (Face ID / Fingerabdruck, einem Passwortmanager oder einem Sicherheitsschlüssel), nicht in dieser App. Wählen Sie „Ich habe bereits eine Wallet“, und dieselbe Adresse kommt zurück, nur ohne Verlauf.",
       "confirm": "Alles löschen",
       "cancel": "Abbrechen",
       "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen."

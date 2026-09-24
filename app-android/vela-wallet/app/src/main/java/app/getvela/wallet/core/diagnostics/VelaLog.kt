@@ -66,6 +66,31 @@ object VelaLog {
     /** Where the log lives, for a share sheet or a bug report. */
     fun currentFile(): File? = directory?.resolve("vela-${day.format(Date())}.log")
 
+    /**
+     * Delete every log file, and forget the failures held in memory
+     * (spec 081 FR-017).
+     *
+     * These files carry credential ids, transports, provider names, HTTP
+     * statuses and timings for the person's own ceremonies — nothing secret,
+     * but unmistakably theirs, and written to **external** storage where the
+     * files outlive an uninstall. An erase that swept the DataStore and left
+     * `/sdcard/Android/data/app.getvela.wallet/files/logs/` intact was telling
+     * somebody their device was clean while a trace of every sign-in they had
+     * made sat there for the next app with storage access to read.
+     *
+     * A release build never wrote any, so there is nothing to delete and this
+     * returns true — the honest answer for "is it gone".
+     *
+     * @return false only when a file that exists could not be removed.
+     */
+    fun eraseFiles(): Boolean {
+        synchronized(recent) { recent.clear() }
+        val dir = directory ?: return true
+        return runCatching {
+            dir.listFiles()?.all { it.deleteRecursively() } ?: true
+        }.getOrDefault(false)
+    }
+
     /** One line: a step that happened, with the fields that explain it. */
     fun event(scope: String, message: String, vararg fields: Pair<String, Any?>) {
         write(scope, message, fields.toList(), error = null)

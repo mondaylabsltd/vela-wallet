@@ -41,7 +41,7 @@
       "bundlerHint": "Ein Vela-Relay-kompatibler Endpunkt ist erforderlich",
       "fiatLabel": "FIAT-KURSE",
       "fiatHint": "USD-basierte Wechselkurse für die Währungsliste — austauschbar für breitere Abdeckung.",
-      "resetToDefaults": "Auf Standard zurücksetzen",
+      "resetToDefaults": "Alle vier zurücksetzen",
       "selfHostGuide": "Anleitung zum Selbst-Hosten →",
       "resetTitle": "Dienst-Endpunkte zurücksetzen?",
       "resetBody": "Alle vier Dienste nutzen wieder die Adressen von Vela. Die hier eingegebenen Adressen werden verworfen.",
@@ -72,8 +72,9 @@
       "compatible": "Kompatibel",
       "incompatible": "Nicht kompatibel",
       "checkSafe": "Safe-L2-Verträge",
-      "checkSigner": "WebAuthn-Signaturmodul",
-      "checkRemaining": "{{count}} weitere Verträge"
+      "checkSigner": "P-256-Precompile",
+      "checkRemaining": "{{count}} weitere Verträge",
+      "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal."
     },
     "treasury": {
       "modalTitle": "Treasury",

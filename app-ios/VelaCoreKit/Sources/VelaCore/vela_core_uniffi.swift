@@ -12687,6 +12687,33 @@ public func validateClientData(kind: ClientDataKind, clientDataJson: Data, authe
 }
 }
 /**
+ * **Does this name actually belong to this address — the next step of the
+ * check.**
+ *
+ * A reverse record (`addr.reverse`) is written by the address itself, so it is
+ * a CLAIM: anyone who funds an address can name it after whoever their victim
+ * is about to pay. `vela_core::app::name_verify` resolves the claimed name
+ * forward and compares, and nothing but `verified` may be drawn (spec 081,
+ * FR-010).
+ *
+ * `answers_json` is the transcript so far (`LookupAnswer[]`, the same shape
+ * `registry_name_step` uses); the return is a `VerifyStep` as JSON: `eth_call`s
+ * to perform, or the verdict plus the name exactly as it was proven. The shell
+ * owns the transport; every rule is the core's.
+ */
+public func verifiedNameStep(chainId: UInt32, registry: String, address: String, name: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_verified_name_step(
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(registry),
+        FfiConverterString.lower(address),
+        FfiConverterString.lower(name),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
  * Which passkeys control the wallet at `address` — the Settings keys view
  * (spec 062). See `vela_core::wallet_keys`.
  */
@@ -13622,6 +13649,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_validate_client_data() != 34255) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_verified_name_step() != 265) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_wallet_keys_step() != 48208) {

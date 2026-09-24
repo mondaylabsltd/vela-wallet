@@ -29,6 +29,7 @@
 
 pub mod abi;
 pub mod activity_feed;
+pub mod appearance_prefs;
 pub mod approval_guard;
 pub mod balance_dashboard;
 pub mod balances;

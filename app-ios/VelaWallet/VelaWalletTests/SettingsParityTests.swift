@@ -50,7 +50,10 @@ struct SettingsParityTests {
     ]
 
     private func live(_ view: NetViewWire) -> SettingsScreenModel {
-        SettingsLive.withNetworks(view, on: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+        var model = SettingsLive.withNetworks(view, on: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+        model = SettingsLive.withEndpoints(view, on: model, loc: loc)
+        model = SettingsLive.withProviders(view, on: model, loc: loc)
+        return model
     }
 
     // MARK: - The providers and endpoints pages (T030)
@@ -124,7 +127,7 @@ struct SettingsParityTests {
                 "is_testnet": false,
             ],
             "compat": [
-                "chain_id": 7_777_777, "compatible": false, "contracts": [],
+                "chain_id": 7_777_777, "compatible": false, "multi_key_ready": false, "contracts": [],
                 "p256_available": NSNull(), "best_rpc_url": NSNull(), "best_rpc_latency_ms": NSNull(),
                 "rpc_failure": "all_probes_failed",
             ],

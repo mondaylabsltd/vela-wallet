@@ -1,6 +1,7 @@
 ---
 title: Crea tu wallet
-description: Crea una wallet Vela de autocustodia en cosa de un minuto con una passkey, sin frase semilla. Tu wallet es una cuenta inteligente Safe con la misma dirección en cada red.
+description: "Crea una wallet de Vela con una a siete llaves: qué hace cada paso, por qué las llaves quedan fijas al crearla, qué se vuelve público y qué es tu wallet en realidad."
+source: a2edda21a075
 ---
 
 <script>
@@ -9,58 +10,77 @@ description: Crea una wallet Vela de autocustodia en cosa de un minuto con una p
 
 # Crea tu wallet
 
-Crear una wallet toma cosa de un minuto y una sola verificación biométrica. Abre la
-wallet web en [wallet.getvela.app](https://wallet.getvela.app/) y elige **Crear una
-wallet**.
+Crear una wallet toma uno o dos minutos. Abre la wallet web en
+[wallet.getvela.app](https://wallet.getvela.app/) (o la extensión, la app de
+escritorio o la de celular) y elige **Crear billetera**.
 
-## Los pasos
+## Pasos
 
-1. **Ponle nombre a tu wallet.** Elige un nombre para reconocer la cuenta después,
-   también al iniciar sesión en otro dispositivo. Se guarda junto a tu llave
-   pública, así que trátalo como público: no pongas nada privado ahí.
-2. **Confirma lo básico.** Una lista corta confirma que entiendes que Vela es de
-   autocustodia y que todavía es software en alfa, con enlaces al
-   [aviso de privacidad](/privacy) y a los [términos](/terms).
-3. **Crea tu passkey.** Cuando aparezca el aviso, autentícate con **Face ID, Touch
-   ID o tu huella**. Eso crea una passkey WebAuthn (P-256) que tu dispositivo
-   guarda y que Vela nunca ve. No hay paso de «anota la frase semilla», porque no
-   hay frase semilla.
-4. **Listo.** Vela muestra la dirección de tu wallet y ya estás dentro. Puedes
-   verificarla y luego iniciar sesión para entrar a tu wallet.
+1. **Ponle nombre a tu wallet.** El nombre te ayuda a reconocerla, y se escribe en
+   un registro público junto con tus llaves: considéralo público y no pongas nada
+   privado en él.
+2. **Confirma lo que va a pasar.** Marcas que tus llaves públicas y el nombre de la
+   wallet se escriben on-chain, que tus llaves privadas se quedan en tus
+   dispositivos o llaves de seguridad, y que aceptas los [términos](/terms) y la
+   [política de privacidad](/privacy).
+3. **Crea tu primera llave.** Elige cómo: **este dispositivo** (Face ID, Touch ID,
+   huella, Windows Hello), **un celular o una tablet** (escaneas un código QR y la
+   creas ahí, donde la app lo ofrece) o una **llave de seguridad USB**. Tu
+   dispositivo crea la passkey y luego firma una vez con ella, para que la app sepa
+   que la llave de verdad funciona antes de seguir.
+4. **Agrega más llaves, si quieres.** Hasta siete en total, de cualquier tipo.
+   Cualquiera de ellas podrá firmar por sí sola. Si tu única llave no está
+   sincronizada en ningún lado (una llave de seguridad, o Windows Hello), la app te
+   pide una segunda, porque con una sola llave sin sincronizar, perder un
+   dispositivo es perder la wallet.
+5. **Crea.** La app calcula la dirección de tu wallet a partir del conjunto completo
+   de llaves y publica ese conjunto en el registro público de Gnosis Chain. Cuando
+   ese registro queda on-chain, tu wallet se abre.
 
-## Qué es realmente tu wallet
-
-Esta es la parte que casi ninguna wallet explica — y define cómo funciona Vela.
-
-Tu wallet Vela es una **cuenta inteligente Safe** (un contrato), no una simple
-«cuenta de propiedad externa». Tu passkey es la dueña de esa cuenta; un montaje
-ERC-4337 te deja operarla solo con tu cara o tu huella.
-
-<Callout type="info" title="Tu dirección es la misma en cada red">
-Vela deriva tu dirección de la llave pública de tu passkey, así que es idéntica en
-Ethereum, Base, Arbitrum, Gnosis y en cualquier otra red soportada. Das una sola
-dirección en todos lados.
+<Callout type="warning" title="Elige tus llaves ahora">
+Tu dirección se calcula a partir de las llaves con las que terminas, así que
+después no se pueden agregar, quitar ni reemplazar llaves.
+[Firmantes y llaves de seguridad](/es-MX/docs/signers) explica por qué y cómo
+elegirlas.
 </Callout>
 
-Una consecuencia útil: la dirección es **contrafactual**. Se calcula antes de que
-se despliegue nada on-chain, así que **puedes recibir fondos antes de que exista el
-contrato de tu wallet**. El contrato se despliega solo —pagando de su propio
-saldo— en tu primera transacción en cada red.
+## Qué es tu wallet
 
-## Qué acaba de pasar con tus llaves
+Tu wallet es una **cuenta inteligente Safe**: un contrato, no una cuenta simple con
+una sola llave privada. Tus llaves son sus dueñas, y cualquiera de ellas puede
+autorizar una transacción. [El contrato de la cuenta](/es-MX/docs/account-contract)
+enumera cada contrato involucrado.
 
-- Tu dispositivo generó un **par de llaves de passkey**.
-- La **llave privada** la guarda el servicio de passkeys de tu sistema (Llavero de
-  iCloud o Gestor de contraseñas de Google), cifrada de extremo a extremo y
-  sincronizada entre tus dispositivos: ninguna app, ni siquiera Vela, la ve nunca.
-- La **llave pública y el nombre que elegiste** se publican en el índice de
-  passkeys de Vela, que además escribe la llave en un registro públicamente
-  legible en Gnosis Chain, para que tu cuenta se pueda encontrar desde un
-  dispositivo nuevo. Ve
-  [recuperación e inicio de sesión](/es-MX/docs/recovery).
+La dirección es **la misma en todas las redes** y es **contrafactual**: se calcula
+antes de desplegar nada, así que puedes recibir fondos en cualquier red desde el
+primer momento. El contrato se despliega solo la primera vez que envías desde una
+red, y la comisión de esa primera transacción incluye el despliegue. Crear la wallet
+no te cuesta nada.
+
+## Qué es público
+
+<span id="what-is-public"></span>
+
+Crear una wallet escribe un registro permanente en un contrato de registro público
+en Gnosis Chain, que cualquiera puede leer y que es imposible editar o borrar:
+
+- la **llave pública** de cada llave (nunca la llave privada) y su **ID de
+  credencial**;
+- el **modelo de autenticador** de cada llave (qué gestor de contraseñas o qué llave
+  de seguridad la creó) y los indicadores de si se verificó tu identidad y de si la
+  llave está sincronizada;
+- el **nombre de la wallet** y un **nombre para cada llave**;
+- la **dirección de la wallet** y cuándo se creó;
+- los **datos de registro firmados** en sí.
+
+El índice de llaves públicas de Vela envía el registro y paga su gas, así que es el
+primero en verlo. Nada de lo que contiene puede mover tus fondos; es lo que permite
+que cualquiera de tus llaves vuelva a encontrar la wallet en un dispositivo nuevo
+([recuperación](/es-MX/docs/recovery)). La [política de privacidad](/privacy) tiene
+la lista completa, y la [página del registro](/registry) muestra cada registro.
 
 ## Siguientes pasos
 
-- [Recibir tus primeros tokens](/es-MX/docs/send-and-receive)
-- [Entender redes y comisiones](/es-MX/docs/networks-and-fees)
-- [Leer por qué las passkeys hacen esto seguro](/es-MX/docs/passkeys)
+- [Recibe tus primeros tokens](/es-MX/docs/send-and-receive)
+- [Entiende las redes y las comisiones](/es-MX/docs/networks-and-fees)
+- [Qué hacer si pierdes un dispositivo](/es-MX/docs/recovery)

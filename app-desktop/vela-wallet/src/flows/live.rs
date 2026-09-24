@@ -25,7 +25,6 @@ use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::payment_request::PaymentRequestView;
 use vela_core::app::receive_watch::ReceiveWatchView;
 use vela_core::app::send::SendReceiptKind;
-use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::datetime::{Civil, format_time};
 use vela_core::l10n::number::format_token_amount;
 
@@ -86,6 +85,7 @@ fn asset_row(
     hidden: bool,
     wallet: &crate::wallet::WalletStrings,
     locale: &str,
+    currency: &crate::wallet::live::Money,
 ) -> AssetRowModel {
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     AssetRowModel {
@@ -115,13 +115,9 @@ fn asset_row(
             // about what "no price" is called.
             Fiat::NoPrice(wallet.no_price.clone())
         } else {
-            Fiat::Value(SharedString::from(format_fiat(
-                amount * token.price_usd.unwrap_or(0.0),
-                "USD",
-                "$",
-                locale,
-                crate::executor::format_prefs::fiat_options(),
-            )))
+            Fiat::Value(SharedString::from(
+                currency.text(amount * token.price_usd.unwrap_or(0.0), locale),
+            ))
         },
     }
 }
@@ -140,6 +136,7 @@ pub fn assets(
     wallet: &crate::wallet::WalletStrings,
     locale: &str,
     filter: Option<u32>,
+    currency: &crate::wallet::live::Money,
 ) -> AssetsPanel {
     let unpriced: std::collections::BTreeSet<(u32, String)> = view
         .unpriced_tokens
@@ -160,7 +157,14 @@ pub fn assets(
                 token.chain_id,
                 token.token_address.clone().unwrap_or_default(),
             );
-            asset_row(token, unpriced.contains(&key), view.hidden, wallet, locale)
+            asset_row(
+                token,
+                unpriced.contains(&key),
+                view.hidden,
+                wallet,
+                locale,
+                currency,
+            )
         })
         .collect();
 
@@ -355,6 +359,7 @@ pub fn tx_detail(
     s: &FlowStrings,
     hidden: bool,
     locale: &str,
+    currency: &crate::wallet::live::Money,
 ) -> Option<crate::flows::fixtures::TxDetail> {
     let item = view.rows.iter().find_map(|row| match row {
         FeedRow::Item { item } if item.id == id => Some(item),
@@ -456,13 +461,7 @@ pub fn tx_detail(
         fiat: if hidden || item.usd_value <= 0.0 {
             SharedString::from("")
         } else {
-            SharedString::from(format_fiat(
-                item.usd_value,
-                "USD",
-                "$",
-                locale,
-                crate::executor::format_prefs::fiat_options(),
-            ))
+            SharedString::from(currency.text(item.usd_value, locale))
         },
         positive: incoming,
         facts,
@@ -632,6 +631,7 @@ pub fn receive_qr(
     pay: &PaymentRequestView,
     s: &FlowStrings,
     locale: &str,
+    currency: &crate::wallet::live::Money,
 ) -> ReceiveQr {
     let network = chain_name(chain_id);
     let symbol = receivable_chains()
@@ -694,7 +694,7 @@ pub fn receive_qr(
         explorer_url: (!address.is_empty())
             .then(|| SharedString::from(format!("{}/address/{address}", explorer_root(chain_id)))),
         contract_copy: None,
-        deposits: deposits(watch, locale),
+        deposits: deposits(watch, locale, currency),
     }
 }
 
@@ -712,8 +712,18 @@ pub fn receive_token_qr(
     pay: &PaymentRequestView,
     s: &FlowStrings,
     locale: &str,
+    currency: &crate::wallet::live::Money,
 ) -> ReceiveQr {
-    let mut qr = receive_qr(address, name, token.chain_id, watch, pay, s, locale);
+    let mut qr = receive_qr(
+        address,
+        name,
+        token.chain_id,
+        watch,
+        pay,
+        s,
+        locale,
+        currency,
+    );
     qr.title = SharedString::from(fill(
         &fill(&s.qr_title_asset, "symbol", &token.symbol),
         "network",
@@ -751,7 +761,11 @@ pub fn receive_token_qr(
 /// `detected` gates the section rather than `deposits.is_empty()`, because they
 /// are the core's two separate answers and only the first means "announce
 /// this". A list with nothing in it is not a celebration.
-fn deposits(view: &ReceiveWatchView, locale: &str) -> Vec<FlowDeposit> {
+fn deposits(
+    view: &ReceiveWatchView,
+    locale: &str,
+    currency: &crate::wallet::live::Money,
+) -> Vec<FlowDeposit> {
     if !view.detected {
         return Vec::new();
     }
@@ -784,13 +798,7 @@ fn deposits(view: &ReceiveWatchView, locale: &str) -> Vec<FlowDeposit> {
                             Some(usd) => format!(
                                 "{}  {}",
                                 chain_name(item.chain_id),
-                                format_fiat(
-                                    usd,
-                                    "USD",
-                                    "$",
-                                    locale,
-                                    crate::executor::format_prefs::fiat_options()
-                                )
+                                currency.text(usd, locale)
                             ),
                             None => chain_name(item.chain_id),
                         }),
@@ -857,6 +865,11 @@ pub struct SendInputs<'a> {
     pub s: &'a FlowStrings,
     pub wallet: &'a crate::wallet::WalletStrings,
     pub locale: &'a str,
+    /// The currency every `≈` figure on these screens is drawn in. Beside the
+    /// locale because it travels with it: both say how a number is written,
+    /// and until 2026-09-23 this one was the constant `"USD"` at seven sites
+    /// while the wallet home had learned to convert.
+    pub money: &'a crate::wallet::live::Money,
     pub identity_name: &'a str,
     pub identity_address: &'a str,
     /// The speed control (spec 068), as the `fee_speed` core decided it.
@@ -914,19 +927,12 @@ fn trimmed(amount: f64) -> String {
     )
 }
 
-fn fiat_line(usd: Option<f64>, locale: &str) -> Option<SharedString> {
-    usd.map(|usd| {
-        SharedString::from(format!(
-            "≈ {}",
-            format_fiat(
-                usd,
-                "USD",
-                "$",
-                locale,
-                crate::executor::format_prefs::fiat_options()
-            )
-        ))
-    })
+fn fiat_line(
+    usd: Option<f64>,
+    locale: &str,
+    currency: &crate::wallet::live::Money,
+) -> Option<SharedString> {
+    usd.map(|usd| SharedString::from(format!("≈ {}", currency.text(usd, locale))))
 }
 
 /// A settled estimate as one line: the fee coin's amount. `—` while there is
@@ -1031,6 +1037,7 @@ pub(crate) fn fee_line(
     send: Option<&SendView>,
     fee: &FeeView,
     locale: &str,
+    currency: &crate::wallet::live::Money,
 ) -> String {
     let coin = fee_text(quote);
     let Some(quote) = quote else { return coin };
@@ -1042,16 +1049,7 @@ pub(crate) fn fee_line(
     if !usd.is_finite() || usd < FEE_FIAT_MIN_USD {
         return coin;
     }
-    format!(
-        "{coin} · ≈{}",
-        format_fiat(
-            usd,
-            "USD",
-            "$",
-            locale,
-            crate::executor::format_prefs::fiat_options()
-        )
-    )
+    format!("{coin} · ≈{}", currency.text(usd, locale))
 }
 
 /// The fee coin's symbol, for the row's mark.
@@ -1108,7 +1106,7 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
         value: if measuring || of_another_tier {
             i.s.fee_pending.clone()
         } else {
-            SharedString::from(fee_line(quote, Some(i.send), i.fee, i.locale))
+            SharedString::from(fee_line(quote, Some(i.send), i.fee, i.locale, i.money))
         },
         refresh: i.speed.map(|_| i.s.fee_refresh.clone()),
         // A measurement is out — whoever started it — the same fact the "…"
@@ -1133,6 +1131,7 @@ fn send_speed(i: &SendInputs<'_>) -> Option<Box<FeeSpeedModel>> {
         Some(i.send),
         i.fee,
         i.locale,
+        i.money,
     )))
 }
 
@@ -1146,6 +1145,7 @@ pub fn speed_model(
     send: Option<&SendView>,
     fee: &FeeView,
     locale: &str,
+    currency: &crate::wallet::live::Money,
 ) -> FeeSpeedModel {
     let view = &speed.view;
     FeeSpeedModel {
@@ -1164,10 +1164,10 @@ pub fn speed_model(
             .map(|option| {
                 let value = match (&option.fee, speed.view_of(option.tier)) {
                     (Some(quote), Some(tier_view)) => {
-                        SharedString::from(fee_line(Some(quote), send, tier_view, locale))
+                        SharedString::from(fee_line(Some(quote), send, tier_view, locale, currency))
                     }
                     (Some(quote), None) => {
-                        SharedString::from(fee_line(Some(quote), send, fee, locale))
+                        SharedString::from(fee_line(Some(quote), send, fee, locale, currency))
                     }
                     // "…" while this tier's own quote is out, "—" when there
                     // is none to be had.
@@ -1191,6 +1191,7 @@ fn send_token_row(
     token: &SendToken,
     wallet: &crate::wallet::WalletStrings,
     locale: &str,
+    currency: &crate::wallet::live::Money,
 ) -> AssetRowModel {
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     AssetRowModel {
@@ -1206,13 +1207,7 @@ fn send_token_row(
         balance: SharedString::from(trimmed(amount)),
         fiat: match token.price_usd {
             None => Fiat::NoPrice(wallet.no_price.clone()),
-            Some(price) => Fiat::Value(SharedString::from(format_fiat(
-                amount * price,
-                "USD",
-                "$",
-                locale,
-                crate::executor::format_prefs::fiat_options(),
-            ))),
+            Some(price) => Fiat::Value(SharedString::from(currency.text(amount * price, locale))),
         },
     }
 }
@@ -1259,7 +1254,7 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool) -> SendPick {
             .send
             .tokens
             .iter()
-            .map(|token| send_token_row(token, i.wallet, i.locale))
+            .map(|token| send_token_row(token, i.wallet, i.locale, i.money))
             .collect(),
         cta: s.multi_send_title.clone(),
     };
@@ -1355,6 +1350,7 @@ mod sweep_tests {
             s,
             wallet,
             locale: "en-US",
+            money: crate::wallet::live::Money::usd(),
             identity_name: "MultiTest",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
@@ -1470,6 +1466,7 @@ mod treasury_tests {
                 s: &s,
                 wallet: &wallet,
                 locale: "en-US",
+                money: crate::wallet::live::Money::usd(),
                 identity_name: "MultiTest",
                 identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
                 speed: None,
@@ -2132,7 +2129,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             token.symbol
         )),
         (Some(_), None) => SharedString::default(),
-        (None, _) => fiat_line(usd, i.locale).unwrap_or_default(),
+        (None, _) => fiat_line(usd, i.locale, i.money).unwrap_or_default(),
     };
 
     SendForm {
@@ -2308,6 +2305,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                     Some(send),
                     i.fee,
                     i.locale,
+                    i.money,
                 )
                 .into()
             },
@@ -2339,7 +2337,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
     // cannot carry one.
     let sweep = send
         .multi_select_mode
-        .then(|| sweep_breakdown(send, i.locale));
+        .then(|| sweep_breakdown(send, i.locale, i.money));
     let notice = send_notice(i, true).or_else(|| {
         tx_error_text(send, s).map(|body| SendNotice {
             dismiss: None,
@@ -2376,12 +2374,16 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         },
         subline: match &sweep {
             Some((_, total_usd)) => fill(
-                &fill(&s.confirm_total_line, "fiat", &money(*total_usd, i.locale)),
+                &fill(
+                    &s.confirm_total_line,
+                    "fiat",
+                    &money(*total_usd, i.locale, i.money),
+                ),
                 "network",
                 &chain_name(send.multi_chain_id.unwrap_or(chain_id)),
             )
             .into(),
-            None => fiat_line(usd, i.locale).unwrap_or_default(),
+            None => fiat_line(usd, i.locale, i.money).unwrap_or_default(),
         },
         facts,
         // Spec 038 #D2: a split's confirm lists every recipient by name and
@@ -2435,21 +2437,19 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
 }
 
 /// One amount of money, in the hero's own formatting (no `≈`).
-fn money(usd: f64, locale: &str) -> String {
-    format_fiat(
-        usd,
-        "USD",
-        "$",
-        locale,
-        crate::executor::format_prefs::fiat_options(),
-    )
+fn money(usd: f64, locale: &str, currency: &crate::wallet::live::Money) -> String {
+    currency.text(usd, locale)
 }
 
 /// SD3c — the sweep's rows and their summed value: every picked coin at the
 /// amount the signature will move — the core's reserved spec (`multi_specs`,
 /// net of the gas the fee coin pays), else the full balance the spec will
 /// become (the web's `sweepAmount`). Never a figure summed here on its own.
-fn sweep_breakdown(send: &SendView, locale: &str) -> (Vec<BreakdownRow>, f64) {
+fn sweep_breakdown(
+    send: &SendView,
+    locale: &str,
+    currency: &crate::wallet::live::Money,
+) -> (Vec<BreakdownRow>, f64) {
     let mut total_usd = 0.0;
     let rows = send
         .tokens
@@ -2472,7 +2472,7 @@ fn sweep_breakdown(send: &SendView, locale: &str) -> (Vec<BreakdownRow>, f64) {
                 seed: None,
                 label: token.symbol.clone().into(),
                 value: match row_usd {
-                    Some(row_usd) => format!("{value} · ≈{}", money(row_usd, locale)),
+                    Some(row_usd) => format!("{value} · ≈{}", money(row_usd, locale, currency)),
                     None => value,
                 }
                 .into(),
@@ -3142,7 +3142,16 @@ mod tests {
         let mut fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
         // Nothing can price the coin: the line is the coin alone, never a
         // figure this file invented.
-        assert_eq!(fee_line(Some(&quote), None, &fee, "en"), "0.000091 BNB");
+        assert_eq!(
+            fee_line(
+                Some(&quote),
+                None,
+                &fee,
+                "en",
+                crate::wallet::live::Money::usd()
+            ),
+            "0.000091 BNB"
+        );
 
         // The relay's published row prices it.
         fee.options = vec![FeeOptionView {
@@ -3158,7 +3167,13 @@ mod tests {
             selected: true,
         }];
         assert_eq!(
-            fee_line(Some(&quote), None, &fee, "en"),
+            fee_line(
+                Some(&quote),
+                None,
+                &fee,
+                "en",
+                crate::wallet::live::Money::usd()
+            ),
             "0.000091 BNB · ≈$0.05"
         );
 
@@ -3168,7 +3183,16 @@ mod tests {
             total_wei: "1000000000000".to_owned(),
             ..quote.clone()
         };
-        assert_eq!(fee_line(Some(&dust), None, &fee, "en"), "0.000001 BNB");
+        assert_eq!(
+            fee_line(
+                Some(&dust),
+                None,
+                &fee,
+                "en",
+                crate::wallet::live::Money::usd()
+            ),
+            "0.000001 BNB"
+        );
     }
 
     /// Device-found: the core resolves `first_time` only while the confirm
@@ -3187,6 +3211,7 @@ mod tests {
                 s: &s,
                 wallet: &wallet,
                 locale: "en",
+                money: crate::wallet::live::Money::usd(),
                 identity_name: "Golden",
                 identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
                 speed: None,
@@ -3240,6 +3265,7 @@ mod tests {
             s: &s,
             wallet: &wallet,
             locale: "en",
+            money: crate::wallet::live::Money::usd(),
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
@@ -3286,6 +3312,7 @@ mod tests {
             s: &s,
             wallet: &wallet,
             locale: "en",
+            money: crate::wallet::live::Money::usd(),
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
@@ -3379,7 +3406,16 @@ mod tests {
         pay.gate_loading = true;
         pay.acknowledged = false;
         pay.can_copy = false;
-        let qr = receive_qr("0xabc", "Golden", 100, &watch, &pay, &s, "en");
+        let qr = receive_qr(
+            "0xabc",
+            "Golden",
+            100,
+            &watch,
+            &pay,
+            &s,
+            "en",
+            crate::wallet::live::Money::usd(),
+        );
         let gate = qr.gate.as_ref().unwrap_or_else(|| unreachable!("no gate"));
         assert!(
             gate.loading,
@@ -3389,7 +3425,16 @@ mod tests {
 
         // Read, not yet acknowledged: the warning stands, with its button.
         pay.gate_loading = false;
-        let qr = receive_qr("0xabc", "Golden", 100, &watch, &pay, &s, "en");
+        let qr = receive_qr(
+            "0xabc",
+            "Golden",
+            100,
+            &watch,
+            &pay,
+            &s,
+            "en",
+            crate::wallet::live::Money::usd(),
+        );
         let gate = qr.gate.as_ref().unwrap_or_else(|| unreachable!("no gate"));
         assert!(!gate.loading);
         assert_eq!(gate.confirm, s.warning_confirm);
@@ -3401,7 +3446,16 @@ mod tests {
         // Acknowledged: the code appears and the address can be copied.
         pay.acknowledged = true;
         pay.can_copy = true;
-        let qr = receive_qr("0xabc", "Golden", 100, &watch, &pay, &s, "en");
+        let qr = receive_qr(
+            "0xabc",
+            "Golden",
+            100,
+            &watch,
+            &pay,
+            &s,
+            "en",
+            crate::wallet::live::Money::usd(),
+        );
         assert!(qr.gate.is_none());
         assert!(qr.can_copy);
     }
@@ -3415,7 +3469,16 @@ mod tests {
         let watch =
             crate::core_host::CoreHost::<vela_core::app::receive_watch::ReceiveWatch>::new().view();
         let pay = pay_view();
-        let qr = receive_qr("0xabc", "Golden", 8453, &watch, &pay, &s, "en");
+        let qr = receive_qr(
+            "0xabc",
+            "Golden",
+            8453,
+            &watch,
+            &pay,
+            &s,
+            "en",
+            crate::wallet::live::Money::usd(),
+        );
         assert_eq!(qr.centre.logos, crate::marks::chain_logos(8453));
         assert_ne!(
             qr.centre.logos,
@@ -3429,7 +3492,16 @@ mod tests {
             token_address: Some("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_owned()),
             ..token(8453, "USDC", "5", Some(1.0))
         };
-        let qr = receive_token_qr("0xabc", "Golden", &usdc, &watch, &pay, &s, "en");
+        let qr = receive_token_qr(
+            "0xabc",
+            "Golden",
+            &usdc,
+            &watch,
+            &pay,
+            &s,
+            "en",
+            crate::wallet::live::Money::usd(),
+        );
         assert_eq!(
             qr.centre.logos,
             crate::marks::token_logos(8453, "USDC", usdc.token_address.as_deref(), &[])
@@ -3451,7 +3523,16 @@ mod tests {
 
         // The chain's own coin has no contract, and says so in words.
         let eth = token(8453, "ETH", "1", None);
-        let qr = receive_token_qr("0xabc", "Golden", &eth, &watch, &pay, &s, "en");
+        let qr = receive_token_qr(
+            "0xabc",
+            "Golden",
+            &eth,
+            &watch,
+            &pay,
+            &s,
+            "en",
+            crate::wallet::live::Money::usd(),
+        );
         assert!(
             qr.contract_copy.is_none(),
             "a native coin has nothing to copy"
@@ -3504,7 +3585,14 @@ mod tests {
         ];
         view.unpriced_tokens = vec![token(143, "MON", "12.5", None)];
 
-        let panel = assets(&view, &strings(), &wallet_strings(), "en-US", None);
+        let panel = assets(
+            &view,
+            &strings(),
+            &wallet_strings(),
+            "en-US",
+            None,
+            crate::wallet::live::Money::usd(),
+        );
         assert_eq!(panel.rows.len(), 2);
         assert_eq!(panel.rows[0].ticker, "xDAI");
         assert_eq!(panel.rows[0].chain, "Gnosis");
@@ -3525,7 +3613,14 @@ mod tests {
         view.tokens = vec![token(100, "xDAI", "0.75897", Some(1.0))];
         view.hidden = true;
 
-        let panel = assets(&view, &strings(), &wallet_strings(), "en-US", None);
+        let panel = assets(
+            &view,
+            &strings(),
+            &wallet_strings(),
+            "en-US",
+            None,
+            crate::wallet::live::Money::usd(),
+        );
         assert_eq!(panel.rows[0].balance, MASK);
         assert!(matches!(panel.rows[0].fiat, Fiat::Masked));
         // The unit survives — H5's rule. The figure is what goes.
@@ -3539,9 +3634,16 @@ mod tests {
         counting.tokens = Vec::new();
         counting.balance_unknown = true;
         assert!(
-            assets(&counting, &strings(), &wallet_strings(), "en-US", None)
-                .empty
-                .is_none(),
+            assets(
+                &counting,
+                &strings(),
+                &wallet_strings(),
+                "en-US",
+                None,
+                crate::wallet::live::Money::usd()
+            )
+            .empty
+            .is_none(),
             "still counting: no 'your wallet is empty'"
         );
 
@@ -3550,9 +3652,16 @@ mod tests {
         loading.balance_unknown = false;
         loading.holdings_loading = true;
         assert!(
-            assets(&loading, &strings(), &wallet_strings(), "en-US", None)
-                .empty
-                .is_none()
+            assets(
+                &loading,
+                &strings(),
+                &wallet_strings(),
+                "en-US",
+                None,
+                crate::wallet::live::Money::usd()
+            )
+            .empty
+            .is_none()
         );
 
         let mut settled = view();
@@ -3560,9 +3669,16 @@ mod tests {
         settled.balance_unknown = false;
         settled.holdings_loading = false;
         assert!(
-            assets(&settled, &strings(), &wallet_strings(), "en-US", None)
-                .empty
-                .is_some(),
+            assets(
+                &settled,
+                &strings(),
+                &wallet_strings(),
+                "en-US",
+                None,
+                crate::wallet::live::Money::usd()
+            )
+            .empty
+            .is_some(),
             "the core ruled: genuinely empty"
         );
 
@@ -3573,7 +3689,14 @@ mod tests {
         let mut narrowed = view();
         narrowed.tokens = vec![token(100, "xDAI", "1", Some(1.0))];
         narrowed.holdings_loading = true;
-        let panel = assets(&narrowed, &strings(), &wallet_strings(), "en-US", Some(1));
+        let panel = assets(
+            &narrowed,
+            &strings(),
+            &wallet_strings(),
+            "en-US",
+            Some(1),
+            crate::wallet::live::Money::usd(),
+        );
         assert!(panel.rows.is_empty());
         assert!(
             panel.empty.is_some(),
@@ -3592,7 +3715,14 @@ mod tests {
             token(56, "BNB", "1", Some(700.0)),
             token(137, "POL", "1", Some(0.4)),
         ];
-        let panel = assets(&view, &strings(), &wallet_strings(), "en-US", None);
+        let panel = assets(
+            &view,
+            &strings(),
+            &wallet_strings(),
+            "en-US",
+            None,
+            crate::wallet::live::Money::usd(),
+        );
         let dots = panel
             .filter
             .as_ref()
@@ -3652,6 +3782,7 @@ mod tests {
                 &pay,
                 &strings(),
                 "en-US",
+                crate::wallet::live::Money::usd(),
             );
             assert_eq!(qr.account.name, "Everyday wallet");
             assert_eq!(qr.account.seed, ADDR, "two same-named accounts must differ");
@@ -3819,8 +3950,15 @@ mod tests {
             assert_eq!(history_ids(&view), vec!["a".to_owned(), "b".to_owned()]);
 
             let s = strings();
-            let received = tx_detail(&view, "a", &s, false, "en-US")
-                .unwrap_or_else(|| unreachable!("row a exists"));
+            let received = tx_detail(
+                &view,
+                "a",
+                &s,
+                false,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("row a exists"));
             assert!(received.positive);
             assert_eq!(received.amount, "+1.5 xDAI");
             assert_eq!(received.fiat, "$1.50");
@@ -3844,22 +3982,46 @@ mod tests {
 
             // The sent one, whose stored record says pending — it must NOT
             // wear the confirmed chip.
-            let sent = tx_detail(&view, "b", &s, false, "en-US")
-                .unwrap_or_else(|| unreachable!("row b exists"));
+            let sent = tx_detail(
+                &view,
+                "b",
+                &s,
+                false,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("row b exists"));
             assert!(!sent.positive);
             assert_eq!(sent.facts[0].label, s.detail_to);
             assert_eq!(sent.status.text, s.status_pending);
             assert!(matches!(sent.status.tone, StatusTone::Info));
 
             // Privacy masks the figure here as everywhere.
-            let hidden = tx_detail(&view, "a", &s, true, "en-US")
-                .unwrap_or_else(|| unreachable!("row a exists"));
+            let hidden = tx_detail(
+                &view,
+                "a",
+                &s,
+                true,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("row a exists"));
             assert_eq!(hidden.amount, crate::wallet::fixtures::MASK);
             assert_eq!(hidden.fiat, "");
 
             // A row that no longer exists has no detail — the panel closes
             // rather than showing a stale one.
-            assert!(tx_detail(&view, "gone", &s, false, "en-US").is_none());
+            assert!(
+                tx_detail(
+                    &view,
+                    "gone",
+                    &s,
+                    false,
+                    "en-US",
+                    crate::wallet::live::Money::usd()
+                )
+                .is_none()
+            );
 
             // A live record can be deleted from its detail (the web's
             // `deleteLabel`); the mocks cannot.
@@ -3886,13 +4048,31 @@ mod tests {
             // A booted `payment_request` in address mode answers the recipient.
             let mut pay = pay_view();
             pay.qr_value = ADDR.to_owned();
-            let qr = receive_qr(ADDR, "Me", 100, &quiet, &pay, &strings(), "en-US");
+            let qr = receive_qr(
+                ADDR,
+                "Me",
+                100,
+                &quiet,
+                &pay,
+                &strings(),
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            );
             assert_eq!(qr.qr_payload.as_deref(), Some(ADDR));
 
             // Request mode puts an EIP-681 URI in the same field, and this file
             // must forward it rather than re-deriving the address.
             pay.qr_value = "ethereum:0x88cC@100?value=1.5e18".to_owned();
-            let request = receive_qr(ADDR, "Me", 100, &quiet, &pay, &strings(), "en-US");
+            let request = receive_qr(
+                ADDR,
+                "Me",
+                100,
+                &quiet,
+                &pay,
+                &strings(),
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            );
             assert_eq!(
                 request.qr_payload.as_deref(),
                 Some("ethereum:0x88cC@100?value=1.5e18")
@@ -3902,7 +4082,16 @@ mod tests {
             // a decorative code on a screen meant to be scanned is the failure
             // this field exists to end.
             pay.qr_value = String::new();
-            let unruled = receive_qr(ADDR, "Me", 100, &quiet, &pay, &strings(), "en-US");
+            let unruled = receive_qr(
+                ADDR,
+                "Me",
+                100,
+                &quiet,
+                &pay,
+                &strings(),
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            );
             assert_eq!(unruled.qr_payload, None);
         });
     }
@@ -3939,7 +4128,7 @@ mod tests {
             deposits: vec![entry.clone()],
         };
         assert!(
-            deposits(&quiet, "en-US").is_empty(),
+            deposits(&quiet, "en-US", crate::wallet::live::Money::usd()).is_empty(),
             "undetected must not announce"
         );
 
@@ -3947,7 +4136,7 @@ mod tests {
             detected: true,
             deposits: vec![entry],
         };
-        let announced = deposits(&landed, "en-US");
+        let announced = deposits(&landed, "en-US", crate::wallet::live::Money::usd());
         assert_eq!(announced.len(), 1);
         assert_eq!(announced[0].rows.len(), 2);
         assert_eq!(announced[0].rows[0].0, "+1.5 xDAI");
@@ -4002,7 +4191,14 @@ mod tests {
                 pending.extend(host.resolve(next.id, result));
             }
             let view = host.view();
-            let panel = assets(&view, &strings(), &wallet_strings(), "en-US", None);
+            let panel = assets(
+                &view,
+                &strings(),
+                &wallet_strings(),
+                "en-US",
+                None,
+                crate::wallet::live::Money::usd(),
+            );
 
             for row in &panel.rows {
                 println!(
@@ -4341,6 +4537,7 @@ mod speed_tests {
             s,
             wallet,
             locale: "en-US",
+            money: crate::wallet::live::Money::usd(),
             identity_name: "Speed",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed,
@@ -4554,6 +4751,7 @@ mod parity_tests {
             s: &s,
             wallet: &wallet,
             locale: "en-US",
+            money: crate::wallet::live::Money::usd(),
             identity_name: "MultiTest",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
@@ -5046,7 +5244,16 @@ mod parity_tests {
             let s = strings();
             let watch = CoreHost::<vela_core::app::receive_watch::ReceiveWatch>::new().view();
             let pay = CoreHost::<vela_core::app::payment_request::PaymentRequest>::new().view();
-            let qr = receive_qr("0xabc", "Golden", 100, &watch, &pay, &s, "en");
+            let qr = receive_qr(
+                "0xabc",
+                "Golden",
+                100,
+                &watch,
+                &pay,
+                &s,
+                "en",
+                crate::wallet::live::Money::usd(),
+            );
             assert_eq!(
                 qr.explorer_url.as_deref(),
                 Some("https://gnosisscan.io/address/0xabc")

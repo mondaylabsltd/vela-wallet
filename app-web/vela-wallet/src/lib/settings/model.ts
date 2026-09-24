@@ -119,6 +119,13 @@ export type SettingsPageId =
 	/** Spec 071 — the default "Sign with" and the Trusted Signer's page (desktop
 	 *  page; on the phone, two rows beside the speed, each opening a sheet). */
 	| 'signing'
+
+	/**
+	 * Spec 081 FR-016 — the report, as a desktop panel. The phone opens the
+	 * same body in a sheet; a wide layout has no sheets (founder, 2026-09-05),
+	 * so the nav gains a destination rather than the panel gaining a modal.
+	 */
+	| 'feedback'
 	| 'about';
 
 /**
@@ -491,11 +498,42 @@ export interface FeedbackModel {
 	subtitle: string;
 	placeholder: string;
 	addSteps: string;
+	/** Spec 081: the steps box the 添加步骤 button reveals. */
+	stepsPlaceholder: string;
 	previewToggle: string;
+	/**
+	 * What the disclosure shows — and, since spec 081, literally the payload's
+	 * `environment` field. The consent note under it says "only what you see is
+	 * sent"; these lines are the only reason that sentence is true.
+	 */
 	previewLines: string[];
 	consent: string;
 	send: string;
+	/** The button's own busy label — busy is never disabled (founder's rule). */
+	sending: string;
+	/** Filed: the two bodies carry `{{number}}`. */
+	success: { title: string; bodyNew: string; bodyDeduped: string; view: string };
+	/** The endpoint could not; the prefilled form still can. */
+	fallback: { title: string; body: string; open: string };
 	githubLink: string;
+}
+
+/**
+ * How the last send ended (spec 081 FR-016).
+ *
+ * `filed: false` is not an error state — it carries `fallbackUrl`, the
+ * prefilled issue form, which is the road that still works when the endpoint
+ * is unprovisioned (503), rate-limited (429) or unreachable. A sheet that
+ * showed only an apology would be dropping the person's report.
+ */
+export interface FeedbackResult {
+	filed: boolean;
+	/** Filed: the issue number and its page. */
+	number?: number;
+	url?: string;
+	deduped?: boolean;
+	/** Not filed: the prefilled form, with the person's own words in it. */
+	fallbackUrl?: string;
 }
 
 /** SR1: the amber "these networks are down" banner and its per-chain fixes. */
@@ -682,6 +720,13 @@ export interface EthereumBackupRowModel {
 	subtitle: string;
 	tone: 'neutral' | 'positive' | 'caution';
 	actionable: boolean;
+	/**
+	 * The action is "ask again", not "do the backup". Only `could_not_check`:
+	 * a person tapping there wants another attempt, which is what the founder
+	 * ruled on 2026-09-23. Android draws the same distinction with
+	 * `RowTrailing.Retry`.
+	 */
+	retry?: boolean;
 }
 
 /**
@@ -796,8 +841,17 @@ export interface SettingsDesktopModel {
 	storage: StorageModel;
 	/** The desktop's clear-all-caches confirm, as a dialog (spec 028 Phase 8). */
 	clearCachesSheet: ConfirmSheetModel;
-	/** The phone's erase sheet, as a dialog (spec 072) — the same words, the same failure. */
+	/**
+	 * The phone's erase sheet, as a dialog (specs 072 and 081 FR-017) — the same
+	 * words and the same failure, because it is the same sheet.
+	 *
+	 * The wide layout drew the danger card from the first day and had nowhere to
+	 * go from it: the card had no handler and the model had no sheet, so the one
+	 * irreversible control on the screen was a picture.
+	 */
 	eraseSheet: ConfirmSheetModel;
+	/** The report panel (spec 081 FR-016) — the phone's sheet, as a page. */
+	feedback: FeedbackModel;
 	about: AboutModel;
 	addNetwork: AddNetworkModel;
 	rpcFix: RpcFixModel;

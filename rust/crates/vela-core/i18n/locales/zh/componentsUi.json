@@ -67,6 +67,7 @@
       "signingFor": "签名对象",
       "signingAccount": "签名账户",
       "bestEffortWarning": "根据函数签名解析得出 — 非经过验证的描述符，请仔细核对细节。",
+      "descriptorFetchedWarning": "此描述来自 Vela 的描述符服务，未经任何认证 — 批准前请核对细节。",
       "bestEffortSimulated": "按函数签名解读（非验证描述符）。下方预览已显示这笔交易的实际影响。",
       "blindButSimulated": "Vela 无法读取该合约的描述，但下方预览已显示这笔交易的实际影响。",
       "simWillSucceed": "模拟通过 — 预计可成功",
@@ -203,7 +204,11 @@
       "trustedSignerReopen": "重新打开页面",
       "trustedSignerDoneTab": "已签名。你可以关闭此标签页，回到 Vela。",
       "viewOnExplorer": "在区块浏览器中查看",
-      "sendingToTokenContract": "发送到代币自身合约"
+      "sendingToTokenContract": "发送到代币自身合约",
+      "selfCallBlockedTitle": "Vela 不会签这笔请求",
+      "selfCallBlockedBody": "这笔请求会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了它。什么都没有签。",
+      "selfCallBlockedLegBody": "这笔请求的第 {{index}} 步会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了整笔请求。什么都没有签。",
+      "selfCallBlockedSafeTx": "这笔请求要你的钥匙授权一笔以后再执行的 Safe 交易。Vela 拒绝了它——这样的签名可以在你不在场时被使用。什么都没有签。"
     },
     "currency": {
       "title": "显示货币",

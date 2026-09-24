@@ -1,4 +1,4 @@
-> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
+> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及 `scripts/package.json` 里的工具脚本（根目录不放任何 npm 文件）。正文按原样保留，作为历史记录。
 
  
 
@@ -16,7 +16,7 @@
 - **故障注入.** 浏览器 console 里的 `vela.*` 命令可模拟 RPC down / slow / null-price 等，用来验证失败态 UX（源码 `src/services/dev/fault-injection.ts`）。
 - **清晰签名测试页.** 路由 `/clear-signing-test` 可在没有真实 dApp 的情况下逐个触发签名场景。
 - **资金.** 建议在测试网或仅放极少量资金的账户上测真实交易；不可逆操作（首笔 gas 账户充值不可退款）务必先在便宜的链/小额上验证。
-- **已知陷阱.** 主仓 README 已过时（写的是 8 链 / 60% markup / 蓝牙）；以本指南预期值为准：**12 链、费用约 2×、~3× 上限、WalletPair WebSocket（无蓝牙）**。
+- **已知陷阱.** 主仓 README 已过时（写的是 8 链 / 60% markup / 蓝牙）；以本指南预期值为准——但本指南也有过时处（2026-09-22 按 spec 080 claim ledger 更正）：**24 条内置网络；手续费 = 预留 gas × 3 × 所选速度价格（最低约 0.01 美元，确认页只显示一个金额），中继报价超过钱包读数 3 倍会被拒；WalletPair 已取消**，dApp 通过扩展或 App 内置浏览器连接。
 
 ## 优先级图例
 

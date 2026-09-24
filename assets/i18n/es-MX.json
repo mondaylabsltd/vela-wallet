@@ -110,7 +110,7 @@
    "subtitle": "Elimina todo lo que Vela guardó aquí",
    "desc": "Se borra todo lo que Vela guardó en este dispositivo. No hay respaldo ni forma de deshacerlo.",
    "loses": "Pierdes: historial de transacciones, contactos y grupos, historial de navegación, permisos de dApps, tokens y redes personalizados, ajustes de RPC y endpoints, y todas las preferencias.",
-   "keeps": "No pierdes la billetera. Tu passkey sigue en Face ID / huella: elige “Ya tengo una billetera” y vuelve la misma dirección, solo que sin historial.",
+   "keeps": "No pierdes la billetera. El borrado no alcanza tus passkeys: las guarda tu proveedor de passkeys (Face ID / huella, un gestor de contraseñas o una llave de seguridad), no esta app. Elige “Ya tengo una billetera” y vuelve la misma dirección, solo que sin historial.",
    "confirm": "Borrar todo",
    "cancel": "Cancelar",
    "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo."
@@ -604,7 +604,7 @@
    "desktopTagline": "Tus llaves, tus activos",
    "featureNoMnemonicTitle": "Sin frase semilla",
    "featureNoMnemonicBody": "Crea e inicia sesión con una passkey en tu dispositivo — sin 12 palabras que anotar y resguardar.",
-   "featureOneAddressTitle": "Una dirección, 12+ redes",
+   "featureOneAddressTitle": "Una dirección, 24 redes",
    "featureOneAddressBody": "La misma dirección funciona en todas las redes compatibles, y puedes agregar las tuyas.",
    "featureOpenSourceTitle": "Código abierto y autohospedable",
    "featureOpenSourceBody": "La app y los servicios de backend son de código abierto — puedes desplegar una infraestructura completamente tuya.",
@@ -627,12 +627,12 @@
    "custodyTitle": "Las llaves se quedan contigo",
    "custodyBody": "Tus llaves de acceso viven donde tú las guardas: el gestor de contraseñas del dispositivo o una llave de seguridad física. Vela no puede tocarlas ni gastar por ti.",
    "chainsTitle": "Una dirección, todas las redes",
-   "chainsBody": "La misma dirección sirve en más de 12 redes y las comisiones se pagan con stablecoins: no hace falta guardar la moneda nativa de cada cadena."
+   "chainsBody": "La misma dirección sirve en 24 redes y las comisiones se pagan con stablecoins: no hace falta guardar la moneda nativa de cada cadena."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — la billetera con passkey",
-    "description": "Una billetera con passkey y sin frase de recuperación: una sola dirección para más de 12 redes, contratos Safe v1.4.1 auditados, gas pagadero con stablecoins, todo de código abierto y autoalojable."
+    "description": "Una billetera con passkey y sin frase de recuperación: una sola dirección para 24 redes, contratos Safe v1.4.1 auditados, gas pagadero con stablecoins, todo de código abierto y autoalojable."
    },
    "tagline": "Tus llaves, tus activos",
    "passkeyIndexLink": "Configurar el servicio de índice de passkeys",
@@ -642,7 +642,7 @@
      "description": "Crea e inicia sesión con la passkey de tu dispositivo — no hay 12 palabras que copiar y resguardar."
     },
     "oneAddress": {
-     "title": "Una dirección, más de 12 redes",
+     "title": "Una dirección, 24 redes",
      "description": "La misma dirección funciona en todas las redes compatibles, y puedes agregar las tuyas."
     },
     "openSource": {
@@ -1253,6 +1253,7 @@
    "close": "Cerrar",
    "valueLabel": "Valor",
    "bestEffortWarning": "Decodificado a partir de la firma de la función — no es un descriptor verificado. Revisa los detalles con cuidado.",
+   "descriptorFetchedWarning": "Esta descripción viene del servicio de descriptores de Vela y nadie la autenticó — revisa los detalles antes de aprobar.",
    "simWillSucceed": "Simulación correcta — se espera que tenga éxito",
    "simWillFail": "Se espera que esta transacción falle — aun así pagarías gas.",
    "simWillFailReason": "Se espera que falle: {{reason}} — aun así pagarías gas.",
@@ -1370,7 +1371,11 @@
    "trustedSignerReopen": "Abrir la página otra vez",
    "trustedSignerDoneTab": "Firmado. Puedes cerrar esta pestaña y volver a Vela.",
    "viewOnExplorer": "Ver en el explorador",
-   "sendingToTokenContract": "Enviado al contrato del propio token"
+   "sendingToTokenContract": "Enviado al contrato del propio token",
+   "selfCallBlockedTitle": "Vela no firma esta solicitud",
+   "selfCallBlockedBody": "Esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela la rechaza. No se firmó nada.",
+   "selfCallBlockedLegBody": "El paso {{index}} de esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela rechaza la solicitud completa. No se firmó nada.",
+   "selfCallBlockedSafeTx": "Esta solicitud pide que tu llave autorice una transacción de Safe para ejecutarla después. Vela la rechaza: una firma así puede usarse sin ti. No se firmó nada."
   },
   "signingApprove": {
    "resultingTotal": "Nuevo límite total",
@@ -1581,7 +1586,7 @@
    "bundlerHint": "Se requiere un endpoint compatible con Vela Relay",
    "fiatLabel": "TIPOS DE CAMBIO FIAT",
    "fiatHint": "Tipos de cambio en USD que definen la lista de monedas — cámbialo para mayor cobertura.",
-   "resetToDefaults": "Restablecer a los valores predeterminados",
+   "resetToDefaults": "Restablecer los cuatro",
    "selfHostGuide": "Guía de autoalojamiento →",
    "resetTitle": "¿Restablecer los endpoints de servicio?",
    "resetBody": "Los cuatro servicios vuelven a las direcciones de Vela. Las direcciones que ingresaste aquí se descartan.",
@@ -1612,8 +1617,9 @@
    "compatible": "Compatible",
    "incompatible": "Incompatible",
    "checkSafe": "Contratos Safe L2",
-   "checkSigner": "Módulo de firma WebAuthn",
-   "checkRemaining": "otros {{count}} contratos"
+   "checkSigner": "Precompilado P-256",
+   "checkRemaining": "otros {{count}} contratos",
+   "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad."
   },
   "treasury": {
    "modalTitle": "Tesorería",

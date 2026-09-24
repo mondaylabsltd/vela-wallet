@@ -1447,18 +1447,20 @@ fn signing_answered(
                     id,
                     &result.map(Value::String).unwrap_or(Value::Null),
                 ),
+                // The refusal carries its `kind` to the page, and the detail
+                // is named INSIDE the sentence rather than sent as the whole
+                // answer — spec 081's two halves, stated once in `dapp_rpc`
+                // for every shell.
                 SignResponsePayload::Err {
                     code,
                     kind,
                     message,
-                } => error_json(
+                } => dapp_rpc::sign_error_json(
                     &job.doc,
                     id,
                     i64::from(code),
-                    message
-                        .as_deref()
-                        .filter(|m| !m.is_empty())
-                        .unwrap_or(dapp_rpc::sign_error_message(kind)),
+                    kind,
+                    message.as_deref(),
                 ),
             };
             out.op(DbrOperation::Deliver {

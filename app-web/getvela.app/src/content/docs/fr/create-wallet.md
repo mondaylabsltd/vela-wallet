@@ -1,6 +1,7 @@
 ---
 title: Créer votre portefeuille
-description: Créez un portefeuille Vela auto-conservé en une minute environ avec une passkey — sans phrase de récupération. Votre portefeuille est un compte intelligent Safe, avec la même adresse sur chaque réseau.
+description: "Créer un portefeuille Vela avec une à sept clés — ce que fait chaque étape, pourquoi les clés sont fixées à la création, ce qui devient public, et ce qu'est réellement votre portefeuille."
+source: a2edda21a075
 ---
 
 <script>
@@ -9,65 +10,80 @@ description: Créez un portefeuille Vela auto-conservé en une minute environ av
 
 # Créer votre portefeuille
 
-Créer un portefeuille prend environ une minute et une seule vérification
-biométrique. Ouvrez le portefeuille web sur
-[wallet.getvela.app](https://wallet.getvela.app/) et choisissez **Créer un
-portefeuille**.
+Créer un portefeuille prend une minute ou deux. Ouvrez le portefeuille web sur
+[wallet.getvela.app](https://wallet.getvela.app/) — ou l'extension, l'app de bureau
+ou l'app mobile — et choisissez **Créer un portefeuille**.
 
 ## Les étapes
 
-1. **Nommez votre portefeuille.** Choisissez un nom qui vous permettra de
-   reconnaître le compte plus tard, y compris en vous connectant depuis un autre
-   appareil. Il est stocké à côté de votre clé publique : traitez-le comme public
-   et n'y mettez rien de personnel.
-2. **Confirmez les bases.** Une courte liste confirme que vous avez compris que
-   Vela est auto-conservé et encore en alpha, avec les liens vers la
-   [politique de confidentialité](/privacy) et les
-   [conditions d'utilisation](/terms).
-3. **Créez votre passkey.** À l'invite, authentifiez-vous avec **Face ID, Touch ID
-   ou votre empreinte**. Cela crée une passkey WebAuthn (P-256) que votre appareil
-   garde et que Vela ne voit jamais. Il n'y a pas d'étape « notez la phrase de
-   récupération », parce qu'il n'y a pas de phrase de récupération.
-4. **C'est fait.** Vela affiche l'adresse de votre portefeuille et vous êtes
-   dedans. Vous pouvez la vérifier, puis vous connecter pour arriver dans votre
-   portefeuille.
+1. **Nommez votre portefeuille.** Le nom vous aide à le reconnaître, et il est
+   inscrit dans un registre public avec vos clés — considérez-le comme public et
+   n'y mettez rien de personnel.
+2. **Confirmez ce qui va se passer.** Vous cochez que vos clés publiques et le nom
+   du portefeuille sont inscrits on-chain, que vos clés privées restent dans vos
+   appareils ou vos clés de sécurité, et que vous acceptez les
+   [conditions d'utilisation](/terms) et la
+   [politique de confidentialité](/privacy).
+3. **Créez votre première clé.** Choisissez comment : **cet appareil** (Face ID,
+   Touch ID, empreinte, Windows Hello), **un téléphone ou une tablette** (scannez un
+   QR code et créez-la sur cet appareil, quand l'app le propose) ou une **clé de
+   sécurité USB**. Votre appareil crée la passkey puis signe une fois avec elle,
+   pour que l'app sache que la clé fonctionne vraiment avant de continuer.
+4. **Ajoutez d'autres clés, si vous le souhaitez.** Jusqu'à sept au total, de
+   n'importe quel type. Chacune pourra signer seule. Si votre seule clé n'est
+   synchronisée nulle part — une clé de sécurité, ou Windows Hello —, l'app en
+   demande une deuxième : avec une seule clé non synchronisée, il suffit de perdre
+   un appareil pour perdre le portefeuille.
+5. **Créez.** L'app calcule l'adresse de votre portefeuille à partir de l'ensemble
+   des clés et publie cet ensemble dans le registre public sur Gnosis Chain. Une
+   fois cet enregistrement on-chain, votre portefeuille s'ouvre.
 
-## Ce qu'est réellement votre portefeuille
-
-C'est la partie que la plupart des portefeuilles n'expliquent pas — et elle
-détermine le fonctionnement de Vela.
-
-Votre portefeuille Vela est un **compte intelligent Safe** (un contrat), et non un
-simple « compte détenu en externe ». Votre passkey est le propriétaire de ce
-compte ; un montage ERC-4337 vous permet de l'opérer avec votre seul visage ou
-votre seule empreinte.
-
-<Callout type="info" title="Votre adresse est la même sur chaque réseau">
-Vela dérive votre adresse de la clé publique de votre passkey : elle est
-identique sur Ethereum, Base, Arbitrum, Gnosis et tous les autres réseaux pris en
-charge. Vous ne donnez qu'une seule adresse, partout.
+<Callout type="warning" title="Choisissez vos clés maintenant">
+Votre adresse est calculée à partir des clés que vous avez au final : les clés ne
+peuvent donc pas être ajoutées, retirées ou remplacées plus tard.
+[Signataires et clés de sécurité](/fr/docs/signers) explique pourquoi, et comment
+choisir.
 </Callout>
 
-Conséquence utile : l'adresse est **contrefactuelle**. Elle est calculée avant que
-quoi que ce soit ne soit déployé on-chain, donc **vous pouvez recevoir des fonds
-avant même que le contrat de votre portefeuille existe**. Le contrat se déploie
-tout seul, payé sur son propre solde, à votre première transaction sur un réseau
-donné.
+## Ce qu'est votre portefeuille
 
-## Ce qui vient d'arriver à vos clés
+Votre portefeuille est un **compte intelligent Safe** — un contrat, pas un simple
+compte avec une seule clé privée. Vos clés en sont les propriétaires, et
+n'importe laquelle peut autoriser une transaction. [Le contrat de compte](/fr/docs/account-contract)
+liste tous les contrats en jeu.
 
-- Votre appareil a généré une **paire de clés de passkey**.
-- La **clé privée** est gardée par le service de passkeys de votre système
-  (trousseau iCloud ou gestionnaire de mots de passe Google), chiffrée de bout en
-  bout et synchronisée entre vos appareils — aucune application, Vela compris, ne
-  la voit jamais.
-- La **clé publique et le nom choisi** sont publiés dans l'index de passkeys de
-  Vela, qui écrit aussi la clé dans un registre publiquement lisible sur Gnosis
-  Chain, afin que votre compte puisse être retrouvé depuis un nouvel appareil.
-  Voir [Récupération et connexion](/fr/docs/recovery).
+L'adresse est **la même sur tous les réseaux**, et elle est **contrefactuelle** :
+elle est calculée avant tout déploiement, si bien que vous pouvez recevoir des
+fonds sur n'importe quel réseau tout de suite. Le contrat se déploie de lui-même la
+première fois que vous envoyez depuis un réseau, et les frais de cette première
+transaction incluent le déploiement. Créer le portefeuille ne vous coûte rien.
+
+## Ce qui est public
+
+<span id="what-is-public"></span>
+
+Créer un portefeuille inscrit un enregistrement permanent dans un contrat de
+registre public sur Gnosis Chain, lisible par tous et impossible à modifier ou à
+supprimer :
+
+- la **clé publique** de chaque clé (jamais la clé privée) et son **identifiant**
+  (credential ID) ;
+- le **modèle d'authentificateur** de chaque clé (quel gestionnaire de mots de passe
+  ou quelle clé de sécurité l'a créée) et des indicateurs précisant si vous avez été
+  vérifié et si la clé est synchronisée ;
+- le **nom du portefeuille** et un **nom pour chaque clé** ;
+- l'**adresse du portefeuille** et sa date de création ;
+- les **données d'enregistrement signées** elles-mêmes.
+
+L'index des clés publiques de Vela soumet l'enregistrement et en paie le gas : il le
+voit donc en premier. Rien dans cet enregistrement ne peut déplacer vos fonds ; c'est
+lui qui permet à n'importe laquelle de vos clés de retrouver le portefeuille sur un
+nouvel appareil ([récupération](/fr/docs/recovery)). La
+[politique de confidentialité](/privacy) donne la liste complète, et la
+[page du registre](/registry) affiche tous les enregistrements.
 
 ## Prochaines étapes
 
-- [Recevoir vos premiers tokens](/fr/docs/send-and-receive)
+- [Recevoir vos premiers jetons](/fr/docs/send-and-receive)
 - [Comprendre les réseaux et les frais](/fr/docs/networks-and-fees)
-- [Lire pourquoi les passkeys rendent cela sûr](/fr/docs/passkeys)
+- [Que faire si vous perdez un appareil](/fr/docs/recovery)

@@ -81,6 +81,15 @@
 			</array>
 		</dict>
 	</array>
+	<!--
+	  Export compliance. Vela's encryption is HTTPS/TLS and the OS's own passkey
+	  crypto — standard, exempt, and nothing else. Declaring it here is the same
+	  answer the store-submission notes have carried since 2026-06-30; without
+	  the key App Store Connect asks it again on every single upload, and a
+	  question answered by hand every time is a question answered wrong once.
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Vela uses the camera to scan QR codes — a payment request, or somebody's address.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

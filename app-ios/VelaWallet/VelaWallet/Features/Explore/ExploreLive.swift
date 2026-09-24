@@ -288,6 +288,19 @@ enum ExploreLive {
                 : loc.t("connect.browser.title", vars: ["host": host]),
             site: asked,
             statusLine: statusLine(secure: secure, connected: connected, host: host, loc: loc),
+            // WHICH account this site holds, not which one the wallet is on.
+            //
+            // A grant is pinned to the address it was given to, so the two can
+            // differ — and they differ exactly when it matters: after an
+            // account switch, or on a grant made before one. The panel named
+            // `identity` regardless, so a device found it saying
+            // "Parallel One · 0x88cC…6894" over a page that had been handed
+            // `0xA9aE…2B`. The identicon goes with it — `seed: shown` — because
+            // that artwork is the anti-forgery mark, and a mark for the wrong
+            // account is worse than none.
+            //
+            // A consent card has no grant yet, so `shown` falls through to the
+            // account that is about to get one, which IS the active one.
             account: (
                 name: isActive ? identity.name : AddressText.short(shown),
                 address: AddressText.short(shown),

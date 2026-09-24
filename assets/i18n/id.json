@@ -110,7 +110,7 @@
    "subtitle": "Hapus semua yang disimpan Vela di sini",
    "desc": "Semua yang disimpan Vela di perangkat ini akan dihapus. Tidak ada cadangan dan tidak bisa dibatalkan.",
    "loses": "Anda kehilangan: riwayat transaksi, kontak dan grup, riwayat penjelajahan, izin dApp, token dan jaringan khusus, pengaturan RPC dan endpoint, serta semua preferensi.",
-   "keeps": "Anda tidak kehilangan dompetnya. Passkey Anda tetap di Face ID / sidik jari — pilih “Saya sudah punya dompet” dan alamat yang sama kembali, hanya tanpa riwayat.",
+   "keeps": "Dompetnya tidak hilang. Penghapusan tidak menyentuh passkey Anda — passkey disimpan oleh penyedia passkey Anda (Face ID / sidik jari, pengelola kata sandi, atau kunci keamanan), bukan oleh aplikasi ini. Pilih “Saya sudah punya dompet” dan alamat yang sama kembali, hanya tanpa riwayat.",
    "confirm": "Hapus Semuanya",
    "cancel": "Batal",
    "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi."
@@ -601,7 +601,7 @@
    "desktopTagline": "Kunci Anda, aset Anda",
    "featureNoMnemonicTitle": "Tanpa seed phrase",
    "featureNoMnemonicBody": "Buat dan masuk dengan passkey di perangkat Anda — tanpa 12 kata yang harus dicatat dan dijaga.",
-   "featureOneAddressTitle": "Satu alamat, 12+ jaringan",
+   "featureOneAddressTitle": "Satu alamat, 24 jaringan",
    "featureOneAddressBody": "Alamat yang sama berlaku di semua jaringan yang didukung, dan Anda dapat menambahkan jaringan sendiri.",
    "featureOpenSourceTitle": "Open source, bisa di-host sendiri",
    "featureOpenSourceBody": "Aplikasi dan layanan backend-nya sama-sama open source — Anda dapat menjalankan stack yang sepenuhnya milik Anda sendiri.",
@@ -624,12 +624,12 @@
    "custodyTitle": "Kuncinya ada di tangan Anda",
    "custodyBody": "Passkey tersimpan di tempat Anda: pengelola kata sandi perangkat, atau kunci keamanan perangkat keras. Vela tidak bisa menyentuhnya, apalagi membelanjakannya.",
    "chainsTitle": "Satu alamat, semua jaringan",
-   "chainsBody": "Alamat yang sama berlaku di 12+ jaringan, dan biayanya bisa dibayar dengan stablecoin — tak perlu menimbun koin asli tiap rantai."
+   "chainsBody": "Alamat yang sama berlaku di 24 jaringan, dan biayanya bisa dibayar dengan stablecoin — tak perlu menimbun koin asli tiap rantai."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — dompet passkey",
-    "description": "Dompet passkey tanpa frasa pemulihan: satu alamat untuk 12+ jaringan, dibangun di atas kontrak Safe v1.4.1 yang telah diaudit, gas bisa dibayar dengan stablecoin, sepenuhnya open source dan bisa di-hosting sendiri."
+    "description": "Dompet passkey tanpa frasa pemulihan: satu alamat untuk 24 jaringan, dibangun di atas kontrak Safe v1.4.1 yang telah diaudit, gas bisa dibayar dengan stablecoin, sepenuhnya open source dan bisa di-hosting sendiri."
    },
    "tagline": "Kunci Anda, aset Anda",
    "passkeyIndexLink": "Siapkan layanan indeks passkey",
@@ -639,7 +639,7 @@
      "description": "Buat dan masuk dengan passkey di perangkat Anda — tidak ada 12 kata yang harus dicatat dan dijaga."
     },
     "oneAddress": {
-     "title": "Satu alamat, 12+ jaringan",
+     "title": "Satu alamat, 24 jaringan",
      "description": "Alamat yang sama berlaku di semua jaringan yang didukung, dan Anda bisa menambah jaringan sendiri."
     },
     "openSource": {
@@ -1250,6 +1250,7 @@
    "close": "Tutup",
    "valueLabel": "Nilai",
    "bestEffortWarning": "Didekode dari signature fungsi — bukan deskriptor terverifikasi. Tinjau detailnya dengan cermat.",
+   "descriptorFetchedWarning": "Deskripsi ini berasal dari layanan deskriptor Vela dan tidak ada yang mengautentikasinya — periksa detailnya sebelum menyetujui.",
    "simWillSucceed": "Simulasi lolos — diperkirakan berhasil",
    "simWillFail": "Transaksi ini diperkirakan gagal — Anda tetap membayar gas.",
    "simWillFailReason": "Diperkirakan gagal: {{reason}} — Anda tetap membayar gas.",
@@ -1367,7 +1368,11 @@
    "trustedSignerReopen": "Buka halaman lagi",
    "trustedSignerDoneTab": "Sudah ditandatangani. Anda dapat menutup tab ini dan kembali ke Vela.",
    "viewOnExplorer": "Lihat di explorer",
-   "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri"
+   "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri",
+   "selfCallBlockedTitle": "Vela tidak menandatangani permintaan ini",
+   "selfCallBlockedBody": "Permintaan ini akan mengubah siapa yang menguasai dompet Anda ({{function}}). Sekali ditandatangani, dompet bisa berpindah ke orang lain, jadi Vela menolaknya. Tidak ada yang ditandatangani.",
+   "selfCallBlockedLegBody": "Langkah {{index}} pada permintaan ini akan mengubah siapa yang menguasai dompet Anda ({{function}}). Sekali ditandatangani, dompet bisa berpindah ke orang lain, jadi Vela menolak seluruh permintaan. Tidak ada yang ditandatangani.",
+   "selfCallBlockedSafeTx": "Permintaan ini meminta kunci Anda menyetujui transaksi Safe untuk dijalankan nanti. Vela menolaknya — tanda tangan seperti itu bisa dipakai tanpa kehadiran Anda. Tidak ada yang ditandatangani."
   },
   "signingApprove": {
    "resultingTotal": "Total izin belanja baru",
@@ -1578,7 +1583,7 @@
    "bundlerHint": "Endpoint yang kompatibel dengan Vela Relay diperlukan",
    "fiatLabel": "KURS FIAT",
    "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
-   "resetToDefaults": "Setel Ulang ke Bawaan",
+   "resetToDefaults": "Kembalikan keempatnya ke default",
    "selfHostGuide": "Panduan self-hosting →",
    "resetTitle": "Setel ulang endpoint layanan?",
    "resetBody": "Keempat layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
@@ -1609,8 +1614,9 @@
    "compatible": "Kompatibel",
    "incompatible": "Tidak kompatibel",
    "checkSafe": "Kontrak Safe L2",
-   "checkSigner": "Modul penanda tangan WebAuthn",
-   "checkRemaining": "{{count}} kontrak lainnya"
+   "checkSigner": "Precompile P-256",
+   "checkRemaining": "{{count}} kontrak lainnya",
+   "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal."
   },
   "treasury": {
    "modalTitle": "Treasury",

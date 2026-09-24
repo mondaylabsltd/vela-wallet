@@ -110,7 +110,7 @@
    "subtitle": "Exclui tudo o que a Vela guardou aqui",
    "desc": "Tudo o que a Vela guardou neste dispositivo é apagado. Não há backup nem como desfazer.",
    "loses": "Você perde: histórico de transações, contatos e grupos, histórico de navegação, permissões de dApps, tokens e redes personalizados, configurações de RPC e endpoints, e todas as preferências.",
-   "keeps": "Você não perde a carteira. Sua passkey continua no Face ID / impressão digital — escolha “Já tenho uma carteira” e o mesmo endereço volta, só que sem histórico.",
+   "keeps": "Você não perde a carteira. Apagar não alcança suas passkeys — elas ficam com o seu provedor de passkeys (Face ID / digital, um gerenciador de senhas ou uma chave de segurança), não com este app. Escolha “Já tenho uma carteira” e o mesmo endereço volta, só que sem histórico.",
    "confirm": "Apagar tudo",
    "cancel": "Cancelar",
    "failed": "A limpeza não terminou. Ainda há dados neste dispositivo e você continua conectado — tente de novo."
@@ -604,7 +604,7 @@
    "desktopTagline": "Suas chaves, seus ativos",
    "featureNoMnemonicTitle": "Sem frase de recuperação",
    "featureNoMnemonicBody": "Crie e entre com uma passkey no seu dispositivo — sem 12 palavras para anotar e guardar.",
-   "featureOneAddressTitle": "Um endereço, 12+ redes",
+   "featureOneAddressTitle": "Um endereço, 24 redes",
    "featureOneAddressBody": "O mesmo endereço funciona em todas as redes compatíveis, e você pode adicionar suas próprias redes.",
    "featureOpenSourceTitle": "Código aberto, auto-hospedável",
    "featureOpenSourceBody": "O app e os serviços de backend são de código aberto — você pode rodar uma infraestrutura totalmente sua.",
@@ -627,12 +627,12 @@
    "custodyTitle": "As chaves ficam com você",
    "custodyBody": "Suas chaves de acesso ficam onde você as guarda: no gerenciador de senhas do aparelho ou numa chave de segurança física. A Vela não alcança nem gasta por você.",
    "chainsTitle": "Um endereço, todas as redes",
-   "chainsBody": "O mesmo endereço vale em mais de 12 redes, e as taxas podem ser pagas em stablecoins — sem precisar estocar a moeda nativa de cada rede."
+   "chainsBody": "O mesmo endereço vale em 24 redes, e as taxas podem ser pagas em stablecoins — sem precisar estocar a moeda nativa de cada rede."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — a carteira com passkey",
-    "description": "Uma carteira com passkey e sem frase de recuperação: um único endereço em mais de 12 redes, contratos Safe v1.4.1 auditados, gas pago com stablecoins, tudo open source e auto-hospedável."
+    "description": "Uma carteira com passkey e sem frase de recuperação: um único endereço em 24 redes, contratos Safe v1.4.1 auditados, gas pago com stablecoins, tudo open source e auto-hospedável."
    },
    "tagline": "Suas chaves, seus ativos",
    "passkeyIndexLink": "Configurar o serviço de índice de passkeys",
@@ -642,7 +642,7 @@
      "description": "Crie e entre com a passkey do seu dispositivo — sem 12 palavras para anotar e guardar."
     },
     "oneAddress": {
-     "title": "Um endereço, mais de 12 redes",
+     "title": "Um endereço, 24 redes",
      "description": "O mesmo endereço funciona em todas as redes suportadas, e você pode adicionar as suas."
     },
     "openSource": {
@@ -1253,6 +1253,7 @@
    "close": "Fechar",
    "valueLabel": "Valor",
    "bestEffortWarning": "Decodificado a partir da assinatura da função — não é um descritor verificado. Revise os detalhes com atenção.",
+   "descriptorFetchedWarning": "Esta descrição veio do serviço de descritores da Vela e nada a autenticou — confira os detalhes antes de aprovar.",
    "simWillSucceed": "Simulação aprovada — deve ser bem-sucedida",
    "simWillFail": "Esta transação deve falhar — você ainda pagaria o gas.",
    "simWillFailReason": "Deve falhar: {{reason}} — você ainda pagaria o gas.",
@@ -1370,7 +1371,11 @@
    "trustedSignerReopen": "Abrir a página de novo",
    "trustedSignerDoneTab": "Assinado. Você pode fechar esta aba e voltar ao Vela.",
    "viewOnExplorer": "Ver no explorador",
-   "sendingToTokenContract": "Enviado ao contrato do próprio token"
+   "sendingToTokenContract": "Enviado ao contrato do próprio token",
+   "selfCallBlockedTitle": "A Vela não assina esta solicitação",
+   "selfCallBlockedBody": "Esta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa. Nada foi assinado.",
+   "selfCallBlockedLegBody": "A etapa {{index}} desta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa a solicitação inteira. Nada foi assinado.",
+   "selfCallBlockedSafeTx": "Esta solicitação pede que a sua chave autorize uma transação Safe para ser executada depois. A Vela recusa — uma assinatura dessas pode ser usada sem você. Nada foi assinado."
   },
   "signingApprove": {
    "resultingTotal": "Novo limite total",
@@ -1581,7 +1586,7 @@
    "bundlerHint": "É necessário um endpoint compatível com o Vela Relay",
    "fiatLabel": "COTAÇÕES FIAT",
    "fiatHint": "Taxas de câmbio baseadas em USD que definem a lista de moedas — substituível por uma cobertura mais ampla.",
-   "resetToDefaults": "Restaurar padrões",
+   "resetToDefaults": "Restaurar os quatro",
    "selfHostGuide": "Guia de auto-hospedagem →",
    "resetTitle": "Restaurar os endpoints de serviço?",
    "resetBody": "Os quatro serviços voltam aos endereços da Vela. Os endereços que você inseriu aqui serão descartados.",
@@ -1612,8 +1617,9 @@
    "compatible": "Compatível",
    "incompatible": "Incompatível",
    "checkSafe": "Contratos Safe L2",
-   "checkSigner": "Módulo de assinatura WebAuthn",
-   "checkRemaining": "outros {{count}} contratos"
+   "checkSigner": "Pré-compilado P-256",
+   "checkRemaining": "outros {{count}} contratos",
+   "singleKeyOnly": "Uma carteira com mais de uma passkey não pode ser criada nesta rede: a fábrica de signatários de passkeys da Safe não está implantada aqui.\nUma carteira com uma única passkey funciona normalmente."
   },
   "treasury": {
    "modalTitle": "Tesouraria",

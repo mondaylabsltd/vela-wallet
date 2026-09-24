@@ -14,11 +14,12 @@ use gpui::SharedString;
 
 use vela_core::app::approval_guard::{GuardAmountError, GuardEditorMode, GuardSurface, GuardView};
 use vela_core::app::clear_signing::{
-    ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearRisk, ClearSignField,
-    ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
+    ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearProvenance, ClearRisk,
+    ClearSignField, ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface,
+    UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
-use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignSurface, SignView};
+use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignView};
 
 use crate::signing::fixtures::{AllowanceInput, Block, ChipState, FeeModel, FeeTokenOption};
 use crate::signing::{SigningStrings, Tone};
@@ -371,10 +372,7 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
             tone: Tone::Neutral,
         },
         Block::Sentence {
-            text: SharedString::from(crate::signing::fill(
-                &s.funding_lead,
-                &[("symbol", &data.native_symbol)],
-            )),
+            text: s.funding_lead.clone(),
             tone: Tone::Neutral,
         },
     ];
@@ -410,6 +408,14 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
             ),
         ],
         tone: Tone::Neutral,
+    });
+
+    // Whose money this is, and that it does not come back. Under the card
+    // rather than above it: the address and the amount are what a person acts
+    // on, and this is what they need to know before they do.
+    out.push(Block::Warning {
+        tone: Tone::Caution,
+        text: s.funding_disclaimer.clone(),
     });
 
     if funding.presentation == SignFundingPresentation::Confirming {
@@ -587,6 +593,34 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
                 &[("symbol", &funding.data.native_symbol)],
             )),
         });
+    }
+
+    // Spec 081: the core refused the request outright — it would have changed
+    // who controls the account. This is the whole story of the sheet, so it is
+    // said first and in the danger tone; `confirm_gate_open` is already false.
+    if let Some(blocked) = sign.blocked.as_ref() {
+        out.push(Block::Intent {
+            text: s.blocked_title.clone(),
+            tone: Tone::Danger,
+        });
+        let text = if blocked.function == "SafeTx" {
+            s.blocked_safe_tx.to_string()
+        } else if let Some(index) = blocked.leg_index {
+            crate::signing::fill(
+                &s.blocked_leg_body,
+                &[
+                    ("index", &index.to_string()),
+                    ("function", &blocked.function),
+                ],
+            )
+        } else {
+            crate::signing::fill(&s.blocked_body, &[("function", &blocked.function)])
+        };
+        out.push(Block::Warning {
+            tone: Tone::Danger,
+            text: SharedString::from(text),
+        });
+        return out;
     }
 
     if let Some(error) = sign.error.as_ref() {
@@ -859,10 +893,24 @@ fn warnings(result: &ClearSignResult, s: &SigningStrings) -> Vec<Block> {
     }
     if result.partial {
         // The descriptor declared more fields than resolved. Saying nothing
-        // would present an incomplete reading as a complete one.
+        // would present an incomplete reading as a complete one — and saying
+        // it with `warn_verified_abi`, as this did until spec 081, said there
+        // was no descriptor for this contract when there plainly was one.
         out.push(Block::Warning {
             tone: Tone::Caution,
-            text: s.warn_verified_abi.clone(),
+            text: s.warn_partial.clone(),
+        });
+    }
+    if result.provenance == ClearProvenance::Fetched {
+        // Spec 081 FR-008: the descriptor service answered, over plain HTTP,
+        // from a base URL the person can edit — and nothing signed the
+        // answer. The other values say nothing here: built in and pinned are
+        // what "verified" means, a token-standard shape is the standard doing
+        // its job, the 4-byte database has its own line above, and a
+        // deployment claims nothing to doubt.
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_descriptor_fetched.clone(),
         });
     }
     if result.fields.iter().any(|field| field.unverified) {
@@ -940,6 +988,7 @@ pub fn fee_model(
     s: &SigningStrings,
     locale: &str,
     speed_tier: Option<FeeTier>,
+    currency: &crate::wallet::live::Money,
 ) -> FeeModel {
     if off_chain(clear) {
         return FeeModel::OffChain(s.ok_no_network_fee.clone());
@@ -955,6 +1004,10 @@ pub fn fee_model(
     // is shut for the same reason.
     FeeModel::OnChain {
         label: s.fee_label.clone(),
+        // What the handler already knows (`signing_host::fee_tapped`): a
+        // failed quote can be asked again, more than one coin can be chosen
+        // between — and one coin with a quote in hand is neither.
+        tappable: fee.failed.is_some() || fee.options.len() > 1,
         value: if another_tier {
             s.fee_estimating.clone()
         } else {
@@ -963,6 +1016,7 @@ pub fn fee_model(
                 None,
                 fee,
                 locale,
+                currency,
             ))
         },
         // The coins the relay will take, open in the sheet when asked — each
@@ -1090,6 +1144,7 @@ pub fn confirm_label(clear: &ClearSigningView, s: &SigningStrings) -> SharedStri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vela_core::app::sign_request::SignSurface;
 
     use vela_core::app::clear_signing::{ClearFieldRole, ClearSignType};
 
@@ -1163,6 +1218,7 @@ mod tests {
             risk: ClearRisk::Normal,
             contract_address: None,
             verified: true,
+            provenance: ClearProvenance::BuiltIn,
             sign_type: ClearSignType::Transaction,
             partial: false,
             best_effort: false,
@@ -1746,9 +1802,16 @@ mod tests {
             &fee,
             Some(FeeTier::Slow)
         ));
-        let FeeModel::OnChain { value, .. } =
-            fee_model(&clear, &fee, 100, false, &s, "en", Some(FeeTier::Slow))
-        else {
+        let FeeModel::OnChain { value, .. } = fee_model(
+            &clear,
+            &fee,
+            100,
+            false,
+            &s,
+            "en",
+            Some(FeeTier::Slow),
+            crate::wallet::live::Money::usd(),
+        ) else {
             unreachable!("a transaction has an on-chain fee");
         };
         assert_eq!(value, s.fee_estimating);
@@ -1764,9 +1827,16 @@ mod tests {
             &fee,
             Some(FeeTier::Slow)
         ));
-        let FeeModel::OnChain { value, .. } =
-            fee_model(&clear, &fee, 100, false, &s, "en", Some(FeeTier::Slow))
-        else {
+        let FeeModel::OnChain { value, .. } = fee_model(
+            &clear,
+            &fee,
+            100,
+            false,
+            &s,
+            "en",
+            Some(FeeTier::Slow),
+            crate::wallet::live::Money::usd(),
+        ) else {
             unreachable!("a transaction has an on-chain fee");
         };
         assert_ne!(value, s.fee_estimating);
@@ -1829,6 +1899,41 @@ mod tests {
             (Tone::Danger, s.warn_token_to_contract.clone())
         );
         assert_eq!(warnings[1].0, Tone::Caution);
+    }
+
+    /// Spec 081 FR-008: each state says the sentence that is TRUE of it.
+    /// An incomplete decode said "no ERC-7730 descriptor for this contract",
+    /// which is the opposite of what happened, and a fetched descriptor said
+    /// nothing at all about never having been authenticated.
+    #[test]
+    fn an_incomplete_decode_and_a_fetched_one_say_what_they_are() {
+        let s = strings();
+        let said = |mutate: &dyn Fn(&mut ClearSignResult)| {
+            let mut result = result(vec![field("To", "0xbbb")]);
+            mutate(&mut result);
+            blocks(&view(result), &RequestFacts::default(), &s)
+                .iter()
+                .filter_map(|block| match block {
+                    Block::Warning { text, .. } => Some(text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(said(&|r| r.partial = true), vec![s.warn_partial.clone()]);
+        assert_eq!(
+            said(&|r| r.provenance = ClearProvenance::Fetched),
+            vec![s.warn_descriptor_fetched.clone()]
+        );
+        // Built in, pinned, a token standard, a deployment: nothing to say.
+        for provenance in [
+            ClearProvenance::BuiltIn,
+            ClearProvenance::PinnedMatch,
+            ClearProvenance::Standard,
+            ClearProvenance::None,
+        ] {
+            assert!(said(&|r| r.provenance = provenance).is_empty());
+        }
     }
 
     /// A pristine machine — nothing presented at all — draws nothing.
@@ -1930,6 +2035,53 @@ mod fee_tests {
         fee
     }
 
+    /// Spec 081's dead-control rule, on the row that prices the request.
+    ///
+    /// The handler has always refused to act on one coin with a quote
+    /// (`signing_host::fee_tapped`); the drawing kept offering. The chevron
+    /// now says what the handler does — and a failed quote keeps it, because
+    /// that press asks again.
+    #[test]
+    fn the_fee_row_is_a_control_only_where_pressing_it_would_do_something() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let tappable = |fee: &FeeView| match fee_model(
+            &clear,
+            fee,
+            1,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
+            FeeModel::OnChain { tappable, .. } => tappable,
+            _ => unreachable!("a transaction has a fee row"),
+        };
+
+        let one_coin = quoted(vec![option("ETH", None, false, true)], true);
+        assert!(!tappable(&one_coin), "one coin, quoted: nothing to choose");
+
+        let two_coins = quoted(
+            vec![
+                option("ETH", None, false, true),
+                option(
+                    "USDT",
+                    Some("0xdac17f958d2ee523a2206206994597c13d831ec7"),
+                    false,
+                    false,
+                ),
+            ],
+            true,
+        );
+        assert!(tappable(&two_coins), "two coins: the list can open");
+
+        let mut failed = quoted(vec![option("ETH", None, false, true)], false);
+        failed.failed = Some(vela_core::app::fee_policy::FeeFailure::QuoteUnavailable);
+        assert!(tappable(&failed), "a failed quote can be asked again");
+    }
+
     /// The coin list opens in the sheet with every coin the relay takes —
     /// including one that cannot pay, drawn for context and marked so the
     /// page binds it nothing.
@@ -1951,11 +2103,29 @@ mod fee_tests {
             false,
         );
 
-        match fee_model(&clear, &fee, 1, false, &s, "en", None) {
+        match fee_model(
+            &clear,
+            &fee,
+            1,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
             FeeModel::OnChain { selector, .. } => assert!(selector.is_none(), "closed"),
             _ => unreachable!("a transaction has a fee row"),
         }
-        match fee_model(&clear, &fee, 1, true, &s, "en", None) {
+        match fee_model(
+            &clear,
+            &fee,
+            1,
+            true,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
             FeeModel::OnChain {
                 selector: Some((title, options)),
                 ..

@@ -393,8 +393,29 @@ for (let i = 1; i < PATHS.length; i++) {
 //   it is supposed to be — 「客户端支持回环 + 蓝牙就够了」, then 「我确定砍掉
 //   蓝牙」. A shrinking ledger is as load-bearing as a growing one: a string
 //   nothing draws is a string nobody notices going wrong.
-if (PATHS.length !== 1722) fail(`expected 1722 paths (1633 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1633) fail(`expected 1633 leaf paths, got ${leafSet.size}`);
+// 1691 (spec 081, 2026-09-22): the self-call guard's blocked sheet needs four
+//   leaves under the existing `componentsUi.signing` branch —
+//   `selfCallBlockedTitle`, `...Body`, `...LegBody` (the batch wording, with
+//   the 1-based step) and `...SafeTx` (the typed-data case, which names no
+//   function). No new branch: 1687 + 4 = 1691 = 1603 leaf + 88 branch.
+// 1692 (spec 081, FR-009): + `settingsModals.addNetwork.singleKeyOnly`. The
+//   network check now asks for Safe's passkey signer factory too, which only a
+//   wallet with more than one key needs — so a chain can be genuinely usable
+//   and still refuse such a wallet. One sentence for that state; without it a
+//   person reads "Compatible" beside two red crosses. 1691 + 1 = 1692.
+// 1693 (spec 081, FR-008): + `componentsUi.signing.descriptorFetchedWarning`.
+//   A descriptor fetched from the chain-data service was shown as "verified"
+//   with nothing having authenticated it. Now only a built-in descriptor — or
+//   a fetched one byte-equal to the built-in copy — earns that word, and this
+//   is the sentence the other case needs. 1692 + 1 = 1693.
+// MERGE (2026-09-24): main and 075 both counted up from 1687 and arrived at
+//   different totals — main at 1693 (spec 081's four blocked-sheet leaves, the
+//   single-key network sentence, the fetched-descriptor warning), 075 at 1722
+//   (the Trusted Signer, then −23 as its cross-device channels went). The
+//   corpus is the UNION of both, so the total is neither, and the number below
+//   is the merged corpus's own — not a guess, and not either side's.
+if (PATHS.length !== 1728) fail(`expected 1728 paths (1639 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1639) fail(`expected 1639 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

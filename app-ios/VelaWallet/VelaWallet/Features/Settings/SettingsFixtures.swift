@@ -282,7 +282,10 @@ enum SettingsFixtures {
             CheckItemModel(label: "EntryPoint v0.7", ok: true),
             CheckItemModel(label: loc.t(k.addCheckSafe), ok: ok),
             CheckItemModel(label: loc.t(k.addCheckSigner), ok: ok),
-            CheckItemModel(label: loc.t(k.addCheckRemaining, vars: ["count": "8"]), ok: ok),
+            // Seven, not eight: spec 081 FR-009 dropped the fallback handler
+            // the wallet never uses and gave the two passkey-signer contracts
+            // their own sentence instead of this count.
+            CheckItemModel(label: loc.t(k.addCheckRemaining, vars: ["count": "7"]), ok: ok),
         ]
 
         if ok {
@@ -451,12 +454,15 @@ enum SettingsFixtures {
             ],
             links: [
                 KeyValueRowModel(label: loc.t(k.aboutLinkWebsite), value: "getvela.app",
-                                 mono: true, external: true),
+                                 mono: true, external: true,
+                                 link: "https://getvela.app"),
                 KeyValueRowModel(label: loc.t(k.aboutLinkGithub),
                                  value: "github.com/mondaylabsltd/vela-wallet",
-                                 mono: true, external: true),
+                                 mono: true, external: true,
+                                 link: "https://github.com/mondaylabsltd/vela-wallet"),
                 KeyValueRowModel(label: loc.t(k.aboutLinkSafe), value: "safe.global",
-                                 mono: true, external: true),
+                                 mono: true, external: true,
+                                 link: "https://safe.global"),
             ],
             footer: loc.t(k.aboutFooter)
         )

@@ -77,7 +77,11 @@ fun VelaSettingsRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onClick(row.id) }
+                // No action, no ripple (dead-controls #8): a control that
+                // cannot act is not dressed as one. The Ethereum-backup row
+                // pressed in under the finger in three of its four states and
+                // the handler returned in silence.
+                .then(if (row.actionable) Modifier.clickable { onClick(row.id) } else Modifier)
                 .heightIn(min = VelaSizing.controlLg)
                 .padding(vertical = VelaSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
@@ -133,6 +137,14 @@ fun VelaSettingsRow(
                 )
                 RowTrailing.External -> Icon(
                     imageVector = VelaIcons.ExternalLink,
+                    contentDescription = null,
+                    tint = colors.fgSubtle,
+                    modifier = Modifier.size(VelaIconSize.sm),
+                )
+                // "Ask again" rather than "go somewhere": the row's own check
+                // runs afresh and the subtitle goes back to 检查中.
+                RowTrailing.Retry -> Icon(
+                    imageVector = VelaIcons.RefreshCw,
                     contentDescription = null,
                     tint = colors.fgSubtle,
                     modifier = Modifier.size(VelaIconSize.sm),

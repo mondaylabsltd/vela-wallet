@@ -149,6 +149,7 @@ export function createSignExecutor(ports: SignShellPorts) {
 					// for each one (a `submit_failed` detail IS `err.message`, verbatim).
 					transport?.sendResponse(operation.id, undefined, {
 						code: operation.payload.code,
+						kind: operation.payload.kind,
 						message: signErrorMessage({
 							kind: operation.payload.kind,
 							detail: operation.payload.message

@@ -17,7 +17,13 @@ import app.getvela.wallet.feature.signing.SigningBlock
 import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningLive
 import app.getvela.wallet.feature.signing.SigningScreenState
+import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.SignExecutor
+import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import app.getvela.wallet.feature.signing.core.ClearConfirm
+import app.getvela.wallet.feature.signing.core.ClearProvenance
+import app.getvela.wallet.feature.signing.core.ClearSignField
+import app.getvela.wallet.feature.signing.core.ClearSignResult
 import app.getvela.wallet.feature.signing.core.ClearSigningView
 import app.getvela.wallet.feature.signing.core.ClearSurface
 import app.getvela.wallet.feature.signing.core.GuardView
@@ -76,6 +82,36 @@ class SigningLiveTest {
         val blind = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
         assertTrue(blind.blocks.any { it is SigningBlock.Warning })
         assertEquals(strings.t("componentsUi.signing.confirmLabel"), blind.confirmAction)
+    }
+
+    /**
+     * Spec 081 FR-008: the sheet says where a description came from, and only
+     * where there is something to say. A fetched descriptor is the descriptor
+     * service's word over plain HTTP; everything else either IS the app's own
+     * word or already has its own line.
+     */
+    @Test
+    fun `a fetched description says it was never authenticated, and the others say nothing`() {
+        val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        fun warningsFor(provenance: ClearProvenance): List<String> {
+            val result = ClearSignResult(
+                intent = "Stake",
+                fields = listOf(ClearSignField(label = "To", value = "0x…", format = "addressName", address = founder)),
+                contract_address = founder,
+                provenance = provenance,
+            )
+            val clear = ClearSigningView(resolved = true, result = result, surface = ClearSurface.ClearSign, confirm = ClearConfirm.Confirm)
+            val model = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
+            return model.blocks.filterIsInstance<SigningBlock.Warning>().map { it.text }
+        }
+        assertEquals(
+            listOf(strings.t("componentsUi.signing.descriptorFetchedWarning")),
+            warningsFor(ClearProvenance.Fetched),
+        )
+        for (quiet in listOf(ClearProvenance.BuiltIn, ClearProvenance.PinnedMatch, ClearProvenance.Standard, ClearProvenance.None)) {
+            assertEquals(quiet.name, emptyList<String>(), warningsFor(quiet))
+        }
     }
 
     private fun estimate(tier: FeeTier, totalWei: String) = FeeEstimateView(
@@ -237,4 +273,12 @@ class SigningLiveTest {
         assertNull(native.gas_fee_token)
         assertEquals("400000000000000", native.quoted_fee?.amount)
     }
+
+    // Spec 081's "a refusal says what happened, and carries a kind" moved with
+    // the code it tests: spec 070 made the CORE write the page's answer
+    // (`dapp_browser` → `dapp_rpc::sign_error_json`), so this shell no longer
+    // has a `responseJson` to check. The assertion is now
+    // `BrowserMachineTest."a refused request tells the page what happened and
+    // why"`, against the real machine, plus the core's own
+    // `dapp_rpc::tests::a_refused_request_is_answered_with_a_sentence_and_a_kind`.
 }

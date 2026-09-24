@@ -361,6 +361,10 @@ enum I18nKeys {
         static let keysProviderGeneric = "onboarding.create.providerGeneric"
         static let keysProviderSecurityKey = "onboarding.create.providerSecurityKey"
         static let networkOffline = "settingsModals.health.offline"
+        // The other two service-health verdicts (spec 081 FR-001). A refused
+        // endpoint and one that answered with somebody else's service are
+        // different failures, and Android has said so since 047 — iOS had no
+        // key for either because the page was a drawing.
         static let healthHttpsRequired = "settingsModals.health.httpsRequired"
         static let healthInvalid = "settingsModals.health.invalid"
         static let chainId = "settingsModals.network.chainId"
@@ -387,6 +391,8 @@ enum I18nKeys {
         static let addBestRpc = "settingsModals.addNetwork.bestRpc"
         static let addButton = "settingsModals.addNetwork.addNetworkBtn"
         static let addIncompatibleHint = "settingsModals.addNetwork.incompatibleHint"
+        /// Spec 081 FR-009: compatible for one key, not for two to seven.
+        static let addSingleKeyOnly = "settingsModals.addNetwork.singleKeyOnly"
         static let addChainTool = "settingsModals.addNetwork.openChainSetupTool"
         static let addRecheckWithRpc = "settingsModals.addNetwork.recheckWithRpc"
         static let addTestnet = "settingsModals.addNetwork.testnet"
@@ -501,6 +507,8 @@ enum I18nKeys {
         static let eraseKeeps = "settings.eraseDevice.keeps"
         static let eraseConfirm = "settings.eraseDevice.confirm"
         static let eraseCancel = "settings.eraseDevice.cancel"
+        /// The erase ran and something survived — said, never swallowed
+        /// (spec 081 FR-017).
         static let eraseFailed = "settings.eraseDevice.failed"
 
             // Feedback.

@@ -47,7 +47,7 @@ That's the entire contract. A rate provider just has to tell you "X per 1 USD".
         formatFiat(usdAmount * rate, code, symbol) → "¥1,553"
 ```
 
-Two tiers, tried in order (see `getRate` in [`currency.ts`](../src/services/currency.ts)):
+Two tiers, tried in order (see `getRate` in `currency.ts` (retired — now `l10n/currency.rs` in the core + `currency-rate.ts` in the shell)):
 
 1. **Chainlink fiat/USD feeds** — on-chain, decentralized, for the ~16 currencies that
    have a feed. *Optional* — drop this tier if you don't need on-chain rates.
@@ -64,7 +64,7 @@ no code change.
 ## 3. The rate-provider contract (HTTP endpoint)
 
 The endpoint must return **USD-based** rates in one of two shapes. Both are accepted by
-`normalizeRates` (see [`fiat-fx.ts`](../src/services/fiat-fx.ts)), so providers are swappable:
+`normalizeRates` (see [`fiat-fx.ts`](../app-web/vela-wallet/src/lib/services/fiat-fx.ts)), so providers are swappable:
 
 **A. Array shape** (Frankfurter v2):
 ```json
@@ -98,7 +98,16 @@ The endpoint must return **USD-based** rates in one of two shapes. Both are acce
 
 ## 4. Public API
 
-From [`currency.ts`](../src/services/currency.ts):
+> **Where this lives now.** The *decisions* — which currencies drop decimals, how many fraction
+> digits a code gets, how a converted value is rendered — moved into the Rust core:
+> `rust/crates/vela-core/src/l10n/currency.rs` (`format_fiat`, `currency_fraction_digits`,
+> `ZERO_DECIMAL`), re-exported from `l10n/mod.rs`. There is no `currency.ts` any more. The web
+> shell keeps only the I/O and the preference: `app-web/vela-wallet/src/lib/services/`
+> (`fiat-fx.ts`, `fiat-rates.ts`, `currency-rate.ts`, `locale-format.ts`) and
+> `src/lib/settings/core/` (`currency-catalog.ts`, `currency.svelte.ts`). The signatures below are
+> the shape of the system, not names you can import today.
+
+The original TypeScript surface, kept because it is the clearest statement of the shape:
 
 ```ts
 getRate(code: string): Promise<number>           // USD → code multiplier (1 for USD)
@@ -112,7 +121,7 @@ loadSupportedCurrencies(): Promise<Currency[]>   // full list driven by the endp
 loadCurrency() / getCurrencyCode() / setCurrency(code)   // persisted user preference
 ```
 
-From [`fiat-fx.ts`](../src/services/fiat-fx.ts) (the HTTP source):
+From [`fiat-fx.ts`](../app-web/vela-wallet/src/lib/services/fiat-fx.ts) (the HTTP source — this one is still live, at that path):
 
 ```ts
 fetchFxRates(): Promise<Record<string, number>>  // { USD:1, EUR:0.86, … }, cached + persisted
@@ -121,7 +130,7 @@ getSupportedFxCodes(): Promise<string[]>         // drives the currency list
 normalizeRates(data): Record<string, number> | null   // array OR {rates} → map
 ```
 
-From [`fiat-rates.ts`](../src/services/fiat-rates.ts) (optional Chainlink tier):
+From [`fiat-rates.ts`](../app-web/vela-wallet/src/lib/services/fiat-rates.ts) (optional Chainlink tier):
 
 ```ts
 getChainlinkRate(code): Promise<number | null>
@@ -138,18 +147,20 @@ const rate = await getRate(code);            // 155.3
 const label = formatFiat(usdAmount * rate, code, symbol);   // "¥1,553"
 ```
 
-A `useDisplayCurrency()` hook ([`use-display-currency.ts`](../src/hooks/use-display-currency.ts))
-bundles this as `{ code, symbol, rate, fmt }` where `fmt(usd) = formatFiat(usd*rate, …)`.
+There is no `useDisplayCurrency()` hook any more — the bundle of `{ code, symbol, rate }` is a
+core-computed view model (`SendDisplayContext` in the generated wire types), and the shell renders
+what it is given.
 
 ---
 
-## 5. Display rules (`formatFiat`)
+## 5. Display rules (`format_fiat`)
 
 - **Decimals are dropped** when the amount is large (≥ 100,000 — cents are visual noise)
   or for **zero-decimal currencies** (JPY, KRW, VND, IDR, ISK, HUF, CLP, …) which have no
-  commonly-used minor unit. See `ZERO_DECIMAL_CODES` / `shouldShowDecimals`.
+  commonly-used minor unit. See `ZERO_DECIMAL` / `currency_fraction_digits` in
+  `rust/crates/vela-core/src/l10n/currency.rs` (the list carries 30 codes).
 - Grouping/decimal separators come from the app's number-format locale (see
-  [`locale-format.ts`](../src/services/locale-format.ts)); replace `formatNumber` with
+  [`locale-format.ts`](../app-web/vela-wallet/src/lib/services/locale-format.ts)); replace `formatNumber` with
   `value.toLocaleString()` if you don't need that.
 
 ```
@@ -163,7 +174,7 @@ formatFiat(2460539, 'USD', '$')   → "$2,460,539"     // large → no cents
 ## 6. Currency list (data-driven)
 
 - `currencyMeta(code)` resolves ISO `code → { name, symbol }` from a static catalog
-  ([`currency-catalog.ts`](../src/services/currency-catalog.ts)), falling back to the bare
+  ([`currency-catalog.ts`](../app-web/vela-wallet/src/lib/settings/core/currency-catalog.ts)), falling back to the bare
   code for anything unknown — so **any** code the endpoint returns still renders.
 - `getSupportedCurrenciesSync()` returns a static base (~30 majors + Chainlink) for
   instant first paint; `loadSupportedCurrencies()` then expands it to **exactly what the
@@ -186,7 +197,7 @@ formatFiat(2460539, 'USD', '$')   → "$2,460,539"     // large → no cents
 ## 8. Optional: Chainlink tier (on-chain rates)
 
 Skippable. If you want decentralized rates for major currencies
-([`fiat-rates.ts`](../src/services/fiat-rates.ts)):
+([`fiat-rates.ts`](../app-web/vela-wallet/src/lib/services/fiat-rates.ts)):
 
 - Feeds are addressed by ENS: `<ccy>-usd.data.eth` (e.g. `gbp-usd.data.eth`), resolved on
   Ethereum mainnet, then read with `latestRoundData()`.
@@ -202,14 +213,14 @@ Skippable. If you want decentralized rates for major currencies
 ## 9. Porting checklist
 
 1. Copy `fiat-fx.ts` (the HTTP source + `normalizeRates`) and `currency-catalog.ts`.
-2. Replace `AsyncStorage` with your KV store (2 calls: get/set a JSON blob).
+2. Replace the shell's KV store with yours (2 calls: get/set a JSON blob).
 3. Decide the default endpoint (Frankfurter v2 recommended) and make it configurable.
 4. Take `getRate` + `formatFiat` + `shouldShowDecimals` from `currency.ts`. Drop the
    Chainlink branch if you don't need on-chain rates — `getRate` becomes just
    "endpoint → 1".
 5. (Optional) Take `currencyMeta` + `loadSupportedCurrencies` for a data-driven picker.
 
-### Minimal standalone version (no Chainlink, no RN)
+### Minimal standalone version (no Chainlink, no wallet)
 
 ```ts
 const ENDPOINT = 'https://api.frankfurter.dev/v2/rates?base=USD';

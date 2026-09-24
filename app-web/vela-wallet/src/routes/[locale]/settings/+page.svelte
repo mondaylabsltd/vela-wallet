@@ -72,8 +72,12 @@
 		type StorageItemId
 	} from '$lib/services/device-storage';
 	import {
+		feedbackLabels,
 		themeFromSegment,
 		withEraseFailure,
+		withEraseFailureDesktop,
+		withFeedback,
+		withFeedbackDesktop,
 		walletKeysModel,
 		withLivePreferences,
 		withLivePreferencesDesktop
@@ -82,6 +86,18 @@
 	import { loadCurrencyCodes } from '$lib/settings/core/currency-catalog';
 	import { SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
 	import { eraseDeviceData } from '$lib/services/erase-device';
+	import {
+		AREA_OTHER,
+		buildBugReport,
+		sendBugReport,
+		webPlatform,
+		type DeviceFacts
+	} from '$lib/services/bug-report';
+	import { BUILD_COMMIT, BUILD_VERSION } from '$lib/build/info';
+	import { netCounters } from '$lib/services/metrics';
+	import { getFailedRpcChains } from '$lib/services/rpc-pool';
+	import { chainName } from '$lib/services/networks';
+	import type { FeedbackResult } from '$lib/settings/model';
 	import type { SettingsPrefEvent } from '$lib/settings/pref-events';
 	import { LOCALE_ENDONYMS } from '$lib/settings/fixtures';
 	import type { SettingsNetEvent } from '$lib/settings/net-events';
@@ -178,6 +194,68 @@
 	/** Set when an erase ran and something survived. Said, never swallowed. */
 	let eraseFailed = $state(false);
 
+	// --- The report (spec 081 FR-016) ----------------------------------------
+	//
+	// The sheet's 发送 was inert: `FeedbackBody` has always taken an `onsend`
+	// and this page never passed one, so a person could type a bug report,
+	// press the button, and be told nothing at all. These three pieces of state
+	// are the whole wiring — what is in flight, and how the last one ended.
+
+	let feedbackSending = $state(false);
+	let feedbackResult = $state<FeedbackResult | undefined>(undefined);
+
+	/**
+	 * What this device is allowed to say about itself, and nothing more.
+	 *
+	 * Five named fields. No address, no balance, no endpoint or RPC URL — the
+	 * last because a self-hosted endpoint carries an API key in its path often
+	 * enough that a public issue tracker is the wrong place for one — and no
+	 * raw `vela.*` value. The failure lines are the net counters' CLASSES
+	 * (`rpc:final_failure ×3`), which say what broke without saying where.
+	 */
+	const deviceFacts = $derived.by<DeviceFacts>(() => {
+		const failures: string[] = [];
+		for (const [key, count] of netCounters()) {
+			if (key.endsWith(':final_failure') && count > 0) failures.push(`${key} ×${count}`);
+		}
+		return {
+			version: BUILD_VERSION,
+			commit: BUILD_COMMIT,
+			platform: webPlatform(),
+			language: data.locale,
+			unreachable: [...getFailedRpcChains()].map((id) => chainName(id)),
+			failures
+		};
+	});
+
+	/**
+	 * Send it, and say what happened.
+	 *
+	 * Both endings are outcomes, not one success and one error: a report the
+	 * endpoint could not file (503 while the token is unprovisioned, 429, any
+	 * 5xx, no network) still has the prefilled GitHub form, and the sheet
+	 * offers it rather than apologising. The person's typing is already in that
+	 * URL — by the form's FIELD IDS, because `template=bug.yml` makes GitHub
+	 * ignore `&body=` entirely.
+	 */
+	async function sendFeedback(report: { what: string; steps: string }): Promise<void> {
+		if (feedbackSending) return;
+		feedbackSending = true;
+		feedbackResult = undefined;
+		const payload = buildBugReport({
+			what: report.what,
+			steps: report.steps,
+			area: AREA_OTHER,
+			labels: feedbackLabels(m),
+			facts: deviceFacts
+		});
+		const outcome = await sendBugReport(payload);
+		feedbackSending = false;
+		feedbackResult = outcome.ok
+			? { filed: true, number: outcome.number, url: outcome.url, deduped: outcome.deduped }
+			: { filed: false, fallbackUrl: outcome.fallbackUrl };
+	}
+
 	// --- The Ethereum backup row (spec 062) ---------------------------------
 	//
 	// Where the active wallet's founding record stands on Ethereum, asked of the
@@ -227,6 +305,13 @@
 	onMount(() => () => feeQuote.dispose());
 	let backupOpening = false;
 	function startBackup(): void {
+		// "Could not check" asks again rather than starting a backup: there is
+		// nothing to sign until we know whether it is already backed up, and
+		// the same effect below does the asking.
+		if (backupState === 'could_not_check') {
+			backupAsked += 1;
+			return;
+		}
 		const account = session.view.accounts[session.view.active_index]?.account;
 		if (!account || backupOpening) return;
 		backupOpening = true;
@@ -433,18 +518,35 @@
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
+		model = withFeedback(model, m, deviceFacts);
 		model = { ...model, keys: walletKeysModel(walletKeys, backupState, m) };
 		// The phone's first block (founder, 2026-09-05): 通讯录 is a tab on the
 		// bar under this very screen, and 反馈 is not wanted here — so the block
 		// they made up goes with them. The desktop nav keeps its own list.
+		//
+		// Spec 081 FR-016 puts 反馈 back on the screen, in the LAST block rather
+		// than the first: the ruling was about that block, and a report button
+		// reachable only from `/gallery` is a report button nobody can press.
+		// Beside 关于, because "something is wrong" and "what is this" are the
+		// same errand and the person looks in the same place for both.
+		const feedbackRow = model.sections
+			.flatMap((section) => section.rows)
+			.find((row) => row.id === 'feedback');
+		const trimmed = model.sections
+			.map((section) => ({
+				...section,
+				rows: section.rows.filter((row) => row.id !== 'contacts' && row.id !== 'feedback')
+			}))
+			.filter((section) => section.rows.length > 0 || section.appearanceControls === true);
+		const last = trimmed.length - 1;
 		return {
 			...model,
-			sections: model.sections
-				.map((section) => ({
-					...section,
-					rows: section.rows.filter((row) => row.id !== 'contacts' && row.id !== 'feedback')
-				}))
-				.filter((section) => section.rows.length > 0 || section.appearanceControls === true)
+			sections:
+				feedbackRow === undefined || last < 0
+					? trimmed
+					: trimmed.map((section, index) =>
+							index === last ? { ...section, rows: [...section.rows, feedbackRow] } : section
+						)
 		};
 	});
 	const liveDesktop = $derived.by(() => {
@@ -469,6 +571,10 @@
 			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }
 		};
 		model = withEraseFailure(model, m, eraseFailed);
+		// Spec 081: the wide layout's own two dead controls — the danger card
+		// with no handler, and a report panel that did not exist.
+		model = withEraseFailureDesktop(model, m, eraseFailed);
+		model = withFeedbackDesktop(model, m, deviceFacts);
 		return withLivePreferencesDesktop(model, m, languageValue, data.locale);
 	});
 
@@ -608,6 +714,9 @@
 				onaccountsopen={accountsOpen}
 				onstorageclear={clearRow}
 				onclearcaches={clearCaches}
+				onfeedbacksend={(report) => void sendFeedback(report)}
+				{feedbackSending}
+				{feedbackResult}
 				onethereumbackup={startBackup}
 			/>
 		</div>
@@ -627,6 +736,9 @@
 				onaccountsignin={() => void goto(welcome)}
 				onaccountsopen={accountsOpen}
 				onclearcaches={clearCaches}
+				onfeedbacksend={(report) => void sendFeedback(report)}
+				{feedbackSending}
+				{feedbackResult}
 				onethereumbackup={startBackup}
 			/>
 		</main>

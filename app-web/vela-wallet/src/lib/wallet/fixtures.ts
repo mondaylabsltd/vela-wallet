@@ -552,6 +552,9 @@ export function buildDesktopState(
 			{ label: m.assetDetail.labelDecimals, value: '18' }
 		],
 		viewOnExplorer: m.assetDetail.viewOnExplorer,
+		// A native coin has no token page, so live links the account's — the
+		// same fallback `live-detail.ts` takes.
+		explorerUrl: `https://gnosisscan.io/address/${IDENTITY.addressFull}`,
 		transactionsTitle: m.assetDetail.labelTransactions,
 		rows: [
 			activityRow(m, DEFAULT_ACTIVITY[2], { withTime: true }),

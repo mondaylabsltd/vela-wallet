@@ -26,6 +26,28 @@ enum class ClearFieldRole {
     @SerialName("generic") Generic,
 }
 
+/**
+ * Where a description came from (spec 081 FR-008) — the ground `verified`
+ * stands on. `Fetched` is the descriptor service's word over plain HTTP, from
+ * a base URL the person can edit; `None` is a sheet no descriptor described.
+ * Defaulted, like every other field here, so a core built before the field
+ * existed still decodes — and it defaults to the claim that promises least.
+ */
+@Serializable
+enum class ClearProvenance {
+    @SerialName("built_in") BuiltIn,
+
+    @SerialName("pinned_match") PinnedMatch,
+
+    @SerialName("fetched") Fetched,
+
+    @SerialName("standard") Standard,
+
+    @SerialName("selector_db") SelectorDb,
+
+    @SerialName("none") None,
+}
+
 @Serializable
 enum class ClearSignType {
     @SerialName("transaction") Transaction,
@@ -206,6 +228,7 @@ data class ClearSignResult(
     val risk: ClearRisk = ClearRisk.Normal,
     val contract_address: String? = null,
     val verified: Boolean = false,
+    val provenance: ClearProvenance = ClearProvenance.Fetched,
     val sign_type: ClearSignType = ClearSignType.Transaction,
     val partial: Boolean = false,
     val best_effort: Boolean = false,

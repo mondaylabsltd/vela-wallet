@@ -617,6 +617,7 @@ object I18nKeys {
         const val BATCH_RATE_RESET = "send.batchRateReset"
         const val BATCH_OVER_CAP = "send.batchOverCap"
         const val BATCH_OVER_BALANCE = "send.batchOverBalance"
+        const val BATCH_TOKEN_HINT = "send.batchTokenHint"
         const val BATCH_ADDS_TO_ROWS = "send.batchAddsToRows"
         const val BATCH_REPLACES_ROWS = "send.batchReplacesRows"
         const val BATCH_REPLACE_INSTEAD = "send.batchReplaceInstead"
@@ -838,6 +839,9 @@ object I18nKeys {
         const val ADD_BEST_RPC = "settingsModals.addNetwork.bestRpc"
         const val ADD_BUTTON = "settingsModals.addNetwork.addNetworkBtn"
         const val ADD_INCOMPATIBLE_HINT = "settingsModals.addNetwork.incompatibleHint"
+
+        /** Spec 081 FR-009: compatible for one key, not for two to seven. */
+        const val ADD_SINGLE_KEY_ONLY = "settingsModals.addNetwork.singleKeyOnly"
         const val ADD_CHAIN_TOOL = "settingsModals.addNetwork.openChainSetupTool"
         const val ADD_RECHECK_WITH_RPC = "settingsModals.addNetwork.recheckWithRpc"
         const val ADD_TESTNET = "settingsModals.addNetwork.testnet"

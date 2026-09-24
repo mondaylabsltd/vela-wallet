@@ -203,6 +203,11 @@ class AppContainer(private val app: Application) {
             // contract is an answer ("not here"), not a silence.
             ethCall = ::rawEthCall,
             indexGet = { path ->
+                // Spec 081 FR-002: the configured index, per lookup. This
+                // client was built once with the default and never told
+                // otherwise, so Settings → Service Endpoints could name a
+                // self-hosted index and every name still came from ours.
+                client.baseUrl = accountStore.registryUrlOrDefault()
                 val got = client.rawGet(path)
                 when {
                     got == null -> RegistryNameLookup.IndexAnswer.Failed

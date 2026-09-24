@@ -86,6 +86,7 @@
       "close": "閉じる",
       "valueLabel": "金額",
       "bestEffortWarning": "関数シグネチャからデコードした内容です — 検証済みのディスクリプターではありません。詳細を慎重にご確認ください。",
+      "descriptorFetchedWarning": "この説明は Vela のディスクリプターサービスから取得したもので、認証はされていません — 承認する前に詳細をご確認ください。",
       "simWillSucceed": "シミュレーション成功 — 成功する見込みです",
       "simWillFail": "この取引は失敗する見込みです — それでも Gas 手数料はかかります。",
       "simWillFailReason": "失敗する見込み：{{reason}} — それでも Gas 手数料はかかります。",
@@ -203,7 +204,11 @@
       "trustedSignerReopen": "ページをもう一度開く",
       "trustedSignerDoneTab": "署名しました。このタブを閉じて Vela に戻ってください。",
       "viewOnExplorer": "エクスプローラーで表示",
-      "sendingToTokenContract": "トークン自身のコントラクトへの送金"
+      "sendingToTokenContract": "トークン自身のコントラクトへの送金",
+      "selfCallBlockedTitle": "Vela はこの要求に署名しません",
+      "selfCallBlockedBody": "この要求は、ウォレットを誰が管理するかを変更します（{{function}}）。一度署名するだけでウォレットを他人に渡してしまう可能性があるため、Vela は拒否しました。何も署名していません。",
+      "selfCallBlockedLegBody": "この要求の {{index}} 番目の処理が、ウォレットを誰が管理するかを変更します（{{function}}）。一度署名するだけでウォレットを他人に渡してしまう可能性があるため、Vela は要求全体を拒否しました。何も署名していません。",
+      "selfCallBlockedSafeTx": "この要求は、後で実行される Safe トランザクションの承認を鍵に求めています。そのような署名はあなたがいない場所でも使えるため、Vela は拒否しました。何も署名していません。"
     },
     "signingApprove": {
       "resultingTotal": "新しい承認上限",

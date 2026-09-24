@@ -24,15 +24,27 @@
 		panel: AddNetworkModel;
 		onselect?: (id: string) => void;
 		onprimary?: () => void;
-		onsecondary?: () => void;
 		onrecheck?: () => void;
 		/** Live wiring (spec 024). Absent = the gallery's pure picture. */
 		onsearch?: (query: string) => void;
 		oncustomrpc?: (value: string) => void;
 	}
 
-	let { panel, onselect, onprimary, onsecondary, onrecheck, onsearch, oncustomrpc }: Props =
-		$props();
+	let { panel, onselect, onprimary, onrecheck, onsearch, oncustomrpc }: Props = $props();
+
+	/**
+	 * Where a chain this wallet refuses can be made ready: the page deploys
+	 * everything anyone can deploy and says who has to do the rest. The same
+	 * URL the desktop opens (`onboarding_flow.rs`, `CHAIN_SETUP_URL`) and iOS
+	 * (`SettingsScreen.swift`, `ExternalLinks.chainSetup`).
+	 *
+	 * Spec 081, dead-controls #12: `panel.secondary` is only ever this one
+	 * label, and it took an `onsecondary` no caller ever passed — so the one
+	 * thing the wallet had just told the person to do was a button that did
+	 * nothing. The panel owns the link, exactly as `EndpointsPanel` owns the
+	 * self-hosting guide's.
+	 */
+	const CHAIN_SETUP_URL = 'https://getvela.app/chain-setup';
 </script>
 
 <div class="add-network">
@@ -66,19 +78,27 @@
 			<CheckList title={panel.checksTitle} items={panel.checks} />
 		{/if}
 
-		{#if panel.customRpc !== undefined}
-			<UrlField field={panel.customRpc} oninput={(value) => oncustomrpc?.(value)} />
-		{/if}
-
+		<!--
+			Directly under the list, not under the RPC field below it: this
+			sentence explains the crossed rows, and a form field between the two
+			separated the explanation from the thing it explains (measured in
+			the live dialog, spec 081 FR-009). Desktop already put it here.
+		-->
 		{#if panel.callout !== undefined}
 			<Callout callout={panel.callout} />
+		{/if}
+
+		{#if panel.customRpc !== undefined}
+			<UrlField field={panel.customRpc} oninput={(value) => oncustomrpc?.(value)} />
 		{/if}
 
 		{#if panel.primary !== undefined}
 			<Button variant="primary" shape="rounded" onclick={onprimary}>{panel.primary}</Button>
 		{/if}
 		{#if panel.secondary !== undefined}
-			<Button variant="secondary" shape="rounded" onclick={onsecondary}>{panel.secondary}</Button>
+			<Button variant="secondary" shape="rounded" href={CHAIN_SETUP_URL} external>
+				{panel.secondary}
+			</Button>
 		{/if}
 		{#if panel.recheck !== undefined}
 			<button type="button" class="recheck" onclick={onrecheck}>

@@ -14,7 +14,9 @@
 - Three files aren't PRDs: **[README.md](./README.md)** (index), **[_TEMPLATE.md](./_TEMPLATE.md)**
   (the shape every PRD follows), and **this guide**.
 - Every functional claim cites a **source anchor** (`file:line`) or a clue number. Trust the source
-  over prose; the repo root `README.md` is stale (see guardrails in the index).
+  over prose. Note that the §10 anchors of every pre-039 PRD point into the deleted Expo tree — see
+  the note above the guardrails in the [index](./README.md) for where the code actually lives now.
+  (The root `README.md` used to be flagged here as stale; spec 080 rewrote it and it is reliable.)
 
 ## How to read a single PRD (where to look)
 
@@ -49,7 +51,8 @@ Pick your track. Each is an ordered short list — read these first, then follow
 1. Find the epic in the [index](./README.md); open the matching PRD.
 2. Read its **Depends on** (header) and **§9** — those are your prerequisites and landmines.
 3. Read **§10 Source anchors** to jump straight into the code.
-4. Check the **status tag**: 🚧 means it's the active branch (`feat/contacts-groups-payroll-batch`); expect churn.
+4. Check the **status tag**: 🚧 means roadmap "now"; expect churn. A 🚧 citing the
+   `feat/contacts-groups-payroll-batch` branch is stale — that work shipped.
 
 ### 📊 PM / evaluator / partner — scope & posture
 `A01` (scope & non-goals) · `A02` (voice, honesty, audit stance) · `A03` (privacy/no-token) · `O04` (roadmap, alpha, on-chain verification) · `O02` (how it's built) · `G05` (fee/business model).
@@ -73,7 +76,7 @@ Pick your track. Each is an ordered short list — read these first, then follow
 | …avoid blind signing? | `I01`, `I02`, `I06`, `I08` |
 | …stop unlimited approvals? | `J05` (+ `I08`) |
 | …preview what a transaction does? | `J01`, `J02`, `J03` |
-| …connect to a dApp (no Bluetooth)? | `K01`, `K02`, `K03`, `K04` |
+| …connect to a dApp? | `K04`, `K05`, `K06`, `K07` (K01–K03 describe WalletPair, which was never built) |
 | …batch multiple calls atomically? | `K07`, `H07` |
 | …pay many people at once (payroll)? | `H06`, `H07`, `H08` (+ `E07`) |
 | …resist address poisoning / phishing? | `H03`, `H02`, `K06` |
@@ -117,8 +120,8 @@ Roadmap items that don't have their own PRD live as **forward-FRs** inside an ex
 - **[docs/CONTENT-SOURCE-100-CLUES.md](../CONTENT-SOURCE-100-CLUES.md)** is the *fact bank* (for
   marketing/SEO/docs). PRDs cite it, but a clue ≠ a requirement — one says "what to say," the other
   "what to build."
-- **`getvela.app/`** holds the public whitepaper, roadmap, and site copy; treated as canonical over
-  the stale root `README.md`.
+- **`app-web/getvela.app/`** holds the public whitepaper, roadmap, and site copy. For public-facing
+  numbers the authority is the claim ledger, `specs/080-site-content-accuracy/claim-ledger.md`.
 - **`docs/agent-rules/`** defines the process these PRDs are built under (`O02`).
 
 ## Maintaining this set
@@ -130,8 +133,9 @@ Roadmap items that don't have their own PRD live as **forward-FRs** inside an ex
   ships, flip it to ✅ and reconcile any forward-FR that referenced it.
 - **When code moves:** update the `file:line` anchors (or at least the symbol names) in §10 so the
   doc stays verifiable. A PRD whose anchors don't resolve is a bug.
-- **Guardrails are non-negotiable:** no "Bluetooth," no "audit planned," no "beta/tolerate-bugs"
-  banner, 12 networks (not 8), ≈2×/~3× fees (not 60%). See the index guardrails before writing.
+- **Guardrails are non-negotiable:** no Bluetooth *in the dApp path*, no "audit planned," no
+  "beta/tolerate-bugs" banner, 24 networks (not 8 or 12), fee = 3 × padded gas × tier price shown
+  before signing (not 60%, not ≈2×). See the index guardrails before writing.
 
 ---
 

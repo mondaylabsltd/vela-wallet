@@ -118,6 +118,8 @@ fun ExploreScreen(
      * hands back a web address to open (`onUrl`) or asks to be closed.
      */
     scanner: (@Composable (onUrl: (String) -> Unit, onClose: () -> Unit) -> Unit)? = null,
+    /** The connection sheet's "Switch account" — the host's own switcher. */
+    onSwitchAccount: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current

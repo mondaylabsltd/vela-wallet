@@ -264,7 +264,10 @@ pub const NETWORKS: [NetworkFixture; 8] = [
 pub const DESKTOP_NETWORK_IDS: [&str; 6] =
     ["ethereum", "bnb", "polygon", "arbitrum", "base", "xlayer"];
 
-pub const NETWORK_COUNT: u32 = 12;
+/// What the DRAWN boards say. The live About page counts the core's built-ins
+/// plus this person's own networks instead (`page.rs`), because the number a
+/// person opens About to read must be the one they are running.
+pub const NETWORK_COUNT: u32 = 24;
 
 /// "链 1" — the line under each network's name.
 pub fn chain_meta(s: &SettingsStrings, chain_id: u64) -> SharedString {
@@ -291,7 +294,12 @@ pub fn compatibility_checks(s: &SettingsStrings, ok: bool) -> [(SharedString, bo
         (s.check_safe.clone(), ok),
         (s.check_signer.clone(), ok),
         (
-            SharedString::from(fill(&s.check_remaining, "count", "8")),
+            // Four, because that is what the live screen counts: the twelve
+            // the core checks, less EntryPoint, less the five whose names
+            // start with Safe, less the two only a multi-key wallet needs
+            // (spec 081 FR-009). A gallery that shows a number no real chain
+            // can produce teaches the wrong screen.
+            SharedString::from(fill(&s.check_remaining, "count", "4")),
             ok,
         ),
     ]
@@ -544,6 +552,14 @@ mod about_tests {
 
 /// Label / value / mono, in DST8's order.
 pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)> {
+    about_rows_with(s, NETWORK_COUNT)
+}
+
+/// The same rows with a network count somebody counted rather than drew.
+pub fn about_rows_with(
+    s: &SettingsStrings,
+    networks: u32,
+) -> Vec<(SharedString, SharedString, bool)> {
     vec![
         (
             s.about_wallet_label.clone(),
@@ -566,7 +582,7 @@ pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)
             SharedString::from(fill(
                 &s.about_networks_value,
                 "count",
-                &NETWORK_COUNT.to_string(),
+                &networks.to_string(),
             )),
             false,
         ),
@@ -575,21 +591,26 @@ pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)
 
 /// Where each About link goes: its drawn value, over HTTPS.
 #[must_use]
-pub fn about_link_url(value: &str) -> String {
-    format!("https://{value}")
-}
-
-pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString)> {
+/// The three places About points at: the label, the host as drawn, and the URL
+/// the row opens. The host is what a person reads; the URL is what the row does,
+/// and they are kept side by side so one cannot drift from the other.
+pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString, SharedString)> {
     vec![
         (
             s.about_link_website.clone(),
             SharedString::from("getvela.app"),
+            SharedString::from("https://getvela.app"),
         ),
         (
             s.about_link_github.clone(),
             SharedString::from("github.com/mondaylabsltd/vela-wallet"),
+            SharedString::from("https://github.com/mondaylabsltd/vela-wallet"),
         ),
-        (s.about_link_safe.clone(), SharedString::from("safe.global")),
+        (
+            s.about_link_safe.clone(),
+            SharedString::from("safe.global"),
+            SharedString::from("https://safe.global"),
+        ),
     ]
 }
 
@@ -615,11 +636,6 @@ pub const LOCALE_ENDONYMS: [(&str, &str); 15] = [
     ("ru", "Русский"),
     ("it", "Italiano"),
 ];
-
-/// The currencies the picker offers — the web's drawn eight, the list the
-/// phones ship too. A committed code outside it is added by the live menu, so
-/// nobody's choice disappears from the list that shows it.
-pub const CURRENCY_CODES: [&str; 8] = ["USD", "EUR", "GBP", "CNY", "JPY", "KRW", "HKD", "VND"];
 
 // -- rescue (DSR1) ------------------------------------------------------------
 
@@ -648,7 +664,6 @@ pub const RPC_PROVIDER_LINKS: [(&str, &str); 4] = [
 ];
 
 /// Where the endpoints panel's "Self-hosting guide →" goes (the web's).
-pub const SELF_HOST_GUIDE_URL: &str = "https://github.com/mondaylabsltd/vela-wallet";
 
 /// Find a network fixture by id. Panics only on a typo in this file's own
 /// constants, which a test catches before anybody runs the app.

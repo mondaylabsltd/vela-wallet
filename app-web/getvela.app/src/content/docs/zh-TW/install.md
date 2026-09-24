@@ -1,42 +1,127 @@
 ---
 title: 安裝 Vela
-description: Vela 在瀏覽器裡跑——不用安裝，也不用經過應用程式商店。打開網頁錢包，或是先看看你的裝置要符合什麼條件才能用密碼金鑰。
+description: "執行 Vela 的每一種方式——網頁、瀏覽器擴充功能、桌面版和手機——各要多少錢、各能做什麼，以及你的裝置需要什麼。"
+source: fa80f5cfdb95
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
 
 # 安裝 Vela
 
-Vela **在你的瀏覽器裡**運作——沒有東西要下載，也不用經過任何應用程式商店。打開
-網頁錢包，一分鐘之內就能建立或復原一個錢包。
+同一個錢包可以在好幾個地方執行，打開的都是同一個位址、用的都是同一組金鑰。依需要挑選，也可以
+同時用好幾個。下載都在[取得 Vela](/zh-TW/get-started) 頁面。
 
-<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">打開網頁錢包 →</a>
+| | 是什麼 | 費用 | 狀態 |
+| --- | --- | --- | --- |
+| **網頁版** | 在任何較新的瀏覽器裡開啟 [wallet.getvela.app](https://wallet.getvela.app/) | 免費 | 已上線 |
+| **瀏覽器擴充功能** | 放在工具列上的錢包，可以連接 dApp | 免費 | 下載後手動載入；尚未上架 Chrome 線上應用程式商店 |
+| **桌面版** | macOS、Windows、Linux 原生應用程式 | 免費 | 從「取得 Vela」頁面或 GitHub 下載 |
+| **iPhone、Android** | 原生應用程式 | 在商店一次性買斷 | 還沒上架；可以從原始碼自行建置 |
 
-同一個錢包，出自同一份程式碼，也能在 iOS 和 Android 上跑。**原生行動應用即將推出**
-——上線之後，你的密碼金鑰和錢包會原封不動跟過去，因為帳戶住在鏈上，而不是住在
-某一個應用程式裡。
+<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">開啟網頁錢包 →</a>
+
+## 網頁版
+
+什麼都不用裝。打開 [wallet.getvela.app](https://wallet.getvela.app/)，建立錢包或登入就好。帳戶清單
+存在這個瀏覽器裡；換一台裝置，用你任何一把金鑰重新登入即可。
+
+## 瀏覽器擴充功能
+
+適用於 Chromium 系列瀏覽器：Chrome、Edge 和 Brave（Chrome 116 以上）。它把錢包放進工具列，讓 dApp
+可以直接連接。在上架 Chrome 線上應用程式商店之前：
+
+1. 從[取得 Vela](/zh-TW/get-started) 下載擴充功能，解壓縮到一個你會一直保留的資料夾——瀏覽器會從那裡執行它。
+2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
+3. 點選「載入未封裝項目」，選擇那個資料夾。
+
+它就是同一個錢包：擴充功能和網頁錢包用的是同樣的 `getvela.app` 密碼金鑰，所以同樣的金鑰會打開同一個位址。
+
+## 桌面版
+
+原生應用程式，而不是包在視窗裡的網頁：**Windows** 10 和 11（x64 與 ARM）、**macOS** 11 以上，以及
+**Linux**（.deb、.rpm 或 Flatpak，x64 與 ARM）。
+
+- **Windows** 會提示「Windows 已保護您的電腦」，因為安裝程式還沒有程式碼簽章。點「其他資訊」，再點「仍要執行」。
+- **macOS** 版本要另外經過 Apple 簽署和公證，所以可能比其他平台晚推出。如果 Mac 按鈕顯示「稍後提供」，
+  最新一個通過公證的 Mac 版本可以在 GitHub 的發布頁面找到。
+- **Linux**：要使用 USB 安全金鑰，系統必須允許應用程式存取它——.deb 和 .rpm 套件會自動幫你裝好這條規則。
+
+在 macOS 和 Windows 上，桌面版內建一個用來開 dApp 的瀏覽器。每個套件的檢查碼都在
+[GitHub 發布頁面](https://github.com/mondaylabsltd/vela-wallet/releases)上——能核對的不只是檢查碼，見下文。
+
+## iPhone 和 Android
+
+原生應用程式，支援 iOS 17.4 以上和 Android 10 以上。它們會以一次性買斷的方式在 App Store 和
+Google Play 販售，目前**還沒有上架**。程式碼是公開的，你可以免費自行建置——只有一個差別：你自己簽署的
+版本不能用手機本身的密碼金鑰替 getvela.app 錢包簽署，不過用另一支手機掃描和用 USB 安全金鑰都可以。
+請看[自行建置應用程式](/zh-TW/docs/self-hosting#web-app)。
+
+## 核對你下載到的東西
+
+檢查碼只能告訴你兩個檔案一模一樣，卻沒辦法告訴你這個檔案是誰做的——
+何況那份檢查碼清單，就掛在下載連結的同一個頁面上。所以我們在每個發布版本附上的套件，
+還都帶一份**建置證明**：建置它的那次工作流程執行會簽署一份聲明，寫明檔案、提交和這次執行，由 GitHub 保存。
+用 [GitHub CLI](https://cli.github.com) 一行指令就能核對（先用 `gh auth login` 登入一次；核對本身免費）：
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+它會印出這個檔案由誰、從哪一個提交建置出來，核不過就報錯。
+這個答案不需要你的電腦先相信我們：簽章是 GitHub 在建置當下做的，
+別人只是把檔案重新上傳到某個地方，是簽不出來的。
+
+Mac 的映像檔用我們的 Developer ID 簽署，並通過 Apple 公證，你打開時 macOS 會替你檢查。想自己問一次：
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="Windows 的提示還是會出現">
+建置證明不是程式碼簽章。
+Windows 安裝程式沒有做程式碼簽章，所以 SmartScreen 還是會擋一次「Windows 已保護您的電腦」——請點<strong>其他資訊</strong>，再點<strong>仍要執行</strong>。
+真正能告訴你這個檔案確實是我們的，是核對建置證明；那個提示講的是一張我們還沒有買的憑證。
+</Callout>
+
+在這項功能啟用之前發布的套件，只有檢查碼。
+
+## 用 Vela 連接 dApp
+
+<span id="dapps"></span>
+
+dApp 連接 Vela 的方式，和連接任何瀏覽器錢包一樣（EIP-1193 和 EIP-6963）：
+
+- 在電腦的瀏覽器裡，透過 **Vela 瀏覽器擴充功能**；
+- 在**桌面版**（macOS、Windows）、**iPhone 應用程式**和 **Android 應用程式**裡，透過它們內建的瀏覽器。
+
+wallet.getvela.app 上的網頁錢包不會連接 dApp，也不支援 WalletConnect。dApp 送來的每一個請求，都會在
+你簽署之前解碼並顯示給你看——請看[清晰簽署](/zh-TW/docs/clear-signing)。
 
 ## 你的裝置需要什麼
 
-Vela 用**密碼金鑰**（WebAuthn）簽署，所以你需要一台支援它的裝置和瀏覽器——基本上
-這幾年的裝置都支援：
+Vela 用**密碼金鑰**簽署，這幾年的裝置幾乎都支援：
 
-| 平台 | 密碼金鑰支援 | 由誰同步 |
-| -------- | --------------- | --------- |
-| iPhone / iPad / Mac | iOS/iPadOS 16+、較新的 Safari | iCloud 鑰匙圈 |
-| Android | Android 9+、目前版本的 Chrome | Google 密碼管理工具 |
-| 桌面 | 目前版本的 Chrome、Edge、Safari、Firefox | 你所在平台的密碼金鑰服務 |
+| 裝置 | 支援情形 |
+| --- | --- |
+| iPhone、iPad、Mac | iOS / iPadOS 16 以上，macOS 上較新的 Safari 或 Chrome |
+| Android | 有 Google Play 服務的較新 Android，或一把 USB 安全金鑰 |
+| Windows | Chrome 或 Edge 搭配 Windows Hello，或一把安全金鑰 |
+| Linux | 一把安全金鑰，或身邊的一支手機（掃描 QR 碼） |
 
-想讓錢包跟著你換到新裝置，就把平台的密碼金鑰同步開著（Apple 上是 iCloud 鑰匙圈，
-Android/Chrome 上是 Google 密碼管理工具）。它怎麼運作，見[復原與登入](/zh-TW/docs/recovery)。
+如果你的裝置本身無法存放密碼金鑰，可以改用另一支手機或硬體安全金鑰。
+[簽署金鑰與安全金鑰](/zh-TW/docs/signers)列出了各個應用程式支援哪些種類的金鑰。
 
-## 只有這兩個官方網址
+## 僅有的官方網址
 
-Vela 是開放原始碼的，這正是重點——但這也表示你得確認自己打開的是真貨。官方網址
-只有：
+- **getvela.app**——這個網站，以及下載
+- **wallet.getvela.app**——網頁錢包
+- **github.com/mondaylabsltd**——程式碼和發布套件
 
-- **getvela.app** —— 這個網站
-- **wallet.getvela.app** —— 錢包
-
-如果有人把你帶去別的地方「安裝 Vela」，先停下來，跟這兩個網址對一遍。程式碼公開在
-[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet)。
+<Callout type="warning" title="安裝前先核對">
+如果有任何東西把你帶到別的地方去「安裝 Vela」或「驗證錢包」，請先停下來。Vela 從來不會要你的助記詞——它根本沒有助記詞。
+</Callout>
 
 下一步：[建立你的錢包](/zh-TW/docs/create-wallet)。

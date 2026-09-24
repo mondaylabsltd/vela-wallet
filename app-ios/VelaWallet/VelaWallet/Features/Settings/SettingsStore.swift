@@ -27,6 +27,16 @@ extension DisplayCurrencyCore: CoreBridge {}
 extension FeeTierPrefCore: CoreBridge {}
 extension SignPrefCore: CoreBridge {}
 
+/// Which of a network's two editable endpoints an `override_field_edited`
+/// names (`NetOverrideField` in the core).
+///
+/// It lives here rather than in `SettingsWire` because it is the one wire enum
+/// on this surface that only ever travels OUTWARD: no view model carries it,
+/// so there is nothing to decode.
+enum NetOverrideFieldWire: String {
+    case rpc, explorer
+}
+
 /// `fee_tier_pref`'s view (spec 069): the tier every send STARTS at — always a
 /// real one, the factory `fast` when nothing was chosen.
 struct FeeTierPrefViewWire: Decodable, Equatable {
@@ -88,7 +98,13 @@ final class SettingsStore {
         pool: RpcPool,
         networkPerform: (([String: Any]) async -> String)? = nil
     ) {
-        self.executor = NetworkAdminExecutor(store: store, accounts: accounts)
+        // The pool travels with the networks machine too (spec 081 FR-001).
+        // Without it `invalidate_pools` — the operation the core emits on
+        // EVERY endpoint save, because invariant ⑤ says a changed endpoint
+        // must not leave stale routing behind — resolved to nothing, so the
+        // wallet kept reading chains through the endpoint the person had just
+        // replaced until a cached winner happened to expire.
+        self.executor = NetworkAdminExecutor(store: store, accounts: accounts, pool: pool)
         self.currencyExecutor = DisplayCurrencyExecutor(store: store, accounts: accounts, pool: pool)
         self.core = CoreStore(
             bridge: NetworkAdminCore(),
@@ -257,17 +273,36 @@ final class SettingsStore {
 
     // MARK: - The endpoints and providers pages (spec 056 US2)
     //
-    // Every event below is spelled as `network_admin.rs`' `Event` spells it.
-    // Until 072 five of them sent `"id"` where the core reads `field` or
-    // `provider`, one left out `field`, and one sent `text` for a chain id —
-    // the core refused each one, so both pages and the RPC fix were drawings
-    // that took typing and kept none of it. `NetworkEventsTests` sends every
-    // one to the real machine.
+    // Eleven events the executor has answered since 050 and nothing has ever
+    // sent. Two whole settings pages were drawn over live operations with no
+    // call sites — the event-parity ruler's largest single block.
+    //
+    // ## The field name is part of the event (spec 081 FR-001)
+    //
+    // Six of these used to name their subject `id` and hand it the DRAWING's
+    // slug — `chain-data`, `passkey`, `relay`, `fiat`. The core's `Event` enum
+    // names it `field` / `provider` / `chain_id` and spells its values in the
+    // core's own snake_case. Serde does not forgive either mistake: it refuses
+    // the whole event, so `update` never ran and the page saved nothing while
+    // looking exactly as if it had. Nothing caught it because the parity
+    // scripts compared only the `"type"` string.
+    //
+    // So every one of them below now goes through `NetEndpointFieldWire` /
+    // `NetProviderIdWire`, which ARE the core's names — the same values the
+    // live page labels its fields with, so a tap round-trips by construction
+    // rather than by two files agreeing.
 
-    /// A chain id to add without the wizard (the EIP-681 recovery path). The
-    /// core resolves, checks and saves it behind the same dedup gate.
+    /// A chain id typed into 添加网络. The core looks it up, checks it and adds
+    /// it without a second confirmation — the EIP-681 scan path.
+    ///
+    /// `now_iso` is required: the event ends in a stored record, and the core
+    /// has no clock (the 016 rule, same as `confirmAdd`).
     func addByChainId(_ chainId: Int) {
-        dispatch(["type": "add_by_chain_id_requested", "chain_id": chainId, "now_iso": Self.nowISO])
+        dispatch([
+            "type": "add_by_chain_id_requested",
+            "chain_id": chainId,
+            "now_iso": Self.nowISO,
+        ])
     }
 
     /// ST12 opened. The core probes all four fields.
@@ -278,11 +313,24 @@ final class SettingsStore {
     /// Two events rather than one because they mean different things: EDITED is
     /// what is on screen, BLURRED is what the person is done saying — and only
     /// the second is worth writing to storage.
-    func editEndpoint(_ field: NetEndpointFieldWire, value: String) {
+    ///
+    /// `id` is the drawn field's id, which on the live page is the core's own
+    /// name for that endpoint.
+    func editEndpoint(id: String, value: String) {
+        guard let field = Self.endpointField(id) else { return }
+        editEndpoint(field: field, value: value)
+    }
+
+    func editEndpoint(field: NetEndpointFieldWire, value: String) {
         dispatch(["type": "endpoint_edited", "field": field.rawValue, "value": value])
     }
 
-    func blurEndpoint(_ field: NetEndpointFieldWire) {
+    func blurEndpoint(id: String) {
+        guard let field = Self.endpointField(id) else { return }
+        blurEndpoint(field: field)
+    }
+
+    func blurEndpoint(field: NetEndpointFieldWire) {
         dispatch(["type": "endpoint_blurred", "field": field.rawValue])
     }
 
@@ -292,22 +340,31 @@ final class SettingsStore {
     /// every configured provider.
     func openProviders() { dispatch(["type": "providers_opened"]) }
 
-    func editProviderKey(_ provider: NetProviderIdWire, value: String) {
+    func editProviderKey(id: String, value: String) {
+        guard let provider = Self.providerId(id) else { return }
+        editProviderKey(provider: provider, value: value)
+    }
+
+    func editProviderKey(provider: NetProviderIdWire, value: String) {
         dispatch(["type": "provider_key_edited", "provider": provider.rawValue, "value": value])
     }
 
-    func blurProviderKey(_ provider: NetProviderIdWire) {
+    func blurProviderKey(id: String) {
+        guard let provider = Self.providerId(id) else { return }
         dispatch(["type": "provider_key_blurred", "provider": provider.rawValue])
     }
 
     /// 测试 — the core asks the provider whether the key works.
-    func testProvider(_ provider: NetProviderIdWire) {
+    func testProvider(id: String) {
+        guard let provider = Self.providerId(id) else { return }
         dispatch(["type": "provider_test_requested", "provider": provider.rawValue])
     }
 
-    /// One field of a network's detail page, as it is typed and when it is
-    /// left. The core probes on every edit and saves on the blur — refusing
-    /// only an RPC that proved it serves another chain.
+    /// One per-network RPC override, as it is typed and when it is left.
+    ///
+    /// The core keeps a draft per FIELD, so which field is being typed into
+    /// travels with the value; an event without it is refused outright rather
+    /// than guessed at.
     func editOverride(chainId: Int, field: NetOverrideFieldWire, value: String) {
         dispatch([
             "type": "override_field_edited",
@@ -315,6 +372,26 @@ final class SettingsStore {
             "field": field.rawValue,
             "value": value,
         ])
+    }
+
+    /// The drawn field's id as the core's own name for it, or `nil` — which is
+    /// what a fixture id is, and the page is a drawing until the core has read
+    /// the stores. Said out loud rather than swallowed: a settings page that
+    /// silently drops what somebody typed is the bug this whole block fixes.
+    private static func endpointField(_ id: String) -> NetEndpointFieldWire? {
+        guard let field = NetEndpointFieldWire(rawValue: id) else {
+            print("[vela-wallet] network_admin: no endpoint field called `\(id)`")
+            return nil
+        }
+        return field
+    }
+
+    private static func providerId(_ id: String) -> NetProviderIdWire? {
+        guard let provider = NetProviderIdWire(rawValue: id) else {
+            print("[vela-wallet] network_admin: no RPC provider called `\(id)`")
+            return nil
+        }
+        return provider
     }
 
     func blurOverride(chainId: Int) {

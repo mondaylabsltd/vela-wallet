@@ -1,6 +1,7 @@
 ---
 title: Membuat dompet Anda
-description: Buat dompet Vela swakelola dalam sekitar satu menit dengan passkey — tanpa frasa pemulihan. Dompet Anda adalah akun pintar Safe dengan alamat yang sama di setiap jaringan.
+description: "Membuat dompet Vela dengan satu sampai tujuh kunci — apa yang dilakukan tiap langkah, kenapa kunci ditetapkan saat pembuatan, apa yang menjadi publik, dan dompet Anda sebenarnya apa."
+source: a2edda21a075
 ---
 
 <script>
@@ -9,58 +10,76 @@ description: Buat dompet Vela swakelola dalam sekitar satu menit dengan passkey 
 
 # Membuat dompet Anda
 
-Membuat dompet memakan waktu sekitar satu menit dan satu kali verifikasi biometrik.
-Buka dompet web di [wallet.getvela.app](https://wallet.getvela.app/) lalu pilih
-**Buat dompet**.
+Membuat dompet butuh satu atau dua menit. Buka dompet web di
+[wallet.getvela.app](https://wallet.getvela.app/) — atau ekstensi, aplikasi desktop,
+atau aplikasi ponsel — lalu pilih **Buat Dompet**.
 
 ## Langkah-langkahnya
 
-1. **Beri nama dompet Anda.** Pilih nama agar Anda mengenali akunnya nanti, termasuk
-   saat masuk di perangkat lain. Nama itu disimpan di samping kunci publik Anda, jadi
-   anggap saja publik — jangan menaruh sesuatu yang pribadi di situ.
-2. **Setujui hal-hal dasarnya.** Daftar singkat memastikan Anda paham bahwa Vela
-   bersifat swakelola dan masih perangkat lunak alfa, lengkap dengan tautan ke
-   [kebijakan privasi](/privacy) dan [ketentuan](/terms).
-3. **Buat passkey Anda.** Saat diminta, verifikasi dengan **Face ID, Touch ID, atau
-   sidik jari**. Langkah ini membuat passkey WebAuthn (P-256) yang dipegang perangkat
-   Anda dan tidak pernah dilihat Vela. Tidak ada langkah frasa pemulihan, karena
-   memang tidak ada frasa pemulihan.
-4. **Selesai.** Vela menampilkan alamat dompet Anda dan Anda sudah masuk. Anda bisa
-   memeriksanya lalu masuk untuk sampai ke dompet Anda.
+1. **Beri nama dompet Anda.** Nama membantu Anda mengenali dompet, dan nama itu ditulis
+   ke registri publik bersama kunci Anda — anggap saja publik, dan jangan isi dengan hal
+   pribadi.
+2. **Pahami apa yang akan terjadi.** Anda mencentang bahwa kunci publik dan nama dompet
+   Anda ditulis on-chain, bahwa kunci privat Anda tetap berada di perangkat atau kunci
+   keamanan Anda, dan bahwa Anda menyetujui [Ketentuan Layanan](/terms) dan
+   [Kebijakan Privasi](/privacy).
+3. **Buat kunci pertama Anda.** Pilih caranya: **Perangkat ini** (Face ID, Touch ID,
+   sidik jari, Windows Hello), **Ponsel atau tablet** (pindai kode QR lalu buat
+   kuncinya di perangkat itu, jika aplikasinya menyediakan opsi ini), atau **Kunci
+   keamanan USB**. Perangkat Anda membuat passkey lalu menandatangani sekali dengannya,
+   supaya aplikasi tahu kunci itu benar-benar berfungsi sebelum melanjutkan.
+4. **Tambahkan kunci lain, kalau mau.** Total hingga tujuh, dari jenis apa pun. Salah
+   satunya saja nanti sudah bisa menandatangani. Kalau satu-satunya kunci Anda tidak
+   tersinkron ke mana pun — kunci keamanan, atau Windows Hello — aplikasi meminta kunci
+   kedua, karena satu kunci yang tidak tersinkron berarti satu perangkat hilang sudah
+   cukup untuk kehilangan dompet.
+5. **Buat.** Aplikasi menghitung alamat dompet Anda dari seluruh kumpulan kunci lalu
+   memublikasikan kumpulan itu ke registri publik di Gnosis Chain. Begitu catatan itu
+   masuk on-chain, dompet Anda terbuka.
+
+<Callout type="warning" title="Pilih kunci Anda sekarang">
+Alamat Anda dihitung dari kunci yang Anda tetapkan di akhir, jadi kunci tidak bisa
+ditambah, dihapus, atau diganti belakangan. [Kunci penanda tangan & kunci keamanan](/id/docs/signers)
+menjelaskan alasannya, dan cara memilihnya.
+</Callout>
 
 ## Dompet Anda sebenarnya apa
 
-Ini bagian yang jarang dijelaskan dompet lain — dan penting untuk memahami cara kerja
-Vela.
+Dompet Anda adalah **akun pintar Safe** — sebuah kontrak, bukan akun biasa dengan satu
+kunci privat. Kunci-kunci Anda adalah pemiliknya, dan salah satunya saja bisa
+mengotorisasi transaksi. [Kontrak akun](/id/docs/account-contract) mencantumkan setiap
+kontrak yang terlibat.
 
-Dompet Vela Anda adalah **akun pintar Safe** (sebuah kontrak pintar), bukan "akun milik
-kunci eksternal" biasa. Passkey Anda adalah pemilik akun itu; penyiapan ERC-4337
-memungkinkan Anda menjalankannya hanya dengan wajah atau sidik jari.
+Alamatnya **sama di setiap jaringan**, dan bersifat **kontrafaktual**: alamat itu
+dihitung sebelum apa pun di-deploy, jadi Anda bisa langsung menerima dana di jaringan
+mana pun. Kontraknya men-deploy dirinya sendiri saat pertama kali Anda mengirim dari
+suatu jaringan, dan biaya transaksi pertama itu sudah termasuk biaya deploy. Membuat
+dompet tidak memakan biaya sepeser pun.
 
-<Callout type="info" title="Alamat Anda sama di setiap jaringan">
-Vela menurunkan alamat Anda dari kunci publik passkey, jadi alamatnya identik di
-Ethereum, Base, Arbitrum, Gnosis, dan setiap jaringan lain yang didukung. Anda cukup
-membagikan satu alamat ke mana pun.
-</Callout>
+## Apa yang publik
 
-Konsekuensi yang berguna: alamatnya bersifat **kontrafaktual**. Ia dihitung sebelum
-apa pun dipasang di rantai, jadi **Anda bisa menerima dana di situ sebelum kontrak
-dompet Anda ada**. Kontraknya memasang dirinya sendiri — dibayar dari saldonya sendiri
-— saat pertama kali Anda mengirim transaksi di suatu jaringan.
+<span id="what-is-public"></span>
 
-## Apa yang barusan terjadi pada kunci Anda
+Membuat dompet menulis catatan permanen ke kontrak registri publik di Gnosis Chain —
+bisa dibaca siapa pun, dan tidak bisa diubah atau dihapus:
 
-- Perangkat Anda membuat **sepasang kunci passkey**.
-- **Kunci privatnya** dipegang penyedia passkey sistem operasi Anda (iCloud Keychain
-  atau Google Password Manager), disimpan terenkripsi ujung-ke-ujung dan disinkronkan
-  antar perangkat Anda — tidak ada aplikasi, termasuk Vela, yang melihatnya.
-- **Kunci publik dan nama pilihan Anda** dikirim ke Indeks Passkey milik Vela, yang
-  juga menulis kunci itu ke catatan yang bisa dibaca publik di Gnosis Chain, agar akun
-  Anda bisa ditemukan lagi di perangkat baru. Lihat
-  [pemulihan & masuk](/id/docs/recovery).
+- **kunci publik** tiap kunci (tidak pernah kunci privatnya) beserta **ID
+  kredensial**-nya;
+- **model autentikator** tiap kunci (pengelola kata sandi atau kunci keamanan mana yang
+  membuatnya), serta penanda apakah Anda terverifikasi dan apakah kunci itu tersinkron;
+- **nama dompet** dan **label untuk tiap kunci**;
+- **alamat dompet** dan waktu pembuatannya;
+- **data pendaftaran yang ditandatangani** itu sendiri.
 
-## Langkah selanjutnya
+Indeks kunci publik milik Vela yang mengirim catatan itu dan membayar gasnya, jadi indeks
+itulah yang pertama kali melihat isinya. Tidak ada isi catatan itu yang bisa memindahkan
+dana Anda; catatan inilah yang memungkinkan salah satu kunci Anda menemukan dompetnya
+lagi di perangkat baru ([pemulihan](/id/docs/recovery)). Daftar lengkapnya ada di
+[kebijakan privasi](/privacy), dan [halaman registri](/registry) menampilkan setiap
+catatan.
+
+## Langkah berikutnya
 
 - [Menerima token pertama Anda](/id/docs/send-and-receive)
 - [Memahami jaringan dan biaya](/id/docs/networks-and-fees)
-- [Membaca bagaimana passkey menjaga semuanya tetap aman](/id/docs/passkeys)
+- [Yang harus dilakukan kalau perangkat hilang](/id/docs/recovery)

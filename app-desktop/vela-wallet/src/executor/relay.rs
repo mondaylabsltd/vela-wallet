@@ -94,17 +94,12 @@ enum Rest {
 
 fn rest_get(chain_id: u32, path: &str) -> Rest {
     let url = format!("{}{path}", base_url(chain_id));
-    // Invariant ②: the relay reads the chain through the endpoint this wallet
-    // trusts, or through its own when the pool names none.
-    let rpc = pool::best_rpc_url(chain_id);
+    // Spec 081 FR-007: the wallet no longer tells the relay which RPC endpoint it prefers. That header carried the user's first-choice URL, which can contain a provider API key — and the relay never read this name anyway (it reads `x-vela-rpc-url`), so nothing depended on it.
+    //
     // Over the candidate chain (spec 038): a refused proxy is retried on the
     // next route, not reported as the relay being down.
     let mut response = match proxy::with_candidates(REST_TIMEOUT, |agent| {
-        let mut request = agent.get(&url).header("accept", "application/json");
-        if let Some(rpc) = rpc.as_deref() {
-            request = request.header("X-Rpc-Url", rpc);
-        }
-        request.call()
+        agent.get(&url).header("accept", "application/json").call()
     }) {
         Ok(response) => response,
         Err(failure) => {

@@ -27,7 +27,7 @@ const key = (over: Partial<WalletKeyRow>): WalletKeyRow => ({
 });
 
 describe('ethereumBackupRow', () => {
-	it('says where the record stands, and is a button only when it is not backed up', () => {
+	it('says where the record stands, and takes a tap only where one does something', () => {
 		expect(ethereumBackupRow('not_backed_up', m)).toEqual({
 			title: 'Back up public keys to Ethereum',
 			subtitle: 'Not backed up yet',
@@ -39,11 +39,21 @@ describe('ethereumBackupRow', () => {
 			tone: 'positive',
 			actionable: false
 		});
-		// Silence is never drawn as a verdict — and never as something to tap.
+		// Silence is never drawn as a verdict — but it IS the one state a
+		// person taps, and what they want is another attempt (founder ruling,
+		// 2026-09-23). It carries `retry` so the row can say "ask again"
+		// rather than "back it up", which is a different offer.
 		expect(ethereumBackupRow('could_not_check', m)).toMatchObject({
 			subtitle: 'Could not check',
-			actionable: false
+			actionable: true,
+			retry: true
 		});
+		// Only that one. The other three have nothing to do, so they take no
+		// tap at all — the house rule, and what stops a row rippling under a
+		// finger for nothing.
+		const notBackedUp = ethereumBackupRow('not_backed_up', m);
+		expect(notBackedUp).toBeDefined();
+		expect(notBackedUp?.retry).toBeUndefined();
 		expect(ethereumBackupRow('checking', m)).toMatchObject({ actionable: false });
 	});
 
@@ -144,7 +154,7 @@ describe('walletKeysModel', () => {
 		expect(unregistered.note).toBeUndefined();
 	});
 
-	it("carries the backup as the block's last row — a button only when there is something to do", () => {
+	it("carries the backup as the block's last row — tappable only where there is something to do", () => {
 		expect(walletKeysModel(registry, 'not_backed_up', m).backup).toMatchObject({
 			actionable: true
 		});

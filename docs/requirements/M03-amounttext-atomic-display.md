@@ -35,7 +35,7 @@ gives a premium, always-legible money display consistent with the "big-tech UX" 
 
 ## 5. Non-functional requirements
 
-- **NFR-1** — Deterministic across iOS/Android/web (A04); no platform-specific auto-shrink dependence.
+- **NFR-1** — Deterministic across all four shells (A04), because the formatting decision is the core's; no platform-specific auto-shrink dependence.
 - **NFR-2** — Never wraps or clips the amount.
 
 ## 6. UX / flow notes

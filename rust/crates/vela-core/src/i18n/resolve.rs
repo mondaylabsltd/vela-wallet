@@ -33,6 +33,39 @@ pub const SUPPORTED: [&str; 15] = [
 ];
 pub(crate) const FALLBACK: &str = "en";
 
+/// What each locale calls ITSELF, in its own script.
+///
+/// A language row that says 简体中文 to somebody reading German is not a small
+/// wording slip — it tells them the app is in a language they can see it is
+/// not. Endonyms are deliberately NOT translated: the one person who most
+/// needs to read "日本語" is the one who has ended up in Japanese by accident
+/// and cannot read anything else on the screen.
+///
+/// Unknown tags answer with the tag, which is at least true. Lives here rather
+/// than in a shell because [`SUPPORTED`] is here, and four copies of a list of
+/// language names is four lists that drift.
+#[must_use]
+pub fn endonym(tag: &str) -> &str {
+    match tag {
+        "en" => "English",
+        "zh" => "简体中文",
+        "zh-TW" => "繁體中文（台灣）",
+        "zh-HK" => "繁體中文（香港）",
+        "ja" => "日本語",
+        "ko" => "한국어",
+        "vi" => "Tiếng Việt",
+        "id" => "Bahasa Indonesia",
+        "tr" => "Türkçe",
+        "es-MX" => "Español (México)",
+        "pt-BR" => "Português (Brasil)",
+        "fr" => "Français",
+        "de" => "Deutsch",
+        "ru" => "Русский",
+        "it" => "Italiano",
+        other => other,
+    }
+}
+
 /// Text direction of a locale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dir {
@@ -472,5 +505,34 @@ fn ordinal_category(locale: &str, count: f64) -> super::plural::Category {
             }
         }
         _ => Category::Other,
+    }
+}
+
+#[cfg(test)]
+mod endonym_tests {
+    use super::{endonym, SUPPORTED};
+
+    /// Every shipped locale names itself, in its own script — and no two name
+    /// themselves the same, which is what a picker needs to be usable.
+    #[test]
+    fn every_supported_locale_names_itself() {
+        let mut seen: Vec<&str> = Vec::new();
+        for tag in SUPPORTED {
+            let name = endonym(tag);
+            assert_ne!(
+                name, tag,
+                "{tag} falls through to its own tag — a picker would show a language code"
+            );
+            assert!(!name.is_empty());
+            assert!(!seen.contains(&name), "{name} names two locales");
+            seen.push(name);
+        }
+    }
+
+    /// An unknown tag answers with the tag. Wrong is worse than unhelpful: a
+    /// silent "English" would tell somebody the app is in a language it is not.
+    #[test]
+    fn an_unknown_tag_is_returned_as_itself() {
+        assert_eq!(endonym("xx-YY"), "xx-YY");
     }
 }

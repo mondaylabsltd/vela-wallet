@@ -62,7 +62,8 @@ struct ConnectionPanelView: View {
             Button(action: onSwitch) {
                 HStack(spacing: Tokens.Space.s12) {
                     IdenticonAvatar(seed: connection.account.seed,
-                                    size: ExploreGeometry.rowAvatar)
+                                    size: ExploreGeometry.rowAvatar,
+                                    tappable: false)
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         Text(verbatim: connection.account.name)
                             .typeRole(Typography.rowTitle.scaled(textScale))

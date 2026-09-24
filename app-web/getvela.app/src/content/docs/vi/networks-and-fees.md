@@ -1,6 +1,7 @@
 ---
 title: Mạng & phí
-description: 12 mạng Vela hỗ trợ, cách phí gas hoạt động trong trừu tượng hóa tài khoản, ai vận hành relay và thu phí, khi nào bạn tự trả tiền kích hoạt tài khoản gas, và cách Vela chọn điểm cuối RPC.
+description: "24 mạng tích hợp sẵn trong Vela, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
+source: 8f8059955244
 ---
 
 <script>
@@ -9,125 +10,156 @@ description: 12 mạng Vela hỗ trợ, cách phí gas hoạt động trong tr�
 
 # Mạng & phí
 
-## Các mạng được hỗ trợ
+## Các mạng tích hợp sẵn
 
-Vela có sẵn **12 mạng EVM**:
+Vela có sẵn **24 mạng**, tất cả đều là mainnet:
 
-| Mạng | Token phí gốc |
-| ----------- | ---------------- |
-| Ethereum | ETH |
-| BNB Chain | BNB |
-| Polygon | POL |
-| Arbitrum | ETH |
-| Optimism | ETH |
-| Base | ETH |
-| Avalanche | AVAX |
-| Gnosis | xDAI |
-| Unichain | ETH |
-| Tempo | USD |
-| Monad | MON |
-| World Chain | ETH |
+| Mạng | Trả gas bằng | Mạng | Trả gas bằng |
+| --- | --- | --- | --- |
+| Ethereum | ETH | Arc | USDC (coin gốc) |
+| BNB Chain | BNB | X Layer | OKB |
+| Polygon | POL | Stable | USDT0 (coin gốc) |
+| Arbitrum | ETH | Soneium | ETH |
+| Optimism | ETH | MegaETH | ETH |
+| Base | ETH | Robinhood Chain | ETH |
+| Avalanche | AVAX | Mantle | MNT |
+| Gnosis | xDAI | Kaia | KAIA |
+| Unichain | ETH | Celo | CELO |
+| Tempo | pathUSD (không có coin gốc) | Ink | ETH |
+| Monad | MON | Plume | PLUME |
+| World Chain | ETH | XRPL EVM | XRP |
 
-Ví của bạn có **cùng một địa chỉ trên tất cả**, nên chỉ có một địa chỉ để chia sẻ ở
-mọi nơi.
+Trên hầu hết các mạng, bạn cũng có thể trả phí bằng một stablecoin USD mà relay chấp
+nhận trên mạng đó (xem bên dưới).
 
-Bạn cũng có thể **thêm mạng tùy chọn** (Cài đặt → Mạng). Vì Vela là ví tài khoản
-thông minh, một mạng phải có sẵn những hợp đồng Vela dựa vào — EntryPoint của
-ERC-4337, các hợp đồng Safe, và precompile chữ ký **P-256 (RIP-7212)** dùng để xác
-minh passkey của bạn trên chuỗi. Vela kiểm tra tự động trước khi cho bạn thêm mạng.
+Ví của bạn có **cùng một địa chỉ trên mọi mạng**, vì địa chỉ được tính từ các khóa của
+bạn, không phụ thuộc vào chuỗi.
 
-<Callout type="info" title="Vì sao Gnosis xuất hiện nhiều thế">
-Ngoài việc là một trong 12 mạng, Gnosis Chain còn lưu <strong>Chỉ mục Passkey</strong>
-của Vela — hợp đồng giữ khóa công khai và tên tài khoản của bạn để khôi phục xuyên
-thiết bị. Việc đó tách biệt với chuyện bạn giao dịch trên mạng nào.
+## Thêm mạng khác
+
+Bạn có thể thêm bất kỳ mạng EVM nào trong **Cài đặt → Mạng lưới**, miễn là mạng đó có
+đủ những gì một ví Vela cần: mười hai hợp đồng tiêu chuẩn (EntryPoint v0.7 của
+ERC-4337, các hợp đồng Safe v1.4.1, mô-đun 4337 và mô-đun passkey của Safe, MultiSend,
+Multicall3 và hai bộ triển khai tất định) và precompile **EIP-7951 / RIP-7212** xác minh chữ ký
+passkey tại địa chỉ `0x100`. Ví kiểm tra tất cả những thứ đó, bao gồm cả một lần kiểm
+tra chữ ký thật với precompile, trước khi cho bạn thêm mạng. Precompile này có hai tên:
+EIP-7951 trên Ethereum, có hiệu lực từ bản nâng cấp Fusaka (tháng 12/2025), và RIP-7212
+trên các rollup. Giao diện giống hệt nhau, và ví chấp nhận cả hai.
+
+Precompile là yêu cầu bắt buộc. Địa chỉ của nó là một phần trong cách tính mọi địa chỉ
+Vela, nên không có bộ xác minh dự phòng và cũng không có cách nào triển khai bù về sau.
+Nếu một chuỗi có precompile nhưng thiếu một số hợp đồng, trang
+[thiết lập chuỗi](/vi/chain-setup) cho biết thiếu những gì và triển khai những hợp đồng
+mà ai cũng triển khai được. Hai trong số mười hai hợp đồng mà nó kiểm tra — hợp đồng
+factory tạo bộ ký passkey của Safe và mã bộ ký mà factory đó triển khai — chỉ quan
+trọng với ví giữ nhiều hơn một khóa, và phần kiểm tra nói rõ điều đó cho từng hợp đồng:
+thiếu chúng thì ví một khóa vẫn chạy bình thường, còn ví có địa chỉ sinh ra từ hai đến
+bảy khóa thì hoàn toàn không triển khai được trên mạng đó.
+
+## Một giao dịch được trả phí thế nào
+
+Vela là ví ERC-4337: bạn không tự phát giao dịch lên mạng. Ứng dụng dựng một
+**UserOperation**, bạn ký nó bằng một trong các khóa của mình, và một **relay** gửi nó
+lên chuỗi, trả trước tiền gas. (ERC-4337 gọi vai trò này là bundler.) Relay được hoàn
+tiền **ngay bên trong thao tác của bạn**: khoản thanh toán là một lệnh chuyển từ ví của
+bạn tới relay, nằm cùng lô với giao dịch của bạn, nên được chữ ký của bạn bảo vệ. Không
+có paymaster, không ai tài trợ gas cho bạn, và cũng không ai có thể từ chối giao dịch
+của bạn vì một chính sách tài trợ.
+
+### Phí là bao nhiêu
+
+<span id="fee"></span>
+
+Màn hình xác nhận hiện một con số duy nhất, theo token trả phí và theo tiền tệ hiển
+thị của bạn. Nó được tính như sau:
+
+- **Lượng gas ví dự trù.** Ví mô phỏng giao dịch và dự trù nhiều gas hơn mức nó dự
+  kiến dùng: ước tính cho phần xác minh và phần thực thi đều được nâng thêm một nửa, kèm
+  mức tối thiểu (ví dụ phần xác minh ít nhất là 300.000 gas khi ví đã được triển khai,
+  và 2.000.000 cho giao dịch triển khai ví).
+- **Giá gas.** Mức cao hơn giữa giá gas của mạng do ví tự đọc được và giá relay báo cho
+  tốc độ bạn chọn. Tốc độ mặc định là *nhanh*, được relay định giá khoảng 1,8 × phí cơ
+  sở cộng hai lần phí ưu tiên.
+- **Phí = 3 × lượng gas dự trù × giá gas**, tối thiểu khoảng 0,01 USD. Trên Tempo, hệ
+  số là 2 và phí được trả bằng pathUSD.
+
+Vì lượng dự trù được độn cao hơn hẳn mức giao dịch sẽ dùng, và giá đã chừa sẵn biên độ,
+nên phí cao hơn chi phí thực của giao dịch trên chuỗi — và còn cao hơn nữa ở giao dịch
+đầu tiên của bạn trên một mạng, vì giao dịch đó đồng thời triển khai ví của bạn. Relay
+trả chi phí thực và giữ phần còn lại; không có khoản nào được hoàn lại. Trên các mạng
+rẻ, đây chỉ là vài xu; trên mainnet Ethereum, nó có thể là một khoản đáng kể. Bạn không
+cần phải đoán: số tiền chính xác nằm trên màn hình xác nhận trước khi bạn ký.
+
+**Ai nhận phí.** Phí thuộc về người vận hành relay mà ví đang dùng — relay của Vela,
+trừ khi bạn đổi. Bản triển khai vela-relay nào cũng dùng được, kể cả
+[relay do bạn tự chạy](/vi/docs/self-hosting#relay), và ví áp dụng cùng một công thức
+dù bạn chọn relay nào.
+
+<Callout type="info" title="Thấy bao nhiêu, trả bấy nhiêu">
+Số tiền phí và địa chỉ nhận phí là một phần của thao tác bạn ký. Relay mà đổi một trong
+hai thứ đó sẽ làm chữ ký của bạn mất hiệu lực, nên bạn trả đúng số tiền đã hiện — không
+hơn, kể cả khi gas tăng trước lúc giao dịch được đưa vào khối. Báo giá gas nào của relay
+cao hơn ba lần mức ví tự đọc được sẽ bị từ chối.
 </Callout>
 
-## Phí hoạt động thế nào (trừu tượng hóa tài khoản)
+### Bạn có thể trả phí bằng gì
 
-Vela dùng **trừu tượng hóa tài khoản ERC-4337**, nên giao dịch không do bạn phát trực
-tiếp — nó là một **UserOperation** giao cho một **relay**, relay gửi lên chuỗi và được
-hoàn lại tiền gas. (Đặc tả ERC-4337 gọi vai trò đó là *bundler*. Của Vela gọi là relay
-vì nó làm nhiều hơn việc gộp lô: nó báo phí ngay trong kênh và chạy giao thức tài khoản
-gas nói ở dưới, cả hai đều không thuộc chuẩn.) Từ đó suy ra vài điều:
+- **Coin gốc** của mạng, lúc nào cũng được.
+- Một **stablecoin USD** trong danh sách của relay cho mạng đó, khi relay định giá được
+  coin gốc. Những stablecoin bạn không có chút nào sẽ bị ẩn đi.
+- Trên **Tempo**, vốn không có coin gốc, chỉ dùng được **pathUSD**.
 
-- **Gas trả từ chính số dư ví của bạn** — mặc định bằng token gốc của mạng (ETH, BNB,
-  xDAI…), hoặc bằng một stablecoin được hỗ trợ ở nơi relay có cung cấp; bạn chọn tài
-  sản trả phí ngay trên màn hình xác nhận. Tempo không có đồng gốc nên gas ở đó luôn
-  được thanh toán bằng stablecoin USD. Không có **paymaster** ERC-4337 nào tài trợ —
-  hay chặn — từng giao dịch. (Vela có thể tài trợ bước _kích hoạt tài khoản gas_ một
-  lần cho người dùng mới; đó là chuyện riêng, nói ở dưới.)
-- **Relay báo giá gas** — nó là nguồn sự thật duy nhất, còn ví hiển thị đúng báo giá đó
-  và ký đúng thứ nó hiển thị. Không có nút chọn tốc độ: mọi giao dịch đều gửi ở mức ưu
-  tiên cao.
-- Tổng phí là **chi phí mạng cộng phí dịch vụ của relay**, với một mức tối thiểu nhỏ
-  cho những giao dịch rất rẻ. Báo giá của relay chính là giá — không có bảng phí riêng
-  nào để tra. Một phần đi về các validator của chuỗi; phần còn lại trả cho relay, bên
-  ứng trước tiền gas và vận hành hạ tầng.
-- Màn hình xác nhận hiện **phí ước tính** theo tài sản trả phí và theo đơn vị tiền hiển
-  thị của bạn trước khi bạn ký. Số tiền báo giá và người nhận nó là một phần của thứ
-  bạn ký, nên relay được trả đúng bằng con số đã hiện — đổi số là chữ ký của bạn mất
-  hiệu lực.
+Bạn chọn token trả phí, và tốc độ (*chậm*, *tiêu chuẩn* hoặc *nhanh*), trên màn hình
+xác nhận và trong phần Cài đặt.
+
+### Giao dịch đầu tiên của bạn trên một mạng
+
+Bạn có thể nhận tiền trên bất kỳ mạng nào trước khi ví của bạn tồn tại ở đó. Lần đầu
+bạn gửi đi từ một mạng, giao dịch đó đồng thời triển khai hợp đồng ví của bạn (và một
+hợp đồng ký nhỏ cho mỗi khóa thêm vào). Gas triển khai đã được tính vào phí của giao
+dịch đó, nên lần gửi đầu tiên trên mỗi mạng tốn hơn những lần sau.
+
+Khi bạn gửi **tối đa** số coin gốc, Vela giữ lại đủ để trả phí.
 
 ## Ai vận hành relay — và ai nhận phí
 
-Mỗi mạng trỏ tới một relay. Mặc định đó là **relay của chính Vela**, và bạn có thể thay
-điểm cuối ở _Cài đặt → Nâng cao → Điểm cuối dịch vụ_. Một điểm cuối áp dụng cho mọi
-mạng có sẵn; một mạng tùy chọn thì giữ địa chỉ relay bạn đã nhập khi thêm nó.
+Mặc định, mọi mạng đều dùng **relay của Vela**, và phí thuộc về Vela. Bạn có thể trỏ ví
+sang một relay khác trong **Cài đặt → Nâng cao → Điểm cuối dịch vụ**; một địa chỉ phục
+vụ tất cả các mạng tích hợp sẵn, còn một mạng tùy chỉnh giữ nguyên địa chỉ relay đã
+dùng khi thêm nó. Relay đó phải là
+[vela-relay](https://github.com/mondaylabsltd/vela-relay) — của Vela hoặc do bạn tự
+chạy — vì ví lấy báo giá phí qua một phương thức riêng của Vela mà các bundler thông
+dụng như Pimlico hay Alchemy không hỗ trợ. Ai vận hành relay bạn dùng thì người đó nhận
+phí; [hướng dẫn tự triển khai](/vi/docs/self-hosting#relay) giải thích cách tự chạy
+một relay.
 
-Một lưu ý thật thà về tương thích: ứng dụng lấy báo giá phí qua một phương thức RPC
-riêng của Vela (`vela_getInBandGasQuote`), và luồng gửi không chạy nếu thiếu nó. Vậy
-nên điểm cuối bạn trỏ tới phải đang chạy
-[vela-relay](https://github.com/mondaylabsltd/vela-relay) — bản của Vela hoặc bản bạn
-tự dựng. Một bundler ERC-4337 thông thường như **Pimlico** hay **Alchemy** không cài
-đặt phương thức đó, nên ở bản phát hành hiện tại nó sẽ không chạy trọn luồng.
+Relay nhận một thao tác đã được ký sẵn. Nó không thể đổi người nhận, số tiền, mức phí
+hay bất cứ thứ gì khác. Nó có thể trì hoãn hoặc từ chối, và nó chọn thời điểm giao dịch
+lên chuỗi — nên với một lệnh hoán đổi, về lý thuyết nó có thể giao dịch chen trước bạn
+trong phạm vi trượt giá của bạn.
 
-Ai vận hành relay cho một mạng thì **thu phí của mạng đó** — phần chênh của relay trên
-mỗi giao dịch và khoản đặt cọc kích hoạt tài khoản gas. Hãy chạy vela-relay của riêng
-bạn và những khoản phí ấy nuôi hạ tầng của bạn thay vì của Vela; Vela không lấy phần
-nào từ lưu lượng bạn dẫn đi nơi khác.
+### Khi relay hết gas
 
-<Callout type="warning" title="Tài khoản gas là một phần của giao thức vela-relay">
-Bước <strong>kích hoạt tài khoản gas</strong> nạp tiền cho một tài khoản relay dành
-riêng cho ví của bạn trên mỗi mạng. Nếu bạn trỏ điểm cuối tới một vela-relay tự dựng,
-khoản đặt cọc nạp cho tài khoản của relay của chính bạn, không phải của Vela.
-</Callout>
+Relay trả gas từ **ngân quỹ** của chính nó trên từng mạng. Nếu ngân quỹ đó cạn, màn hình
+gửi sẽ báo cho bạn trước khi bạn ký:
 
-### Kích hoạt tài khoản gas (Vela Relay)
+- Trên một mạng do relay của Vela phục vụ, bên vận hành relay (Vela) cần nạp thêm; bạn có
+  thể báo lỗi này. Nếu không đợi được, bạn có thể **tùy ý** tự gửi một ít coin gốc vào
+  ngân quỹ. Khoản đóng góp đó **không được hoàn lại** và **không** dùng để trả cho giao
+  dịch của chính bạn.
+- Trên một mạng tùy chỉnh, việc nạp tiền cho relay là việc của người vận hành nó — có
+  thể chính là bạn.
 
-Trên relay của Vela, giao dịch đầu tiên của bạn ở mỗi mạng sẽ **kích hoạt một tài
-khoản gas riêng**. Ứng dụng trước hết xin ngân quỹ của relay chi trả giúp bạn — việc
-này diễn ra lặng lẽ bên trong luồng gửi, và một chiếc ví được tài trợ sẽ không bao giờ
-thấy màn hình nạp tiền. Chỉ khi việc tài trợ bị từ chối, ứng dụng mới hiện yêu cầu nạp:
-bạn gửi một lượng nhỏ token gốc tới địa chỉ tài khoản gas mà nó hiển thị, và nó nói cho
-bạn biết vì sao không được tài trợ.
+Không có tài khoản gas riêng cho từng ví, cũng không có khoản đặt cọc kích hoạt nào: một
+phiên bản trước đây của Vela từng có cơ chế đó, và giờ nó không còn nữa.
 
-**Bạn tự trả phí kích hoạt** mỗi khi không được tài trợ miễn phí, cụ thể là khi:
+## Vela đọc dữ liệu từng mạng thế nào
 
-- **Ngân quỹ của Vela cho mạng đó cạn hoặc gần cạn** — quỹ miễn phí trên chuỗi đó tạm
-  hết.
-- **Bạn đã dùng hết hạn mức miễn phí** — việc tài trợ có giới hạn theo từng ví, quá vài
-  lần đầu thì bạn tự trả.
-- **Relay của Vela không tài trợ mạng đó** — ví dụ **mạng tùy chọn hoặc mạng thử nghiệm
-  do bạn tự thêm**, Vela không giữ ngân quỹ cho chúng. (Hãy trỏ chúng sang relay của
-  riêng bạn nếu muốn bỏ hẳn bước kích hoạt.)
-
-Khoản đặt cọc kích hoạt **không hoàn lại** — đó là số dư khởi đầu của relay và tự bù
-lại từ tiền hoàn gas theo thời gian, dù vẫn có thể cạn và cần **kích hoạt lại** về sau.
-Địa chỉ relay cũng có thể đổi khi nâng cấp dịch vụ, và khi đó cần kích hoạt mới.
-
-Phí trừ vào số dư của bạn ở **tài sản trả phí** bạn chọn — mặc định là token gốc. Nếu
-một lệnh gửi bị chặn vì gas, nghĩa là số dư của bạn ở tài sản trả phí đó không đủ trả
-phí; ở nơi relay có cung cấp gas bằng stablecoin, đổi tài sản trả phí trên màn hình xác
-nhận có thể gỡ chặn.
-
-Khi bạn gửi **toàn bộ** số token gốc, Vela tự động giữ lại đủ cho gas để giao dịch
-không thất bại.
-
-## Vela nói chuyện với từng mạng thế nào
-
-Vela đọc số dư và gửi giao dịch qua một **nhóm điểm cuối RPC**, không phải một nhà cung
-cấp duy nhất. Nó gom điểm cuối từ nhiều nguồn, chấm điểm theo độ trễ và độ tin cậy, và
-**tự chuyển dự phòng** khi một cái chậm hoặc chết — tạm cho những điểm cuối tệ ra ngoài
-— để một node chập chờn không bao giờ làm cả ứng dụng ngưng chạy.
+Vela đọc số dư và mô phỏng giao dịch qua một **nhóm điểm cuối RPC** cho mỗi mạng — các
+điểm cuối tích hợp sẵn, các điểm cuối công khai dự phòng, và mọi khóa nhà cung cấp hay
+điểm cuối bạn thêm vào — và chuyển sang điểm cuối kế tiếp khi một điểm cuối chậm hoặc
+ngừng hoạt động. Bạn có thể đặt điểm cuối riêng cho từng mạng trong **Cài đặt → Mạng
+lưới**. (Ứng dụng Android hiện chỉ dùng một điểm cuối cho mỗi mạng, không có chuyển dự
+phòng, và ứng dụng iPhone chưa cho phép thay đổi.)
 
 Tiếp theo: [passkey hoạt động thế nào](/vi/docs/passkeys).

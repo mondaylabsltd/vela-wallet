@@ -435,7 +435,18 @@ export interface SweepRowModel {
 	symbol: string;
 	balanceLabel: string;
 	amount: string;
-	max: string;
+	/**
+	 * Absent on the live path, and the drawn board keeps it.
+	 *
+	 * A sweep's amounts ARE every picked token's whole balance, less the
+	 * reserve whichever asset pays the fee needs — the core recomputes them on
+	 * every quote (`multi_token_specs`). The row is a label, so there is no
+	 * per-row figure for a Max to fill. Worse than useless, in fact: the chip
+	 * discarded its row index and the core's `TapMax` then acted on the FIRST
+	 * token of the pick, writing the hidden single amount. iOS and Android
+	 * both dropped the chip; the core refuses `TapMax` in sweep mode now too.
+	 */
+	max?: string;
 }
 
 export interface FeeRowModel {
@@ -896,6 +907,15 @@ export interface SendReceiptModel {
 	/** submitted / confirmed: the hash and its copy affordance. */
 	hash?: { label: string; value: string; copyLabel: string };
 	viewOnExplorer?: string;
+	/**
+	 * Where it leads. Live only, and only once there IS a hash — a receipt for
+	 * an op the chain has not named yet has nothing to link. Until spec 081 no
+	 * builder set `viewOnExplorer` at all, so the one button on the one screen
+	 * that answers "did it really happen" was never drawn on the live path;
+	 * iOS had the button and no handler, which is the same hole from the other
+	 * side.
+	 */
+	explorerUrl?: string;
 	/**
 	 * Spec 038 #D3 — live, while submitted: when the relay accepted the op and
 	 * how long this chain usually takes, so the screen can count rather than

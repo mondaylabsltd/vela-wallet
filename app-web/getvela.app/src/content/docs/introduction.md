@@ -1,51 +1,50 @@
 ---
 title: Introduction
-description: What Vela is, who it's for, and the ideas behind a self-custodial smart wallet with no seed phrase.
+description: "What Vela is in six lines, and a list of the questions people arrive with — each linked straight to its answer."
 ---
 
-# Introduction
+# Vela documentation
 
-Vela is a **self-custodial smart wallet** for EVM networks. You own your keys, but
-there's no seed phrase to write down — you sign with a passkey, using your face or
-fingerprint.
+Vela is an **open-source, self-hostable wallet for Ethereum and other EVM
+networks**, with no seed phrase. Your wallet is an unmodified
+[Safe](/docs/account-contract) smart account, and you sign with **passkeys** — on
+your phone or computer, on another phone, or on a hardware security key.
 
-This documentation covers how to get started, create a wallet, move tokens, and
-understand the security model behind it.
+- **Runs without us.** The apps and every service behind them — the relay, the
+  public-key index, chain data and exchange rates — are MIT-licensed. Build and
+  run them yourself with the [self-hosting guide](/docs/self-hosting), which also
+  lists the limits.
+- **Your keys, up to seven.** Chosen when you create the wallet; any one of them
+  can sign. Vela never has them and holds no role on your wallet.
+- **24 networks, one address.** Plus any EVM network you add that meets the
+  requirements.
+- **You read before you sign.** Transactions are decoded into plain language;
+  what can't be decoded is labelled.
+- **Alpha.** It works and holds real funds, and it is young: start with small
+  amounts. [What alpha means here](/blog/vela-is-in-alpha).
 
-## The short version
+## Find an answer
 
-- **Self-custodial.** Your funds are controlled by a key only you can use. Vela
-  (the company) cannot move, freeze, or recover your money.
-- **No seed phrase.** Your signing key is a passkey in your device's secure
-  hardware. There is no twelve-word phrase to lose or have phished.
-- **A Safe smart account.** Each wallet is a [Safe](https://github.com/safe-fndn/safe-smart-account)
-  smart contract operated with ERC-4337 account abstraction — which is what lets
-  you sign with a passkey and read every transaction before you approve it.
-- **12 networks, one address.** Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-  Base, Avalanche, Gnosis, Unichain, Tempo, Monad, and World Chain — plus custom
-  networks — all at the same address.
-- **Readable signing.** Transactions are decoded into human-readable intent
-  (ERC-7730) where a descriptor exists; otherwise Vela falls back to best-effort
-  decoding and shows a warning. Calls it can't decode are flagged, not hidden.
-- **Open source.** The wallet and all its services are
-  [public on GitHub](https://github.com/mondaylabsltd/vela-wallet) so anyone can
-  audit exactly what they do.
-- **Alpha software.** Vela works and holds real funds, but it hasn't had years
-  of production hardening. Start with small amounts. The
-  [alpha post](/blog/vela-is-in-alpha) explains what that means.
+| I want to know… | Go to |
+| --- | --- |
+| How to run everything myself | [Self-hosting guide](/docs/self-hosting) |
+| How to run my own relay, and who gets the fee | [Self-hosting guide → relay](/docs/self-hosting#relay) · [Networks & fees → the fee](/docs/networks-and-fees#fee) |
+| What happens if getvela.app goes offline | [Self-hosting guide → without getvela.app](/docs/self-hosting#if-getvela-app-disappears) |
+| Why a transaction costs what it costs | [Networks & fees](/docs/networks-and-fees) |
+| Whether my chain is supported, or how to add one | [Networks & fees](/docs/networks-and-fees) · [Chain setup](/chain-setup) |
+| Whether Vela is audited | [Audits & known issues](/docs/security-audits) |
+| How to check what I'm really signing | [Clear signing](/docs/clear-signing) · [The Bybit attack](/docs/bybit-attack) |
+| Which app to install, and what it costs | [Install Vela](/docs/install) · [Get Vela](/get-started) |
+| How to create a wallet, and which keys to use | [Create your wallet](/docs/create-wallet) · [Signers & security keys](/docs/signers) |
+| What to do if I lose my phone or delete a passkey | [Recovery & sign-in](/docs/recovery) |
+| Whether I can add or change keys later | [Signers & security keys](/docs/signers) |
+| How to use Vela with a dApp | [Install Vela → dApps](/docs/install#dapps) |
+| What is public about my wallet | [Create your wallet → what's public](/docs/create-wallet#what-is-public) · [Privacy policy](/privacy) |
 
-## Who it's for
+## Read in depth
 
-Vela is built for people who want real self-custody without the footgun of seed
-phrase management — and for people who've been burned by it before. If you can
-unlock your phone, you can use Vela.
+- [Why we built Vela](/docs/why-vela) — the story and the trade-off we chose.
+- [Whitepaper](/docs/whitepaper) — the architecture and exactly what you trust.
+- [The account contract](/docs/account-contract) — which contracts hold your money.
 
-## Where to go next
-
-- [Install Vela](/docs/install) — it runs in your browser, no download needed.
-- [Create your wallet](/docs/create-wallet) — your first wallet in about a minute.
-- [How passkeys work](/docs/passkeys) — the security model, explained plainly.
-- [Whitepaper](/docs/whitepaper) — the full architecture and trust model.
-
-If you're more interested in the *why* than the *how*, the [blog](/blog) tells the
-story of how Vela is being built.
+The [blog](/blog) follows how Vela is being built.

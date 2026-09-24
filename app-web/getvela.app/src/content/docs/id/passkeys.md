@@ -1,6 +1,7 @@
 ---
 title: Cara kerja passkey
-description: "Model keamanan di balik Vela: apa itu passkey, di mana kunci Anda berada, dan kenapa tidak ada yang bisa dicuri lewat phishing."
+description: "Apa itu passkey, di mana kunci privatnya disimpan untuk tiap jenis kunci, kenapa tidak ada rahasia yang bisa dicuri lewat phishing, dan apa yang tidak dilindungi passkey."
+source: b23999b2ed69
 ---
 
 <script>
@@ -9,59 +10,73 @@ description: "Model keamanan di balik Vela: apa itu passkey, di mana kunci Anda 
 
 # Cara kerja passkey
 
-Seluruh model keamanan Vela bertumpu pada satu gagasan: kunci yang mengendalikan
-dompet Anda adalah **passkey**, dibuat oleh perangkat Anda dan dipegang sistem operasi
-— tidak ada aplikasi, termasuk Vela, yang bisa membacanya — dan hanya dipakai dengan
-wajah atau sidik jari Anda.
+Kunci yang mengendalikan dompet Vela adalah **passkey**: kredensial WebAuthn pada kurva
+P-256. Perangkat atau kunci keamanan Anda membuat tiap passkey, menyimpan kunci
+privatnya, dan hanya memakainya setelah Anda mengonfirmasi dengan Face ID, sidik jari,
+PIN perangkat, atau sentuhan dan PIN di kunci keamanan. Vela tidak pernah menerima
+kunci privatnya; kalau pengelola kata sandi menyinkronkannya, pengelola itulah yang
+menyimpannya, terenkripsi, atas nama Anda.
 
-## Passkey itu sebenarnya apa
+## Apa itu passkey
 
-Passkey adalah sepasang kunci publik/privat yang dibuat perangkat Anda. **Kunci
-privatnya** dipegang penyedia passkey sistem operasi Anda — biasanya iCloud Keychain
-di Apple, Google Password Manager di Android — disimpan terenkripsi ujung-ke-ujung,
-jadi tidak ada aplikasi yang bisa membaca atau menyalinnya. Aplikasi tidak menerima
-kuncinya; setelah Anda terverifikasi, mereka hanya boleh *meminta perangkat Anda
-menandatangani sesuatu*.
+Passkey adalah pasangan kunci publik/privat yang dibuat untuk satu situs web — untuk
+Vela, `getvela.app`. Aplikasi tidak pernah menerima kunci privatnya; aplikasi hanya bisa
+meminta autentikator menandatangani sesuatu, dan autentikator meminta persetujuan Anda
+lebih dulu.
 
-Ini teknologi yang sama dengan yang melindungi Apple Pay dan buka kunci biometrik
-Anda.
+Di mana kunci privatnya disimpan bergantung pada jenis kuncinya:
 
-<Callout type="info" title="Poin pentingnya">
-Sebuah aplikasi — termasuk Vela — bisa meminta tanda tangan, tetapi tidak pernah
-melihat kunci privat Anda. Wajah atau sidik jari Anda memberi izin kepada perangkat
-untuk menandatangani; kuncinya sendiri tetap di sistem operasi, terenkripsi
-ujung-ke-ujung.
+| Jenis kunci | Tempat kunci privat disimpan | Tersinkron ke perangkat lain? |
+| --- | --- | --- |
+| **Perangkat ini** — Face ID, Touch ID, sidik jari, Windows Hello | Pengelola kata sandi platform Anda (Rantai Kunci iCloud, Pengelola Sandi Google) atau pengelola kata sandi seperti 1Password | Biasanya, dengan enkripsi end-to-end, kalau sinkronisasi aktif. Kunci Windows Hello tetap di PC itu |
+| **Ponsel lain**, dihubungkan dengan memindai kode QR | Pengelola kata sandi di ponsel itu | Sama seperti di atas |
+| **Kunci keamanan fisik** (YubiKey dan kunci FIDO2 lainnya, lewat USB atau NFC) | Di dalam kunci keamanan itu | Tidak pernah |
+
+Dompet Vela bisa memakai hingga tujuh kunci dengan kombinasi apa pun, yang dipilih saat
+Anda membuatnya; [kunci penanda tangan & kunci keamanan](/id/docs/signers) membahas
+pilihan itu.
+
+## Tidak ada rahasia yang bisa dicuri lewat phishing
+
+Phishing bekerja dengan membuat Anda menyerahkan sebuah rahasia. Frasa pemulihan adalah
+dua belas kata yang bisa saja Anda ketik di suatu tempat karena dibujuk. Passkey **tidak
+punya rahasia yang bisa diketik**: tidak ada yang bisa dibocorkan, tidak ada yang bisa
+ditempel, dan situs palsu tidak bisa memintanya. Selain itu, karena passkey dibuat untuk
+satu situs web, browser Anda hanya menawarkan passkey `getvela.app` ke halaman di
+getvela.app dan subdomainnya.
+
+Itu menghilangkan satu jenis kerugian yang umum terjadi di dompet non-kustodial:
+frasa pemulihan yang dicuri.
+
+## Apa yang tidak dilindungi passkey
+
+<Callout type="warning" title="Passkey menandatangani apa pun yang Anda setujui">
+Permintaan konfirmasi dari ponsel atau browser Anda memberi tahu <em>kunci mana</em>
+yang dipakai, bukan <em>apa</em> yang ditandatangani. Passkey akan menandatangani
+transaksi berbahaya semudah transaksi yang baik kalau Anda menyetujuinya. Itulah
+sebabnya Vela mendekode setiap transaksi sebelum Anda menandatangani
+(<a href="/id/docs/clear-signing">clear signing</a>), dan kenapa halaman yang
+menampilkannya itu penting (<a href="/id/docs/bybit-attack">serangan Bybit</a>).
 </Callout>
 
-## Kenapa tidak ada yang bisa di-phishing
+Passkey juga tidak melindungi dari orang yang memegang ponsel Anda dalam keadaan tidak
+terkunci dan bisa lolos pemeriksaannya, atau yang menguasai akun tempat passkey Anda
+tersinkron. Pasang kode sandi perangkat, amankan akun Apple atau Google Anda, dan
+pertimbangkan kunci keamanan fisik yang tidak tersinkron ke mana pun.
 
-Phishing bekerja dengan membuat Anda menyerahkan sebuah rahasia. Pada frasa pemulihan,
-rahasia itu adalah dua belas kata yang bisa Anda ketikkan ke halaman palsu. Pada
-passkey, **tidak ada rahasia yang bisa diketik**. Situs penipu tidak bisa meminta Anda
-"memasukkan passkey Anda", karena passkey bukan sesuatu yang bisa dimasukkan — ia
-operasi perangkat keras yang dikunci oleh biometrik Anda.
+## Seperti apa rasanya menandatangani
 
-Itu menghapus satu cara paling umum orang kehilangan dana yang mereka kelola sendiri.
+1. Anda mengonfirmasi transaksi di Vela, setelah membaca apa yang dilakukannya.
+2. Perangkat atau kunci keamanan Anda meminta Face ID, sidik jari, PIN Anda, atau
+   sentuhan plus PIN.
+3. Perangkat itu menandatangani, dan hanya tanda tangannya yang kembali ke aplikasi.
+4. Aplikasi menyerahkan operasi yang sudah ditandatangani ke relay, yang mengirimkannya;
+   kontrak dompet Anda memeriksa tanda tangan passkey on-chain sebelum melakukan apa pun.
 
-## Rasanya menandatangani transaksi
+## Ke mana kunci publiknya pergi
 
-1. Anda mengonfirmasi transaksi di Vela.
-2. Perangkat Anda meminta Face ID / Touch ID.
-3. Perangkat Anda menandatangani transaksi dengan passkey Anda.
-4. Vela menyiarkan transaksi yang sudah ditandatangani ke jaringan.
-
-Gerakan yang sama dengan membuka kunci ponsel — karena memang mekanisme passkey yang
-sama, yang sudah dipakai perangkat Anda di tempat lain.
-
-<Callout type="warning" title="Keamanan perangkat tetap penting">
-Passkey sangat baik melindungi dari serangan jarak jauh dan phishing. Ia tidak
-melindungi dari orang yang memegang perangkat Anda dalam keadaan tidak terkunci dan
-bisa melewati pemeriksaan biometrik Anda. Pasang kode sandi perangkat dan jangan
-menyerahkan ponsel yang tidak terkunci kepada orang yang tidak Anda percaya.
-</Callout>
-
-## Sisanya ada di mana
-
-Kunci **publik** passkey Anda ditulis ke indeks kecil di rantai agar dompet Anda bisa
-dipulihkan di perangkat baru. Itu topik halaman berikutnya:
+Bagian **publik** dari kunci-kunci Anda dicatat di registri publik di Gnosis Chain,
+supaya perangkat baru bisa menemukan dompet Anda. Itulah pokok bahasan
 [pemulihan & masuk](/id/docs/recovery).
+
+Berikutnya: [kunci penanda tangan & kunci keamanan](/id/docs/signers).

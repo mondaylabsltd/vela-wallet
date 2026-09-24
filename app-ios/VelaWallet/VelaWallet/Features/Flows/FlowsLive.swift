@@ -535,7 +535,12 @@ enum FlowsLive {
                 name: card.networkName,
                 pickLabel: model.network?.pickLabel ?? ""
             )
-        } ?? model.network
+        }
+        // NOT `?? model.network`. The lookup runs on every network at once, so
+        // before a token is found there is no network to name — and falling
+        // back to the drawn model put the FIXTURE's chain under a real
+        // person's search, with a chevron beside it. Android says the same
+        // thing by setting it to null outright (`FlowLive.kt:303`).
         live.fieldValue = view.inputAddress
         // An error only once there is something to be wrong about: an empty
         // field is not an invalid address, it is an empty field.

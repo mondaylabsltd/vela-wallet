@@ -1,6 +1,7 @@
 ---
 title: Whitepaper
-description: Vela hoạt động ra sao và bạn phải — hoặc không phải — tin vào những gì để dùng nó. Kiến trúc, mô hình bảo mật, khôi phục, và cách tự kiểm chứng tất cả.
+description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
+source: 60d297b650ac
 ---
 
 <script>
@@ -9,256 +10,306 @@ description: Vela hoạt động ra sao và bạn phải — hoặc không phả
 
 # Whitepaper
 
-<Callout type="info" title="Trạng thái: alpha · v0.1">
-Trang này mô tả Vela hoạt động thế nào ở hiện tại và bạn phải — hoặc không phải — tin
-vào những gì để dùng nó. Nó chọn thật thà thay vì tiếp thị. Vela đang ở
-<a href="/blog/vela-is-in-alpha">giai đoạn alpha</a> — hãy bắt đầu với số nhỏ. Vela
-không có token. Mọi điều ở đây đều kiểm chứng được bằng mã nguồn mở.
+<Callout type="info" title="Tình trạng: alpha · sửa đổi lần cuối tháng 9/2026">
+Trang này mô tả Vela hoạt động thế nào hiện nay và bạn phải hay không phải tin những gì
+khi dùng nó. Vela đang ở giai đoạn <a href="/blog/vela-is-in-alpha">alpha</a> — hãy bắt
+đầu với số tiền nhỏ. Vela không có token. Mọi điều ở đây đều đối chiếu được với mã nguồn
+mở; chỗ nào mã nguồn và trang này không khớp, mã nguồn là đúng và trang này là lỗi.
 </Callout>
 
 ## Tóm tắt
 
-Vela là **ví hợp đồng thông minh tự quản** cho các mạng EVM. Mỗi ví là một tài khoản
-thông minh [Safe](https://github.com/safe-fndn/safe-smart-account) do một **passkey**
-kiểm soát — một chứng danh WebAuthn (P-256) do hệ điều hành của thiết bị giữ, mã hóa
-đầu-cuối, và mở khóa bằng Face ID, Touch ID hoặc vân tay. Không có cụm từ khôi phục,
-không có khóa riêng tư nào để bạn chép, cất hay đánh mất.
+Vela là một **ví hợp đồng thông minh tự lưu ký** cho Ethereum và các mạng EVM khác. Mỗi
+ví là một tài khoản **Safe v1.4.1** nguyên bản, vận hành qua **ERC-4337**, và được kiểm
+soát bởi tối đa bảy **passkey** — các khóa WebAuthn P-256 do thiết bị của bạn, trình quản
+lý mật khẩu của bạn, hoặc khóa bảo mật phần cứng nắm giữ. Không có cụm từ khôi phục.
 
-Vela, với tư cách công ty, không bao giờ giữ khóa hay tiền của bạn và **không thể
-chuyển, đóng băng hay tịch thu chúng**. Ứng dụng, relay giao dịch và các dịch vụ hỗ
-trợ đều mã nguồn mở và tự vận hành được. Thứ bạn phải tin rút lại chỉ còn: các hợp
-đồng thông minh đã được kiểm toán, kho passkey của hệ điều hành, và — chỉ cho tính sẵn
-sàng — một relay mà bạn thay được hoặc tự chạy được.
+Vela, với tư cách công ty, không bao giờ giữ khóa của bạn và không có vai trò gì trên Safe
+của bạn, nên tự mình nó **không thể chuyển, đóng băng hay chiếm đoạt tiền của bạn**. Nhưng
+Vela có viết và cung cấp phần mềm yêu cầu các khóa của bạn ký — đó là lý do mô hình mối đe
+dọa bên dưới quan trọng. Các ứng dụng, relay gửi giao dịch lên chuỗi, và các dịch vụ hỗ
+trợ đều là mã nguồn mở, và bạn có thể tự chạy bản sao của từng thứ. Tóm lại, những gì bạn
+phải tin: các hợp đồng, các trình xác thực giữ khóa của bạn, mã của ứng dụng bạn dùng để ký,
+tên miền mà passkey của bạn thuộc về, và các dịch vụ mà bạn trỏ ứng dụng tới.
 
-## Vì sao Vela tồn tại
+## Vì sao có Vela
 
-Hầu hết ví bắt bạn đánh đổi:
+- **Ví dùng cụm từ khôi phục** đặt một bí mật 12–24 từ trước mặt mọi người dùng: một điểm
+  hỏng duy nhất và một mục tiêu lừa đảo thường trực.
+- **Ví lưu ký** bỏ được cụm từ khôi phục bằng cách giữ luôn tiền của bạn.
+- **Ví passkey** phụ thuộc vào máy chủ và mã đóng của một công ty thì bỏ được cụm từ khôi
+  phục, nhưng bỏ rơi bạn nếu công ty đó biến mất.
+- **Ký mù** — duyệt dữ liệu khó hiểu mà bạn không đọc được — vẫn còn phổ biến, và là một
+  trong những con đường khiến ví bị rút sạch.
 
-- **Ví dùng cụm từ khôi phục** đặt một bí mật 12–24 từ trước mặt mọi người dùng. Đó là
-  điểm hỏng duy nhất và là mục tiêu lừa đảo thường trực.
-- **Ví lưu ký** bỏ đi cụm từ khôi phục nhưng nắm giữ tiền của bạn — đưa trở lại đúng
-  cái rủi ro đối tác mà crypto sinh ra để loại bỏ.
-- **Ký mù** — duyệt những dòng hex khó hiểu mà bạn không đọc nổi — đã trở thành bình
-  thường trong hệ sinh thái và đứng sau một phần lớn các vụ ví bị rút sạch.
-
-Vela muốn dễ dùng như một ứng dụng lưu ký trong khi vẫn giữ bạn hoàn toàn tự quản:
-không cụm từ khôi phục, không ai giữ tiền, và không có giao dịch nào bạn không đọc được
+Vela hướng tới sự tiện lợi của passkey mà không kèm theo bất kỳ sự phụ thuộc nào ở trên:
+một tài khoản tiêu chuẩn, mã nguồn mở, dịch vụ thay thế được, và giao dịch bạn đọc được
 trước khi ký.
 
 ## Nguyên tắc thiết kế
 
-1. **Tự quản, không ngoại lệ.** Khóa được tạo ra trên thiết bị của bạn và do trình cung
-   cấp passkey của hệ điều hành giữ, mã hóa đầu-cuối. Máy chủ của Vela chỉ thấy dữ liệu
-   công khai.
-2. **Hãy kiểm chứng, đừng tin suông.** Toàn bộ hệ thống — ứng dụng và cả bốn dịch vụ
-   phía sau — đều mã nguồn mở theo giấy phép MIT.
-3. **Không ký mù.** Giao dịch được giải mã thành ý định con người đọc được ở mọi nơi có
-   mô tả; những lệnh gọi lạ bị đánh dấu chứ không bị giấu.
-4. **Làm ít thôi.** Ví giữ ETH và token ERC-20 và kết nối tới những dApp bạn chọn. Ít mã
-   phải tin hơn, bề mặt tấn công nhỏ hơn.
+1. **Tự lưu ký, không ngoại lệ.** Khóa do trình xác thực của bạn tạo và giữ. Các dịch vụ
+   của Vela không bao giờ thấy chúng; những gì các dịch vụ đó thấy được liệt kê trong phần
+   Quyền riêng tư.
+2. **Hợp đồng tiêu chuẩn, không sửa đổi.** Không hợp đồng nào trên đường đi tới tiền của
+   bạn do Vela viết.
+3. **Kiểm chứng, đừng tin suông.** Các ứng dụng và dịch vụ đều công khai; các dịch vụ có
+   thể tự triển khai.
+4. **Giải mã trước khi ký.** Những gì không giải mã được đều kèm cảnh báo ký mù rõ ràng.
+5. **Làm ít hơn.** Chiếc ví gửi, nhận, và ký cho những dApp bạn chọn.
 
 ## Kiến trúc
 
 ```text
-Ứng dụng Vela (iOS / Android / web, một mã nguồn)
-  • Passkey (WebAuthn P-256, trình cung cấp passkey của hệ điều hành)
-  • Dựng và ký UserOperation
-  • Giao diện ký minh bạch (ERC-7730)
-        │  UserOperation đã ký
+Các ứng dụng Vela — web, tiện ích trình duyệt, máy tính (macOS/Windows/Linux), iOS, Android
+  một lõi Rust dùng chung (quy tắc, mật mã, ABI, ký minh bạch) + vỏ gốc cho từng nền tảng
+  • dựng UserOperation và cho bạn thấy nó làm gì
+  • xin khóa của bạn một xác nhận WebAuthn
+        │  UserOperation đã ký (đã gồm phí)
         ▼
-Relay của Vela (ERC-4337, tự vận hành được)
-  • Gửi handleOps tới EntryPoint
-  • Không thể sửa hay giả mạo giao dịch của bạn
+Relay (vela-relay, tự triển khai được)
+  • báo giá phí, trả trước gas, gửi handleOps
+  • không thể thay đổi thao tác
         ▼
 Chuỗi EVM
-  EntryPoint v0.7 → tài khoản thông minh Safe
-  Bộ ký WebAuthn xác minh P-256 trên chuỗi
+  EntryPoint v0.7 → Safe v1.4.1 của bạn → mô-đun 4337 của Safe
+  Mô-đun passkey của Safe xác minh P-256 qua precompile EIP-7951 / RIP-7212
 ```
 
-### Mô hình tài khoản
+Các dịch vụ hỗ trợ, tất cả đều mã nguồn mở: một **chỉ mục khóa công khai** đăng ký ví mới
+vào một sổ đăng ký trên chuỗi và trả lời các yêu cầu tra cứu, một danh mục **dữ liệu
+chuỗi**, và một nguồn **tỷ giá**. Xem [hướng dẫn tự triển khai](/vi/docs/self-hosting).
 
-Ví của bạn là một tài khoản thông minh **Safe v1.4.1** (một hợp đồng proxy) vận hành
-qua trừu tượng hóa tài khoản **ERC-4337** (EntryPoint v0.7) với **Safe 4337 Module** và
-một **bộ ký WebAuthn** làm chủ sở hữu tài khoản.
+### Tài khoản
 
-Địa chỉ mang tính **tất định** và **phản thực**: nó được tính từ khóa công khai của
-passkey bằng `CREATE2` trước khi có giao dịch nào được gửi, nên bạn nhận tiền vào đó
-được trước cả khi nó được triển khai. Tài khoản tự triển khai chính mình, trả bằng số
-dư của nó, trong giao dịch đầu tiên của bạn.
+Ví của bạn là một proxy **Safe v1.4.1** (singleton SafeL2), với **mô-đun 4337 v0.3.0** của
+Safe được bật làm mô-đun và fallback handler, vận hành qua **EntryPoint v0.7**. Các chủ sở
+hữu của nó là các bộ ký passkey từ **mô-đun passkey v0.2.1** của Safe: khóa đầu tiên được
+bộ ký dùng chung xác minh, và mỗi khóa thêm vào được xác minh bởi hợp đồng ký riêng do
+factory của Safe tạo ra. Ngưỡng là **1**.
 
-### Khóa và xác thực
+Địa chỉ mang tính **tất định và phản thực**: nó được tính bằng `CREATE2` từ dữ liệu thiết
+lập Safe, vốn chứa mọi khóa ban đầu, trước khi có bất cứ thứ gì được triển khai. Địa chỉ
+giống nhau trên mọi mạng. Bạn nhận tiền vào đó được ngay; giao dịch đầu tiên của bạn trên
+mỗi mạng sẽ triển khai ví và trả chi phí đó ngay trong phí của giao dịch.
 
-Việc xác thực dùng **passkey WebAuthn** trên đường cong **P-256**. Khóa riêng tư được
-tạo trên thiết bị của bạn và do trình cung cấp passkey của hệ điều hành (Chuỗi khóa
-iCloud hoặc Trình quản lý mật khẩu Google) giữ, mã hóa đầu-cuối, đồng bộ giữa các thiết
-bị của bạn. **Máy chủ của Vela chỉ thấy khóa công khai của bạn.** Mỗi lần ký đều cần xác
-thực sinh trắc học mới — không có khóa phiên sống lâu. Xem
-[passkey hoạt động thế nào](/vi/docs/passkeys) để biết chi tiết.
+### Khóa
 
-### Ký và luồng giao dịch
+Một ví có **từ một đến bảy khóa**, cố định khi bạn tạo ví. Bất kỳ khóa nào cũng tự ký được
+một mình (1-of-n). Một khóa có thể là:
 
-1. **Dựng** một `UserOperation` ERC-4337 cho Safe của bạn và ước tính gas.
-2. **Giải mã** lệnh gọi thành ý định con người đọc được và hiện ra để bạn xem.
-3. **Ký** — thiết bị của bạn tạo một xác nhận WebAuthn trên digest của thao tác sau khi
-   xác thực sinh trắc học.
-4. **Mã hóa** xác nhận đó thành một chữ ký hợp đồng **EIP-1271**.
-5. **Chuyển tiếp** thao tác đã ký tới relay, relay gửi nó tới EntryPoint.
-6. **Xác minh trên chuỗi** — Safe xác minh chữ ký P-256 ngay trên chuỗi qua precompile
-   RIP-7212 trước khi thực thi. Precompile là điều kiện bắt buộc: không có bộ xác minh
-   dự phòng, và Vela từ chối bật một mạng thiếu nó.
+- một passkey trên thiết bị bạn đang dùng — được Chuỗi khóa iCloud, Trình quản lý mật khẩu
+  của Google hoặc một trình quản lý mật khẩu khác đồng bộ nếu bạn cho phép;
+- một điện thoại khác, kết nối bằng cách quét mã QR (kênh truyền hybrid của WebAuthn);
+- một khóa bảo mật phần cứng qua USB hoặc NFC, không đồng bộ đi đâu cả.
 
-Relay nhận một thao tác **đã được ký sẵn**. Nó không thể đổi người nhận, số tiền hay bất
-kỳ trường nào mà không làm chữ ký mất hiệu lực.
+Mọi chữ ký đều cần bước xác minh người dùng của chính trình xác thực — sinh trắc học hoặc mã
+PIN thiết bị, hoặc mã PIN và thao tác chạm trên khóa bảo mật. Không có khóa phiên. Không thể
+thêm, gỡ bỏ hay thay khóa về sau: trên mọi chuỗi mà ví chưa được triển khai, địa chỉ vẫn đại
+diện cho tập khóa ban đầu, nên đổi chủ sở hữu trên một chuỗi sẽ khiến tài khoản khác nhau
+giữa các chuỗi.
 
-### Relay và mô hình gas
+Passkey thuộc về một bên phụ thuộc (relying party) — passkey của Vela được tạo cho
+**`getvela.app`**. Trình duyệt chỉ đưa chúng cho các trang trên getvela.app hoặc các tên miền
+con của nó, điều khiến chúng chống được lừa đảo; đó cũng là một sự phụ thuộc mà tài liệu này
+sẽ quay lại bên dưới.
 
-- Gas trả **từ chính số dư ví của bạn** — mặc định bằng token gốc của mạng, hoặc bằng
-  một stablecoin được hỗ trợ ở nơi relay có cung cấp. Tempo không có đồng gốc nên gas ở
-  đó luôn thanh toán bằng stablecoin USD. Không có **paymaster** và không có bên thứ ba
-  nào tài trợ — hay chặn — giao dịch của bạn.
-- **Relay là nguồn sự thật duy nhất về giá gas.** Nó báo giá theo điều kiện chuỗi thời
-  gian thực; ví hiển thị báo giá đó và ký đúng thứ nó hiển thị.
-- Phần thu của Vela cố tình đơn giản: tổng là **chi phí mạng cộng phí dịch vụ của
-  relay**, với một mức tối thiểu nhỏ cho những giao dịch rất rẻ. Một phần đi về
-  validator của chuỗi; phần còn lại trả cho relay, bên vận hành hạ tầng và giữ cho tài
-  khoản gas của bạn có tiền.
-- Ví **hiện phí ước tính trước khi bạn xác nhận** — theo tài sản trả phí và theo đơn vị
-  tiền hiển thị của bạn — và số tiền báo giá cùng người nhận nó là một phần của thứ bạn
-  ký, nên relay được trả đúng bằng con số đã hiện. Không có phần chênh giấu mặt.
-- Mỗi Safe có một **tài khoản relay riêng** (tài khoản gas) trên từng chuỗi, kích hoạt
-  bằng một khoản đặt cọc **không hoàn lại**. Nó có thể cạn dần, nên về sau có thể cần
-  **kích hoạt lại** — không hẳn là một khoản đặt cọc một lần.
+### Luồng ký
 
-Relay là phụ thuộc về **tính sẵn sàng**, không phải về **quyền giữ tiền**: nó có thể
-trì hoãn hoặc từ chối chuyển tiếp, nhưng không bao giờ sửa, giả mạo hay trộm được. Nó
-là mã nguồn mở và bạn tự chạy được; và vì giá được **báo ra và hiện lên** thay vì giấu
-đi, phí của cả một relay tự dựng lẫn của bên thứ ba đều luôn hiện rõ trước khi bạn ký.
-Xem [mạng & phí](/vi/docs/networks-and-fees).
+1. **Dựng** một UserOperation cho Safe của bạn — bao gồm một lệnh chuyển trả phí cho relay
+   — và mô phỏng nó.
+2. **Giải mã** nó thành ý định con người đọc được và hiện cho bạn.
+3. **Ký**: sau khi xác minh bạn, trình xác thực tạo một xác nhận WebAuthn trên hash của thao
+   tác.
+4. **Mã hóa** xác nhận đó thành dạng chữ ký Safe mà mô-đun passkey mong đợi.
+5. **Gửi** thao tác đã ký tới relay, relay gọi EntryPoint.
+6. **Xác minh trên chuỗi**: mô-đun passkey kiểm tra chữ ký P-256 bằng precompile EIP-7951 / RIP-7212
+   trước khi Safe thực thi bất cứ điều gì. Không có bộ xác minh dự phòng; một mạng không có
+   precompile thì không thể thêm vào.
 
-### Ký minh bạch (ERC-7730)
+### Phí
 
-Vela giải mã calldata và dữ liệu có kiểu EIP-712 bằng các mô tả **ERC-7730** và vẽ ra
-**ý định** (Hoán đổi, Gửi, Duyệt…), **phần cốt lõi** (số tiền, địa chỉ) và **chi tiết**
-(nonce, hạn chót, calldata thô) khi được yêu cầu, có mã màu theo rủi ro. Khi không mô tả
-nào khớp, Vela hiện cảnh báo ký mù rõ ràng thay vì giả vờ hiểu lệnh gọi đó.
+- Relay được trả **ngay trong thao tác** (in band): thao tác khai báo phí EntryPoint bằng
+  không và kèm một lệnh chuyển từ Safe của bạn tới địa chỉ của relay. Số tiền và người nhận
+  là một phần của thứ bạn ký, nên bạn trả đúng số tiền màn hình xác nhận đã hiện.
+- Phí bằng **ba lần lượng gas ví dự trù cho thao tác** (các ước tính mô phỏng được nâng thêm
+  một nửa, kèm mức tối thiểu), **tính theo mức cao hơn giữa giá gas ví tự đọc được và giá
+  relay báo cho tốc độ đã chọn**, tối thiểu khoảng 0,01 USD. Trên Tempo, hệ số là hai. Phần
+  độn thêm và biên độ trong giá khiến phí cao hơn chi phí thực của thao tác trên chuỗi, nhất
+  là ở giao dịch đầu tiên trên một mạng; relay giữ phần chênh lệch. Số tiền chính xác nằm
+  trên màn hình xác nhận trước khi bạn ký.
+- Phí được trả cho relay mà ví đang dùng: mặc định là relay của Vela, hoặc bất kỳ bản triển
+  khai vela-relay nào, kể cả bản do bạn tự chạy.
+- Phí được trả bằng coin của mạng hoặc bằng một stablecoin USD mà relay chấp nhận (pathUSD
+  trên Tempo, mạng không có coin gốc). **Không có paymaster**: không ai tài trợ gas, và cũng
+  không ai có thể lọc giao dịch qua một chính sách tài trợ.
+- Nếu ngân quỹ gas của relay trên một mạng đã cạn, ví sẽ báo trước khi bạn ký. Không có khoản
+  đặt cọc nào cho từng người dùng.
+
+Chi tiết: [mạng & phí](/vi/docs/networks-and-fees).
+
+### Ký minh bạch
+
+Các lệnh gọi và thông điệp EIP-712 được giải mã bằng bộ mô tả **ERC-7730** — có sẵn trong
+ứng dụng cho các hợp đồng phổ biến, lấy từ dịch vụ dữ liệu chuỗi, hoặc khớp với các dạng
+token tiêu chuẩn — rồi, như phương án cuối cùng, một cơ sở dữ liệu selector công khai, được
+gắn nhãn giải mã tốt nhất có thể. Những gì còn lại đều nhận cảnh báo ký mù rõ ràng. Một bộ
+mô tả lấy về không bao giờ được gắn nhãn đã xác minh — chỉ bộ mô tả có sẵn trong ứng dụng,
+hoặc bộ lấy về mà giống hệt bản có sẵn, mới xứng với chữ đó. Một lệnh cấp quyền trên chuỗi
+ở mức "không giới hạn" (từ 2^200 trở lên) không thể gửi đi cho đến khi bạn giảm nó xuống;
+một lệnh cấp quyền lớn nhưng hữu hạn và các permit dạng chữ ký thì hiện kèm cảnh báo thận
+trọng nhưng không bị chặn. Chi tiết: [ký minh bạch](/vi/docs/clear-signing).
 
 ### Mạng
 
-Vela hỗ trợ 12 mạng EVM — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad và World Chain — cộng thêm mạng tùy chọn. Một
-mạng tùy chọn chỉ thêm được nếu nó đã có sẵn những hợp đồng Vela dựa vào (EntryPoint,
-các hợp đồng Safe, bộ ký WebAuthn) và precompile P-256 RIP-7212; Vela kiểm tra trước
-khi bật.
+Vela có 24 mạng tích hợp sẵn — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
+Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
+MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume và XRPL EVM — và chấp nhận bất kỳ
+mạng EVM nào có mười hai hợp đồng mà nó kiểm tra cùng precompile EIP-7951 / RIP-7212. Hai trong số
+mười hai hợp đồng đó là factory tạo bộ ký passkey của Safe và mã bộ ký mà factory này
+triển khai; chỉ ví có nhiều hơn một khóa mới cần chúng, và bước kiểm tra báo riêng hai
+hợp đồng này.
 
 ## Mô hình bảo mật
 
-**Những gì Vela không thể làm:**
+**Những gì Vela không thể làm**
 
-- Chuyển, tiêu hay sang nhượng tiền của bạn — chỉ passkey của bạn mới ủy quyền được cho
-  Safe.
-- Đóng băng hay tịch thu tài khoản của bạn — Safe là hợp đồng của bạn trên chuỗi; Vela
-  không có vai trò đặc quyền nào trên đó.
-- Ký thay bạn — mỗi giao dịch đều cần một xác nhận sinh trắc học mới.
-- Thấy khóa riêng tư của bạn — nó không bao giờ tới Vela; chỉ thiết bị của bạn dùng được
-  nó để ký.
-- Sửa một giao dịch sau khi bạn ký — mọi thay đổi đều làm chữ ký mất hiệu lực.
+- Tự mình chuyển, tiêu hay đóng băng tiền của bạn — chỉ các khóa của bạn mới phê duyệt được
+  cho Safe của bạn, và Vela không có vai trò gì trên nó. (Điều Vela làm được là phát hành
+  phần mềm yêu cầu bạn ký; xem các mối đe dọa bên dưới.)
+- Sửa một giao dịch sau khi bạn đã ký — mọi thay đổi đều làm chữ ký mất hiệu lực.
+- Đọc khóa riêng tư của bạn — chúng ở lại trong các trình xác thực của bạn.
+- Thêm một khóa vào ví của bạn, hoặc gỡ bỏ một khóa.
 
-**Điều mà "không thể đóng băng" không bao gồm:** bản thân *token*. Một stablecoin có
-kiểm soát — USDC, USDT và hầu hết token bảo chứng bằng tiền pháp định — mang theo một
-hàm danh sách đen mà tổ chức phát hành có thể gọi lên bất kỳ địa chỉ nào, kể cả của bạn.
-Quyền đó thuộc về tổ chức phát hành và tồn tại dù bạn giữ token trong ví nào; không ví
-tự quản nào, kể cả Vela, lấy nó đi được. Cái mà tự quản mang lại là: **chúng tôi** không
-phải một bên thứ hai cũng làm được như vậy.
+**Điều mà "không thể đóng băng" không bao gồm: chính token.** USDC, USDT và hầu hết các token
+bảo chứng bằng tiền pháp định cho phép bên phát hành đưa bất kỳ địa chỉ nào vào danh sách đen,
+kể cả địa chỉ của bạn. Quyền đó thuộc về bên phát hành và tồn tại dù bạn dùng ví nào. Điều tự
+lưu ký mang lại cho bạn là Vela không phải một bên thứ hai có được quyền đó.
 
-**Những gì bạn phải tin:**
+**Những gì bạn phải tin**
 
-- **Các hợp đồng Safe** (đã kiểm toán, dùng rộng rãi) và bộ ký WebAuthn xác minh khóa
-  P-256 của bạn.
-- **Trình cung cấp passkey của hệ điều hành** (Apple / Google) trong việc bảo vệ và đồng
-  bộ chứng danh của bạn.
-- **Các nhà cung cấp RPC** bạn truy vấn (Vela dùng một nhóm nhiều nguồn có chuyển dự
-  phòng; bạn tự đặt được nguồn riêng).
-- **Relay**, chỉ về tính sẵn sàng — và bạn tự vận hành được nó.
+- **Các hợp đồng**: Safe, mô-đun 4337 và mô-đun passkey của nó, EntryPoint v0.7, và precompile
+  EIP-7951 / RIP-7212 của chuỗi.
+- **Tên miền**: bất kỳ trang nào được phục vụ từ getvela.app hoặc một tên miền con của nó đều
+  có thể xin các khóa của bạn một chữ ký.
+- **Các trình xác thực** giữ khóa của bạn, và — với passkey được đồng bộ — tài khoản Apple,
+  Google hoặc trình quản lý mật khẩu đứng sau chúng.
+- **Mã của ứng dụng bạn dùng để ký.** Nó dựng giao dịch và cho bạn thấy giao dịch làm gì. Một
+  ứng dụng bị xâm nhập có thể cho bạn xem một thứ và yêu cầu bạn ký một thứ khác; lời nhắc của
+  trình xác thực sẽ không cho bạn biết sự khác biệt.
+- **Các điểm cuối RPC** bạn đọc dữ liệu từ đó: một nút nói dối có thể hiện sai số dư hoặc hiện
+  sai bản xem trước mô phỏng. Bạn có thể đặt điểm cuối của riêng mình.
+- **Các dịch vụ dữ liệu chuỗi và tỷ giá**: chúng cung cấp danh sách token, bộ mô tả, danh sách
+  token trả phí và tỷ giá dùng để đổi một số tiền pháp định thành số lượng token.
+- **Relay**: nó không thể sửa những gì bạn đã ký, nhưng có thể trì hoãn hoặc từ chối, chọn thời
+  điểm giao dịch lên chuỗi (nên nó có thể chạy trước một lệnh hoán đổi trong phạm vi trượt giá
+  của bạn), và đặt giá gas làm cơ sở tính phí của bạn, tối đa gấp ba mức ví tự đọc được.
 
-**Các mối đe dọa đã tính đến:**
+**Các mối đe dọa đã được xem xét**
 
-- **Mất hoặc bị trộm thiết bị** — kẻ trộm vẫn cần sinh trắc học/mã PIN của bạn để ký.
-- **Lừa đảo / dApp độc hại** — được xử lý bằng ký minh bạch.
-- **Máy chủ Vela bị chiếm** — không đem lại khả năng ký; thiệt hại tối đa là dịch vụ
-  suy giảm, không phải mất tiền.
-- **Rủi ro chuỗi cung ứng** — giảm nhẹ bằng mã nguồn mở và tự vận hành.
+- **Mất hoặc bị trộm thiết bị** — kẻ trộm vẫn phải vượt qua bước kiểm tra của trình xác thực;
+  một khóa khác giúp bạn lấy lại quyền truy cập. Nhưng không thể gỡ bỏ khóa: nếu một khóa có
+  thể đã rơi vào tay người khác, hãy chuyển tiền sang một ví mới, vì địa chỉ cũ vẫn tiêu được
+  bằng khóa đó trên mọi mạng.
+- **Lừa đảo** — không thể gõ passkey vào một trang giả, và trình duyệt chỉ đưa nó cho các trang
+  trên getvela.app và các tên miền con của nó.
+- **dApp độc hại** — được xử lý bằng ký minh bạch, lớp chặn cấp quyền và một lần từ chối
+  thẳng: yêu cầu một lệnh gọi từ Safe của bạn tới chính nó — `enableModule`,
+  `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` và những lệnh còn lại
+  trong họ đó — đều bị chặn, kể cả khi nằm trong một giao dịch gộp hay một `MultiSend`; mọi
+  nhánh mang `delegatecall` và chữ ký dữ liệu có cấu trúc `SafeTx` cũng vậy. Bất kỳ lệnh nào
+  trong số đó, chỉ cần ký một lần, cũng sẽ trao tài khoản đi trọn vẹn như dữ liệu trong vụ
+  Bybit, nên ví không hề đưa chúng ra để ký.
+- **Dịch vụ phía sau bị xâm nhập** (relay, chỉ mục, dữ liệu chuỗi, tỷ giá) — không có quyền ký,
+  nhưng có ảnh hưởng thật: từ chối phục vụ, bộ mô tả hoặc danh sách token gây hiểu lầm, tỷ giá
+  sai làm thay đổi số tiền thực gửi đi khi bạn nhập theo tiền pháp định, và (với relay) thời
+  điểm cùng giá gas đã nêu ở trên. Một phần mô tả lấy từ dịch vụ dữ liệu chuỗi không bao giờ
+  được gọi là đã xác minh — chỉ phần mô tả có sẵn trong ứng dụng, hoặc phần lấy về mà giống
+  hệt bản có sẵn, mới xứng với chữ đó; phần còn lại vẫn hiện kèm một dòng nói rằng không có
+  gì xác thực chúng. Mỗi dịch vụ đều thay được.
+- **Kênh phân phối ứng dụng bị xâm nhập** — một bản triển khai web, bản cập nhật tiện ích hay
+  bản build ứng dụng bị sửa đổi có thể đưa ra một giao dịch độc hại để bạn ký. Đây là lớp tấn
+  công kiểu [Bybit](/vi/docs/bybit-attack). Biện pháp giảm nhẹ hiện nay còn hạn chế: phần giải
+  mã và lớp chặn cấp quyền trong chính ứng dụng, các bản build macOS đã công chứng, và việc tự
+  biên dịch tiện ích hoặc ứng dụng từ mã nguồn (các gói phát hành có checksum SHA-256 và các
+  attestation nguồn gốc bản dựng của GitHub nêu rõ commit và lần chạy workflow; trình cài
+  đặt Windows vẫn chưa được ký mã). Một trang ký độc lập không dùng chung mã với ứng dụng đã được làm xong nhưng
+  chưa được kết nối.
+- **Bất cứ thứ gì được phục vụ từ tên miền** — bất kỳ trang nào trên getvela.app hoặc các tên
+  miền con của nó, kể cả một script mà trang đó tải, đều có thể xin chữ ký từ passkey của Vela,
+  và lời nhắc chỉ hiện "getvela.app". Vì vậy trang web cấm chính các trang của mình dùng
+  passkey, và không tải script phân tích trên trang đang giữ khóa. Nếu tên miền đổi chủ, chủ
+  mới cũng sẽ kiểm soát những ứng dụng nào được dùng passkey. Tiện ích và ứng dụng tự biên dịch
+  mang theo mã của riêng mình, dù theo mặc định chúng vẫn lấy bộ mô tả và dùng các dịch vụ dưới
+  getvela.app.
 
 ## Khôi phục
 
-Passkey của bạn được trình cung cấp của hệ điều hành sao lưu; trên thiết bị mới, đăng
-nhập bằng chính tài khoản Apple hay Google đó sẽ khôi phục nó, và ví của bạn hiện lại.
+Tạo ví sẽ công bố khóa công khai và địa chỉ của ví lên một **hợp đồng sổ đăng ký** công khai
+trên Gnosis (có thể sao chép sang Ethereum). Trên thiết bị mới, bạn đăng nhập bằng **bất kỳ
+khóa nào**; ứng dụng tìm ví qua chỉ mục hoặc, nếu không được, đọc thẳng từ sổ đăng ký, và
+kiểm tra rằng các khóa tính lại ra đúng địa chỉ đã ghi. Một ví chỉ có một khóa còn có thể
+được dựng lại từ hai chữ ký mà hoàn toàn không cần sổ đăng ký.
 
-<Callout type="warning" title="Bản sao lưu passkey của nền tảng chính là cách khôi phục của bạn">
-Khôi phục của Vela chính là passkey của bạn, được Chuỗi khóa iCloud hoặc Trình quản lý
-mật khẩu Google đồng bộ. Theo thiết kế, không có cụm từ khôi phục, không có khôi phục
-xã hội, không có người giám hộ — không có gì để Vela đánh mất, làm lộ hay bị ép phải
-dùng. Mặt trái là có thật: nếu bạn mất <strong>cả</strong> thiết bị
-<strong>lẫn</strong> passkey đồng bộ trên đám mây, mà không còn bản sao nào khác, thì
-tài khoản không khôi phục được. Hãy bật sao lưu passkey của nền tảng và bảo vệ tài khoản
-đó.
+<Callout type="warning" title="Khóa của bạn chính là cách khôi phục">
+Không có cụm từ khôi phục, không có khôi phục xã hội và không có người giám hộ — không có gì
+mà Vela có thể làm mất, làm lộ, hay bị ép phải dùng. Nếu mọi khóa ban đầu đều mất, ví không
+thể khôi phục. Hãy tạo ví với nhiều hơn một khóa, giữ đồng bộ passkey luôn bật nếu bạn dựa vào
+nó, và bảo vệ tài khoản đứng sau nó.
 </Callout>
 
-Mô hình khôi phục đầy đủ, kể cả những giới hạn thật thà, nằm ở
-[khôi phục & đăng nhập](/vi/docs/recovery).
+Chi tiết: [khôi phục & đăng nhập](/vi/docs/recovery).
 
 ## Nếu Vela biến mất
 
-Tự quản nghĩa là khóa và tiền của bạn không phụ thuộc vào việc Vela còn online. Tiền nằm
-trong **hợp đồng Safe của chính bạn trên chuỗi**, còn relay thì mã nguồn mở và thay thế
-được.
-
-Một lưu ý thật thà: WebAuthn buộc passkey vào tên miền của bên tin cậy (`getvela.app`).
-Nếu tên miền đó mất vĩnh viễn, những passkey gắn với nó sẽ cần trợ giúp để hoạt động ở
-nơi khác — một công cụ có thể trình ra bên tin cậy gốc cho bộ xác thực. Vela từng phát
-hành một tiện ích trình duyệt mức dành cho lập trình viên cho tình huống đó và đã ngừng
-nó vào tháng 9/2026; một đường khôi phục mức người dùng phổ thông cho trường hợp mất tên
-miền vẫn là việc còn dang dở, và chúng tôi nói thẳng ra thay vì ngụ ý rằng nó đã có. Việc
-truy cập độc lập trên chuỗi còn phụ thuộc vào hỗ trợ P-256 (RIP-7212) của chuỗi đích, vốn
-đang dần phổ biến hơn.
+Tiền của bạn vẫn nằm trong Safe của bạn trên chuỗi. Các hợp đồng không phụ thuộc vào Vela, và
+mọi dịch vụ Vela vận hành đều là mã nguồn mở để người khác chạy. Thứ duy nhất không thể dời
+đi là bên phụ thuộc của passkey, `getvela.app`: một bản sao ví web trên tên miền khác sẽ tạo
+ra một ví khác. Với các ví
+đã có, tiện ích trình duyệt Vela (được phép dùng passkey của `getvela.app`) và các ứng dụng bạn
+tự biên dịch (với điện thoại hoặc khóa bảo mật) vẫn tiếp tục hoạt động khi không có
+getvela.app. [Hướng dẫn tự triển khai](/vi/docs/self-hosting#if-getvela-app-disappears) trình
+bày rõ từng con đường và giới hạn của nó. Truy cập độc lập trên một chuỗi cũng đòi hỏi chuỗi đó
+hỗ trợ EIP-7951 / RIP-7212.
 
 ## Quyền riêng tư
 
-Không tài khoản, không email, không KYC, không cụm từ khôi phục nào để thu thập. Máy chủ
-chỉ lưu **khóa công khai** của bạn và cái tên tài khoản bạn chọn (để khôi phục xuyên
-thiết bị), vốn được công bố trên chuỗi theo thiết kế. Nội dung giao dịch không bị ghi
-log. Trang web dùng công cụ phân tích tự vận hành, không cookie. Xem
-[chính sách riêng tư](/privacy).
+Không tài khoản, không email, không KYC. Những gì trở nên công khai được ghi vào sổ đăng ký khi
+bạn tạo ví: khóa công khai và ID thông tin xác thực của từng khóa, mẫu trình xác thực, tên ví và
+nhãn các khóa của bạn, địa chỉ, và dữ liệu đăng ký đã ký. Chỉ mục của Vela thấy bản ghi đó trước
+khi gửi lên, và thấy những địa chỉ bạn tra tên; relay của Vela thấy địa chỉ của bạn, các thao
+tác bạn gửi và điểm cuối RPC mà ứng dụng của bạn dùng (kể cả khóa API trong URL của nó), và lưu
+các thao tác trong một thời gian giới hạn để thử lại và chẩn đoán lỗi. Mọi dịch vụ đều thấy địa
+chỉ IP của bạn. Trang web dùng công cụ phân tích không dùng cookie.
+[Chính sách quyền riêng tư](/privacy) là danh sách chính thức.
 
-## Kiểm chứng được và mã nguồn mở
+## Mã nguồn mở
 
-Mọi thứ đều **mã nguồn mở theo giấy phép MIT** — ứng dụng và cả bốn dịch vụ phía sau (dữ
-liệu chuỗi, chỉ mục passkey, relay, tỷ giá), và bạn **tự vận hành được** (Cài đặt →
-Nâng cao → Điểm cuối dịch vụ). Đọc mã tại
-[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
+Mọi thứ đều theo giấy phép MIT: chiếc ví (mọi ứng dụng và phần lõi), relay, chỉ mục khóa
+công khai, dịch vụ tỷ giá và danh mục dữ liệu chuỗi. Mã nguồn: [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Không có token
 
-Vela **không có token** và không có kế hoạch phát hành. Không có gì để mua, để farm hay
-để đầu cơ. Gas trả bằng tài sản gốc của từng mạng.
+Vela không có token và không có kế hoạch phát hành token. Không có gì để mua, để farm hay để
+đầu cơ. Phí được trả bằng coin của từng mạng hoặc bằng stablecoin.
 
 ## Tình trạng kiểm toán và giới hạn
 
-**Các hợp đồng Safe** ở lõi mỗi tài khoản Vela đã được kiểm toán độc lập và tôi luyện
-qua thực tế. **Phần tích hợp của chính Vela** quanh chúng **chưa qua kiểm toán độc lập
-của bên thứ ba**, và hiện chưa có lịch — một cuộc kiểm toán chuyên nghiệp là mục tiêu
-cho lúc dự án đủ sức chi trả, không phải một cam kết có ngày tháng. Cho tới lúc đó, việc
-rà soát phần tích hợp là không chính thức: mã nguồn mở, và nó dựa vào những người có
-năng lực và quan tâm trong cộng đồng đọc nó, cùng với rà soát có hỗ trợ của AI. Việc đó
-có ích, nhưng không tương đương một cuộc kiểm toán chuyên nghiệp. Hãy coi Vela là phần
-mềm alpha và chỉ dùng số tiền mà bạn thấy thoải mái khi đặt vào một thứ còn non trẻ như
-vậy.
+Các hợp đồng của Safe, mô-đun 4337 và mô-đun passkey của Safe, cùng EntryPoint v0.7 đã được
+kiểm toán độc lập và được dùng rộng rãi. **Mã của chính Vela — các ứng dụng, các dịch vụ phía
+sau và hợp đồng sổ đăng ký — chưa qua một cuộc kiểm toán độc lập của bên thứ ba, và cũng chưa
+có lịch kiểm toán nào**; một cuộc kiểm toán chuyên nghiệp là mục tiêu cho lúc dự án có kinh phí,
+không phải một cam kết có ngày cụ thể. Cho đến lúc đó, việc rà soát là không chính thức: mã
+nguồn công khai, những thành viên có năng lực trong cộng đồng đọc nó, và nó được rà soát bằng
+công cụ AI. Điều đó có ích, nhưng không tương đương một cuộc kiểm toán chuyên nghiệp. Hãy coi
+Vela là phần mềm alpha. Chi tiết: [kiểm toán & vấn đề đã biết](/vi/docs/security-audits).
 
-## Tham chiếu
+## Tài liệu tham khảo
 
 - ERC-4337 — Trừu tượng hóa tài khoản qua EntryPoint
-- EIP-1271 — Chuẩn xác thực chữ ký cho hợp đồng
-- ERC-7730 — Ký minh bạch / mô tả dữ liệu có cấu trúc
-- EIP-5792 — Gộp lô lệnh gọi của ví
-- RIP-7212 — Precompile xác minh chữ ký secp256r1 (P-256)
-- WebAuthn / FIDO2 — Xác thực bằng passkey
-- [Tài khoản thông minh Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1)
+- EIP-1271 — Xác thực chữ ký cho hợp đồng
+- ERC-7730 — Bộ mô tả cho ký minh bạch
+- EIP-5792 — Gộp lệnh gọi của ví (`wallet_sendCalls`)
+- EIP-7951 / RIP-7212 — Precompile xác minh chữ ký P-256
+- WebAuthn / FIDO2 — Passkey
+- [Tài khoản thông minh Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

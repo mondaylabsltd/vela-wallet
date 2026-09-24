@@ -110,7 +110,7 @@
    "subtitle": "Xoá mọi thứ Vela đã lưu trên máy này",
    "desc": "Mọi thứ Vela đã lưu trên thiết bị này sẽ bị xoá. Không có bản sao lưu và không thể hoàn tác.",
    "loses": "Bạn sẽ mất: lịch sử giao dịch, danh bạ và nhóm, lịch sử duyệt web, quyền của dApp, token và mạng tuỳ chỉnh, cài đặt RPC và điểm cuối, cùng mọi tuỳ chọn.",
-   "keeps": "Bạn không mất ví. Passkey vẫn nằm trong Face ID / vân tay — chọn “Tôi đã có ví” là địa chỉ cũ quay lại, chỉ khác là không còn lịch sử.",
+   "keeps": "Bạn không mất ví. Việc xóa không chạm tới passkey của bạn — passkey do nhà cung cấp passkey của bạn giữ (Face ID / vân tay, trình quản lý mật khẩu, hoặc khóa bảo mật), không nằm trong ứng dụng này. Chọn “Tôi đã có ví” và cùng một địa chỉ sẽ trở lại, chỉ là không còn lịch sử.",
    "confirm": "Xoá tất cả",
    "cancel": "Hủy",
    "failed": "Việc xoá chưa hoàn tất. Vẫn còn dữ liệu trên thiết bị này và bạn vẫn đang đăng nhập — hãy thử lại."
@@ -601,7 +601,7 @@
    "desktopTagline": "Khóa của bạn, tài sản của bạn",
    "featureNoMnemonicTitle": "Không cần cụm từ khôi phục",
    "featureNoMnemonicBody": "Tạo ví và đăng nhập bằng passkey trên thiết bị của bạn — không có 12 từ phải chép lại và cất giữ.",
-   "featureOneAddressTitle": "Một địa chỉ, 12+ mạng",
+   "featureOneAddressTitle": "Một địa chỉ, 24 mạng",
    "featureOneAddressBody": "Cùng một địa chỉ hoạt động trên mọi mạng được hỗ trợ, và bạn cũng có thể tự thêm mạng riêng.",
    "featureOpenSourceTitle": "Mã nguồn mở, tự triển khai được",
    "featureOpenSourceBody": "Ứng dụng và các dịch vụ backend đều là mã nguồn mở — bạn có thể vận hành một hệ thống hoàn toàn của riêng mình.",
@@ -624,12 +624,12 @@
    "custodyTitle": "Chìa khoá nằm trong tay bạn",
    "custodyBody": "Passkey được giữ ở nơi của bạn: trình quản lý mật khẩu của thiết bị, hoặc một khoá bảo mật phần cứng. Vela không chạm tới được và cũng không thể tiêu thay bạn.",
    "chainsTitle": "Một địa chỉ, mọi chuỗi",
-   "chainsBody": "Cùng một địa chỉ dùng được trên hơn 12 mạng, và phí có thể trả bằng stablecoin — không cần trữ sẵn đồng gốc cho từng chuỗi."
+   "chainsBody": "Cùng một địa chỉ dùng được trên 24 mạng, và phí có thể trả bằng stablecoin — không cần trữ sẵn đồng gốc cho từng chuỗi."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — ví passkey",
-    "description": "Ví passkey không cần cụm từ khôi phục: một địa chỉ dùng trên hơn 12 mạng, dựa trên hợp đồng Safe v1.4.1 đã được kiểm toán, trả gas bằng stablecoin, mã nguồn mở hoàn toàn và có thể tự vận hành."
+    "description": "Ví passkey không cần cụm từ khôi phục: một địa chỉ dùng trên 24 mạng, dựa trên hợp đồng Safe v1.4.1 đã được kiểm toán, trả gas bằng stablecoin, mã nguồn mở hoàn toàn và có thể tự vận hành."
    },
    "tagline": "Khóa của bạn, tài sản của bạn",
    "passkeyIndexLink": "Thiết lập dịch vụ chỉ mục passkey",
@@ -639,7 +639,7 @@
      "description": "Tạo và đăng nhập bằng passkey trên thiết bị — không có 12 từ phải chép lại và cất giữ."
     },
     "oneAddress": {
-     "title": "Một địa chỉ, hơn 12 mạng",
+     "title": "Một địa chỉ, 24 mạng",
      "description": "Cùng một địa chỉ dùng được trên mọi mạng được hỗ trợ, và bạn có thể tự thêm mạng."
     },
     "openSource": {
@@ -1250,6 +1250,7 @@
    "close": "Đóng",
    "valueLabel": "Giá trị",
    "bestEffortWarning": "Được giải mã từ chữ ký hàm — không phải bộ mô tả đã xác minh. Hãy xem xét kỹ các chi tiết.",
+   "descriptorFetchedWarning": "Mô tả này đến từ dịch vụ bộ mô tả của Vela và không có gì xác thực nó — hãy kiểm tra chi tiết trước khi phê duyệt.",
    "simWillSucceed": "Mô phỏng thành công — dự kiến sẽ thành công",
    "simWillFail": "Giao dịch này dự kiến sẽ thất bại — bạn vẫn phải trả phí gas.",
    "simWillFailReason": "Dự kiến thất bại: {{reason}} — bạn vẫn phải trả phí gas.",
@@ -1367,7 +1368,11 @@
    "trustedSignerReopen": "Mở lại trang",
    "trustedSignerDoneTab": "Đã ký. Bạn có thể đóng thẻ này và quay lại Vela.",
    "viewOnExplorer": "Xem trên explorer",
-   "sendingToTokenContract": "Gửi tới chính hợp đồng của token"
+   "sendingToTokenContract": "Gửi tới chính hợp đồng của token",
+   "selfCallBlockedTitle": "Vela không ký yêu cầu này",
+   "selfCallBlockedBody": "Yêu cầu này sẽ thay đổi ai kiểm soát ví của bạn ({{function}}). Chỉ cần ký một lần là ví có thể rơi vào tay người khác, nên Vela từ chối. Không có gì được ký.",
+   "selfCallBlockedLegBody": "Bước {{index}} của yêu cầu này sẽ thay đổi ai kiểm soát ví của bạn ({{function}}). Chỉ cần ký một lần là ví có thể rơi vào tay người khác, nên Vela từ chối toàn bộ yêu cầu. Không có gì được ký.",
+   "selfCallBlockedSafeTx": "Yêu cầu này muốn khóa của bạn phê duyệt một giao dịch Safe để thực thi sau. Vela từ chối — chữ ký như vậy có thể được dùng khi bạn không có mặt. Không có gì được ký."
   },
   "signingApprove": {
    "resultingTotal": "Tổng hạn mức mới",
@@ -1578,7 +1583,7 @@
    "bundlerHint": "Cần điểm cuối tương thích với Vela Relay",
    "fiatLabel": "TỶ GIÁ FIAT",
    "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
-   "resetToDefaults": "Khôi phục mặc định",
+   "resetToDefaults": "Đặt lại cả bốn về mặc định",
    "selfHostGuide": "Hướng dẫn tự triển khai →",
    "resetTitle": "Khôi phục điểm cuối dịch vụ?",
    "resetBody": "Cả bốn dịch vụ sẽ quay về địa chỉ của Vela. Các địa chỉ bạn đã nhập ở đây sẽ bị xóa.",
@@ -1609,8 +1614,9 @@
    "compatible": "Tương thích",
    "incompatible": "Không tương thích",
    "checkSafe": "Hợp đồng Safe L2",
-   "checkSigner": "Mô-đun ký WebAuthn",
-   "checkRemaining": "{{count}} hợp đồng còn lại"
+   "checkSigner": "Precompile P-256",
+   "checkRemaining": "{{count}} hợp đồng còn lại",
+   "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường."
   },
   "treasury": {
    "modalTitle": "Ngân quỹ",

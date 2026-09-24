@@ -147,6 +147,14 @@ struct TechModel {
     var raw: (label: String, hex: String)?
     let copyLabel: String
     let explorerLabel: String
+
+    /// Nothing to disclose. A refused request nulls every field this card
+    /// would show (spec 081); drawing the row anyway promises content and then
+    /// opens on an empty panel. Found on an Android device, fixed on both.
+    var isEmpty: Bool {
+        summary == nil && fn == nil && params.isEmpty && identities.isEmpty
+            && simResult == nil && raw == nil
+    }
 }
 
 struct FeeTokenOption: Identifiable {
@@ -163,8 +171,15 @@ struct FeeTokenOption: Identifiable {
 enum FeeModel {
     /// `warning` says why the slide is shut when the coin that pays is not
     /// there (issue #262); it sits under the row, where the other coins are.
+    /// `tappable` is whether the row can DO anything: ask a failed quote
+    /// again, or open a list with more than one coin in it. With one coin and
+    /// a good quote there is nothing to choose, and the row is a statement —
+    /// drawn without a chevron, because a control that cannot act is not
+    /// dressed as one. Android has decided this in its builder since 046; web
+    /// followed in spec 081. It defaults to `true` so the drawn boards, which
+    /// are pictures of the tappable state, are unchanged.
     case onchain(label: String, value: String, selector: (title: String, options: [FeeTokenOption])?,
-                 warning: String? = nil)
+                 warning: String? = nil, tappable: Bool = true)
     /// Off-chain signature: the ✓ line, in place of a fee row.
     case offchain(note: String)
     /// Nothing at all — cs20–cs22, where there is no fee and no reassurance.
@@ -179,11 +194,16 @@ struct SigningModel {
     let tech: TechModel
     /// cs29 ships the disclosure open — the whole point of that mock.
     let techOpen: Bool
-    let fee: FeeModel
+    /// `nil` under a refusal (spec 081): a fee for a transaction nobody will
+    /// send is a number about nothing.
+    let fee: FeeModel?
     var signer: (label: String, name: String, seed: String)
     /// The slide. There is no reject button anywhere in this vocabulary:
     /// closing the sheet is the rejection (product contract, SPEC 签名).
-    let confirm: (hint: String, action: String, enabled: Bool)
+    ///
+    /// `nil` under a refusal: a dead slide reads as an option somebody merely
+    /// failed to use, rather than one the wallet never offered.
+    let confirm: (hint: String, action: String, enabled: Bool)?
     /// Desktop third-column heading; the phone sheet uses it as its a11y name.
     let panelTitle: String
     /// The wallet asking ITSELF (the key backup): its own mark and name, and

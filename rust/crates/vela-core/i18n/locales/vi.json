@@ -110,7 +110,7 @@
       "subtitle": "Xoá mọi thứ Vela đã lưu trên máy này",
       "desc": "Mọi thứ Vela đã lưu trên thiết bị này sẽ bị xoá. Không có bản sao lưu và không thể hoàn tác.",
       "loses": "Bạn sẽ mất: lịch sử giao dịch, danh bạ và nhóm, lịch sử duyệt web, quyền của dApp, token và mạng tuỳ chỉnh, cài đặt RPC và điểm cuối, cùng mọi tuỳ chọn.",
-      "keeps": "Bạn không mất ví. Passkey vẫn nằm trong Face ID / vân tay — chọn “Tôi đã có ví” là địa chỉ cũ quay lại, chỉ khác là không còn lịch sử.",
+      "keeps": "Bạn không mất ví. Việc xóa không chạm tới passkey của bạn — passkey do nhà cung cấp passkey của bạn giữ (Face ID / vân tay, trình quản lý mật khẩu, hoặc khóa bảo mật), không nằm trong ứng dụng này. Chọn “Tôi đã có ví” và cùng một địa chỉ sẽ trở lại, chỉ là không còn lịch sử.",
       "confirm": "Xoá tất cả",
       "cancel": "Hủy",
       "failed": "Việc xoá chưa hoàn tất. Vẫn còn dữ liệu trên thiết bị này và bạn vẫn đang đăng nhập — hãy thử lại."

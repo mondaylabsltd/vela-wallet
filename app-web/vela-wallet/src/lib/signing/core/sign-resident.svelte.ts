@@ -52,6 +52,7 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	swipe_action: 'none',
 	tracker_handoff: null,
 	notice: null,
+	blocked: null,
 	global_chain_id: 1
 };
 

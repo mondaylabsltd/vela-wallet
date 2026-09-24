@@ -111,6 +111,13 @@ struct FlowHost: View {
     /// apart, and the shell's own picking flag can.
     var onPickCta: (() -> Void)?
     var onMax: (() -> Void)?
+    /// The ⇄ under the amount: type in the display currency instead of the
+    /// token, or back. Drawn since 021 and enabled by the core whenever the
+    /// token has a price, and `SendStore.toggleFiatInput()` had no caller
+    /// anywhere in the iOS tree — the other three shells all send it.
+    var onDenom: (() -> Void)?
+    /// The add-token sheet's ERC-20 / 原生 toggle.
+    var onAddTokenTab: ((String) -> Void)?
     /// Split: a row was removed, or a row was added.
     var onRemoveRecipient: ((Int) -> Void)?
     var onAddRecipient: (() -> Void)?
@@ -239,6 +246,7 @@ struct FlowHost: View {
                         onBatchMerge: onBatchMerge,
                         addTokenInput: addTokenInput,
                         onAddToken: onAddToken,
+                        onAddTokenTab: onAddTokenTab,
                         addTokenError: addTokenError,
                         onExplorer: onExplorer,
                         onSaveCard: onSaveCard,
@@ -344,6 +352,7 @@ struct FlowHost: View {
                     },
                     onRemoveRecipient: { index in onRemoveRecipient?(index) },
                     onFee: { onNavigate(.feeToken) },
+                    onDenom: { onDenom?() },
                     onMax: { _ in onMax?() },
                     onAddRecipient: {
                         if let onAddRecipient { onAddRecipient() }
@@ -385,7 +394,12 @@ struct FlowHost: View {
             }
         case .sendReceipt(let m):
             FlowScaffold(header: m.header, onBack: onBack) {
-                SendReceiptBody(model: m)
+                // The receipt's own "View on explorer". It had no handler at
+                // all, so the one button on the screen that answers "did it
+                // really happen" did nothing on the one screen that exists to
+                // answer that. `SendLive` only sets the label once there IS a
+                // transaction hash, so the button is absent until it can work.
+                SendReceiptBody(model: m, onExplorer: { onExplorer?() })
             } footer: {
                 FlowFooter {
                     VelaButton(
@@ -452,6 +466,8 @@ private struct FlowSheetHost: View {
     var onBatchMerge: (() -> Void)?
     var addTokenInput: Binding<String>?
     var onAddToken: (() -> Void)?
+    /// The add-token sheet's ERC-20 / 原生 toggle.
+    var onAddTokenTab: ((String) -> Void)?
     var addTokenError: String?
     var onExplorer: (() -> Void)?
     var onSaveCard: (() -> Void)?
@@ -537,6 +553,7 @@ private struct FlowSheetHost: View {
         case .addToken(let m):
             AddTokenBody(
                 model: m,
+                onTab: { id in onAddTokenTab?(id) },
                 onSubmit: { onAddToken?() },
                 input: addTokenInput,
                 errorText: addTokenError

@@ -149,7 +149,10 @@ const chip = (id: string, label: string, state: AllowanceChip['state']): Allowan
 const onchainFee = (m: SigningMessages): FeeModel => ({
 	kind: 'onchain',
 	label: m.feeLabel,
-	value: FEE_VALUE
+	value: FEE_VALUE,
+	// The mocks draw the chevron: every CS board is a chain the fee can be
+	// paid on in more than one coin. The live row decides this from the quote.
+	tappable: true
 });
 
 /** The technical-details disclosure. Empty is legitimate: it still opens. */

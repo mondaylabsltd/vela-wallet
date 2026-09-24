@@ -232,6 +232,11 @@ describe('desktop canon', () => {
 			// phone, where its two rows follow 交易速度.
 			'signing',
 			'storage',
+			// Spec 081 FR-016 — the report. It had no desktop entrance at all,
+			// so the only way to reach it was `/gallery`. Beside 关于, which is
+			// also where the LIVE phone screen moves it (the mock's own first
+			// block keeps it, because a gallery state is the mock).
+			'feedback',
 			'about'
 		]);
 	});

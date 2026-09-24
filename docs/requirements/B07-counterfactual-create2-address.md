@@ -19,9 +19,11 @@ day zero; the Safe self-deploys on the first outbound transaction. This is the m
 
 The address must be derivable from nothing but the P-256 public key so that a restored passkey
 (B09) reproduces the exact same wallet with no stored state, and so the address is stable across all
-12 networks (F01). `chainId` is deliberately **not** an input to the salt — that is what makes the
-address chain-independent. The derivation is re-implemented identically in TypeScript, iOS Swift, and
-Android Kotlin, locked by a shared golden vector, because a one-bit divergence would strand funds.
+24 built-in networks (F01). `chainId` is deliberately **not** an input to the salt — that is what
+makes the address chain-independent. The derivation exists **once**, in
+`rust/crates/vela-core/src/safe.rs` (`compute_safe_address` / `compute_safe_address_multi`), and
+every shell calls it, because a one-bit divergence between re-implementations would strand funds —
+that duplication is exactly what spec 039 removed.
 
 ## 3. Users & stories
 
@@ -58,7 +60,7 @@ the account is "created on-chain" until the first tx — it is *counterfactual* 
 
 ## 7. Acceptance criteria
 
-- [ ] **AC-1** — For a fixed test public key, the derived address equals the golden-vector address in TS, Swift, and Kotlin.
+- [ ] **AC-1** — For a fixed test public key, the derived address equals the golden-vector address when the corpus is replayed through Rust, the Swift and Kotlin bindings and the shipped wasm.
 - [ ] **AC-2** — The derived address is identical across all supported chainIds for the same key.
 - [ ] **AC-3** — `eth_getCode` on an undeployed account returns the expected non-empty runtime bytecode.
 - [ ] **AC-4** — Address derivation completes with the device offline (no network).

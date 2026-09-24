@@ -1333,6 +1333,17 @@ pub struct Model {
     /// fields are private to `money`, so from here the unit can only change by
     /// [`DenominatedAmount::convert`] — which restates the digits or fails.
     amount: DenominatedAmount,
+    /// The TOKEN figure the ⇄ was last pressed on, kept so pressing it twice
+    /// gives back what the person typed.
+    ///
+    /// A conversion is lossy in one direction: the fiat leg is rounded to two
+    /// decimals, and dividing that back by the price gives eighteen digits of
+    /// arithmetic noise. Typing `1` and toggling there-and-back left
+    /// `1.000293813380387808` on screen — a different amount, in the field a
+    /// signature is built from. So the toggle RESTORES rather than recomputes,
+    /// and only when the fiat figure is still the one it produced: edit it,
+    /// and the conversion is what you get.
+    fiat_origin: Option<String>,
     split_mode: bool,
     recipients: Vec<SendRecipientDraft>,
     picker_target: Option<String>,
@@ -2757,7 +2768,7 @@ fn toggle_fiat_input(model: &mut Model) -> Cmd {
     if target.is_fiat() && price.is_none() {
         return Command::done(); // the door into fiat stays shut
     }
-    model.amount = model
+    let converted = model
         .amount
         .convert(
             &target,
@@ -2768,15 +2779,51 @@ fn toggle_fiat_input(model: &mut Model) -> Cmd {
         // Unconvertible on the way OUT of fiat: leave the mode, drop the
         // figure. Never carry the digits across the unit boundary.
         .unwrap_or_else(|_| DenominatedAmount::token(""));
+
+    if target.is_fiat() {
+        // Going IN: remember what this fiat figure was made from.
+        model.fiat_origin = Some(model.amount.value().to_owned());
+        model.amount = converted;
+        return render();
+    }
+
+    // Coming OUT. If the fiat figure is still exactly the one the remembered
+    // token amount produces, the person did not change it — so give back the
+    // digits they typed rather than the division's remainder.
+    let untouched = model.fiat_origin.as_ref().is_some_and(|origin| {
+        DenominatedAmount::token(origin.clone())
+            .convert(
+                &model.display.denom(),
+                price.as_ref(),
+                token.decimals,
+                model.display.fiat_decimals,
+            )
+            .is_ok_and(|round_trip| round_trip.value() == model.amount.value())
+    });
+    model.amount = match (untouched, model.fiat_origin.take()) {
+        (true, Some(origin)) => DenominatedAmount::token(origin),
+        _ => converted,
+    };
     render()
 }
 
 fn tap_max(model: &mut Model) -> Cmd {
-    // `Max` fills the SINGLE amount, and a split has none: the rows are the
-    // amounts. It used to write that hidden field anyway (and could start a
-    // fee estimate for it), so the button changed nothing a person could see
-    // and left a stale figure behind for `amount_warning` to keep judging.
-    if model.split_mode {
+    // `Max` fills the SINGLE amount, and neither batch mode has one: the rows
+    // are the amounts. It used to write that hidden field anyway (and could
+    // start a fee estimate for it), so the button changed nothing a person
+    // could see and left a stale figure behind for `amount_warning` to keep
+    // judging.
+    //
+    // A SWEEP is the same refusal for a stronger reason: its rows are already
+    // each token's maximum. `multi_token_specs` gives every picked token its
+    // whole balance less the reserve whichever asset pays the fee needs, and
+    // recomputes it on every quote — there is no per-row figure for a Max to
+    // fill and no second arithmetic to run. What the event DID do there was
+    // act on `selected_token`, the first token of the pick: it rewrote the
+    // hidden single amount of one row (or started a rival `EstimateFee` for
+    // it) and `derive_amount_warning`, which no batch mode escapes, then
+    // painted a verdict about that token over a form that shows several.
+    if model.split_mode || model.multi_select_mode {
         return Command::done();
     }
     let Some(token) = model.selected_token.clone() else {

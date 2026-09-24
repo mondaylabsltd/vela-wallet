@@ -6,6 +6,12 @@
 	<!-- A REAL click: the one road to the side panel (a user gesture). -->
 	<button id="connect" type="button">Connect</button>
 	<button id="sign" type="button">Sign</button>
+	<!-- Spec 081: the four shapes the self-call guard must refuse. A page can
+	     ask for every one of them, so the test dApp can too. -->
+	<button id="take-over" type="button">Add owner (blocked)</button>
+	<button id="enable-module" type="button">Enable module (blocked)</button>
+	<button id="batch-take-over" type="button">Batch with a self-call (blocked)</button>
+	<button id="safe-tx" type="button">SafeTx typed data (blocked)</button>
 	<pre id="out">waiting…</pre>
 	<script>
 		const out = document.getElementById('out');
@@ -75,6 +81,56 @@
 		});
 		document.getElementById('sign').addEventListener('click', () => {
 			window.__ask('personal_sign', ['0x48656c6c6f2c2056656c61', window.ethereum.selectedAddress]);
+		});
+
+		/** Spec 081 fixtures: calls that would change who controls the account. */
+		const wordAddr = (a) => a.replace(/^0x/, '').padStart(64, '0');
+		const word = (n) => n.toString(16).padStart(64, '0');
+		const selfAddress = () => window.ethereum.selectedAddress;
+		const addOwnerData = () => `0x0d582f13${wordAddr(selfAddress())}${word(1)}`;
+		const enableModuleData = () => `0x610b5925${wordAddr(selfAddress())}`;
+
+		document.getElementById('take-over').addEventListener('click', () => {
+			window.__ask('eth_sendTransaction', [
+				{ from: selfAddress(), to: selfAddress(), data: addOwnerData(), value: '0x0' }
+			]);
+		});
+		document.getElementById('enable-module').addEventListener('click', () => {
+			window.__ask('eth_sendTransaction', [
+				{ from: selfAddress(), to: selfAddress(), data: enableModuleData(), value: '0x0' }
+			]);
+		});
+		document.getElementById('batch-take-over').addEventListener('click', () => {
+			window.__ask('wallet_sendCalls', [
+				{
+					version: '2.0.0',
+					from: selfAddress(),
+					chainId: '0x1',
+					calls: [
+						{ to: '0x3333333333333333333333333333333333333333', value: '0x0', data: '0x' },
+						{ to: selfAddress(), value: '0x0', data: enableModuleData() }
+					]
+				}
+			]);
+		});
+		document.getElementById('safe-tx').addEventListener('click', () => {
+			const typed = {
+				primaryType: 'SafeTx',
+				domain: { chainId: 1, verifyingContract: selfAddress() },
+				types: {
+					EIP712Domain: [
+						{ name: 'chainId', type: 'uint256' },
+						{ name: 'verifyingContract', type: 'address' }
+					],
+					SafeTx: [
+						{ name: 'to', type: 'address' },
+						{ name: 'value', type: 'uint256' },
+						{ name: 'data', type: 'bytes' }
+					]
+				},
+				message: { to: selfAddress(), value: '0', data: '0x' }
+			};
+			window.__ask('eth_signTypedData_v4', [selfAddress(), JSON.stringify(typed)]);
 		});
 
 		// Driven by the test.

@@ -6,6 +6,8 @@ author: Shelchin
 tags: [building-in-public, story]
 ---
 
+> **Update, 22 September 2026.** "Your face or your fingerprint" is how you *unlock* a passkey, not the passkey itself; Vela also works with a device PIN, another phone or a hardware security key. See [how passkeys work](/docs/passkeys).
+
 This is the first post on the Vela blog, so it's worth saying plainly what this
 space is for.
 

@@ -321,7 +321,12 @@ fun VelaUrlField(
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.base,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    // From the MIDDLE, the way iOS already truncates the same
+                    // box. These values are URLs and addresses: the end is
+                    // where they differ — `?base=USD` on a rates endpoint, the
+                    // last four of an address — and cutting the tail off hides
+                    // exactly the part a person is checking.
+                    overflow = TextOverflow.MiddleEllipsis,
                     modifier = Modifier.weight(1f),
                 )
             } else {

@@ -86,6 +86,7 @@
       "close": "Kapat",
       "valueLabel": "Değer",
       "bestEffortWarning": "Fonksiyon imzasından çözümlendi — doğrulanmış bir tanımlayıcı değil. Ayrıntıları dikkatlice inceleyin.",
+      "descriptorFetchedWarning": "Bu açıklama Vela'nın tanımlayıcı servisinden geldi ve kimse doğrulamadı — onaylamadan önce ayrıntıları kontrol edin.",
       "simWillSucceed": "Simülasyon geçti — başarılı olması bekleniyor",
       "simWillFail": "Bu işlemin başarısız olması bekleniyor — gas ücretini yine de ödersiniz.",
       "simWillFailReason": "Başarısız olması bekleniyor: {{reason}} — gas ücretini yine de ödersiniz.",
@@ -203,7 +204,11 @@
       "trustedSignerReopen": "Sayfayı yeniden aç",
       "trustedSignerDoneTab": "İmzalandı. Bu sekmeyi kapatıp Vela'ya dönebilirsiniz.",
       "viewOnExplorer": "Gezginde görüntüle",
-      "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor"
+      "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor",
+      "selfCallBlockedTitle": "Vela bu isteği imzalamaz",
+      "selfCallBlockedBody": "Bu istek cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela reddetti. Hiçbir şey imzalanmadı.",
+      "selfCallBlockedLegBody": "Bu isteğin {{index}}. adımı cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela isteğin tamamını reddetti. Hiçbir şey imzalanmadı.",
+      "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı."
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

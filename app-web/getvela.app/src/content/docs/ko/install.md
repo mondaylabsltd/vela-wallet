@@ -1,44 +1,147 @@
 ---
 title: Vela 설치
-description: Vela는 브라우저에서 돌아갑니다 — 설치도, 앱스토어도 필요 없습니다. 웹 지갑을 열거나, 패스키에 필요한 기기 조건을 먼저 확인하세요.
+description: "웹, 브라우저 확장 프로그램, 데스크톱, 휴대폰까지 Vela를 쓰는 모든 방법. 각각의 비용과 할 수 있는 일, 기기에 필요한 조건을 정리했습니다."
+source: fa80f5cfdb95
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
 
 # Vela 설치
 
-Vela는 **브라우저 안에서** 돌아갑니다. 내려받을 것도 없고 앱스토어를 거칠 필요도
-없습니다. 웹 지갑을 열면 1분도 안 되어 지갑을 만들거나 복구할 수 있습니다.
+같은 지갑이 여러 곳에서 돌아가고, 어디서 열든 같은 키로 같은 주소가 열립니다. 필요에
+맞게 고르면 되고, 여러 개를 함께 써도 됩니다. 내려받기는 [Vela 받기](/ko/get-started)에
+있습니다.
+
+| | 무엇인가 | 비용 | 상태 |
+| --- | --- | --- | --- |
+| **웹** | 최신 브라우저에서 여는 [wallet.getvela.app](https://wallet.getvela.app/) | 무료 | 이용 가능 |
+| **브라우저 확장 프로그램** | 도구 모음에 두는 지갑. dApp에 연결됩니다 | 무료 | 내려받아 직접 로드. 아직 Chrome 웹 스토어에 없음 |
+| **데스크톱** | macOS, Windows, Linux용 네이티브 앱 | 무료 | Vela 받기 페이지나 GitHub에서 내려받기 |
+| **iPhone, Android** | 네이티브 앱 | 스토어에서 1회 구매 | 아직 스토어에 없음. 소스에서 직접 빌드 가능 |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">웹 지갑 열기 →</a>
 
-같은 코드로 만든 같은 지갑이 iOS와 안드로이드에서도 돌아갑니다. **네이티브 모바일
-앱은 곧 출시됩니다.** 출시되어도 계정은 특정 앱이 아니라 온체인에 있으므로, 패스키와
-지갑이 그대로 따라옵니다.
+## 웹
+
+설치할 것이 없습니다. [wallet.getvela.app](https://wallet.getvela.app/)을 열고 지갑을
+만들거나 로그인하면 바로 쓸 수 있습니다. 계정 목록은 이 브라우저에 저장됩니다. 다른
+기기에서는 키 중 하나로 다시 로그인하면 됩니다.
+
+## 브라우저 확장 프로그램
+
+Chromium 기반 브라우저인 Chrome, Edge, Brave에서 쓸 수 있습니다(Chrome 116 이상).
+지갑을 도구 모음에 두고, dApp이 지갑에 바로 연결할 수 있게 해 줍니다. Chrome 웹 스토어에
+올라가기 전까지는 다음과 같이 설치합니다.
+
+1. [Vela 받기](/ko/get-started)에서 확장 프로그램을 내려받아, 계속 둘 폴더에 압축을
+   풉니다. 브라우저는 그 폴더에서 확장 프로그램을 실행합니다.
+2. `chrome://extensions`를 열고 **개발자 모드**를 켭니다.
+3. **압축해제된 확장 프로그램을 로드합니다**를 누르고 그 폴더를 선택합니다.
+
+같은 지갑입니다. 확장 프로그램과 웹 지갑은 같은 `getvela.app` 패스키를 쓰기 때문에, 같은
+키로 같은 주소가 열립니다.
+
+## 데스크톱
+
+창 안에 웹 페이지를 띄운 것이 아니라 네이티브 앱입니다. **Windows** 10·11(x64, ARM),
+**macOS** 11 이상, **Linux**(.deb, .rpm, Flatpak / x64, ARM)를 지원합니다.
+
+- **Windows**에서는 설치 프로그램에 아직 코드 서명이 없어서 "Windows의 PC 보호" 경고가
+  뜹니다. **추가 정보**를 누른 다음 **실행**을 누르세요.
+- **macOS** 빌드는 별도 단계에서 Apple의 서명과 공증을 거치므로 다른 플랫폼보다 늦게
+  나올 수 있습니다. Mac 버튼에 "곧 제공"이라고 표시되어 있다면, 공증을 마친 가장 최근
+  Mac 빌드를 GitHub 릴리스 페이지에서 받을 수 있습니다.
+- **Linux**에서 USB 보안 키를 쓰려면 시스템이 앱에 키 접근을 허용해야 합니다. .deb와
+  .rpm 패키지는 이 규칙을 자동으로 설치합니다.
+
+macOS와 Windows용 데스크톱 앱에는 dApp을 쓰기 위한 내장 브라우저가 있습니다. 모든
+패키지의 체크섬은
+[GitHub 릴리스 페이지](https://github.com/mondaylabsltd/vela-wallet/releases)에 있습니다.
+확인할 수 있는 것은 체크섬만이 아닙니다. 아래를 보세요.
+
+## iPhone과 Android
+
+iOS 17.4 이상, Android 10 이상에서 돌아가는 네이티브 앱입니다. App Store와 Google
+Play에서 1회 구매로 판매할 예정이며, **아직 스토어에는 없습니다**. 코드가 공개되어 있으니
+무료로 직접 빌드할 수 있습니다. 차이는 하나입니다. 직접 서명한 빌드로는 휴대폰 자체의
+패스키로 getvela.app 지갑에 서명할 수 없습니다. 다른 휴대폰으로 스캔하는 방법과 USB 보안
+키는 쓸 수 있습니다. [앱 직접 빌드하기](/ko/docs/self-hosting#web-app)를 참고하세요.
+
+## 내려받은 것을 확인하기
+
+체크섬으로 알 수 있는 것은 두 파일이 같다는 사실뿐입니다. 누가 그 파일을 만들었는지는 알 수
+없고, 체크섬 목록은 내려받기와 같은 페이지에 올라가 있습니다. 그래서 릴리스에 붙이는 모든
+패키지에는 **증명(attestation)**도 함께 붙습니다. 그것을 빌드한 워크플로 실행이 파일과 커밋,
+실행을 밝힌 진술에 서명하고, GitHub가 이를 보관합니다. 확인은 [GitHub
+CLI](https://cli.github.com) 명령 한 줄이면 됩니다(`gh auth login`으로 한 번 로그인하세요.
+확인 자체는 무료입니다).
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+누가 어느 커밋에서 그 파일을 빌드했는지 알려 주거나, 아니면 실패합니다. 이 답을 얻기 위해 내
+컴퓨터가 우리를 믿어야 할 필요는 없습니다. 서명은 GitHub의 것이고 빌드 시점에 만들어지며,
+파일을 어딘가에 다시 올리기만 한 사람은 만들어 낼 수 없습니다.
+
+Mac 이미지는 우리 Developer ID로 서명하고 Apple의 공증을 받았으며, 열 때 macOS가 대신
+확인해 줍니다. 직접 물어보려면 이렇게 하세요.
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="Windows 경고는 그대로입니다">
+증명은 코드 서명이 아닙니다. Windows 설치 프로그램에는 코드 서명이 없어서 SmartScreen이
+여전히 "Windows의 PC 보호"로 한 번 막습니다. <strong>추가 정보</strong>를 누른 다음
+<strong>실행</strong>을 누르세요. 그 파일이 정말 우리 것인지 알려 주는 것은 증명 확인
+쪽이고, 이 경고는 우리가 아직 사지 않은 인증서에 관한 것입니다.
+</Callout>
+
+이 기능을 켜기 전에 게시한 패키지에는 체크섬만 붙어 있습니다.
+
+## dApp에서 Vela 쓰기
+
+<span id="dapps"></span>
+
+dApp은 다른 브라우저 지갑에 연결할 때와 같은 방식(EIP-1193, EIP-6963)으로 Vela에
+연결합니다.
+
+- 데스크톱 브라우저에서는 **Vela 브라우저 확장 프로그램**으로
+- **데스크톱 앱**(macOS, Windows), **iPhone 앱**, **Android 앱** 안에서는 각 앱의 내장
+  브라우저로
+
+wallet.getvela.app의 웹 지갑은 dApp에 연결하지 않으며, WalletConnect도 지원하지
+않습니다. dApp이 보내는 요청은 모두 서명하기 전에 디코딩해서 보여 줍니다.
+[클리어 서명](/ko/docs/clear-signing)을 참고하세요.
 
 ## 기기에 필요한 것
 
-Vela는 **패스키**(WebAuthn)로 서명하므로, 이를 지원하는 기기와 브라우저가 필요합니다.
-사실상 최근 몇 년 사이의 환경이면 대부분 됩니다.
+Vela는 **패스키**로 서명합니다. 최근 몇 년 사이에 나온 기기라면 거의 모두 패스키를
+지원합니다.
 
-| 플랫폼 | 패스키 지원 | 동기화 주체 |
-| -------- | --------------- | --------- |
-| 아이폰 / 아이패드 / 맥 | iOS·iPadOS 16 이상, 최신 Safari | iCloud 키체인 |
-| 안드로이드 | 안드로이드 9 이상, 최신 Chrome | Google 비밀번호 관리자 |
-| 데스크톱 | 최신 Chrome, Edge, Safari, Firefox | 사용 중인 플랫폼의 패스키 저장소 |
+| 기기 | 지원 조건 |
+| --- | --- |
+| iPhone, iPad, Mac | iOS / iPadOS 16 이상, 최신 Safari 또는 Chrome이 있는 macOS |
+| Android | Google Play 서비스가 있는 최신 Android, 또는 USB 보안 키 |
+| Windows | Chrome 또는 Edge에서 Windows Hello, 또는 보안 키 |
+| Linux | 보안 키, 또는 가까이 있는 휴대폰(QR 코드 스캔) |
 
-지갑이 새 기기로 따라오게 하려면, 플랫폼의 패스키 동기화를 켜 두세요(애플은 iCloud
-키체인, 안드로이드·Chrome은 Google 비밀번호 관리자). 작동 방식은
-[복구와 로그인](/ko/docs/recovery)에 있습니다.
+기기 자체에 패스키를 저장할 수 없다면 다른 휴대폰이나 하드웨어 보안 키를 쓰세요. 앱마다
+어떤 종류의 키를 지원하는지는 [서명 키와 보안 키](/ko/docs/signers)에 정리되어 있습니다.
 
-## 공식 주소는 이 둘뿐
+## 공식 주소는 이것뿐입니다
 
-Vela가 오픈소스라는 점이 핵심이지만, 동시에 지금 보고 있는 것이 진짜인지 스스로
-확인해야 한다는 뜻이기도 합니다. 공식 주소는 다음 둘뿐입니다.
+- **getvela.app** — 이 사이트, 그리고 내려받기
+- **wallet.getvela.app** — 웹 지갑
+- **github.com/mondaylabsltd** — 코드와 릴리스 패키지
 
-- **getvela.app** — 이 사이트
-- **wallet.getvela.app** — 지갑
-
-“Vela를 설치하라”며 다른 곳으로 보내는 것이 있다면, 멈추고 이 둘과 대조하세요.
-코드는 [github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet)
-에 공개되어 있습니다.
+<Callout type="warning" title="설치하기 전에 확인하세요">
+"Vela 설치"나 "지갑 인증"을 하라며 다른 곳으로 안내하는 것이 있다면 멈추세요. Vela는
+시드 구문을 요구하지 않습니다. 애초에 시드 구문이 없습니다.
+</Callout>
 
 다음: [지갑 만들기](/ko/docs/create-wallet).

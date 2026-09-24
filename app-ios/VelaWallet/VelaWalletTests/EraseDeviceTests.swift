@@ -49,11 +49,11 @@ struct EraseDeviceTests {
 
     /// Everything of ours goes — including every key the old list never
     /// named — and the answer is "nothing survived".
-    @Test func theEraseIsAScanNotAList() {
+    @Test func theEraseIsAScanNotAList() async {
         let (defaults, store) = fresh()
         seedEverything(store)
 
-        let survivors = DeviceStorage.erase(store)
+        let survivors = await DeviceStorage.erase(store)
 
         #expect(survivors.isEmpty, "survived: \(survivors)")
         for key in [
@@ -69,12 +69,12 @@ struct EraseDeviceTests {
     /// The one record the erase keeps: a passkey public key the index never
     /// confirmed. Deleting it would make that key unfindable on every device.
     /// And keys that are not ours are not ours to delete.
-    @Test func thePendingUploadAndOtherAppsKeysAreKept() {
+    @Test func thePendingUploadAndOtherAppsKeysAreKept() async {
         let (defaults, store) = fresh()
         seedEverything(store)
         defaults.set("keep me", forKey: "com.apple.something")
 
-        _ = DeviceStorage.erase(store)
+        _ = await DeviceStorage.erase(store)
 
         #expect(store.readList(VelaStore.Key.pendingUploads).count == 1)
         #expect(defaults.string(forKey: "com.apple.something") == "keep me")
@@ -96,14 +96,14 @@ struct EraseDeviceTests {
 
     /// An erase that could not delete something SAYS so — it never answers
     /// "done" over a key that is still there.
-    @Test func whatSurvivesIsReportedNotSwallowed() throws {
+    @Test func whatSurvivesIsReportedNotSwallowed() async throws {
         let defaults = try #require(StubbornDefaults(
             suiteName: "vela.tests.erase.\(UUID().uuidString)", stubborn: "vela.contacts"
         ))
         let store = VelaStore(defaults: defaults)
         seedEverything(store)
 
-        let survivors = DeviceStorage.erase(store)
+        let survivors = await DeviceStorage.erase(store)
 
         #expect(survivors == ["vela.contacts"])
     }
@@ -113,7 +113,7 @@ struct EraseDeviceTests {
     @Test func anErasedStoreBootsToTheFirstRun() async {
         let (defaults, store) = fresh()
         seedEverything(store)
-        #expect(DeviceStorage.erase(store).isEmpty)
+        #expect(await DeviceStorage.erase(store).isEmpty)
 
         let session = SessionController(store: AccountStore(defaults: defaults))
         session.boot()
@@ -132,11 +132,17 @@ struct EraseDeviceTests {
         let loc = Loc(overrideTag: "en", preferredLanguages: [])
         let base = SettingsFixtures.build(.st16, loc: loc)
 
-        let failed = SettingsLive.withEraseFailure(true, on: base, loc: loc)
-        #expect(failed.eraseSheet.callout?.text == loc.t(I18nKeys.SettingsUi.eraseFailed))
+        let failed = SettingsLive.withEraseFailure(["vela.contacts"], on: base, loc: loc)
+        // The sentence, and WHICH key stayed — the desktop's callout says the
+        // same, because a person can act on a name and not on "something".
+        #expect(failed.eraseSheet.callout?.text.hasPrefix(loc.t(I18nKeys.SettingsUi.eraseFailed)) == true)
+        #expect(failed.eraseSheet.callout?.text.contains("vela.contacts") == true)
         #expect(failed.eraseSheet.callout?.tone == .danger)
 
-        let fine = SettingsLive.withEraseFailure(false, on: base, loc: loc)
+        // Nothing survived: no callout of ours, whether that is `nil` or empty.
+        #expect(SettingsLive.withEraseFailure([], on: base, loc: loc)
+            .eraseSheet.callout?.text == base.eraseSheet.callout?.text)
+        let fine = SettingsLive.withEraseFailure(nil, on: base, loc: loc)
         #expect(fine.eraseSheet.callout?.text == base.eraseSheet.callout?.text)
     }
 }

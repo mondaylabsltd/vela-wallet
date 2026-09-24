@@ -869,10 +869,17 @@ function feedback(m: SettingsMessages): FeedbackModel {
 		subtitle: m.bugReport.subtitle,
 		placeholder: m.bugReport.whatPlaceholder,
 		addSteps: m.bugReport.addSteps,
+		stepsPlaceholder: m.bugReport.stepsPlaceholder,
 		previewToggle: m.bugReport.previewToggle,
 		// Label AND value on every line: the point of this block is that the
 		// person can read what is about to leave their device, and a bare list
 		// of values is not readable.
+		//
+		// These five are the BOARD's — a picture of a phone in Chinese on iOS,
+		// which is what a gallery state is for. The live screen replaces every
+		// one of them through `live.withFeedback`, and it must: the consent
+		// note promises the preview is what gets sent, and until spec 081 the
+		// only thing this list described was itself.
 		previewLines: [
 			`${m.bugReport.previewVersion}: v${APP_VERSION} (${APP_COMMIT})`,
 			`${m.bugReport.previewPlatform}: iOS 26.0`,
@@ -882,6 +889,18 @@ function feedback(m: SettingsMessages): FeedbackModel {
 		],
 		consent: m.bugReport.consent,
 		send: m.bugReport.send,
+		sending: m.bugReport.sending,
+		success: {
+			title: m.bugReport.successTitle,
+			bodyNew: m.bugReport.successBodyNew,
+			bodyDeduped: m.bugReport.successBodyDeduped,
+			view: m.bugReport.viewIssue
+		},
+		fallback: {
+			title: m.bugReport.fallbackTitle,
+			body: m.bugReport.fallbackBody,
+			open: m.bugReport.openGithub
+		},
 		githubLink: m.bugReport.openGithubForm
 	};
 }
@@ -1179,6 +1198,11 @@ export function buildDesktopState(
 		// Spec 071, beside the speed as on the phone.
 		{ id: 'signing', icon: 'pencil', label: m.signing.title },
 		{ id: 'storage', icon: 'hard-drive', label: m.storage.title },
+		// Spec 081 FR-016. The wide layout had no way in at all — the report was
+		// reachable only from `/gallery`, which no person who owns this wallet
+		// will ever open. It sits beside 关于 for the same reason the phone puts
+		// it there: "something is wrong" and "what is this" are the same errand.
+		{ id: 'feedback', icon: 'message-square-text', label: m.feedback.title },
 		{ id: 'about', icon: 'info', label: m.about.title }
 	];
 	const accounts = accountsSheet(m, identicon);
@@ -1299,6 +1323,7 @@ export function buildDesktopState(
 		storage: storage(m),
 		clearCachesSheet: clearCachesSheet(m),
 		eraseSheet: eraseSheet(m),
+		feedback: feedback(m),
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),
 		rpcFix: rpcFix(m, false),

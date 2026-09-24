@@ -6,6 +6,14 @@
 
 	interface Props {
 		row: ActivityRowModel;
+		/**
+		 * Where this row goes. Absent ⇒ the row is a READING and not a control:
+		 * no button, no pointer, no press. A contact's 最近往来 is the case that
+		 * matters — it has no transaction detail to open (the three other shells
+		 * draw those rows as plain rows for the same reason), and a row that
+		 * shrinks under a finger and then does nothing is a promise broken every
+		 * time (spec 081, dead-controls #15).
+		 */
 		onclick?: () => void;
 	}
 
@@ -20,7 +28,7 @@
 	);
 </script>
 
-<button type="button" class="row" {onclick}>
+{#snippet body()}
 	<span class="lead" aria-hidden="true">
 		<Icon {icon} size="md" />
 		<span
@@ -39,7 +47,13 @@
 		<span class="value">{row.amount}</span>
 		<span class="unit">{row.unit}</span>
 	</span>
-</button>
+{/snippet}
+
+{#if onclick !== undefined}
+	<button type="button" class="row" {onclick}>{@render body()}</button>
+{:else}
+	<div class="row stated">{@render body()}</div>
+{/if}
 
 <style>
 	.row {
@@ -58,6 +72,13 @@
 
 	.row:active {
 		transform: scale(var(--motion-press-row));
+	}
+
+	/* Nothing to open: no invitation, and above all no press. */
+	.row.stated,
+	.row.stated:active {
+		cursor: default;
+		transform: none;
 	}
 
 	.lead {

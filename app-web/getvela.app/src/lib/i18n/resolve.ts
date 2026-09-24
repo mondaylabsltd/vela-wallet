@@ -82,11 +82,17 @@ function mergeRequired(source: unknown, value: unknown): unknown {
  * in a way nothing would catch until a reader in Japanese landed on an English
  * page. The prefix is applied here instead, once, when the catalog is built.
  *
- * Only root-relative hrefs are touched. `https://…`, `#anchor` and `mailto:`
- * are left exactly as written.
+ * Only root-relative hrefs are touched, and a `#fragment` on one is kept
+ * (`/docs/self-hosting#relay` → `/ja/docs/self-hosting#relay`; until 2026-09-22
+ * the pattern skipped any href with a fragment, so those led to English).
+ * `https://…`, a bare `#anchor` and `mailto:` are left exactly as written.
  */
 function localizeLinks(html: string, locale: Locale): string {
-	return html.replace(/href="(\/[^"#]*)"/g, (_, path: string) => `href="${pathFor(locale, path)}"`);
+	return html.replace(
+		/href="(\/[^"#]*)(#[^"]*)?"/g,
+		(_, path: string, fragment: string | undefined) =>
+			`href="${pathFor(locale, path)}${fragment ?? ''}"`
+	);
 }
 
 /** Apply `localizeLinks` to every string in a tree, preserving its shape. */

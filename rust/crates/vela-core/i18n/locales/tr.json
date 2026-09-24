@@ -110,7 +110,7 @@
       "subtitle": "Vela'nın burada sakladığı her şeyi sil",
       "desc": "Vela'nın bu cihazda sakladığı her şey silinir. Yedeği yoktur ve geri alınamaz.",
       "loses": "Kaybedecekleriniz: işlem geçmişi, kişiler ve gruplar, gezinme geçmişi, dApp izinleri, özel tokenlar ve ağlar, RPC ve uç nokta ayarları ve tüm tercihler.",
-      "keeps": "Cüzdanı kaybetmezsiniz. Geçiş anahtarınız Face ID / parmak izinde kalır — “Zaten bir cüzdanım var” deyin, aynı adres geri gelir, yalnızca geçmişi boş olur.",
+      "keeps": "Cüzdanı kaybetmezsiniz. Silme işlemi geçiş anahtarlarınıza ulaşmaz — onları bu uygulama değil, geçiş anahtarı sağlayıcınız (Face ID / parmak izi, bir parola yöneticisi ya da bir güvenlik anahtarı) saklar. “Zaten bir cüzdanım var” seçeneğini seçin, aynı adres geçmişi olmadan geri gelir.",
       "confirm": "Her Şeyi Sil",
       "cancel": "İptal",
       "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin."

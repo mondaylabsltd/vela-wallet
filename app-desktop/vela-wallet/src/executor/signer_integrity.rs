@@ -30,9 +30,7 @@
 use std::time::Duration;
 
 use serde_json::Value;
-use vela_core::trusted_signer::integrity::{
-    self, BUILD_ALLOWED, CheckFailure, NoVersion, Page, Verdict,
-};
+use vela_core::trusted_signer::integrity::{self, CheckFailure, NoVersion, Page, Verdict};
 
 use crate::executor::storage;
 
@@ -310,6 +308,7 @@ pub fn can_enforce() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vela_core::trusted_signer::integrity::BUILD_ALLOWED;
 
     const A: &str = "aa11223344556677889900aabbccddeeff00112233445566778899aabbccddee";
 

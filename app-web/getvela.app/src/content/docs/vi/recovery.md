@@ -1,6 +1,7 @@
 ---
 title: Khôi phục & đăng nhập
-description: Cách Vela cho phép bạn khôi phục ví trên thiết bị mới mà không cần cụm từ khôi phục — và những giới hạn thật thà của mô hình đó.
+description: "Cách quay lại ví trên thiết bị mới bằng bất kỳ khóa nào của bạn, ví được tìm ở đâu, và những giới hạn thật thà của việc khôi phục khi không có cụm từ khôi phục."
+source: 77cf3f24c7c7
 ---
 
 <script>
@@ -9,66 +10,74 @@ description: Cách Vela cho phép bạn khôi phục ví trên thiết bị mớ
 
 # Khôi phục & đăng nhập
 
-Phần khó nhất của một chiếc ví không có cụm từ khôi phục chính là khôi phục: không có
-mười hai từ thì làm sao vào lại trên điện thoại mới? Vela xử lý chính xác như sau.
+Không có cụm từ khôi phục, việc khôi phục dựa vào hai thứ: **một khóa bạn vẫn còn giữ**,
+và **một bản ghi công khai cho biết những khóa nào thuộc về ví của bạn**.
 
-## Cách hoạt động
+## Những gì được ghi lại khi bạn tạo ví
 
-Khi bạn tạo ví, hai thứ được ghi lên **chỉ mục passkey** của Vela:
+Địa chỉ ví của bạn được tính từ tất cả các khóa bạn dùng khi tạo ví. Để về sau bất kỳ
+khóa nào trong số đó cũng tìm lại được ví, việc tạo ví sẽ ghi một bản ghi vào một
+**hợp đồng sổ đăng ký** công khai trên Gnosis Chain: khóa công khai của từng khóa, địa
+chỉ ví, tên ví, và dữ liệu đăng ký đã ký. Sổ đăng ký không có chủ sở hữu và bản ghi không
+thể sửa hay xóa. (Danh sách đầy đủ những gì công khai nằm ở
+[tạo ví của bạn](/vi/docs/create-wallet#what-is-public).)
 
-- **Khóa công khai** của passkey (không bao giờ là khóa riêng tư).
-- **Cái tên** bạn đặt cho ví.
+Dịch vụ chỉ mục khóa công khai của Vela gửi bản ghi đó lên và trả gas cho nó; còn bản
+thân bản ghi nằm trên chuỗi, và bất kỳ ứng dụng nào cũng đọc trực tiếp được.
 
-Khóa công khai được lưu trên blockchain Gnosis qua một hợp đồng thông minh, nên ai
-cũng đọc được và nó không phụ thuộc vào việc máy chủ của Vela còn sống hay không.
+## Đăng nhập trên thiết bị mới
 
-Trong khi đó, khóa **riêng tư** của bạn là một passkey do chuỗi khóa nền tảng đồng bộ
-— **Chuỗi khóa iCloud** trên thiết bị Apple, **Trình quản lý mật khẩu Google** trên
-Android.
+1. Mở Vela và chọn đăng nhập.
+2. Dùng **bất kỳ khóa nào** của bạn: một passkey đã đồng bộ sang thiết bị này, một điện
+   thoại ở gần (quét mã QR), hoặc khóa bảo mật của bạn.
+3. Vela tính ra khóa công khai của khóa đó từ chữ ký, rồi tra nó — trước hết trong chỉ
+   mục của Vela, sau đó, nếu chỉ mục không phản hồi, trong hợp đồng sổ đăng ký trên
+   Gnosis rồi trên Ethereum — và dựng lại ví. Nó kiểm tra rằng các khóa tìm được thực sự
+   tính ra đúng địa chỉ đã ghi trước khi hiện ví cho bạn.
 
-Để đăng nhập trên thiết bị mới:
+Danh sách tài khoản không được đồng bộ giữa các thiết bị; đăng nhập sẽ dựng lại chúng.
 
-1. Đăng nhập cùng tài khoản iCloud hoặc Google, có bật đồng bộ chuỗi khóa.
-2. Mở Vela và chọn đăng nhập.
-3. Xác thực bằng passkey. Nền tảng đưa ra passkey đã đồng bộ; chỉ mục đưa ra tài khoản
-   khớp với nó. Ví của bạn đã trở lại.
-
-Chỉ mục là một bộ nhớ đệm, không phải điểm hỏng duy nhất. Nếu nó không truy cập được
-và tài khoản của bạn không có trong bộ nhớ cục bộ, Vela có thể dựng lại khóa công khai
-ngay trên thiết bị từ hai chữ ký passkey rồi suy ra lại địa chỉ ví — không cần máy chủ
-nào.
-
-<Callout type="info" title="Vì sao lại tách làm hai">
-Khóa công khai trong chỉ mục trên chuỗi cho phép bất kỳ ai (kể cả một bản cài mới
-tinh) tìm ra tài khoản của bạn. Khóa riêng tư, do chuỗi khóa nền tảng bạn tin cậy đồng
-bộ, mới là thứ thật sự cho phép giao dịch. Mọi thứ trong chỉ mục đều là dữ liệu công
-khai; không thứ gì trong đó chuyển được tiền của bạn — chỉ chữ ký từ passkey của bạn
-mới làm được.
+<Callout type="info" title="Nếu không chỉ mục hay sổ đăng ký nào trả lời được">
+Một ví chỉ có <strong>một khóa</strong> có thể được dựng lại ngay trên thiết bị mà không
+cần máy chủ nào: hai chữ ký từ khóa đó là đủ để khôi phục khóa công khai và tính lại địa
+chỉ. Một ví có nhiều khóa thì cần bản ghi trong sổ đăng ký, vì một khóa không thể cho ứng
+dụng biết các khóa kia là gì.
 </Callout>
+
+## Các bản sao của bản ghi
+
+Sổ đăng ký trên Gnosis là nơi các ứng dụng đọc trước tiên. Trong **Cài đặt**, bạn còn
+có thể sao chép bản ghi của ví sang cùng hợp đồng sổ đăng ký đó trên **Ethereum**, tự
+trả gas, để bản ghi tồn tại trên một chuỗi thứ hai. Ai cũng có thể tạo bản sao như vậy;
+trong đó không có gì chuyển được tiền.
 
 ## Những giới hạn thật thà
 
-Tự quản nghĩa là trách nhiệm cũng thật. Đây là những điều cần hiểu.
-
-<Callout type="warning" title="Khôi phục của bạn phụ thuộc vào chuỗi khóa nền tảng">
-Việc đăng nhập xuyên thiết bị của Vela dựa vào passkey được đồng bộ qua Chuỗi khóa
-iCloud hoặc Trình quản lý mật khẩu Google. Hãy giữ tài khoản đó an toàn và cập nhật
-các phương án khôi phục của nó. Nếu bạn mất quyền truy cập <strong>cả</strong> thiết
-bị <strong>lẫn</strong> chuỗi khóa của tài khoản nền tảng, Vela không thể tạo lại khóa
-riêng tư cho bạn — theo thiết kế, chúng tôi chưa bao giờ có nó.
+<Callout type="warning" title="Mất khóa là mất">
+Nếu mọi khóa bạn dùng khi tạo ví đều không còn — các passkey đã đồng bộ, các điện thoại,
+các khóa bảo mật — thì không ai khôi phục được ví: Vela không, Apple hay Google không,
+không ai cả. Không có cụm từ khôi phục, không có bộ phận hỗ trợ đặt lại giúp, và không có
+cửa sau.
 </Callout>
 
-Lời khuyên thực tế:
+Điều khiến chuyện đó khó xảy ra là có nhiều hơn một lối vào:
 
-- **Bật đồng bộ chuỗi khóa.** Đó là thứ mang passkey của bạn đi giữa các thiết bị.
-- **Bảo vệ tài khoản Apple / Google** bằng mật khẩu mạnh và các cách khôi phục riêng
-  của nó. Tài khoản đó giờ là một phần an toàn của ví bạn.
-- **Đăng nhập trên nhiều hơn một thiết bị** nếu có thể, để mất một chiếc điện thoại
-  chỉ là phiền toái chứ không phải khủng hoảng.
+- **Giữ đồng bộ passkey luôn bật** nếu bạn dùng passkey của thiết bị này. Chính nó mang
+  khóa sang điện thoại hoặc máy tính mới.
+- **Bảo vệ tài khoản đứng sau nó.** Người kiểm soát tài khoản Apple hoặc Google của bạn
+  có thể dùng được passkey đã đồng bộ; hãy đặt mật khẩu mạnh và các phương án khôi phục
+  riêng cho tài khoản đó.
+- **Tạo ví với nhiều hơn một khóa**, ví dụ passkey trên điện thoại cộng một khóa bảo mật
+  phần cứng cất ở nơi an toàn. Chỉ có thể thêm khóa khi tạo ví
+  ([vì sao](/vi/docs/signers)). Hãy nhớ rằng bất kỳ khóa đơn lẻ nào cũng tự ký được — và
+  không thể gỡ bỏ, nên nếu một khóa từng bị lộ, hãy chuyển tiền sang một ví mới
+  ([cần làm gì](/vi/docs/signers)).
 
 ## Vela làm được gì và không làm được gì
 
-- **Làm được:** giúp bạn tìm lại tài khoản qua chỉ mục công khai.
-- **Không làm được:** chuyển tiền của bạn, đóng băng ví, hay khôi phục một khóa riêng
-  tư. Vela chưa bao giờ giữ nó. Đó chính là toàn bộ ý nghĩa của tự quản — và cũng là
-  cái giá bạn đánh đổi cho nó.
+- **Làm được:** duy trì chỉ mục hoạt động, để ví của bạn được tìm thấy nhanh trên thiết
+  bị mới.
+- **Không làm được:** chuyển tiền của bạn, đóng băng ví, thêm hay gỡ bỏ khóa, hoặc khôi
+  phục một khóa bạn đã mất. Vela không bao giờ giữ khóa của bạn.
+
+Tiếp theo: [ký minh bạch](/vi/docs/clear-signing).

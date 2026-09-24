@@ -150,7 +150,7 @@ describe('json_rpc_post outcomes are transport facts', () => {
 		expect(result).toMatchObject({ outcome: { type: 'network' } });
 	});
 
-	it('the X-Rpc-Url header rides only when the core supplies it', async () => {
+	it('never tells the relay which RPC endpoint this wallet prefers (spec 081)', async () => {
 		const fetchSpy = vi.fn(
 			async () =>
 				new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: '0x1' }), {
@@ -170,8 +170,11 @@ describe('json_rpc_post outcomes are transport facts', () => {
 			})
 		);
 		const init = (fetchSpy.mock.calls[0] as unknown[])[1] as { headers: Record<string, string> };
-		const headers = init.headers;
-		expect(headers['X-Rpc-Url']).toBe('https://rpc.one');
+		// FR-007: that URL can carry a provider API key, and the relay reads
+		// `x-vela-rpc-url` anyway — so it is never sent, even when the core
+		// still names its own fastest pick.
+		expect(Object.keys(init.headers ?? {})).not.toContain('X-Rpc-Url');
+		expect(JSON.stringify(init.headers ?? {})).not.toContain('rpc.one');
 	});
 });
 

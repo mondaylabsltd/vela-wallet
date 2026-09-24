@@ -8,6 +8,7 @@
 	import { LOCALES, pathFor } from '$lib/i18n/locales';
 	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import { seoConfig } from '$lib/seo';
+	import { BUILT_IN_NETWORKS, chainLogo } from '$lib/networks';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -44,10 +45,7 @@
 		{ href: '/docs/account-contract', external: false },
 		{ href: '/docs/signers', external: false },
 		{ href: '/docs/bybit-attack', external: false },
-		{
-			href: 'https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints',
-			external: true
-		}
+		{ href: '/docs/self-hosting#if-getvela-app-disappears', external: false }
 	] as const;
 
 	/**
@@ -63,18 +61,21 @@
 	 * eleven times is an advertisement, not a comparison.
 	 */
 	const COMPARE_TONES = [
-		{ vela: '', metamask: '', base: '' },
-		{ vela: 'yes', metamask: '', base: 'yes' },
-		{ vela: 'warn', metamask: 'yes', base: '' },
-		{ vela: 'warn', metamask: 'warn', base: 'yes' },
-		{ vela: 'yes', metamask: 'yes', base: 'warn' },
-		{ vela: 'yes', metamask: '', base: 'yes' },
-		{ vela: 'yes', metamask: '', base: 'yes' },
-		{ vela: 'yes', metamask: 'yes', base: 'yes' },
-		{ vela: 'yes', metamask: '', base: 'warn' },
-		{ vela: 'yes', metamask: '', base: 'warn' },
-		{ vela: 'yes', metamask: '', base: '' },
-		{ vela: 'warn', metamask: 'yes', base: 'yes' }
+		{ vela: '', metamask: '', base: '' }, // account type
+		{ vela: 'yes', metamask: '', base: 'warn' }, // full self-hosting
+		{ vela: 'yes', metamask: 'warn', base: 'warn' }, // source code
+		{ vela: 'yes', metamask: 'yes', base: 'warn' }, // custom networks
+		{ vela: 'yes', metamask: '', base: 'yes' }, // signing key
+		{ vela: 'warn', metamask: 'warn', base: 'yes' }, // adding a key later
+		{ vela: 'yes', metamask: '', base: 'yes' }, // losing one key
+		{ vela: 'warn', metamask: 'yes', base: '' }, // transaction gas
+		{ vela: 'warn', metamask: '', base: 'yes' }, // sponsored gas
+		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // batched transactions
+		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // decoded before signing
+		// The signing page exists but no app sends it requests yet (spec 080):
+		// an extra check you cannot use today is not a green cell.
+		{ vela: 'warn', metamask: 'yes', base: '' }, // an extra check
+		{ vela: 'warn', metamask: 'yes', base: 'yes' } // maturity
 	] as const;
 
 	// Analytics helper
@@ -260,24 +261,8 @@
 		};
 	});
 
-	// Built-in networks (mirrors the wallet's DEFAULT_NETWORKS). Logos are the
-	// same source the wallet itself uses, so they always match in-app.
-	const NETWORKS = [
-		{ name: 'Ethereum', chainId: 1 },
-		{ name: 'BNB Chain', chainId: 56 },
-		{ name: 'Polygon', chainId: 137 },
-		{ name: 'Arbitrum', chainId: 42161 },
-		{ name: 'Optimism', chainId: 10 },
-		{ name: 'Base', chainId: 8453 },
-		{ name: 'Avalanche', chainId: 43114 },
-		{ name: 'Gnosis', chainId: 100 },
-		{ name: 'Unichain', chainId: 130 },
-		{ name: 'Monad', chainId: 143 },
-		{ name: 'World Chain', chainId: 480 },
-		{ name: 'Tempo', chainId: 4217 }
-	];
-	const chainLogo = (chainId: number) =>
-		`https://ethereum-data.awesometools.dev/chainlogos/eip155-${chainId}.png`;
+	// Built-in networks: one list, checked against vela-core by networks.test.ts.
+	const NETWORKS = BUILT_IN_NETWORKS;
 
 	// Structured data on the root page binds the "Vela Wallet" brand entity to
 	// getvela.app. It feeds Google the canonical site name (so results read
@@ -409,6 +394,14 @@
 					data-rybbit-prop-location="hero-code">{m.home.hero.ctaCode}</a
 				>
 			</div>
+			<!-- The path the buyer takes (founder, 2026-09-22): a quiet link, not a
+			     third button, so the choice above stays a choice between two. -->
+			<a
+				href={L('/docs/self-hosting')}
+				class="hero-selfhost"
+				data-rybbit-event="cta_click"
+				data-rybbit-prop-location="hero-selfhost">{m.home.hero.ctaSelfHost}</a
+			>
 		</div>
 
 		<!-- The wallet count, read live from the registry contract and set over a
@@ -760,19 +753,27 @@
 		   wrap normally. */
 		text-wrap: balance;
 	}
-	/* CJK glyphs fill their em box, so a headline set at the Latin size reads
-	   noticeably larger and runs out of line much sooner — 真正属于你的以太坊钱包
-	   wrapped mid-word (你 | 的) at the Latin scale. `word-break: auto-phrase`
-	   is the nominally correct fix and measurably does nothing here, so this
-	   uses the answer CJK typography has always used: a slightly smaller scale
-	   and a little more leading. `html[lang]` is set per locale in
-	   hooks.server.ts, so this follows the page, not the browser. */
+	/* CJK headlines are set in each platform's own sans (tokens.css), bold and
+	   at the Latin scale — the look the founder chose on 2026-09-22 — with a
+	   little more leading than Latin, which CJK needs. Japanese is the
+	   exception: its headline is twice as long, so it keeps a smaller scale and
+	   breaks at phrase boundaries (`auto-phrase`, Chrome; others wrap as
+	   before) instead of inside イーサリアム. Korean breaks between words, as
+	   Korean does. `html[lang]` follows the page (hooks.server.ts and the root
+	   layout). */
 	:global(html[lang^='zh']) h1,
-	:global(html[lang='ja']) h1,
 	:global(html[lang='ko']) h1 {
+		line-height: 1.12;
+		letter-spacing: -0.01em;
+	}
+	:global(html[lang='ko']) h1 {
+		word-break: keep-all;
+	}
+	:global(html[lang='ja']) h1 {
 		font-size: clamp(2.35rem, 4.6vw, 3.6rem);
 		line-height: 1.2;
 		letter-spacing: -0.01em;
+		word-break: auto-phrase;
 	}
 	/* Two short sentences, so it can carry the weight of a standfirst rather
 	   than reading as body text under a headline. Sized for the longest locale
@@ -788,6 +789,22 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 12px;
+	}
+	.hero-selfhost {
+		display: inline-block;
+		margin-top: 20px;
+		font-size: 0.95rem;
+		color: var(--text-secondary);
+		text-decoration: underline;
+		text-decoration-color: var(--border);
+		text-underline-offset: 4px;
+	}
+	.hero-selfhost::after {
+		content: ' →';
+	}
+	.hero-selfhost:hover {
+		color: var(--text);
+		text-decoration-color: currentColor;
 	}
 	.btn.btn-hero {
 		padding: 20px 44px;
@@ -1119,7 +1136,7 @@
 		background: var(--accent-soft);
 	}
 	.counter-count {
-		font-family: var(--font-serif);
+		font-family: var(--font-serif-latin);
 		font-size: 3rem;
 		font-weight: 700;
 		line-height: 1;

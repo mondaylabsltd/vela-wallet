@@ -1,59 +1,57 @@
 ---
 title: Introduction
-description: Ce qu'est Vela, à qui il s'adresse, et les idées derrière un portefeuille intelligent auto-conservé sans phrase de récupération.
+description: "Ce qu'est Vela en six lignes, et les questions que l'on se pose en arrivant — chacune avec un lien direct vers sa réponse."
+source: f1879437a0b5
 ---
 
-# Introduction
+# Documentation de Vela
 
-Vela est un **portefeuille intelligent auto-conservé** pour les réseaux EVM. Les
-clés sont à vous, mais il n'y a aucune phrase de récupération à noter — vous
-signez avec une passkey, par le visage ou l'empreinte.
+Vela est un **portefeuille open source et auto-hébergeable pour Ethereum et les
+autres réseaux EVM**, sans phrase de récupération. Votre portefeuille est un compte
+intelligent [Safe](/fr/docs/account-contract) non modifié, et vous signez avec des
+**passkeys** — sur votre téléphone ou votre ordinateur, sur un autre téléphone, ou
+sur une clé de sécurité matérielle.
 
-Cette documentation explique comment démarrer, créer un portefeuille, déplacer des
-tokens, et comprendre le modèle de sécurité qui tient tout cela.
+- **Fonctionne sans nous.** Les apps et tous les services sur lesquels elles
+  s'appuient — le relais, l'index des clés publiques, les données de chaîne et les
+  taux de change — sont sous licence MIT. Compilez-les et faites-les tourner
+  vous-même grâce au [guide d'auto-hébergement](/fr/docs/self-hosting), qui en
+  liste aussi les limites.
+- **Vos clés, jusqu'à sept.** Choisies à la création du portefeuille ; n'importe
+  laquelle peut signer. Vela ne les détient jamais et n'a aucun rôle sur votre
+  portefeuille.
+- **24 réseaux, une seule adresse.** Plus tout réseau EVM que vous ajoutez et qui
+  remplit les conditions requises.
+- **Vous lisez avant de signer.** Les transactions sont décodées en langage clair ;
+  ce qui ne peut pas l'être est signalé.
+- **Alpha.** Vela fonctionne et contient de vrais fonds, mais il est jeune :
+  commencez avec de petits montants. [Ce que « alpha » veut dire ici](/blog/vela-is-in-alpha).
 
-## La version courte
+## Trouver une réponse
 
-- **Auto-conservé.** Vos fonds sont contrôlés par une clé que vous seul pouvez
-  utiliser. Vela (l'entreprise) ne peut ni déplacer, ni geler, ni récupérer votre
-  argent.
-- **Aucune phrase de récupération.** Votre clé de signature est une passkey
-  gardée par le matériel sécurisé de votre appareil. Il n'y a pas douze mots à
-  perdre ou à se faire hameçonner.
-- **Un compte intelligent Safe.** Chaque portefeuille est un contrat
-  [Safe](https://github.com/safe-fndn/safe-smart-account), opéré via l'abstraction
-  de compte ERC-4337 — c'est précisément ce qui vous permet de signer avec une
-  passkey et de lire chaque transaction avant de l'approuver.
-- **12 réseaux, une seule adresse.** Ethereum, BNB Chain, Polygon, Arbitrum,
-  Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad et World Chain — plus
-  les réseaux que vous ajoutez — tous à la même adresse.
-- **Une signature lisible.** Là où un descripteur existe, la transaction est
-  traduite en intention lisible (ERC-7730) ; sinon, Vela retombe sur un décodage
-  au mieux et vous avertit. Les appels qu'il ne sait pas lire sont signalés, pas
-  cachés.
-- **Open source.** Le portefeuille et tous ses services sont
-  [publics sur GitHub](https://github.com/mondaylabsltd/vela-wallet), pour que
-  chacun puisse vérifier ce qu'ils font.
-- **Logiciel en alpha.** Vela fonctionne et contient de l'argent réel, mais il n'a
-  pas des années de production derrière lui. Commencez petit. Le
-  [billet sur l'alpha](/blog/vela-is-in-alpha) explique ce que cela implique.
+| Je veux savoir… | Aller à |
+| --- | --- |
+| Comment tout faire tourner moi-même | [Guide d'auto-hébergement](/fr/docs/self-hosting) |
+| Comment faire tourner mon propre relais, et qui reçoit les frais | [Guide d'auto-hébergement → relais](/fr/docs/self-hosting#relay) · [Réseaux et frais → les frais](/fr/docs/networks-and-fees#fee) |
+| Ce qui se passe si getvela.app est hors ligne | [Guide d'auto-hébergement → sans getvela.app](/fr/docs/self-hosting#if-getvela-app-disappears) |
+| Pourquoi une transaction coûte ce qu'elle coûte | [Réseaux et frais](/fr/docs/networks-and-fees) |
+| Si ma chaîne est prise en charge, ou comment en ajouter une | [Réseaux et frais](/fr/docs/networks-and-fees) · [Configurer une chaîne](/fr/chain-setup) |
+| Si Vela est audité | [Audits et problèmes connus](/fr/docs/security-audits) |
+| Comment vérifier ce que je signe vraiment | [Signature lisible](/fr/docs/clear-signing) · [L'attaque de Bybit](/fr/docs/bybit-attack) |
+| Quelle app installer, et combien elle coûte | [Installer Vela](/fr/docs/install) · [Obtenir Vela](/fr/get-started) |
+| Comment créer un portefeuille, et quelles clés utiliser | [Créer votre portefeuille](/fr/docs/create-wallet) · [Signataires et clés de sécurité](/fr/docs/signers) |
+| Que faire si je perds mon téléphone ou supprime une passkey | [Récupération et connexion](/fr/docs/recovery) |
+| Si je peux ajouter ou changer des clés plus tard | [Signataires et clés de sécurité](/fr/docs/signers) |
+| Comment utiliser Vela avec une dApp | [Installer Vela → dApps](/fr/docs/install#dapps) |
+| Ce qui est public à propos de mon portefeuille | [Créer votre portefeuille → ce qui est public](/fr/docs/create-wallet#what-is-public) · [Politique de confidentialité](/privacy) |
 
-## À qui il s'adresse
+## Pour aller plus loin
 
-Vela est fait pour les gens qui veulent une vraie auto-conservation sans le piège
-de la gestion d'une phrase de récupération — et pour ceux qui s'y sont déjà
-brûlés. Si vous savez déverrouiller votre téléphone, vous savez utiliser Vela.
+- [Pourquoi nous avons créé Vela](/fr/docs/why-vela) — l'histoire, et le compromis
+  que nous avons choisi.
+- [Livre blanc](/fr/docs/whitepaper) — l'architecture, et ce à quoi vous faites
+  confiance, précisément.
+- [Le contrat de compte](/fr/docs/account-contract) — les contrats qui détiennent
+  votre argent.
 
-## Où aller ensuite
-
-- [Installer Vela](/fr/docs/install) — ça tourne dans votre navigateur, rien à
-  télécharger.
-- [Créer votre portefeuille](/fr/docs/create-wallet) — votre premier portefeuille
-  en une minute environ.
-- [Comment fonctionnent les passkeys](/fr/docs/passkeys) — le modèle de sécurité,
-  expliqué simplement.
-- [Livre blanc](/fr/docs/whitepaper) — l'architecture complète et le modèle de
-  confiance.
-
-Si le *pourquoi* vous intéresse plus que le *comment*, le [blog](/blog) raconte
-comment Vela se construit.
+Le [blog](/blog) raconte comment Vela se construit.

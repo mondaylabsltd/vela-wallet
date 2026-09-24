@@ -35,7 +35,7 @@ visible "known" signal makes repeat payments safer and faster — without a serv
 
 ## 5. Non-functional requirements
 
-- **NFR-1** — In-memory cache in front of AsyncStorage for fast lookups (A06).
+- **NFR-1** — In-memory cache in front of the shell's persistent store for fast lookups (A06).
 - **NFR-2** — Address book is private/on-device; sync is a separate 🔜 feature.
 
 ## 6. UX / flow notes

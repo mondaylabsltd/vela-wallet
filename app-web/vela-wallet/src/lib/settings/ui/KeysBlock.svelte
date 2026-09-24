@@ -149,7 +149,9 @@
 				<span class="name">{backup.title}</span>
 				<span class="meta state">{backup.subtitle}</span>
 			</span>
-			{#if backup.actionable}
+			{#if backup.retry}
+				<Icon icon={UTILITY_ICONS['refresh-cw']} size="sm" />
+			{:else if backup.actionable}
 				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 			{:else if backup.tone === 'positive'}
 				<span class="done"><Icon icon={UTILITY_ICONS.check} size="sm" /></span>

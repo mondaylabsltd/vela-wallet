@@ -1,6 +1,7 @@
 ---
 title: Whitepaper
-description: Bagaimana Vela bekerja dan apa yang harus — dan tidak harus — Anda percayai untuk memakainya. Arsitektur, model keamanan, pemulihan, dan cara memverifikasi semuanya sendiri.
+description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
+source: 60d297b650ac
 ---
 
 <script>
@@ -9,273 +10,334 @@ description: Bagaimana Vela bekerja dan apa yang harus — dan tidak harus — A
 
 # Whitepaper
 
-<Callout type="info" title="Status: alfa · v0.1">
-Halaman ini menjelaskan bagaimana Vela bekerja hari ini dan apa yang harus — dan tidak
-harus — Anda percayai untuk memakainya. Ia mengutamakan kejujuran di atas pemasaran.
-Vela berada dalam tahap <a href="/blog/vela-is-in-alpha">alfa</a> — mulailah dengan
-jumlah kecil. Vela tidak punya token. Semua yang ada di sini bisa diverifikasi terhadap
-kode sumber terbukanya.
+<Callout type="info" title="Status: alfa · terakhir direvisi September 2026">
+Halaman ini menjelaskan bagaimana Vela bekerja saat ini dan apa yang perlu dan tidak
+perlu Anda percayai untuk memakainya. Vela masih dalam tahap
+<a href="/blog/vela-is-in-alpha">alfa</a> — mulailah dengan jumlah kecil. Vela tidak
+punya token. Semua yang ada di sini bisa diperiksa terhadap kode open source-nya; kalau
+kode dan halaman ini berbeda, kodelah yang benar, dan berarti ada bug di halaman ini.
 </Callout>
 
 ## Ringkasan
 
-Vela adalah **dompet kontrak pintar swakelola** untuk jaringan EVM. Setiap dompet
-adalah akun pintar [Safe](https://github.com/safe-fndn/safe-smart-account) yang
-dikendalikan sebuah **passkey** — kredensial WebAuthn (P-256) yang dipegang sistem
-operasi perangkat Anda, terenkripsi ujung-ke-ujung, dan dibuka dengan Face ID, Touch
-ID, atau sidik jari. Tidak ada frasa pemulihan dan tidak ada kunci privat yang harus
-Anda salin, simpan, atau hilangkan.
+Vela adalah **dompet kontrak pintar non-kustodial** untuk Ethereum dan jaringan EVM
+lainnya. Setiap dompet adalah akun **Safe v1.4.1** yang tidak dimodifikasi, dijalankan
+lewat **ERC-4337**, dan dikendalikan oleh hingga tujuh **passkey** — kunci WebAuthn
+P-256 yang disimpan perangkat Anda, pengelola kata sandi Anda, atau kunci keamanan fisik.
+Tidak ada frasa pemulihan.
 
-Vela, perusahaannya, tidak pernah memegang kunci atau dana Anda dan **tidak bisa
-memindahkan, membekukan, atau menyitanya**. Aplikasinya, relay transaksinya, dan
-layanan pendukungnya semuanya bersumber terbuka dan bisa Anda hosting sendiri. Yang
-harus Anda percayai menyusut menjadi: kontrak pintar yang sudah diaudit, brankas
-passkey sistem operasi Anda, dan — hanya untuk ketersediaan layanan — sebuah relay yang
-bisa Anda ganti atau jalankan sendiri.
+Vela, sebagai perusahaan, tidak pernah memegang kunci Anda dan tidak punya peran di Safe
+Anda, jadi Vela **tidak bisa memindahkan, membekukan, atau menyita dana Anda** secara
+sepihak. Namun Vela memang menulis dan menyajikan perangkat lunak yang meminta kunci Anda
+menandatangani — itulah sebabnya model ancaman di bawah ini penting. Aplikasinya, relay
+yang mengirim transaksi, dan layanan pendukungnya open source, dan Anda bisa menjalankan
+salinan sendiri dari masing-masing. Singkatnya, yang Anda percayai: kontraknya,
+autentikator yang menyimpan kunci Anda, kode aplikasi yang Anda pakai untuk
+menandatangani, domain tempat passkey Anda terikat, dan layanan yang Anda hubungkan ke
+aplikasi.
 
 ## Kenapa Vela ada
 
-Kebanyakan dompet memaksa sebuah pertukaran:
+- **Dompet berbasis frasa pemulihan** menyodorkan rahasia 12–24 kata kepada setiap
+  pengguna: satu titik kegagalan dan sasaran phishing yang tak pernah hilang.
+- **Dompet kustodial** menghilangkan frasa pemulihan dengan cara mengambil alih penyimpanan
+  dananya.
+- **Dompet passkey** yang bergantung pada server dan kode tertutup satu perusahaan memang
+  menghilangkan frasa pemulihan, tetapi membuat Anda terlantar kalau perusahaan itu
+  menghilang.
+- **Tanda tangan buta** — menyetujui data buram yang tidak bisa Anda baca — masih umum,
+  dan merupakan salah satu cara dompet dikuras.
 
-- **Dompet berfrasa pemulihan** menaruh rahasia 12–24 kata di depan setiap pengguna. Ia
-  titik kegagalan tunggal sekaligus sasaran phishing yang terus-menerus.
-- **Dompet kustodian** menghapus frasa pemulihannya tetapi mengambil alih dana Anda —
-  menghadirkan kembali risiko lawan transaksi yang justru ingin dihapus kripto.
-- **Tanda tangan buta** — menyetujui hex tak terbaca — sudah jadi hal biasa di
-  ekosistem ini dan berada di balik sebagian besar dompet yang terkuras.
-
-Vela ingin semudah aplikasi kustodian sambil menjaga Anda sepenuhnya swakelola: tanpa
-frasa pemulihan, tanpa kustodian, dan tanpa transaksi yang tidak bisa Anda baca sebelum
+Vela mengincar kenyamanan passkey tanpa satu pun ketergantungan itu: akun standar, kode
+terbuka, layanan yang bisa diganti, dan transaksi yang bisa Anda baca sebelum Anda
 menandatanganinya.
 
 ## Prinsip desain
 
-1. **Swakelola, tanpa pengecualian.** Kunci dibuat di perangkat Anda dan dipegang
-   penyedia passkey sistem operasi Anda, terenkripsi ujung-ke-ujung. Server Vela hanya
-   pernah melihat data publik.
-2. **Verifikasi, jangan percaya begitu saja.** Seluruh tumpukannya — aplikasi dan
-   keempat layanan pendukungnya — bersumber terbuka dengan lisensi MIT.
-3. **Tanpa tanda tangan buta.** Transaksi diterjemahkan menjadi maksud yang bisa dibaca
-   manusia di mana pun deskriptornya ada; panggilan yang tidak dikenal ditandai, bukan
-   disembunyikan.
-4. **Berbuat lebih sedikit.** Dompetnya menyimpan ETH dan ERC-20 serta terhubung ke
-   dApp yang Anda pilih. Lebih sedikit kode untuk dipercaya, permukaan serangan lebih
-   kecil.
+1. **Non-kustodial, tanpa pengecualian.** Kunci dibuat dan disimpan oleh autentikator
+   Anda. Layanan Vela tidak pernah melihatnya; apa yang memang mereka lihat tercantum di
+   bagian Privasi.
+2. **Kontrak standar, tanpa modifikasi.** Tidak ada satu pun kontrak di jalur menuju dana
+   Anda yang ditulis Vela.
+3. **Verifikasi, jangan percaya begitu saja.** Aplikasi dan layanannya terbuka untuk
+   publik; layanannya bisa di-hosting sendiri.
+4. **Dekode sebelum menandatangani.** Yang tidak bisa didekode membawa peringatan tanda
+   tangan buta yang tegas.
+5. **Lakukan lebih sedikit.** Dompet ini mengirim, menerima, dan menandatangani untuk dApp
+   yang Anda pilih.
 
 ## Arsitektur
 
 ```text
-Aplikasi Vela (iOS / Android / Web, satu basis kode)
-  • Passkey (WebAuthn P-256, penyedia passkey sistem operasi)
-  • Penyusunan & penandatanganan UserOperation
-  • Antarmuka clear signing (ERC-7730)
-        │  UserOperation bertanda tangan
+Aplikasi Vela — web, ekstensi browser, desktop (macOS/Windows/Linux), iOS, Android
+  satu inti Rust bersama (aturan, kripto, ABI, clear signing) + cangkang native tiap platform
+  • menyusun UserOperation dan menunjukkan apa yang dilakukannya
+  • meminta asersi WebAuthn dari kunci Anda
+        │  UserOperation yang sudah ditandatangani (termasuk biaya)
         ▼
-Relay Vela (ERC-4337, bisa di-hosting sendiri)
-  • Mengirim handleOps ke EntryPoint
-  • Tidak bisa mengubah atau memalsukan transaksi Anda
+Relay (vela-relay, bisa di-hosting sendiri)
+  • memberi kuotasi biaya, menalangi gas, mengirim handleOps
+  • tidak bisa mengubah operasinya
         ▼
-Rantai EVM
-  EntryPoint v0.7 → akun pintar Safe
-  Penanda tangan WebAuthn memverifikasi P-256 di rantai
+Chain EVM
+  EntryPoint v0.7 → Safe v1.4.1 Anda → modul 4337 Safe
+  modul passkey Safe memverifikasi P-256 lewat precompile EIP-7951 / RIP-7212
 ```
 
-### Model akun
+Layanan pendukung, semuanya open source: **indeks kunci publik** yang mendaftarkan dompet
+baru di registri on-chain dan menjawab pencarian, direktori **data chain**, dan sumber
+**kurs**. Lihat [panduan hosting sendiri](/id/docs/self-hosting).
 
-Dompet Anda adalah akun pintar **Safe v1.4.1** (sebuah kontrak proxy) yang dijalankan
-lewat abstraksi akun **ERC-4337** (EntryPoint v0.7) dengan **Safe 4337 Module** dan
-sebuah **penanda tangan WebAuthn** sebagai pemilik akunnya.
+### Akun
 
-Alamatnya **deterministik** dan **kontrafaktual**: ia dihitung dari kunci publik passkey
-Anda lewat `CREATE2` sebelum transaksi apa pun dikirim, jadi Anda bisa menerima dana di
-situ sebelum ia pernah dipasang. Akunnya memasang dirinya sendiri, dibayar dari
-saldonya sendiri, pada transaksi pertama Anda.
+Dompet Anda adalah proxy **Safe v1.4.1** (singleton SafeL2), dengan **modul 4337 v0.3.0**
+milik Safe diaktifkan sebagai modul dan fallback handler-nya, dan dijalankan lewat
+**EntryPoint v0.7**. Pemiliknya adalah signer passkey dari **modul passkey v0.2.1**
+milik Safe: kunci pertama diverifikasi oleh shared signer, dan setiap kunci tambahan oleh
+kontrak signer-nya sendiri yang dibuat oleh factory milik Safe. Ambang batasnya **1**.
 
-### Kunci dan autentikasi
+Alamatnya **deterministik dan kontrafaktual**: dihitung dengan `CREATE2` dari data
+penyiapan Safe, yang mencakup setiap kunci awal, sebelum apa pun di-deploy. Alamat itu
+sama di setiap jaringan. Anda bisa langsung menerima dana di sana; transaksi pertama Anda
+di tiap jaringan men-deploy dompetnya dan membayarnya di dalam biaya transaksi itu.
 
-Autentikasi memakai **passkey WebAuthn** di kurva **P-256**. Kunci privatnya dibuat di
-perangkat Anda dan dipegang, terenkripsi ujung-ke-ujung, oleh penyedia passkey sistem
-operasi Anda (iCloud Keychain atau Google Password Manager), yang menyinkronkannya antar
-perangkat Anda. **Server Vela hanya pernah melihat kunci publik Anda.** Menandatangani
-selalu menuntut verifikasi biometrik yang baru — tidak ada kunci sesi berumur panjang.
-Lihat [cara kerja passkey](/id/docs/passkeys) untuk detail lengkapnya.
+### Kunci
 
-### Penandatanganan dan alur transaksi
+Sebuah dompet punya **satu sampai tujuh kunci**, yang ditetapkan saat Anda membuatnya.
+Salah satunya saja bisa menandatangani sendirian (1-of-n). Sebuah kunci bisa berupa:
 
-1. **Menyusun** `UserOperation` ERC-4337 untuk Safe Anda dan memperkirakan gasnya.
-2. **Menerjemahkan** panggilannya menjadi maksud yang bisa dibaca manusia dan
-   menampilkannya untuk ditinjau.
-3. **Menandatangani** — perangkat Anda menghasilkan pernyataan WebAuthn atas digest
-   operasinya setelah verifikasi biometrik.
-4. **Mengodekan** pernyataan itu sebagai tanda tangan kontrak **EIP-1271**.
-5. **Meneruskan** operasi bertanda tangan itu ke relay, yang mengirimkannya ke
-   EntryPoint.
-6. **Memverifikasi di rantai** — Safe memverifikasi tanda tangan P-256 di rantai lewat
-   precompile RIP-7212 sebelum mengeksekusinya. Precompile itu syarat mutlak: tidak ada
-   verifikator cadangan, dan Vela menolak mengaktifkan jaringan yang tidak punya itu.
+- passkey di perangkat yang sedang Anda pakai — disinkronkan oleh Rantai Kunci iCloud,
+  Pengelola Sandi Google, atau pengelola kata sandi lain jika Anda mengizinkannya;
+- ponsel lain, yang dihubungkan dengan memindai kode QR (transport hybrid WebAuthn);
+- kunci keamanan fisik lewat USB atau NFC, yang tidak tersinkron ke mana pun.
 
-Relay menerima operasi yang **sudah ditandatangani**. Ia tidak bisa mengubah penerima,
-jumlah, atau kolom lain tanpa membatalkan tanda tangannya.
+Setiap tanda tangan membutuhkan verifikasi pengguna dari autentikator itu sendiri —
+biometrik atau PIN perangkat, atau PIN dan sentuhan pada kunci keamanan. Tidak ada
+session key. Kunci tidak bisa ditambah, dihapus, atau diganti belakangan: di setiap
+chain tempat dompet belum di-deploy, alamatnya tetap mewakili kumpulan kunci awal, jadi
+mengganti pemilik di satu chain akan membuat akunnya berbeda dari chain ke chain.
 
-### Relay dan model gas
+Passkey milik sebuah relying party — passkey Vela dibuat untuk **`getvela.app`**.
+Browser hanya menawarkannya ke halaman di getvela.app atau subdomainnya, dan itulah yang
+membuat passkey tahan phishing; itu juga sebuah ketergantungan yang akan dibahas lagi di
+bawah.
 
-- Gas dibayar **dari saldo dompet Anda sendiri** — dengan token asli jaringan secara
-  bawaan, atau dengan stablecoin yang didukung di tempat relay menawarkannya. Tempo,
-  yang tidak punya koin asli, selalu menyelesaikan gas dengan stablecoin USD. Tidak ada
-  **paymaster** dan tidak ada pihak ketiga yang mensponsori — atau menggerbangi —
-  transaksi Anda.
-- **Relay adalah satu-satunya sumber kebenaran untuk harga gas.** Ia memberi kuotasi
-  dari kondisi rantai terkini; dompetnya menampilkan kuotasi itu dan menandatangani
-  persis apa yang ditampilkannya.
-- Tagihan relayer Vela sengaja dibuat sederhana: totalnya adalah **biaya jaringan
-  ditambah biaya layanan relayer**, dengan tagihan minimum kecil untuk transaksi yang
-  sangat murah. Sebagian mengalir ke validator rantainya; sisanya membayar relayer yang
-  menjalankan infrastrukturnya dan menjaga akun gas Anda tetap terisi.
-- Dompetnya **menampilkan perkiraan biaya sebelum Anda mengonfirmasi** — dalam aset
-  biaya dan mata uang tampilan Anda — dan jumlah yang dikuotasi beserta penerimanya
-  adalah bagian dari yang Anda tandatangani, jadi relayer dibayar persis sebesar yang
-  ditampilkan. Tidak ada markup tersembunyi.
-- Setiap Safe punya **akun relayer khusus** (akun gas) per rantai, yang diaktifkan
-  dengan deposit yang **tidak dapat dikembalikan**. Akun itu bisa menipis seiring waktu,
-  jadi ia mungkin perlu **diaktifkan ulang** nanti — jadi ia bukan benar-benar deposit
-  sekali jalan.
+### Alur tanda tangan
 
-Relay adalah ketergantungan **ketersediaan**, bukan ketergantungan **kustodi**: ia bisa
-menunda atau menolak meneruskan, tetapi tidak pernah bisa mengubah, memalsukan, atau
-mencuri. Ia bersumber terbuka dan Anda bisa menjalankan sendiri — dan karena harganya
-**dikuotasi dan ditampilkan** alih-alih disembunyikan, bahkan biaya relay milik sendiri
-atau milik pihak ketiga pun selalu terlihat oleh Anda sebelum menandatangani. Lihat
-[jaringan & biaya](/id/docs/networks-and-fees).
+1. **Susun** UserOperation untuk Safe Anda — termasuk transfer yang membayar relay — lalu
+   simulasikan.
+2. **Dekode** menjadi maksud yang bisa dibaca manusia dan tampilkan kepada Anda.
+3. **Tanda tangani**: autentikator Anda membuat asersi WebAuthn atas hash operasi setelah
+   memverifikasi Anda.
+4. **Enkode** asersi itu menjadi tanda tangan Safe yang diharapkan modul passkey.
+5. **Kirim** operasi yang sudah ditandatangani ke relay, yang memanggil EntryPoint.
+6. **Verifikasi on-chain**: modul passkey memeriksa tanda tangan P-256 dengan precompile
+   EIP-7951 / RIP-7212 sebelum Safe mengeksekusi apa pun. Tidak ada verifier cadangan; jaringan
+   tanpa precompile itu tidak bisa ditambahkan.
 
-### Clear signing (ERC-7730)
+### Biaya
 
-Vela menerjemahkan calldata dan data bertipe EIP-712 memakai deskriptor **ERC-7730** dan
-menggambarkan **maksudnya** (Tukar, Kirim, Setujui…), **intinya** (jumlah, alamat), dan
-**detailnya** (nonce, tenggat, calldata mentah) saat diminta, dengan kode warna menurut
-risikonya. Saat tidak ada deskriptor yang cocok, Vela menampilkan peringatan tanda
-tangan buta yang tegas alih-alih berpura-pura memahami panggilannya.
+- Relay dibayar **in-band**: operasinya mendeklarasikan biaya EntryPoint nol dan
+  menyertakan transfer dari Safe Anda ke alamat relay. Jumlah dan penerimanya adalah
+  bagian dari yang Anda tandatangani, jadi Anda membayar persis sebesar yang ditampilkan
+  layar konfirmasi.
+- Biayanya **tiga kali gas yang dicadangkan dompet untuk operasi itu** (perkiraan hasil
+  simulasi dinaikkan setengahnya, dengan batas minimum), **dengan harga gas yang lebih
+  tinggi antara hasil baca dompet sendiri dan harga relay untuk kecepatan yang dipilih**,
+  dengan minimum sekitar $0,01. Di Tempo, pengalinya dua. Cadangan dan ruang lebih pada
+  harganya membuat biaya itu berada di atas biaya on-chain operasi yang sebenarnya,
+  terlebih untuk transaksi pertama di suatu jaringan; relay menyimpan selisihnya. Jumlah
+  pastinya ada di layar konfirmasi sebelum Anda menandatangani.
+- Biaya itu masuk ke relay yang dipakai dompet: relay Vela secara bawaan, atau
+  deployment vela-relay mana pun, termasuk yang Anda jalankan sendiri.
+- Biaya dibayar dengan koin jaringan itu atau dengan stablecoin USD yang diterima relay
+  (pathUSD di Tempo, yang tidak punya koin native). **Tidak ada paymaster**: tidak ada
+  yang mensponsori gas, dan tidak ada yang bisa menyaring transaksi lewat kebijakan
+  sponsor.
+- Kalau treasury gas milik relay di suatu jaringan kosong, dompet memberi tahu sebelum
+  Anda menandatangani. Tidak ada deposit per pengguna.
+
+Detailnya: [jaringan & biaya](/id/docs/networks-and-fees).
+
+### Clear signing
+
+Panggilan dan pesan EIP-712 didekode dengan deskriptor **ERC-7730** — bawaan aplikasi
+untuk kontrak yang umum, diambil dari layanan data chain, atau dicocokkan dengan bentuk
+token standar — lalu, sebagai jalan terakhir, basis data selector publik, dengan label
+upaya terbaik (best effort). Sisanya mendapat peringatan tanda tangan buta yang tegas.
+Deskriptor yang diambil tidak pernah diberi label terverifikasi — hanya deskriptor bawaan
+aplikasi, atau deskriptor yang diambil dan identik dengannya, yang berhak atas kata itu.
+Persetujuan on-chain di tingkat "tanpa batas" (2^200 atau lebih) tidak bisa dikirim
+sampai Anda menurunkannya; persetujuan besar yang terbatas dan permit yang
+ditandatangani ditampilkan dengan peringatan hati-hati tetapi tidak diblokir.
+Detailnya:
+[clear signing](/id/docs/clear-signing).
 
 ### Jaringan
 
-Vela mendukung 12 jaringan EVM — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-Base, Avalanche, Gnosis, Unichain, Tempo, Monad, dan World Chain — ditambah jaringan
-buatan sendiri. Jaringan buatan sendiri hanya bisa ditambahkan kalau ia sudah menampung
-kontrak yang diandalkan Vela (EntryPoint, kontrak-kontrak Safe, penanda tangan WebAuthn)
-dan precompile P-256 RIP-7212; Vela memeriksanya sebelum mengaktifkannya.
+Vela punya 24 jaringan bawaan — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
+Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
+MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, dan XRPL EVM — dan menerima
+jaringan EVM apa pun yang punya dua belas kontrak yang diperiksanya dan precompile
+EIP-7951 / RIP-7212. Dua dari dua belas kontrak itu adalah factory signer passkey milik Safe dan
+kode signer yang di-deploy factory itu, yang hanya dibutuhkan dompet dengan lebih dari
+satu kunci; pemeriksaannya melaporkan keduanya secara terpisah.
 
 ## Model keamanan
 
-**Yang tidak bisa dilakukan Vela:**
+**Apa yang tidak bisa dilakukan Vela**
 
-- Memindahkan, membelanjakan, atau mentransfer dana Anda — hanya passkey Anda yang bisa
-  memberi izin kepada Safe-nya.
-- Membekukan atau menyita akun Anda — Safe itu kontrak Anda di rantai; Vela tidak punya
-  peran istimewa padanya.
-- Menandatangani atas nama Anda — setiap transaksi butuh pernyataan biometrik yang baru.
-- Melihat kunci privat Anda — ia tidak pernah sampai ke Vela; hanya perangkat Anda yang
-  bisa memakainya untuk menandatangani.
-- Mengubah transaksi setelah Anda menandatangani — perubahan apa pun membatalkan tanda
-  tangannya.
+- Memindahkan, membelanjakan, atau membekukan dana Anda secara sepihak — hanya kunci Anda
+  yang bisa mengotorisasi Safe Anda, dan Vela tidak punya peran di dalamnya. (Yang bisa
+  dilakukan Vela adalah merilis perangkat lunak yang meminta Anda menandatangani; lihat
+  ancaman di bawah.)
+- Mengubah transaksi setelah Anda menandatanganinya — perubahan apa pun membuat tanda
+  tangannya tidak sah.
+- Membaca kunci privat Anda — kunci itu tetap di autentikator Anda.
+- Menambahkan kunci ke dompet Anda, atau menghapusnya.
 
-**Yang tidak dicakup oleh "tidak bisa membekukan":** *token*-nya. Stablecoin
-berizin — USDC, USDT, dan sebagian besar token bersandar fiat — membawa fungsi daftar
-hitam yang bisa dipanggil penerbitnya terhadap alamat mana pun, termasuk alamat Anda.
-Kuasa itu milik penerbitnya dan ada apa pun dompet tempat Anda menyimpan tokennya; tidak
-ada dompet swakelola, termasuk Vela, yang bisa mencabutnya. Yang diberikan swakelola
-adalah: **kami** bukan pihak kedua yang juga bisa melakukannya.
+**Yang tidak tercakup oleh "tidak bisa membekukan": tokennya.** USDC, USDT, dan sebagian
+besar token yang dijamin mata uang fiat mengizinkan penerbitnya memasukkan alamat mana pun
+ke daftar hitam, termasuk alamat Anda. Kewenangan itu milik penerbit dan tetap ada apa pun
+dompet yang Anda pakai. Yang diberikan dompet non-kustodial adalah bahwa Vela bukan pihak
+kedua yang bisa melakukannya.
 
-**Yang Anda percayai:**
+**Yang Anda percayai**
 
-- **Kontrak Safe** (diaudit, dipakai luas) dan penanda tangan WebAuthn yang
-  memverifikasi kunci P-256 Anda.
-- **Penyedia passkey sistem operasi** Anda (Apple / Google) untuk melindungi dan
-  menyinkronkan kredensial Anda.
-- **Penyedia RPC** yang Anda kueri (Vela memakai kumpulan multi-sumber dengan
-  pengalihan; Anda bisa memasang milik Anda sendiri).
-- **Relay**, hanya untuk ketersediaan layanan — dan Anda bisa meng-hosting-nya sendiri.
+- **Kontraknya**: Safe, modul 4337 dan modul passkey-nya, EntryPoint v0.7, dan precompile
+  EIP-7951 / RIP-7212 milik chain.
+- **Domainnya**: halaman apa pun yang disajikan dari getvela.app atau salah satu
+  subdomainnya bisa meminta tanda tangan dari kunci Anda.
+- **Autentikator** yang menyimpan kunci Anda, dan — untuk passkey yang tersinkron — akun
+  Apple, Google, atau pengelola kata sandi di baliknya.
+- **Kode aplikasi yang Anda pakai untuk menandatangani.** Aplikasi itulah yang menyusun
+  transaksi dan menunjukkan apa yang dilakukannya. Aplikasi yang dibobol bisa menampilkan
+  satu hal dan meminta Anda menandatangani hal lain; permintaan konfirmasi dari
+  autentikator tidak akan memberi tahu perbedaannya.
+- **Endpoint RPC** tempat Anda membaca data: node yang berbohong bisa menampilkan saldo
+  yang salah atau pratinjau simulasi yang salah. Anda bisa mengatur node sendiri.
+- **Layanan data chain dan kurs**: keduanya menyediakan daftar token, deskriptor, daftar
+  token untuk biaya, dan kurs yang dipakai untuk mengubah jumlah fiat menjadi jumlah
+  token.
+- **Relay**: relay tidak bisa mengubah apa yang Anda tandatangani, tetapi bisa menunda
+  atau menolaknya, memilih kapan transaksi masuk ke chain (jadi relay bisa melakukan
+  front-running atas sebuah swap dalam batas slippage Anda), dan menetapkan harga gas yang
+  menjadi dasar biaya Anda, hingga tiga kali hasil baca dompet sendiri.
 
-**Ancaman yang dipertimbangkan:**
+**Ancaman yang dipertimbangkan**
 
-- **Perangkat hilang atau dicuri** — pencurinya tetap butuh biometrik/PIN Anda untuk
-  menandatangani.
-- **Phishing / dApp berbahaya** — ditangani dengan clear signing.
-- **Server Vela yang dikuasai** — tidak memberi kemampuan menandatangani; radius
-  dampaknya adalah layanan yang menurun, bukan kehilangan dana.
-- **Risiko rantai pasok** — diperkecil oleh sumber terbuka dan hosting sendiri.
+- **Perangkat hilang atau dicuri** — pencuri tetap harus lolos pemeriksaan
+  autentikatornya; kunci lain memulihkan akses. Namun kunci tidak bisa dihapus: kalau
+  salah satunya mungkin sudah di tangan orang lain, pindahkan dana Anda ke dompet baru,
+  karena alamat lama tetap bisa dibelanjakan oleh kunci itu di setiap jaringan.
+- **Phishing** — passkey tidak bisa diketik di situs palsu, dan browser hanya
+  menawarkannya ke halaman di getvela.app dan subdomainnya.
+- **dApp berbahaya** — ditangani dengan clear signing, pengaman persetujuan, dan sebuah
+  penolakan: permintaan panggilan dari Safe Anda ke Safe itu sendiri — `enableModule`,
+  `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` dan sisa keluarga
+  itu — diblokir, termasuk ketika berada di dalam sebuah batch atau `MultiSend`, begitu
+  pula setiap bagian yang membawa `delegatecall` dan tanda tangan typed data `SafeTx`.
+  Salah satu saja, sekali ditandatangani, akan menyerahkan akun Anda sepenuhnya, sama
+  seperti payload Bybit, jadi dompet sama sekali tidak menawarkannya untuk
+  ditandatangani.
+- **Layanan backend yang dibobol** (relay, indeks, data chain, kurs) — tidak punya
+  kewenangan menandatangani, tetapi punya pengaruh nyata: menolak layanan, deskriptor atau
+  daftar token yang menyesatkan, kurs yang salah sehingga mengubah berapa yang terkirim
+  untuk suatu jumlah fiat, dan (untuk relay) waktu dan harga gas di atas. Deskripsi yang
+  diambil dari layanan data chain tidak pernah disebut terverifikasi — hanya deskripsi
+  bawaan aplikasi, atau deskripsi yang diambil dan identik dengannya, yang berhak atas
+  kata itu, sedangkan sisanya ditampilkan dengan satu baris yang menyatakan tidak ada yang
+  mengautentikasinya. Setiap layanan bisa diganti.
+- **Distribusi aplikasi yang dibobol** — deployment web, pembaruan ekstensi, atau build
+  aplikasi yang dimanipulasi bisa menyodorkan transaksi berbahaya untuk Anda tandatangani.
+  Ini jenis serangan [Bybit](/id/docs/bybit-attack). Mitigasinya saat ini terbatas: dekode
+  dan pengaman persetujuan di aplikasi itu sendiri, build macOS yang dinotarisasi, dan
+  mengompilasi ekstensi atau aplikasinya sendiri dari kode sumber (paket rilis disertai
+  checksum SHA-256 dan atestasi build-provenance GitHub yang menyebut commit serta proses
+  workflow-nya; penginstal Windows masih belum ditandatangani kodenya). Halaman tanda tangan independen yang tidak
+  berbagi kode dengan aplikasi sudah dibuat, tetapi belum terhubung.
+- **Apa pun yang disajikan dari domain itu** — halaman mana pun di getvela.app atau
+  subdomainnya, termasuk skrip yang dimuatnya, bisa meminta tanda tangan dari passkey
+  Vela, dan permintaan konfirmasinya hanya menampilkan "getvela.app". Karena itu situs web
+  melarang halamannya sendiri memakai passkey, dan tidak memuat skrip analitiknya di
+  halaman yang memegang kunci. Kalau domain itu berpindah tangan, pemilik barunya juga
+  akan mengendalikan aplikasi mana yang boleh memakai passkey itu. Ekstensi dan aplikasi
+  yang dikompilasi sendiri membawa kodenya sendiri, meskipun secara bawaan keduanya masih
+  mengambil deskriptor dan memakai layanan di bawah getvela.app.
 
 ## Pemulihan
 
-Passkey Anda dicadangkan oleh penyedia sistem operasi Anda; di perangkat baru, masuk
-dengan akun Apple atau Google yang sama akan memulihkannya, dan dompet Anda muncul
-kembali.
+Pembuatan dompet memublikasikan kunci publik dan alamatnya ke **kontrak registri** publik
+di Gnosis (bisa disalin ke Ethereum). Di perangkat baru, Anda masuk dengan **salah satu**
+kunci; aplikasi menemukan dompetnya lewat indeks atau, kalau gagal, langsung dari
+registri, lalu memeriksa bahwa kunci-kunci itu menghasilkan kembali alamat yang tercatat.
+Dompet dengan satu kunci juga bisa dibangun ulang dari dua tanda tangan tanpa registri
+sama sekali.
 
-<Callout type="warning" title="Cadangan passkey platform Anda adalah pemulihan Anda">
-Pemulihan di Vela adalah passkey Anda, yang disinkronkan iCloud Keychain atau Google
-Password Manager. Secara desain tidak ada frasa pemulihan, tidak ada pemulihan sosial,
-dan tidak ada wali — tidak ada yang bisa Vela hilangkan, bocorkan, atau dipaksa untuk
-memakainya. Sisi lainnya nyata: kalau Anda kehilangan <strong>keduanya</strong> —
-perangkat Anda <strong>dan</strong> passkey yang tersinkron di awan — tanpa salinan
-lain, akunnya tidak bisa dipulihkan. Biarkan cadangan passkey platform Anda menyala dan
-amankan akunnya.
+<Callout type="warning" title="Kunci Anda adalah pemulihan Anda">
+Tidak ada frasa pemulihan, tidak ada pemulihan sosial, dan tidak ada guardian — tidak ada
+yang bisa dihilangkan, dibocorkan, atau dipaksakan untuk dipakai oleh Vela. Kalau setiap
+kunci awal hilang, dompetnya tidak bisa dipulihkan. Buat dompet dengan lebih dari satu
+kunci, biarkan sinkronisasi passkey aktif kalau Anda mengandalkannya, dan amankan akun di
+baliknya.
 </Callout>
 
-Model pemulihan selengkapnya, termasuk batas-batas jujurnya, ada di
-[pemulihan & masuk](/id/docs/recovery).
+Detailnya: [pemulihan & masuk](/id/docs/recovery).
 
-## Kalau Vela hilang
+## Kalau Vela menghilang
 
-Swakelola berarti kunci dan dana Anda tidak bergantung pada Vela tetap online. Dana ada
-di **kontrak Safe Anda sendiri di rantai**, dan relay-nya bersumber terbuka serta bisa
-diganti.
-
-Satu catatan jujur: WebAuthn mengikat passkey pada domain relying party
-(`getvela.app`). Kalau domain itu hilang selamanya, passkey yang terikat padanya akan
-butuh bantuan untuk bekerja di tempat lain — sebuah alat yang bisa menyodorkan relying
-party aslinya kepada autentikator. Vela dulu menyediakan ekstensi browser kelas
-pengembang untuk kasus itu dan menghentikannya pada September 2026; jalur pemulihan
-kelas konsumen untuk kehilangan domain masih pekerjaan yang belum selesai, dan kami
-mengatakannya alih-alih menyiratkan bahwa ia sudah ada. Akses on-chain secara independen
-juga bergantung pada dukungan P-256 (RIP-7212) di rantai tujuan, yang terus membaik di
-berbagai rantai.
+Dana Anda tetap berada di Safe Anda on-chain. Kontraknya tidak bergantung pada Vela, dan
+setiap layanan yang dijalankan Vela adalah open source sehingga bisa dijalankan pihak lain.
+Satu-satunya yang tidak bisa dipindahkan adalah relying party passkey itu, `getvela.app`:
+salinan dompet web di domain lain membuat dompet yang berbeda. Untuk dompet yang sudah
+ada, ekstensi browser Vela (yang bisa memakai passkey `getvela.app` berdasarkan izin) dan
+aplikasi yang Anda kompilasi sendiri (dengan ponsel atau kunci keamanan) tetap berfungsi
+tanpa getvela.app.
+[Panduan hosting sendiri](/id/docs/self-hosting#if-getvela-app-disappears) menguraikan
+setiap jalur beserta batasannya. Akses mandiri ke sebuah chain juga mensyaratkan chain itu
+mendukung EIP-7951 / RIP-7212.
 
 ## Privasi
 
-Tidak ada akun, tidak ada email, tidak ada KYC, tidak ada frasa pemulihan untuk
-dikumpulkan. Server hanya menyimpan **kunci publik** Anda dan nama akun yang Anda pilih
-(untuk pemulihan lintas perangkat), yang memang dipublikasikan di rantai sesuai desain.
-Isi transaksi tidak dicatat. Situsnya memakai analitik tanpa cookie yang di-hosting
-sendiri. Lihat [kebijakan privasi](/privacy).
+Tanpa akun, tanpa email, tanpa KYC. Yang menjadi publik ditulis ke registri saat Anda
+membuat dompet: kunci publik dan ID kredensial tiap kunci, model autentikator, nama dompet
+dan label kunci Anda, alamatnya, dan data pendaftaran yang ditandatangani. Indeks Vela
+melihat catatan itu sebelum mengirimkannya, begitu pula alamat-alamat yang Anda cari
+namanya; relay Vela melihat alamat Anda, operasi yang Anda kirim, dan endpoint RPC yang
+dipakai aplikasi Anda (termasuk kunci API apa pun di URL-nya), dan menyimpan operasi untuk
+waktu terbatas guna mencoba ulang dan mendiagnosis masalah. Setiap layanan melihat alamat
+IP Anda. Situs webnya memakai analitik tanpa cookie.
+[Kebijakan privasi](/privacy) adalah daftar yang berlaku.
 
-## Keterverifikasian dan sumber terbuka
+## Open source
 
-Semuanya **berlisensi MIT dan bersumber terbuka** — aplikasinya dan keempat layanan
-pendukungnya (data rantai, indeks passkey, relay, kurs mata uang), yang bisa Anda
-**hosting sendiri** (Pengaturan → Lanjutan → Endpoint Layanan). Baca kodenya di
-[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
+Semuanya berlisensi MIT: dompetnya (semua aplikasi dan intinya), relay, indeks kunci
+publik, layanan kurs, dan direktori data chain. Kodenya:
+[github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Tanpa token
 
-Vela **tidak punya token** dan tidak berencana membuatnya. Tidak ada yang bisa dibeli,
-di-farming, atau dispekulasikan. Gas dibayar dengan aset asli masing-masing jaringan.
+Vela tidak punya token dan tidak berencana membuatnya. Tidak ada yang bisa dibeli,
+di-farm, atau dispekulasikan. Biaya dibayar dengan koin tiap jaringan atau stablecoin.
 
 ## Status audit dan keterbatasan
 
-**Kontrak Safe** di inti setiap akun Vela diaudit secara independen dan sudah teruji
-lapangan. **Integrasi Vela sendiri** di sekelilingnya **belum melewati audit pihak
-ketiga yang independen**, dan belum ada yang dijadwalkan — audit profesional adalah
-tujuan untuk saat proyek ini mampu membiayainya, bukan komitmen bertanggal. Sampai saat
-itu, peninjauan integrasinya bersifat informal: kodenya terbuka, dan ia bersandar pada
-anggota komunitas yang cakap dan tertarik untuk membacanya serta pada peninjauan
-berbantuan AI. Itu membantu, tetapi tidak setara audit profesional. Perlakukan Vela
-sebagai perangkat lunak alfa dan pakailah jumlah yang Anda nyaman taruh pada sesuatu
-yang masih semuda ini.
+Kontrak Safe, modul 4337 dan modul passkey-nya, serta EntryPoint v0.7 sudah diaudit
+secara independen dan dipakai luas. **Kode Vela sendiri — aplikasi, layanan backend, dan
+kontrak registri — belum pernah diaudit pihak ketiga yang independen, dan tidak ada audit
+yang dijadwalkan**; audit profesional adalah sasaran untuk saat proyek ini mampu
+membiayainya, bukan komitmen dengan tanggal. Sampai saat itu, tinjauannya bersifat
+informal: kodenya terbuka, anggota komunitas yang cakap membacanya, dan kode itu ditinjau
+dengan bantuan alat AI. Itu membantu; tetapi tidak setara dengan audit profesional.
+Perlakukan Vela sebagai perangkat lunak alfa. Detailnya:
+[audit & masalah yang diketahui](/id/docs/security-audits).
 
-## Rujukan
+## Referensi
 
 - ERC-4337 — Abstraksi akun lewat EntryPoint
-- EIP-1271 — Validasi tanda tangan standar untuk kontrak
-- ERC-7730 — Clear signing / deskriptor data terstruktur
-- EIP-5792 — Pemaketan panggilan dompet
-- RIP-7212 — Precompile verifikasi tanda tangan secp256r1 (P-256)
-- WebAuthn / FIDO2 — Autentikasi passkey
-- [Akun pintar Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1)
+- EIP-1271 — Validasi tanda tangan untuk kontrak
+- ERC-7730 — Deskriptor clear signing
+- EIP-5792 — Batching panggilan dompet (`wallet_sendCalls`)
+- EIP-7951 / RIP-7212 — Precompile verifikasi tanda tangan P-256
+- WebAuthn / FIDO2 — Passkey
+- [Akun pintar Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

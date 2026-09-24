@@ -904,6 +904,37 @@ fun SendFormBody(
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
         model.sweepRows.forEachIndexed { index, row ->
+            // An empty label means NO chip, and the row keeps the space it
+            // would have taken. A sweep moves the maximum of every row by
+            // definition — the core computes each one net of the fee's
+            // reserve — so the live form has nothing for this control to do,
+            // and the only event behind it (`TapMax`) acts on the single
+            // selected token rather than on this row. The drawn form (the
+            // gallery's fixture) keeps the chip; the live one does not, which
+            // is how iOS reads it too (`FlowBodies.swift:688`).
+            val maxChip: (@Composable () -> Unit)? = if (row.max.isEmpty()) {
+                null
+            } else {
+                {
+                    Box(
+                        modifier = Modifier
+                            .background(colors.bgSunken, CircleShape)
+                            .clickable { onMax(index) }
+                            .padding(
+                                horizontal = VelaSpacing.md,
+                                vertical = VelaSpacing.xs,
+                            ),
+                    ) {
+                        Text(
+                            text = row.max,
+                            color = colors.fgBase,
+                            fontFamily = VelaFontFamily,
+                            fontWeight = VelaFontWeight.semibold,
+                            fontSize = VelaTextSize.xs,
+                        )
+                    }
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -922,25 +953,7 @@ fun SendFormBody(
                         fiat = AssetFiatModel.None,
                         masked = false,
                     ),
-                    trailing = {
-                        Box(
-                            modifier = Modifier
-                                .background(colors.bgSunken, CircleShape)
-                                .clickable { onMax(index) }
-                                .padding(
-                                    horizontal = VelaSpacing.md,
-                                    vertical = VelaSpacing.xs,
-                                ),
-                        ) {
-                            Text(
-                                text = row.max,
-                                color = colors.fgBase,
-                                fontFamily = VelaFontFamily,
-                                fontWeight = VelaFontWeight.semibold,
-                                fontSize = VelaTextSize.xs,
-                            )
-                        }
-                    },
+                    trailing = maxChip,
                 )
             }
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
@@ -1314,7 +1327,10 @@ fun BatchImportBody(
         }
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         HairlineDivider()
-        Row(
+        // The rate converts a FIAT sheet; in token units the core ignores it, so
+        // the row is not drawn at all (the web shows it only in fiat mode) —
+        // a rate beside "In XDAI" read as if it were being applied.
+        if (model.unit == BatchUnit.Fiat) Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = VelaSpacing.md),
@@ -1549,6 +1565,17 @@ fun SendConfirmBody(
                 if (index > 0) HairlineDivider()
                 FactRow(fact = fact)
             }
+        }
+        model.recipientTag?.let {
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            Text(
+                text = it,
+                color = colors.warningBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(horizontal = VelaSpacing.lg),
+            )
         }
         if (model.breakdown.isNotEmpty()) {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))

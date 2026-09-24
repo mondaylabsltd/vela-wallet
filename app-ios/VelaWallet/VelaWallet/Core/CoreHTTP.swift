@@ -105,10 +105,9 @@ enum CoreHTTP {
 
     /// `GET url` with extra headers → a classified REST answer.
     ///
-    /// The one header that matters is `X-Rpc-Url`: the relay reads the chain
-    /// through the endpoint THIS wallet picked, so a person on their own RPC
-    /// gets an account view derived from it rather than from whatever the
-    /// relay happens to use.
+    /// Spec 081 (FR-007): no RPC-endpoint header is sent to the relay. It used
+    /// to carry the endpoint this wallet picked — which can contain a provider
+    /// API key — and the relay read a different header name anyway.
     static func getREST(
         _ url: String,
         headers: [String: String] = [:],

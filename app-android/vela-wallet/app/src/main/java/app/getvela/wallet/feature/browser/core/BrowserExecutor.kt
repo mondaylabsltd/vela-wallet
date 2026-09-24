@@ -124,6 +124,14 @@ class BrowserExecutor(
         /** `vela.chain.<origin>` — the extension's key for the chain a site is on. */
         fun chainKey(origin: String): String = CHAIN_PREFIX + origin
 
+        // main's `resultJson`/`errorJson`/`eventJson`/`rejectMessage` are NOT
+        // revived here: they speak `DpermPageEvent` and `DpermRejectReason`,
+        // the pre-070 core's vocabulary, and 070 moved all four decisions into
+        // `dapp_browser`. The thing they carried that matters — `error.kind`,
+        // the machine-readable half of a refusal (spec 081) — survives: it is
+        // on the core's own wire (`SignWire`'s `self_call_blocked` among the
+        // rest), so every shell reads one spelling of it.
+
         /** The "Connected to <app>" row, field for field the other clients' (`buildConnectionRecord`). */
         fun connectionRow(address: String, chainId: Int, origin: String, nowMs: Long): JSONObject = JSONObject()
             .put("id", "dapp-$nowMs-connect")

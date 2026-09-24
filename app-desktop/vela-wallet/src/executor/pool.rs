@@ -123,12 +123,6 @@ enum Request {
         chain_id: u32,
         reply: Sender<Option<String>>,
     },
-    /// Which RPC URL the pool would reach for first — the `X-Rpc-Url` the
-    /// relay's REST endpoints carry (invariant ②).
-    BestRpcUrl {
-        chain_id: u32,
-        reply: Sender<Option<String>>,
-    },
 }
 
 /// Why a routed call produced no answer.
@@ -180,18 +174,6 @@ pub fn bundler_call(chain_id: u32, method: &str, params: Value) -> Result<Value,
 /// pool is empty — the caller falls back to the built-in base. **Blocks.**
 pub fn bundler_base(chain_id: u32) -> Option<String> {
     query(chain_id, |chain_id, reply| Request::BundlerBase {
-        chain_id,
-        reply,
-    })
-}
-
-/// The RPC URL this chain's pool would reach for first (`getChainRpcUrl`) —
-/// rides `X-Rpc-Url` on the relay's REST endpoints so the relay reads the
-/// chain through the endpoint the wallet trusts. `None` = nothing eligible,
-/// and the caller sends no header (the fail-closed side of invariant ②).
-/// **Blocks.**
-pub fn best_rpc_url(chain_id: u32) -> Option<String> {
-    query(chain_id, |chain_id, reply| Request::BestRpcUrl {
         chain_id,
         reply,
     })
@@ -349,17 +331,6 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                 let call_id = format!("b{next_id}");
                 queries.insert(call_id.clone(), reply);
                 let pending = host.dispatch(Event::BundlerBaseRequested {
-                    call_id,
-                    chain_id,
-                    now_ms: now_ms(),
-                });
-                drain(&mut host, pending, &mut inflight, &mut queries, workers);
-            }
-            Request::BestRpcUrl { chain_id, reply } => {
-                next_id += 1;
-                let call_id = format!("r{next_id}");
-                queries.insert(call_id.clone(), reply);
-                let pending = host.dispatch(Event::BestRpcUrlRequested {
                     call_id,
                     chain_id,
                     now_ms: now_ms(),
@@ -680,12 +651,12 @@ fn post(
     // dead proxy in the environment does not get every RPC endpoint banned.
     let timeout = Duration::from_millis(u64::from(timeout_ms));
     let mut response = match proxy::with_candidates_for(url, timeout, |agent| {
-        let mut request = agent.post(url).header("content-type", "application/json");
-        // Invariant ②: a bundler call carries the same-chain RPC the pool verified.
-        if let Some(rpc) = x_rpc_url {
-            request = request.header("X-Rpc-Url", rpc);
-        }
-        request.send_json(&payload)
+        // Spec 081 FR-007: the wallet no longer tells the relay which RPC endpoint it prefers. That header carried the user's first-choice URL, which can contain a provider API key — and the relay never read this name anyway (it reads `x-vela-rpc-url`), so nothing depended on it.
+        let _ = x_rpc_url;
+        agent
+            .post(url)
+            .header("content-type", "application/json")
+            .send_json(&payload)
     }) {
         Ok(response) => response,
         Err(failure) => {

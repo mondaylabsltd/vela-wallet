@@ -88,6 +88,15 @@ export interface SigningMessages {
 	valueUnlimited: string;
 	valueAllNfts: string;
 	unlimitedDisabled: string;
+	/**
+	 * Spec 081: the request would have changed who controls the account, so the
+	 * wallet refused it. `…LegBody` names the step inside a batch; `…SafeTx` is
+	 * the typed-data case, which names no function.
+	 */
+	selfCallBlockedTitle: string;
+	selfCallBlockedBody: string;
+	selfCallBlockedLegBody: string;
+	selfCallBlockedSafeTx: string;
 	/** What a typed cap that is not a number gets told. */
 	invalidAmount: string;
 	choosePrompt: string;
@@ -125,6 +134,14 @@ export interface SigningMessages {
 	warnPermitCantCap: string;
 	warnBestEffort: string;
 	warnVerifiedAbi: string;
+	/**
+	 * Spec 081 FR-008: this description came from the descriptor service and
+	 * nobody authenticated it. Optional only until its corpus key lands with
+	 * the feature's i18n pass — the resolver hands `undefined` while the
+	 * catalogs lack it, and the sheet says one thing less rather than drawing
+	 * a raw key path.
+	 */
+	warnDescriptorFetched: string;
 	warnSimUnavailable: string;
 	warnDrain: string;
 	okSelfTransfer: string;

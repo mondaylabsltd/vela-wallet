@@ -72,6 +72,11 @@ import type {
 	UrlFieldModel,
 	AccountsSheetModel
 } from './model';
+import {
+	environmentLines,
+	type DeviceFacts,
+	type EnvironmentLabels
+} from '$lib/services/bug-report';
 import type { EthereumBackupState } from '$lib/services/registry-backup';
 import type { EthereumBackupRowModel, WalletKeysModel } from './model';
 import type { WalletKeys } from '$lib/services/wallet-keys';
@@ -281,6 +286,13 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 			},
 			checksTitle: m.addNetwork.compatibilityCheck,
 			checks,
+			// Spec 081 FR-009. Two of the rows above belong to a wallet with
+			// more than one passkey; when only those are missing the core still
+			// says compatible, truthfully, and this is the rest of the sentence.
+			// Without it the badge says Compatible over two red crosses.
+			callout: compat.multi_key_ready
+				? undefined
+				: { tone: 'warning', text: m.addNetwork.singleKeyOnly },
 			customRpc: {
 				id: 'custom-rpc',
 				label: m.addNetwork.customRpcTitle,
@@ -947,6 +959,65 @@ export function withEraseFailure<M extends { eraseSheet: ConfirmSheetModel }>(
 	};
 }
 
+/** The same failure, in the wide layout's dialog (spec 081 FR-017). */
+export function withEraseFailureDesktop(
+	model: SettingsDesktopModel,
+	m: SettingsMessages,
+	failed: boolean
+): SettingsDesktopModel {
+	if (!failed) return model;
+	return {
+		...model,
+		eraseSheet: {
+			...model.eraseSheet,
+			callout: { tone: 'danger', text: m.erase.failed }
+		}
+	};
+}
+
+/**
+ * The report's preview lines, which are the report (spec 081 FR-016).
+ *
+ * The fixture drew five invented lines — `iOS 26.0`, `zh`, two dashes — under
+ * a consent note promising that the preview IS what leaves the device. This
+ * builder makes that true by calling the SAME function the payload is built
+ * from (`services/bug-report.ts`), so the two cannot drift apart again.
+ */
+export function withFeedback(
+	model: SettingsHomeModel,
+	m: SettingsMessages,
+	facts: DeviceFacts
+): SettingsHomeModel {
+	return {
+		...model,
+		feedback: { ...model.feedback, previewLines: environmentLines(feedbackLabels(m), facts) }
+	};
+}
+
+/** The desktop panel shows the same five lines, from the same call. */
+export function withFeedbackDesktop(
+	model: SettingsDesktopModel,
+	m: SettingsMessages,
+	facts: DeviceFacts
+): SettingsDesktopModel {
+	return {
+		...model,
+		feedback: { ...model.feedback, previewLines: environmentLines(feedbackLabels(m), facts) }
+	};
+}
+
+/** The corpus labels the five lines wear, in one place for both layouts. */
+export function feedbackLabels(m: SettingsMessages): EnvironmentLabels {
+	return {
+		version: m.bugReport.previewVersion,
+		platform: m.bugReport.previewPlatform,
+		language: m.bugReport.previewLanguage,
+		rpc: m.bugReport.previewRpc,
+		failures: m.bugReport.previewFailures,
+		none: m.bugReport.previewNone
+	};
+}
+
 // ---------------------------------------------------------------------------
 // The account switcher (spec 028 Phase 8) — the session's rows, the balance
 // core's totals.
@@ -1434,11 +1505,15 @@ export function ethereumBackupRow(
 				actionable: true
 			};
 		case 'could_not_check':
+			// Tappable, and what it does is ask again — the state a person is
+			// most likely to tap, and the only one where "nothing happened"
+			// was the whole experience.
 			return {
 				title: m.backup.title,
 				subtitle: m.backup.couldNotCheck,
 				tone: 'neutral',
-				actionable: false
+				actionable: true,
+				retry: true
 			};
 		case 'unavailable':
 		case 'not_registered':

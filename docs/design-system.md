@@ -7,10 +7,13 @@ Use this brief whenever you design, review, or generate UI for Vela Wallet.
 - The Penpot file **Vela Wallet** is the visual source of truth.
 - Use its local token sets, never literal replacement values:
   - `core` — foundational tokens; always active.
-  - `mode-light` — light semantic colors; activate for light UI.
-  - `mode-dark` — dark semantic colors; activate for dark UI.
+  - `color-light` — light semantic colors; activate for light UI.
+  - `color-dark` — dark semantic colors; activate for dark UI.
 - Activate `core` plus **exactly one** mode set. Never enable both modes.
-- This document explains token intent; Penpot remains the authority for current values.
+- This document explains token intent. The committed DTCG export
+  [`design-tokens.json`](design-tokens.json) is the value authority the generators read
+  (`app-web/vela-wallet/scripts/gen-tokens.mjs`); when this prose and the export disagree, the
+  export wins.
 
 ## Non-negotiable rules
 
@@ -69,25 +72,25 @@ Use the named rhythm; do not create intermediate gaps.
 | `space.4xl` | 32px | Screen section |
 | `space.5xl` | 48px | Major break |
 
-- Radius: `radius.none`, `radius.xs`, `radius.sm`, `radius.md`, `radius.lg`, `radius.xl`, `radius.full`.
+- Radius: `radius.none` (0), `radius.sm` (4), `radius.md` (8), `radius.lg` (12), `radius.xl` (16), `radius.2xl` (20), `radius.full`. There is no `radius.xs`.
 - Controls: use `sizing.control.sm` (36px), `sizing.control.md` (44px), or `sizing.control.lg` (52px). Prefer 44px or larger for touch targets.
-- Platform dimensions: use `dimension.tabBar.ios` (50px), `dimension.tabBar.android` (80px), and `dimension.max.content` (800px) where applicable.
+- Layout dimensions: use `layout.maxContentWidth` (800px), `layout.dockBarHeight` (86px), `layout.screenPaddingX` and `layout.scanFabSize` where applicable. There is no `dimension.*` set, and no per-platform tab-bar token — the dock is one height on every shell.
 
 ## Typography and localization
 
-- UI stack: `font.ui` — **Plus Jakarta Sans** for Latin plus **Noto Sans SC** for CJK fallback.
-- Technical stack: `font.mono` — **JetBrains Mono** for addresses, code, IDs, and numeric diagnostics.
-- Use `typography.label`, `typography.body`, `typography.button`, `typography.title`, `typography.display`, `typography.numeric`, and `typography.mono` by intent.
+- UI stack: `font.sans` (and `font.display`, `font.numeric`) — **Plus Jakarta Sans** for Latin. CJK falls back to the platform's own sans (PingFang, Noto Sans CJK, Yu Gothic…), never a serif and never a downloaded CJK web font.
+- Technical stack: `font.mono` — **IBM Plex Mono** for addresses, code, IDs, and numeric diagnostics.
+- There is no `typography.*` composite set. Compose a role from `text.*` (`xs`…`5xl`), `weight.*` (`regular`, `medium`, `semibold`, `bold`), `leading.*` and `font.*`.
 - Keep the same type role in English and Chinese. Do not introduce another CJK display font.
 - Text scale is user-controlled and persistent. Support all six levels:
   `compact` 0.82×, `small` 0.91×, `standard` 1.00×, `comfortable` 1.10×, `large` 1.22×, `xlarge` 1.35×.
 
 ## Effects and engineering tokens
 
-- Opacity: use `opacity.disabled`, `opacity.low`, `opacity.medium`, or `opacity.high`.
+- Opacity: use `opacity.disabled` (0.45), `opacity.dim` (0.4), or `opacity.backdrop` (0.35). There is no `low`/`medium`/`high`.
 - Elevation: use `shadow.sm`, `shadow.md`, or `shadow.lg` only on raised surfaces; borders still define structure.
-- Motion: use `motion.fast` (150ms), `motion.base` (250ms), or `motion.slow` (400ms).
-- Use `border.width.base`, `tracking.none`, `text.case.*`, `text.decoration.*`, and `rotation.*` instead of manual values.
+- Motion: use `motion.duration.fast` (150ms), `motion.duration.normal` (250ms), or `motion.duration.slow` (400ms); `motion.press`, `motion.entrance`, `motion.sheet` and the two springs carry the curves.
+- Use `border.hairline` (1) and `border.emphasis` (1.5) for strokes, and `letterSpacing.sectionLabel` (0.6) for the section-label tracking, instead of manual values. There are no `text.case.*`, `text.decoration.*` or `rotation.*` tokens.
 
 ## Brand mark and app icon
 

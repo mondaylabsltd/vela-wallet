@@ -1,0 +1,105 @@
+# Provenance for the macOS images (spec 081, FR-012).
+#
+# Every other file on a Release is built by release.yml, which attests it in the
+# same run that produces it. The .dmg files cannot work that way: nothing able
+# to sign as us is stored on GitHub (spec 063 §3a), so they are built, signed,
+# notarized and attached BY HAND on the founder's Mac —
+# app-desktop/vela-wallet/scripts/release-macos-local.sh <tag> --upload. A
+# workflow that never saw them must not claim it built them.
+#
+# So this run does the only honest thing: it takes the images as PUBLISHED,
+# checks with Apple's own tools that they are what they claim (a stapled
+# notarization ticket, and Gatekeeper accepting them), and attests those exact
+# bytes. The attestation then says "this file, as published under this tag, was
+# notarized and vouched for by this repository" — which is true — rather than
+# "this workflow compiled it", which would not be.
+#
+#   Actions > macOS provenance > Run workflow > tag: v0.9.3
+#
+# Run it AFTER release-macos-local.sh has uploaded. Anyone can then check an
+# image the same way as every other download:
+#
+#   gh attestation verify VelaWallet-0.9.3-macos-arm64.dmg --repo mondaylabsltd/vela-wallet
+#
+# Re-running it is harmless: attestations accumulate, and each one is about the
+# bytes it saw.
+name: macOS provenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The release tag whose .dmg files to verify and attest, e.g. v0.9.3'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  attest:
+    name: Verify the published images and attest them
+    # Apple's tools only exist on a Mac: `stapler` and `spctl` are the whole
+    # point of this job, so it cannot run anywhere cheaper.
+    runs-on: macos-15
+    permissions:
+      contents: read       # read the release's assets
+      id-token: write      # the short-lived identity that signs the attestation
+      attestations: write  # record it against this repository
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: The images as published
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$TAG' is not a release tag. Releases are tagged vX.Y.Z (e.g. v0.9.3)."
+            exit 1
+          fi
+          mkdir -p dmgs
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.dmg' --dir dmgs --clobber
+          shopt -s nullglob
+          images=(dmgs/*.dmg)
+          if (( ${#images[@]} == 0 )); then
+            echo "::error::$TAG carries no .dmg. Attach them first, on a Mac that can sign: app-desktop/vela-wallet/scripts/release-macos-local.sh $TAG --upload"
+            exit 1
+          fi
+          ls -l dmgs
+
+      - name: Apple says they are notarized, and Gatekeeper opens them
+        run: |
+          for dmg in dmgs/*.dmg; do
+            name=$(basename "$dmg")
+            # A stapled ticket is what makes the image open on a Mac that is
+            # offline; without it Gatekeeper has to ask Apple, and may refuse.
+            xcrun stapler validate "$dmg" ||
+              { echo "::error::$name has no stapled notarization ticket — it is not a publishable image"; exit 1; }
+            # -t open is how an image is assessed the way a person opens it;
+            # the context pins the check to the signature the image carries.
+            spctl --assess --type open --context context:primary-signature -vv "$dmg" ||
+              { echo "::error::Gatekeeper refuses $name — it is not signed with our Developer ID and notarized"; exit 1; }
+            shasum -a 256 "$dmg"
+          done
+
+      - name: Provenance for these exact bytes
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dmgs/*.dmg'
+
+      - name: Say what was attested
+        run: |
+          {
+            echo "### macOS images attested for $TAG"
+            echo
+            echo "Notarized (stapled ticket) and accepted by Gatekeeper, then attested as published:"
+            echo
+            echo '```'
+            shasum -a 256 dmgs/*.dmg | sed 's|dmgs/||'
+            echo '```'
+            echo
+            echo "Anyone can check one with:"
+            echo
+            echo '```'
+            echo "gh attestation verify <file>.dmg --repo $GITHUB_REPOSITORY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

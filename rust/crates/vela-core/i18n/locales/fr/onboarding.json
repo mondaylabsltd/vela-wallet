@@ -7,7 +7,7 @@
       "desktopTagline": "Vos clés, vos actifs",
       "featureNoMnemonicTitle": "Sans phrase de récupération",
       "featureNoMnemonicBody": "Créez votre portefeuille et connectez-vous avec une clé d'accès sur votre appareil — aucune phrase de 12 mots à noter et à protéger.",
-      "featureOneAddressTitle": "Une adresse, 12+ réseaux",
+      "featureOneAddressTitle": "Une adresse, 24 réseaux",
       "featureOneAddressBody": "La même adresse fonctionne sur tous les réseaux pris en charge, et vous pouvez ajouter les vôtres.",
       "featureOpenSourceTitle": "Open source, auto-hébergeable",
       "featureOpenSourceBody": "L'application et les services backend sont open source — vous pouvez déployer une infrastructure entièrement à vous.",
@@ -30,12 +30,12 @@
       "custodyTitle": "Les clés restent chez vous",
       "custodyBody": "Vos clés d'accès restent là où vous les gardez : le gestionnaire de mots de passe de l'appareil, ou une clé de sécurité physique. Vela n'y touche pas et ne peut rien dépenser.",
       "chainsTitle": "Une adresse, toutes les chaînes",
-      "chainsBody": "La même adresse fonctionne sur plus de 12 réseaux, et les frais se paient en stablecoins — inutile de stocker la monnaie native de chaque chaîne."
+      "chainsBody": "La même adresse fonctionne sur 24 réseaux, et les frais se paient en stablecoins — inutile de stocker la monnaie native de chaque chaîne."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — le portefeuille à clé d'accès",
-        "description": "Un portefeuille à clé d'accès, sans phrase de récupération : une seule adresse sur plus de 12 réseaux, des contrats Safe v1.4.1 audités, le gas payable en stablecoins, le tout open source et auto-hébergeable."
+        "description": "Un portefeuille à clé d'accès, sans phrase de récupération : une seule adresse sur 24 réseaux, des contrats Safe v1.4.1 audités, le gas payable en stablecoins, le tout open source et auto-hébergeable."
       },
       "tagline": "Vos clés, vos actifs",
       "passkeyIndexLink": "Configurer le service d'index des clés d'accès",
@@ -45,7 +45,7 @@
           "description": "Créez votre portefeuille et connectez-vous avec la clé d'accès de votre appareil — pas de 12 mots à recopier et à garder."
         },
         "oneAddress": {
-          "title": "Une adresse, plus de 12 réseaux",
+          "title": "Une adresse, 24 réseaux",
           "description": "La même adresse fonctionne sur tous les réseaux pris en charge, et vous pouvez ajouter les vôtres."
         },
         "openSource": {

@@ -17,6 +17,7 @@
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 	import type {
 		ConfirmSheetModel,
+		FeedbackResult,
 		SettingsDesktopModel,
 		SettingsOverlayId,
 		SettingsPageId
@@ -29,8 +30,10 @@
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
 	import AddNetworkPanel from './ui/AddNetworkPanel.svelte';
 	import ConfirmSheet from './ui/ConfirmSheet.svelte';
+	import Callout from './ui/Callout.svelte';
 	import DangerCard from './ui/DangerCard.svelte';
 	import Dialog from './ui/Dialog.svelte';
+	import FeedbackBody from './ui/FeedbackBody.svelte';
 	import Dropdown from './ui/Dropdown.svelte';
 	import EndpointsPanel from './ui/EndpointsPanel.svelte';
 	import FormRow from './ui/FormRow.svelte';
@@ -74,6 +77,10 @@
 		onstorageclear?: (id: string) => void;
 		/** "Clear all caches" was confirmed. Absent in the gallery. */
 		onclearcaches?: () => void;
+		/** 发送 in the report panel (spec 081 FR-016). Absent in the gallery. */
+		onfeedbacksend?: (report: { what: string; steps: string }) => void;
+		feedbackSending?: boolean;
+		feedbackResult?: FeedbackResult;
 	}
 
 	let {
@@ -90,7 +97,10 @@
 		onaccountsopen,
 		onethereumbackup,
 		onstorageclear,
-		onclearcaches
+		onclearcaches,
+		onfeedbacksend,
+		feedbackSending = false,
+		feedbackResult
 	}: Props = $props();
 
 	let page = $state<SettingsPageId>(untrack(() => model.page));
@@ -126,6 +136,8 @@
 				return { title: model.endpoints.title, description: undefined };
 			case 'storage':
 				return { title: model.storage.title, description: model.storage.subtitle };
+			case 'feedback':
+				return { title: model.feedback.title, description: model.feedback.subtitle };
 			case 'about':
 				return { title: model.about.title, description: undefined };
 			default:
@@ -239,9 +251,10 @@
 				</button>
 				<p class="sign-out-note">{model.account.signOutNote}</p>
 
-				<!-- The phone's erase, as a dialog: the same question, the same sweep,
-				     and a failure said in the dialog's own callout (spec 072). It was
-				     drawn here and did nothing. -->
+				<!-- Spec 081 FR-017 with 072's dialog: the card asks, the dialog
+				     confirms, the route erases — and a failure is said in the
+				     dialog's own callout. It was drawn with no handler from the
+				     first day. -->
 				<DangerCard
 					title={model.account.erase.title}
 					subtitle={model.account.erase.subtitle}
@@ -378,6 +391,16 @@
 						)}
 					onclearcaches={() => (overlay = 'clear-caches')}
 				/>
+			{:else if page === 'feedback'}
+				<!-- Spec 081 FR-016: the phone's sheet body, as a panel. Same
+				     component, so the preview lines and the consent note cannot
+				     say one thing on a laptop and another on a phone. -->
+				<FeedbackBody
+					panel={model.feedback}
+					onsend={onfeedbacksend}
+					sending={feedbackSending}
+					result={feedbackResult}
+				/>
 			{:else if page === 'about'}
 				<AboutPanel panel={model.about} layout="inline" />
 			{/if}
@@ -452,8 +475,16 @@
 			/>
 		</Dialog>
 	{:else if overlay === 'erase-device'}
-		<!-- Does NOT close on confirm, as on the phone: a failed erase is said in
-		     this dialog's callout, and a successful one leaves the page. -->
+		<!-- Spec 081 FR-017. Everything the phone's sheet says, in the desktop's
+		     container: what is lost, and — the note — that the passkey is NOT,
+		     because it lives with the person's passkey provider and not here.
+		     `ConfirmSheet` is the phone's own component and draws all three (body,
+		     note, callout), so the two clients cannot drift into saying different
+		     things about the same destructive action.
+
+		     The dialog does NOT close on confirm: a failed erase has to say so
+		     where the person is looking — its callout is in this sheet — and a
+		     success leaves this page anyway. -->
 		<Dialog title={model.eraseSheet.title} closeLabel={model.closeLabel} onclose={closeOverlay}>
 			<ConfirmSheet
 				sheet={model.eraseSheet}
@@ -575,5 +606,6 @@
 	.dialog-actions {
 		display: flex;
 		justify-content: flex-end;
+		gap: var(--space-lg);
 	}
 </style>

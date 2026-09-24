@@ -1,6 +1,7 @@
 ---
 title: Klartext-Signatur
-description: Vela übersetzt Transaktionen vor der Freigabe in Klartext — Absicht, Beträge, Adressen und Risiko — statt undurchsichtiger Hex-Zeichen. Was es nicht dekodieren kann, sagt es dir, statt so zu tun als ob.
+description: "Vela übersetzt Transaktionen vor der Freigabe in verständliche Sprache – Absicht, Beträge, Adressen und Risiko – statt undurchsichtigem Hex. Kann es einen Aufruf nicht dekodieren, warnt es dich, statt so zu tun, als ob."
+source: 7232328b724e
 ---
 
 <script>
@@ -9,83 +10,101 @@ description: Vela übersetzt Transaktionen vor der Freigabe in Klartext — Absi
 
 # Klartext-Signatur
 
-Die meisten Wallets zeigen dir eine Wand aus Hexadezimalzeichen und hoffen auf
-das Beste. „Blindes Signieren“ — Aufrufe freigeben, die du nicht lesen kannst —
-steckt hinter einem großen Teil der leergeräumten Wallets. Velas Antwort ist die
-**Klartext-Signatur**: Vor dem Signieren wird die Transaktion in etwas übersetzt,
-das du verstehen kannst.
+Viele Wallets zeigen bei jedem Vertrag, den sie nicht kennen, noch immer Rohdaten an,
+und „Blindsignieren“ – Aufrufe freigeben, die du eigentlich nicht lesen kannst – ist
+einer der Wege, auf denen Wallets leergeräumt werden. Velas Antwort ist die
+**Klartext-Signatur** (Clear Signing): Bevor du signierst, wird die Transaktion in
+etwas übersetzt, das du verstehen kannst, soweit das möglich ist.
 
 ## Was du siehst
 
 Statt roher Calldata zeigt Vela:
 
-- **Absicht** — was die Transaktion tut: *Senden*, *Genehmigen*, *Tauschen* und
-  so weiter.
-- **Die Substanz** — die beteiligten Beträge und Adressen, Token-Beträge in
-  echten Einheiten und Empfänger zu einem Namen aufgelöst, wo es einen gibt.
-- **Die Details** — Nonce, Fristen und die rohe Calldata, auf Abruf statt direkt
-  ins Gesicht.
-- **Einen Risikohinweis**, farbcodiert, damit das Gruselige gruselig aussieht.
+- **Absicht** – was die Transaktion tut: *Senden*, *Genehmigen*, *Tauschen* und so
+  weiter.
+- **Das Wesentliche** – die beteiligten Beträge und Adressen, Token-Beträge in echten
+  Einheiten und Empfänger als Name, wo es einen gibt.
+- **Die Details** – Nonce, Fristen und die rohe Calldata, auf Wunsch abrufbar statt
+  ungefragt vor die Nase gesetzt.
+- **Einen Risikohinweis**, farblich gekennzeichnet, damit gefährliche Aktionen
+  auffallen.
 
 ## Wie es funktioniert (ERC-7730)
 
-Vela dekodiert sowohl **Vertragsaufrufe** als auch **EIP-712-Typdaten** mithilfe
-von [ERC-7730](https://github.com/LedgerHQ/clear-signing-erc7730-registry)-Deskriptoren
-— kleinen, teilbaren Definitionen dessen, was die Funktionen eines Vertrags
-bedeuten.
+Vela dekodiert sowohl **Vertragsaufrufe** als auch **typisierte EIP-712-Daten** mit
+[ERC-7730](https://github.com/LedgerHQ/clear-signing-erc7730-registry)-Deskriptoren –
+kleinen, teilbaren Definitionen dessen, was die Funktionen eines Vertrags bedeuten.
 
-- Existiert ein **vertragsspezifischer Deskriptor**, wird die Transaktion als
-  **verifiziert** markiert und mit dem Namen des Vertrags versehen.
-- Sonst fällt Vela auf **Standard-Deskriptoren** für gängige Formen zurück —
-  ERC-20-Token, ERC-721-NFTs, ERC-4626-Vaults und ERC-2612-Permits — sodass die
-  meisten Alltagsaktionen weiterhin dekodiert werden.
+Vela sucht einen Deskriptor in dieser Reihenfolge:
+
+1. **In der App eingebaut** – Deskriptoren für weit verbreitete Verträge: die Router
+   von Uniswap, PancakeSwap und SushiSwap, WETH, den Aave-v3-Pool, 1inch, Lido und
+   wstETH sowie Seaport.
+2. **Vom Chain-Daten-Server von Vela abgerufen**, der das öffentliche
+   ERC-7730-Verzeichnis neu veröffentlicht.
+3. **Standardformen** – ERC-20-Token, ERC-721- und ERC-1155-NFTs, ERC-4626-Vaults und
+   ERC-2612-Permits –, damit die meisten alltäglichen Aktionen trotzdem dekodiert
+   werden.
+
+**Verifiziert** ist der ersten Quelle vorbehalten. Als verifiziert gekennzeichnet
+wird eine Transaktion nur, wenn die Beschreibung aus einem Deskriptor stammt, der in
+die App eingebaut ist, die du gerade nutzt – oder vom Chain-Daten-Server kommt und mit
+der eingebauten Kopie identisch ist, was belegt, dass unterwegs nichts verändert wurde.
+Alles andere, was der Server schickt, wird trotzdem dekodiert und trotzdem angezeigt,
+mit einer Zeile, die sagt, dass es vom Deskriptor-Dienst stammt und nichts es
+authentifiziert hat. Dieser Dienst ist nicht signiert und damit nur so
+vertrauenswürdig wie derjenige, der ihn betreibt – ein Grund, warum du
+[einen eigenen betreiben](/de/docs/self-hosting#chain-data) kannst.
 
 Token-Beträge werden mit den **echten On-Chain-Dezimalstellen** des Tokens
-formatiert. Vela nimmt nie einfach 18 an; lassen sich die Dezimalstellen nicht
-bestätigen, zeigt es den Wert, **markiert ihn aber als unverifiziert**, statt zu
-raten.
+formatiert. Kann Vela die Dezimalstellen eines Tokens nicht bestätigen, zeigt es den
+Betrag so an, als hätte der Token 18, und **kennzeichnet ihn als nicht verifiziert**,
+damit eine falsche Zahl nie wie eine geprüfte aussieht.
 
 ## Risikostufen
 
-Jede dekodierte Transaktion bekommt eine Risikostufe, damit die gefährlichen
-Muster auffallen:
+Jede dekodierte Transaktion bekommt eine Risikostufe, damit gefährliche Muster
+auffallen:
 
-- **Achtung** bei Genehmigungen und Permits — du vergibst Ausgaberechte.
-- **Gefahr** bei den wirklich riskanten Dingen, etwa einer **unbegrenzten
-  Token-Genehmigung**.
-- Geringeres Risiko bei Routine wie Staking oder Einzahlen.
+- **Vorsicht** bei Freigaben und Permits – du vergibst Ausgaberechte.
+- **Gefahr** bei wirklich Riskantem, etwa einer **unbegrenzten Token-Freigabe**.
+- Niedrigeres Risiko bei Routineaktionen wie Staking oder Einzahlungen.
 
-<Callout type="warning" title="Unbegrenzte Genehmigungen werden blockiert">
-Ein „approve“, das eine unbegrenzte Erlaubnis erteilt, ist einer der häufigsten
-Wege, auf denen später Geld abfließt. Vela markiert das nicht nur: Es schreibt die
-Anfrage auf einen endlichen Betrag deiner Wahl um, und eine letzte Prüfung vor dem
-Absenden weigert sich, eine Genehmigung zu senden, die weiterhin unbegrenzt wäre.
-Diese Sperre liest die rohe Calldata direkt, sie greift also auch dann, wenn es
-für den Vertrag keinen Deskriptor gibt.
+<Callout type="warning" title="„Unbegrenzte“ On-Chain-Freigaben lassen sich nicht absenden">
+Eine On-Chain-Freigabe über einen unbegrenzten Betrag ist einer der häufigsten Wege,
+auf denen Guthaben später abgezogen wird. Fordert eine dApp eine solche Freigabe
+(<code>approve</code>, <code>increaseAllowance</code> oder das <code>approve</code> von
+Permit2) in „unbegrenzter“ Höhe an – 2^200 oder mehr (2^152 bei Permit2), also die
+Werte, die dApps für „unbegrenzt“ verwenden –, sendet Vela sie erst ab, wenn du sie
+auf einen bestimmten Betrag, dein Guthaben oder einen Widerruf änderst; eine letzte
+Prüfung vor dem Absenden liest die rohe Calldata und greift deshalb mit und ohne
+Deskriptor. Was sie nicht aufhält: eine <strong>große, aber begrenzte Freigabe</strong>
+(selbst weit über deinem Guthaben), <strong>signierte Permits</strong> (EIP-2612- und
+Permit2-Signaturen) und NFT-<code>setApprovalForAll</code> – all das wird mit einem
+Vorsichtshinweis angezeigt, und die Entscheidung liegt bei dir.
 </Callout>
 
 ## Wenn Vela einen Aufruf nicht dekodieren kann
 
-Ehrlichkeit zählt mehr als ein aufgeräumter Bildschirm. Gibt es keinen
-ERC-7730-Deskriptor, taucht die Funktion aber in einer öffentlichen
-Selector-Datenbank auf, dekodiert Vela generisch und kennzeichnet das Ergebnis
-unter einem Achtung-Banner als **Best Effort** — dekodiert, aber nicht
-verifiziert. Scheitert auch das, oder lässt sich nur ein Teil einer Transaktion
-dekodieren, tut Vela **nicht** so, als hätte es sie verstanden.
+Gibt es keinen ERC-7730-Deskriptor, steht die Funktion aber in einer öffentlichen
+Selektor-Datenbank, dekodiert Vela den Aufruf generisch und kennzeichnet ihn unter
+einem Vorsichtsbanner als **ohne Gewähr** – dekodiert, aber nicht verifiziert.
+Scheitert auch das oder kann Vela nur einen Teil einer Transaktion dekodieren, tut es
+**nicht** so, als würde es sie verstehen.
 
-<Callout type="danger" title="Ausdrückliche Blindsignatur-Warnung">
-Lässt sich ein Aufruf nicht dekodieren, zeigt Vela eine klare
-Blindsignatur-Warnung statt einer freundlich wirkenden Scheinzusammenfassung.
-Lassen sich nur einige Felder auflösen, sagt es dir, dass die Ansicht
-unvollständig ist, und hält die Risikostufe hoch. Du weißt immer, wie viel von
-dem, was du signierst, Vela tatsächlich lesen konnte.
+<Callout type="danger" title="Ausdrückliche Warnung vor Blindsignieren">
+Lässt sich ein Aufruf nicht dekodieren, zeigt Vela eine deutliche Blindsignatur-Warnung
+statt einer scheinbar freundlichen Zusammenfassung. Kann es nur einige Felder auflösen,
+sagt es dir, dass die Ansicht unvollständig ist, und hält die Risikostufe erhöht. Du
+weißt immer, wie viel von dem, was du signierst, Vela tatsächlich lesen konnte.
 </Callout>
 
 ## Warum das wichtig ist
 
-Selbstverwahrung heißt, dass niemand eine schlechte Transaktion für dich
-rückgängig machen kann. Die Verteidigung ist kein Support-Schalter — sie besteht
-darin, **vor** der Freigabe zu verstehen, was du freigibst. Klartext-Signatur
-macht aus „vertrau diesem undurchsichtigen Klumpen“ ein „hier steht genau, was er
-tut“. Wo das im Sicherheitsmodell von Vela sitzt, steht im
+Selbstverwahrung heißt, dass niemand eine schlechte Transaktion für dich rückgängig
+machen kann. Der Schutz ist kein Support-Schalter – sondern zu verstehen, was du
+freigibst, **bevor** du es freigibst. Mit der Klartext-Signatur versucht Vela, dir das
+zu zeigen, und sie hat Grenzen: Sie kann nur so ehrlich sein wie die App, die sie
+anzeigt – deshalb ist eine [unabhängige Prüfung](/de/docs/clear-signing-self-host)
+wichtig. Wo sie in Velas Sicherheitsmodell hingehört, steht im
 [Whitepaper](/de/docs/whitepaper).

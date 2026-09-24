@@ -1,5 +1,7 @@
 # The in-app dApp browser — architecture (spec 070)
 
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The idea, however, shipped: an in-app dApp browser injecting an EIP-1193/6963 provider is in the **iOS** app (spec 053, `Features/Explore/Core/BrowserEngine.swift`), the **Android** app (spec 044, `feature/browser/`) and the **desktop** app on macOS and Windows (`app-desktop/vela-wallet/src/webview.rs`, a wry-hosted WKWebView / WebView2; Linux has none — `webview_absent.rs`). The hosted web wallet has no in-page transport; the web's dApp path is the browser extension in `app-web/vela-wallet/extension/`.
+
 > Replaces the 2026-07 design record for the retired React Native app. That
 > design's security invariants (§5 there) are all carried below; its mechanism
 > (a React Native view manager, a `WebViewTransport` in TypeScript) is gone.

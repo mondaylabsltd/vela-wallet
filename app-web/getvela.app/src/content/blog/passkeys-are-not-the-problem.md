@@ -6,6 +6,8 @@ author: Shelchin
 tags: [passkeys, security, design]
 ---
 
+> **Corrections, 22 September 2026.** Two parts of this post overstated the case. Family did not tell users to export a phrase; it is winding down and moving users to Aave's account app. And in "group two", Dharma's and Loopring's own notices said users could still reach their contract accounts afterwards — through an open-source interface or by calling the contracts directly — so "only recognized by its own software" was too strong. Separately, a Safe owned by a passkey can be *read* by any Safe interface, but only software that can request a signature for that passkey's website can sign for it; for Vela, that means the tools listed in the [self-hosting guide](/docs/self-hosting#if-getvela-app-disappears). The framework — ask what else can reach your account — stands.
+
 Pulse wallet [announced it's shutting down on August 21](https://x.com/PulseSocialFi/status/2084884180132114531),
 with no key export path offered. Users have to move their assets out, transfer
 by transfer, before the deadline. (If you still have funds in Pulse, the

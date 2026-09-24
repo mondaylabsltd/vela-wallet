@@ -11,6 +11,10 @@ The browser may remind you at startup that a developer-mode extension is running
 
 Your wallet is not in the extension: it is the passkey you sign in with. The extension signs in to the same wallet as the web, desktop and phone apps.
 
-`SHA256SUMS-extension` lists the checksum of the zip.
+The `SHA256SUMS` file on this release lists the checksum of the zip along with every other package here. The zip also carries build provenance — the run that built it signed for it, and you can check where it came from:
+
+```
+gh attestation verify vela-wallet-extension-<version>.zip --repo mondaylabsltd/vela-wallet
+```
 
 ---

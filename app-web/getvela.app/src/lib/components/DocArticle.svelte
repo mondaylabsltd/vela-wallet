@@ -50,15 +50,15 @@
 					<path d="M12 20h9" />
 					<path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
 				</svg>
-				Edit this page on GitHub
+				{m.chrome.docs.ui.edit}
 			</a>
 		</div>
 
 		{#if adjacent.prev || adjacent.next}
-			<nav class="pager" aria-label="Docs pages">
+			<nav class="pager" aria-label={m.chrome.docs.ui.pagerLabel}>
 				{#if adjacent.prev}
 					<a class="pager-link" href={hrefFor(adjacent.prev.slug)}>
-						<span class="dir">← Previous</span>
+						<span class="dir">{m.chrome.docs.ui.previous}</span>
 						<span class="t">{titleOf(adjacent.prev)}</span>
 					</a>
 				{:else}
@@ -66,7 +66,7 @@
 				{/if}
 				{#if adjacent.next}
 					<a class="pager-link right" href={hrefFor(adjacent.next.slug)}>
-						<span class="dir">Next →</span>
+						<span class="dir">{m.chrome.docs.ui.next}</span>
 						<span class="t">{titleOf(adjacent.next)}</span>
 					</a>
 				{/if}
@@ -75,7 +75,7 @@
 	</article>
 
 	<aside class="doc-toc">
-		<Toc containerSelector=".doc-body" />
+		<Toc containerSelector=".doc-body" label={m.chrome.docs.ui.onThisPage} />
 	</aside>
 </div>
 

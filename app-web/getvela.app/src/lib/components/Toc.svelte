@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
-	let { containerSelector = '.doc-body' }: { containerSelector?: string } = $props();
+	let {
+		containerSelector = '.doc-body',
+		label = 'On this page'
+	}: { containerSelector?: string; label?: string } = $props();
 
 	type Heading = { id: string; text: string; level: number };
 
@@ -39,8 +42,8 @@
 </script>
 
 {#if headings.length > 1}
-	<nav class="toc" aria-label="On this page">
-		<p class="toc-title">On this page</p>
+	<nav class="toc" aria-label={label}>
+		<p class="toc-title">{label}</p>
 		<ul>
 			{#each headings as h (h.id)}
 				<li class:sub={h.level === 3}>

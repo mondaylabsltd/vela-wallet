@@ -912,9 +912,7 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::executor::chain;
-    use crate::resident::{Answer, Machine};
-    use vela_core::app::fee_policy::{FeeOperation, FeePolicy};
+    use vela_core::app::fee_policy::FeePolicy;
 
     /// Issue #265: an import ADDS to the recipients already on the form, and
     /// replaces them only when the person chose "Replace them instead".
@@ -1376,6 +1374,7 @@ mod tests {
                 s: &s,
                 wallet: &wallet,
                 locale: "en",
+                money: crate::wallet::live::Money::usd(),
                 identity_name: "Golden",
                 identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
                 speed: None,
@@ -1558,6 +1557,7 @@ mod tests {
             s,
             wallet,
             locale: "en",
+            money: crate::wallet::live::Money::usd(),
             identity_name: "Golden",
             identity_address: "0x0",
             speed: None,
@@ -1603,6 +1603,7 @@ mod tests {
             s: &s,
             wallet: &wallet,
             locale: "en",
+            money: crate::wallet::live::Money::usd(),
             identity_name: "Golden",
             identity_address: "0x0",
             speed: None,

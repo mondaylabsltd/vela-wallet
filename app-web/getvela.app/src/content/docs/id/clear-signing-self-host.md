@@ -1,113 +1,101 @@
 ---
 title: Hosting sendiri halaman tanda tangan
-description: Halaman tanpa dependensi dan ekstensi Chrome yang menerjemahkan sendiri sebuah transaksi lalu menandatanganinya dengan passkey Anda — cara menjalankan salinan Anda sendiri, dan salinan mana yang bisa menandatangani untuk dompet Anda.
+description: "Halaman dan ekstensi Chrome tanpa dependensi yang mendekode transaksi sendiri lalu menandatanganinya dengan passkey Anda — cara menjalankan salinan Anda sendiri, dan salinan mana yang bisa menandatangani untuk dompet Anda."
+source: c81389ef7aa2
 ---
 
 # Hosting sendiri halaman tanda tangan
 
-Vela menerjemahkan setiap transaksi sebelum Anda menyetujuinya, dan terjemahan itu
-kerja yang jujur — tetapi kerja yang dilakukan oleh aplikasi yang sama yang menyusun
-transaksinya. Kalau aplikasinya, atau jalan yang dipakainya untuk sampai ke Anda,
-diutak-atik, ia bisa menampilkan satu hal dan menandatangani hal lain. Itulah persis
-yang terjadi pada [Bybit](/id/docs/bybit-attack).
+Vela mendekode setiap transaksi sebelum Anda menyetujuinya, dan dekode itu dikerjakan
+dengan jujur — tetapi dikerjakan oleh aplikasi yang sama yang menyusun transaksinya.
+Kalau aplikasi itu, atau jalur yang membawanya sampai ke Anda, dimanipulasi, aplikasi itu
+bisa menampilkan satu hal dan menandatangani hal lain. Persis itulah yang terjadi pada
+[Bybit](/id/docs/bybit-attack).
 
-Halaman tanda tangan ada untuk membelah itu jadi dua: transaksinya datang dari satu
-tempat, sedangkan pemeriksaan dan tanda tangannya terjadi di tempat yang Anda
-kendalikan.
+Halaman tanda tangan ada untuk memisahkan keduanya: transaksinya datang dari satu tempat,
+sedangkan pemeriksaan dan tanda tangannya terjadi di tempat yang Anda kendalikan.
 
-## Apa itu
 
-Satu folder — `app-web/trusted-signer` di repositori — yang sekaligus halaman web dan
-ekstensi Chrome. HTML, CSS, dan JavaScript murni: tanpa framework, tanpa bundler,
-tanpa langkah build, tanpa dependensi, dan tanpa permintaan jaringan sendiri.
+Saat menerima permintaan tanda tangan, halaman ini tidak memercayai ringkasan yang ikut
+datang bersamanya. Halaman ini mendekode calldata mentah sendiri, menghitung digest-nya
+sendiri, menunjukkan kepada Anda apa yang benar-benar akan diotorisasi tanda tangan itu,
+dan baru setelah itu meminta passkey Anda.
 
-Saat menerima permintaan tanda tangan, ia tidak memercayai ringkasan yang datang
-bersamanya. Ia menerjemahkan sendiri calldata mentahnya, menghitung digest-nya
-sendiri, menunjukkan apa yang sebenarnya akan diizinkan oleh tanda tangan itu, dan
-baru setelah itu meminta passkey Anda.
-
-Karena tidak ada langkah build, berkas yang Anda baca adalah berkas yang berjalan.
-Anda bisa membandingkan folder itu dengan repositori dan tahu persis apa yang Anda
+Karena tidak ada langkah build, file yang Anda baca adalah file yang dijalankan. Anda bisa
+membandingkan (diff) folder itu dengan repositorinya dan tahu persis apa yang Anda
 sajikan.
 
 ## Salinan mana yang bisa menandatangani untuk dompet Anda
 
-Passkey terikat pada domain tempat ia dibuat. Kunci Vela Anda terdaftar di bawah
-`getvela.app`, dan browser hanya akan menawarkannya kepada halaman yang relying
-party-nya `getvela.app`. Satu aturan itu saja yang menentukan cara menjalankan salinan
-mana yang berguna bagi Anda.
+Sebuah passkey terikat pada domain tempat passkey itu dibuat. Kunci Vela Anda terdaftar
+di bawah `getvela.app`, dan browser hanya akan menawarkannya ke halaman yang relying
+party-nya adalah `getvela.app`. Satu aturan itulah yang menentukan cara menjalankan
+salinan sendiri mana yang berguna bagi Anda.
 
-**Sebagai ekstensi Chrome — inilah yang dipakai dengan dompet Anda yang sudah ada.**
-Relying party ekstensi itu adalah `getvela.app` dari mana pun foldernya berasal, jadi
-kunci Anda yang sekarang bisa menandatangani di dalamnya, sementara kodenya adalah
-folder yang Anda muat dan Anda periksa sendiri.
-
-1. Buka `chrome://extensions` dan nyalakan **Mode pengembang**.
-2. **Muat yang belum dipaket**, lalu pilih folder `app-web/trusted-signer`.
-3. Ikon di bilah alat membuka halamannya di sebuah tab.
-
-**Sebagai halaman di domain Anda sendiri, atau di localhost.** Saat disajikan lewat
-HTTP(S), relying party halaman itu adalah nama host-nya sendiri — jadi ia bisa
-menandatangani dengan kunci yang terdaftar di bawah _nama host itu_, bukan kunci yang
-terdaftar di bawah `getvela.app`. Itu membuatnya cara yang tepat untuk mencoba seluruh
-prosesnya dari ujung ke ujung, menjalankan alur desktop, dan menandatangani untuk
-dompet yang kuncinya dibuat di domain Anda sendiri. Ia bukan cara untuk menandatangani
-bagi dompet `getvela.app` yang sudah ada.
+**Sebagai halaman di domain Anda sendiri, atau di localhost.** Kalau disajikan lewat
+HTTPS (atau dari localhost), relying party halaman itu adalah nama host-nya sendiri —
+jadi halaman itu bisa menandatangani dengan kunci yang terdaftar di bawah nama host
+_tersebut_, bukan dengan kunci yang terdaftar di bawah `getvela.app`. Karena itu, cara
+ini cocok untuk mencoba seluruh prosesnya dari awal sampai akhir, menjalankan alur
+desktop, dan menandatangani untuk dompet yang kuncinya dibuat di domain Anda sendiri.
+Cara ini bukan cara untuk menandatangani bagi dompet `getvela.app` yang sudah ada.
 
 ```sh
 cd app-web/trusted-signer
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 
-Setiap jalur di dalam aplikasinya bersifat relatif, jadi subdirektori di host yang
-sudah ada pun bisa; membuka `index.html` langsung dari disk (`file://`) cukup untuk
-melihat-lihat — tanpa origin tidak ada relying party dan tidak ada yang bisa
-ditandatangani.
+Semua path di aplikasi ini relatif, jadi subdirektori di host yang sudah ada juga bisa
+dipakai, dan membuka `index.html` langsung dari disk (`file://`) bisa untuk melihat-lihat
+— tanpa origin, tidak ada relying party dan tidak ada yang bisa ditandatangani.
 
 ## Apa yang dilakukannya sebelum menandatangani
 
-- **Ia menerjemahkan sendiri transaksinya.** Apa yang dilakukan panggilan itu, kepada
-  siapa, dan berapa banyak, dari calldata-nya — termasuk panggilan yang bersarang di
-  dalam sebuah batch.
-- **Ia hanya menandatangani digest yang dihitungnya sendiri.** Digest EIP-191,
-  EIP-712, SafeOp, dan SafeMessage dihitung di dalam halaman dan dicocokkan silang
-  dengan `vela-core`, kode yang sama yang dipakai dompetnya. Digest yang tidak bisa
-  dihitungnya berarti penolakan, bukan tanda tangan.
-- **Ia memastikan transaksinya memang yang diminta.** Panggilan yang diminta situsnya
-  harus benar-benar ada di dalam operasi yang sedang ditandatangani.
-- **Ia menolak persetujuan tanpa batas.** Bukan peringatan — penolakan, lengkap dengan
+- **Mendekode transaksinya sendiri.** Apa yang dilakukan panggilan itu, kepada siapa, dan
+  berapa jumlahnya, langsung dari calldata — termasuk panggilan yang bersarang di dalam
+  sebuah batch.
+- **Hanya menandatangani digest yang dihitungnya sendiri.** Digest EIP-191, EIP-712,
+  SafeOp, dan SafeMessage dihitung di halaman itu dan dicocokkan dengan `vela-core`, kode
+  yang sama dengan yang dipakai dompet. Digest yang tidak bisa dihitungnya berarti
+  penolakan, bukan tanda tangan.
+- **Memeriksa bahwa transaksinya memang yang diminta.** Panggilan yang diminta situs itu
+  harus benar-benar ada di dalam operasi yang ditandatangani.
+- **Menolak persetujuan di tingkat "tanpa batas".** Bukan peringatan — penolakan, disertai
   petunjuk apa yang sebaiknya dilakukan.
-- **Ia mengatakan kalau ada yang tidak bisa dibacanya,** alih-alih menyajikan ringkasan
-  ramah yang tidak bisa dipertanggungjawabkannya.
-- **Ia menampilkan alamat dan identicon akunnya,** dan tidak menampilkan nama penerima
-  yang diberikan pihak yang meminta tanda tangan. Apa pun yang dikendalikan si peminta
-  dibuang atau diberi label sebagai miliknya.
+- **Mengatakan kalau tidak bisa membaca sesuatu,** alih-alih menampilkan ringkasan ramah
+  yang tidak bisa dipertanggungjawabkannya.
+- **Menampilkan alamat dan identicon akun,** dan tidak menampilkan nama penerima yang
+  diberikan oleh pihak yang meminta tanda tangan. Apa pun yang dikendalikan peminta akan
+  dibuang atau diberi label sebagai milik peminta.
 
-## Yang sengaja tidak dimilikinya
+## Apa yang sengaja tidak dimilikinya
 
-- **Tidak ada kolom edit.** Permintaannya terkunci begitu tiba: Anda menandatanganinya
-  atau tidak. Pemilih biaya atau penyunting jatah akan menulis ulang calldata, dan itu
-  justru penyakit yang ingin dicegah halaman ini.
-- **Tidak ada pembuatan kunci.** Halaman tanda tangan tidak bisa membuat passkey.
-  Membuatnya sama dengan membuat akun yang lain.
-- **Tidak ada permintaan jaringan.** Kalau tidak ada yang diambil, tidak ada yang bisa
-  disadap.
+- **Tanpa editor.** Permintaannya sudah tetap saat tiba: Anda menandatanganinya atau
+  tidak. Pemilih biaya atau editor allowance akan menulis ulang calldata, dan justru itu
+  penyakit yang hendak dicegah halaman ini.
+- **Tanpa pembuatan kunci.** Halaman tanda tangan tidak bisa membuat passkey. Membuat
+  passkey berarti membuat akun yang berbeda.
+- **Tanpa data dari jaringan.** Tidak ada yang ditampilkan atau ditandatanganinya yang
+  diambil dari luar. Satu-satunya yang dimuatnya adalah logo token, sebagai gambar, dari
+  server data chain milik Vela; kalau gagal, sebuah huruf menggantikannya.
 
-## Bagaimana sebuah permintaan sampai kepadanya
+## Bagaimana permintaan sampai ke sana
 
-| Peminta | Kanal |
+| Peminta                                      | Saluran                                                                    |
 | -------------------------------------------- | -------------------------------------------------------------------------- |
-| Halaman di browser yang sama | `postMessage` |
-| Halaman di browser yang sama, ke ekstensinya | Port ekstensi |
-| Aplikasi desktop di mesin yang sama | Fragmen URL + callback loopback |
-| Ponsel atau komputer lain | Bluetooth LE (protokolnya sudah dibuat; sisi radionya belum diuji di perangkat nyata) |
+| Halaman di browser yang sama                 | `postMessage`                                                              |
+| Halaman di browser yang sama, ke ekstensi    | Port ekstensi                                                              |
+| Aplikasi desktop di komputer yang sama       | Fragmen URL + callback loopback (demo di `samples/`; aplikasi desktop Vela belum memakainya) |
+| Ponsel atau komputer lain                    | Bluetooth LE (protokolnya sudah diimplementasikan; radionya belum diuji di perangkat keras sungguhan) |
 
-Format datanya, digest-nya, dan tabel asal setiap elemen di layar ada di `PROTOCOL.md`
-di samping kodenya.
+Format data, digest, dan tabel asal setiap item di layar ada di `PROTOCOL.md` di samping
+kodenya.
 
-## Kapan memakainya
+## Posisinya
 
-Sejak hari akun itu menyimpan uang yang akan Anda sayangkan kalau hilang — dan sejak
-itu, untuk setiap tanda tangan. Bukan hanya untuk jumlah besar: satu persetujuan kecil
-bisa menyerahkan cukup wewenang untuk mengosongkan akun. Kebiasaan menandatangani yang
-hanya dipakai pada momen istimewa tidak akan ada di tempatnya pada hari ia dibutuhkan.
+Begitu aplikasi bisa menyerahkan permintaannya ke halaman ini, cara pakai yang dituju
+sederhana: sejak hari akun Anda menyimpan uang yang tidak rela Anda hilangkan, setiap
+tanda tangan melewati halaman yang kodenya Anda muat sendiri. Bukan hanya untuk jumlah
+besar — persetujuan kecil pun bisa menyerahkan cukup banyak untuk mengosongkan akun.
+Sampai saat itu, halaman ini adalah cara untuk membaca dan menguji persis bagaimana
+pendapat kedua itu akan bekerja.

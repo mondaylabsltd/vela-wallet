@@ -41,7 +41,7 @@
       "bundlerHint": "Endpoint yang kompatibel dengan Vela Relay diperlukan",
       "fiatLabel": "KURS FIAT",
       "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
-      "resetToDefaults": "Setel Ulang ke Bawaan",
+      "resetToDefaults": "Kembalikan keempatnya ke default",
       "selfHostGuide": "Panduan self-hosting →",
       "resetTitle": "Setel ulang endpoint layanan?",
       "resetBody": "Keempat layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
@@ -72,8 +72,9 @@
       "compatible": "Kompatibel",
       "incompatible": "Tidak kompatibel",
       "checkSafe": "Kontrak Safe L2",
-      "checkSigner": "Modul penanda tangan WebAuthn",
-      "checkRemaining": "{{count}} kontrak lainnya"
+      "checkSigner": "Precompile P-256",
+      "checkRemaining": "{{count}} kontrak lainnya",
+      "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal."
     },
     "treasury": {
       "modalTitle": "Treasury",

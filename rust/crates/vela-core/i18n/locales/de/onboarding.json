@@ -7,7 +7,7 @@
 			"desktopTagline": "Ihre Schlüssel, Ihr Vermögen",
 			"featureNoMnemonicTitle": "Keine Seed-Phrase",
 			"featureNoMnemonicBody": "Erstellen Sie Ihre Wallet und melden Sie sich per Passkey auf Ihrem Gerät an — keine 12 Wörter, die Sie abschreiben und verwahren müssen.",
-			"featureOneAddressTitle": "Eine Adresse, 12+ Netzwerke",
+			"featureOneAddressTitle": "Eine Adresse, 24 Netzwerke",
 			"featureOneAddressBody": "Dieselbe Adresse funktioniert auf allen unterstützten Netzwerken, und Sie können eigene hinzufügen.",
 			"featureOpenSourceTitle": "Open Source, selbst hostbar",
 			"featureOpenSourceBody": "App und Backend-Dienste sind Open Source — Sie können einen komplett eigenen Stack betreiben.",
@@ -30,12 +30,12 @@
 			"custodyTitle": "Die Schlüssel bleiben bei dir",
 			"custodyBody": "Deine Passkeys bleiben, wo du sie aufbewahrst: im Passwortmanager des Geräts oder auf einem Hardware-Sicherheitsschlüssel. Vela kommt nicht daran und kann nichts für dich ausgeben.",
 			"chainsTitle": "Eine Adresse, alle Chains",
-			"chainsBody": "Dieselbe Adresse gilt in 12+ Netzwerken, und Gebühren lassen sich in Stablecoins zahlen — kein Vorrat an nativen Coins für jede Chain."
+			"chainsBody": "Dieselbe Adresse gilt in 24 Netzwerken, und Gebühren lassen sich in Stablecoins zahlen — kein Vorrat an nativen Coins für jede Chain."
 		},
 		"welcomeWeb": {
 			"meta": {
 				"title": "Vela Wallet — die Passkey-Wallet",
-				"description": "Eine Passkey-Wallet ohne Seed-Phrase: eine Adresse für über 12 Netzwerke, auditierte Safe-v1.4.1-Contracts, Gas in Stablecoins zahlbar, komplett Open Source und selbst hostbar."
+				"description": "Eine Passkey-Wallet ohne Seed-Phrase: eine Adresse für 24 Netzwerke, auditierte Safe-v1.4.1-Contracts, Gas in Stablecoins zahlbar, komplett Open Source und selbst hostbar."
 			},
 			"tagline": "Ihre Schlüssel, Ihre Vermögenswerte",
 			"passkeyIndexLink": "Passkey-Indexdienst einrichten",
@@ -45,7 +45,7 @@
 					"description": "Erstellen und anmelden mit dem Passkey Ihres Geräts — keine 12 Wörter zum Abschreiben und Verwahren."
 				},
 				"oneAddress": {
-					"title": "Eine Adresse, 12+ Netzwerke",
+					"title": "Eine Adresse, 24 Netzwerke",
 					"description": "Dieselbe Adresse gilt in allen unterstützten Netzwerken, eigene Netzwerke lassen sich hinzufügen."
 				},
 				"openSource": {

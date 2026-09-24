@@ -24,7 +24,7 @@ struct SettingsSheet: View {
     /// erase answers whether it happened: `false` keeps this sheet up, its
     /// callout saying what did not go (spec 072).
     var onClearCaches: (() -> Void)?
-    var onErase: (() -> Bool)?
+    var onErase: (() -> Void)?
     /// An account row tapped in the switcher.
     var onSelectAccount: ((String) -> Void)?
     var onAccountCreate: (() -> Void)?
@@ -150,11 +150,15 @@ struct SettingsSheet: View {
                         sheet: model.eraseSheet,
                         // Wired, and **never run on the founder's phone**. The
                         // confirm is drawn and the action exists; verifying it
-                        // means reading the code and the simulator, not erasing
-                        // a device with a real wallet on it. An erase that
-                        // left something behind keeps the sheet up — its
-                        // callout says so and the button is still there.
-                        onConfirm: { if onErase?() != false { onDismiss() } },
+                        // means reading the code, not erasing a device with a
+                        // real wallet on it.
+                        //
+                        // Spec 081 FR-017: the sheet does NOT dismiss on
+                        // confirm. The erase verifies before it succeeds, and a
+                        // failed one has to say so where the person is looking;
+                        // a success signs out and leaves this screen entirely,
+                        // so the sheet goes with it either way.
+                        onConfirm: { onErase?() },
                         onCancel: onDismiss
                     )
                 case .feedback:
@@ -375,7 +379,7 @@ private struct AccountsSheetBody: View {
             Button { onSelect?(row.addressFull) } label: {
             VStack(spacing: 0) {
                 HStack(spacing: Tokens.Space.s12) {
-                    IdenticonAvatar(seed: row.addressFull, size: 40)
+                    IdenticonAvatar(seed: row.addressFull, size: 40, tappable: false)
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         Text(row.name)
                             .typeRole(Typography.fieldLabel)

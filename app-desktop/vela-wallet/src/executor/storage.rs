@@ -495,17 +495,6 @@ pub(crate) mod tests {
     use super::*;
     use vela_core::app::AccountKey;
 
-    /// One temporary state directory per test.
-    ///
-    /// `VELA_STATE_DIR` is process-wide, so these tests are serialized behind
-    /// one lock rather than run in parallel — the alternative is a shared
-    /// document two tests rewrite at once, which is exactly the interleave the
-    /// file lock in this module exists to prevent.
-    /// Two writers share `vela.serviceEndpoints`, and until spec 030 either
-    /// erased the other. Onboarding saves the passkey-index override;
-    /// `network_admin` saves the other three service URLs. The whole-value write
-    /// this replaced meant configuring a self-hosted index silently unset the
-    /// data, bundler and fiat endpoints — and saving those silently unset the
     /// The raw view the shared rules read: a string as itself, a record as its
     /// JSON text — and a raw value written back lands as the same JSON value,
     /// so a record another shell reads is an object, not a quoted string.
@@ -548,6 +537,11 @@ pub(crate) mod tests {
         });
     }
 
+    /// Two writers share `vela.serviceEndpoints`, and until spec 030 either
+    /// erased the other. Onboarding saves the passkey-index override;
+    /// `network_admin` saves the other three service URLs. The whole-value write
+    /// this replaced meant configuring a self-hosted index silently unset the
+    /// data, bundler and fiat endpoints — and saving those silently unset the
     /// index, sending the next launch back to the public default.
     #[test]
     fn saving_one_service_endpoint_leaves_its_siblings_alone() {
@@ -694,6 +688,12 @@ pub(crate) mod tests {
     /// process, however many tests want one.
     static SERIAL: Mutex<()> = Mutex::new(());
 
+    /// One temporary state directory per test.
+    ///
+    /// `VELA_STATE_DIR` is process-wide, so these tests are serialized behind
+    /// one lock rather than run in parallel — the alternative is a shared
+    /// document two tests rewrite at once, which is exactly the interleave the
+    /// file lock in this module exists to prevent.
     pub(crate) fn with_temp_state<T>(name: &str, body: impl FnOnce() -> T) -> T {
         let Ok(_guard) = SERIAL.lock() else {
             unreachable!("the test lock is poisoned");

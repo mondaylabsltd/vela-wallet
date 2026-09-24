@@ -172,24 +172,35 @@ fun SigningSheetContent(
                 .background(colors.borderBase),
         )
 
-        TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
-        SigningFee(
-            model.fee,
-            onFee = onFee,
-            onPick = onFeePick,
-            onToggleSpeed = onToggleSpeed,
-            onPickSpeed = onPickSpeed,
-        )
+        if (!model.tech.isEmpty) {
+            TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
+        }
+        model.fee?.let { fee ->
+            SigningFee(
+                fee,
+                onFee = onFee,
+                onPick = onFeePick,
+                onToggleSpeed = onToggleSpeed,
+                onPickSpeed = onPickSpeed,
+            )
+        }
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
         model.signWith?.let { SignWithRow(it, onSignWith) }
         model.trustedSignerNotice?.let { SigningWarning(SigningTone.Caution, it) }
         val waiting = model.trustedSignerWait
+        // Three states, in order of precedence: waiting on the Trusted Signer's
+        // page (071), a request that can be confirmed, and a request that
+        // cannot. The last draws NOTHING — spec 081: a refused request offers
+        // no confirm control at all, not a disabled one, because the wallet
+        // never offered it.
+        val hint = model.confirmHint
+        val action = model.confirmAction
         if (waiting != null) {
             TrustedSignerWaiting(waiting, onReopen = onTrustedSignerReopen, onCancel = onTrustedSignerCancel)
-        } else {
+        } else if (hint != null && action != null) {
             SlideToConfirm(
-                hint = model.confirmHint,
-                action = model.confirmAction,
+                hint = hint,
+                action = action,
                 enabled = model.confirmEnabled,
                 onConfirm = onConfirm,
             )

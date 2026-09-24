@@ -17,6 +17,7 @@
  * four clients, because the alternative is four drifting copies of a list of
  * brand names.
  */
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -73,15 +74,40 @@ ${rows.map((r) => `    (${rust(r.aaguid)}, ${rust(r.name)}, ${r.light}, ${r.dark
 pub(crate) const NO_ICON: u16 = ${NONE};
 `;
 
+/**
+ * rustfmt, the way the repository will see this file anyway.
+ *
+ * Without this the generator emitted one-line tuples, `cargo fmt` wrapped the
+ * long ones, and `--check` then called a byte-identical catalog "stale" — on
+ * `main`, for anyone who ran the documented gate. Regenerating to silence it
+ * produced a 198-line diff that changed nothing but whitespace. Formatting
+ * here makes the comparison mean what it says again.
+ */
+function formatted(source) {
+	try {
+		return execFileSync('rustfmt', ['--emit', 'stdout', '--edition', '2024', '--quiet'], {
+			input: source,
+			encoding: 'utf8'
+		});
+	} catch {
+		// No rustfmt (or it refused): compare what we generated, unformatted.
+		// A missing toolchain must not turn this gate into a false alarm of
+		// its own — it just makes it weaker, and says so.
+		console.warn('rustfmt unavailable — comparing unformatted output');
+		return source;
+	}
+}
+
 const check = process.argv.includes('--check');
+const text = formatted(out);
 if (check) {
 	const current = readFileSync(TARGET, 'utf8');
-	if (current !== out) {
+	if (current !== text) {
 		console.error('passkey catalog is stale — run `npm run gen:passkey-providers`');
 		process.exit(1);
 	}
 	console.log(`passkey catalog in sync (${rows.length} providers, ${icons.length} marks)`);
 } else {
-	writeFileSync(TARGET, out);
+	writeFileSync(TARGET, text);
 	console.log(`wrote ${TARGET} (${rows.length} providers, ${icons.length} marks)`);
 }

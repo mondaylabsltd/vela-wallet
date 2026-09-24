@@ -53,6 +53,7 @@
 		<SigningBody
 			{model}
 			{onconfirm}
+			{onclose}
 			{onchip}
 			{oncustom}
 			{onfee}

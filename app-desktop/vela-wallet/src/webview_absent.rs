@@ -17,3 +17,15 @@
 
 /// A message for a page. No page is listening.
 pub fn deliver(_tab: &str, _message_json: &str) {}
+
+/// Erase's sweep of the browser's own store (spec 081 FR-017).
+///
+/// `true`, not `false`: the bool answers "was the platform asked", and the
+/// caller logs a `false` as "no web view to clear". On Linux there is no
+/// browser and therefore no browsing data, so there is nothing to have failed
+/// to clear — printing a warning about an absent web view on every erase would
+/// be noise about a state that is permanent here, not a shortfall.
+#[must_use]
+pub fn clear_browsing_data() -> bool {
+    true
+}

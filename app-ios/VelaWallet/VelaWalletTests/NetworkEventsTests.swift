@@ -134,10 +134,10 @@ struct NetworkEventsTests {
         let world = await world()
         let url = "https://index.example.org"
 
-        world.settings.editEndpoint(.passkeyIndex, value: url)
+        world.settings.editEndpoint(field: .passkeyIndex, value: url)
         #expect(endpoint(world, .passkeyIndex)?.value == url, "the edit never reached the core")
 
-        world.settings.blurEndpoint(.passkeyIndex)
+        world.settings.blurEndpoint(field: .passkeyIndex)
         await settle { world.shelf.readObject(VelaStore.Key.serviceEndpoints)["passkeyIndexURL"] as? String == url }
         #expect(world.shelf.readObject(VelaStore.Key.serviceEndpoints)["passkeyIndexURL"] as? String == url)
         // And the page asked the new address how it is.
@@ -166,8 +166,8 @@ struct NetworkEventsTests {
     /// "Reset to defaults" writes the defaults over what was typed.
     @Test func resetPutsTheDefaultsBack() async {
         let world = await world()
-        world.settings.editEndpoint(.bundlerService, value: "https://relay.example.org")
-        world.settings.blurEndpoint(.bundlerService)
+        world.settings.editEndpoint(field: .bundlerService, value: "https://relay.example.org")
+        world.settings.blurEndpoint(field: .bundlerService)
         await settle { world.shelf.readObject(VelaStore.Key.serviceEndpoints)["bundlerServiceURL"] != nil }
 
         world.settings.resetEndpoints()
@@ -184,15 +184,15 @@ struct NetworkEventsTests {
         let world = await world()
 
         world.settings.openProviders()
-        world.settings.editProviderKey(.alchemy, value: "k3y")
+        world.settings.editProviderKey(provider: .alchemy, value: "k3y")
         #expect(provider(world, .alchemy)?.key == "k3y", "the keystroke never reached the core")
 
-        world.settings.blurProviderKey(.alchemy)
+        world.settings.blurProviderKey(id: NetProviderIdWire.alchemy.rawValue)
         await settle { (world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y" }
         #expect((world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y")
         #expect(provider(world, .alchemy)?.hasKey == true)
 
-        world.settings.testProvider(.alchemy)
+        world.settings.testProvider(id: NetProviderIdWire.alchemy.rawValue)
         await settle { provider(world, .alchemy)?.test?.done == true }
         let test = provider(world, .alchemy)?.test
         #expect(test?.done == true, "the test never ran")
@@ -210,8 +210,8 @@ struct NetworkEventsTests {
         #expect(provider(world, .drpc)?.key == "saved-key")
 
         // Another provider's field touched and left.
-        world.settings.editProviderKey(.ankr, value: "a")
-        world.settings.blurProviderKey(.ankr)
+        world.settings.editProviderKey(provider: .ankr, value: "a")
+        world.settings.blurProviderKey(id: NetProviderIdWire.ankr.rawValue)
         await settle { world.shelf.readObject(VelaStore.Key.rpcProviders)["ankr"] != nil }
         #expect((world.shelf.readObject(VelaStore.Key.rpcProviders)["drpc"] as? String) == "saved-key")
     }

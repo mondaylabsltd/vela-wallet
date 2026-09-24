@@ -20,17 +20,30 @@ import Testing
 struct SettingsLiveTests {
     private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
 
-    private func contract(_ name: String, _ deployed: Bool) -> NetContractStatusWire {
-        NetContractStatusWire(name: name, address: "0x", deployed: deployed)
+    private func contract(
+        _ name: String,
+        _ deployed: Bool,
+        multiKeyOnly: Bool = false
+    ) -> NetContractStatusWire {
+        NetContractStatusWire(
+            name: name, address: "0x", deployed: deployed, multiKeyOnly: multiKeyOnly
+        )
     }
 
-    /// The core's eleven, with every one deployed unless named otherwise.
+    /// The core's twelve, with every one deployed unless named otherwise. The
+    /// last two are the passkey-signer pair only a multi-key wallet needs
+    /// (spec 081 FR-009); the CompatibilityFallbackHandler left the list,
+    /// because a Vela account's fallback handler is the 4337 module.
     private func contracts(missing: Set<String> = []) -> [NetContractStatusWire] {
-        [
+        let core = [
             "Deterministic Deployment Proxy", "Safe Singleton Factory", "Multicall3",
             "EntryPoint v0.7", "Safe L2", "Safe Proxy Factory", "Safe 4337 Module",
-            "Safe Module Setup", "WebAuthn Signer", "Fallback Handler", "MultiSend",
+            "Safe Module Setup", "WebAuthn Signer", "MultiSend",
         ].map { contract($0, !missing.contains($0)) }
+        let multiKey = [
+            "Safe Passkey Signer Factory", "Safe Passkey Signer Singleton",
+        ].map { contract($0, !missing.contains($0), multiKeyOnly: true) }
+        return core + multiKey
     }
 
     private func compat(
@@ -39,7 +52,9 @@ struct SettingsLiveTests {
         latency: Double? = 182
     ) -> NetCompatibilityWire {
         NetCompatibilityWire(
-            chainId: 7_777_777, compatible: compatible, contracts: contracts(missing: missing),
+            chainId: 7_777_777, compatible: compatible,
+            multiKeyReady: compatible && missing.isEmpty,
+            contracts: contracts(missing: missing),
             p256Available: compatible, bestRpcUrl: "https://rpc.test",
             bestRpcLatencyMs: latency, rpcFailure: nil
         )
@@ -109,15 +124,42 @@ struct SettingsLiveTests {
         #expect(model.callout != nil)
     }
 
-    // MARK: - The four drawn rows over eleven contracts
+    // MARK: - The four drawn rows over the core's contracts
 
-    /// All eleven deployed → four ticks, and the fourth counts the other eight.
-    @Test func theChecksSummariseElevenContractsIntoTheDrawnFour() {
+    /// Everything deployed → four ticks, and the fourth counts the other
+    /// seven. Seven, not eight: spec 081 dropped the fallback handler the
+    /// wallet never uses, and moved the two passkey-signer contracts out of
+    /// this count into their own sentence.
+    @Test func theChecksSummariseTheContractsIntoTheDrawnFour() {
         let rows = SettingsLive.checks(compat(compatible: true), loc: loc)
         #expect(rows.count == 4)
         #expect(rows.allSatisfy { $0.ok })
         #expect(rows[0].label == "EntryPoint v0.7")
-        #expect(rows[3].label.contains("8"), "the remaining row must count 8, got \(rows[3].label)")
+        #expect(rows[3].label.contains("7"), "the remaining row must count 7, got \(rows[3].label)")
+    }
+
+    /// Spec 081 FR-009. A chain with everything but Safe's passkey signer
+    /// factory is a working chain for a one-key wallet — the rows must stay
+    /// green — and the callout is what tells somebody with several keys that
+    /// their wallet cannot be created there.
+    @Test func aChainWithoutThePasskeyFactoryKeepsItsTicksAndSaysWhatIsMissing() {
+        let partial = compat(compatible: true, missing: ["Safe Passkey Signer Factory"])
+        let rows = SettingsLive.checks(partial, loc: loc)
+        #expect(rows.allSatisfy { $0.ok }, "a one-key wallet works here")
+
+        let model = SettingsLive.wizard(
+            wizardView(chainInfo: zora, compat: partial, canAdd: true),
+            loc: loc, fallback: fallback()
+        )
+        #expect(model.callout?.tone == .warning)
+        #expect(model.candidate?.badge?.tone == .ok, "the chain is still compatible")
+
+        let whole = compat(compatible: true)
+        let wholeModel = SettingsLive.wizard(
+            wizardView(chainInfo: zora, compat: whole, canAdd: true),
+            loc: loc, fallback: fallback()
+        )
+        #expect(wholeModel.callout == nil, "nothing extra to say about a whole chain")
     }
 
     /// A missing contract fails the row that names it, and only that row.
@@ -134,7 +176,7 @@ struct SettingsLiveTests {
         let counted = SettingsLive.checks(compat(compatible: false, missing: ["Multicall3"]),
                                           loc: loc)
         #expect(counted[0].ok && counted[1].ok && counted[2].ok)
-        #expect(!counted[3].ok, "a missing contract inside the counted eight must fail that row")
+        #expect(!counted[3].ok, "a missing contract inside the counted seven must fail that row")
     }
 
     // MARK: - Rows and badges

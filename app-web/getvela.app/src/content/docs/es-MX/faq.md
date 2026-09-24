@@ -1,75 +1,101 @@
 ---
 title: Preguntas frecuentes
-description: Preguntas comunes sobre Vela — custodia, passkeys, cuentas inteligentes, recuperación, redes soportadas, comisiones y privacidad.
+description: "Respuestas cortas sobre custodia, llaves, recuperación, redes, comisiones, qué puede ver Vela, el código abierto y qué pasa si Vela desaparece."
+source: 7446e22f990d
 ---
 
 # Preguntas frecuentes
 
 ## ¿Vela es de autocustodia?
 
-Sí. Tu wallet es una cuenta inteligente controlada por una llave que solo tú puedes
-usar, guardada por el sistema operativo de tu dispositivo y que Vela nunca ve. Vela
-no puede mover, congelar ni recuperar tus fondos.
-
-## ¿Mi wallet es una cuenta normal o un contrato?
-
-Es una **cuenta inteligente Safe** (un contrato), operada con abstracción de
-cuentas ERC-4337. Eso es lo que te permite firmar con una passkey, leer cada
-transacción antes de aprobarla y usar la misma dirección en cada red. La
-arquitectura está en el [whitepaper](/es-MX/docs/whitepaper).
+Sí. Tu wallet es una cuenta inteligente Safe que solo controlan tus llaves, y estas
+se quedan en tus dispositivos, en tu gestor de contraseñas o en tus llaves de
+seguridad. Vela no tiene ninguna llave ni ningún rol en ella, así que no puede
+mover, congelar ni recuperar tus fondos por su cuenta. Lo que sí hace es escribir el
+software que les pide a tus llaves que firmen; consulta el
+[modelo de amenazas](/es-MX/docs/whitepaper).
 
 ## ¿De verdad no hay frase semilla?
 
-De verdad. Tu llave de firma es una passkey guardada por el sistema operativo de tu
-dispositivo, y Vela nunca la ve. No hay doce palabras que anotar, perder o que te
-roben con phishing. Por qué eso es seguro:
-[cómo funcionan las passkeys](/es-MX/docs/passkeys).
+De verdad. Tus llaves son passkeys, y una passkey no tiene ningún secreto que puedas
+anotar o escribir. Consulta [cómo funcionan las passkeys](/es-MX/docs/passkeys).
 
-## ¿Qué pasa si pierdo mi teléfono?
+## ¿Qué necesito para crear una wallet?
 
-Si tu passkey se sincroniza por el Llavero de iCloud o el Gestor de contraseñas de
-Google, inicias sesión en un dispositivo nuevo con la misma cuenta y tu wallet
-regresa. El modelo completo y sus límites están en
+Un dispositivo compatible con passkeys (un celular o una computadora recientes con
+Face ID, huella o Windows Hello), o dos llaves de seguridad físicas. Sin correo, sin
+cuenta y sin saldo inicial. Puedes crear la wallet con hasta siete llaves; no se
+pueden agregar después. Consulta [crea tu wallet](/es-MX/docs/create-wallet).
+
+## ¿Qué pasa si pierdo mi celular?
+
+Inicia sesión en un dispositivo nuevo con cualquier otra llave: la misma passkey
+sincronizada a través del Llavero de iCloud o del Administrador de contraseñas de
+Google, otro celular o tu llave de seguridad. Si el celular tenía tu única llave y
+esa llave no estaba sincronizada, la wallet no se puede recuperar. Consulta
 [recuperación e inicio de sesión](/es-MX/docs/recovery).
 
-## ¿Qué redes y tokens están soportados?
+## ¿Qué redes y tokens son compatibles?
 
-Vela trae **12 redes EVM** — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-Base, Avalanche, Gnosis, Unichain, Tempo, Monad y World Chain — más redes
-personalizadas, con tokens nativos y ERC-20. Tu dirección es la misma en todas. Ve
-[redes y comisiones](/es-MX/docs/networks-and-fees).
+24 redes EVM integradas, entre ellas Ethereum, Base, Arbitrum, Optimism, Polygon,
+BNB Chain, Gnosis y Avalanche, más cualquier red EVM que agregues y que cumpla los
+requisitos. Monedas nativas y tokens ERC-20. La dirección es la misma en todas las
+redes. Consulta [redes y comisiones](/es-MX/docs/networks-and-fees).
 
-## ¿Cuánto cuesta usarla?
+## ¿Cuánto cuesta?
 
-La wallet es gratis y Vela **no tiene token**. Pagas el **gas** de la red desde tu
-propio saldo, más una comisión del relay. El precio lo cotiza el relay y se muestra
-**antes de que firmes**, desglosado en _comisión de red / comisión del relay /
-total_: el costo exacto de cada transacción está en la pantalla de confirmación, y
-el monto cotizado forma parte de lo que firmas, así que no puede cambiar después.
-Las transacciones muy baratas pueden toparse con una comisión mínima pequeña. En
-Tempo, que no tiene moneda nativa, el gas se liquida en stablecoins en dólares.
-Cada red además necesita un pequeño **depósito no reembolsable para activar su
-cuenta de relay de gas** (Vela lo cubre para usuarios nuevos cuando puede); como esa
-cuenta se puede agotar, quizá tengas que reponerlo más adelante, así que no es
-estrictamente un pago único. Detalles en
-[redes y comisiones](/es-MX/docs/networks-and-fees).
+- **Las apps:** la wallet web, la extensión de navegador y las apps de escritorio
+  son gratis. Las apps de iOS y Android serán un pago único en las tiendas; también
+  puedes compilar cualquier app desde el código fuente gratis.
+- **Cada transacción:** una comisión que se paga desde tu wallet al relay que la
+  envía (el de Vela, a menos que apuntes la wallet a otro relay u operes el tuyo).
+  Cubre el gas más el margen del relay, con un mínimo de alrededor de US$0.01. El
+  monto exacto aparece en la pantalla de confirmación antes de que firmes y forma
+  parte de lo que firmas. No hay depósito ni suscripción.
+  [Cómo se calcula la comisión](/es-MX/docs/networks-and-fees#fee).
+- **Ningún token.** Vela no tiene uno ni planea tenerlo.
 
-## ¿Qué puede ver o hacer Vela (la empresa)?
+## ¿Puedo usar Vela con dApps?
 
-Vela guarda la llave **pública** de tu passkey y el **nombre** que elegiste, para
-permitir el inicio de sesión entre dispositivos. No ve tu llave privada, tus saldos
-se leen de cadenas públicas y no hay registro por correo. La versión que manda es
-el [aviso de privacidad](/privacy).
+Sí, con la extensión de Vela para el navegador (Chrome, Edge, Brave) y con el
+navegador integrado de las apps de escritorio (macOS, Windows), iOS y Android. La
+wallet web de wallet.getvela.app no se conecta a dApps. Consulta
+[instalar](/es-MX/docs/install#dapps).
+
+## ¿Qué puede ver o hacer Vela?
+
+Vela no puede leer tus llaves ni mover tus fondos por su cuenta. Sus servicios ven
+tu dirección IP y lo que la app les pregunta: el índice ve tus llaves públicas y el
+nombre de tu wallet cuando registra una wallet nueva, y las direcciones que
+consultas; el relay ve tu dirección, las operaciones que envías y el endpoint RPC
+que usa tu app; el servicio de datos de cadena ve por qué tokens y contratos
+pregunta tu app. Lo que se vuelve público on-chain está en
+[crea tu wallet](/es-MX/docs/create-wallet#what-is-public). La
+[política de privacidad](/privacy) es la versión completa y oficial.
 
 ## ¿Vela es de código abierto?
 
-Sí: la wallet y sus cuatro servicios de backend (datos de cadena, índice de
-passkeys, relay, tipos de cambio) están
-[públicos en GitHub](https://github.com/mondaylabsltd/vela-wallet) con licencia
-MIT, y puedes hospedarlos tú.
+Sí, todo, con licencia MIT: las apps de la wallet y el núcleo, el relay, el índice de
+llaves públicas, el servicio de tipos de cambio y el directorio de datos de cadena,
+en [GitHub](https://github.com/orgs/mondaylabsltd/repositories). Cada servicio lo
+puedes operar tú; consulta la
+[guía de autoalojamiento](/es-MX/docs/self-hosting).
+
+## ¿Vela está auditada?
+
+Los contratos donde está tu dinero (Safe y sus módulos, y el EntryPoint de ERC-4337)
+están auditados. El código propio de Vela no, y no hay ninguna auditoría programada.
+Consulta [auditorías y problemas conocidos](/es-MX/docs/security-audits).
+
+## ¿Qué pasa si Vela cierra?
+
+Tus fondos se quedan en tu Safe, on-chain. Para una wallet existente, la extensión de
+Vela para el navegador y las apps que compiles tú siguen funcionando sin
+getvela.app, y cada servicio es de código abierto para que alguien más lo opere. La
+[guía de autoalojamiento](/es-MX/docs/self-hosting#if-getvela-app-disappears)
+enumera los caminos y sus límites.
 
 ## Tengo una pregunta que no está aquí.
 
-Abre un issue en [GitHub](https://github.com/mondaylabsltd/vela-wallet) o
-escríbenos en [X](https://x.com/realvelawallet) o
-[Telegram](https://t.me/velawallet).
+Abre un issue en [GitHub](https://github.com/mondaylabsltd/vela-wallet/issues), o
+escríbenos en [X](https://x.com/realvelawallet) o en [Telegram](https://t.me/velawallet).

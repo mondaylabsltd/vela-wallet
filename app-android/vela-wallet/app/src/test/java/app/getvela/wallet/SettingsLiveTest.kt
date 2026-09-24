@@ -522,6 +522,12 @@ class SettingsLiveTest {
                 compat = NetCompatibility(
                     chain_id = 42220,
                     compatible = true,
+                    // Fully compatible, multi-key included — which is what
+                    // "nothing to explain" below means. The flag defaults to
+                    // false, and a chain that cannot hold a multi-passkey
+                    // wallet DOES get a callout saying so (spec 081 FR-009,
+                    // the test two below this one).
+                    multi_key_ready = true,
                     contracts = listOf(
                         NetContractStatus("EntryPoint", "0xaa", deployed = true),
                         NetContractStatus("Safe", "0xbb", deployed = true),
@@ -535,10 +541,57 @@ class SettingsLiveTest {
 
         assertEquals(SettingsTone.Ok, add.candidate!!.badge!!.tone)
         // The core's contracts, then the signer precompile (the web's `checkSigner`).
-        assertEquals(listOf("EntryPoint", "Safe", "WebAuthn signer module"), add.checks.map { it.label })
+        // The row is named for what it CHECKS — `p256_available`, the precompile.
+        // It used to read "WebAuthn signer module", which is the name of a
+        // different contract in the same list (main, 87502cd0).
+        assertEquals(listOf("EntryPoint", "Safe", "P-256 precompile"), add.checks.map { it.label })
         assertTrue(add.checks.dropLast(1).all { it.ok })
         assertTrue(add.primary!!.isNotBlank())
         assertNull("nothing to explain on a compatible chain", add.callout)
+    }
+
+    /**
+     * Spec 081 FR-009. A chain can be compatible AND unable to hold a wallet
+     * made from several passkeys. The pill stays green — a one-key wallet does
+     * work there — and the callout says the rest, because two crossed rows
+     * under a green "Compatible" explain nothing on their own.
+     */
+    @Test
+    fun aChainWithoutSafesPasskeyFactorySaysSoWhileStayingCompatible() {
+        val checked = NetWizardView(
+            phase = NetWizardPhase.Checked,
+            chain_info = chainInfo(42220, "Celo Mainnet"),
+            compat = NetCompatibility(
+                chain_id = 42220,
+                compatible = true,
+                multi_key_ready = false,
+                contracts = listOf(
+                    NetContractStatus("EntryPoint", "0xaa", deployed = true),
+                    NetContractStatus("Safe", "0xbb", deployed = true),
+                    NetContractStatus(
+                        "Safe Passkey Signer Factory",
+                        "0xcc",
+                        deployed = false,
+                        multi_key_only = true,
+                    ),
+                ),
+            ),
+            can_add = true,
+        )
+
+        val add = SettingsLive.withWizard(base(), wizardView(checked), strings).addNetwork
+        assertEquals(SettingsTone.Ok, add.candidate!!.badge!!.tone)
+        assertEquals(CalloutTone.Warning, add.callout!!.tone)
+        assertTrue(add.callout!!.text.isNotBlank())
+
+        // And a chain that has everything says nothing extra.
+        val whole = checked.copy(
+            compat = checked.compat!!.copy(
+                multi_key_ready = true,
+                contracts = checked.compat!!.contracts.map { it.copy(deployed = true) },
+            ),
+        )
+        assertNull(SettingsLive.withWizard(base(), wizardView(whole), strings).addNetwork.callout)
     }
 
     /** An incompatible chain is named as such, and cannot be added. */

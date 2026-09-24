@@ -159,6 +159,14 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
         writeRaw(KEY_ACCOUNTS, kept.toString())
     }
 
+    /**
+     * The index to ask, right now: the person's override, or the shipped
+     * default when they have not set one (spec 081 FR-002 — the "empty means
+     * the default" rule the core states in `NetServiceEndpoints::effective`).
+     */
+    suspend fun registryUrlOrDefault(): String =
+        loadRegistryUrl()?.takeIf { it.isNotBlank() } ?: RegistryClient.DEFAULT_REGISTRY_URL
+
     /** The passkey-index endpoint override, when the person set one. */
     suspend fun loadRegistryUrl(): String? =
         readRaw(KEY_SERVICE_ENDPOINTS)

@@ -1,92 +1,100 @@
 ---
 title: Hợp đồng tài khoản
-description: Ví Vela của bạn là một Safe v1.4.1 không sửa đổi. Không dòng nào trên đường đi của hợp đồng do chúng tôi viết — đây là những gì bạn được, và cái giá phải trả.
+description: "Ví Vela của bạn là một Safe v1.4.1 nguyên bản. Không hợp đồng nào trên đường đi tới tiền của bạn do Vela viết — đây là chính xác những hợp đồng đó, chúng mang lại cho bạn điều gì, và cái giá là gì."
+source: 17fbc25a3149
 ---
 
 # Hợp đồng tài khoản
 
-Ví của bạn không phải cấu trúc dữ liệu riêng của một ứng dụng. Nó là một tài khoản
-thông minh **Safe v1.4.1** — đúng hợp đồng đang giữ những ngân quỹ lớn hơn bất cứ thứ
-gì Vela từng thấy — được triển khai đúng như Safe công bố, không sửa một dòng.
+Ví của bạn không phải là một cấu trúc dữ liệu riêng của ứng dụng nào. Nó là một tài
+khoản thông minh **Safe v1.4.1** — hợp đồng mà nhiều ngân quỹ lớn trên chuỗi đang dùng —
+được triển khai y như Safe công bố, không sửa đổi gì.
 
-Câu đó ngắn nhưng hệ quả thì không, nên trang này viết rõ ra.
+## Trên đường đi không có hợp đồng nào của chúng tôi
 
-## Không thứ gì trên đường đi là của chúng tôi
+Mọi hợp đồng có thể chạm tới tiền của bạn đều do Safe hoặc các tác giả ERC-4337 viết:
 
-Có bốn hợp đồng đứng giữa bạn và tiền của bạn. Vela không viết cái nào:
+| Hợp đồng | Vai trò trong ví của bạn | Tác giả |
+| --- | --- | --- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, qua một proxy) | Chính tài khoản; chủ sở hữu, ngưỡng, thực thi | Safe |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Cho phép EntryPoint vận hành Safe; đồng thời là fallback handler của nó | Safe |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Xác minh chữ ký P-256 của khóa đầu tiên | Safe |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) và các bộ ký nó tạo ra | Mỗi khóa thêm vào có một hợp đồng ký nhỏ | Safe |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Chạy thao tác đã ký của bạn | Các tác giả ERC-4337 |
 
-| Hợp đồng | Ai viết |
-| --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1) (chính tài khoản, một proxy) | Safe |
-| [Safe 4337 Module](https://github.com/safe-global/safe-modules/tree/main/modules/4337) | Safe |
-| [SafeWebAuthnSharedSigner](https://github.com/safe-global/safe-modules/tree/main/modules/passkey) (xác minh khóa P-256 của bạn) | Safe |
-| [ERC-4337 EntryPoint v0.7](https://eips.ethereum.org/EIPS/eip-4337) | Nhóm tác giả ERC-4337 |
+Các hợp đồng của chính Vela không nằm trong danh sách này: **sổ đăng ký khóa công khai**
+ghi lại các khóa của từng ví để thiết bị mới tìm được ví ([khôi phục](/vi/docs/recovery)),
+sổ đăng ký tên miền đi kèm với nó, và chỉ mục cũ mà chúng đã thay thế. Chúng không giữ
+tiền và không có vai trò gì trong Safe của bạn.
 
-Không có hợp đồng nào của Vela. Kho mã hoàn toàn không chứa Solidity — bạn kiểm tra
-bằng một câu lệnh:
+Kho mã của ví hoàn toàn không có dòng Solidity nào — bạn có thể kiểm tra chỉ bằng một
+lệnh:
 
 ```bash
 git clone https://github.com/mondaylabsltd/vela-wallet
-find vela-wallet -name '*.sol'   # không in ra gì
+find vela-wallet -name '*.sol'   # không in ra gì cả
 ```
 
-Khi Vela thêm một mạng, nó triển khai **chính những** hợp đồng ấy ở địa chỉ chuẩn của
-chúng. Nó không triển khai hợp đồng do mình thiết kế, và nó không giữ vai trò đặc
-quyền nào trên ví bạn: không khóa quản trị, không đường nâng cấp, không module nào
-chúng tôi thêm được.
+Vela không giữ vai trò đặc quyền nào trên tài khoản của bạn: không khóa quản trị, không
+đường nâng cấp, không mô-đun nào nó có thể thêm vào. Chỉ các khóa của bạn mới thay đổi
+được Safe của bạn.
 
-## Vì sao "không sửa đổi" mới là từ quan trọng
+## Vì sao "nguyên bản" là chữ quan trọng
 
-Rất nhiều ví được dựng trên "một cái Safe", "một bản fork của Safe" hoặc "một tài
-khoản lấy cảm hứng từ Safe". Fork là một hợp đồng mới đội danh tiếng cũ. Khác biệt,
-một cách thực tế:
+Rất nhiều ví được xây trên "một Safe", một bản fork của Safe, hoặc một tài khoản lấy cảm
+hứng từ Safe. Sự khác biệt quan trọng ở ba điểm.
 
-**Các bản kiểm toán áp dụng đúng vào thứ bạn đang dùng.** Báo cáo kiểm toán của Safe
-bao phủ bytecode ở đúng những bản phát hành này. Kiểm toán của một bản fork chỉ bao
-phủ phần mã trước khi fork. Nếu một chiếc ví đã sửa hợp đồng tài khoản, mọi kiểm toán
-nó viện dẫn đều là kiểm toán của một thứ khác, còn phần sửa đổi chính là phần không ai
-xem.
+**Các bản kiểm toán áp dụng đúng vào thứ bạn đang dùng.** Các bản kiểm toán của Safe bao
+phủ chính những bản phát hành này, hoặc những bản trước đó chỉ khác chúng vài thay đổi
+nhỏ đã được ghi lại ([trang kiểm toán](/vi/docs/security-audits) có chi tiết). Kiểm toán
+của một bản fork chỉ bao phủ phần mã trước khi fork; phần sửa đổi chính là phần không ai
+kiểm toán.
 
-**Hệ sinh thái coi tài khoản của bạn là một Safe, vì nó đúng là vậy.** Các trình duyệt
-khối giải mã được nó. Công cụ giao dịch của chính Safe hiểu nó. Nếu mai Vela biến mất,
-ví của bạn không phải một định dạng mồ côi — nó là tài khoản thông minh có nhiều công
-cụ hỗ trợ nhất trên Ethereum, và bất kỳ giao diện tương thích Safe nào cũng điều khiển
-được. Đó là điều làm cho câu
-["Vela biến mất thì ví của bạn vẫn còn"](/vi/docs/why-vela) là một phát biểu về hợp
-đồng chứ không phải về ý định của chúng tôi.
+**Hệ sinh thái coi tài khoản của bạn là một Safe, vì nó đúng là một Safe.** Các trình
+khám phá khối giải mã được nó, và công cụ của Safe đọc được nó và dựng được giao dịch cho
+nó. Tuy nhiên, để *ký* những giao dịch đó, một chương trình phải có khả năng xin khóa của
+bạn một chữ ký cho `getvela.app`, tên miền mà passkey của bạn thuộc về — nên chính ứng
+dụng web của Safe, vốn chạy trên một tên miền khác, không ký thay bạn được.
+[Hướng dẫn tự triển khai](/vi/docs/self-hosting#if-getvela-app-disappears) liệt kê những
+gì ký được.
 
-**Bề mặt tấn công là bề mặt mà tất cả mọi người cũng đang nhìn.** Một hợp đồng tài
-khoản đóng riêng chỉ có tác giả của nó nhìn. Cái này thì mọi người đang giữ tiền trong
-Safe đều nhìn.
+**Bề mặt tấn công là thứ nhiều người khác cũng đang theo dõi.** Một hợp đồng tài khoản tự
+viết chủ yếu chỉ có tác giả của nó để mắt tới. Các hợp đồng lõi của Safe được theo dõi bởi
+tất cả những ai giữ tiền trong một Safe; mô-đun 4337 và mô-đun passkey có ít người theo
+dõi hơn, nhưng vẫn có thật.
 
 ## Cái giá phải trả
 
-Theo chuẩn không miễn phí, và các đánh đổi là thật:
+Dùng chuẩn không phải là miễn phí:
 
-- **Gas.** Tài khoản thông minh xác minh chữ ký trên chuỗi. Hãy chuẩn bị tinh thần tốn
-  khoảng 1,5–3× gas của một giao dịch EOA thông thường, tùy chuỗi. Xem
+- **Gas.** Chữ ký của bạn được xác minh trên chuỗi và giao dịch chạy qua EntryPoint. Theo
+  đo đạc của chúng tôi trên Gnosis (tháng 9/2026), một lần gửi đơn giản từ ví Vela đã
+  triển khai tốn khoảng 140.000–170.000 gas trên chuỗi; một lần chuyển ETH thông thường
+  từ tài khoản thường tốn 21.000. Ngoài gas, relay còn tính phí của nó — xem
   [mạng & phí](/vi/docs/networks-and-fees).
-- **Tài khoản phải được triển khai.** Địa chỉ của bạn được tính bằng `CREATE2` trước
-  khi có gì trên chuỗi, nên bạn nhận tiền được ngay; nhưng giao dịch đi đầu tiên sẽ trả
-  phí triển khai hợp đồng.
-- **Không phải chuỗi nào cũng đủ điều kiện.** Bộ ký WebAuthn xác minh chữ ký P-256
-  trên chuỗi, việc này cần precompile **RIP-7212**. Vela thà từ chối bật một mạng
-  thiếu nó còn hơn lùi về một bộ xác minh yếu hơn.
-- **Rủi ro của Safe giờ là rủi ro của bạn.** Tin vào một hợp đồng được dùng rộng rãi
-  thì vẫn là tin vào một hợp đồng. Điều Vela nói được là chúng tôi không chồng thêm
-  một thứ thứ hai để bạn phải tin.
+- **Tài khoản phải được triển khai.** Địa chỉ của bạn được tính bằng `CREATE2` trước khi
+  có bất cứ thứ gì trên chuỗi, nên bạn nhận tiền vào đó được ngay; giao dịch gửi đi đầu
+  tiên của bạn trên mỗi mạng sẽ trả chi phí triển khai hợp đồng.
+- **Không phải chuỗi nào cũng đủ điều kiện.** Chữ ký passkey được xác minh bằng precompile
+  **EIP-7951 / RIP-7212**, và địa chỉ của nó là một phần trong dữ liệu thiết lập của mọi ví, nên một
+  mạng không có nó hoàn toàn không chạy được Vela.
+- **Rủi ro của Safe giờ là rủi ro của bạn.** Tin một hợp đồng được dùng rộng rãi thì vẫn
+  là tin một hợp đồng. Vela không thêm hợp đồng thứ hai nào của riêng mình trên đường đi
+  tới tiền của bạn để bạn phải tin.
 
-## Cái gì được kiểm toán, cái gì không
+## Những gì đã và chưa được kiểm toán
 
-Các hợp đồng của Safe và module ký WebAuthn đã được bên thứ ba kiểm toán, và những báo
-cáo đó công khai. **Mã ứng dụng của chính Vela chưa được kiểm toán độc lập**, và cũng
-chưa có lịch kiểm toán — đó là mục tiêu cho lúc dự án đủ sức chi trả, không phải một
-cam kết có ngày tháng. Mọi hợp đồng Vela phụ thuộc vào, báo cáo kiểm toán của nó và
-những vấn đề chúng tôi đang theo dõi đều nằm ở
-[kiểm toán & vấn đề đã biết](/vi/docs/security-audits).
+Các hợp đồng của Safe, mô-đun 4337 và mô-đun passkey của Safe, cùng EntryPoint v0.7 đều có
+báo cáo kiểm toán công khai của bên thứ ba. **Mã của chính Vela — các ứng dụng, các dịch
+vụ phía sau và hợp đồng sổ đăng ký — chưa được bên thứ ba kiểm toán, và cũng chưa có lịch
+kiểm toán nào**; đó là mục tiêu cho lúc dự án có kinh phí, không phải một cam kết có ngày
+cụ thể. Mọi hợp đồng, báo cáo kiểm toán của nó và những vấn đề chúng tôi đang theo dõi đều
+nằm trong [kiểm toán & vấn đề đã biết](/vi/docs/security-audits).
 
 ## Tự mình xem
 
-Tài khoản của bạn nằm trên chuỗi. Mở nó trong một trình duyệt khối và đọc địa chỉ
-implementation: đó sẽ là bản triển khai chuẩn v1.4.1 của Safe, từng byte một, trên mọi
-mạng Vela hỗ trợ.
+Tài khoản của bạn nằm trên chuỗi. Khi ví đã được triển khai, hãy mở địa chỉ của bạn trên
+một trình khám phá khối: đó là một proxy Safe có phần triển khai là bản SafeL2 v1.4.1 chính
+thức của Safe, trên mọi mạng.
+
+Tiếp theo: [kiểm toán & vấn đề đã biết](/vi/docs/security-audits).

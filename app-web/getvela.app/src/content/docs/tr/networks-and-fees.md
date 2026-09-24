@@ -1,6 +1,7 @@
 ---
 title: Ağlar ve ücretler
-description: Vela'nın desteklediği 12 ağ, hesap soyutlamasında gaz ücretlerinin nasıl işlediği, relay'i kimin çalıştırıp ücretleri kimin aldığı, gaz hesabı etkinleştirmesini ne zaman kendiniz ödediğiniz ve Vela'nın RPC uç noktalarını nasıl seçtiği.
+description: "Vela'ya yerleşik 24 ağ, başka bir ağın nasıl ekleneceği, bir işlemin ücretinin tam olarak nasıl hesaplandığı ve kime gittiği, bir relay'in gas'ı bittiğinde ne olduğu."
+source: 8f8059955244
 ---
 
 <script>
@@ -9,133 +10,159 @@ description: Vela'nın desteklediği 12 ağ, hesap soyutlamasında gaz ücretler
 
 # Ağlar ve ücretler
 
-## Desteklenen ağlar
+## Yerleşik ağlar
 
-Vela, içinde **12 EVM ağıyla** geliyor:
+Vela'da **24 ağ** yerleşik olarak gelir; hepsi ana ağdır:
 
-| Ağ | Yerel ücret tokenı |
-| ----------- | ---------------- |
-| Ethereum | ETH |
-| BNB Chain | BNB |
-| Polygon | POL |
-| Arbitrum | ETH |
-| Optimism | ETH |
-| Base | ETH |
-| Avalanche | AVAX |
-| Gnosis | xDAI |
-| Unichain | ETH |
-| Tempo | USD |
-| Monad | MON |
-| World Chain | ETH |
+| Ağ | Gas ne ile ödenir | Ağ | Gas ne ile ödenir |
+| --- | --- | --- | --- |
+| Ethereum | ETH | Arc | USDC (yerel coin) |
+| BNB Chain | BNB | X Layer | OKB |
+| Polygon | POL | Stable | USDT0 (yerel coin) |
+| Arbitrum | ETH | Soneium | ETH |
+| Optimism | ETH | MegaETH | ETH |
+| Base | ETH | Robinhood Chain | ETH |
+| Avalanche | AVAX | Mantle | MNT |
+| Gnosis | xDAI | Kaia | KAIA |
+| Unichain | ETH | Celo | CELO |
+| Tempo | pathUSD (yerel coin yok) | Ink | ETH |
+| Monad | MON | Plume | PLUME |
+| World Chain | ETH | XRPL EVM | XRP |
 
-Cüzdanınızın **hepsinde aynı adresi** var; yani paylaşacağınız tek bir adres
-oluyor.
+Çoğunda ücreti, relay'in o ağda kabul ettiği bir USD stabilcoiniyle de
+ödeyebilirsiniz (aşağıya bakın).
 
-Ayrıca **kendi ağlarınızı da ekleyebilirsiniz** (Ayarlar → Ağlar). Vela bir akıllı
-hesap cüzdanı olduğu için, bir ağın Vela'nın dayandığı sözleşmeleri sunması gerekir:
-ERC-4337 EntryPoint, Safe sözleşmeleri ve geçiş anahtarınızı zincir üstünde
-doğrulayan **P-256 (RIP-7212)** imza ön derlemesi. Vela bir ağ eklemenize izin
-vermeden önce bunu otomatik olarak kontrol eder.
+Cüzdanınızın **her ağda aynı adresi** vardır, çünkü adres zincirden değil,
+anahtarlarınızdan hesaplanır.
 
-<Callout type="info" title="Gnosis neden bu kadar çok geçiyor">
-12 ağdan biri olmasının ötesinde, Gnosis Chain Vela'nın <strong>Geçiş Anahtarı
-Dizini</strong>'ni barındırıyor — cihazlar arası kurtarma için genel anahtarınızı
-ve hesap adınızı saklayan sözleşmeyi. Bu, hangi ağda işlem yaptığınızdan bağımsız.
+## Başka bir ağ eklemek
+
+**Ayarlar → Ağlar** bölümünden herhangi bir EVM ağını ekleyebilirsiniz; yeter ki
+ağda bir Vela cüzdanının ihtiyaç duyduğu her şey olsun: on iki standart sözleşme
+(ERC-4337 EntryPoint v0.7, Safe v1.4.1 sözleşmeleri, Safe'in 4337 ve geçiş anahtarı
+modülleri, MultiSend, Multicall3 ve iki deterministik dağıtıcı) ve geçiş anahtarı
+imzalarını `0x100` adresinde doğrulayan **EIP-7951 / RIP-7212** ön derlemesi. Cüzdan, ağı
+eklemenize izin vermeden önce bunların hepsini kontrol eder; buna ön derlemeye karşı
+gerçek bir imza denemesi de dahildir. Bu ön derlemenin iki adı var: Ethereum'da Fusaka
+yükseltmesinden (Aralık 2025) beri etkin olan EIP-7951 ve rollup'larda RIP-7212. Arayüz
+aynıdır; cüzdan ikisini de kabul eder.
+
+Ön derleme kesin bir gereksinimdir. Adresi, her Vela adresinin hesaplanmasının bir
+parçasıdır; bu yüzden yedek bir doğrulayıcı yoktur ve sonradan bir tane dağıtmanın
+da yolu yoktur. Bir zincirde ön derleme var ama sözleşmelerin bir kısmı eksikse,
+[zincir kurulumu](/tr/chain-setup) neyin eksik olduğunu gösterir ve herkesin
+dağıtabileceği olanları dağıtır. Kontrol ettiği on iki sözleşmeden ikisi — Safe'in
+geçiş anahtarı imzalayıcı fabrikası ve o fabrikanın dağıttığı imzalayıcı kodu —
+yalnızca birden fazla anahtar tutan bir cüzdanı ilgilendirir ve kontrol bunu sözleşme
+bazında söyler: bunlar olmadan tek anahtarlı bir cüzdan normal çalışır, adresi iki ila
+yedi anahtardan gelen bir cüzdan ise o ağda hiç dağıtılamaz.
+
+## Bir işlemin bedeli nasıl ödenir
+
+Vela bir ERC-4337 cüzdanıdır: işlemi kendiniz yayınlamazsınız. Uygulama bir
+**UserOperation** oluşturur, siz onu anahtarlarınızdan biriyle imzalarsınız ve bir
+**relay** onu zincire gönderip gas bedelini peşin öder. (ERC-4337 bu role bundler
+der.) Relay'in alacağı **işleminizin içinde** ödenir: ödeme, cüzdanınızdan relay'e
+yapılan ve işleminizle aynı toplu işlemde duran bir transferdir; dolayısıyla
+imzanızın kapsamındadır. Paymaster yoktur; gas ücretinizi kimse sponsorlamaz ve kimse
+bir sponsorluk politikası yüzünden işleminizi reddedemez.
+
+### Ücret nedir
+
+<span id="fee"></span>
+
+Onay ekranı tek bir tutar gösterir; hem ücret coininde hem de görüntüleme para
+biriminizde. Şöyle hesaplanır:
+
+- **Cüzdanın ayırdığı gas.** Cüzdan işlemi simüle eder ve kullanmayı beklediğinden
+  fazla gas ayırır: doğrulama ve yürütme tahminlerinin her biri yarı yarıya artırılır
+  ve alt sınırlar uygulanır (örneğin cüzdan dağıtıldıktan sonra doğrulama en az
+  300.000 gas, cüzdanı dağıtan işlem için 2.000.000 gas).
+- **Gas fiyatı.** Cüzdanın ağın gas fiyatı için kendi okuması ile relay'in seçtiğiniz
+  hız için verdiği fiyattan yüksek olanı. Varsayılan hız *hızlı*dır; relay bunu
+  yaklaşık 1,8 × taban ücret artı iki katı öncelik ücreti olarak fiyatlar.
+- **Ücret = 3 × ayrılan gas × gas fiyatı**; asgari yaklaşık 0,01 dolar. Tempo'da çarpan
+  2'dir ve ücret pathUSD ile ödenir.
+
+Ayrılan miktar işlemin kullanacağının epey üstünde tutulur ve fiyata pay bırakılır;
+bu yüzden ücret, işlemin zincir üstü maliyetinden fazladır — bir ağdaki ilk
+işleminizde, cüzdanınızı da dağıttığı için, daha da fazladır. Gerçek maliyeti relay
+öder ve gerisini kendisi tutar; hiçbir şey iade edilmez. Ucuz ağlarda bu birkaç
+senttir; Ethereum ana ağında ciddi bir tutar olabilir. Tahmin yürütmeniz gerekmez:
+kesin tutar, siz imzalamadan önce onay ekranındadır.
+
+**Ücret kime gider.** Ücret, cüzdanın ayarlı olduğu relay'i kim çalıştırıyorsa ona
+gider — siz değiştirmedikçe Vela'ya. Herhangi bir vela-relay dağıtımı kullanılabilir,
+[kendi çalıştırdığınız](/tr/docs/self-hosting#relay) da dahil; hangi relay'i seçerseniz
+seçin cüzdan aynı formülü kullanır.
+
+<Callout type="info" title="Ne görüyorsanız onu ödersiniz">
+Ücret tutarı ve gittiği adres, imzaladığınız işlemin parçasıdır. Bunlardan birini
+değiştiren bir relay imzanızı geçersiz kılar; bu yüzden tam olarak gösterilen tutarı
+ödersiniz — işlem zincire girmeden gas yükselse bile fazlasını değil. Relay'in gas
+fiyatı teklifi cüzdanın kendi okumasının üç katından fazlaysa reddedilir.
 </Callout>
 
-## Ücretler nasıl işliyor (hesap soyutlaması)
+### Ne ile ödeyebilirsiniz
 
-Vela **ERC-4337 hesap soyutlaması** kullanıyor; yani işlemi doğrudan siz yayınlamış
-olmuyorsunuz — işlem, bir **relay**'e teslim edilen bir **UserOperation** ve relay
-onu zincire gönderip gaz masrafını geri alıyor. (ERC-4337 spesifikasyonu bu role
-*bundler* diyor. Vela'nınkine relay deniyor, çünkü paketlemekten fazlasını yapıyor:
-ücreti kanal içinde bildiriyor ve aşağıdaki gaz hesabı protokolünü işletiyor; ikisi
-de standardın parçası değil.) Bundan birkaç sonuç çıkıyor:
+- Ağın **yerel coini** ile, her zaman.
+- Relay yerel coini fiyatlayabildiğinde, relay'in o ağ için listesindeki bir **USD
+  stabilcoini** ile. Hiç tutmadığınız stabilcoinler gizlenir.
+- Yerel coini olmayan **Tempo**'da yalnızca **pathUSD** ile.
 
-- **Gaz, kendi cüzdan bakiyenizden ödenir** — varsayılan olarak ağın yerel
-  tokenıyla (ETH, BNB, xDAI…) ya da relay'in sunduğu yerlerde desteklenen bir
-  stabilcoinle; ücret varlığını onay ekranında siz seçersiniz. Tempo'nun yerel
-  parası yok, orada gaz her zaman dolar stabilcoinleriyle ödenir. Her işlemi
-  sponsorlayan — ya da kapılayan — bir ERC-4337 **paymaster**'ı yok. (Vela, yeni
-  kullanıcılar için tek seferlik _gaz hesabı etkinleştirmesini_ üstlenebilir; o
-  ayrı bir konu ve aşağıda anlatılıyor.)
-- **Gaz fiyatını relay bildirir** — tek doğruluk kaynağı odur; cüzdan da o fiyatı
-  gösterir ve tam olarak gösterdiğini imzalar. Hız seçici yoktur: her işlem yüksek
-  öncelikle gönderilir.
-- Toplam tutar, **ağ maliyeti artı relay'in hizmet ücretidir**; çok ucuz işlemlerde
-  küçük bir asgari ücretle. Relay'in bildirdiği fiyat, fiyatın kendisidir — bakılacak
-  ayrı bir ücret tarifesi yoktur. Bir kısmı ağın doğrulayıcılarına gider; kalanı gazı
-  peşinen ödeyen ve altyapıyı çalıştıran relay'e.
-- Onay ekranı, siz imzalamadan önce **tahmini ücreti** hem ücret varlığında hem de
-  görüntüleme para biriminizde gösterir. Bildirilen tutar ve alıcısı, imzaladığınız
-  şeyin parçasıdır; yani relay'e tam olarak gösterilen kadar ödenir — değişen bir
-  rakam imzanızı geçersiz kılardı.
+Ücret coinini ve hızı (*yavaş*, *standart* ya da *hızlı*) onay ekranında ve
+Ayarlar'da seçersiniz.
 
-## Relay'i kim çalıştırıyor — ve ücretleri kim alıyor
+### Bir ağdaki ilk işleminiz
 
-Her ağ bir relay'e işaret eder. Varsayılan olarak bu **Vela'nın kendi relay'i**dir
-ve uç noktayı _Ayarlar → Gelişmiş → Servis Uç Noktaları_ altından
-değiştirebilirsiniz. Tek bir uç nokta bütün yerleşik ağlar için geçerlidir;
-eklediğiniz özel bir ağ ise eklerken verdiğiniz relay adresini korur.
+Cüzdanınız bir ağda var olmadan önce de o ağda para alabilirsiniz. Bir ağdan ilk kez
+gönderim yaptığınızda o işlem cüzdan sözleşmenizi de dağıtır (ve her ek anahtar için
+küçük birer imzalayıcı sözleşme). Dağıtımın gas bedeli o işlemin ücretine dahildir; bu
+yüzden her ağdaki ilk gönderim, sonrakilerden daha pahalıdır.
 
-Uyumluluk konusunda dürüst bir uyarı: uygulama ücreti Vela'ya özgü bir RPC
-yöntemiyle (`vela_getInBandGasQuote`) alıyor ve gönderim akışı o yöntem olmadan
-çalışmıyor. Yani işaret ettiğiniz uç noktanın
-[vela-relay](https://github.com/mondaylabsltd/vela-relay) çalıştırıyor olması
-gerekir — Vela'nın örneği ya da sizin barındırdığınız bir örnek. **Pimlico** veya
-**Alchemy** gibi genel bir ERC-4337 bundler'ı bu yöntemi uygulamıyor, dolayısıyla
-mevcut sürümde baştan sona çalışmaz.
+Bir yerel coinin **azami** tutarını gönderdiğinizde Vela ücret için yetecek kadarını
+ayırır.
 
-Bir ağın relay'ini kim işletiyorsa **o ağın ücretlerini de o alır**: her işlemdeki
-relay marjını ve gaz hesabı etkinleştirme depozitosunu. Kendi vela-relay'inizi
-çalıştırın, o ücretler Vela'nın değil sizin altyapınızı finanse etsin; başka yere
-yönlendirdiğiniz trafikten Vela pay almaz.
+## Relay'i kim çalıştırıyor — ve ücreti kim alıyor
 
-<Callout type="warning" title="Gaz hesabı, vela-relay protokolünün bir parçası">
-<strong>Gaz hesabı etkinleştirme</strong> adımı, her ağda cüzdanınız için ayrılmış
-bir relay hesabını fonluyor. Uç noktayı kendi barındırdığınız bir vela-relay'e
-yönlendirirseniz depozito Vela'nın değil, kendi relay'inizin hesabını fonlar.
-</Callout>
+Varsayılan olarak her ağ **Vela'nın relay'ini** kullanır ve ücret Vela'ya gider.
+Cüzdanı **Ayarlar → Gelişmiş → Servis Uç Noktaları** bölümünden başka bir relay'e
+yönlendirebilirsiniz; tek bir adres bütün yerleşik ağlara hizmet verir, özel bir ağ
+ise eklendiği sıradaki relay adresini korur. Relay'in
+[vela-relay](https://github.com/mondaylabsltd/vela-relay) olması gerekir — Vela'nınki
+ya da sizin çalıştırdığınız — çünkü cüzdan ücret teklifini Vela'ya özgü bir yöntemle
+ister ve Pimlico ya da Alchemy gibi genel bundler'lar bu yöntemi uygulamaz.
+Kullandığınız relay'i kim çalıştırıyorsa ücreti o alır; nasıl çalıştırılacağını
+[kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting#relay) anlatıyor.
 
-### Gaz hesabını etkinleştirmek (Vela Relay)
+Relay, zaten imzalanmış bir işlem alır. Alıcıyı, tutarı, ücreti ya da başka herhangi
+bir şeyi değiştiremez. İşlemi geciktirebilir ya da reddedebilir ve zincire ne zaman
+gireceğini o seçer — dolayısıyla bir takasta ilke olarak, kayma toleransınız içinde
+sizden önce işlem yapabilir.
 
-Vela'nın relay'inde, her ağdaki ilk işleminiz **ayrılmış bir gaz hesabını
-etkinleştirir**. Uygulama önce relay'in kasasından bunu sizin için karşılamasını
-ister — bu, gönderim akışının içinde sessizce olur ve sponsorlanan bir cüzdan hiç
-fonlama ekranı görmez. Yalnızca sponsorluk reddedildiğinde uygulama bir yükleme
-isteği gösterir: gösterdiği gaz hesabı adresine az miktarda yerel token
-gönderirsiniz ve uygulama size sponsorluğun neden verilmediğini söyler.
+### Bir relay'in gas'ı bittiğinde
 
-**Ücretsiz sponsorluk sunulmadığında etkinleştirme ücretini siz ödersiniz**; yani
-şu durumlarda:
+Bir relay, gas bedelini her ağdaki kendi **kasasından** öder. Kasa boşsa, gönderme
+ekranı bunu siz imzalamadan önce söyler:
 
-- **Vela'nın o ağdaki kasası boş ya da azalmış** — o zincirdeki ücretsiz fon geçici
-  olarak tükenmiş.
-- **Ücretsiz kotanızı kullanmışsınız** — sponsorluk cüzdan başına sınırlıdır, ilk
-  birkaçtan sonrası size aittir.
-- **Vela'nın relay'i o ağı hiç fonlamıyor** — örneğin **kendi eklediğiniz özel ya da
-  test ağları**; Vela bunlar için kasa tutmaz. (Etkinleştirmeyi tümden atlamak
-  isterseniz bunları kendi relay'inize yönlendirin.)
+- Vela'nın relay'inin hizmet verdiği bir ağda kasayı relay'in işletmecisinin (Vela)
+  doldurması gerekir; durumu bildirebilirsiniz. Bekleyemiyorsanız, **isteğe bağlı
+  olarak** kasaya kendiniz az miktarda yerel coin gönderebilirsiniz. Bu katkı **iade
+  edilmez** ve kendi işleminizin ücretini **karşılamaz**.
+- Özel bir ağda relay'i fonlamak, onu kim çalıştırıyorsa ona kalmıştır — bu siz de
+  olabilirsiniz.
 
-Etkinleştirme depozitosu **iade edilmez** — relay'in başlangıç bakiyesidir ve zamanla
-gaz iadelerinden kendini besler; yine de tükenip sonradan **yeniden
-etkinleştirme** gerektirebilir. Servis yükseltmesinde relay adresi de değişebilir,
-bu da yeni bir etkinleştirme ister.
+Cüzdan başına bir gas hesabı ya da etkinleştirme depozitosu yoktur: Vela'nın eski bir
+sürümünde vardı, artık yok.
 
-Ücret, seçtiğiniz **ücret varlığındaki** bakiyenizden düşer — varsayılan olarak yerel
-token. Bir gönderim gaz yüzünden engelleniyorsa, o ücret varlığındaki bakiyeniz
-ücreti karşılamıyor demektir; relay'in stabilcoinle gaz sunduğu yerlerde onay
-ekranında ücret varlığını değiştirmek engeli kaldırabilir.
+## Vela her ağı nasıl okur
 
-Bir yerel tokenın **azami** tutarını gönderdiğinizde Vela, işlem başarısız olmasın
-diye gaz için gerekeni otomatik olarak ayırır.
-
-## Vela her ağla nasıl konuşuyor
-
-Vela bakiyeleri okumak ve işlem göndermek için tek bir sağlayıcıyı değil, bir **RPC
-uç noktası havuzunu** kullanır. Uç noktaları birkaç kaynaktan toplar, gecikme ve
-güvenilirliğe göre puanlar ve biri yavaşladığında ya da düştüğünde **otomatik olarak
-devreder** — kötü uç noktaları geçici olarak kenara alır — böylece tek bir aksak
-düğüm uygulamayı asla devre dışı bırakmaz.
+Vela bakiyeleri okur ve işlemleri simüle ederken her ağ için bir **RPC uç noktası
+havuzu** kullanır — yerleşik uç noktalar, herkese açık yedekler ve sizin eklediğiniz
+sağlayıcı anahtarları ya da uç noktalar — ve bir uç nokta yavaşladığında ya da
+çöktüğünde bir sonrakine geçer. Her ağ için kendi uç noktanızı **Ayarlar → Ağlar**
+bölümünden tanımlayabilirsiniz. (Android uygulaması şu anda her ağ için tek bir uç
+nokta kullanıyor ve otomatik geçiş yapmıyor; iPhone uygulaması ise bunu değiştirmenize
+henüz izin vermiyor.)
 
 Sırada: [geçiş anahtarları nasıl çalışır](/tr/docs/passkeys).

@@ -44,11 +44,11 @@ class BrowserMachineTest {
     private val origin = "http://127.0.0.1:8137"
 
     /** Everything the executor was asked to do, in order. */
-    private val delivered = java.util.Collections.synchronizedList(ArrayList<Pair<String, JSONObject>>())
-    private val forwarded = java.util.Collections.synchronizedList(ArrayList<DbrOperation.ForwardToSigning>())
-    private val cancelled = java.util.Collections.synchronizedList(ArrayList<String>())
-    private val records = java.util.Collections.synchronizedList(ArrayList<JSONObject>())
-    private val reads = java.util.Collections.synchronizedList(ArrayList<String>())
+    private val delivered = java.util.concurrent.CopyOnWriteArrayList<Pair<String, JSONObject>>()
+    private val forwarded = java.util.concurrent.CopyOnWriteArrayList<DbrOperation.ForwardToSigning>()
+    private val cancelled = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val records = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
+    private val reads = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     @After
     fun stop() = scope.cancel()
@@ -168,6 +168,46 @@ class BrowserMachineTest {
         val answer = answerFor("s1").second
         assertEquals(4001, answer.getJSONObject("error").getInt("code"))
         assertEquals("the core's words", "User rejected the request", answer.getJSONObject("error").getString("message"))
+        assertEquals("user_rejected", answer.getJSONObject("error").getString("kind"))
+    }
+
+    /**
+     * Spec 081, device-found — through this shell, where the report came from.
+     *
+     * A refused request was answered with the refused FUNCTION's name and
+     * nothing else ("addOwnerWithThreshold"), which reads as a label rather
+     * than an answer. The page now gets a sentence that names it, and a
+     * machine-readable `kind` beside the code.
+     *
+     * This lived in `SigningLiveTest` against `SignExecutor.responseJson` while
+     * the shell built the page's answer itself. Spec 070 moved that into the
+     * core (`dapp_browser` → `dapp_rpc::sign_error_json`), so the assertion
+     * moved to where the answer is now made — and it is the REAL machine
+     * answering here, not this shell's copy of the rule.
+     */
+    @Test
+    fun `a refused request tells the page what happened and why`() = runBlocking<Unit> {
+        val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":100,"granted_at_ms":1.0e12}"""))
+        val h = host(store)
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        ask(h, "tab-1", "d1", "s1", "eth_sendTransaction", JSONArray().put(JSONObject().put("to", safe)))
+        withTimeout(10_000) { while (forwarded.isEmpty()) delay(10) }
+        h.dispatch(
+            DbrEvent.SigningAnswered(
+                "tab-1",
+                "s1",
+                SignResponsePayload.Err(-32603, SignErrorKind.SelfCallBlocked, "addOwnerWithThreshold"),
+                null,
+            ),
+            DbrEvent.serializer(),
+        )
+        val error = answerFor("s1").second.getJSONObject("error")
+        assertEquals(-32603, error.getInt("code"))
+        assertEquals("self_call_blocked", error.getString("kind"))
+        val message = error.getString("message")
+        assertTrue("a sentence, not a label: $message", message.contains("refused a call that would change who controls"))
+        assertTrue("and it names what was refused: $message", message.contains("addOwnerWithThreshold"))
     }
 
     @Test

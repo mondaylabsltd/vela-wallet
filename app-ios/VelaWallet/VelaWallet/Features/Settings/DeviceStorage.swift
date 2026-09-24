@@ -26,6 +26,7 @@
 
 import Foundation
 import VelaCore
+import WebKit
 
 enum DeviceStorage {
 
@@ -143,8 +144,35 @@ enum DeviceStorage {
     /// Returns what SURVIVED — empty is an erase that happened. A caller that
     /// sent the person to the first run over a non-empty answer would be
     /// telling them their phone is clean while their history is still on it.
-    static func erase(_ store: VelaStore) -> [String] {
+    /// ## And the three stores that are not `UserDefaults`
+    ///
+    /// `WKWebsiteDataStore.default()` holds every dApp the person browsed —
+    /// cookies, localStorage, IndexedDB, service workers — and an erase that
+    /// left it behind left somebody signed in to the sites they had visited.
+    /// `URLCache.shared` and the logo store's own disk cache hold the images
+    /// the wallet fetched, which is a readable list of the tokens and chains it
+    /// holds. (Spec 081 FR-017, brought across in the 075 merge; what survives
+    /// is still the core's `is_erasable_key`, so the four shells cannot
+    /// disagree about the one key an erase keeps.)
+    @MainActor
+    static func erase(_ store: VelaStore) async -> [String] {
         store.everyKey().filter { storageIsErasableKey(key: $0) }.forEach { store.remove($0) }
+
+        // The completion-handler form on purpose: the erase must not reach its
+        // verification while WebKit is still deleting.
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            WKWebsiteDataStore.default().removeData(
+                ofTypes: types, modifiedSince: .distantPast
+            ) { continuation.resume() }
+        }
+
+        // The images this wallet fetched: the shared cache, and the logo
+        // store's own disk cache, which is not part of it.
+        URLCache.shared.removeAllCachedResponses()
+        LogoStore.forgetAll()
+
+        // Verify by re-reading. The sweep above is not evidence of anything.
         return store.everyKey().filter { storageIsErasableKey(key: $0) }.sorted()
     }
 

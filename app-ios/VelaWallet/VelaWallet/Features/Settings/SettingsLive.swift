@@ -62,57 +62,103 @@ enum SettingsLive {
             return updated
         }
         // The two pages behind the advanced rows are the core's view too
-        // (spec 072): until now they drew the fixture — "Alchemy · Connected ·
-        // alch_k3y…9fQ2" for everyone — over whatever was actually saved.
-        copy.rpcProviders = providers(view, loc: loc, fallback: model.rpcProviders)
-        copy.endpoints = endpoints(view, loc: loc, fallback: model.endpoints)
+        // (spec 072), and each has a projection of its own now (spec 081
+        // FR-001): `withEndpoints` and `withProviders`, applied beside this one
+        // rather than from inside it.
         return copy
     }
 
-    // MARK: - RPC providers and service endpoints (spec 072)
+    // MARK: - The service endpoints (spec 081 FR-001)
 
-    /// The three providers' display names — brand names, not corpus strings.
-    private static let providerNames: [NetProviderIdWire: String] = [
-        .alchemy: "Alchemy", .drpc: "dRPC", .ankr: "Ankr",
-    ]
-
-    /// Where each provider's API key is made: the web's `PROVIDER_KEY_URLS`,
-    /// so "Get a key" goes to the same page on every Vela.
-    static let providerKeyUrls: [NetProviderIdWire: String] = [
-        .alchemy: "https://dashboard.alchemy.com/",
-        .drpc: "https://drpc.org/",
-        .ankr: "https://www.ankr.com/rpc/",
-    ]
-
-    /// ST11 from the core: each provider's saved key (or its draft while one
-    /// is open), whether one is configured, and the last test's count.
+    /// The four services this wallet talks to, as the core holds them.
     ///
-    /// The field's own action is the one thing to do next: with no key, go
-    /// and get one (the provider's page); with one, check it (a test).
-    static func providers(
-        _ view: NetViewWire, loc: Loc, fallback: RpcProvidersModel
-    ) -> RpcProvidersModel {
+    /// Until this existed the page was the drawing, on a real phone, with live
+    /// controls under it: it offered `https://p256-index-rs.getvela.app` — a
+    /// host that has not answered since the index moved to `-v2` — as the
+    /// person's own passkey index, and put an invented `88ms` beside it. Both
+    /// halves were untrue and the second is the worse one, because a latency
+    /// badge is a claim that something was measured.
+    ///
+    /// What comes from the core: the value (its draft, which is the stored URL
+    /// until somebody types), the default as the placeholder, and the health.
+    /// What stays the drawing's: the title, the description, each field's label
+    /// and hint, and the reset button's words.
+    static func withEndpoints(
+        _ view: NetViewWire,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        var copy = model
+        copy.endpoints = EndpointsModel(
+            title: model.endpoints.title,
+            description: model.endpoints.description,
+            fields: view.endpoints.map { endpoint in
+                UrlFieldModel(
+                    // **The core's own name for the field, not the drawing's
+                    // slug.** This id is what the screen hands back when the
+                    // field is typed into, and the store turns it straight
+                    // back into `NetEndpointField` — so the round trip holds
+                    // by construction rather than by a mapping table.
+                    id: endpoint.field.rawValue,
+                    label: loc.t(endpointLabel(endpoint.field)),
+                    value: endpoint.value,
+                    // The default is the PLACEHOLDER: an endpoint nobody has
+                    // set shows, greyed, the URL it would use — never an empty
+                    // box, and never that URL as if it had been chosen.
+                    placeholder: endpoint.defaultValue,
+                    hint: loc.t(endpointHint(endpoint.field)),
+                    badge: servicePill(endpoint.health, loc: loc)
+                )
+            },
+            reset: model.endpoints.reset
+        )
+        return copy
+    }
+
+    /// The RPC providers page, from the same machine.
+    ///
+    /// Sibling of the above and shipped with it for one reason: the events
+    /// behind this page now reach the core, and the drawing prefills Alchemy's
+    /// box with `alch_k3y...9fQ2`. A person who typed one character after that
+    /// would have sent the mock key and half of their own to be saved.
+    ///
+    /// Whether a provider is configured is `has_key`, which is not
+    /// `key.isEmpty`: a cleared key is REMOVED from storage, and the core is
+    /// the one that knows the difference.
+    static func withProviders(
+        _ view: NetViewWire,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
         let notSet = loc.t(k.providerNotSet)
-        return RpcProvidersModel(
-            title: fallback.title,
-            subtitle: fallback.subtitle,
-            description: fallback.description,
-            providers: view.providers.map { provider in
-                let id = provider.provider
+        var copy = model
+        copy.rpcProviders = RpcProvidersModel(
+            title: model.rpcProviders.title,
+            subtitle: model.rpcProviders.subtitle,
+            description: model.rpcProviders.description,
+            providers: view.providers.enumerated().compactMap { index, provider in
+                // The drawn card supplies nothing but its shape; every word on
+                // it below is either the core's or the corpus's.
+                guard let card = model.rpcProviders.providers[safe: index]
+                    ?? model.rpcProviders.providers.first
+                else { return nil }
                 return ProviderCardModel(
-                    id: id.rawValue,
-                    name: providerNames[id] ?? id.rawValue,
+                    id: provider.provider.rawValue,
+                    name: providerName(provider.provider),
                     badge: provider.hasKey
                         ? StatusPillModel(tone: .ok, label: loc.t(k.providerConnected))
                         : StatusPillModel(tone: .neutral, label: notSet),
                     field: UrlFieldModel(
-                        id: id.rawValue, label: "", value: provider.key,
+                        id: provider.provider.rawValue,
+                        label: card.field.label,
+                        value: provider.key,
                         placeholder: provider.hasKey ? nil : notSet,
                         action: loc.t(provider.hasKey ? k.providerCheckKey : k.providerGetKey)
                     ),
-                    // Only a FINISHED test has a count worth saying; one still
-                    // running says nothing rather than "0 of 12".
+                    // The count the test actually reached, and only once it has
+                    // finished. The drawing said "supports 12" on a phone that
+                    // had never asked.
                     support: provider.test.flatMap { test in
                         test.done
                             ? loc.t(k.providerSupports, vars: [
@@ -120,57 +166,76 @@ enum SettingsLive {
                             ])
                             : nil
                     },
-                    linkUrl: provider.hasKey ? nil : providerKeyUrls[id]
+                    link: provider.hasKey ? nil : "\(loc.t(k.providerGetKey)) →",
+                    linkUrl: provider.hasKey ? nil : providerKeyUrl(provider.provider),
+                    test: card.test
                 )
             }
         )
+        return copy
     }
 
-    /// ST12 from the core: the four endpoints as stored (the default shows as
-    /// the placeholder) and how each last answered.
-    static func endpoints(
-        _ view: NetViewWire, loc: Loc, fallback: EndpointsModel
-    ) -> EndpointsModel {
+    /// The drawn label for one endpoint field.
+    ///
+    /// Named per field rather than taken by position: the core's order and the
+    /// drawing's happen to agree today, and a page that silently relabels
+    /// somebody's relay as their passkey index if they ever stop agreeing is
+    /// not worth the four lines it saves.
+    private static func endpointLabel(_ field: NetEndpointFieldWire) -> String {
         let k = I18nKeys.SettingsUi.self
-        return EndpointsModel(
-            title: fallback.title,
-            description: fallback.description,
-            fields: view.endpoints.map { endpoint in
-                let (label, hint) = switch endpoint.field {
-                case .ethereumData: (k.endpointChainData, k.endpointChainDataHint)
-                case .passkeyIndex: (k.endpointPasskey, k.endpointPasskeyHint)
-                case .bundlerService: (k.endpointRelay, k.endpointRelayHint)
-                case .fiatRates: (k.endpointFiat, k.endpointFiatHint)
-                }
-                return UrlFieldModel(
-                    id: endpoint.field.rawValue,
-                    label: loc.t(label),
-                    value: endpoint.value,
-                    placeholder: endpoint.defaultValue,
-                    hint: loc.t(hint),
-                    badge: servicePill(endpoint.health, loc: loc)
-                )
-            },
-            reset: fallback.reset
-        )
+        return switch field {
+        case .ethereumData: k.endpointChainData
+        case .passkeyIndex: k.endpointPasskey
+        case .bundlerService: k.endpointRelay
+        case .fiatRates: k.endpointFiat
+        }
     }
 
-    /// Every `NetServiceHealth` worded — an endpoint that answered as some
-    /// other service is "invalid", not "offline", and the two are fixed
-    /// differently.
-    static func servicePill(_ health: NetServiceHealthWire, loc: Loc) -> StatusPillModel {
+    private static func endpointHint(_ field: NetEndpointFieldWire) -> String {
+        let k = I18nKeys.SettingsUi.self
+        return switch field {
+        case .ethereumData: k.endpointChainDataHint
+        case .passkeyIndex: k.endpointPasskeyHint
+        case .bundlerService: k.endpointRelayHint
+        case .fiatRates: k.endpointFiatHint
+        }
+    }
+
+    /// Where a provider hands out keys. The same three URLs Android opens
+    /// (`SettingsLive.kt:609`), kept as a `switch` so a new provider cannot be
+    /// added without somebody deciding where its link goes.
+    static func providerKeyUrl(_ provider: NetProviderIdWire) -> String {
+        switch provider {
+        case .alchemy: "https://dashboard.alchemy.com/"
+        case .drpc: "https://drpc.org/"
+        case .ankr: "https://www.ankr.com/rpc/"
+        }
+    }
+
+    private static func providerName(_ provider: NetProviderIdWire) -> String {
+        switch provider {
+        case .alchemy: "Alchemy"
+        case .drpc: "dRPC"
+        case .ankr: "Ankr"
+        }
+    }
+
+    /// How one of the four services answered.
+    ///
+    /// Quiet while it is being checked — `checking` is a real state and a pill
+    /// reading "checking" beside a box somebody is typing into is noise — then
+    /// the measured latency, or the reason it did not answer. The three
+    /// failures stay apart: refused for not being HTTPS, unreachable, and
+    /// answered-but-not-by-this-service are three different things to fix.
+    static func servicePill(_ health: NetServiceHealthWire, loc: Loc) -> StatusPillModel? {
         let k = I18nKeys.SettingsUi.self
         switch health {
         case .checking:
-            return StatusPillModel(tone: .neutral, label: "···")
+            return nil
+        // The same latency wording the network pills use, so one endpoint is
+        // never "88ms" here and "slow" a page away.
         case .ok(let latencyMs, _):
-            guard latencyMs >= 1000 else {
-                return StatusPillModel(tone: .ok, label: "\(Int(latencyMs.rounded()))ms")
-            }
-            return StatusPillModel(
-                tone: .warn,
-                label: "\(loc.t(k.networkSlow)) · \(Formats.number(latencyMs / 1000, minimumFractionDigits: 1, maximumFractionDigits: 1))s"
-            )
+            return badge(.ok(latencyMs: latencyMs))
         case .notHttps:
             return StatusPillModel(tone: .error, label: loc.t(k.healthHttpsRequired))
         case .unreachable:
@@ -370,6 +435,29 @@ enum SettingsLive {
 
     static func themeChoice(segment id: String) -> ThemeChoice? {
         id == "auto" ? .system : ThemeChoice(rawValue: id)
+    }
+
+    /// 测试 on every provider card, live only.
+    ///
+    /// The DRAWN panel has no such control: the gallery cannot ask a provider
+    /// anything, so a button there would be a picture of an action. The live
+    /// page can, and the core has had `provider_test_requested` since 050 with
+    /// nothing to send it.
+    static func withProviderTests(
+        on model: SettingsScreenModel, loc: Loc
+    ) -> SettingsScreenModel {
+        var copy = model
+        copy.rpcProviders = RpcProvidersModel(
+            title: model.rpcProviders.title,
+            subtitle: model.rpcProviders.subtitle,
+            description: model.rpcProviders.description,
+            providers: model.rpcProviders.providers.map { provider in
+                var changed = provider
+                changed.test = loc.t("settingsModals.rpcProviders.test")
+                return changed
+            }
+        )
+        return copy
     }
 
     /// The row id the screen routes to the host (spec 062).
@@ -800,12 +888,22 @@ enum SettingsLive {
         model.checksTitle = loc.t(k.addCompatibilityCheck)
         model.checks = checks(compat, loc: loc)
 
+        model.callout = errorCallout(wizard.error, loc: loc)
+            ?? (wizard.compat?.compatible == false
+                ? CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
+                // Spec 081 FR-009: compatible, and still not somewhere a wallet
+                // with several passkeys can be created. Both halves are true;
+                // the badge says the first, this says the second.
+                : wizard.compat.map { $0.compatible && !$0.multiKeyReady } == true
+                ? CalloutModel(tone: .warning, text: loc.t(k.addSingleKeyOnly))
+                : nil)
+
         // The gate. An accent CTA appears only when the CORE says the chain can
         // be added; otherwise the re-check, because an action you cannot take
         // should not be dressed as the action you came for.
         if wizard.canAdd {
             model.primary = loc.t(k.addButton)
-        } else if !compat.compatible {
+        } else if wizard.compat?.compatible == false {
             model.callout = CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
             // The drawing's "Open Chain Setup Tool" is not offered: no client
             // has a page for it to open, and a button that goes nowhere is the
@@ -834,7 +932,10 @@ enum SettingsLive {
             compat.contracts.first { $0.name == name }?.deployed ?? false
         }
         let named = ["EntryPoint v0.7", "Safe L2", "WebAuthn Signer"]
-        let rest = compat.contracts.filter { !named.contains($0.name) }
+        // The multi-key pair is spoken by its own callout, not folded into
+        // 其余 N 项合约: a chain missing only those is whole for a one-key
+        // wallet, and a red count row would say the opposite.
+        let rest = compat.contracts.filter { !named.contains($0.name) && !$0.multiKeyOnly }
         return [
             CheckItemModel(label: "EntryPoint v0.7", ok: deployed("EntryPoint v0.7")),
             CheckItemModel(label: loc.t(k.addCheckSafe), ok: deployed("Safe L2")),
@@ -1153,12 +1254,15 @@ enum SettingsLive {
     /// sheet stays up with the reason in its own callout, and the person is
     /// still signed in — never sent to the first run over a partial wipe.
     static func withEraseFailure(
-        _ failed: Bool, on model: SettingsScreenModel, loc: Loc
+        _ survivors: [String]?, on model: SettingsScreenModel, loc: Loc
     ) -> SettingsScreenModel {
-        guard failed else { return model }
+        guard let survivors, !survivors.isEmpty else { return model }
         var live = model
+        // Named, as the desktop names them: "something stayed" is not
+        // actionable, and the keys are what a person can report.
         live.eraseSheet.callout = CalloutModel(
-            tone: .danger, text: loc.t(I18nKeys.SettingsUi.eraseFailed)
+            tone: .danger,
+            text: "\(loc.t(I18nKeys.SettingsUi.eraseFailed)) (\(survivors.joined(separator: ", ")))"
         )
         return live
     }

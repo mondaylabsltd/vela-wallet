@@ -70,9 +70,17 @@ struct RootView: View {
     @State private var identiconViewer: IdenticonSubject?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
-    /// An erase ran and something survived it — said on the erase sheet,
-    /// never swallowed (spec 072 FR-011).
-    @State private var eraseFailed = false
+    /// The settings page a screen elsewhere is sending somebody to. Cleared
+    /// the moment settings opens, so it steers exactly one visit.
+    @State private var pendingSettingsPage: SettingsPage?
+    /// An erase ran and these keys survived (spec 081 FR-017).
+    ///
+    /// Never `Some([])`: an empty survivor list is the success, and the app has
+    /// signed out by then. A non-empty one keeps the person signed in with the
+    /// reason in the erase sheet's own body, because telling somebody their
+    /// phone is clean while their history is still on it is the one outcome
+    /// this feature cannot have.
+    @State private var eraseFailed: [String]?
     /// Naming a group — new, or renaming the one it names.
     ///
     /// The platform's own prompt, which is the shape the explore tab's
@@ -816,6 +824,11 @@ struct RootView: View {
                         case .settings:
                             settingsScreen()
                                 .navigationBarBackButtonHidden()
+                                // The steer is spent on arrival: the screen has
+                                // already seeded its page from it, and leaving
+                                // it set would send the NEXT visit to the same
+                                // place for no reason.
+                                .onAppear { pendingSettingsPage = nil }
                         }
                     }
             }
@@ -1932,6 +1945,13 @@ struct RootView: View {
     /// the networks page uses — so one endpoint store has one writer.
     private func commitRescueRpc() {
         guard let chainId = rescueChain else { return }
+        // The core keeps its per-network drafts on an OPEN card and drops an
+        // edit for a chain whose card was never seeded. The networks page
+        // seeds it by expanding a row; this sheet is the same edit through
+        // another door, so it has to open the card before it can type into it
+        // — and the probe that opening starts is what the deferred-save gate
+        // then waits on.
+        settings.expandNetwork(chainId: chainId)
         settings.editOverride(chainId: chainId, field: .rpc, value: rpcDraft)
         settings.blurOverride(chainId: chainId)
         wallet.refresh(pull: true)
@@ -2493,6 +2513,22 @@ struct RootView: View {
                     },
                     onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
+                    onDenom: { send.toggleFiatInput() },
+                    // 原生 is not a second kind of token to paste an address
+                    // for — a native coin arrives with its network. Android
+                    // has sent people to 添加网络 from this tab since 044; on
+                    // iOS the toggle moved and nothing happened.
+                    onAddTokenTab: { id in
+                        guard id == "native" else { return }
+                        // The sheet goes FIRST. Pushing settings underneath it
+                        // left the person looking at the same add-token sheet,
+                        // unchanged, still on ERC-20, with 添加网络 hidden
+                        // behind it — found on a device, and indistinguishable
+                        // from the tab doing nothing.
+                        flows.close()
+                        pendingSettingsPage = .addNetwork
+                        router.path.append(.settings)
+                    },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
                     onFillEmpty: { amount in fillEmptyRows(amount) },
@@ -2718,6 +2754,14 @@ struct RootView: View {
             let chainId = ChainCatalog.chains.indices.contains(receiveNetwork)
                 ? ChainCatalog.chains[receiveNetwork].chainId : 0
             return ExplorerLinks.address(chainId: chainId, session.view.address, store: shelf)
+        case .sd4a, .sd4b, .sd4c:
+            // The send receipt. The chain is the token's, never the wallet's
+            // current one: a send can confirm while the person has already
+            // looked at another network, and linking THAT chain's explorer
+            // would show them a hash that is not there.
+            guard let view = send.view, let token = view.selectedToken,
+                  let hash = view.txHash, !hash.isEmpty else { return nil }
+            return ExplorerLinks.tx(chainId: token.chainId, hash: hash, store: shelf)
         default:
             return nil
         }
@@ -2854,15 +2898,15 @@ struct RootView: View {
             // pages are built from its view), so each maps back one to one.
             endpointActions: SettingsEndpointActions(
                 onEditEndpoint: { id, value in
-                    NetEndpointFieldWire(rawValue: id).map { settings.editEndpoint($0, value: value) }
+                    NetEndpointFieldWire(rawValue: id).map { settings.editEndpoint(field: $0, value: value) }
                 },
-                onBlurEndpoint: { id in NetEndpointFieldWire(rawValue: id).map { settings.blurEndpoint($0) } },
+                onBlurEndpoint: { id in NetEndpointFieldWire(rawValue: id).map { settings.blurEndpoint(field: $0) } },
                 onResetEndpoints: { settings.resetEndpoints() },
                 onEditProvider: { id, value in
-                    NetProviderIdWire(rawValue: id).map { settings.editProviderKey($0, value: value) }
+                    NetProviderIdWire(rawValue: id).map { settings.editProviderKey(provider: $0, value: value) }
                 },
-                onBlurProvider: { id in NetProviderIdWire(rawValue: id).map { settings.blurProviderKey($0) } },
-                onTestProvider: { id in NetProviderIdWire(rawValue: id).map { settings.testProvider($0) } },
+                onBlurProvider: { id in NetProviderIdWire(rawValue: id).map { settings.blurProviderKey(id: $0.rawValue) } },
+                onTestProvider: { id in NetProviderIdWire(rawValue: id).map { settings.testProvider(id: $0.rawValue) } },
                 onOpenEndpoints: { settings.openEndpoints() },
                 onOpenProviders: { settings.openProviders() }
             ),
@@ -2953,6 +2997,12 @@ struct RootView: View {
         var model = base
         if let view = settings.networkAdmin, view.loaded {
             model = SettingsLive.withNetworks(view, on: model, loc: loc)
+            // The last two pages drawn over live machinery (spec 081 FR-001):
+            // 端点 offered a dead host as the person's passkey index with an
+            // invented latency beside it, and 供应商 prefilled a mock API key.
+            // Both are the same machine's view; neither had a projection.
+            model = SettingsLive.withEndpoints(view, on: model, loc: loc)
+            model = SettingsLive.withProviders(view, on: model, loc: loc)
         }
         if let view = settings.currency {
             model = SettingsLive.withCurrency(view, on: model, loc: loc)
@@ -2991,6 +3041,14 @@ struct RootView: View {
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
         model = SettingsLive.withEraseFailure(eraseFailed, on: model, loc: loc)
+        model = SettingsLive.withProviderTests(on: model, loc: loc)
+        // Somebody was sent here for one page in particular. `SettingsScreen`
+        // seeds its own state from this once, at init, and owns it from then
+        // on; the pending value is cleared when the screen appears so the next
+        // visit opens where settings normally opens.
+        if let pendingSettingsPage {
+            model.page = pendingSettingsPage
+        }
         // Measured, not drawn (058). `storageTick` is what makes a clear show
         // up: the report is read here, so the page has to be asked to build
         // again after keys are removed.
@@ -3007,6 +3065,22 @@ struct RootView: View {
                 ?? ChainCatalog.chains.count,
             on: model, loc: loc
         )
+        // A partial wipe names what stayed, in the sheet itself (spec 081
+        // FR-017, the rule 028 set for the web and Android): the person is
+        // still signed in, and the button is still live so they can retry.
+        if let left = eraseFailed, !left.isEmpty {
+            model.eraseSheet = ConfirmSheetModel(
+                title: model.eraseSheet.title,
+                body: model.eraseSheet.body + "\n\n" + left.joined(separator: ", "),
+                confirm: model.eraseSheet.confirm,
+                cancel: model.eraseSheet.cancel,
+                danger: true,
+                note: model.eraseSheet.note,
+                callout: CalloutModel(
+                    tone: .danger, text: loc.t(I18nKeys.SettingsUi.eraseFailed)
+                )
+            )
+        }
         return model
     }
 
@@ -3075,40 +3149,54 @@ struct RootView: View {
         wallet.refresh(pull: true)
     }
 
-    /// 抹除此设备 — everything of ours on this phone, then the first run.
+    /// 抹除此设备 — everything this device holds, and then the door
+    /// (spec 072 FR-011 and spec 081 FR-017, `contracts/erase-device.md`).
     ///
     /// **Never run on the founder's phone.** It is wired because a drawn
     /// destructive action that does nothing is worse than one that works;
     /// verifying it means reading this code and the simulator, not erasing a
     /// device with a real wallet on it.
     ///
-    /// The order is the rule (spec 072 FR-011):
+    /// ## The order is the rule
     ///
     /// 1. The live dApp sessions are cut first (`revoke_all`), so an open page
     ///    hears it is disconnected rather than keeping a grant nobody holds.
-    /// 2. The store is SCANNED and every key the core calls erasable goes —
-    ///    no hand-kept list (it had eighteen names and missed contacts'
-    ///    siblings, every `vela.perm.*` grant and the name cache) — then the
-    ///    store is looked at again.
-    /// 3. Anything that survived keeps the person here, signed in, with the
-    ///    sheet saying so. Otherwise the app starts over from the empty store
-    ///    — the first run, with no sign-out sheet to cancel afterwards (the
-    ///    old path raised one after the data was already gone).
+    /// 2. Everything this device holds goes — the store SCANNED against the
+    ///    core's own `is_erasable_key` (no hand-kept list: the old one had
+    ///    eighteen names and missed about fourteen groups), and with it the
+    ///    three stores that are not `UserDefaults`: `WKWebsiteDataStore`, the
+    ///    shared URL cache and the logo store's own. A phone that kept a
+    ///    browsed site's cookies after being called wiped was the worst of
+    ///    them.
+    /// 3. Then it is looked at AGAIN. The sweep is not evidence.
+    /// 4. On a clean verification the session ends properly — `signOut` **and**
+    ///    `signOutConfirmed`, because `signOut` alone only opens the
+    ///    confirmation, and the old path therefore ended with a wiped phone
+    ///    sitting under a modal asking whether to sign out. On failure the
+    ///    person stays signed in with what survived named in the sheet itself.
     ///
-    /// Returns whether the erase happened.
-    private func eraseThisDevice() -> Bool {
+    /// The account records are gone by then, so `clearSignedInWallet` is
+    /// awaited before the session machine is told: `AccountStore` is an actor,
+    /// and a sign-out that read a list the sweep had already emptied would
+    /// disagree with the store.
+    private func eraseThisDevice() {
         browser.revokeAll()
-        let survivors = DeviceStorage.erase(shelf)
-        guard survivors.isEmpty else {
-            print("[vela-wallet] erase incomplete: \(survivors.count) key(s) survived")
-            eraseFailed = true
+        Task { @MainActor in
+            let survivors = await DeviceStorage.erase(shelf)
+            guard survivors.isEmpty else {
+                print("[vela-wallet] erase incomplete: \(survivors.count) key(s) survived")
+                eraseFailed = survivors
+                storageTick += 1
+                return
+            }
+            eraseFailed = nil
             storageTick += 1
-            return false
+            relayClient.clearCaches()
+            await accounts.clearSignedInWallet()
+            session.signOut()
+            session.signOutConfirmed()
+            onErased()
         }
-        eraseFailed = false
-        relayClient.clearCaches()
-        onErased()
-        return true
     }
 
     /// An account row in the switcher — from the wallet header, Explore or
@@ -3121,6 +3209,17 @@ struct RootView: View {
                 ($0["address"] as? String)?.lowercased() == address.lowercased()
             }) else { return }
             session.switchAccount(index: index)
+            // The browser is told too, and this is not housekeeping. A
+            // connected site holds a grant PINNED to an address; the core
+            // re-pins it on `AccountSwitched`, writes it, and tells the page —
+            // but only if somebody says the switch happened. Until now only
+            // the browser's own first launch did, so switching accounts with a
+            // site connected left the page believing it was still talking to
+            // the account it was granted, while the wallet signed as another.
+            browser.accountsChanged(
+                addresses: records.compactMap { $0["address"] as? String },
+                active: address
+            )
             // Everything account-scoped starts again: the book, the balances,
             // the feed. A switch that left the previous account's money on
             // screen would be the worst thing this control could do.

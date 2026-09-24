@@ -86,6 +86,7 @@
       "close": "Chiudi",
       "valueLabel": "Valore",
       "bestEffortWarning": "Decodificato dalla firma della funzione — non è un descrittore verificato. Controlla i dettagli con attenzione.",
+      "descriptorFetchedWarning": "Questa descrizione arriva dal servizio di descrittori di Vela e nessuno l'ha autenticata — controlla i dettagli prima di approvare.",
       "simWillSucceed": "Simulazione superata — ci si aspetta che vada a buon fine",
       "simWillFail": "Ci si aspetta che questa transazione fallisca — pagheresti comunque il gas.",
       "simWillFailReason": "Ci si aspetta che fallisca: {{reason}} — pagheresti comunque il gas.",
@@ -203,7 +204,11 @@
       "trustedSignerReopen": "Riapri la pagina",
       "trustedSignerDoneTab": "Firmato. Puoi chiudere questa scheda e tornare a Vela.",
       "viewOnExplorer": "Vedi sull’explorer",
-      "sendingToTokenContract": "Inviato al contratto del token stesso"
+      "sendingToTokenContract": "Inviato al contratto del token stesso",
+      "selfCallBlockedTitle": "Vela non firma questa richiesta",
+      "selfCallBlockedBody": "Questa richiesta cambierebbe chi controlla il tuo wallet ({{function}}). Firmarla una volta può consegnarlo a qualcun altro, quindi Vela la rifiuta. Non è stato firmato nulla.",
+      "selfCallBlockedLegBody": "Il passaggio {{index}} di questa richiesta cambierebbe chi controlla il tuo wallet ({{function}}). Firmarla una volta può consegnarlo a qualcun altro, quindi Vela rifiuta l’intera richiesta. Non è stato firmato nulla.",
+      "selfCallBlockedSafeTx": "Questa richiesta chiede alla tua chiave di autorizzare una transazione Safe da eseguire più tardi. Vela la rifiuta: una firma così può essere usata senza di te. Non è stato firmato nulla."
     },
     "signingApprove": {
       "resultingTotal": "Nuovo limite totale",

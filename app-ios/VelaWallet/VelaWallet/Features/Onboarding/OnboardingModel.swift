@@ -207,11 +207,20 @@ final class OnboardingModel {
             prompts: UsbPromptsBridge(model: self),
             showQr: { [weak self] payload in self?.presentQr(payload) }
         )
+        // The stored override, applied before any machine can ask a question:
+        // a flow that started against the default and then switched mid-way
+        // would query two different registries for one wallet. Each flow
+        // re-applies it too — see `applyConfiguredRegistry`.
+        applyConfiguredRegistry()
+    }
+
+    /// Spec 081 FR-002. The index is re-read at the start of every flow, not
+    /// snapshotted once in `init`: this model lives as long as the process, so
+    /// somebody who changed their public-key index in Settings and then signed
+    /// in was still talking to ours. `setBaseURL` is idempotent and costs one
+    /// actor hop, which is nothing against a ceremony.
+    private func applyConfiguredRegistry() {
         Task {
-            // The stored override, applied before any machine can ask a
-            // question: a flow that started against the default and then
-            // switched mid-way would query two different registries for one
-            // wallet.
             let url = await session.registryURL()
             endpointURL = url
             await registry.setBaseURL(url)
@@ -222,6 +231,7 @@ final class OnboardingModel {
 
     func startCreate() {
         guard create == nil else { return }
+        applyConfiguredRegistry()
         let driver = CoreDriver(
             bridge: CreateWalletCore(),
             perform: { [weak self] operation in
@@ -276,6 +286,7 @@ final class OnboardingModel {
     // MARK: - Sign in
 
     func signIn(method: KeyMethod = .platform) {
+        applyConfiguredRegistry()
         if login == nil {
             let driver = CoreDriver(
                 bridge: LoginCore(),

@@ -95,5 +95,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 			response.headers.set(k, v);
 		}
 	}
+	// Same rule as static/_headers, for the responses the Worker renders: this
+	// origin never asks for a passkey, so nothing it serves may (spec 080).
+	response.headers.set(
+		'Permissions-Policy',
+		'publickey-credentials-get=(), publickey-credentials-create=()'
+	);
 	return response;
 };

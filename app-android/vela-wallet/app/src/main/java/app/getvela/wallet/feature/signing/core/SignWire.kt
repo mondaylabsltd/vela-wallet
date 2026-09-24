@@ -60,6 +60,9 @@ enum class SignErrorKind {
 
     @SerialName("unlimited_approval") UnlimitedApproval,
 
+    /** The request would have changed who controls the account (spec 081). */
+    @SerialName("self_call_blocked") SelfCallBlocked,
+
     @SerialName("funding_cancelled") FundingCancelled,
 
     @SerialName("submit_failed") SubmitFailed,
@@ -113,6 +116,15 @@ data class SignQuotedFee(
 
 @Serializable
 data class SignErrorNotice(val kind: SignErrorKind, val detail: String? = null)
+
+/** Why a request is refused outright: the Safe function it would have called. */
+@Serializable
+data class SignBlockedView(
+    val function: String,
+    val selector: String = "",
+    val leg_index: Int? = null,
+    val nested: Boolean = false,
+)
 
 @Serializable
 data class SignFundingNeeded(
@@ -261,6 +273,7 @@ data class SignView(
     val tracker_handoff: SignTrackerHandoff? = null,
     val notice: SignNotice? = null,
     val global_chain_id: Int = 0,
+    val blocked: SignBlockedView? = null,
 )
 
 @Serializable

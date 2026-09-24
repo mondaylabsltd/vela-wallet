@@ -1,5 +1,6 @@
 package app.getvela.wallet.navigation
 
+import app.getvela.wallet.core.diagnostics.BugReportUrl
 import app.getvela.wallet.core.diagnostics.CrashSheet
 import app.getvela.wallet.feature.settings.SettingsPage
 import app.getvela.wallet.feature.settings.core.RegistryBackup
@@ -51,6 +52,7 @@ import app.getvela.wallet.BuildConfig
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1240,6 +1242,15 @@ fun VelaNavHost(
                                     message = refusal,
                                 )
                             },
+                            // The connection sheet's "Switch account": the same
+                            // switcher the wallet home opens, so the two can never
+                            // show different accounts. Switching re-pins the
+                            // connected site's grant — the session flow already
+                            // tells the permissions machine on every change.
+                            onSwitchAccount = {
+                                wallet.switcherOpened(session.accounts.map { it.address })
+                                switcherOpen = true
+                            },
                         )
                     } else {
                         // The holdings, the feed and the currency are this device's
@@ -1684,7 +1695,12 @@ fun VelaNavHost(
                 // The Ethereum backup row (spec 062): asked of the chain, never of our
                 // server, each time this screen meets an account. `null` = still asking.
                 var backupCheck by remember(session.address) { mutableStateOf<RegistryBackup.Check?>(null) }
-                LaunchedEffect(session.address) {
+                // …and each time a person asks for it again. "Could not check" is
+                // exactly when someone taps that row, and what they want is another
+                // attempt (dead-controls #8), so the tap bumps this and the SAME
+                // check runs — no second code path to drift from the opening one.
+                var backupAttempt by remember(session.address) { mutableIntStateOf(0) }
+                LaunchedEffect(session.address, backupAttempt) {
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
                     val key = application.container.foundingKeyOf(address) ?: return@LaunchedEffect
@@ -1755,10 +1771,15 @@ fun VelaNavHost(
                     eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
                     m
                 }
+                // Spec 081 FR-016: the device lines go in `environment`, by the
+                // form's own field id. The `&body=` this used to send is IGNORED
+                // whenever `template=` names an issue form, so every report filed
+                // this way arrived blank.
                 val feedbackUrl = remember(liveModel.feedback.previewLines) {
-                    "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
-                        java.net.URLEncoder.encode("[android] ", "UTF-8") +
-                        "&body=" + java.net.URLEncoder.encode(liveModel.feedback.previewLines.joinToString("\n"), "UTF-8")
+                    BugReportUrl.build(
+                        what = "",
+                        environment = liveModel.feedback.previewLines.joinToString("\n"),
+                    )
                 }
                 SettingsRoute(
                     model = liveModel,
@@ -1789,12 +1810,31 @@ fun VelaNavHost(
                         onClearCaches = { scope.launch { DeviceStorage.clearCaches(VelaStore(context)); application.container.wallet.refresh(); storageTick++ } },
                         onErase = {
                             scope.launch {
-                                // The core's rule (spec 072): every `vela.` key but the
-                                // pending-upload ledger, found by scanning — the accounts
-                                // too, so nothing of this wallet survives on the device.
-                                // Live pages hear their sites disconnected first.
+                                // What an erase removes is the CORE's rule
+                                // (`is_erasable_key`): every `vela.` key but the
+                                // pending-upload ledger — the accounts too, so
+                                // nothing of this wallet survives on the device
+                                // (spec 072). Live pages hear their sites
+                                // disconnected first.
+                                //
+                                // What it SWEEPS is main's (spec 081 FR-017):
+                                // `eraseDevice`, not `erase`, because this device
+                                // also holds the theme in a second store, the
+                                // crash record, the logs, the caches and — the
+                                // one that mattered — every browsed site's
+                                // cookies and localStorage under `app_webview/`.
+                                //
+                                // NOTE (075 merge): main kept `vela.accounts`
+                                // and `vela.activeAccountIndex` here, on 028's
+                                // reading that the account records belong to
+                                // sign-out. 072 and the core say an erase takes
+                                // them. Taking the core's, because one rule for
+                                // four shells is the point of having it — and
+                                // flagged for the owner, because it is a
+                                // decision about a destructive action and not a
+                                // merge detail.
                                 application.container.browser.revokeAll()
-                                val left = DeviceStorage.erase(VelaStore(context))
+                                val left = DeviceStorage.eraseDevice(context, VelaStore(context))
                                 if (left.isEmpty()) {
                                     eraseFailed = null
                                     application.container.session.signOut()
@@ -1806,9 +1846,14 @@ fun VelaNavHost(
                         },
                         onFeedbackSend = { text ->
                             // Spec 048: what was typed leads the report; the device lines follow.
-                            val body = listOf(text.trim(), liveModel.feedback.previewLines.joinToString("\n")).filter { it.isNotBlank() }.joinToString("\n\n")
-                            val url = "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
-                                java.net.URLEncoder.encode("[android] ", "UTF-8") + "&body=" + java.net.URLEncoder.encode(body, "UTF-8")
+                            // Spec 081 FR-016: each in its OWN field — `what` and
+                            // `environment` — because `&body=` is dropped by GitHub
+                            // for an issue form, which is how this button spent its
+                            // whole life opening a blank page.
+                            val url = BugReportUrl.build(
+                                what = text.trim(),
+                                environment = liveModel.feedback.previewLines.joinToString("\n"),
+                            )
                             VelaLog.event("feedback", "send", "typed" to text.length)
                             runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
                         },
@@ -1844,12 +1889,26 @@ fun VelaNavHost(
                         // would look for it.
                         onSignOut = { application.container.session.signOut() },
                         onOpenContacts = { navController.push(VelaDestinations.CONTACTS) },
-                        // Only while there is something to do. The signing sheet is hosted on
-                        // the wallet route, so the person goes there and the request follows.
+                        // Only while there is something to do — and in one state there
+                        // are two things. With a call in hand the person is taken to the
+                        // signing sheet, which is hosted on the wallet route, so they go
+                        // there and the request follows. After a check that did not
+                        // finish, the tap asks again: the answer is dropped (the row says
+                        // "checking…" once more) and the effect above re-runs (#8).
                         onEthereumBackup = {
-                            backupCheck?.call?.let { call ->
-                                selectFromPushed(VelaTab.Wallet)
-                                application.container.openEthereumBackup(call)
+                            val check = backupCheck
+                            val call = check?.call
+                            when {
+                                call != null -> {
+                                    selectFromPushed(VelaTab.Wallet)
+                                    application.container.openEthereumBackup(call)
+                                }
+                                check?.state == RegistryBackup.State.CouldNotCheck -> {
+                                    settingsHaptic(VelaHaptic.Select)
+                                    backupCheck = null
+                                    backupAttempt += 1
+                                }
+                                else -> Unit
                             }
                         },
                         onSheetSelect = { sheet, id ->
@@ -1901,6 +1960,7 @@ fun VelaNavHost(
                                 ?.let { settings.expandOverride(it.chain_id) }
                         },
                         onResetEndpoints = { settings.resetEndpoints() },
+                        onEndpointsOpened = { settings.openEndpoints() },
                         onRpcFixField = { value -> rpcDraft = value },
                         onRpcFixPrimary = {
                             rescueChainId?.let { chainId ->

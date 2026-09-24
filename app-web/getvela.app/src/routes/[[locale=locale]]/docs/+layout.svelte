@@ -35,11 +35,11 @@
 		aria-expanded={menuOpen}
 	>
 		<span class="bars" aria-hidden="true"></span>
-		{menuOpen ? 'Hide' : 'Browse'} docs
+		{menuOpen ? m.chrome.docs.ui.hide : m.chrome.docs.ui.browse}
 	</button>
 
 	<aside class="sidebar" class:open={menuOpen}>
-		<nav aria-label="Documentation">
+		<nav aria-label={m.chrome.docs.ui.navLabel}>
 			{#each sidebar as group (group.key)}
 				<div class="group">
 					<p class="group-title">{m.chrome.docs.groups[group.key]}</p>

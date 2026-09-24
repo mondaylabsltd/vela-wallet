@@ -41,7 +41,7 @@
       "bundlerHint": "Vela Relay 호환 엔드포인트가 필요합니다",
       "fiatLabel": "법정화폐 환율",
       "fiatHint": "USD 기준 환율로 통화 목록을 구성합니다 — 더 넓은 범위의 소스로 교체 가능.",
-      "resetToDefaults": "기본값으로 재설정",
+      "resetToDefaults": "네 가지 모두 기본값으로",
       "selfHostGuide": "직접 배포 가이드 →",
       "resetTitle": "서비스 엔드포인트를 재설정할까요?",
       "resetBody": "네 가지 서비스 모두 Vela의 주소로 돌아갑니다. 여기에 입력한 주소는 삭제됩니다.",
@@ -72,8 +72,9 @@
       "compatible": "호환됨",
       "incompatible": "호환되지 않음",
       "checkSafe": "Safe L2 컨트랙트",
-      "checkSigner": "WebAuthn 서명 모듈",
-      "checkRemaining": "나머지 컨트랙트 {{count}}개"
+      "checkSigner": "P-256 프리컴파일",
+      "checkRemaining": "나머지 컨트랙트 {{count}}개",
+      "singleKeyOnly": "이 네트워크에서는 패스키가 둘 이상인 지갑을 만들 수 없습니다. Safe의 패스키 서명자 팩토리가 배포되어 있지 않기 때문입니다.\n패스키가 하나인 지갑은 정상적으로 작동합니다."
     },
     "treasury": {
       "modalTitle": "트레저리",

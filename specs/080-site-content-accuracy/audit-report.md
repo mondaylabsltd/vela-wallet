@@ -1,0 +1,99 @@
+# Audit report — 080
+
+Findings on getvela.app and the root README (F-11, F-12 and H-12 onward came from the independent adversarial review, after the first rewrite), verified against `main` at
+`dd482131`, the service repositories, and primary external sources (research.md).
+Severity: **Fatal** — an expert reader would call it false and stop trusting the
+site. **High** — wrong in a way that costs a user money, keys or a decision.
+**Medium** — stale, imprecise or inconsistent without direct harm. **Low** —
+voice and clarity.
+
+"If we recommended Vela to Ethereum's founder tomorrow" is the Fatal list.
+
+## Fatal
+
+| # | Where | What it said | Why an expert would stop reading | Fix | Status |
+|---|---|---|---|---|---|
+| F-1 | Whitepaper, threat model | "Compromised Vela server — yields no signing ability; the blast radius is degraded service, not loss of funds." | For a web wallet the server delivers the code that builds the transaction and renders the summary; a compromised delivery asks you to sign something else and the passkey prompt can't tell. That is exactly the Bybit lesson the site's own Bybit page teaches. | Threat model split: backend services (no signing power) vs app delivery (can present a malicious transaction), plus domain takeover; mitigations named honestly. | fixed |
+| F-2 | Account contract | "If Vela is gone tomorrow … any Safe-compatible interface can drive it." | A passkey is bound to its rpId (`getvela.app`); Safe{Wallet} or any interface on another origin cannot get an assertion. The claim confuses reading an account with signing for it. | "Safe tools can read it and build transactions; signing needs software that can ask for a `getvela.app` signature" + link to the list of what can. Same correction as a dated note on the blog post that said it. | fixed |
+| F-3 | Audits page | SafeWebAuthnSharedSigner "represents exactly one passkey per Safe" while every other page promised up to seven keys; the factory and singleton the second-to-seventh keys use were not listed anywhere. | Irreconcilable to anyone who knows the passkey module; the contract list was incomplete for every multi-key wallet. | Keys 2–7 use SafeWebAuthnSignerFactory `0x1d31…1195` / singleton `0x4E27…CA50`; both added with their audit coverage; address table extended. | fixed |
+| F-4 | Audits page | Safe4337Module v0.3.0: "no unresolved findings above informational level." | Certora's August 2026 review found a Medium (M-01), acknowledged and not fixed; Nethermind reviewed it too. The page was out of date on the one contract every operation passes through. | Three reviews listed; M-01 explained under Known issues with Vela's exposure. | fixed |
+| F-5 | Bybit page | Vela removes "the upgrade primitive the attack relied on" / "no contract we can upgrade". | The attack used an owner-signed DELEGATECALL; Safe + the 4337 module still allow it, and Vela's own batches use it. Holding no admin role is a different claim. | Reworded: no admin role; the primitive still exists behind a valid signature; the defences are decoding and an independent check. Also states a dApp can request a call to the account itself and Vela decodes but does not block it. | fixed |
+| F-6 | Whitepaper vs landing FAQ | Whitepaper: domain loss has "no consumer-grade path". FAQ: "sign from the Vela extension or the clear-signing extension." | Opposite answers to the most important ownership question, one of them wrong in both directions: the extension works (host-permission rpId), the clear-signing extension cannot operate a wallet on its own and is not published. | One answer everywhere, in the self-hosting guide's "if getvela.app disappears" section: extension (any key), self-built apps (phone QR / security key), store apps (depend on association files). | fixed |
+| F-7 | Fees page, FAQ, whitepaper, README | A per-network, non-refundable "gas account" activation deposit, sponsored "for new users". | The mechanism no longer exists in the relay or any shell. Describing a deposit that isn't taken, and omitting what is (the in-band fee formula), is the kind of mismatch that reads as not knowing your own product. | Removed everywhere; replaced by the treasury top-up that does exist (voluntary, non-refundable, doesn't pay for your transaction). | fixed |
+| F-8 | README, whitepaper, FAQ, landing FAQ | Fee "≈2×", "3× the raw on-chain cost", "no hidden markup". | Code: `3 × padded gas limits × max(wallet price, relay fast-tier price)`, min ≈ $0.01 — often ten times or more the actual cost. Every multiple in circulation understated it. | Formula stated in plain words on the fees page, whitepaper, README; landing trade-off says "often ten times or more the real on-chain cost". The marketing essay's "about twice" is flagged for the founder (below). | fixed (site); flagged (marketing draft) |
+| F-9 | Privacy policy | "We do not monitor, log, or analyze your on-chain transactions"; "never sent to Google"; "on-device data is deleted when you log out"; RPC preferences "not sent to our servers"; the public-key index not disclosed at all. | Each is contradicted by code: the relay logs sender + op hash and keeps ops 1 h–14 d; the site loads Google Fonts; sign-out keeps history/contacts/settings; the `X-Rpc-Url` header sends the top RPC URL (possibly with a provider key) to the relay; the index sees every registration and lookup. | Policy rewritten flow by flow, with retention, company number, a privacy contact and a new date. | fixed |
+| F-10 | Everywhere | "12 networks" | The wallet has 24 since 17 September; README said 24. | 24 everywhere; a test now compares the site list with vela-core and every locale's heading. | fixed (en, zh; 13 locales in Phase 8) |
+| F-11 | Whitepaper threat model; website | "A passkey … is not offered to other domains"; nothing about what the site itself loads. getvela.app — the passkeys' own domain — loads a third-party analytics script on every page, including the page that keeps a funded deployer key. | Any script on a getvela.app page (or subdomain) can call WebAuthn with rpId `getvela.app`; the prompt shows only the domain. An expert would call the omission the first thing to fix. | **Product fix**: `Permissions-Policy: publickey-credentials-get=(), publickey-credentials-create=()` on every site response (static `_headers` + hook); analytics removed from `/chain-setup`. Threat model now says any page on the domain can request signatures and what the site does about it. | fixed |
+| F-12 | Landing fact #4, meta, FAQ, whitepaper | "Access doesn't depend on Vela staying online" / "every service can be replaced". | The relay hard-codes Vela's chain-data host; sending with zero Vela infrastructure needs a code change; iOS can't change endpoints. The lead ownership claim contradicted the site's own guide. | "Everything Vela runs is open source and you can run it yourself"; every page that promised replaceability now names the relay caveat; the guide says it up front. | fixed |
+
+## High
+
+| # | Where | Finding | Fix | Status |
+|---|---|---|---|---|
+| H-1 | Create wallet, recovery, passkeys, whitepaper, privacy, terms, about | Single passkey, iCloud/Google only, "your face or fingerprint" *is* the passkey. The product creates 1–7 keys of three kinds, and requires a second key when the only one syncs nowhere. | Keys described the same way on every page (claim ledger C-keys-1/2, C-auth-1). | fixed |
+| H-2 | Landing trade-off #3 | Said only that Safe is audited; A02's mandated sentence (Vela's own code is not audited, none scheduled) was missing from the landing page. | Title now "The contracts are audited. Vela's own code is not." | fixed |
+| H-3 | Landing compare row "An extra check", FAQ | The independent signing page presented as an available extra check. It is built, unpublished, and no app sends it requests. | Row reads "built but not yet connected to the apps", tone changed; docs state status. | fixed |
+| H-4 | Signing-page doc | "No network requests"; recommended for every signature today. | It loads token logos from Vela's chain-data host; it can't be used for real signatures until apps route to it. | Corrected; "When to use it" → "Where it fits". | fixed |
+| H-5 | Self-hosting (landing fact #4 → README table) | The ownership claim linked to a table of four repos and a false validation claim ("the wallet validates three checks before accepting"). No steps, no requirements, no limits. | New `/docs/self-hosting`: map of every dependency, the rpId limit and escape hatches, per-app endpoint support (incl. the iOS gap), step-by-step for relay / index / chain data / rates / apps, with the undocumented `P256_INDEX_DOMAIN_REGISTRY` and per-chain treasury funding. | fixed |
+| H-6 | Clear-signing doc | "Unlimited approvals are blocked" without saying signed permits (EIP-2612 / Permit2) are signed as requested; "verified" implied authentication of fetched descriptors. | Scope of the guard stated; "verified" defined as "a descriptor for this contract was found". | fixed |
+| H-7 | Terms | Nothing about fees, store purchases, 1-of-n key risk, unaudited integration; liability clause named a product, not the company; no statutory carve-out, governing law or contact email; date not updated after two edits that bind every user through the onboarding checkbox. | Rewritten; flagged for legal review. | fixed; legal review recommended |
+| H-8 | Roadmap | Address book "next" (shipped); DApp Connect without phone (dropped — WalletPair); more networks (shipped); a path for chains without P-256 (contradicts the address derivation); an independent audit (violates the no-audit-scheduled stance); accounts "already follow you through platform backup" on iOS/Android (false for the native apps). | Rewritten from shipped work; upcoming items limited to what is true. | fixed |
+| H-9 | Install, introduction, get-started | "Nothing to download, no app store, mobile coming soon"; "built from one codebase"; Mac App Store listed as coming. | Every platform with cost and status; "one wallet, wherever you open it"; Mac App Store removed (blocked by sandboxing). | fixed |
+| H-10 | Comparison table | MetaMask "Sponsored gas: not offered", "open source", "EOA"; Base Account naming after the 10 Sep rename; Base "if the service goes away, the wallet goes with it". | Updated to current, sourced facts; the Base criticism restated fairly (closed signing service; no published path for the passkey). | fixed |
+| H-11 | `/api/transactions` (site server) | The `network` query parameter went into the Alchemy hostname with the API key in the path — a key-exfiltration bug. | Allowlist of known slugs. Deleting the five dormant routes is recommended. | fixed |
+| H-12 | Fees page, landing, whitepaper, FAQ | "Usually several times the on-chain cost" — the site's own numbers (≥ ~410k reserved gas ×3 at ~1.8× price vs ~150k used) give ~10–20×. | "Often ten times or more, more on the first send on a network". | fixed |
+| H-13 | Clear signing, whitepaper, roadmap | "Unlimited approvals can't be submitted" — the guard's threshold is 2^200; `approve(spender, 2^199)` passes. | Threshold and what passes stated. | fixed |
+| H-14 | Bybit, whitepaper, audits | Self-calls (`enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`) framed as a minor gap; they are a full takeover. | Stated as a serious gap with the one rule to follow (reject requests targeting your own address); listed under "Gaps in Vela's own defences". | fixed (docs); product gap remains |
+| H-15 | Signers, recovery, whitepaper, landing FAQ | Never said that a compromised key can't be revoked and the address is burned on every chain; told users to "use a security key instead" as if keys could be swapped. | "If a key may be compromised, move everything to a new wallet." | fixed |
+| H-16 | Self-hosting, passkeys, why-vela | rpId rules misstated (`wallet.example.com` → `example.com`; "a browser or phone will only use them for getvela.app"). | Precise rules: subdomains, related origins, extension host permissions, CTAP/hybrid outside the browser. | fixed |
+| H-17 | Why-vela, about, FAQ, intro | Custody absolutes ("not a policy we could change", "Vela cannot move your funds") while Vela serves the code that builds what you sign. | "No key and no role; but Vela writes the software that asks your key to sign." | fixed |
+| H-18 | Whitepaper | "Relay: liveness only". It also chooses inclusion timing (front-running within slippage) and sets the fee's gas-price basis (up to 3× the wallet's reading). | Stated. | fixed |
+| H-19 | Whitepaper principle 1, FAQ | "Services only ever see public data and signed operations" — the relay receives the RPC URL (with any API key) and every service sees IPs. | Corrected. | fixed |
+| H-20 | Chain-setup page, networks page, whitepaper | "Vela works here" for a chain that lacks Safe's signer factory — keys 2–7 of a multi-key wallet couldn't sign there. | Caveat added everywhere the check is described; product gap listed. | fixed (docs); product gap remains |
+| H-21 | Send & receive | Recipient names presented as findings; they are unverified reverse records chosen by the address owner. | "A name is a hint, not proof." | fixed |
+
+## Medium (selection)
+
+- Gas "1.5–3× an EOA transfer" → measured ~143–168k gas per send vs 21k (on-chain data, Gnosis).
+- Security page: Safe bounty tier wording, griefing-vector impact understated and mempool exposure overstated, DefiLlama provenance, pathUSD wording, "most widely tooled" superlative, "we state it in the site header".
+- Signers: native NFC not supported; desktop "this device" and Windows less tested; cross-chain reason owners can't change.
+- Send & receive: names resolve only from address to name; split/sweep/batch undocumented; activity can miss log-less native deposits.
+- Recovery: omitted the Gnosis → Ethereum registry fallback and that two-signature recovery covers single-key wallets only.
+- About: "the smart contracts" (Vela doesn't write the account contracts); "biggest cause of lost crypto".
+- Licences: "all four services MIT" — p256-index has no licence file.
+- Footer linked the legacy index site (biubiu.tools); landing linked a third-party chain-setup tool instead of the site's own page.
+- Translated docs: nothing tracked drift (now `source:` fingerprints); zh links convention now tested.
+
+## Low
+
+- AI/marketing voice removed from landing, about and get-started ("not a slogan but the architecture", "no faceless company", "Your keys, your coins").
+- Missing full stop in a trade-off; inconsistent "安全钥匙/安全密钥" in zh.
+
+## Not fixed here — product gaps found by the audit
+
+Recorded so the docs can stay honest until they are fixed; each has file
+references in research.md §3b and the reports.
+
+1. iOS Settings → Service Endpoints shows fixture data and saves nothing (event field mismatch).
+2. ~~Web onboarding ignores a custom passkey index (`setRegistryUrl` never called); desktop ignores it in sessions that start signed in; Android name lookups always use the default.~~ **Fixed 2026-09-22** (spec 081 FR-002): one rule in the core (`NetServiceEndpoints::effective`), read per call on web and Android, applied at boot and on save on desktop, re-applied per flow on iOS.
+3. ~~The relay hard-codes `ethereum-data.getvela.app` (`vela-relay/src/utils/rpc.rs:15`).~~ **Fixed 2026-09-22** — `VELA_RELAY_CHAIN_DIRECTORY_URL` (vela-relay PR #12); landing fact #4 restored on that basis.
+4. ~~p256-index: no LICENSE; `P256_INDEX_DOMAIN_REGISTRY` undocumented; source Dockerfile misses `p256-replay`. vela-relay source Dockerfile misses workspace members.~~ **Fixed 2026-09-22** — MIT licence added; p256-index PR #8 and vela-relay PR #13, both verified by a real `docker build` from a clean clone.
+5. ~~No guard on dApp-requested calls to the account itself (addOwner / enableModule / setFallbackHandler) — decoded, not blocked.~~ **Fixed 2026-09-22** (spec 081 FR-005/006): refused in `vela-core/src/app/self_call_guard.rs`, including inside batches and `MultiSend`, any `delegatecall` leg, and `SafeTx` typed data.
+6. Fetched ERC-7730 descriptors are labelled "verified" without authentication.
+7. ~~`X-Rpc-Url` sends the user's top RPC URL (possibly with a provider API key) to the relay, and the relay reads a different header name anyway.~~ **Fixed 2026-09-22** (spec 081 FR-007): removed from all four shells.
+8. **Mostly fixed 2026-09-22** (spec 081 FR-004/FR-017): desktop erase has a handler and sweeps `vela.` plus the webview's browsing data; iOS erase sweeps every key, `WKWebsiteDataStore`, the logo caches, and signs out confirmed; both self-hosting links open `https://getvela.app/docs/self-hosting`. **Still open**: the desktop treasury top-up's old "fee reserve" copy.
+9. ~~Web feedback "Send" does nothing; the site's `/api/bug-report` has no caller.~~ **Fixed 2026-09-22** (spec 081 FR-016): `services/bug-report.ts` posts to the site endpoint with a prefilled-issue fallback, the row is reachable on phone and desktop, and a test asserts the payload carries no address, balance, endpoint URL or raw `vela.*` value.
+10. The site loads a third-party-origin analytics script on the same origin as `/chain-setup`, which keeps a funded deployer key in localStorage.
+11. ~~Five dormant site API routes (`/api/wallet`, `/api/transactions`, `/api/nft`, `/api/bundler`, `/api/proxy`) forward wallet addresses to Alchemy/Pimlico with no caller.~~ **Fixed 2026-09-22** (spec 081 FR-015): deleted after a repo-wide no-caller proof, with the dead helpers in `server/net.ts`.
+12. ~~The iOS app has no privacy manifest (App Store blocker per the privacy report).~~ **Fixed 2026-09-22** (spec 081 FR-014): `PrivacyInfo.xcprivacy` declaring what the archived binary actually imports, with a CI gate that re-derives it with `nm -u`.
+13. ~~The network admission check (vela-core `network_admin.rs:97-133`, mirrored by the site's chain-setup page) omits SafeWebAuthnSignerFactory and its singleton, and checks CompatibilityFallbackHandler, which wallets don't use.~~ **Fixed 2026-09-22** (spec 081 FR-009): twelve contracts, two of them marked multi-key-only, and a second verdict `multi_key_ready` that every shell now says out loud.
+14. Reverse-record names are shown without forward verification in every shell.
+15. Release packages carry SHA-256 checksums in the same GitHub release, no signatures; the Windows installer is unsigned; v0.9.4 has no notarized macOS build.
+16. ~~The app's own copy (vela-core corpus: onboarding "12+ networks") and the extension manifest ("12+ networks") understate the network count — not false, but stale.~~ **Fixed 2026-09-22** (spec 081 FR-011): 24, counted from `chains.ts`, in four corpus keys × 15 locales, the extension manifest and the three Linux packaging blurbs.
+
+## For the founder
+
+- **Fee narrative vs code.** *Resolved 2026-09-22:* the founder chose the code. The marketing essay and leads now state `3 × reserved gas × the price for your speed`, and every surface leads with "exact amount shown before you sign; paid to the relay (Vela's by default); switch relays or run your own" instead of a multiple of the on-chain cost (claim ledger C-fee-1).
+- **Legal review** of the rewritten terms (statutory carve-out, governing law, store-purchase clause) and privacy policy (controller scope, ICO reference).
+- **Analytics operator.** The policy names Rybbit at `tj.appsdata.org`; it no longer claims "self-hosted" because the repo can't confirm who runs that host.
+- **Landing nav.** Spec 059 fixed it at two links (Why, FAQ). Docs are reachable from the fact rows and the footer only; a "Docs" link would help the expert reader. Not changed — a founder ruling.

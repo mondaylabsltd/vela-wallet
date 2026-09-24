@@ -86,6 +86,7 @@
       "close": "Fermer",
       "valueLabel": "Valeur",
       "bestEffortWarning": "Décodé à partir de la signature de fonction — ce n'est pas un descripteur vérifié. Vérifiez attentivement les détails.",
+      "descriptorFetchedWarning": "Cette description vient du service de descripteurs de Vela et rien ne l'authentifie — vérifiez les détails avant d'approuver.",
       "simWillSucceed": "Simulation réussie — devrait aboutir",
       "simWillFail": "Cette transaction devrait échouer — vous paieriez quand même les frais de gas.",
       "simWillFailReason": "Échec probable : {{reason}} — vous paieriez quand même les frais de gas.",
@@ -203,7 +204,11 @@
       "trustedSignerReopen": "Rouvrir la page",
       "trustedSignerDoneTab": "Signé. Vous pouvez fermer cet onglet et revenir à Vela.",
       "viewOnExplorer": "Voir dans l’explorateur",
-      "sendingToTokenContract": "Envoyé au contrat du jeton lui-même"
+      "sendingToTokenContract": "Envoyé au contrat du jeton lui-même",
+      "selfCallBlockedTitle": "Vela ne signe pas cette demande",
+      "selfCallBlockedBody": "Cette demande changerait qui contrôle votre portefeuille ({{function}}). La signer une seule fois peut le remettre à quelqu’un d’autre, alors Vela la refuse. Rien n’a été signé.",
+      "selfCallBlockedLegBody": "L’étape {{index}} de cette demande changerait qui contrôle votre portefeuille ({{function}}). La signer une seule fois peut le remettre à quelqu’un d’autre, alors Vela refuse toute la demande. Rien n’a été signé.",
+      "selfCallBlockedSafeTx": "Cette demande veut que votre clé autorise une transaction Safe à exécuter plus tard. Vela la refuse : une telle signature peut servir sans vous. Rien n’a été signé."
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",

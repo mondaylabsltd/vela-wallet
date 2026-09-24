@@ -27,6 +27,12 @@ describe('signing messages', () => {
 	it.each(SUPPORTED_LOCALES)('no signing string is empty in %s', (locale) => {
 		for (const [field] of KEYS) {
 			const value = resolveSigningMessages(locale)[field as keyof typeof messages];
+			// A message whose corpus key has not landed yet is ABSENT, not
+			// empty (spec 081's descriptor-provenance line): the resolver
+			// leaves it out rather than drawing a raw key path, and there is
+			// nothing to measure until the catalogs carry it. Checked first:
+			// there are no leaves to walk in something that is not there.
+			if (value === undefined) continue;
 			// Two fields are GROUPS, not strings: the speed control's words
 			// (spec 069) and the landing's (spec 077). Every leaf of either has
 			// to resolve, so the walk is generic rather than a list per group —

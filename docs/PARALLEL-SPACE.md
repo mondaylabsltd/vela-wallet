@@ -21,20 +21,25 @@
 Because the only swap is the signer, and the true keys live in the device passkey (never
 in local storage), entering/exiting the parallel space is safe and fully reversible.
 
-Everything is gated on `__DEV__`: the passkey override in `src/modules/passkey/index.ts`
-is a compile-time no-op in release builds, so none of this ships enabled in production.
+On the web the fixture signer is reached only through a dynamic import behind the dev gate
+(spec 026 D18), so it is never in a production page's startup chunk; on the desktop it is the
+`dev-fixtures` cargo feature, which release packages do not compile. Entering is always explicit,
+and the badge is unconditional — it gates itself rather than being compiled out, so a fixture
+wallet can never be on screen without saying so.
 
 ## The fixture keyset
 
-Three fixed P-256 keypairs → three deterministic Safe accounts. Defined in
-[`src/services/dev/passkey-fixture.ts`](../src/services/dev/passkey-fixture.ts); locked by
-[`src/__tests__/services/passkey-fixture.test.ts`](../src/__tests__/services/passkey-fixture.test.ts).
+Three fixed P-256 keypairs → three deterministic single-key Safe accounts, plus the multi-key
+Safe derived from all three. Defined in
+[`app-web/vela-wallet/src/lib/dev/passkey-fixture.ts`](../app-web/vela-wallet/src/lib/dev/passkey-fixture.ts);
+locked by `passkey-fixture.test.ts` beside it and by `core/golden-addresses.test.ts`.
 
 | Account | Safe address (identical on every EVM chain) |
 |---|---|
 | **Parallel One** (primary) | `0xD400866e00B055B20752a826CD5C89b811de130b` |
 | Parallel Two | `0x031d7D57c99CAF891e1C250554691Fd12D84772b` |
 | Parallel Three | `0x58cd0ce6A27099220543b31710d7860d75Ba1d3d` |
+| **golden multi-key Safe** (all three keys, 1-of-3) | `0x88cCA0EeDbF2C4426110bbFc998F048689266894` |
 
 The fixture signer builds a **genuine** WebAuthn assertion (real ECDSA-P256 signature over
 `sha256(authenticatorData ‖ sha256(clientDataJSON))`), so the same bytes verify against
@@ -42,9 +47,10 @@ Safe's on-chain P-256 verifier — a real UserOp from a fixture Safe settles on-
 
 ## Enter / exit
 
-**Route (manual + e2e):** open `/parallel`. The layout installs the fixed-key signer,
-loads the fixture wallet, and drops you into the real home. `/parallel/connect` opens the
-real Connect screen directly under the prefix.
+**Route (manual + e2e):** open `/[locale]/parallel` (e.g. `/en/parallel`). The page installs the
+fixed-key signer, loads the fixture wallet, and drops you into the real home. It is the only route
+under the prefix — there is no `/parallel/connect`; a dApp request is exercised through the
+extension instead (below).
 
 **Console (`vela.*`, dev builds):**
 
@@ -57,30 +63,34 @@ vela.parallel.help()
 ```
 
 **e2e (Playwright):** seed `localStorage` before the app boots so the mode is armed on the
-first render — see `e2e/support/parallel.ts`.
+first render — see `app-web/vela-wallet/e2e/parallel-entry.e2e.ts`.
 
 ## Test dApp + relay
 
-The "dApp side" is a tiny, self-contained page served by a local relay — no external
-services, no crypto to fake. It speaks the real RemoteInject wire protocol (SSE + POST), so
-the wallet's real transport drives the whole connect → request → approve → respond loop.
+The "dApp side" is a tiny, self-contained page — no external services, no crypto to fake:
+`app-web/vela-wallet/e2e/testdapp/index.html` (plus `legacy.html`, which asks through
+`window.ethereum` instead of EIP-6963). There is no relay and no pairing step any more: the page is
+served by the Playwright fixture and the **Chrome extension** injects the provider into it, which is
+the real transport the product ships.
 
-```
-node e2e/support/relay.js
-#   prints a connect URL:  http://localhost:8788/s/<id>?n=<n>&k=<k>
-#   serves the test dApp:  http://localhost:8788/
-```
+The specs that drive it, all in `app-web/vela-wallet/e2e/`:
 
-1. In the wallet, open `/parallel/connect` and paste the connect URL.
-2. Open the test dApp page, fire a request (transfer, approve, personal_sign, typed data,
-   batch, chain switch, reads…).
-3. Approve it in the wallet — signed by the fixture passkey — and the dApp shows the result.
+| Spec | What it drives |
+|---|---|
+| `extension-discovery.e2e.ts` | EIP-6963 announcement, `window.ethereum` |
+| `extension-connect.e2e.ts` | connect consent, modern and legacy pages |
+| `extension-live-provider.e2e.ts` | reads, chain switch, event broadcast |
+| `extension-signing.e2e.ts` | `personal_sign`, typed data, a transaction |
+| `extension-security.e2e.ts` | the origin and permission boundaries |
+| `extension-connections.e2e.ts` | the sessions list |
 
-Playwright automates exactly this (`e2e/parallel-dapp.spec.ts`).
+Run them with `pnpm test:e2e` from `app-web/vela-wallet` (it starts a real worker; screenshots land
+in `e2e/__screenshots__/`).
 
 ## On-chain (opt-in, real xDAI)
 
-The hermetic suite mocks the bundler/RPC and is the default. A single opt-in test
-(`@onchain`, excluded from default CI) deploys the counterfactual fixture Safe and submits a
-real UserOp on Gnosis. Fund **Parallel One** with a little xDAI first; the bundler gas
-account may also need a top-up (see `bundler-service.ts`). Run with the on-chain tag enabled.
+The hermetic suite stubs the bundler and RPC and is the default; `e2e/stub-chain.ts` is what it
+stubs with. For a real-network check, enter the parallel space in a browser against the golden
+multi-key Safe `0x88cCA0EeDbF2C4426110bbFc998F048689266894` on Gnosis: read-only inspection needs
+nothing, and a real send needs a little xDAI in that Safe. The fixture private keys are public, so
+**never leave more than pocket change there, and never a real asset.**
