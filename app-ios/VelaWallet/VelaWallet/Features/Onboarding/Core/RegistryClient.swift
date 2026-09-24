@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import VelaCore
 
 /// A registry call that did not produce an answer.
 ///
@@ -452,6 +453,36 @@ actor RegistryClient {
                 )
             }
         )
+    }
+
+    /// Which deployment this registry serves — the chain and the
+    /// `domainRegistry` contract, from `/api/health`.
+    ///
+    /// The Trusted Signer page needs both to compute a member challenge, and it
+    /// cannot ask for them itself: the published page carries `default-src
+    /// 'none'` inside its hashed bytes (076), so it reaches no network. The page
+    /// does not trust what arrives either — it computes the challenge from these
+    /// and signs only what it computed, so a wrong answer here produces a
+    /// challenge this wallet did not ask for and the answer is refused.
+    ///
+    /// `nil` when the registry did not say, which the page is then told plainly.
+    func deployment() async -> SignerRegistryDeployment? {
+        do {
+            let health = try await request(
+                "/api/health?_t=\(Int(Date().timeIntervalSince1970 * 1000))",
+                body: nil,
+                timeout: Self.readTimeout,
+                label: "Health"
+            )
+            let chainId = (health["chainId"] as? NSNumber)?.uint64Value ?? 0
+            let contract = health["domainRegistry"] as? String ?? ""
+            let looksLikeAnAddress = contract.count == 42 && contract.hasPrefix("0x")
+                && contract.dropFirst(2).allSatisfy(\.isHexDigit)
+            guard chainId > 0, looksLikeAnAddress else { return nil }
+            return SignerRegistryDeployment(chainId: chainId, contract: contract)
+        } catch {
+            return nil
+        }
     }
 
     /// One health probe. Never throws: the core asked a yes/no question.

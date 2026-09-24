@@ -205,5 +205,70 @@ async function dragWithTouch(page, { steps = 12 } = {}) {
   await page.send('Target.closeTarget', { targetId: page.targetId });
 }
 
+// --- 4. a member proof computes its challenge, and the deployment decides it --
+//
+// The page used to FETCH this challenge. It cannot: the published page carries
+// `default-src 'none'` in its hashed bytes (076), and the owner found that out
+// the hard way — creating a wallet failed at its second step with 「注册表没有
+// 应答」 (2026-09-24). So the wallet names the chain and the registry contract,
+// and the page computes the challenge from them and from the keys on screen.
+//
+// Which makes the deployment load-bearing, and that is what this checks: change
+// either fact and the bytes signed change. The wallet compares what comes back
+// against the challenge IT fetched, so a requester that lies gets refused —
+// that half is asserted where a real core can do the refusing (Rust, Android,
+// iOS).
+{
+  const member = (over) => ({
+    method: 'vela_memberProof',
+    params: [{
+      // 24 bytes: the page requires 16 or more, base64url.
+      credentialId: b64url(Buffer.from('a-credential-of-24-bytes')),
+      publicKey: '04' + '11'.repeat(64),
+      groupPublicKey: '04' + '22'.repeat(64),
+      attestation: '',
+      registry: 'https://p256-index-v2.getvela.app',
+      chainId: 100,
+      registryContract: '0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf',
+      ...over,
+    }],
+    origin: '',
+  });
+
+  /** The challenge the card shows for these facts, or null when it refuses. */
+  const challengeFor = async (over, label) => {
+    const payload = JSON.stringify({ intent: member(over), context: { walletName: 'Mine', rpId: 'getvela.app' } });
+    const page = await Page.open(CDP, `${SIGNER}?ch=url&lang=en#i=${b64url(payload)}&cb=${b64url('velawallet://sign-result')}&t=member-${label}`);
+    await asPhone(page);
+    await page.addAuthenticator();
+    await page.waitFor("!!document.querySelector('.slide')");
+    await sleep(400);
+    await page.ev("[...document.querySelectorAll('details')].forEach(d => d.open = true)");
+    const shown = String(await page.ev("(document.querySelector('.challenge-text') || {}).textContent || ''")).trim();
+    const off = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
+    const text = String(await page.text());
+    await page.send('Target.closeTarget', { targetId: page.targetId });
+    return { shown, off, text };
+  };
+
+  const real = await challengeFor({}, 'real');
+  check('a member proof draws a card with a challenge, and no network was needed',
+    /^0x[0-9a-f]{64}$/.test(real.shown) && !real.off, real.shown.slice(0, 20) + '…');
+  check('and it says the challenge was computed here', /computed here/i.test(real.text));
+
+  const otherChain = await challengeFor({ chainId: 1 }, 'chain');
+  check('another chain gives another challenge', /^0x[0-9a-f]{64}$/.test(otherChain.shown) &&
+    otherChain.shown !== real.shown, otherChain.shown.slice(0, 20) + '…');
+
+  const otherContract = await challengeFor({ registryContract: '0x' + '11'.repeat(20) }, 'contract');
+  check('another registry contract gives another challenge',
+    /^0x[0-9a-f]{64}$/.test(otherContract.shown) && otherContract.shown !== real.shown,
+    otherContract.shown.slice(0, 20) + '…');
+
+  const blind = await challengeFor({ chainId: undefined, registryContract: undefined }, 'blind');
+  check('and with neither fact the page refuses instead of signing something unchecked',
+    blind.off && /which chain and registry/i.test(blind.text), blind.text.replace(/\n/g, ' / ').slice(0, 120));
+}
+
 browser.kill();
 process.exit(check.summary() ? 0 : 1);

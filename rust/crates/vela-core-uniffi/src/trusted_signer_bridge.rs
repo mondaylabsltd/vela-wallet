@@ -473,9 +473,37 @@ pub fn trusted_signer_ceremony_request(
     id: String,
     wallet_name: String,
     registry: String,
+    deployment: Option<SignerRegistryDeployment>,
 ) -> Option<String> {
     let ceremony = trusted_signer::ceremony::Ceremony::from_json(&operation_json)?;
-    Some(trusted_signer::ceremony::request(&ceremony, &id, &wallet_name, &registry).to_string())
+    let deployment = deployment.map(|d| trusted_signer::ceremony::RegistryDeployment {
+        chain_id: d.chain_id,
+        contract: d.contract,
+    });
+    Some(
+        trusted_signer::ceremony::request(
+            &ceremony,
+            &id,
+            &wallet_name,
+            &registry,
+            deployment.as_ref(),
+        )
+        .to_string(),
+    )
+}
+
+/// The registry deployment a member proof is bound to — the chain and the
+/// `domainRegistry` contract, as `/api/health` names them.
+///
+/// The shell reads these once from its registry and hands them over, because
+/// the page cannot: `default-src 'none'` is inside its hashed bytes (076), so a
+/// page whose hash a wallet accepts reaches no network. The page computes the
+/// challenge from them and refuses anything that does not match, so lying about
+/// either fact produces a challenge the wallet did not ask for.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SignerRegistryDeployment {
+    pub chain_id: u64,
+    pub contract: String,
 }
 
 /// Judge a ceremony's answer that arrived by another channel (BLE).

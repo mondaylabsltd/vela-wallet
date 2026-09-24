@@ -69,6 +69,11 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // the bytes are committed at
     // `app-web/trusted-signer/dist/b/<this hash>/sign.html`.
 
+    // The member proof computes its challenge instead of fetching it — the
+    // second step of creating a wallet, which could not work on a published
+    // page at all: `default-src 'none'` is in these very bytes, so the fetch it
+    // used to make reached nothing (owner, 2026-09-24: 「注册表没有应答」).
+    "6ffe9ef204ad9ba623cc34d0d403d880269081bdd326e7e7a7e17da15c14a4a6",
     // The create ceremony works over the custom scheme, and the card names
     // where the answer goes instead of borrowing an identity it cannot check.
     // Until this page, `walletRequester` vouched only for the socket channels —

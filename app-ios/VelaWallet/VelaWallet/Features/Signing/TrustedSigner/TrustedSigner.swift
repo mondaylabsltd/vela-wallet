@@ -68,14 +68,18 @@ protocol TrustedSignerCeremonyPort: AnyObject {
     ///
     /// - Parameters:
     ///   - walletName: what the page's card names.
-    ///   - registry: where the page fetches a member challenge.
+    ///   - registry: the registry service, named on the page's card.
     ///   - expectedMemberChallenge: the challenge the WALLET fetched for the
     ///     same inputs — the page must have signed exactly it.
     ///   - page: the operation's own `signer_origin` — the page a key that
     ///     already exists lives behind. Empty opens the one from Settings.
+    ///   - deployment: the chain and registry contract a member proof is bound
+    ///     to. The page computes the challenge from them, because the published
+    ///     page reaches no network to look them up (076).
     func ceremony(
         operationJson: String, walletName: String, registry: String,
-        expectedMemberChallenge: Data?, page: String?
+        expectedMemberChallenge: Data?, page: String?,
+        deployment: SignerRegistryDeployment?
     ) async -> TrustedSignerCeremonyStep
 
     /// The flow is over, however it ended.
@@ -180,11 +184,13 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
 
     func ceremony(
         operationJson: String, walletName: String, registry: String,
-        expectedMemberChallenge: Data?, page: String?
+        expectedMemberChallenge: Data?, page: String?,
+        deployment: SignerRegistryDeployment? = nil
     ) async -> TrustedSignerCeremonyStep {
         let id = UUID().uuidString.lowercased()
         guard let request = trustedSignerCeremonyRequest(
-            operationJson: operationJson, id: id, walletName: walletName, registry: registry
+            operationJson: operationJson, id: id, walletName: walletName, registry: registry,
+            deployment: deployment
         ) else {
             // Not a ceremony the core knows: the machine must still be told
             // something it can act on.

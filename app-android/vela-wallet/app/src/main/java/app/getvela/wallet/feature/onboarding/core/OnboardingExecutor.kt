@@ -496,11 +496,21 @@ class OnboardingExecutor(
         )
         val operationJson = operation.toString()
         val id = toHex(passkey.random(CEREMONY_ID_BYTES), false)
+        // A member proof needs the registry's deployment, because the page
+        // computes the challenge itself and the published page reaches no
+        // network to look it up (076). Asked for only when it is needed, so no
+        // other ceremony waits on a round trip.
+        val deployment = if (operation.optString("type") == "sign_member_proof") {
+            registry.deployment()
+        } else {
+            null
+        }
         val request = trustedSignerCeremonyRequest(
             operationJson,
             id,
             deps.walletName(),
             registry.baseUrl,
+            deployment,
         ) ?: throw PasskeyFailure(
             FailureKind.Other,
             "This step cannot run on the Trusted Signer",

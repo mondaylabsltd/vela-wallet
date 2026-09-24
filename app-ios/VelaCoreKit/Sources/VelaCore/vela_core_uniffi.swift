@@ -8292,6 +8292,70 @@ public func FfiConverterTypeSignerPageCheck_lower(_ value: SignerPageCheck) -> R
 
 
 /**
+ * The registry deployment a member proof is bound to — the chain and the
+ * `domainRegistry` contract, as `/api/health` names them.
+ *
+ * The shell reads these once from its registry and hands them over, because
+ * the page cannot: `default-src 'none'` is inside its hashed bytes (076), so a
+ * page whose hash a wallet accepts reaches no network. The page computes the
+ * challenge from them and refuses anything that does not match, so lying about
+ * either fact produces a challenge the wallet did not ask for.
+ */
+public struct SignerRegistryDeployment: Equatable, Hashable {
+    public var chainId: UInt64
+    public var contract: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(chainId: UInt64, contract: String) {
+        self.chainId = chainId
+        self.contract = contract
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SignerRegistryDeployment: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignerRegistryDeployment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignerRegistryDeployment {
+        return
+            try SignerRegistryDeployment(
+                chainId: FfiConverterUInt64.read(from: &buf), 
+                contract: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SignerRegistryDeployment, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.chainId, into: &buf)
+        FfiConverterString.write(value.contract, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignerRegistryDeployment_lift(_ buf: RustBuffer) throws -> SignerRegistryDeployment {
+    return try FfiConverterTypeSignerRegistryDeployment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignerRegistryDeployment_lower(_ value: SignerRegistryDeployment) -> RustBuffer {
+    return FfiConverterTypeSignerRegistryDeployment.lower(value)
+}
+
+
+/**
  * One drawn row of the storage page.
  */
 public struct StorageItemRecord: Equatable, Hashable {
@@ -10928,6 +10992,30 @@ fileprivate struct FfiConverterOptionTypeQrMatrix: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSignerRegistryDeployment: FfiConverterRustBuffer {
+    typealias SwiftType = SignerRegistryDeployment?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSignerRegistryDeployment.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSignerRegistryDeployment.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeUserOpDraft: FfiConverterRustBuffer {
     typealias SwiftType = UserOpDraft?
 
@@ -13094,14 +13182,15 @@ public func trustedSignerCallbackUrl() -> String  {
  * with `method = trusted_signer`; `None` for anything else. `registry` is the
  * registry service the page fetches a member challenge from.
  */
-public func trustedSignerCeremonyRequest(operationJson: String, id: String, walletName: String, registry: String) -> String?  {
+public func trustedSignerCeremonyRequest(operationJson: String, id: String, walletName: String, registry: String, deployment: SignerRegistryDeployment?) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_trusted_signer_ceremony_request(
         FfiConverterString.lower(operationJson),
         FfiConverterString.lower(id),
         FfiConverterString.lower(walletName),
-        FfiConverterString.lower(registry),uniffiCallStatus
+        FfiConverterString.lower(registry),
+        FfiConverterOptionTypeSignerRegistryDeployment.lower(deployment),uniffiCallStatus
     )
 })
 }
@@ -13646,7 +13735,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_callback_url() != 46246) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_ceremony_request() != 65378) {
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_ceremony_request() != 31008) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_default_url() != 18932) {

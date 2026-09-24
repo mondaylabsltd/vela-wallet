@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.core
 
+import uniffi.vela_core_uniffi.SignerRegistryDeployment
 import java.io.IOException
 import app.getvela.wallet.core.diagnostics.VelaLog
 import java.net.HttpURLConnection
@@ -316,6 +317,32 @@ class RegistryClient(
                 )
             },
         )
+    }
+
+    /**
+     * Which deployment this registry serves — the chain and the `domainRegistry`
+     * contract, from `/api/health`.
+     *
+     * The Trusted Signer page needs both to compute a member challenge, and it
+     * cannot ask for them itself: the published page carries `default-src
+     * 'none'` inside its hashed bytes (076), so it reaches no network. The page
+     * does not trust what arrives either — it computes the challenge from these
+     * and signs only what it computed, so a wrong answer here produces a
+     * challenge this wallet did not ask for and the answer is refused.
+     *
+     * `null` when the registry did not say, which the page is then told plainly.
+     */
+    suspend fun deployment(): SignerRegistryDeployment? = try {
+        val health = get("/api/health?_t=${System.currentTimeMillis()}", READ_TIMEOUT_MS, "Health")
+        val chainId = health.optLong("chainId", 0L)
+        val contract = health.optString("domainRegistry")
+        if (chainId > 0L && Regex("^0x[0-9a-fA-F]{40}$").matches(contract)) {
+            SignerRegistryDeployment(chainId = chainId.toULong(), contract = contract)
+        } else {
+            null
+        }
+    } catch (_: RegistryFailure) {
+        null
     }
 
     /** One health probe. Never throws: the core asked a yes/no question. */

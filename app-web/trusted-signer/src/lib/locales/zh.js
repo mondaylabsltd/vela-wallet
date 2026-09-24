@@ -223,6 +223,7 @@ window.VelaCS.i18n.register('zh', {
   'field.key': '钥匙',
   'field.groupKey': '组钥匙',
   'field.registry': '注册表',
+  'field.chain': '链',
   'field.relyingParty': 'Passkey 所属站点',
   'sentence.create': '在这台设备上为「{wallet}」新建一把 passkey，并交回钱包，成为它的一把钥匙。不签任何东西，也不动任何资产。',
   'sentence.createUnnamed': '在这台设备上新建一把 passkey，并交回钱包，成为它的一把钥匙。不签任何东西，也不动任何资产。',
@@ -241,6 +242,7 @@ window.VelaCS.i18n.register('zh', {
   'refuse.memberNotForWallet': '钥匙的注册表确认只为 Vela 钱包做，而这个请求的答复到不了 Vela 钱包。不签。',
   'refuse.badCeremony': '这份请求格式不对，没有可以放心签的东西。不签。',
   'refuse.memberMismatch': '注册表给的挑战码不是这些钥匙应得的那一个。要签的和屏幕上显示的对不上。不签。',
+  'refuse.noDeployment': '这个请求没有说明这把钥匙要在哪条链、哪个注册表上被确认，挑战码无从算起。不签。',
   'refuse.registryUnavailable': '注册表没有应答，这把钥匙的挑战码无从核对。请回到钱包重试。',
   'warn.notWalletAsks': '这份请求不是 Vela 钱包发来的。请求方会知道你挑了哪一把 passkey。',
   'warn.foreignPageKey': '这把钥匙将属于 {rpId}：Vela 的各个 App 只能经由这一页使用它。',
@@ -248,6 +250,9 @@ window.VelaCS.i18n.register('zh', {
   'ui.challengePending': '正在向注册表索取…',
   'ui.challengeFromClock': '当前时间，加上本页生成的随机字节',
   'ui.challengeFromRegistry': '由上面的钥匙在本地算出；注册表给出的正是同样的 32 字节',
+  // 本地算出，不是取来的：发布版页面碰不到网络（076），而本页本来也只签
+  // 自己算出来的挑战码。
+  'ui.challengeComputedHere': '由链、注册表合约和上面的钥匙在本地算出',
   'ui.fetchingChallenge': '正在向注册表索取这把钥匙的挑战码…',
   'ui.slideCreate': '按住橙色圆点向右拖到底以创建钥匙。关掉页面即拒绝。',
   'ui.created': '钥匙已创建，已交回钱包。',

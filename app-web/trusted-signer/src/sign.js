@@ -268,26 +268,33 @@
       return;
     }
 
-    // The member challenge: this page's own fetch, for the inputs on screen,
-    // checked against the page's own computation before anything is signable.
-    sheet.querySelector('.slide').classList.add('slide-off');
-    say('ui.fetchingChallenge');
-    phase('fetching');
-    ns.ceremony.fetchMemberChallenge(c.member, context.rpId).then(function (fetched) {
-      if (current !== request || request.gone) return;
-      view.challenge = { text: '0x' + ns.ceremony._hex(fetched.challenge), noteKey: 'ui.challengeFromRegistry' };
-      var redrawn = ns.render(view, {});
-      draw(redrawn);
-      arm(request, view, redrawn.querySelector('.slide'), fetched.challenge);
-    }, function (error) {
-      if (current !== request || request.gone) return;
+    // The member challenge, computed HERE from the facts on screen — the chain,
+    // the registry contract, the relying party, the key and its binding. No
+    // fetch: the published page reaches no network at all (076), and the page
+    // never signed a challenge it was handed anyway.
+    var computed = null;
+    try {
+      computed = ns.ceremony.memberChallengeFor(c.member, context.rpId);
+    } catch (error) {
+      computed = null;
+    }
+    if (!computed) {
+      sheet.querySelector('.slide').classList.add('slide-off');
       view.refuse = true;
       view.risk = 'danger';
       view.challenge = null;
-      view.warnings.push({ tone: 'danger', key: error.refusal || 'refuse.registryUnavailable' });
+      view.warnings.push({ tone: 'danger', key: 'refuse.noDeployment' });
       draw(ns.render(view, {}));
-      refused(request, error.code || 'refused');
-    });
+      refused(request, 'refused');
+      return;
+    }
+    view.challenge = {
+      text: '0x' + ns.ceremony._hex(computed.challenge),
+      noteKey: 'ui.challengeComputedHere',
+    };
+    var redrawn = ns.render(view, {});
+    draw(redrawn);
+    arm(request, view, redrawn.querySelector('.slide'), computed.challenge);
   }
 
   function arm(request, view, slider, challenge) {

@@ -42,13 +42,32 @@ class TrustedSignerTab(activity: Activity) {
         return default?.takeIf { it in tabs } ?: tabs.firstOrNull { it == CHROME } ?: tabs.firstOrNull()
     }
 
+    /**
+     * Put the wallet back in front of the page.
+     *
+     * **NEW_TASK is what does the work, and it took a device to find that.**
+     * CLEAR_TOP finishes a tab that is above this activity in THIS task, which
+     * is what the loopback channel needed — but Chrome runs the Custom Tab in a
+     * task of its own, so there is nothing above us to clear and our task is
+     * simply behind Chrome's. Without NEW_TASK the system delivers the intent to
+     * an activity that is already top-of-its-own-task and moves nothing:
+     * measured as `START … LAUNCH_SINGLE_TOP … result code=3`
+     * (`START_DELIVERED_TO_TOP`), with the wallet still PAUSED behind the page.
+     *
+     * With NEW_TASK the system finds the task this activity already lives in and
+     * brings THAT forward. SINGLE_TOP keeps the instance and its state — an
+     * intent with no data routes nothing in `onNewIntent` — so this is a resume
+     * and never a rebuild.
+     */
     fun bringBack() {
         val host = activity.get() ?: return
-        // CLEAR_TOP finishes the tab above; SINGLE_TOP keeps this activity and
-        // its state (an intent with no data routes nothing in onNewIntent).
         host.runOnUiThread {
             host.startActivity(
-                Intent(host, host.javaClass).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                Intent(host, host.javaClass).addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                ),
             )
         }
     }

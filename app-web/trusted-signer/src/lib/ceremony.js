@@ -148,6 +148,38 @@ window.VelaCS = window.VelaCS || {};
    * with `.refusal` = `refuse.memberMismatch` (the answer is not for these
    * inputs) or `refuse.registryUnavailable` (no usable answer at all).
    */
+  /**
+   * The member challenge, computed HERE from the facts on screen.
+   *
+   * This replaces a pair of fetches to the registry (`/api/health` for the
+   * deployment, `/api/challenge` for its answer). The published page cannot
+   * make either: `default-src 'none'` is inside its hashed bytes (spec 076), so
+   * a page whose hash a wallet accepts reaches no network — and creating a
+   * wallet therefore failed at its second step with 「注册表没有应答」 (owner,
+   * 2026-09-24).
+   *
+   * Nothing is weakened by where the facts arrive from, because the challenge
+   * was never taken from the answer: the page computed it and refused anything
+   * that did not match. Now it simply computes it. A requester that lies about
+   * `chainId` or `registryContract` gets a challenge the WALLET did not ask for,
+   * and the wallet refuses the assertion (`expected_member_challenge`).
+   *
+   * What it gives up: the registry is no longer asked whether it agrees. It was
+   * never trusted for the value, only consulted — and a consultation that can
+   * only ever be refused for disagreeing is not a check the page needs.
+   */
+  function memberChallengeFor(inputs, rpId) {
+    var binding = memberBinding(inputs.groupPublicKey, inputs.attestation);
+    var challenge = memberChallenge({
+      chainId: inputs.chainId,
+      registry: inputs.registryContract,
+      rpId: rpId,
+      publicKey: inputs.publicKey,
+      binding: binding,
+    });
+    return { challenge: challenge, chainId: inputs.chainId, registry: inputs.registryContract };
+  }
+
   function fetchMemberChallenge(inputs, rpId) {
     var base = inputs.registry.replace(/\/+$/, '');
     var facts = null;
@@ -322,6 +354,7 @@ window.VelaCS = window.VelaCS || {};
     proofChallenge: proofChallenge,
     memberBinding: memberBinding,
     memberChallenge: memberChallenge,
+    memberChallengeFor: memberChallengeFor,
     fetchMemberChallenge: fetchMemberChallenge,
     create: create,
     assert: assert,

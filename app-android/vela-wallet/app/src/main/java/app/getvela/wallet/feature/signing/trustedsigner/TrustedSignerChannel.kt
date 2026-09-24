@@ -243,17 +243,15 @@ class TrustedSignerChannel(
             } else {
                 // Answered. On the custom-scheme channel a visit ENDS with its
                 // answer — there is no session to keep, and the next request
-                // opens the page again — so the person must be brought back to
-                // the wallet now.
+                // opens the page again.
                 //
-                // Leaving the tab up is what the socket channel did, because
-                // there the next request arrived on the same connection and the
-                // page itself moved on. Here nothing moves the page, and the
-                // owner found exactly that: 「签完名后，会卡在 完成，结果已交回
-                // 钱包」 — the page says it handed the answer back and the
-                // wallet, which had it, was behind the tab.
+                // Bringing the wallet back is NOT done from here, even though
+                // this is where the answer arrives: by now this app is in the
+                // background, and a background app cannot move its task in
+                // front of the browser's (measured — see
+                // `SignResultActivity.bringTheWalletBack`). The callback's own
+                // activity does it, because the system started that one itself.
                 _state.value = State.Idle
-                bringBack()
             }
             Put(answer, mine)
         }

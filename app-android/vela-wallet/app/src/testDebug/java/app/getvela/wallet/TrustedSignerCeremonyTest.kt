@@ -10,6 +10,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import uniffi.vela_core_uniffi.SignerRegistryDeployment
 import uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
 import uniffi.vela_core_uniffi.trustedSignerCeremonyRequest
 import uniffi.vela_core_uniffi.fromHex
@@ -200,11 +201,18 @@ class TrustedSignerCeremonyTest {
         assertTrue("$outcome", outcome is TrustedSignerCeremonyOutcome.Refused)
     }
 
+    /** The deployment a member proof is bound to, as `/api/health` names it. */
+    private val deployment = SignerRegistryDeployment(
+        chainId = 100uL,
+        contract = "0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf",
+    )
+
     private fun request(operationJson: String): String = trustedSignerCeremonyRequest(
         operationJson,
         "abc123",
         "Parallel One",
         "https://index.example",
+        deployment,
     ) ?: error("the core builds a request for every ceremony operation")
 
     /**

@@ -205,29 +205,36 @@ try {
       await page.waitFor("window.__velaState.phase === 'waiting'") &&
       /Waiting for the wallet/.test(await page.text()));
 
-    // The member proof: the page asks the registry itself.
+    // The member proof: the page computes the challenge itself, from the chain
+    // and the registry contract the WALLET named. It asks the registry nothing —
+    // the published page reaches no network at all (076), and a challenge the
+    // page derived is the only kind it ever signed.
     const group = await p256PublicHex();
     const publicKeyHex = '04' + key.x.slice(2) + key.y.slice(2);
     const before = registry.requests.length;
     const member = wallet.request('m1', {
       method: 'vela_memberProof',
-      params: [{ credentialId, publicKey: publicKeyHex, attestation: '', groupPublicKey: group, registry: registry.url }],
+      params: [{
+        credentialId, publicKey: publicKeyHex, attestation: '', groupPublicKey: group,
+        registry: registry.url,
+        chainId: 100,
+        registryContract: '0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf',
+      }],
       origin: '',
     }, { walletName: WALLET });
     const armed = await page.waitFor("window.__velaState.phase === 'card' && window.__velaState.kind === 'memberProof'");
-    const asked = registry.requests.slice(before);
-    const posted = asked.find((r) => r.path === '/api/challenge');
-    check('member: the page fetched /api/health and /api/challenge itself', armed &&
-      asked.some((r) => r.path === '/api/health') && !!posted);
-    check('member: for exactly the inputs on the card, under its own rpId', !!posted &&
-      posted.body.rpId === 'getvela.app' && posted.body.publicKey === publicKeyHex && posted.body.groupPublicKey === group &&
-      !('attestation' in posted.body));
+    check('member: the card is drawn without asking the registry anything', armed &&
+      registry.requests.length === before, `${registry.requests.length - before} request(s)`);
+    // The registry's OWN computation, for the same inputs: the page must arrive
+    // at exactly it, or "confirm this key joins your wallet" means nothing.
     const expected = registry.honestChallenge({ rpId: 'getvela.app', publicKey: publicKeyHex, groupPublicKey: group, attestation: '' });
     await page.ev("[...document.querySelectorAll('details')].forEach(d => d.open = true)");
     const memberCard = await page.text();
     check('member: the card names the key, the group key and the registry, and shows the challenge',
       memberCard.includes(publicKeyHex.slice(0, 8)) && memberCard.includes(group.slice(0, 8)) &&
       memberCard.includes('127.0.0.1') && memberCard.includes(expected.challenge));
+    check('member: and the challenge it computed IS the registry\'s, for the same inputs',
+      memberCard.includes(expected.challenge), expected.challenge.slice(0, 20) + '…');
     await page.ev('window.__slider.__confirm()', true);
     const proof = await member;
     check('member: answered as {t:"result", id, assertion, origin}', answerShape(proof, 'm1', 'assertion'));

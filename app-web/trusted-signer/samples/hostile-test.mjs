@@ -250,26 +250,35 @@ try {
     check('supplied challenge: not one passkey prompt was opened', (await page.ev('window.__webauthnCalls')) === 0);
     check('supplied challenge: the registry was never even asked', registry.requests.length === before);
 
-    // --- 4. the registry's answer is not the challenge for the inputs shown
-    const inputs = { credentialId, publicKey: '04' + '11'.repeat(64), groupPublicKey: '04' + '22'.repeat(64), attestation: '', registry: registry.url };
-    for (const [lie, what] of [
-      ['otherGroup', 'the challenge for another group key'],
-      ['otherKey', 'the challenge for another member key'],
-      ['safeOp', '32 bytes that are no registry challenge (a Safe digest)'],
-      ['binding', 'the right challenge beside a wrong binding'],
-    ]) {
-      registry.state.lie = lie;
-      const answer = await wallet.request('m' + (++n), { method: 'vela_memberProof', params: [inputs], origin: '' }, { walletName: 'Mine' });
-      await page.waitFor("window.__velaState.phase === 'refused'");
-      check(`member proof: a registry answering ${what} is refused`,
-        answer.t === 'error' && answer.code === 'refused' &&
-        /not the one these keys give/.test(await page.text()) && !(await page.ev('!!window.__slider')));
-    }
-    registry.state.lie = 'down';
-    const down = await wallet.request('m' + (++n), { method: 'vela_memberProof', params: [inputs], origin: '' }, {});
-    check('member proof: a registry that does not answer is "unavailable", never signed',
-      down.t === 'error' && down.code === 'unavailable' && /did not answer/.test(await page.text()));
-    registry.state.lie = null;
+    // --- 4. a member proof with no deployment to compute from
+    //
+    // The page used to fetch the challenge and refuse a registry that answered
+    // the wrong one. It no longer asks anyone: it computes the challenge from
+    // the chain and the registry contract IN THE REQUEST (076 — the published
+    // page reaches no network). So the lie that matters moved from the registry
+    // to the requester, and what catches it moved from the page to the WALLET:
+    // the page signs the challenge for the facts it was shown, and the wallet,
+    // which fetched the real one, refuses anything else
+    // (`expected_member_challenge` — asserted in the Rust, Android and iOS
+    // suites, where a real core does the refusing).
+    //
+    // What belongs HERE is the case the page must still refuse by itself: a
+    // request that gives it nothing to compute from. That the page computes the
+    // right bytes for the facts it IS given is `ceremony-test`'s, and that a
+    // wrong deployment yields different bytes is `slider-test`'s — both of
+    // which have a page and an authenticator to finish a ceremony with.
+    const inputs = {
+      credentialId, publicKey: '04' + '11'.repeat(64), groupPublicKey: '04' + '22'.repeat(64),
+      attestation: '', registry: registry.url,
+    };
+    const asked = registry.requests.length;
+    const refused = await wallet.request('m' + (++n), { method: 'vela_memberProof', params: [inputs], origin: '' }, {});
+    await page.waitFor("window.__velaState.phase === 'refused'");
+    check('member proof: a request that names no chain or registry is refused, never signed',
+      refused.t === 'error' && /which chain and registry/i.test(await page.text()) &&
+      !(await page.ev('!!window.__slider')));
+    check('member proof: and the registry was not asked to fill the gap',
+      registry.requests.length === asked, `${registry.requests.length - asked} request(s)`);
     check('member proof: still not one passkey prompt', (await page.ev('window.__webauthnCalls')) === 0);
     wallet.bye();
     await wallet.stop();

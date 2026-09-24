@@ -218,6 +218,7 @@ window.VelaCS.i18n.register('en', {
   'field.key': 'Key',
   'field.groupKey': 'Group key',
   'field.registry': 'Registry',
+  'field.chain': 'Chain',
   'field.relyingParty': 'Passkey site',
   'sentence.create': 'A new passkey is made on this device for {wallet}, and handed back to the wallet as one of its keys. Nothing is signed and no money moves.',
   'sentence.createUnnamed': 'A new passkey is made on this device and handed back to the wallet as one of its keys. Nothing is signed and no money moves.',
@@ -239,6 +240,7 @@ window.VelaCS.i18n.register('en', {
   'refuse.memberNotForWallet': 'A key’s registry confirmation is for a Vela wallet, and this request’s answer would not reach one. Not signing.',
   'refuse.badCeremony': 'This request is malformed, so there is nothing sound to sign. Not signing.',
   'refuse.memberMismatch': 'The registry’s challenge is not the one these keys give. What would be signed is not what is shown. Not signing.',
+  'refuse.noDeployment': 'This request does not say which chain and registry the key would be confirmed against, so the challenge cannot be computed. Not signing.',
   'refuse.registryUnavailable': 'The registry did not answer, so this key’s challenge cannot be checked. Try again from the wallet.',
   'warn.notWalletAsks': 'This request did not come from a Vela wallet. Whoever asked will learn which passkey you picked.',
   'warn.foreignPageKey': 'This key will belong to {rpId}: the Vela apps can use it only through this page.',
@@ -246,6 +248,9 @@ window.VelaCS.i18n.register('en', {
   'ui.challengePending': 'asking the registry…',
   'ui.challengeFromClock': 'the time now, and random bytes from this page',
   'ui.challengeFromRegistry': 'computed here from the keys above; the registry answered the same 32 bytes',
+  // Computed, not fetched: the published page reaches no network (076), and
+  // a challenge this page derived is the only kind it ever signed.
+  'ui.challengeComputedHere': 'computed here from the chain, the registry and the keys above',
   'ui.fetchingChallenge': 'Asking the registry for this key’s challenge…',
   'ui.slideCreate': 'Drag the orange dot all the way right to create the key. Closing the page refuses.',
   'ui.created': 'Key created. It went back to the wallet.',

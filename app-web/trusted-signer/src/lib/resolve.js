@@ -824,6 +824,8 @@ window.VelaCS = window.VelaCS || {};
   // A 16-byte-or-longer credential id, base64url, as the page's wire carries it.
   var CREDENTIAL_ID = /^[A-Za-z0-9_-]{16,1400}$/;
   var P256_POINT = /^(0x)?04[0-9a-fA-F]{128}$/;
+  /** A 20-byte contract address, `0x`-prefixed as the wallet sends it. */
+  var ADDRESS = /^0x[0-9a-fA-F]{40}$/;
   var LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$/;
 
   function hostOf(url) {
@@ -960,6 +962,8 @@ window.VelaCS = window.VelaCS || {};
     var rpId = ctx.rpId || null;
     var fromWallet = walletRequester(ctx);
     var bad = intent.params !== undefined && !Array.isArray(intent.params);
+    /** A member proof whose request names no chain or registry contract. */
+    var noDeployment = false;
 
     view.kind = 'ceremony';
     view.intentKey = 'intent.' + kind;
@@ -1062,12 +1066,29 @@ window.VelaCS = window.VelaCS || {};
         groupPublicKey: p.groupPublicKey,
         attestation: p.attestation === undefined || p.attestation === null ? '' : p.attestation,
         registry: registryUrl(p.registry),
+        // The DEPLOYMENT the challenge is computed against. The wallet reads
+        // these from the registry's `/api/health` and hands them over, because
+        // the published page reaches no network at all (076). They are not
+        // trusted: the page computes the challenge FROM them and signs only
+        // what it computed, so a requester that lies about either gets a
+        // challenge the wallet never asked for.
+        chainId: p.chainId,
+        registryContract: p.registryContract,
       };
       if (typeof member.credentialId !== 'string' || !CREDENTIAL_ID.test(member.credentialId)) bad = true;
       if (typeof member.publicKey !== 'string' || !P256_POINT.test(member.publicKey)) bad = true;
       if (typeof member.groupPublicKey !== 'string' || !P256_POINT.test(member.groupPublicKey)) bad = true;
       if (typeof member.attestation !== 'string' || !/^(0x)?([0-9a-fA-F]{40})?$/.test(member.attestation)) bad = true;
       if (!member.registry) bad = true;
+      // Told apart from the rest, because the reason a person can act on is
+      // different: the other fields being wrong is a malformed request, and
+      // this one missing means the page has nothing to compute the challenge
+      // from. `refuse.badCeremony` would send them looking at the keys.
+      if (!Number.isSafeInteger(member.chainId) || member.chainId < 1 ||
+        typeof member.registryContract !== 'string' || !ADDRESS.test(member.registryContract)) {
+        bad = true;
+        noDeployment = true;
+      }
       if (!bad && member.publicKey.replace(/^0x/i, '').toLowerCase() ===
         member.groupPublicKey.replace(/^0x/i, '').toLowerCase()) bad = true;
       view.ceremony.credentialId = member.credentialId;
@@ -1076,12 +1097,17 @@ window.VelaCS = window.VelaCS || {};
         groupPublicKey: member.groupPublicKey.replace(/^0x/i, '').toLowerCase(),
         attestation: member.attestation.replace(/^0x/i, '').toLowerCase(),
         registry: member.registry,
+        chainId: member.chainId,
+        registryContract: member.registryContract,
       };
       view.sentence = text(wallet ? 'sentence.memberProof' : 'sentence.memberProofUnnamed', { wallet: wallet });
       if (!bad) {
         view.fields.push({ label: 'field.key', value: shortKey(view.ceremony.member.publicKey) });
         view.fields.push({ label: 'field.groupKey', value: shortKey(view.ceremony.member.groupPublicKey) });
         view.fields.push({ label: 'field.registry', value: hostOf(member.registry) });
+        view.fields.push({ label: 'field.chain', value: String(member.chainId) });
+        params.push({ name: 'chainId', value: String(member.chainId) });
+        params.push({ name: 'registryContract', value: member.registryContract });
         params.push({ name: 'publicKey', value: view.ceremony.member.publicKey });
         params.push({ name: 'groupPublicKey', value: view.ceremony.member.groupPublicKey });
         params.push({ name: 'attestation', value: view.ceremony.member.attestation || '—' });
@@ -1111,7 +1137,7 @@ window.VelaCS = window.VelaCS || {};
     } else if (bad) {
       view.refuse = true;
       view.risk = 'danger';
-      view.warnings.push({ tone: 'danger', key: 'refuse.badCeremony' });
+      view.warnings.push({ tone: 'danger', key: noDeployment ? 'refuse.noDeployment' : 'refuse.badCeremony' });
     } else if (!fromWallet) {
       view.risk = 'caution';
       view.warnings.push({ tone: 'caution', key: 'warn.notWalletAsks' });

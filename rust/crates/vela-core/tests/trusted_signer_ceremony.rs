@@ -12,7 +12,7 @@ use base64::Engine as _;
 use serde_json::{json, Value};
 use vela_core::app::shell::{ProofPurpose, ShellOperation};
 use vela_core::app::KeyMethod;
-use vela_core::trusted_signer::ceremony::{request, verify, Answer, Ceremony};
+use vela_core::trusted_signer::ceremony::{request, verify, Answer, Ceremony, RegistryDeployment};
 use vela_core::trusted_signer::TrustedSignerError;
 
 const PAGE: &str = "https://sign.getvela.app";
@@ -130,7 +130,7 @@ fn a_ceremony_reads_from_the_operation_a_shell_already_holds() {
 
 #[test]
 fn each_ceremony_asks_the_page_for_its_own_kind() {
-    let create = request(&register(), "r1", "Ann", REGISTRY);
+    let create = request(&register(), "r1", "Ann", REGISTRY, None);
     assert_eq!(create["intent"]["method"], "vela_createPasskey");
     assert_eq!(
         create["intent"]["params"][0]["excludeCredentialIds"][0],
@@ -138,17 +138,33 @@ fn each_ceremony_asks_the_page_for_its_own_kind() {
     );
     assert_eq!(create["context"]["walletName"], "Ann");
     assert_eq!(
-        request(&sign_in(), "r2", "", "")["intent"]["method"],
+        request(&sign_in(), "r2", "", "", None)["intent"]["method"],
         "vela_signIn"
     );
-    let proof_request = request(&proof(ProofPurpose::RecoverSecond), "r3", "", "");
+    let proof_request = request(&proof(ProofPurpose::RecoverSecond), "r3", "", "", None);
     assert_eq!(
         proof_request["intent"]["params"][0]["purpose"],
         "recover_second"
     );
-    let member_request = request(&member(), "r4", "Ann", REGISTRY);
+    // A member proof carries the DEPLOYMENT, because that is all the page needs
+    // to compute the challenge itself — and the published page cannot fetch it
+    // (076: `default-src 'none'` is inside its hashed bytes).
+    let deployment = RegistryDeployment {
+        chain_id: 100,
+        contract: "0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf".to_owned(),
+    };
+    let member_request = request(&member(), "r4", "Ann", REGISTRY, Some(&deployment));
     assert_eq!(member_request["intent"]["method"], "vela_memberProof");
-    assert_eq!(member_request["intent"]["params"][0]["registry"], REGISTRY);
+    let params = &member_request["intent"]["params"][0];
+    assert_eq!(params["registry"], REGISTRY);
+    assert_eq!(params["chainId"], 100);
+    assert_eq!(params["registryContract"], deployment.contract);
+
+    // And without it the facts are null rather than guessed: a page that cannot
+    // compute the challenge must say so, not sign something it did not check.
+    let blind = request(&member(), "r5", "Ann", REGISTRY, None);
+    assert!(blind["intent"]["params"][0]["chainId"].is_null());
+    assert!(blind["intent"]["params"][0]["registryContract"].is_null());
 }
 
 #[test]

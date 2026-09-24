@@ -426,6 +426,13 @@ final class OnboardingExecutor {
             // silently signing with something else.
             throw PasskeyFailure(kind: .notSupported, message: "The Trusted Signer cannot be opened here.")
         }
+        // A member proof needs the registry's deployment, because the page
+        // computes the challenge itself and the published page reaches no
+        // network to look it up (076). Asked for only when it is needed, so no
+        // other ceremony waits on a round trip.
+        let deployment = (operation["type"] as? String) == "sign_member_proof"
+            ? await registry.deployment()
+            : nil
         let step = await trustedSigner.ceremony(
             operationJson: CoreJSON.string(operation),
             walletName: walletName(),
@@ -433,7 +440,8 @@ final class OnboardingExecutor {
             expectedMemberChallenge: memberChallenge,
             // A key that already exists names the page it lives behind; a
             // key being created has none yet and opens the one from Settings.
-            page: operation["signer_origin"] as? String
+            page: operation["signer_origin"] as? String,
+            deployment: deployment
         )
         switch step {
         case .registered(let json), .asserted(let json):

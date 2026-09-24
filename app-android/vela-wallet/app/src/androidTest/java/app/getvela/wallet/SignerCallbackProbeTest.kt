@@ -18,7 +18,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Spec 076, probe P3 — **a measurement, not a feature**.
+ * Spec 076, probe P4 — **a measurement, not a feature**.
  *
  * The custom-scheme channel rests on one thing no unit test can tell us: that
  * a page in a **Custom Tab over this app** can hand the answer back, and that
@@ -91,6 +91,25 @@ class SignerCallbackProbeTest {
         val answered = CompletableDeferred<String?>()
         TrustedSignerCallbacks.await(token, answered)
 
+        // Every time MainActivity is resumed, counted by the framework itself.
+        // `ActivityScenario.state` is not a faithful witness here — it reported
+        // PAUSED while the system logged `START_TASK_TO_FRONT` — so the probe
+        // watches the callback the activity actually receives.
+        val resumes = java.util.concurrent.atomic.AtomicInteger(0)
+        val watcher = object : android.app.Application.ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: android.app.Activity) {
+                if (activity is MainActivity) resumes.incrementAndGet()
+            }
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) = Unit
+            override fun onActivityStarted(a: android.app.Activity) = Unit
+            override fun onActivityPaused(a: android.app.Activity) = Unit
+            override fun onActivityStopped(a: android.app.Activity) = Unit
+            override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) = Unit
+            override fun onActivityDestroyed(a: android.app.Activity) = Unit
+        }
+        val app = instrumentation.targetContext.applicationContext as android.app.Application
+        instrumentation.runOnMainSync { app.registerActivityLifecycleCallbacks(watcher) }
+
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         var identity: Int? = null
         var opened = false
@@ -103,10 +122,12 @@ class SignerCallbackProbeTest {
         if (!opened) {
             served.socket.close()
             TrustedSignerCallbacks.forget(token)
-            println("P3 · SKIPPED: no browser on this device to open a tab in")
+            println("P4 · SKIPPED: no browser on this device to open a tab in")
             return
         }
 
+        // Resumes so far: the launch, and whatever the tab opening did.
+        val before = resumes.get()
         val landed = CountDownLatch(1)
         Thread {
             while (!answered.isCompleted && landed.count > 0) Thread.sleep(50)
@@ -114,8 +135,8 @@ class SignerCallbackProbeTest {
         }.also { it.isDaemon = true }.start()
         val arrived = landed.await(45, TimeUnit.SECONDS) && answered.isCompleted
 
-        println("P3 · the page was fetched: ${served.asked}")
-        println("P3 · the callback arrived: $arrived")
+        println("P4 · the page was fetched: ${served.asked}")
+        println("P4 · the callback arrived: $arrived")
         served.socket.close()
         TrustedSignerCallbacks.forget(token)
 
@@ -129,9 +150,35 @@ class SignerCallbackProbeTest {
 
         // …and the wallet is where it was: the same activity instance, never
         // rebuilt, with nothing of its state touched.
+        // …and the wallet comes back BY ITSELF. Nothing in the test asks for it:
+        // `SignResultActivity` does it on delivery, which is the only place that
+        // can — by then the wallet is a background app, and a background app
+        // cannot move its task in front of the browser's. This is the whole of
+        // the owner's 「卡在 完成」 report.
+        var came = false
+        for (i in 1..40) {
+            if (resumes.get() > before) {
+                came = true
+                println("P4 · the wallet resumed on its own after ${(i - 1) * 250}ms")
+                break
+            }
+            Thread.sleep(250)
+        }
+        println("P4 · resumes: before=$before after=${resumes.get()}")
+        assertTrue("the wallet never came back in front of the page", came)
+
+        // …as the SAME instance. A rebuild would be a fresh app with the flow's
+        // screen gone, which is what a `singleTop` MainActivity receiving this
+        // callback directly would have produced.
         scenario.onActivity { activity ->
             assertEquals("MainActivity was recreated by the callback", identity, System.identityHashCode(activity))
         }
-        scenario.close()
+        instrumentation.runOnMainSync { app.unregisterActivityLifecycleCallbacks(watcher) }
+        // Deliberately NOT `scenario.close()`. The browser's tab is still in its
+        // own task, so this activity sits PAUSED behind it and never reaches
+        // DESTROYED — `close()` waits for that and times out, reporting a
+        // failure about the test's own cleanup after everything it measured has
+        // passed. The instrumentation tears the process down either way.
+        instrumentation.runOnMainSync { /* leave the wallet where it is */ }
     }
 }

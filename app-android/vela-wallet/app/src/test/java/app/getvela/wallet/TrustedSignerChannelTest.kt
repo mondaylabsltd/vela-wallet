@@ -103,15 +103,18 @@ class TrustedSignerChannelTest {
     }
 
     @Test
-    fun `an answered request brings the wallet back over the page`() {
+    fun `a standalone signature ends its flow, which is what lets the page go`() {
         // A visit ends with its answer on this channel: there is no session for
-        // the page to hold, and the next request opens it again. Leaving the tab
-        // in front is what the socket channel did, and it stranded the person on
-        // the page's own "handed back to the wallet" screen while the wallet,
-        // which had the answer, sat behind it (owner, 2026-09-24).
+        // the page to hold, and the next request opens it again.
+        //
+        // Who puts the wallet back in front is NOT this class: by then the app is
+        // in the background and cannot move its own task over the browser's
+        // (measured — `SignResultActivity.bringTheWalletBack`). What this class
+        // owes is ending the flow, which is what releases the page at all.
         val channel = channel { visit -> visit.answer(answer(signer)) }
         onThisDevice { channel.sign(request, digest, keys) }
-        assertTrue("the wallet was never brought back", broughtBack.get() > 0)
+        assertEquals("the flow is over after a standalone signature", TrustedSignerChannel.State.Idle, channel.state.value)
+        assertTrue("the flow never ended", broughtBack.get() > 0)
     }
 
     @Test

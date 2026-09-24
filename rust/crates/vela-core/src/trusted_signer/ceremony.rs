@@ -120,10 +120,44 @@ const fn purpose_name(purpose: ProofPurpose) -> &'static str {
     }
 }
 
+/// Which registry deployment a member proof is bound to.
+///
+/// The member challenge is
+/// `keccak256(abi.encode(chainId, contract, rpId, publicKey, binding))`, so
+/// these two facts are all the page needs to compute it — and computing it is
+/// what it already does, refusing anything that does not match.
+///
+/// **Why the wallet supplies them rather than the page fetching them.** The
+/// page used to read them from the registry's `/api/health`, which the
+/// published page cannot do at all: `default-src 'none'` is inside its hashed
+/// bytes (spec 076), so a page whose hash a wallet accepts can reach no
+/// network. Measured, and then measured again the hard way — creating a wallet
+/// failed at its second step with 「注册表没有应答」 (owner, 2026-09-24).
+///
+/// Handing them over is also stronger than fetching them. The page never signs
+/// a challenge it was given; it signs the one it derived from what is on
+/// screen. So a requester that lies about either fact gets a different
+/// challenge — and the wallet, which fetched the real one, refuses the answer
+/// (`verify`'s `expected_member_challenge`). The registry stops being a party
+/// this step has to trust.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RegistryDeployment {
+    pub chain_id: u64,
+    /// The `domainRegistry` contract, `0x`-prefixed.
+    pub contract: String,
+}
+
 /// The page request for a ceremony. `registry` is the registry service the
-/// page asks for a member challenge (the wallet's own endpoint).
+/// wallet uses, named so the card can show it. `deployment` is required by a
+/// member proof and ignored by every other ceremony.
 #[must_use]
-pub fn request(ceremony: &Ceremony, id: &str, wallet_name: &str, registry: &str) -> Value {
+pub fn request(
+    ceremony: &Ceremony,
+    id: &str,
+    wallet_name: &str,
+    registry: &str,
+    deployment: Option<&RegistryDeployment>,
+) -> Value {
     let (method, params) = match ceremony {
         Ceremony::RegisterPasskey {
             name,
@@ -163,6 +197,11 @@ pub fn request(ceremony: &Ceremony, id: &str, wallet_name: &str, registry: &str)
                 "attestation": attestation_hex,
                 "groupPublicKey": group_public_key_hex,
                 "registry": registry,
+                // Absent when the wallet could not learn the deployment. The
+                // page then has nothing to compute the challenge from and says
+                // so, rather than signing something it could not check.
+                "chainId": deployment.map(|d| d.chain_id),
+                "registryContract": deployment.map(|d| d.contract.clone()),
             }),
         ),
     };

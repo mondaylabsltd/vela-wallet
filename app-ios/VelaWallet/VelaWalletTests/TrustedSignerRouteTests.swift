@@ -127,6 +127,12 @@ struct TrustedSignerCeremonyFixture {
 
 // MARK: - One session, several requests
 
+/// The deployment a member proof is bound to, as `/api/health` names it.
+let TEST_DEPLOYMENT = SignerRegistryDeployment(
+    chainId: 100,
+    contract: "0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf"
+)
+
 @MainActor
 struct TrustedSignerSessionTests {
 
@@ -142,7 +148,8 @@ struct TrustedSignerSessionTests {
         let register = page.registerOperation()
         let registerRequest = try #require(trustedSignerCeremonyRequest(
             operationJson: TrustedSignerCeremonyFixture.json(register),
-            id: "ignored", walletName: "Mine", registry: registry
+            id: "ignored", walletName: "Mine", registry: registry,
+            deployment: TEST_DEPLOYMENT
         ))
         let channel = TrustedSignerChannel(
             signerUrl: page.signerUrl,
@@ -176,7 +183,8 @@ struct TrustedSignerSessionTests {
         let member = page.memberProofOperation()
         let memberRequest = try #require(trustedSignerCeremonyRequest(
             operationJson: TrustedSignerCeremonyFixture.json(member),
-            id: "ignored", walletName: "Mine", registry: registry
+            id: "ignored", walletName: "Mine", registry: registry,
+            deployment: TEST_DEPLOYMENT
         ))
         let firstToken = channel.token
         // The page answers the second visit as it is opened, so nothing here
@@ -225,7 +233,8 @@ struct TrustedSignerSessionTests {
         let register = page.registerOperation()
         let request = try #require(trustedSignerCeremonyRequest(
             operationJson: TrustedSignerCeremonyFixture.json(register),
-            id: "x", walletName: "Mine", registry: "https://r.test"
+            id: "x", walletName: "Mine", registry: "https://r.test",
+            deployment: TEST_DEPLOYMENT
         ))
         let channel = TrustedSignerChannel(
             signerUrl: page.signerUrl,
@@ -242,7 +251,8 @@ struct TrustedSignerSessionTests {
         let member = page.memberProofOperation()
         let memberRequest = try #require(trustedSignerCeremonyRequest(
             operationJson: TrustedSignerCeremonyFixture.json(member),
-            id: "y", walletName: "Mine", registry: "https://r.test"
+            id: "y", walletName: "Mine", registry: "https://r.test",
+            deployment: TEST_DEPLOYMENT
         ))
         channel.openPage = { url in
             _ = try? PageVisit(url).refuse("user_rejected")
@@ -265,7 +275,8 @@ struct TrustedSignerSessionTests {
         let member = page.memberProofOperation()
         let request = try #require(trustedSignerCeremonyRequest(
             operationJson: TrustedSignerCeremonyFixture.json(member),
-            id: "x", walletName: "Mine", registry: "https://r.test"
+            id: "x", walletName: "Mine", registry: "https://r.test",
+            deployment: TEST_DEPLOYMENT
         ))
         let channel = TrustedSignerChannel(
             signerUrl: page.signerUrl,
@@ -289,7 +300,8 @@ struct TrustedSignerSessionTests {
         let register = page.registerOperation()
         let request = try #require(trustedSignerCeremonyRequest(
             operationJson: TrustedSignerCeremonyFixture.json(register),
-            id: "x", walletName: "Mine", registry: "https://r.test"
+            id: "x", walletName: "Mine", registry: "https://r.test",
+            deployment: TEST_DEPLOYMENT
         ))
         let channel = TrustedSignerChannel(
             signerUrl: page.signerUrl,
@@ -486,11 +498,17 @@ final class ScriptedCeremonyPort: TrustedSignerCeremonyPort {
         self.answer = answer
     }
 
+    /// What the last ceremony was told the deployment was, so a test can check
+    /// a member proof carries one and nothing else does.
+    var deployments: [SignerRegistryDeployment?] = []
+
     func ceremony(
         operationJson: String, walletName: String, registry: String,
-        expectedMemberChallenge: Data?, page: String?
+        expectedMemberChallenge: Data?, page: String?,
+        deployment: SignerRegistryDeployment?
     ) async -> TrustedSignerCeremonyStep {
         asked.append((operationJson, registry, walletName, expectedMemberChallenge, page))
+        deployments.append(deployment)
         return answer(operationJson)
     }
 
@@ -605,9 +623,17 @@ struct TrustedSignerExecutorTests {
         // The core reads it as the ceremony it is, from this very JSON.
         let request = trustedSignerCeremonyRequest(
             operationJson: TrustedSignerCeremonyFixture.json(routed),
-            id: "x", walletName: "Mine", registry: "https://r.test"
+            id: "x", walletName: "Mine", registry: "https://r.test",
+            deployment: TEST_DEPLOYMENT
         )
         #expect(request != nil)
+        // The deployment reaches the page's params, which is what lets it
+        // compute the member challenge without asking the network (076).
+        let built = try CoreJSON.object(try #require(request))
+        let intent = try #require(built["intent"] as? [String: Any])
+        let params = try #require((intent["params"] as? [[String: Any]])?.first)
+        #expect((params["chainId"] as? NSNumber)?.uint64Value == TEST_DEPLOYMENT.chainId)
+        #expect(params["registryContract"] as? String == TEST_DEPLOYMENT.contract)
 
         let ordinary = PublishMember(json: [
             "credential_id": "cred-2", "public_key_hex": "04" + String(repeating: "22", count: 64),
