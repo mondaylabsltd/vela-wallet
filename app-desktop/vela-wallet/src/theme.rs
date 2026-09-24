@@ -436,6 +436,26 @@ fn scaled(base: f32) -> Pixels {
 pub fn text_balance_hero() -> Pixels {
     scaled(40.)
 }
+/// The send form's typed figure, on the web's ladder (`AmountInput`):
+/// `--text-hero` 46, `--text-heroCompact` 38 past 9 characters,
+/// `--text-heroTight` 31 past 12 — so a long figure steps down instead of
+/// running off the column.
+pub fn text_amount_hero(chars: usize) -> Pixels {
+    scaled(match chars {
+        0..=9 => 46.,
+        10..=12 => 38.,
+        _ => 31.,
+    })
+}
+/// The line the figure sits on — the hero rung's on every rung, so the block
+/// is one height whatever is typed and nothing below it moves.
+pub fn line_amount_hero() -> Pixels {
+    scaled(46. * 1.2)
+}
+/// The unit after the figure (`--text-3xl`): lighter, so the number reads first.
+pub fn text_amount_unit() -> Pixels {
+    scaled(26.)
+}
 pub fn text_balance_decimals() -> Pixels {
     scaled(24.)
 }

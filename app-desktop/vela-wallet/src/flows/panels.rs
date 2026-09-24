@@ -1214,40 +1214,44 @@ fn send_form(
     let mut col = column().child(card);
 
     if let Some(field) = actions.amount_field.take() {
-        // Live: a real field, labelled with the coin it counts in, the fiat
-        // line under it and the Max chip beside it. The value is the CORE's
-        // — it validates every keystroke — so the field holds no copy.
-        let strings = crate::ui::NameFieldStrings {
-            // The unit the figure is typed in — money or the token (#231).
-            label: model
-                .amount_unit
-                .clone()
-                .unwrap_or_else(|| model.token.1.clone()),
-            placeholder: field.placeholder.clone(),
-            helper: SharedString::from(""),
-            too_long_hint: SharedString::from(""),
-        };
-        let block = column().child(crate::ui::text_field(
-            "send-amount",
-            theme,
-            &strings,
-            &field.value,
-            false,
-            false,
-            &field.focus,
-            window,
-            field.on_change,
-        ));
-        let mut under = div().flex().items_center().justify_between().gap(px(8.));
+        // Live: the web's `AmountInput` — the figure large and centred with
+        // its unit after it, and the other denomination under it. The value
+        // is the CORE's — it validates every keystroke — so the field holds
+        // no copy.
+        let unit = model
+            .amount_unit
+            .clone()
+            .unwrap_or_else(|| model.token.1.clone());
+        let mut block = div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(4.))
+            .py(px(24.))
+            .child(crate::ui::hero_amount_field(
+                "send-amount",
+                theme,
+                &field.value,
+                field.placeholder.clone(),
+                unit,
+                &field.focus,
+                window,
+                field.on_change,
+            ));
         if let Some((_, fiat)) = &model.amount {
             let line = div()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_muted);
-            under = under.child(match model.denom_toggle {
-                // ⇄ IS the other denomination's line (the web's `button.fiat`):
-                // pressing what it shows is how the figure comes across. Where
-                // the swap would change nothing it is drawn dimmed and answers
-                // to nothing — the notice below says why.
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .text_size(theme::text_row_title())
+                .text_color(theme.fg_muted)
+                .child(fiat.clone());
+            block = block.child(match model.denom_toggle {
+                // The chevrons ARE the other denomination's line (the web's
+                // `button.fiat`): pressing what it shows is how the figure
+                // comes across. Where the swap would change nothing it is
+                // drawn dimmed and answers to nothing — the notice below says
+                // why.
                 Some(enabled) => clickable(
                     "send-denom-toggle",
                     if enabled {
@@ -1255,13 +1259,24 @@ fn send_form(
                     } else {
                         None
                     },
-                    line.when(!enabled, |el| el.opacity(0.5))
-                        .child(SharedString::from(format!("⇄  {fiat}"))),
+                    line.when(!enabled, |el| el.opacity(0.5)).child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(icon_img(icons, Icon::ChevronUp, false, theme.fg_muted, 10.))
+                            .child(icon_img(
+                                icons,
+                                Icon::ChevronDown,
+                                false,
+                                theme.fg_muted,
+                                10.,
+                            )),
+                    ),
                 ),
-                None => line.child(fiat.clone()),
+                None => line,
             });
         }
-        col = col.child(block.child(under));
+        col = col.child(block);
     } else if let Some((value, fiat)) = &model.amount {
         col = col.child(
             div()
@@ -1286,37 +1301,82 @@ fn send_form(
     }
 
     if let Some(field) = actions.recipient_field.take() {
-        // Live: the address is typed (or pasted), and the book is one pill
-        // away. The label carries the core's trust line once it has one.
+        // Live: the web's `RecipientField` — a quiet label, then one raised
+        // card holding the payee's face, the address as it is typed, and the
+        // book. The label carries the core's trust line once it has one.
         let label = model
             .recipient
             .as_ref()
             .map(|(label, _, _)| label.clone())
             .unwrap_or_default();
-        let strings = crate::ui::NameFieldStrings {
-            label,
-            placeholder: field.placeholder.clone(),
-            helper: SharedString::from(""),
-            too_long_hint: SharedString::from(""),
+        // A face only for a whole address: a half-typed one would change
+        // creature on every keystroke, and none of them would be anybody.
+        let whole = field.value.len() == 42 && field.value.starts_with("0x");
+        let face = if whole {
+            div()
+                .flex_none()
+                .child(crate::wallet::components::identicon_avatar(
+                    identicons,
+                    &field.value,
+                    36.,
+                ))
+        } else {
+            div()
+                .flex_none()
+                .size(px(36.))
+                .rounded_full()
+                .bg(theme.bg_sunken)
         };
-        col = col.child(crate::ui::text_field(
-            "send-recipient",
-            theme,
-            &strings,
-            &field.value,
-            false,
-            false,
-            &field.focus,
-            window,
-            field.on_change,
-        ));
-        if let Some(pick) = &model.pick_contacts {
-            col = col.child(div().flex().child(clickable(
+        let mut card = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .p(px(12.))
+            .rounded(px(12.))
+            .bg(theme.bg_raised)
+            .child(face)
+            .child(crate::ui::bare_text_field(
+                "send-recipient",
+                theme,
+                &field.value,
+                field.placeholder.clone(),
+                &field.focus,
+                window,
+                field.on_change,
+            ));
+        if model.pick_contacts.is_some() {
+            card = card.child(clickable(
                 "flow-pick-contacts",
                 actions.open_contact_pick.take(),
-                pill(theme, pick.clone()),
-            )));
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(36.))
+                    .rounded_full()
+                    .hover(|el| el.bg(theme.bg_sunken))
+                    .child(icon_img(
+                        icons,
+                        Icon::NavContacts,
+                        false,
+                        theme.fg_muted,
+                        18.,
+                    )),
+            ));
         }
+        col = col.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(label),
+                )
+                .child(card),
+        );
     } else if let Some((label, lines, seed)) = &model.recipient {
         col = col
             .child(
@@ -1479,16 +1539,20 @@ fn send_form(
     }
     // The fee row, and beside it the refresh control — outside the row's
     // own click, so measuring again never opens the fee-coin sheet.
-    let mut fee_line =
-        div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .child(div().flex_1().min_w(px(0.)).child(clickable(
-                "flow-fee-row",
-                actions.open_fee_token.take(),
-                fee_row(theme, icons, &model.fee),
-            )));
+    // One raised surface, as the web's `FeeRow` draws it: the row that opens
+    // the fee-coin sheet, and the refresh at its end — two controls side by
+    // side, not one inside the other, so measuring again never opens the
+    // sheet.
+    let mut fee_line = div()
+        .flex()
+        .items_center()
+        .rounded(px(12.))
+        .bg(theme.bg_raised)
+        .child(div().flex_1().min_w(px(0.)).child(clickable(
+            "flow-fee-row",
+            actions.open_fee_token.take(),
+            fee_row(theme, icons, &model.fee),
+        )));
     if model.fee.refresh.is_some() {
         fee_line = fee_line.child(clickable(
             "flow-fee-refresh",

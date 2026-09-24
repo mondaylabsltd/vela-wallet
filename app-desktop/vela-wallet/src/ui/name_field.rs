@@ -197,91 +197,8 @@ pub fn text_field(
             .overflow_hidden()
             .cursor_text()
             .child(inner)
-            .on_click(move |_, window, cx| {
-                // A click puts the caret back at the end, as it would anywhere.
-                select(None);
-                focus_for_click.focus(window, cx);
-            })
-            .on_key_down(move |event: &KeyDownEvent, window, cx| {
-                let ks = &event.keystroke;
-                let selected = !current.is_empty() && is_selected(&focus_for_keys);
-                if let Some(chord) = edit_chord(ks) {
-                    match chord {
-                        EditChord::SelectAll => {
-                            if !current.is_empty() {
-                                select(Some(&focus_for_keys));
-                                window.refresh();
-                            }
-                        }
-                        // A masked well holds a PIN: it may be pasted into,
-                        // never read back out.
-                        EditChord::Copy => {
-                            if selected && !mask {
-                                cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
-                            }
-                        }
-                        EditChord::Cut => {
-                            if selected && !mask {
-                                cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
-                                select(None);
-                                on_change(String::new(), window, cx);
-                            }
-                        }
-                        // Every value these wells take — an address, a URL, an
-                        // RPC endpoint, a contract — arrives from somewhere
-                        // else. A newline is dropped rather than typed: these
-                        // are single-line wells, and a pasted trailing newline
-                        // is what turns a good address into one the core
-                        // refuses.
-                        EditChord::Paste => {
-                            let Some(pasted) =
-                                cx.read_from_clipboard().and_then(|item| item.text())
-                            else {
-                                return;
-                            };
-                            let pasted: String =
-                                pasted.chars().filter(|c| !c.is_control()).collect();
-                            if pasted.is_empty() {
-                                return;
-                            }
-                            let kept = if selected { "" } else { current.as_str() };
-                            select(None);
-                            on_change(format!("{kept}{pasted}"), window, cx);
-                        }
-                    }
-                    return;
-                }
-                if ks.modifiers.control || ks.modifiers.alt || ks.modifiers.platform {
-                    return;
-                }
-                // A selection is replaced by whatever is typed over it.
-                let mut next = if selected {
-                    String::new()
-                } else {
-                    current.clone()
-                };
-                match ks.key.as_str() {
-                    "backspace" | "delete" if selected => {}
-                    "backspace" => {
-                        if next.pop().is_none() {
-                            return;
-                        }
-                    }
-                    "left" | "right" | "home" | "end" | "escape" => {
-                        if selected {
-                            select(None);
-                            window.refresh();
-                        }
-                        return;
-                    }
-                    _ => match &ks.key_char {
-                        Some(ch) if !ch.chars().any(char::is_control) => next.push_str(ch),
-                        _ => return,
-                    },
-                }
-                select(None);
-                on_change(next, window, cx);
-            })
+            .on_click(click_to_edit(focus_for_click))
+            .on_key_down(edit_keys(current, focus_for_keys, mask, on_change))
     };
 
     let mut col = div().flex().flex_col();
@@ -322,6 +239,250 @@ pub fn text_field(
             .text_color(theme.fg_muted)
             .child(strings.helper.clone()),
     )
+}
+
+/// A click into a well: the caret goes back to the end, as it would anywhere.
+fn click_to_edit(focus: FocusHandle) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut App) {
+    move |_, window, cx| {
+        select(None);
+        focus.focus(window, cx);
+    }
+}
+
+/// Every well's keys — typing, backspace, the four clipboard chords over an
+/// all-or-nothing selection — whatever the well looks like. One handler, so
+/// the bordered field, the send form's figure and its recipient line cannot
+/// disagree about what Ctrl+V does.
+fn edit_keys(
+    current: String,
+    focus_for_keys: FocusHandle,
+    mask: bool,
+    on_change: impl Fn(String, &mut Window, &mut App) + 'static,
+) -> impl Fn(&KeyDownEvent, &mut Window, &mut App) + 'static {
+    move |event: &KeyDownEvent, window, cx| {
+        let ks = &event.keystroke;
+        let selected = !current.is_empty() && is_selected(&focus_for_keys);
+        if let Some(chord) = edit_chord(ks) {
+            match chord {
+                EditChord::SelectAll => {
+                    if !current.is_empty() {
+                        select(Some(&focus_for_keys));
+                        window.refresh();
+                    }
+                }
+                // A masked well holds a PIN: it may be pasted into,
+                // never read back out.
+                EditChord::Copy => {
+                    if selected && !mask {
+                        cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
+                    }
+                }
+                EditChord::Cut => {
+                    if selected && !mask {
+                        cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
+                        select(None);
+                        on_change(String::new(), window, cx);
+                    }
+                }
+                // Every value these wells take — an address, a URL, an
+                // RPC endpoint, a contract — arrives from somewhere
+                // else. A newline is dropped rather than typed: these
+                // are single-line wells, and a pasted trailing newline
+                // is what turns a good address into one the core
+                // refuses.
+                EditChord::Paste => {
+                    let Some(pasted) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+                        return;
+                    };
+                    let pasted: String = pasted.chars().filter(|c| !c.is_control()).collect();
+                    if pasted.is_empty() {
+                        return;
+                    }
+                    let kept = if selected { "" } else { current.as_str() };
+                    select(None);
+                    on_change(format!("{kept}{pasted}"), window, cx);
+                }
+            }
+            return;
+        }
+        if ks.modifiers.control || ks.modifiers.alt || ks.modifiers.platform {
+            return;
+        }
+        // A selection is replaced by whatever is typed over it.
+        let mut next = if selected {
+            String::new()
+        } else {
+            current.clone()
+        };
+        match ks.key.as_str() {
+            "backspace" | "delete" if selected => {}
+            "backspace" => {
+                if next.pop().is_none() {
+                    return;
+                }
+            }
+            "left" | "right" | "home" | "end" | "escape" => {
+                if selected {
+                    select(None);
+                    window.refresh();
+                }
+                return;
+            }
+            _ => match &ks.key_char {
+                Some(ch) if !ch.chars().any(char::is_control) => next.push_str(ch),
+                _ => return,
+            },
+        }
+        select(None);
+        on_change(next, window, cx);
+    }
+}
+
+/// The caret: a styled bar (no blink — nothing timed here).
+fn caret(theme: &Theme, height: gpui::Pixels) -> Div {
+    div()
+        .w(px(FLOW_CARET_W))
+        .h(height)
+        .flex_none()
+        .bg(theme.accent)
+}
+
+/// The send form's amount, as the web's `AmountInput` draws it: the figure
+/// large and centred, the unit after it in a lighter face, the caret between
+/// them — and the same keys as every well.
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
+pub fn hero_amount_field(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    value: &str,
+    placeholder: SharedString,
+    unit: SharedString,
+    focus: &FocusHandle,
+    window: &Window,
+    on_change: impl Fn(String, &mut Window, &mut App) + 'static,
+) -> gpui::Stateful<Div> {
+    let focused = focus.is_focused(window);
+    let selected = focused && !value.is_empty() && is_selected(focus);
+    let size = theme::text_amount_hero(value.chars().count());
+    let figure = div()
+        .font_weight(FontWeight::BOLD)
+        .text_size(size)
+        .text_color(if value.is_empty() {
+            theme.fg_subtle
+        } else {
+            theme.fg_base
+        })
+        .when(selected, |text| {
+            text.bg(theme.accent.opacity(0.28)).rounded(px(4.))
+        })
+        .child(if value.is_empty() {
+            placeholder
+        } else {
+            SharedString::from(value.to_owned())
+        });
+    div()
+        .id(id)
+        .track_focus(focus)
+        .cursor_text()
+        .h(theme::line_amount_hero())
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(px(2.))
+        .min_w(px(0.))
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .child(figure)
+        .when(focused && !selected, |row| {
+            row.child(caret(theme, size * 0.8))
+        })
+        .child(
+            div()
+                .ml(px(8.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_size(theme::text_amount_unit())
+                .text_color(theme.fg_muted)
+                .child(unit),
+        )
+        .on_click(click_to_edit(focus.clone()))
+        .on_key_down(edit_keys(value.to_owned(), focus.clone(), false, on_change))
+}
+
+/// A well with no well: the text and its caret, for a field that sits inside
+/// a card of its own (the send form's recipient). An address runs to two
+/// lines rather than being clipped — a cut address hides exactly the
+/// characters a poisoning attack changes.
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
+pub fn bare_text_field(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    value: &str,
+    placeholder: SharedString,
+    focus: &FocusHandle,
+    window: &Window,
+    on_change: impl Fn(String, &mut Window, &mut App) + 'static,
+) -> gpui::Stateful<Div> {
+    let focused = focus.is_focused(window);
+    let selected = focused && !value.is_empty() && is_selected(focus);
+    let line = |text: String| {
+        div()
+            .font_family(theme::font_mono())
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_base)
+            .whitespace_nowrap()
+            .when(selected, |el| {
+                el.bg(theme.accent.opacity(0.28)).rounded(px(2.))
+            })
+            .child(SharedString::from(text))
+    };
+    let mut text = div().flex().flex_col().min_w(px(0.));
+    if value.is_empty() {
+        text = text.child(
+            div()
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(placeholder),
+                )
+                .when(focused, |el| el.child(caret(theme, px(16.)))),
+        );
+    } else {
+        // Halves past 22 characters, as the address cards split them.
+        let chars: Vec<char> = value.chars().collect();
+        let halves = if chars.len() > 22 {
+            let mid = chars.len().div_ceil(2);
+            vec![
+                chars[..mid].iter().collect::<String>(),
+                chars[mid..].iter().collect::<String>(),
+            ]
+        } else {
+            vec![value.to_owned()]
+        };
+        let last = halves.len() - 1;
+        for (i, half) in halves.into_iter().enumerate() {
+            let mut row = div().flex().items_center().child(line(half));
+            if i == last && focused && !selected {
+                row = row.child(caret(theme, px(16.)));
+            }
+            text = text.child(row);
+        }
+    }
+    div()
+        .id(id)
+        .track_focus(focus)
+        .cursor_text()
+        .flex_1()
+        .min_w(px(0.))
+        .min_h(px(36.))
+        .flex()
+        .items_center()
+        .overflow_hidden()
+        .child(text)
+        .on_click(click_to_edit(focus.clone()))
+        .on_key_down(edit_keys(value.to_owned(), focus.clone(), false, on_change))
 }
 
 #[cfg(test)]

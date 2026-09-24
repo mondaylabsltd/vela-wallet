@@ -626,7 +626,9 @@ pub fn fee_row(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
         .gap(px(8.))
         .p(px(12.))
         .rounded(px(12.))
-        .bg(theme.bg_sunken)
+        // The web's raised surface: the fee sits on the same card colour as
+        // the token and the recipient above it.
+        .bg(theme.bg_raised)
         .child(
             div()
                 .flex_1()
@@ -657,9 +659,10 @@ pub fn fee_refresh_icon(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> D
         .flex()
         .items_center()
         .justify_center()
-        .size(px(32.))
-        .rounded(px(10.))
-        .bg(theme.bg_sunken)
+        .size(px(36.))
+        .mr(px(4.))
+        .rounded_full()
+        .hover(|el| el.bg(theme.bg_sunken))
         .child(icon_img(
             icons,
             Icon::RefreshCw,
@@ -928,8 +931,9 @@ pub fn token_header_card(
         .items_center()
         .gap(px(12.))
         .p(px(12.))
-        .rounded(px(14.))
-        .bg(theme.bg_sunken)
+        .rounded(px(12.))
+        // The web's `TokenHeaderCard`: a raised card, the Max chip sunken on it.
+        .bg(theme.bg_raised)
         .child(token_icon_logos(
             theme,
             mark.ticker.as_ref(),
@@ -945,6 +949,7 @@ pub fn token_header_card(
                 .child(
                     div()
                         .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.fg_base)
                         .child(symbol),
                 )
@@ -968,8 +973,9 @@ pub fn max_chip(theme: &Theme, max: SharedString) -> Div {
         .px(px(12.))
         .py(px(4.))
         .rounded(px(999.))
-        .bg(theme.bg_raised)
+        .bg(theme.bg_sunken)
         .text_size(theme::text_row_sub())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_base)
         .child(max)
 }

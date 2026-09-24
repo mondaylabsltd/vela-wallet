@@ -185,6 +185,7 @@ pub fn nav_row(
         .items_center()
         .gap(px(12.))
         .h(px(WALLET_NAV_ROW_H))
+        .flex_none()
         .px(px(12.))
         .rounded(px(10.))
         .cursor_pointer()
@@ -243,6 +244,9 @@ pub fn chain_row(
         // The web filter's row (`min-height: --size-hitTarget`): at 32
         // twenty-odd chains read as one block of text rather than a list.
         .h(px(WALLET_NAV_ROW_H))
+        // Never squeezed: a short window must scroll the list, not crush
+        // twenty rows into the height of ten.
+        .flex_none()
         .px(px(12.))
         .rounded(px(8.))
         .cursor_pointer()
