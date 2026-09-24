@@ -109,28 +109,9 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     // one; live replaces it (max(live, cached) is the core's rule — this only
     // chooses what to show meanwhile). The web's `liveBalance`.
     let on_cache = view.display_total_usd.is_none() && view.cached_total_usd.is_some();
-    let status = if view.unreachable {
-        // A first launch with no network: say so, over the skeleton, rather
-        // than show a settled-looking zero (spec 038 finding 15).
-        Some((StatusKind::Warning, s.balance_unreachable.clone()))
-    } else if view.refreshing || on_cache {
-        // A cached figure is a figure being brought up to date — said so, so
-        // yesterday's total never reads as today's.
-        Some((StatusKind::Refreshing, s.balance_stale.clone()))
-    } else {
-        view.notice.map(|notice| {
-            (
-                StatusKind::Warning,
-                match notice {
-                    // Partial and still retrying — the figure is real but not
-                    // final, which is a different thing from wrong.
-                    BalanceNotice::StillUpdating => s.balance_stale.clone(),
-                    BalanceNotice::Unpriced => s.balance_unpriced.clone(),
-                },
-            )
-        })
-    };
 
+    // Hidden says nothing about the figure it is hiding — the web's hidden
+    // hero has no status line (078 H-03).
     if view.hidden {
         return BalanceModel {
             label: s.total_balance.clone(),
@@ -139,7 +120,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             integer: SharedString::from(BALANCE_MASK),
             decimals: None,
             live: None,
-            status,
+            status: None,
         };
     }
 
@@ -153,8 +134,48 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             integer: SharedString::from(""),
             decimals: None,
             live: None,
-            status,
+            // A first launch with no network says so over the skeleton rather
+            // than show a settled-looking zero (spec 038 finding 15) — and a
+            // skeleton says nothing else: it is already "still counting".
+            status: view
+                .unreachable
+                .then(|| (StatusKind::Warning, s.balance_unreachable.clone())),
         };
+    };
+
+    // One status line, most actionable first — the web's `liveBalance` order.
+    // `banner_chain_ids` is already failed MINUS rate-limited (a rate limit
+    // heals on its own), so a chain here really is unreachable and the person
+    // can fix its RPC: the line names it, and opens its editor. Then a figure
+    // being brought up to date — grey, because it is not wrong, only not
+    // final. Then what could not be priced.
+    let status = match view.banner_chain_ids.as_slice() {
+        [chain_id] => Some((
+            StatusKind::Warning,
+            SharedString::from(crate::wallet::fill(
+                &s.rpc_unavailable_single,
+                "name",
+                &crate::executor::custom_tokens::network_name(*chain_id),
+            )),
+        )),
+        [_, _, ..] => Some((
+            StatusKind::Warning,
+            SharedString::from(crate::wallet::fill(
+                &s.rpc_unavailable_multiple,
+                "count",
+                &view.banner_chain_ids.len().to_string(),
+            )),
+        )),
+        [] if view.refreshing
+            || on_cache
+            || view.notice == Some(BalanceNotice::StillUpdating) =>
+        {
+            Some((StatusKind::Refreshing, s.balance_stale.clone()))
+        }
+        [] if view.notice == Some(BalanceNotice::Unpriced) => {
+            Some((StatusKind::Warning, s.balance_unpriced.clone()))
+        }
+        [] => None,
     };
 
     let (integer, decimals) = split_fiat(usd, locale, money);
@@ -177,6 +198,143 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         decimals,
         live: None,
         status,
+    }
+}
+
+/// SR3, the balance by network (078 H-03) — the web's `liveBalanceDetail`:
+/// the chains still being read (rate-limited, retrying on their own) or
+/// unreachable (with a Retry), the chains that settled, largest first, and the
+/// tokens nothing could price. The same figures the hero sums.
+pub struct BalanceDetail {
+    pub summary: SharedString,
+    pub pending: Vec<DetailChain>,
+    pub done: Vec<DetailChain>,
+    pub unpriced: Vec<DetailChain>,
+}
+
+/// One line of the breakdown: a chain (or an unpriced token on one), what it
+/// says under its name, what it says at the end, and — for an unreachable
+/// chain — the Retry it offers.
+pub struct DetailChain {
+    pub chain_id: u32,
+    pub name: SharedString,
+    /// Under the name; `(text, failed)` — a failed chain says so in red.
+    pub status: Option<(SharedString, bool)>,
+    pub amount: Option<SharedString>,
+    pub retry: bool,
+}
+
+#[must_use]
+pub fn balance_detail(
+    view: &BalanceView,
+    s: &WalletStrings,
+    locale: &str,
+    money: &Money,
+) -> BalanceDetail {
+    let name = |chain_id: u32| {
+        SharedString::from(crate::executor::custom_tokens::network_name(chain_id))
+    };
+    let mask = || SharedString::from(crate::wallet::fixtures::MASK);
+
+    let mut pending: Vec<DetailChain> = view
+        .rate_limited_chain_ids
+        .iter()
+        .map(|&chain_id| DetailChain {
+            chain_id,
+            name: name(chain_id),
+            status: Some((s.detail_retrying.clone(), false)),
+            amount: None,
+            retry: false,
+        })
+        .collect();
+    for &chain_id in &view.banner_chain_ids {
+        if pending.iter().any(|row| row.chain_id == chain_id) {
+            continue;
+        }
+        pending.push(DetailChain {
+            chain_id,
+            name: name(chain_id),
+            status: Some((s.detail_failed.clone(), true)),
+            amount: None,
+            retry: true,
+        });
+    }
+
+    let mut per_chain: Vec<(u32, f64)> = Vec::new();
+    for token in &view.tokens {
+        let usd = token.balance.parse::<f64>().unwrap_or(f64::NAN) * token.price_usd.unwrap_or(0.0);
+        if !usd.is_finite() {
+            continue;
+        }
+        match per_chain.iter_mut().find(|(id, _)| *id == token.chain_id) {
+            Some((_, sum)) => *sum += usd,
+            None => per_chain.push((token.chain_id, usd)),
+        }
+    }
+    per_chain.retain(|(id, _)| !pending.iter().any(|row| row.chain_id == *id));
+    per_chain.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let done = per_chain
+        .into_iter()
+        .map(|(chain_id, usd)| DetailChain {
+            chain_id,
+            name: name(chain_id),
+            status: None,
+            amount: Some(if view.hidden {
+                mask()
+            } else {
+                SharedString::from(money.text(usd, locale))
+            }),
+            retry: false,
+        })
+        .collect();
+
+    let total = view.display_total_usd.or(view.cached_total_usd);
+    let summary = crate::wallet::fill(
+        &s.detail_total,
+        "amount",
+        &match total {
+            Some(usd) if !view.hidden => money.text(usd, locale),
+            _ => crate::wallet::fixtures::MASK.to_owned(),
+        },
+    );
+
+    let unpriced = view
+        .unpriced_tokens
+        .iter()
+        .map(|token| DetailChain {
+            chain_id: token.chain_id,
+            name: SharedString::from(token.symbol.clone()),
+            status: Some((
+                SharedString::from(format!(
+                    "{} · {}",
+                    crate::executor::custom_tokens::network_name(token.chain_id),
+                    if view.hidden {
+                        crate::wallet::fixtures::MASK.to_owned()
+                    } else {
+                        token.balance.parse::<f64>().map_or_else(
+                            |_| token.balance.clone(),
+                            |amount| {
+                                format_token_amount(
+                                    amount,
+                                    crate::executor::format_prefs::current().number,
+                                    false,
+                                )
+                            },
+                        )
+                    }
+                )),
+                false,
+            )),
+            amount: None,
+            retry: false,
+        })
+        .collect();
+
+    BalanceDetail {
+        summary: SharedString::from(summary),
+        pending,
+        done,
+        unpriced,
     }
 }
 
@@ -615,6 +773,85 @@ mod tests {
         let model = balance(&live, &strings(), "en", &Money::default());
         assert_eq!(model.integer, SharedString::from("$40"));
         assert!(model.status.is_none(), "{:?}", model.status.map(|s| s.1));
+    }
+
+    /// The status line in the web's order (078 H-03): an unreachable chain by
+    /// name first, then "still updating" in grey (it is not wrong, only not
+    /// final), then unpriced; a hidden hero says nothing, and a skeleton only
+    /// "unreachable".
+    #[test]
+    fn the_status_line_says_the_most_actionable_thing_first() {
+        let s = strings();
+        let money = Money::default();
+
+        let mut down = view(Some(10.0));
+        down.banner_chain_ids = vec![1];
+        down.notice = Some(BalanceNotice::Unpriced);
+        let model = balance(&down, &s, "en", &money);
+        let Some((StatusKind::Warning, text)) = model.status else {
+            panic!("an unreachable chain is a warning: {:?}", model.status.map(|s| s.1));
+        };
+        assert!(
+            text.contains(&crate::executor::custom_tokens::network_name(1)),
+            "the line names the chain: {text}"
+        );
+        down.banner_chain_ids = vec![1, 10];
+        let (_, text) = balance(&down, &s, "en", &money).status.expect("a line");
+        assert!(text.contains('2'), "several are counted: {text}");
+
+        let mut updating = view(Some(10.0));
+        updating.notice = Some(BalanceNotice::StillUpdating);
+        assert!(matches!(
+            balance(&updating, &s, "en", &money).status,
+            Some((StatusKind::Refreshing, _))
+        ));
+
+        let mut unpriced = view(Some(10.0));
+        unpriced.notice = Some(BalanceNotice::Unpriced);
+        assert_eq!(
+            balance(&unpriced, &s, "en", &money).status,
+            Some((StatusKind::Warning, s.balance_unpriced.clone()))
+        );
+
+        let mut hidden = view(Some(10.0));
+        hidden.hidden = true;
+        hidden.banner_chain_ids = vec![1];
+        assert!(balance(&hidden, &s, "en", &money).status.is_none());
+
+        let mut loading = view(None);
+        loading.refreshing = true;
+        assert!(
+            balance(&loading, &s, "en", &money).status.is_none(),
+            "a skeleton is already 'still counting'"
+        );
+        loading.unreachable = true;
+        assert!(matches!(
+            balance(&loading, &s, "en", &money).status,
+            Some((StatusKind::Warning, _))
+        ));
+    }
+
+    /// SR3 splits the chains the way the web's does: rate-limited ones retry
+    /// by themselves, unreachable ones offer Retry, and a chain in either
+    /// list is not also counted as settled.
+    #[test]
+    fn the_breakdown_keeps_a_pending_chain_out_of_the_settled_ones() {
+        let mut v = view(Some(10.0));
+        v.rate_limited_chain_ids = vec![137];
+        v.banner_chain_ids = vec![137, 10];
+        let detail = balance_detail(&v, &strings(), "en", &Money::default());
+        let pending: Vec<(u32, bool)> = detail
+            .pending
+            .iter()
+            .map(|row| (row.chain_id, row.retry))
+            .collect();
+        assert_eq!(pending, vec![(137, false), (10, true)]);
+        assert!(
+            detail
+                .done
+                .iter()
+                .all(|row| row.chain_id != 137 && row.chain_id != 10)
+        );
     }
 
     /// A zero is "live" only once every chain answered: a partial zero, or a

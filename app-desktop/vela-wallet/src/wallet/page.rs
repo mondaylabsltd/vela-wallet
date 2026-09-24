@@ -527,6 +527,8 @@ pub struct WalletPage {
     /// The contacts header search (078 X-05 / C-02): the web filters the
     /// A–Z list as it is typed, in the shell (`letterSections`).
     contacts_query: String,
+    /// SR3, the balance breakdown the hero's status line opens (078 H-03).
+    balance_detail_open: bool,
     contacts_query_focus: gpui::FocusHandle,
     /// Spec 032: the send journey's two machines, alive while the flow is
     /// open and discarded with it — a second send starts from a fresh
@@ -1008,6 +1010,7 @@ impl WalletPage {
             flow_query: (None, String::new()),
             flow_query_focus: cx.focus_handle(),
             contacts_query: String::new(),
+            balance_detail_open: false,
             contacts_query_focus: cx.focus_handle(),
             send_host: None,
             #[cfg(not(target_os = "linux"))]
@@ -2558,6 +2561,8 @@ impl WalletPage {
             self.contact_form = None;
         } else if self.import_result.is_some() {
             self.import_result = None;
+        } else if self.balance_detail_open {
+            self.balance_detail_open = false;
         } else if self.settings_dialog.is_some() {
             self.close_settings_dialog(cx);
         } else {
@@ -2911,6 +2916,11 @@ impl WalletPage {
                                 );
                             })
                                 as crate::wallet::components::BalanceToggle
+                        }),
+                        self.identity.is_some().then(|| {
+                            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.open_balance_status(cx);
+                            })) as crate::wallet::components::BalanceToggle
                         }),
                     ))
                     .child(
@@ -6342,7 +6352,7 @@ impl WalletPage {
         let s_clone = fixtures::balance_variants(&self.strings);
         let mut balances = div().flex().flex_col().gap(px(16.));
         for model in &s_clone {
-            balances = balances.child(balance_display(theme, &mut self.icons, model, None));
+            balances = balances.child(balance_display(theme, &mut self.icons, model, None, None));
         }
 
         let mut rows = div().flex().flex_col();
@@ -13006,6 +13016,160 @@ impl WalletPage {
         columns
     }
 
+    /// The hero's status line, pressed (078 H-03) — the web's `openRescue`:
+    /// an unreachable chain opens ITS RPC editor, the first of them when
+    /// several are down; anything else opens the breakdown.
+    fn open_balance_status(&mut self, cx: &mut Context<Self>) {
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        match view.banner_chain_ids.first() {
+            Some(&chain_id) => {
+                self.settings_fix_chain = Some(chain_id);
+                self.settings_dialog = Some(SettingsDialog::FixRpc);
+            }
+            None => self.balance_detail_open = true,
+        }
+        cx.notify();
+    }
+
+    /// SR3, the balance by network (`settings/ui/BalanceDetailBody.svelte`)
+    /// in the desktop's dialog.
+    fn balance_detail_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.balance_detail_open || self.identity.is_none() {
+            return None;
+        }
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let money = self.money(cx);
+        let detail = wallet_live::balance_detail(&view, &self.strings, &self.locale, &money);
+        let s = &self.strings;
+        let section = |text: SharedString| {
+            div()
+                .mt(px(16.))
+                .mb(px(4.))
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_base)
+                .child(text)
+        };
+        let row = |line: &wallet_live::DetailChain, retry: Option<gpui::AnyElement>| {
+            let name = crate::executor::custom_tokens::network_name(line.chain_id);
+            let mut text = div().flex().flex_col().gap(px(2.)).flex_1().min_w(px(0.)).child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .text_color(theme.fg_base)
+                    .child(line.name.clone()),
+            );
+            if let Some((status, failed)) = &line.status {
+                text = text.child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(if *failed {
+                            theme.error_base
+                        } else {
+                            theme.fg_subtle
+                        })
+                        .child(status.clone()),
+                );
+            }
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .py(px(12.))
+                .border_b_1()
+                .border_color(theme.border_card)
+                .child(chain_logo_mark(
+                    u64::from(line.chain_id),
+                    crate::settings::model::lettermark(&name),
+                    crate::settings::model::chain_tint(u64::from(line.chain_id))
+                        .unwrap_or(0x8A_8F_98),
+                    32.,
+                ))
+                .child(text)
+                .children(line.amount.clone().map(|amount| {
+                    div()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(amount)
+                }))
+                .children(retry)
+        };
+
+        let mut body = div().flex().flex_col().child(
+            div()
+                .mb(px(16.))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(detail.summary.clone()),
+        );
+        body = body
+            .child(section(s.detail_networks_label.clone()))
+            .child(
+                div()
+                    .mb(px(8.))
+                    .text_size(theme::text_label())
+                    .line_height(gpui::relative(1.4))
+                    .text_color(theme.fg_subtle)
+                    .child(s.detail_networks_note.clone()),
+            );
+        for line in &detail.pending {
+            let retry = line.retry.then(|| {
+                let chain_id = line.chain_id;
+                div()
+                    .id(("balance-detail-retry", line.chain_id as usize))
+                    .flex_none()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.info_base)
+                    .child(s.detail_retry.clone())
+                    .on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                        // As the RPC editor's Done does: clear the chain's
+                        // failure and force one read — the core's own retry
+                        // is throttled like any other fetch.
+                        crate::executor::balance_dashboard::dispatch(
+                            vela_core::app::balance_dashboard::Event::FixChainResolved {
+                                chain_id,
+                            },
+                            cx,
+                        );
+                        crate::executor::balance_dashboard::refresh(cx);
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            });
+            body = body.child(row(line, retry));
+        }
+        body = body.child(section(s.detail_updated.clone()));
+        for line in &detail.done {
+            body = body.child(row(line, None));
+        }
+        if !detail.unpriced.is_empty() {
+            body = body.child(section(s.balance_unpriced.clone()));
+            for line in &detail.unpriced {
+                body = body.child(row(line, None));
+            }
+        }
+        let title = s.detail_title.clone();
+        Some(
+            crate::ui::dialog::dialog(
+                "balance-detail",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body.pb(px(8.)),
+                &self.dialog_scroll("balance-detail"),
+                Self::closer(cx, |this, _| this.balance_detail_open = false),
+            )
+            .into_any_element(),
+        )
+    }
+
     /// Copy `text`, and show that it was copied — under `key` — for `hold`
     /// (078 X-06). The web's holds: a tick 150 ms, a key row's "Copied"
     /// 1.2 s, the contacts toast 1.5 s.
@@ -14310,6 +14474,7 @@ impl Render for WalletPage {
         let group_form = self.group_form_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
         let contact_qr = self.contact_qr_dialog(&theme, window, cx);
+        let balance_detail = self.balance_detail_dialog(&theme, window, cx);
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
@@ -14343,6 +14508,9 @@ impl Render for WalletPage {
         // whose answer changes which screen the app is on.
         if let Some(settings_dialog) = settings_dialog {
             root = root.child(settings_dialog);
+        }
+        if let Some(balance_detail) = balance_detail {
+            root = root.child(balance_detail);
         }
         // The import's answer, over the menu it was started from.
         if let Some(import_result) = import_result {

@@ -333,6 +333,7 @@ pub fn balance_display(
     icons: &mut IconCache,
     model: &BalanceModel,
     on_toggle: Option<BalanceToggle>,
+    on_status: Option<BalanceToggle>,
 ) -> Div {
     let mut root = div().flex().flex_col().gap(px(8.)).child(
         div()
@@ -422,17 +423,28 @@ pub fn balance_display(
             StatusKind::Warning => (Icon::TriangleAlert, theme.warning),
             StatusKind::Refreshing => (Icon::RefreshCw, theme.fg_muted),
         };
-        root = root.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .text_size(theme::text_row_sub())
-                .text_color(color)
-                .child(icon_img(icons, icon, false, color, 14.))
-                .child(text)
-                .child(icon_img(icons, Icon::ChevronRight, false, color, 12.)),
-        );
+        // The web's `.status` button (`BalanceDisplay.svelte`): gap 8,
+        // padding 4/0, 13 text, 14 glyphs either side. It opens what the line
+        // is about — the unreachable chain's RPC editor, or the breakdown —
+        // so it is drawn as the button it is (078 H-03).
+        let line = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .py(px(4.))
+            .text_size(theme::text_row_sub())
+            .text_color(color)
+            .child(icon_img(icons, icon, false, color, 14.))
+            .child(text)
+            .child(icon_img(icons, Icon::ChevronRight, false, color, 14.));
+        root = root.child(match on_status {
+            Some(on_status) => line
+                .id("balance-status")
+                .cursor_pointer()
+                .on_click(on_status)
+                .into_any_element(),
+            None => line.into_any_element(),
+        });
     }
 
     root

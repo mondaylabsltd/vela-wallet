@@ -49,7 +49,7 @@ screenshot checked against the web.
 - [ ] T031 H-02 (header and switcher rows done; contact rows, recipient
       cards, the signer line open) identicon viewer from every addressed
       identicon.
-- [ ] T032 H-03 balance status line: RPC-fix dialog / balance breakdown; the
+- [x] T032 H-03 balance status line: RPC-fix dialog / balance breakdown; the
       web's text order and colours.
 - [ ] T033 F-01 scan from the send form (recipient card button, contact
       picker row) → scanner → `scan_resolved`.
