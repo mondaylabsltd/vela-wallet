@@ -1,0 +1,69 @@
+# Tasks: the desktop wallet is the web wallet (078)
+
+`[x]` done · `[ ]` open. IDs refer to research.md. Each task ends with the
+suite green, clippy with no new warnings, and — for anything visible — a
+screenshot checked against the web.
+
+## Phase 0 — landed before and during the spec
+- [x] T000 Windows build, `velawallet://` relay, empty-path callback, `dist/`
+      bytes, sidebar/Wallet/Settings layout, clipboard chords, send picker and
+      form, share-card identicon, switch-back cache, hero ladder (see spec
+      "Done on this branch").
+- [x] T001 S-01 / G-02 Close closes the signing column; Escape dismisses it.
+- [x] T002 spec.md, research.md (four audits), plan.md, tasks.md.
+
+## Phase 1 — foundations (X)
+- [ ] T010 X-01 theme: `border_strong`, `accent_soft`; dark `bg_sunken`
+      #0F0F0D; check every dark use of the old value.
+- [ ] T011 X-02 buttons: primary / secondary / danger at the web's 52 / 17
+      semibold / 8·24 / r12, `border_strong` outline; replace
+      `ghost_button` / `accent_button` call sites.
+- [ ] T012 X-03 third column: header 16/24, close 36 with a 20 icon, content
+      0/24/24, scrolls with the bar, scroll reset on a new subject.
+- [ ] T013 X-04 dialog primitive: 520 / 24 / r16 / hairline / shadow-lg /
+      scrim .35 / Escape + scrim close; move settings, contact, QR and
+      remove dialogs onto it.
+- [ ] T014 X-05 search field as a real input that filters: token pick,
+      contact pick, receive list, contacts (with ✕), empty-result line.
+- [ ] T015 X-06 copy button with tick feedback; wire fact rows, receive
+      network rows, key rows (reset after 1.2 s), contacts.
+
+## Phase 2 — P0 behaviour
+- [ ] T020 G-01 slide to confirm: drag, commit ≥ 88 %, spring back,
+      Enter/Space, `accent_soft` fill, label fades.
+- [ ] T021 G-03 refused request: one full-width Close, raw data hidden.
+- [ ] T022 C-01 delete contact / group asks first (danger button).
+- [ ] T023 E-02 custom-group rows open their own site; unique ids.
+- [ ] T024 H-07 hero decimals split on the person's decimal mark.
+- [ ] T025 M-01 core: Max during the fee check or the credential load does not
+      strand Continue; test in `tests/app_send.rs`.
+
+## Phase 3 — P1 features
+- [ ] T030 H-01 account switcher dialog from the sidebar header.
+- [ ] T031 H-02 identicon viewer from every addressed identicon.
+- [ ] T032 H-03 balance status line: RPC-fix dialog / balance breakdown; the
+      web's text order and colours.
+- [ ] T033 F-01 scan from the send form (recipient card button, contact
+      picker row) → scanner → `scan_resolved`.
+- [ ] T034 F-02 scanner notices; F-03 scanner look after `ScanSurface`.
+- [ ] T035 F-04 send receipt stages; G-04 dApp receipt.
+- [ ] T036 H-04 activity day headers; H-05 listening line.
+- [ ] T037 H-06 asset detail parity (logo + name, facts, copy, explorer).
+- [ ] T038 F-05 sweep form; F-06 split rows editable; F-08 recipient label.
+- [ ] T039 F-07 add token parity.
+- [ ] T040 C-02…C-08 contacts features.
+- [ ] T041 S-02…S-05 settings features.
+- [ ] T042 E-01, E-03 explore features; G-05 technical details.
+- [ ] T043 M-02, M-03 core Max estimates the real transfer; a fee-coin switch
+      re-quotes before Max uses it; M-04 decimal mark.
+
+## Phase 4 — P2 visuals, surface by surface (screenshot each)
+- [ ] T050 Wallet home H-08…H-12.
+- [ ] T051 Flows F-09…F-11.
+- [ ] T052 Contacts C-09.
+- [ ] T053 Settings S-06…S-13.
+- [ ] T054 Explore E-04, E-05; signing G-06.
+
+## Phase 5 — acceptance
+- [ ] T060 Screenshot pairs for every gallery state both apps draw (SC-001).
+- [ ] T061 The owner's hour next to the web (SC-003).
