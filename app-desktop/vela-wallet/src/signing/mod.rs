@@ -138,6 +138,8 @@ pub struct SigningStrings {
     pub error_unlimited: SharedString,
     /// Spec 081: the request would have changed who controls the account.
     pub blocked_title: SharedString,
+    /// A refused request's one way out (`componentsUi.signing.close`).
+    pub close: SharedString,
     pub blocked_body: String,
     pub blocked_leg_body: String,
     pub blocked_safe_tx: SharedString,
@@ -338,6 +340,7 @@ impl SigningStrings {
             error_network: loc.t("send.lock.netNotFound"),
             error_unlimited: a("unlimitedDisabled"),
             blocked_title: s("selfCallBlockedTitle"),
+            close: s("close"),
             blocked_body: loc
                 .t("componentsUi.signing.selfCallBlockedBody")
                 .to_string(),

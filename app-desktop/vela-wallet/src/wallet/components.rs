@@ -359,7 +359,16 @@ pub fn balance_display(
                         .text_size(theme::text_balance_decimals())
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_subtle)
-                        .child(SharedString::from(format!(".{decimals}"))),
+                        // The person's decimal mark, as the web's
+                        // `decimalMark` — a `.` after "1.575" read as a second
+                        // thousands separator.
+                        .child(SharedString::from(format!(
+                            "{}{decimals}",
+                            crate::executor::format_prefs::current()
+                                .number
+                                .separators()
+                                .decimal
+                        ))),
                 );
             }
             root.child(pressable(amount, on_toggle))

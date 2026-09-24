@@ -187,17 +187,37 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
 /// belongs here rather than in a formatter. Splitting on the LAST `.` is what
 /// keeps a locale whose group separator is `.` from being cut in half.
 fn split_fiat(usd: f64, locale: &str, money: &Money) -> (SharedString, Option<SharedString>) {
-    let formatted = money.text(usd, locale);
-    match formatted.rsplit_once('.') {
-        Some((whole, minor)) if minor.chars().all(|c| c.is_ascii_digit()) => (
-            SharedString::from(whole.to_owned()),
-            Some(SharedString::from(minor.to_owned())),
-        ),
-        // No minor units — a large balance drops them by product rule
-        // (`drop_minor_units_above`), and a currency with zero fraction digits
-        // never had them.
-        _ => (SharedString::from(formatted), None),
+    split_at_mark(
+        &money.text(usd, locale),
+        crate::executor::format_prefs::current()
+            .number
+            .separators()
+            .decimal,
+    )
+}
+
+/// Split a formatted figure at the person's DECIMAL MARK — never at a fixed
+/// `.`. Under `1.234,56` a `.` split drew "1" large and ".234,56" small, and
+/// a comma-decimal balance was never split at all (078 H-07; the web splits by
+/// `numberSeparators().decimal`). What follows the digits — a symbol written
+/// after the figure, "1.234,56 €" — stays with the small part, so nothing is
+/// dropped.
+fn split_at_mark(formatted: &str, mark: &str) -> (SharedString, Option<SharedString>) {
+    if let Some((whole, rest)) = formatted.rsplit_once(mark) {
+        let digits = rest.chars().take_while(char::is_ascii_digit).count();
+        // Minor units are one to three digits; anything else is not a
+        // fraction (a group, when the mark doubles as one elsewhere).
+        if (1..=3).contains(&digits) {
+            return (
+                SharedString::from(whole.to_owned()),
+                Some(SharedString::from(rest.to_owned())),
+            );
+        }
     }
+    // No minor units — a large balance drops them by product rule
+    // (`drop_minor_units_above`), and a currency with zero fraction digits
+    // never had them.
+    (SharedString::from(formatted.to_owned()), None)
 }
 
 #[cfg(test)]
@@ -703,6 +723,30 @@ mod tests {
         );
     }
 
+    /// The split is at the person's decimal mark, whatever their grouping.
+    #[test]
+    fn the_hero_splits_at_the_decimal_mark_it_was_given() {
+        let split = |text: &str, mark: &str| {
+            let (whole, minor) = split_at_mark(text, mark);
+            (whole.to_string(), minor.map(|m| m.to_string()))
+        };
+        assert_eq!(
+            split("$1,544.50", "."),
+            ("$1,544".into(), Some("50".into()))
+        );
+        assert_eq!(
+            split("1.234,56 €", ","),
+            ("1.234".into(), Some("56 €".into()))
+        );
+        assert_eq!(
+            split("1 234,56 €", ","),
+            ("1 234".into(), Some("56 €".into()))
+        );
+        // A dot-grouped whole number has no minor units to split off.
+        assert_eq!(split("1.234 €", ","), ("1.234 €".into(), None));
+        assert_eq!(split("¥1,235", "."), ("¥1,235".into(), None));
+    }
+
     #[test]
     fn splitting_survives_a_dot_grouped_locale() {
         let (integer, decimals) = split_fiat(1383.28, "de", &Money::default());
@@ -710,8 +754,12 @@ mod tests {
             integer.contains("1.383") || integer.contains("1,383"),
             "the whole part lost its grouping: {integer}"
         );
+        // The minor units are at most two DIGITS; a symbol written after the
+        // figure rides along with them.
         assert!(
-            decimals.as_ref().is_none_or(|d| d.len() <= 2),
+            decimals
+                .as_ref()
+                .is_none_or(|d| d.chars().take_while(char::is_ascii_digit).count() <= 2),
             "the split took too much: {decimals:?}"
         );
     }

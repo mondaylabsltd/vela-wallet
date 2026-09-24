@@ -190,6 +190,10 @@ enum Confirm {
     DisconnectAll,
     /// Service endpoints back to Vela's own, what was typed forgotten.
     ResetEndpoints,
+    /// One contact, named — the web asks before either delete (078 C-01).
+    DeleteContact { address: String, name: SharedString },
+    /// One group, named; its contacts stay in the book.
+    DeleteGroup { id: String, name: SharedString },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2552,6 +2556,25 @@ impl WalletPage {
                     resident.dispatch(NetEvent::ResetEndpointsToDefaults, cx);
                 });
             }
+            Confirm::DeleteContact { address, .. } => {
+                let now_ms = crate::executor::now_ms();
+                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(ContactEvent::Delete { address, now_ms }, cx);
+                });
+                // A detail panel open on it was about a row that is gone.
+                if self.panel == PanelId::ContactDetail {
+                    self.panel = PanelId::None;
+                }
+            }
+            Confirm::DeleteGroup { id, .. } => {
+                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(ContactEvent::GroupDelete { id }, cx);
+                });
+                // The group that was open no longer exists; the rail falls
+                // back to the whole book rather than to whichever group slid
+                // into that index.
+                self.group = None;
+            }
         }
         self.confirm = None;
         cx.notify();
@@ -2605,6 +2628,32 @@ impl WalletPage {
                 note: None,
                 confirm: s.endpoints_reset_confirm.clone(),
                 cancel: s.endpoints_reset_cancel.clone(),
+                danger: true,
+            },
+            Confirm::DeleteContact { name, .. } => ConfirmCopy {
+                title: self.contacts.delete_title.clone(),
+                body: SharedString::from(crate::wallet::fill(
+                    &self.contacts.delete_body,
+                    "name",
+                    name,
+                )),
+                callout: None,
+                note: None,
+                confirm: self.contacts.delete.clone(),
+                cancel: self.contacts.cancel.clone(),
+                danger: true,
+            },
+            Confirm::DeleteGroup { name, .. } => ConfirmCopy {
+                title: self.contacts.group_delete.clone(),
+                body: SharedString::from(crate::wallet::fill(
+                    &self.contacts.group_delete_body,
+                    "name",
+                    name,
+                )),
+                callout: None,
+                note: None,
+                confirm: self.contacts.delete.clone(),
+                cancel: self.contacts.cancel.clone(),
                 danger: true,
             },
         }
@@ -4021,6 +4070,7 @@ impl WalletPage {
         let view_all = self.contacts.view_all_activity.clone();
         let edit = self.contacts.edit.clone();
         let delete = self.contacts.delete_contact.clone();
+        let delete_name = model.name.clone();
         let send = self.contacts.action_send.clone();
         let receive = self.contacts.action_receive.clone();
         let qr = self.contacts.action_qr.clone();
@@ -4186,18 +4236,11 @@ impl WalletPage {
                         let Some(address) = live_address.clone() else {
                             return;
                         };
-                        let now_ms = crate::executor::now_ms();
-                        resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                            resident.dispatch(
-                                ContactEvent::Delete {
-                                    address: address.to_string(),
-                                    now_ms,
-                                },
-                                cx,
-                            );
+                        // Asked first, as the web asks (078 C-01).
+                        this.confirm = Some(Confirm::DeleteContact {
+                            address: address.to_string(),
+                            name: delete_name.clone(),
                         });
-                        // The panel was about a row that no longer exists.
-                        this.panel = PanelId::None;
                         cx.notify();
                     },
                 )),
@@ -12386,39 +12429,50 @@ impl WalletPage {
         // second decoding of it: the method, and for a transaction each call's
         // destination and calldata; for a message or typed data, the payload.
         // A person checking a summary against the bytes needs the bytes.
-        let open = self.signing_advanced_open;
-        let raw_rows = self.signing_raw_rows(cx);
-        column = column.child(row_divider(theme)).child(
-            div()
-                .id("signing-advanced")
-                .py(px(10.))
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .when(!raw_rows.is_empty(), |el| {
-                    el.cursor_pointer().on_click(cx.listener(|this, _, _, cx| {
-                        this.signing_advanced_open = !this.signing_advanced_open;
-                        cx.notify();
-                    }))
-                })
-                .child(icon_img(
-                    &mut self.icons,
-                    if open {
-                        Icon::ChevronDown
-                    } else {
-                        Icon::ChevronRight
-                    },
-                    false,
-                    theme.fg_muted,
-                    12.,
-                ))
-                .child(
+        let open = self.signing_advanced_open && !refused;
+        // A refused request shows no bytes (the web's `live.ts` hides the
+        // request data when blocked): they describe a transaction that will
+        // never be signed, and reading them only invites "so why can't I?".
+        let raw_rows = if refused {
+            Vec::new()
+        } else {
+            self.signing_raw_rows(cx)
+        };
+        column = column
+            .when(!refused, |column| column.child(row_divider(theme)))
+            .when(!refused, |column| {
+                column.child(
                     div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(self.signing.advanced_toggle.clone()),
-                ),
-        );
+                        .id("signing-advanced")
+                        .py(px(10.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .when(!raw_rows.is_empty(), |el| {
+                            el.cursor_pointer().on_click(cx.listener(|this, _, _, cx| {
+                                this.signing_advanced_open = !this.signing_advanced_open;
+                                cx.notify();
+                            }))
+                        })
+                        .child(icon_img(
+                            &mut self.icons,
+                            if open {
+                                Icon::ChevronDown
+                            } else {
+                                Icon::ChevronRight
+                            },
+                            false,
+                            theme.fg_muted,
+                            12.,
+                        ))
+                        .child(
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_muted)
+                                .child(self.signing.advanced_toggle.clone()),
+                        ),
+                )
+            });
         if open {
             for (label, value) in raw_rows {
                 column = column.child(
@@ -12501,6 +12555,33 @@ impl WalletPage {
                     confirm_action,
                 )
             }));
+        // A refused request's one way out (the web's `dismissOnly`): Close,
+        // full width, the same dismissal as the ✕. It had none — the confirm
+        // is absent, rightly, and nothing stood in its place.
+        if refused {
+            column = column.child(
+                div()
+                    .id("signing-refused-close")
+                    .cursor_pointer()
+                    .child(crate::flows::components::ghost_button(
+                        theme,
+                        self.signing.close.clone(),
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        #[cfg(not(target_os = "linux"))]
+                        if let Some(host) = this.signing_host.clone() {
+                            host.update(cx, |host, cx| {
+                                host.dispatch_sign(
+                                    vela_core::app::sign_request::Event::SwipeDismissed,
+                                    cx,
+                                );
+                            });
+                        }
+                        this.panel = PanelId::None;
+                        cx.notify();
+                    })),
+            );
+        }
         column
     }
 
@@ -13330,6 +13411,7 @@ impl WalletPage {
                 let Some((id, name, _)) = self.group_models(cx).get(index).cloned() else {
                     return Vec::new();
                 };
+                let group_name = name.clone();
                 let rename = (id.clone(), name);
                 vec![
                     // 重命名分组 — the same dialog 新建分组 opens, with the id
@@ -13349,14 +13431,11 @@ impl WalletPage {
                     None,
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                            resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                resident
-                                    .dispatch(ContactEvent::GroupDelete { id: id.to_string() }, cx);
+                            // Asked first, as the web asks (078 C-01).
+                            this.confirm = Some(Confirm::DeleteGroup {
+                                id: id.to_string(),
+                                name: group_name.clone(),
                             });
-                            // The group that was open no longer exists; the
-                            // rail falls back to the whole book rather than to
-                            // whichever group slid into that index.
-                            this.group = None;
                             this.menu = None;
                             cx.notify();
                         })) as contacts_components::MenuAction,
@@ -13450,6 +13529,11 @@ impl WalletPage {
                 let copy_me = address.clone();
                 let edit_address = address.clone();
                 let delete_address = address.clone();
+                let delete_label = SharedString::from(if name.is_empty() {
+                    address.clone()
+                } else {
+                    name.clone()
+                });
                 vec![
                     // 转账 — the send flow, opened with this person in the
                     // recipient field. The core takes the prefill; the shell
@@ -13517,14 +13601,10 @@ impl WalletPage {
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
-                            resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(
-                                    ContactEvent::Delete {
-                                        address: delete_address.clone(),
-                                        now_ms: crate::executor::now_ms(),
-                                    },
-                                    cx,
-                                );
+                            // Asked first, as the web asks (078 C-01).
+                            this.confirm = Some(Confirm::DeleteContact {
+                                address: delete_address.clone(),
+                                name: delete_label.clone(),
                             });
                             cx.notify();
                         })) as contacts_components::MenuAction,
