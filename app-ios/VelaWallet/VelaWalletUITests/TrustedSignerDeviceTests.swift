@@ -41,6 +41,28 @@ final class TrustedSignerDeviceTests: XCTestCase {
     }
 
     func testClosingTheSignerPageLeavesTheRequestUnsigned() throws {
+        // **Cannot run in the parallel space, and the parallel space is what
+        // gives this test a wallet to sign with.**
+        //
+        // Since 2026-09-22 the space's binding installs a `UserOpSigner` that
+        // signs every request with its built-in fixture key, and the sheet says
+        // so in the "Sign with" row (`SigningLive.signWith`) — by the owner's
+        // own call, so that a slide that raises no passkey sheet does not look
+        // broken. A stored `trusted_signer` is therefore never reached here:
+        // measured 2026-09-24, the sheet opens and reads 平行空间内置钥匙.
+        //
+        // Outside the space this simulator has no wallet and no passkey, so the
+        // dApp cannot connect and the request never exists. What still covers
+        // the Trusted Signer on a phone: `TrustedSignerChooserDeviceTests` (the
+        // create and sign-in choosers, outside the space), the page's own
+        // browser suites, and Android's `TrustedSignerCeremonyTest`, which runs
+        // a whole create against the page's parallel keyset.
+        //
+        // To bring this back, the space would have to step aside for a stored
+        // Trusted Signer and let the PAGE sign with its keyset — a product
+        // decision about a debug surface, recorded rather than taken here.
+        throw XCTSkip("the parallel space signs with its own key; see the note above")
+        // swiftlint:disable:next unreachable_code
         let app = XCUIApplication()
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_THEME"] = "dark"
