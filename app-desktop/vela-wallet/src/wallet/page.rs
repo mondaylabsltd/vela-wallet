@@ -11613,6 +11613,15 @@ impl WalletPage {
     /// Is the column taken by a request that is still open? A column that
     /// has answered — showing a receipt, an error — is not: its request is
     /// over, and the next one may take its place.
+    /// No signing column is open. Always so on Linux, which has none to open:
+    /// `signing_host` exists only where the dApp browser does.
+    fn no_signing_host(&self) -> bool {
+        #[cfg(not(target_os = "linux"))]
+        return self.signing_host.is_none();
+        #[cfg(target_os = "linux")]
+        return true;
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn signing_busy(&self, cx: &gpui::App) -> bool {
         self.signing_host.as_ref().is_some_and(|host| {
@@ -13036,7 +13045,7 @@ impl WalletPage {
                 let title = self.explore.connection_title.clone();
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
-            PanelId::Signing if self.dapp_landing.is_some() && self.signing_host.is_none() => {
+            PanelId::Signing if self.dapp_landing.is_some() && self.no_signing_host() => {
                 let body = self.dapp_receipt_body(theme, window, cx);
                 let title = self.signing.panel_title.clone();
                 columns.child(self.panel_scaffold(theme, title, body, cx))
@@ -13556,7 +13565,7 @@ impl WalletPage {
                     .cursor_pointer()
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.dapp_landing = None;
-                        if this.panel == PanelId::Signing && this.signing_host.is_none() {
+                        if this.panel == PanelId::Signing && this.no_signing_host() {
                             this.panel = PanelId::None;
                         }
                         cx.notify();
