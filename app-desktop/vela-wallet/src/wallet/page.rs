@@ -728,6 +728,9 @@ pub struct WalletPage {
     contact_form: Option<ContactForm>,
     /// 添加成员 / 移入分组 — the web's tick list with a Save (078 C-06).
     pick: Option<PickDialog>,
+    /// The export's format question is up, for the whole book or one group
+    /// (078 C-07).
+    export_scope: Option<ContactExportScope>,
     pick_query_focus: gpui::FocusHandle,
     /// The contact whose address is being shown as a code, if any.
     contact_qr: Option<(SharedString, SharedString)>,
@@ -1138,6 +1141,7 @@ impl WalletPage {
             import_result: None,
             contact_form: None,
             pick: None,
+            export_scope: None,
             pick_query_focus: cx.focus_handle(),
             contact_qr: None,
             group_form: None,
@@ -2959,6 +2963,8 @@ impl WalletPage {
             self.group_form = None;
         } else if self.pick.is_some() {
             self.pick = None;
+        } else if self.export_scope.is_some() {
+            self.export_scope = None;
         } else if self.explore_form.is_some() {
             self.explore_form = None;
         } else if self.contact_qr.is_some() {
@@ -14797,9 +14803,8 @@ impl WalletPage {
                     // The COUNTS are the core's — it applied existing-wins and
                     // knows what actually happened. An import that reports
                     // nothing is a feature that looks broken.
-                    (None, Some(report)) => (
-                        this.contacts.import_done_title.clone(),
-                        SharedString::from(crate::wallet::fill(
+                    (None, Some(report)) => {
+                        let mut body = crate::wallet::fill(
                             &crate::wallet::fill(
                                 &this.contacts.import_done_body,
                                 "added",
@@ -14807,8 +14812,22 @@ impl WalletPage {
                             ),
                             "skipped",
                             &report.skipped.to_string(),
-                        )),
-                    ),
+                        );
+                        // Rows dropped for a malformed address are said, as
+                        // the web's `importReport` says them.
+                        if report.invalid > 0 {
+                            body.push(' ');
+                            body.push_str(&crate::wallet::fill(
+                                &this.contacts.import_done_invalid,
+                                "invalid",
+                                &report.invalid.to_string(),
+                            ));
+                        }
+                        (
+                            this.contacts.import_done_title.clone(),
+                            SharedString::from(body),
+                        )
+                    }
                     // Neither: `ImportFile` fails closed until the ledger is
                     // loaded, so nothing was read and nothing was written.
                     // Drawing no dialog here would be this whole sweep's own
@@ -14827,53 +14846,61 @@ impl WalletPage {
         .detach();
     }
 
-    /// Write the whole address book where the person points.
-    ///
-    /// The extension decides the format, because that is the choice the save
-    /// dialog already asked them to make — a `.csv` that contains JSON is a
-    /// file nothing opens. The BYTES are the core's: one serializer, so a
-    /// backup taken on the desktop restores on the web.
-    fn export_contacts(cx: &mut Context<Self>) {
+    /// Write the book — or one group of it — where the person points, in
+    /// the format they chose (078 C-07). The web asks CSV or JSON first and
+    /// saves under the core's own filename; the save dialog here opens on that
+    /// name. The BYTES are the core's: one serializer, so a backup taken on
+    /// the desktop restores on the web.
+    fn export_contacts(
+        scope: ContactExportScope,
+        format: ContactFileFormat,
+        cx: &mut Context<Self>,
+    ) {
+        let exported_at_iso = crate::executor::now_iso();
+        let file = resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+            resident.dispatch(
+                ContactEvent::ExportRequested {
+                    scope,
+                    format,
+                    exported_at_iso,
+                },
+                cx,
+            );
+            resident.view().export
+        });
+        // The core produced nothing to hand over. Never write an empty file
+        // over the path somebody chose.
+        let Some(file) = file else {
+            return;
+        };
+        // `VELA_EXPORT_DIR=<dir>` answers the save dialog with the core's
+        // filename in that folder — the `VELA_IMPORT_FILE` seam, the other
+        // way.
+        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+            .map(|dir| std::path::PathBuf::from(dir).join(&file.filename));
         // The save dialog opens where a person keeps their files, not where
-        // this app keeps its state. `.` would open wherever the binary was
-        // launched from, which on a double-click is nowhere useful.
-        let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let target = cx.prompt_for_new_path(&directory, Some("vela-contacts.json"));
+        // this app keeps its state.
+        let target = pinned.is_none().then(|| {
+            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            cx.prompt_for_new_path(&directory, Some(&file.filename))
+        });
         cx.spawn(async move |page, cx| {
-            let Ok(Ok(Some(path))) = target.await else {
-                return;
-            };
-            let format = if path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("csv"))
-            {
-                ContactFileFormat::Csv
-            } else {
-                ContactFileFormat::Json
-            };
-            let exported_at_iso = crate::executor::now_iso();
-            page.update(cx, |_, cx| {
-                let file = resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(
-                        ContactEvent::ExportRequested {
-                            scope: ContactExportScope::All,
-                            format,
-                            exported_at_iso,
-                        },
-                        cx,
-                    );
-                    resident.view().export
-                });
-                let Some(file) = file else {
-                    // The core produced nothing to hand over. Never write an
-                    // empty file over the path somebody chose.
-                    return;
-                };
-                if let Err(error) = std::fs::write(&path, &file.content) {
-                    eprintln!("[vela-wallet] contacts export: {}: {error}", path.display());
-                    // The one-shot stays in the view: nothing was handed over.
-                    return;
+            let path = match (pinned, target) {
+                (Some(path), _) => path,
+                (None, Some(target)) => {
+                    let Ok(Ok(Some(path))) = target.await else {
+                        return;
+                    };
+                    path
                 }
+                (None, None) => return,
+            };
+            if let Err(error) = std::fs::write(&path, &file.content) {
+                eprintln!("[vela-wallet] contacts export: {}: {error}", path.display());
+                // The one-shot stays in the view: nothing was handed over.
+                return;
+            }
+            page.update(cx, |_, cx| {
                 resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
                     resident.dispatch(ContactEvent::ExportTaken, cx);
                 });
@@ -14881,6 +14908,78 @@ impl WalletPage {
             .ok();
         })
         .detach();
+    }
+
+    /// The export's one question — the web's `export` sheet: the body line,
+    /// then CSV and JSON side by side.
+    fn export_format_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let scope = self.export_scope.clone()?;
+        let s = &self.contacts;
+        let pick = |format: ContactFileFormat, scope: ContactExportScope| {
+            move |this: &mut Self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>| {
+                this.export_scope = None;
+                Self::export_contacts(scope.clone(), format, cx);
+                cx.notify();
+            }
+        };
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .pb(px(16.))
+            .child(
+                div()
+                    .text_size(theme::text_body())
+                    .line_height(theme::line_height_body())
+                    .text_color(theme.fg_muted)
+                    .child(s.export_body.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .id("export-csv")
+                            .flex_1()
+                            .cursor_pointer()
+                            .child(crate::flows::components::secondary_button(
+                                theme,
+                                SharedString::from("CSV"),
+                            ))
+                            .on_click(cx.listener(pick(ContactFileFormat::Csv, scope.clone()))),
+                    )
+                    .child(
+                        div()
+                            .id("export-json")
+                            .flex_1()
+                            .cursor_pointer()
+                            .child(crate::flows::components::accent_button(
+                                theme,
+                                SharedString::from("JSON"),
+                            ))
+                            .on_click(cx.listener(pick(ContactFileFormat::Json, scope))),
+                    ),
+            );
+        Some(
+            crate::ui::dialog::dialog(
+                "contacts-export",
+                theme,
+                window,
+                s.export_title.clone(),
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("contacts-export"),
+                Self::closer(cx, |this, _| this.export_scope = None),
+            )
+            .into_any_element(),
+        )
     }
 
     /// What each row of an open menu does, positionally.
@@ -14923,10 +15022,25 @@ impl WalletPage {
                             cx.notify();
                         })) as contacts_components::MenuAction,
                     ),
-                    // 导入到本组 / 导出本组 still need a per-group file path the
-                    // core has no event for; the whole-book pair is wired.
-                    None,
-                    None,
+                    // 导入到本组 — the file's contacts, into THIS group
+                    // (`ImportFile { into_group }`, the web's `importGroup`).
+                    Some({
+                        let id = id.to_string();
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            Self::import_contacts(Some(id.clone()), cx);
+                            cx.notify();
+                        })) as contacts_components::MenuAction
+                    }),
+                    // 导出本组 — the format question, for this group.
+                    Some({
+                        let id = id.to_string();
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            this.export_scope = Some(ContactExportScope::Group { id: id.clone() });
+                            cx.notify();
+                        })) as contacts_components::MenuAction
+                    }),
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             // Asked first, as the web asks (078 C-01).
@@ -14951,7 +15065,8 @@ impl WalletPage {
                 Some(Box::new(cx.listener(
                     |this, _: &gpui::ClickEvent, _, cx: &mut Context<Self>| {
                         this.menu = None;
-                        Self::export_contacts(cx);
+                        this.export_scope = Some(ContactExportScope::All);
+                        cx.notify();
                     },
                 )) as contacts_components::MenuAction),
             ],
@@ -15472,6 +15587,7 @@ impl Render for WalletPage {
         let import_result = self.import_result_dialog(&theme, window, cx);
         let group_form = self.group_form_dialog(&theme, window, cx);
         let pick = self.pick_dialog(&theme, window, cx);
+        let export_format = self.export_format_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
         let contact_qr = self.contact_qr_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
@@ -15518,6 +15634,9 @@ impl Render for WalletPage {
         }
         if let Some(pick) = pick {
             root = root.child(pick);
+        }
+        if let Some(export_format) = export_format {
+            root = root.child(export_format);
         }
         if let Some(contact_qr) = contact_qr {
             root = root.child(contact_qr);

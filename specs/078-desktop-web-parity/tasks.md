@@ -66,7 +66,7 @@ screenshot checked against the web.
 - [x] T037 H-06 asset detail parity (logo + name, facts, copy, explorer).
 - [x] T038 F-05 sweep form; F-06 split rows editable; F-08 recipient label.
 - [x] T039 F-07 add token parity.
-- [ ] T040 C-02…C-08 contacts features.
+- [x] T040 C-02…C-08 contacts features.
 - [ ] T041 S-02…S-05 settings features.
 - [ ] T042 E-01, E-03 explore features; G-05 technical details.
 - [ ] T043 M-02, M-03 core Max estimates the real transfer; a fee-coin switch

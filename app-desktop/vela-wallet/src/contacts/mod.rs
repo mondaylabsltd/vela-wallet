@@ -38,6 +38,11 @@ pub struct ContactsStrings {
     /// an import that reports nothing is a feature that looks broken.
     pub import_done_title: SharedString,
     pub import_done_body: String,
+    /// The import report's tail when rows were dropped: `{{invalid}}`.
+    pub import_done_invalid: String,
+    /// The format question every export asks first (078 C-07).
+    pub export_title: SharedString,
+    pub export_body: SharedString,
     pub import_fail_title: SharedString,
     pub import_fail_body: SharedString,
     /// The add/edit sheet. 030 called this "blocked on drawn UI that does not
@@ -114,6 +119,9 @@ impl ContactsStrings {
             import_all: s("contacts.importAll"),
             import_done_title: s("contacts.importDoneTitle"),
             import_done_body: raw("contacts.importDoneBody"),
+            import_done_invalid: raw("contacts.importDoneInvalid"),
+            export_title: s("contacts.exportTitle"),
+            export_body: s("contacts.exportBody"),
             import_fail_title: s("contacts.importFailTitle"),
             import_fail_body: s("contacts.importFailBody"),
             add_title: s("contacts.addTitle"),
