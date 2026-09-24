@@ -380,6 +380,93 @@ fn menu_of(
         .child(col)
 }
 
+/// One choice with a line saying why somebody would make it (the web's
+/// `SelectRow` with a `detail`): the name, the line, whether it is in force.
+pub type DetailRow = (gpui::SharedString, Option<gpui::SharedString>, bool);
+
+/// The menu the speed and "Sign with" dropdowns drop (078 S-04) — the web's
+/// `Dropdown` over `SelectRow`s: the name at 15, its line beneath at 11 in
+/// the subtle colour, 52-high rows on hairlines, the chosen one in the accent
+/// with an 18 check. It opens over its trigger and grows toward the row's
+/// label — `width`, since a line of words is wider than the 280 control
+/// column; the web sizes it to its widest choice, capped at the row measure.
+pub fn dropdown_menu_details(
+    theme: &Theme,
+    icons: &mut IconCache,
+    rows: &[DetailRow],
+    width: f32,
+    on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let hover = theme.bg_sunken;
+    let pick: PickAction = Rc::new(on_pick);
+    let mut col = div().flex().flex_col();
+    let last = rows.len().saturating_sub(1);
+    for (i, (label, detail, selected)) in rows.iter().enumerate() {
+        let pick = pick.clone();
+        let mut text = div()
+            .flex_1()
+            .min_w(px(0.))
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .text_color(if *selected {
+                        theme.accent
+                    } else {
+                        theme.fg_base
+                    })
+                    .when(*selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(label.clone()),
+            );
+        if let Some(detail) = detail {
+            text = text.child(
+                div()
+                    .text_size(theme::text_label())
+                    .line_height(theme::line_height_body())
+                    .text_color(theme.fg_subtle)
+                    .child(detail.clone()),
+            );
+        }
+        let mut row = div()
+            .id(ElementId::from(("dropdown-detail-option", i)))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .min_h(px(52.))
+            .py(px(12.))
+            .cursor_pointer()
+            .hover(move |el| el.bg(hover))
+            .on_click(move |_, window, cx| pick(i, window, cx))
+            .child(text);
+        if *selected {
+            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
+        }
+        if i != last {
+            row = row.border_b_1().border_color(theme.divider);
+        }
+        col = col.child(row);
+    }
+    div()
+        .absolute()
+        .top_0()
+        .right_0()
+        .w(px(width.clamp(
+            theme::SETTINGS_CONTROL_W,
+            theme::WALLET_ROW_MEASURE,
+        )))
+        .px(px(12.))
+        .rounded(px(12.))
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .shadow_lg()
+        .flex()
+        .flex_col()
+        .child(col)
+}
+
 // -- SegmentedControl ---------------------------------------------------------
 
 /// The product's ONE segmented control (design review 2026-07). Three-up for

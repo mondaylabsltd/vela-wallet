@@ -58,11 +58,11 @@ use crate::executor::format_prefs;
 use crate::executor::passkey::WindowHandle;
 use crate::hardware;
 use crate::settings::components::{
-    CalloutTone, ConfirmCopy, callout, chain_logo_mark, chain_mark, check_list, confirm_sheet,
-    danger_card, dropdown_menu, dropdown_menu_choices, dropdown_menu_picks, dropdown_trigger,
-    editable_url_field, form_row, key_value_row, network_row, rpc_banner, segmented,
-    segmented_picks, settings_nav_row, status_pill, storage_bar, storage_group, storage_group_with,
-    text_scale, text_scale_picks, url_field,
+    CalloutTone, ConfirmCopy, DetailRow, callout, chain_logo_mark, chain_mark, check_list,
+    confirm_sheet, danger_card, dropdown_menu, dropdown_menu_choices, dropdown_menu_details,
+    dropdown_menu_picks, dropdown_trigger, editable_url_field, form_row, key_value_row,
+    network_row, rpc_banner, segmented, segmented_picks, settings_nav_row, status_pill,
+    storage_bar, storage_group, storage_group_with, text_scale, text_scale_picks, url_field,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -9857,77 +9857,90 @@ impl WalletPage {
     /// the line on what it buys, the stored one ticked. Choosing one commits
     /// and persists at once — `fee_tier_pref` — and a send already open
     /// follows it until the person picks a speed on that send.
+    /// The default speed (spec 068) — one row, as the web's desktop draws
+    /// it (078 S-04): the label, and a dropdown showing the tier in force whose
+    /// choices each say what they are for. Choosing commits and persists at
+    /// once (`fee_tier_pref`).
     fn settings_fee_speed(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         use vela_core::app::fee_policy::FeeTier;
         use vela_core::app::fee_tier_pref::{Event as FeeTierPrefEvent, FeeTierPref};
         let view = resident::resident::<FeeTierPref>(cx).read(cx).view();
         let s = &self.flow_strings;
-        let mut list = div()
+        let rows: Vec<DetailRow> = view
+            .offered
+            .iter()
+            .map(|tier| {
+                let (name, hint) = match tier {
+                    FeeTier::Standard => (
+                        s.gas_tier_standard.clone(),
+                        s.gas_tier_hint_standard.clone(),
+                    ),
+                    FeeTier::Slow => (s.gas_tier_slow.clone(), s.gas_tier_hint_slow.clone()),
+                    FeeTier::Fast | FeeTier::Rapid => {
+                        (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone())
+                    }
+                };
+                (name, Some(hint), *tier == view.tier)
+            })
+            .collect();
+        let value = rows
+            .iter()
+            .find(|(_, _, selected)| *selected)
+            .or(rows.first())
+            .map(|(name, _, _)| name.clone())
+            .unwrap_or_default();
+        let offered = view.offered.clone();
+        let page = cx.entity();
+        let menu = (self.settings_open_dropdown == Some("fee-speed")).then(|| {
+            dropdown_menu_details(theme, &mut self.icons, &rows, 340., move |index, _, cx| {
+                if let Some(tier) = offered.get(index).copied() {
+                    resident::resident::<FeeTierPref>(cx).update(cx, |pref, cx| {
+                        pref.dispatch(FeeTierPrefEvent::UserChose { tier }, cx);
+                    });
+                }
+                page.update(cx, |this, cx| {
+                    this.settings_open_dropdown = None;
+                    cx.notify();
+                });
+            })
+        });
+        let label = self.settings.nav_fee_speed.clone();
+        let control = self.settings_dropdown_control("fee-speed", theme, value, menu, cx);
+        // The web's panel measure, as the "Sign with" page keeps.
+        div()
             .flex()
             .flex_col()
-            .gap(px(4.))
-            .p(px(4.))
-            .rounded(px(12.))
-            .bg(theme.bg_sunken);
-        for (index, tier) in view.offered.iter().copied().enumerate() {
-            let (name, hint) = match tier {
-                FeeTier::Standard => (
-                    s.gas_tier_standard.clone(),
-                    s.gas_tier_hint_standard.clone(),
-                ),
-                FeeTier::Slow => (s.gas_tier_slow.clone(), s.gas_tier_hint_slow.clone()),
-                FeeTier::Fast | FeeTier::Rapid => {
-                    (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone())
-                }
-            };
-            let selected = tier == view.tier;
-            list = list.child(
-                div()
-                    .id(ElementId::from(("settings-fee-speed", index)))
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .px(px(12.))
-                    .py(px(10.))
-                    .rounded(px(10.))
-                    .cursor_pointer()
-                    .when(selected, |row| row.bg(theme.bg_raised))
-                    .hover(|row| row.bg(theme.bg_raised))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        resident::resident::<FeeTierPref>(cx).update(cx, |pref, cx| {
-                            pref.dispatch(FeeTierPrefEvent::UserChose { tier }, cx);
-                        });
-                        cx.notify();
-                    }))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .gap(px(2.))
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_title())
-                                    .text_color(if selected {
-                                        theme.accent
-                                    } else {
-                                        theme.fg_base
-                                    })
-                                    .child(name),
-                            )
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_sub())
-                                    .text_color(theme.fg_subtle)
-                                    .child(hint),
-                            ),
-                    )
-                    .child(div().w(px(16.)).children(selected.then(|| {
-                        icon_img(&mut self.icons, Icon::Check, false, theme.accent, 16.)
-                    }))),
-            );
-        }
-        div().flex().flex_col().max_w(px(560.)).child(list)
+            .max_w(px(560.))
+            .child(form_row(theme, label, control))
+    }
+
+    /// A settings dropdown's cell: its trigger, toggling the menu, and the
+    /// menu itself drawn over the rows after it (`deferred`, as the
+    /// localization rows do).
+    fn settings_dropdown_control(
+        &mut self,
+        id: &'static str,
+        theme: &Theme,
+        value: SharedString,
+        menu: Option<Div>,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let trigger = dropdown_trigger(theme, &mut self.icons, value);
+        div()
+            .id(SharedString::from(format!("settings-dropdown-{id}")))
+            .relative()
+            .w_full()
+            .cursor_pointer()
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.settings_open_dropdown = if this.settings_open_dropdown == Some(id) {
+                    None
+                } else {
+                    Some(id)
+                };
+                cx.notify();
+            }))
+            .child(trigger)
+            .when_some(menu, |el, menu| el.child(deferred(menu).with_priority(1)))
     }
 
     /// How this device signs by default (spec 071): the five ways in the
@@ -9938,74 +9951,49 @@ impl WalletPage {
         use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
         let view = resident::resident::<SignPref>(cx).read(cx).view();
         let s = &self.settings;
-        let mut list = div()
-            .flex()
-            .flex_col()
-            .gap(px(4.))
-            .p(px(4.))
-            .rounded(px(12.))
-            .bg(theme.bg_sunken);
-        for (index, method) in view.offered.iter().enumerate() {
-            let name = s
-                .sign_with_options
-                .iter()
-                .find(|(id, _)| id == method)
-                .map_or_else(
-                    || SharedString::from(method.clone()),
-                    |(_, title)| title.clone(),
-                );
-            // The one choice that is not a place a passkey is says what it is.
-            let line = (method == vela_core::trusted_signer::METHOD)
-                .then(|| s.trusted_signer_body.clone());
-            let selected = *method == view.method;
-            let chosen = method.clone();
-            list = list.child(
-                div()
-                    .id(ElementId::from(("settings-sign-with", index)))
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .px(px(12.))
-                    .py(px(10.))
-                    .rounded(px(10.))
-                    .cursor_pointer()
-                    .when(selected, |row| row.bg(theme.bg_raised))
-                    .hover(|row| row.bg(theme.bg_raised))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        let method = chosen.clone();
-                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                            pref.dispatch(SignPrefEvent::MethodChosen { method }, cx);
-                        });
-                        cx.notify();
-                    }))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .gap(px(2.))
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_title())
-                                    .text_color(if selected {
-                                        theme.accent
-                                    } else {
-                                        theme.fg_base
-                                    })
-                                    .child(name),
-                            )
-                            .children(line.map(|line| {
-                                div()
-                                    .text_size(theme::text_row_sub())
-                                    .text_color(theme.fg_subtle)
-                                    .child(line)
-                            })),
-                    )
-                    .child(div().w(px(16.)).children(selected.then(|| {
-                        icon_img(&mut self.icons, Icon::Check, false, theme.accent, 16.)
-                    }))),
-            );
-        }
+        // The core's ways, in its order, the stored one ticked — and the one
+        // that is not a place a passkey is says what it is.
+        let rows: Vec<DetailRow> = view
+            .offered
+            .iter()
+            .map(|method| {
+                let name = s
+                    .sign_with_options
+                    .iter()
+                    .find(|(id, _)| id == method)
+                    .map_or_else(
+                        || SharedString::from(method.clone()),
+                        |(_, title)| title.clone(),
+                    );
+                let line = (method == vela_core::trusted_signer::METHOD)
+                    .then(|| s.trusted_signer_body.clone());
+                (name, line, *method == view.method)
+            })
+            .collect();
+        let value = rows
+            .iter()
+            .find(|(_, _, selected)| *selected)
+            .or(rows.first())
+            .map(|(name, _, _)| name.clone())
+            .unwrap_or_default();
+        let offered = view.offered.clone();
+        let chooser = cx.entity();
+        let menu = (self.settings_open_dropdown == Some("sign-with")).then(|| {
+            dropdown_menu_details(theme, &mut self.icons, &rows, 440., move |index, _, cx| {
+                if let Some(method) = offered.get(index).cloned() {
+                    resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                        pref.dispatch(SignPrefEvent::MethodChosen { method }, cx);
+                    });
+                }
+                chooser.update(cx, |this, cx| {
+                    this.settings_open_dropdown = None;
+                    cx.notify();
+                });
+            })
+        });
+        let label = self.settings.nav_signing.clone();
+        let control = self.settings_dropdown_control("sign-with", theme, value, menu, cx);
+        let list = form_row(theme, label, control);
 
         // The page. Its badge is where it is — "Official", or the host a
         // person chose — and the field holds what they are typing until Save
