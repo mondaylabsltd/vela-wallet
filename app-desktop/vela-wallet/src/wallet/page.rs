@@ -58,8 +58,8 @@ use crate::executor::format_prefs;
 use crate::executor::passkey::WindowHandle;
 use crate::hardware;
 use crate::settings::components::{
-    CalloutTone, ConfirmCopy, callout, chain_mark, check_list, confirm_card, danger_card,
-    dropdown_menu, dropdown_menu_choices, dropdown_menu_picks, dropdown_trigger,
+    CalloutTone, ConfirmCopy, callout, chain_logo_mark, chain_mark, check_list, confirm_card,
+    danger_card, dropdown_menu, dropdown_menu_choices, dropdown_menu_picks, dropdown_trigger,
     editable_url_field, form_row, key_value_row, network_row, rpc_banner, segmented,
     segmented_picks, settings_nav_row, status_pill, storage_bar, storage_group, storage_group_with,
     text_scale, text_scale_picks, url_field,
@@ -563,6 +563,8 @@ pub struct WalletPage {
     content_scroll: gpui::ScrollHandle,
     /// The sidebar's network list — twenty-odd chains outgrow a short window.
     networks_scroll: gpui::ScrollHandle,
+    /// The settings panel's, for the same bar.
+    settings_scroll: gpui::ScrollHandle,
     /// The network menu's rows — `(chain, name, current)` — named when it
     /// opened; `menu_origin` says which site it is about.
     site_networks: Vec<(u32, SharedString, bool)>,
@@ -987,6 +989,7 @@ impl WalletPage {
             address_focus: cx.focus_handle(),
             content_scroll: gpui::ScrollHandle::new(),
             networks_scroll: gpui::ScrollHandle::new(),
+            settings_scroll: gpui::ScrollHandle::new(),
             site_networks: Vec::new(),
             browser_url_pinned: false,
             send_amount_focus: cx.focus_handle(),
@@ -2757,23 +2760,29 @@ impl WalletPage {
                 )
             })
             .child(nav_col)
-            .child(div().h(px(1.)).bg(theme.divider))
-            .child(
-                div()
-                    .px(px(12.))
-                    .text_size(theme::text_label())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_subtle)
-                    .child(self.strings.networks_title.clone()),
-            )
-            .child(
-                div()
-                    .relative()
-                    .flex_1()
-                    .min_h(px(0.))
-                    .child(networks)
-                    .children(crate::ui::vertical_scrollbar(theme, &self.networks_scroll)),
-            )
+            // The network list is the Wallet's filter, as on the web (spec 028
+            // Phase 9, RULING 2): a section with nothing to filter shows none,
+            // and the rail ends at the nav.
+            .when(self.section == Section::Wallet, |sidebar| {
+                sidebar
+                    .child(div().h(px(1.)).bg(theme.divider))
+                    .child(
+                        div()
+                            .px(px(12.))
+                            .text_size(theme::text_label())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.fg_subtle)
+                            .child(self.strings.networks_title.clone()),
+                    )
+                    .child(
+                        div()
+                            .relative()
+                            .flex_1()
+                            .min_h(px(0.))
+                            .child(networks)
+                            .children(crate::ui::vertical_scrollbar(theme, &self.networks_scroll)),
+                    )
+            })
     }
 
     // -- column 2: content ---------------------------------------------------
@@ -6609,12 +6618,7 @@ impl WalletPage {
     }
 
     /// Column 3: the panel the nav selected.
-    fn settings_panel(
-        &mut self,
-        theme: &Theme,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
+    fn settings_panel(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let (title, description) = match self.settings_page {
             SettingsPage::Account => (self.settings.nav_account.clone(), None),
             SettingsPage::Appearance => (self.settings.nav_appearance.clone(), None),
@@ -6798,18 +6802,16 @@ impl WalletPage {
             None => None,
         };
 
-        div()
+        let panel = div()
             .id("settings-panel")
-            .flex_1()
-            .min_w(px(0.))
-            .h_full()
+            .track_scroll(&self.settings_scroll)
+            .size_full()
             .overflow_y_scroll()
             // Left-aligned against the nav column, exactly as the wallet's own
             // content column is. The padding is the panel's, the cap is the
             // content's: a settings form stretched to a 2000px window is a
             // different screen from the one that was designed.
             .px(px(SETTINGS_PANEL_PAD_X))
-            .pt(px(WALLET_PAD_TOP))
             .pb(px(48.))
             .child(
                 div()
@@ -6819,6 +6821,24 @@ impl WalletPage {
                         el.child(div().pb(px(24.)).child(banner))
                     })
                     .child(body),
+            );
+        // Scrolls below the caption strip, as the Wallet column does: a
+        // network row scrolled up under the window's buttons put its caret
+        // through ─.
+        div()
+            .flex_1()
+            .min_w(px(0.))
+            .h_full()
+            .pt(px(WALLET_PAD_TOP.max(crate::window_frame::CAPTION_H)))
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .child(panel)
+                    .children(crate::ui::vertical_scrollbar(theme, &self.settings_scroll)),
             )
     }
 
@@ -8197,6 +8217,7 @@ impl WalletPage {
                 ElementId::from(("settings-network", i)),
                 theme,
                 &mut self.icons,
+                n.chain_id,
                 n.letter.clone(),
                 n.color,
                 n.name.clone(),
@@ -9658,7 +9679,8 @@ impl WalletPage {
                     .cursor_pointer()
                     .when(selected, |el| el.bg(theme.bg_sunken))
                     .hover(|el| el.bg(theme.bg_sunken))
-                    .child(chain_mark(
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
                         crate::settings::model::lettermark(&entry.name),
                         crate::settings::model::chain_tint(u64::from(chain_id))
                             .unwrap_or(0x8A_8F_98),
@@ -10110,7 +10132,7 @@ impl WalletPage {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(chain_mark(letter, colour, 32.))
+                    .child(chain_logo_mark(u64::from(chain_id), letter, colour, 32.))
                     .child(
                         div()
                             .flex_1()

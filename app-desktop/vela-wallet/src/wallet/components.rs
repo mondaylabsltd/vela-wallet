@@ -213,7 +213,8 @@ pub fn chain_row(
     icons: &mut IconCache,
     row: &ChainRowModel,
 ) -> Stateful<Div> {
-    const MARK: f32 = 16.;
+    // The web's `.mark` slot (`--icon-md`) and `.dot` (`--icon-xs`).
+    const MARK: f32 = 18.;
     let colour = row.dot.unwrap_or(theme.fg_subtle);
     let dot = move || {
         div()
@@ -221,7 +222,7 @@ pub fn chain_row(
             .flex()
             .items_center()
             .justify_center()
-            .child(div().size(px(10.)).rounded(px(5.)).bg(colour))
+            .child(div().size(px(12.)).rounded(px(6.)).bg(colour))
             .into_any_element()
     };
     let dot = match row.chain_id.and_then(crate::marks::chain_logo_url) {
@@ -239,7 +240,9 @@ pub fn chain_row(
         .flex()
         .items_center()
         .gap(px(12.))
-        .h(px(32.))
+        // The web filter's row (`min-height: --size-hitTarget`): at 32
+        // twenty-odd chains read as one block of text rather than a list.
+        .h(px(WALLET_NAV_ROW_H))
         .px(px(12.))
         .rounded(px(8.))
         .cursor_pointer()

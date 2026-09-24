@@ -300,7 +300,9 @@ pub const WALLET_PAD_TOP: f32 = 28.;
 pub const WALLET_AVATAR: f32 = 40.;
 pub const WALLET_ROW_ICON: f32 = 40.;
 pub const WALLET_BADGE: f32 = 12.;
-pub const WALLET_NAV_ROW_H: f32 = 40.;
+/// The web sidebar's `--size-control-md`; its network rows use the same 44
+/// (`--size-hitTarget`). At 40/32 the desktop rail read as a crowded copy.
+pub const WALLET_NAV_ROW_H: f32 = 44.;
 pub const WALLET_CONTROL_H: f32 = 44.;
 /// The money-in toast (D1b): the glyph disc, and how far below the top of the
 /// window the pill floats. Measured against the phone's own banner — same

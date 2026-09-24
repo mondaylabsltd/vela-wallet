@@ -12,7 +12,7 @@ use std::rc::Rc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, div, px, rgb,
+    StatefulInteractiveElement as _, Styled, StyledImage as _, div, px, rgb,
 };
 
 use crate::icons::{Icon, IconCache};
@@ -608,6 +608,27 @@ pub fn chain_mark(letter: gpui::SharedString, color: u32, size: f32) -> Div {
         .child(letter)
 }
 
+/// A chain's avatar where the chain is known: its logo — the one the wallet's
+/// network filter and token badges draw (`marks::chain_logo_url`) — over the
+/// lettermark, which is what shows while it loads, when it cannot, and for a
+/// chain id the logo host could never name.
+pub fn chain_logo_mark(chain_id: u64, letter: gpui::SharedString, color: u32, size: f32) -> Div {
+    let url = u32::try_from(chain_id)
+        .ok()
+        .and_then(crate::marks::chain_logo_url);
+    let Some(url) = url else {
+        return chain_mark(letter, color, size);
+    };
+    let mark = move || chain_mark(letter.clone(), color, size).into_any_element();
+    div().size(px(size)).flex_none().child(
+        gpui::img(url)
+            .size(px(size))
+            .rounded_full()
+            .with_loading(mark.clone())
+            .with_fallback(mark),
+    )
+}
+
 /// One network row (DST4): mark, name, chain-id line, an optional latency
 /// pill, an optional 自定义 tag, and a disclosure caret. The desktop expands in
 /// place rather than pushing a page, so the caret is a state and not a chevron.
@@ -622,6 +643,7 @@ pub fn network_row(
     // `SharedString`, not `&'static str`: a live network's name and
     // lettermark come from the core at runtime (spec 030). The fixture
     // path passes the same constants it always did, now via `.into()`.
+    chain_id: u64,
     letter: gpui::SharedString,
     color: u32,
     name: gpui::SharedString,
@@ -659,7 +681,7 @@ pub fn network_row(
         .gap(px(12.))
         .py(px(12.))
         .cursor_pointer()
-        .child(chain_mark(letter, color, MARK))
+        .child(chain_logo_mark(chain_id, letter, color, MARK))
         .child(
             div()
                 .flex_1()

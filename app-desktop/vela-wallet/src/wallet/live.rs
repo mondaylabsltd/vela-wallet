@@ -881,7 +881,7 @@ mod tests {
             // wallet knows about.
             assert_eq!(chains.len(), 3);
             assert_eq!(chains[0].name, s.all_networks);
-            assert_eq!(chains[0].count, 2, "the count is the chains listed");
+            assert_eq!(chains[0].count, 3, "every holding, as the web counts");
             assert!(chains[0].dot.is_none(), "all is not a chain");
             assert!(chains[0].selected);
             assert_eq!(chains[1].name, "Ethereum");
@@ -1226,7 +1226,10 @@ pub fn chain_rows(
         name: s.all_networks.clone(),
         // The neutral dot: "all" is not a chain and must not wear one's colour.
         dot: None,
-        count: u32::try_from(order.len()).unwrap_or(u32::MAX),
+        // The holdings, as the web counts them (`liveChainRows`:
+        // `view.tokens.length`) — every other row counts holdings too. This
+        // counted the CHAINS, so one wallet read 23 on the web and 16 here.
+        count: u32::try_from(view.tokens.len()).unwrap_or(u32::MAX),
         selected: filter.is_none(),
         chain_id: None,
     }];
