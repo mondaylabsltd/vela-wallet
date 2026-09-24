@@ -1104,14 +1104,20 @@ mod tests {
             // Unpriced: the chain, never "$0.00 · Monad".
             assert!(mon.sub.contains("Monad"));
             assert!(!mon.sub.contains('$'), "an unpriced holding is not $0.00");
-            // An ERC-20 names its contract; the price row is absent because
-            // there is no price to state.
+            // An ERC-20 names its contract, and keeps it whole for the copy;
+            // the price row says there is none rather than going missing
+            // (the web's `liveAssetDetail`, 078 H-06).
             assert!(
                 mon.facts
                     .iter()
                     .any(|(label, _)| *label == s.label_contract)
             );
-            assert!(!mon.facts.iter().any(|(label, _)| *label == s.label_price));
+            assert!(mon.contract_copy.is_some());
+            assert!(
+                mon.facts
+                    .iter()
+                    .any(|(label, value)| *label == s.label_price && *value == s.no_price)
+            );
             // xDAI's transaction is not MON's.
             assert!(mon.activity.is_empty());
 
@@ -1683,16 +1689,20 @@ pub fn asset_detail(
     let figure = |value: f64| money.text(value, locale);
 
     let mut facts = vec![(s.label_name.clone(), SharedString::from(token.name.clone()))];
-    if let Some(price) = token.price_usd {
-        facts.push((
-            s.label_price.clone(),
-            SharedString::from(crate::wallet::fill(
+    // Price is always a row — "No price" when there is none (the web's
+    // `liveAssetDetail`, 078 H-06): a fact that disappears reads as a panel
+    // that forgot it rather than a token nobody quotes.
+    facts.push((
+        s.label_price.clone(),
+        match token.price_usd {
+            Some(price) => SharedString::from(crate::wallet::fill(
                 &crate::wallet::fill(&s.price_value, "symbol", &token.symbol),
                 "value",
                 &figure(price),
             )),
-        ));
-    }
+            None => s.no_price.clone(),
+        },
+    ));
     facts.push((
         s.label_contract.clone(),
         match token.token_address.as_ref() {
@@ -1749,6 +1759,7 @@ pub fn asset_detail(
         // record N.
         activity_ids: own.iter().map(|item| item.id.clone()).collect(),
         explorer_url: token_explorer_url(token, view.address.as_deref()).map(SharedString::from),
+        contract_copy: token.token_address.clone().map(SharedString::from),
     })
 }
 

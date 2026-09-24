@@ -460,6 +460,9 @@ pub struct AssetDetailModel {
     /// Where "view on explorer" leads (the web's `tokenExplorerURL`). `None`
     /// for a chain with no explorer, and for the mock.
     pub explorer_url: Option<SharedString>,
+    /// The whole contract address, for the Contract fact's copy (078 H-06) —
+    /// the fact shows its two ends. `None` for a chain's own coin.
+    pub contract_copy: Option<SharedString>,
 }
 
 /// D3 as the mocks draw it.
@@ -474,7 +477,9 @@ pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
         facts: bnb_facts(s),
         activity: bnb_activity(s),
         activity_ids: Vec::new(),
-        explorer_url: None,
+        // The web's D3 links its explorer; the mock's chain has one.
+        explorer_url: Some("https://bscscan.com".into()),
+        contract_copy: None,
     }
 }
 

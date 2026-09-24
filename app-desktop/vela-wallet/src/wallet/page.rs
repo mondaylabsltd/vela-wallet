@@ -3708,6 +3708,7 @@ impl WalletPage {
                 activity: Vec::new(),
                 activity_ids: Vec::new(),
                 explorer_url: None,
+                contract_copy: None,
             })
     }
 
@@ -6118,6 +6119,9 @@ impl WalletPage {
                     Icon::ArrowUpRight,
                     s.detail_send.clone(),
                 )
+                // `--size-control-md`: the panel's pair is a size down from
+                // the home's actions (`AssetDetailPanel.svelte`).
+                .h(px(44.))
                 .on_click({
                     // 转账 from a token: the form with THAT token chosen.
                     let token = token.clone();
@@ -6141,6 +6145,7 @@ impl WalletPage {
                     Icon::ArrowDownLeft,
                     s.detail_receive.clone(),
                 )
+                .h(px(44.))
                 .on_click({
                     // 收款 from a token: its own code, no picker in between —
                     // the token already names its chain.
@@ -6156,49 +6161,99 @@ impl WalletPage {
                 }),
             );
 
-        let mut facts = div().flex().flex_col();
-        for (i, (label, value)) in model.facts.iter().cloned().enumerate() {
-            let mut row = div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .py(px(12.))
-                .child(
+        // A hairline above the first fact and under every one (the web's
+        // `.facts` / `.fact`), and the Contract's copy — the whole address
+        // for the clipboard, its two ends for reading (078 H-06).
+        let mut facts = div()
+            .flex()
+            .flex_col()
+            .border_t_1()
+            .border_color(theme.border_card);
+        let copied = self.copied.as_deref() == Some("asset-contract");
+        for (label, value) in model.facts.iter().cloned() {
+            let copy = (label == s.label_contract)
+                .then(|| model.contract_copy.clone())
+                .flatten();
+            let mut value_side = div().flex().items_center().gap(px(4.)).child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(theme.fg_base)
+                    .child(value),
+            );
+            if let Some(address) = copy {
+                value_side = value_side.child(
                     div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(label),
-                )
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme.fg_base)
-                        .child(value),
+                        .id("asset-contract-copy")
+                        .size(px(20.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .child(icon_img(
+                            &mut self.icons,
+                            if copied { Icon::Check } else { Icon::Copy },
+                            false,
+                            if copied {
+                                theme.success_base
+                            } else {
+                                theme.fg_subtle
+                            },
+                            14.,
+                        ))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.copy_text(
+                                "asset-contract",
+                                address.to_string(),
+                                std::time::Duration::from_millis(150),
+                                cx,
+                            );
+                        })),
                 );
-            if i > 0 {
-                row = row.border_t_1().border_color(theme.divider);
             }
-            facts = facts.child(row);
+            facts = facts.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(12.))
+                    .py(px(12.))
+                    // The web's line: 13 at `leading-normal`. gpui's default
+                    // leading made each fact ~4px taller than the web's.
+                    .line_height(gpui::relative(1.4))
+                    .border_b_1()
+                    .border_color(theme.border_card)
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_muted)
+                            .child(label),
+                    )
+                    .child(value_side),
+            );
         }
 
-        // No explorer for this chain: no link rather than a wrong one.
-        let explorer = model.explorer_url.clone().map(|url| {
-            div()
-                .id("detail-explorer")
-                .flex()
-                .items_center()
-                .gap(px(4.))
+        // No explorer for this chain: the same words in the system's
+        // unavailable look (the web's disabled button, spec 081 #18) — never a
+        // link to a wrong page, and not a gap where the link was either.
+        let explorer_line = div()
+            .id("detail-explorer")
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_muted)
+            .child(s.view_on_explorer.clone())
+            .child(crate::wallet::components::chevron_icon(
+                theme,
+                &mut self.icons,
+            ));
+        let explorer = Some(match model.explorer_url.clone() {
+            Some(url) => explorer_line
                 .cursor_pointer()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_muted)
                 .hover(|el| el.text_color(theme.fg_base))
-                .child(s.view_on_explorer.clone())
-                .child(crate::wallet::components::chevron_icon(
-                    theme,
-                    &mut self.icons,
-                ))
-                .on_click(move |_, _, cx| cx.open_url(&url))
+                .on_click(move |_, _, cx| cx.open_url(&url)),
+            None => explorer_line.opacity(theme::OPACITY_DISABLED),
         });
 
         let mut tx = div().flex().flex_col().child(
