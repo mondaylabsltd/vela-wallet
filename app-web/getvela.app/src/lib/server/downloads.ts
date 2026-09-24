@@ -16,7 +16,16 @@
  * 4. Whatever goes wrong on the mirror path ends in the GitHub redirect: a slow
  *    download beats none.
  * 5. GitHub being down does not take the page down: the last good list is kept
- *    and served stale (FR-002).
+ *    and served stale (FR-002) — and SAYS SO in the log. v0.9.5 shipped its
+ *    macOS images eleven minutes after its Release was created, and the page
+ *    offered them as "coming shortly" for hours: the list fetched in between
+ *    was kept, every refresh failed, and nothing anywhere said a word.
+ * 6. The refresh does not depend on one rate-limited API. GitHub allows 60
+ *    anonymous calls an hour PER IP, and a Worker's IP is shared with the rest
+ *    of Cloudflare, so exhausting it is normal, not exceptional. Two defences:
+ *    a conditional request (a 304 is free — GitHub does not count it), and a
+ *    fallback that reads the release through plain file downloads, which have
+ *    no such limit.
  */
 import {
 	matchFiles,
@@ -40,6 +49,8 @@ export interface ReleaseInfo {
 	/** file name → lowercase hex SHA-256, from every `SHA256SUMS*` on the Release. */
 	checksums: Record<string, string>;
 	fetchedAt: number;
+	/** The API's ETag, so the next refresh can ask for a free 304. */
+	etag?: string;
 }
 
 /** Somewhere a list outlives this isolate: the edge cache in production. */
@@ -98,12 +109,91 @@ interface GithubRelease {
 	assets: { name: string; size: number; browser_download_url: string }[];
 }
 
-async function fetchFromGithub(deps: Deps): Promise<ReleaseInfo> {
-	const headers = { 'User-Agent': 'getvela.app', Accept: 'application/vnd.github+json' };
+const GITHUB_HEADERS = { 'User-Agent': 'getvela.app', Accept: 'application/vnd.github+json' };
+
+/** Every `SHA256SUMS*` on a release, merged. Plain downloads: no rate limit. */
+async function fetchChecksums(
+	deps: Deps,
+	urls: { name: string; url: string }[]
+): Promise<Record<string, string>> {
+	const checksums: Record<string, string> = {};
+	for (const { url } of urls) {
+		const sums = await deps.fetch(url, {
+			headers: GITHUB_HEADERS,
+			signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS)
+		});
+		// A checksum file that will not load only costs those files their mirror
+		// (rule 3); it must not cost the page its list.
+		if (sums.ok) Object.assign(checksums, parseChecksums(await sums.text()));
+	}
+	return checksums;
+}
+
+const assetUrl = (tag: string, name: string) =>
+	`https://github.com/${REPO}/releases/download/${tag}/${encodeURIComponent(name)}`;
+
+/**
+ * The release, read WITHOUT the API (rule 6): the `releases/latest` redirect
+ * names the tag, and the tag's own `SHA256SUMS*` name every file on it — which
+ * is exactly the set this page is allowed to offer anyway, since a file with no
+ * published checksum is never mirrored.
+ *
+ * `latest` skips pre-releases, and every release so far is one; when it has
+ * nothing to point at, the caller's stale list is still better than an empty
+ * page, so this throws rather than inventing one.
+ */
+async function fetchWithoutApi(deps: Deps): Promise<ReleaseInfo> {
+	// `redirect: 'manual'`, and the tag read from the Location header rather than
+	// from the final URL: the header is the answer itself, and it is there
+	// whether or not anything followed it.
+	const res = await deps.fetch(`https://github.com/${REPO}/releases/latest`, {
+		redirect: 'manual',
+		signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS)
+	});
+	const where = res.headers.get('Location') ?? res.url;
+	const tag = /\/releases\/tag\/(v\d+\.\d+\.\d+)/.exec(where)?.[1];
+	if (!tag) throw new Error(`GitHub releases/latest: no vX.Y.Z tag in "${where}"`);
+
+	const checksums = await fetchChecksums(
+		deps,
+		['SHA256SUMS', 'SHA256SUMS-macos'].map((name) => ({ name, url: assetUrl(tag, name) }))
+	);
+	const names = Object.keys(checksums).filter((name) => !name.startsWith('SHA256SUMS'));
+	if (!names.length) throw new Error(`GitHub ${tag}: no checksummed files`);
+
+	// The size is shown beside each download, so it is worth one HEAD each —
+	// and a size that cannot be had is 0, not a reason to hide the file.
+	const files = await Promise.all(
+		names.map(async (name) => {
+			const url = assetUrl(tag, name);
+			let size = 0;
+			try {
+				const head = await deps.fetch(url, {
+					method: 'HEAD',
+					redirect: 'follow',
+					signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS)
+				});
+				size = Number(head.headers.get('Content-Length')) || 0;
+			} catch {
+				// Leave it at 0.
+			}
+			return { name, size, url };
+		})
+	);
+	return { tag, version: tag.slice(1), files, checksums, fetchedAt: deps.now() };
+}
+
+async function fetchFromGithub(deps: Deps, previous: ReleaseInfo | null): Promise<ReleaseInfo> {
+	const headers: Record<string, string> = { ...GITHUB_HEADERS };
+	// A conditional request costs nothing against the hourly limit when the
+	// answer is 304, which it is most of the time: releases are rare.
+	if (previous?.etag) headers['If-None-Match'] = previous.etag;
+
 	const res = await deps.fetch(RELEASES_API, {
 		headers,
 		signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS)
 	});
+	if (res.status === 304 && previous) return { ...previous, fetchedAt: deps.now() };
 	if (!res.ok) throw new Error(`GitHub releases: ${res.status}`);
 
 	// "Latest" includes pre-releases — every release so far is one — so this is
@@ -113,16 +203,12 @@ async function fetchFromGithub(deps: Deps): Promise<ReleaseInfo> {
 	const latest = releases.find((r) => !r.draft && /^v\d+\.\d+\.\d+$/.test(r.tag_name));
 	if (!latest) throw new Error('GitHub releases: no published vX.Y.Z release');
 
-	const checksums: Record<string, string> = {};
-	for (const asset of latest.assets.filter((a) => a.name.startsWith('SHA256SUMS'))) {
-		const sums = await deps.fetch(asset.browser_download_url, {
-			headers,
-			signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS)
-		});
-		// A checksum file that will not load only costs those files their mirror
-		// (rule 3); it must not cost the page its list.
-		if (sums.ok) Object.assign(checksums, parseChecksums(await sums.text()));
-	}
+	const checksums = await fetchChecksums(
+		deps,
+		latest.assets
+			.filter((a) => a.name.startsWith('SHA256SUMS'))
+			.map((a) => ({ name: a.name, url: a.browser_download_url }))
+	);
 
 	return {
 		tag: latest.tag_name,
@@ -131,7 +217,8 @@ async function fetchFromGithub(deps: Deps): Promise<ReleaseInfo> {
 			.filter((a) => !a.name.startsWith('SHA256SUMS'))
 			.map((a) => ({ name: a.name, size: a.size, url: a.browser_download_url })),
 		checksums,
-		fetchedAt: deps.now()
+		fetchedAt: deps.now(),
+		etag: res.headers.get('ETag') ?? undefined
 	};
 }
 
@@ -143,14 +230,31 @@ export async function loadRelease(deps: Deps): Promise<ReleaseInfo> {
 	if (stored && (!remembered || stored.fetchedAt > remembered.fetchedAt)) remembered = stored;
 	if (fresh(remembered)) return remembered!;
 
-	try {
-		remembered = await fetchFromGithub(deps);
-		await deps.store?.write(remembered).catch(() => {});
-		return remembered;
-	} catch (error) {
-		if (remembered) return remembered;
-		throw error;
+	const reasons: string[] = [];
+	// The API first — it is the one source that carries sizes and knows a draft
+	// from a pre-release — then the plain-download route, which no rate limit
+	// touches (rule 6).
+	for (const attempt of [() => fetchFromGithub(deps, remembered), () => fetchWithoutApi(deps)]) {
+		try {
+			remembered = await attempt();
+			await deps.store?.write(remembered).catch(() => {});
+			return remembered;
+		} catch (error) {
+			reasons.push(String(error));
+		}
 	}
+
+	if (remembered) {
+		// Serving a stale list is the right answer and a silent one is not: this
+		// is how a page goes on saying "coming shortly" about a file that has
+		// been published for hours.
+		const minutes = Math.round((deps.now() - remembered.fetchedAt) / 60_000);
+		console.error(
+			`[downloads] could not refresh the release list (${reasons.join('; ')}) — serving ${remembered.tag} as read ${minutes} minutes ago`
+		);
+		return remembered;
+	}
+	throw new Error(`no release list: ${reasons.join('; ')}`);
 }
 
 export function manifestOf(info: ReleaseInfo): DownloadsManifest {
