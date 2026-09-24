@@ -363,8 +363,8 @@ pub struct FilterChip {
 #[derive(Clone)]
 pub struct SendPick {
     pub search_placeholder: SharedString,
-    /// DSD1L parks the chain pill at the end of the chip strip.
-    pub pill: (Vec<Hsla>, SharedString),
+    /// The class chips. There is no network pill: on the desktop the
+    /// sidebar's network filter is the one, and it narrows these rows too.
     pub filters: Vec<FilterChip>,
     pub rows: Vec<AssetRowModel>,
     pub cta: SharedString,
@@ -1080,10 +1080,6 @@ fn send_pick(s: &FlowStrings) -> SendPick {
                 selected: false,
             },
         ],
-        pill: (
-            NETWORKS[..3].iter().map(|n| (n.color)()).collect(),
-            s.pill_all.clone(),
-        ),
         rows: send_rows(),
         cta: s.multi_send_title.clone(),
     }

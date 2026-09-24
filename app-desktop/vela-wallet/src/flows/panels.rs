@@ -98,6 +98,9 @@ pub struct PanelActions {
     /// DSD1L, live: one listener per token row. Empty falls back to
     /// `open_send_form`, which the fixture gives to its first row.
     pub open_send_rows: Vec<Click>,
+    /// DSD1L, live: the class chips (全部 / 稳定币 / Gas / 其他), in
+    /// `SendClass::CHIPS` order. Empty draws them inert.
+    pub send_class_chips: Vec<Click>,
     /// SD1b, live: "select all valuable", and the CTA that either enters the
     /// sweep or confirms the tokens ticked in it.
     pub sweep_select_all: Option<Click>,
@@ -299,6 +302,7 @@ pub fn render(
             icons,
             actions.open_send_form,
             actions.open_send_rows,
+            actions.send_class_chips,
             actions.sweep_select_all,
             actions.send_pick_cta,
         ),
@@ -1055,34 +1059,22 @@ fn pill(theme: &Theme, label: SharedString) -> Div {
         .child(label)
 }
 
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 fn send_pick(
     model: &SendPick,
     theme: &Theme,
     icons: &mut IconCache,
     mut open_form: Option<Click>,
     per_row: Vec<Click>,
+    chip_clicks: Vec<Click>,
     select_all: Option<Click>,
     cta: Option<Click>,
 ) -> Div {
-    let (dots, pill_label) = &model.pill;
+    // No network pill here: the sidebar's network filter already narrows
+    // these rows, and a second one beside it could disagree with the first.
     let mut col = column()
         .child(flow_search(theme, icons, model.search_placeholder.clone()))
-        .child(
-            div()
-                .flex()
-                // The pill wraps below the chips rather than sitting on top of
-                // them. At third-column width the chip strip and the pill do
-                // not both fit once the chain dots load, and the pill is
-                // `flex_none`: 其他 was drawn half under 全部网络. Wrapping is
-                // the only one of the three outcomes (clip, overlap, wrap)
-                // that loses no word.
-                .flex_wrap()
-                .items_center()
-                .justify_between()
-                .gap(px(8.))
-                .child(filter_chips(theme, &model.filters))
-                .child(network_pill(theme, icons, dots, pill_label.clone()).flex_none()),
-        );
+        .child(filter_chips(theme, &model.filters, chip_clicks));
 
     // SD1b's chain lock, in the corpus's own sentence: the first pick names
     // the network and the greying that follows is explained rather than left

@@ -1212,9 +1212,55 @@ fn send_token_row(
     }
 }
 
+/// SD1's chips: all, the stables, the chains' own coins, the rest — in the
+/// order they are drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SendClass {
+    #[default]
+    All,
+    Stable,
+    Gas,
+    Other,
+}
+
+impl SendClass {
+    pub const CHIPS: [Self; 4] = [Self::All, Self::Stable, Self::Gas, Self::Other];
+
+    /// Which chip a token answers to — the web's `sendTokenClass`, word for
+    /// word. A chain's native coin is what pays its gas; a stable is one by
+    /// the symbol table the core's activity feed keeps; everything else is
+    /// "other". One rule, so the chip and the row can never disagree.
+    #[must_use]
+    pub fn of(token: &SendToken) -> Self {
+        if token.token_address.is_none() {
+            Self::Gas
+        } else if vela_core::app::activity_feed::is_stable(&token.symbol) {
+            Self::Stable
+        } else {
+            Self::Other
+        }
+    }
+}
+
+/// The picker's rows after both narrowings, in the core's order: the
+/// sidebar's network (the desktop's one network filter — the picker has no
+/// second) and the chip.
+///
+/// Applied to the VIEW, before anything is read from it, so the rows drawn,
+/// the listener each row gets and the scope of "select all valuable" are the
+/// same list. Narrowing only the drawing would hand row 2's click to whatever
+/// token was third before the filter — here, a transfer of the wrong coin.
+pub fn narrow_send_tokens(view: &mut SendView, chain: Option<u32>, class: SendClass) {
+    view.tokens.retain(|token| {
+        chain.is_none_or(|chain| token.chain_id == chain)
+            && (class == SendClass::All || SendClass::of(token) == class)
+    });
+}
+
 /// DSD1L — which token to send, in one of the picker's two modes.
 ///
-/// The rows are the core's holdings.
+/// The rows are the core's holdings, already narrowed (`narrow_send_tokens`);
+/// `class` only says which chip is lit.
 ///
 /// `sweeping` is the SHELL's flag, and deliberately: the core's
 /// `multi_select_mode` flips only when a selection is CONFIRMED, so before
@@ -1223,33 +1269,24 @@ fn send_token_row(
 /// sweep moves are all still the core's — the web's port records the same
 /// split in the same words (`live-send.ts` `sweepPicking`).
 #[must_use]
-pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool) -> SendPick {
+pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> SendPick {
     let s = i.s;
-    let mut dots = Vec::new();
-    for token in &i.send.tokens {
-        let colour = tint(token.chain_id);
-        if !dots.contains(&colour) {
-            dots.push(colour);
-        }
-        if dots.len() == 3 {
-            break;
-        }
-    }
-    let chip = |label: &SharedString, selected: bool| FilterChip {
-        label: label.clone(),
-        selected,
-    };
     let mut pick = SendPick {
         selection: None,
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
-        pill: (dots, s.pill_all.clone()),
-        filters: vec![
-            chip(&s.filter_all, true),
-            chip(&s.filter_stable, false),
-            chip(&s.filter_gas, false),
-            chip(&s.filter_other, false),
-        ],
+        filters: SendClass::CHIPS
+            .iter()
+            .map(|chip| FilterChip {
+                label: match chip {
+                    SendClass::All => s.filter_all.clone(),
+                    SendClass::Stable => s.filter_stable.clone(),
+                    SendClass::Gas => s.filter_gas.clone(),
+                    SendClass::Other => s.filter_other.clone(),
+                },
+                selected: *chip == class,
+            })
+            .collect(),
         rows: i
             .send
             .tokens
@@ -1357,6 +1394,43 @@ mod sweep_tests {
         }
     }
 
+    /// The chips narrow by the web's rule, the sidebar's network narrows with
+    /// them, and the lit chip is the one the person pressed.
+    #[test]
+    fn the_picker_narrows_by_class_and_by_the_sidebars_network() {
+        let tokens = vec![
+            token(1, "ETH", None),
+            token(1, "USDT", Some("0xaa")),
+            token(1, "PEPE", Some("0xbb")),
+            token(100, "xDAI", None),
+            token(100, "USDC", Some("0xcc")),
+        ];
+        let symbols = |class, chain| {
+            let mut view = view_with(tokens.clone(), Vec::new(), None);
+            narrow_send_tokens(&mut view, chain, class);
+            view.tokens
+                .iter()
+                .map(|token| token.symbol.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(symbols(SendClass::All, None).len(), 5);
+        assert_eq!(symbols(SendClass::Gas, None), ["ETH", "xDAI"]);
+        assert_eq!(symbols(SendClass::Stable, None), ["USDT", "USDC"]);
+        assert_eq!(symbols(SendClass::Other, None), ["PEPE"]);
+        assert_eq!(symbols(SendClass::All, Some(100)), ["xDAI", "USDC"]);
+        assert_eq!(symbols(SendClass::Stable, Some(100)), ["USDC"]);
+
+        crate::executor::storage::tests::with_temp_state("send-chips", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let view = view_with(tokens, Vec::new(), None);
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::Gas);
+            let lit: Vec<bool> = pick.filters.iter().map(|chip| chip.selected).collect();
+            assert_eq!(lit, [false, false, true, false]);
+        });
+    }
+
     /// The sweep picker says which rows are ticked, which are on the wrong
     /// chain, and how many are going — all of it read from the core's view.
     ///
@@ -1379,7 +1453,7 @@ mod sweep_tests {
 
             // Not sweeping: the one-token list, and no selection at all.
             let plain = view_with(tokens.clone(), Vec::new(), None);
-            let pick = send_pick_with(&inputs(&plain, &fee, &s, &wallet), false);
+            let pick = send_pick_with(&inputs(&plain, &fee, &s, &wallet), false, SendClass::All);
             assert!(pick.selection.is_none());
             assert!(!pick.cta_accent);
             assert_eq!(pick.cta, s.multi_send_title);
@@ -1387,7 +1461,7 @@ mod sweep_tests {
             // Sweeping, nothing picked yet: ticks are showing, nothing is
             // dimmed (no chain is pinned), and the CTA is still the quiet one.
             let empty = view_with(tokens.clone(), Vec::new(), None);
-            let pick = send_pick_with(&inputs(&empty, &fee, &s, &wallet), true);
+            let pick = send_pick_with(&inputs(&empty, &fee, &s, &wallet), true, SendClass::All);
             let selection = pick
                 .selection
                 .as_ref()
@@ -1400,7 +1474,7 @@ mod sweep_tests {
             // Two picked on Gnosis: those two ticked, Ethereum's row dimmed
             // (still listed), the chain named, and the CTA counting.
             let picked = view_with(tokens, vec![ids[0].clone(), ids[1].clone()], Some(100));
-            let pick = send_pick_with(&inputs(&picked, &fee, &s, &wallet), true);
+            let pick = send_pick_with(&inputs(&picked, &fee, &s, &wallet), true, SendClass::All);
             let selection = pick
                 .selection
                 .as_ref()

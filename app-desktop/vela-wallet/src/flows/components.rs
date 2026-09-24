@@ -293,22 +293,26 @@ pub fn flow_search(theme: &Theme, icons: &mut IconCache, placeholder: SharedStri
 /// Distinct from a segmented toggle on purpose. That control divides ONE space
 /// into named halves and fills its width; this is a row of independent
 /// narrowings that hugs its labels.
-pub fn filter_chips(theme: &Theme, chips: &[FilterChip]) -> Div {
+///
+/// `clicks` pairs with `chips` by position; a chip without one is drawn and
+/// inert (the mock). They were inert everywhere until 2026-09-24: 全部 was
+/// lit for good and the other three did nothing when pressed.
+pub fn filter_chips(theme: &Theme, chips: &[FilterChip], clicks: Vec<super::panels::Click>) -> Div {
     // No wrap WITHIN the strip: a second line of chips pushes the list down
     // and changes the panel's shape depending on how long a locale's words
-    // are. The strip keeps its own width (`flex_initial`, not `flex_1`) so
-    // the row above can wrap the network pill below it instead of letting the
-    // pill overlap the last chip; `min_w`/`overflow_hidden` still clip as a
-    // last resort, for the locale whose three chips alone are wider than the
-    // column.
+    // are. `min_w`/`overflow_hidden` clip as a last resort, for the locale
+    // whose chips alone are wider than the column.
     let mut row = div()
         .flex()
         .gap(px(6.))
         .flex_initial()
         .min_w(px(0.))
         .overflow_hidden();
-    for chip in chips {
-        row = row.child(
+    let mut clicks = clicks.into_iter();
+    for (i, chip) in chips.iter().enumerate() {
+        row = row.child(super::panels::clickable(
+            gpui::ElementId::from(("flow-filter-chip", i)),
+            clicks.next(),
             div()
                 .px(px(12.))
                 .py(px(5.))
@@ -327,7 +331,7 @@ pub fn filter_chips(theme: &Theme, chips: &[FilterChip]) -> Div {
                     theme.fg_muted
                 })
                 .child(chip.label.clone()),
-        );
+        ));
     }
     row
 }

@@ -7,6 +7,7 @@ mod launch_animation;
 mod logo;
 mod name_field;
 mod rail;
+mod scrollbar;
 mod spinner;
 mod status_badge;
 
@@ -17,7 +18,8 @@ pub use button::{
 };
 pub use launch_animation::LaunchAnimation;
 pub use logo::{vela_mark, vela_wordmark};
-pub use name_field::{NameFieldStrings, name_field, text_field};
+pub use name_field::{EditChord, NameFieldStrings, edit_chord, name_field, text_field};
 pub use rail::{RailSlot, onboarding_rail};
+pub use scrollbar::vertical_scrollbar;
 pub use spinner::spinner;
 pub use status_badge::status_badge;

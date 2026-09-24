@@ -378,6 +378,8 @@ pub struct AddressBar {
     pub placeholder: SharedString,
     /// Somebody is typing: the text so far, drawn with a caret.
     pub draft: Option<SharedString>,
+    /// The whole draft is selected: drawn highlighted, with no caret.
+    pub selected: bool,
 }
 
 /// The address field's contents, for the page to wrap in whatever makes it
@@ -401,12 +403,26 @@ pub fn address_field(theme: &Theme, icons: &mut IconCache, bar: &AddressBar) -> 
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_base)
                 .whitespace_nowrap()
+                .when(bar.selected, |text| {
+                    text.bg(theme.accent.opacity(0.28)).rounded(px(2.))
+                })
                 .child(draft.clone())
         };
+        // The caret sits AGAINST the text, in a box of its own: as a third
+        // child of the row it took the row's 8px gap and floated a space
+        // after the last letter, where no text would ever go.
+        let mut typed = div()
+            .flex()
+            .items_center()
+            .min_w(px(0.))
+            .overflow_hidden()
+            .child(text);
+        if !(bar.selected && !draft.is_empty()) {
+            typed = typed.child(div().w(px(1.5)).h(px(14.)).flex_none().bg(theme.accent));
+        }
         return row
             .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
-            .child(text)
-            .child(div().w(px(1.5)).h(px(14.)).flex_none().bg(theme.accent));
+            .child(typed);
     }
     if bar.browsing {
         let (glyph, tint) = if bar.secure {

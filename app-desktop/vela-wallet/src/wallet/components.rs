@@ -4,7 +4,7 @@
 
 use gpui::{
     Div, ElementId, ImageSource, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled, canvas, div,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, StyledImage as _, canvas, div,
     fill as quad_fill, img, px,
 };
 
@@ -200,19 +200,40 @@ pub fn nav_row(
     }
 }
 
-/// One network-filter row: dot, name, count, accent check when selected.
+/// One network-filter row: the chain's logo, name, count, accent check when
+/// selected.
+///
+/// The logo is the one the token badges already draw (`marks::chain_logo_url`),
+/// as the web's filter shows it. The coloured dot stays as what a row shows
+/// while the logo loads, when it cannot, and on the all-networks row, which
+/// has no chain to draw.
 pub fn chain_row(
     id: impl Into<ElementId>,
     theme: &Theme,
     icons: &mut IconCache,
     row: &ChainRowModel,
 ) -> Stateful<Div> {
-    let dot = div()
-        .w(px(10.))
-        .h(px(10.))
-        .flex_none()
-        .rounded(px(5.))
-        .bg(row.dot.unwrap_or(theme.fg_subtle));
+    const MARK: f32 = 16.;
+    let colour = row.dot.unwrap_or(theme.fg_subtle);
+    let dot = move || {
+        div()
+            .size(px(MARK))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().size(px(10.)).rounded(px(5.)).bg(colour))
+            .into_any_element()
+    };
+    let dot = match row.chain_id.and_then(crate::marks::chain_logo_url) {
+        Some(url) => div().size(px(MARK)).flex_none().child(
+            img(url)
+                .size(px(MARK))
+                .rounded(px(MARK / 2.))
+                .with_loading(dot)
+                .with_fallback(dot),
+        ),
+        None => div().flex_none().child(dot()),
+    };
     let mut el = div()
         .id(id)
         .flex()

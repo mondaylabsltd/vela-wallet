@@ -555,7 +555,14 @@ pub struct WalletPage {
     /// page (or the placeholder). What was typed goes through the core's
     /// `browser_input`, so a word searches and a host gets a scheme.
     address_draft: Option<String>,
+    /// The whole draft is selected (a click into the bar, or ⌘A / Ctrl+A):
+    /// what is typed or pasted next replaces it.
+    address_selected: bool,
     address_focus: gpui::FocusHandle,
+    /// The Wallet column's scroll position, for the bar drawn beside it.
+    content_scroll: gpui::ScrollHandle,
+    /// The sidebar's network list — twenty-odd chains outgrow a short window.
+    networks_scroll: gpui::ScrollHandle,
     /// The network menu's rows — `(chain, name, current)` — named when it
     /// opened; `menu_origin` says which site it is about.
     site_networks: Vec<(u32, SharedString, bool)>,
@@ -579,6 +586,9 @@ pub struct WalletPage {
     /// `multi_select_mode` turns on when the selection is CONFIRMED, so before
     /// that nothing in the view says whether the ticks are showing.
     send_sweeping: bool,
+    /// The send picker's lit chip. The shell's, as on the web: narrowing a
+    /// list is not a fact about the send.
+    send_class: flows_live::SendClass,
     /// The native window, for the one platform whose passkey dialog is the
     /// OS's; captured once, because a ceremony runs off the main thread and
     /// cannot reach `Window` from there.
@@ -973,7 +983,10 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             dapp_requests_armed: false,
             address_draft: None,
+            address_selected: false,
             address_focus: cx.focus_handle(),
+            content_scroll: gpui::ScrollHandle::new(),
+            networks_scroll: gpui::ScrollHandle::new(),
             site_networks: Vec::new(),
             browser_url_pinned: false,
             send_amount_focus: cx.focus_handle(),
@@ -982,6 +995,7 @@ impl WalletPage {
             split_focuses: Vec::new(),
             send_fee_picker: false,
             send_sweeping: false,
+            send_class: flows_live::SendClass::All,
             scan_camera: None,
             scan_preview: ScanPreview::default(),
             window_handle: crate::onboarding::native_window_handle(window),
@@ -2691,7 +2705,14 @@ impl WalletPage {
             });
         }
 
-        let mut networks = div().flex().flex_col().gap(px(2.)).flex_1().min_h(px(0.));
+        let mut networks = div()
+            .id("sidebar-networks")
+            .track_scroll(&self.networks_scroll)
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .size_full()
+            .overflow_y_scroll();
         let chain_rows = self.chain_models(cx);
         let live = self.identity.is_some();
         for (i, row) in chain_rows.iter().enumerate() {
@@ -2745,7 +2766,14 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(self.strings.networks_title.clone()),
             )
-            .child(networks)
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .child(networks)
+                    .children(crate::ui::vertical_scrollbar(theme, &self.networks_scroll)),
+            )
     }
 
     // -- column 2: content ---------------------------------------------------
@@ -2883,13 +2911,16 @@ impl WalletPage {
             ));
         }
 
-        div()
-            .flex_1()
-            .min_w(px(0.))
-            .h_full()
-            .overflow_hidden()
+        // A column that scrolls, and a bar that says so. It was
+        // `overflow_hidden`: every holding was laid out and whatever fell
+        // below the window's edge was simply cut, with nothing to reach it by.
+        let column = div()
+            .id("wallet-content")
+            .track_scroll(&self.content_scroll)
+            .size_full()
+            .overflow_y_scroll()
             .px(px(WALLET_PAD_X))
-            .pt(px(WALLET_PAD_TOP))
+            .pb(px(WALLET_PAD_TOP))
             .flex()
             .flex_col()
             .child(balance_display(
@@ -2948,7 +2979,25 @@ impl WalletPage {
                             })),
                     )
             })
-            .child(assets_col)
+            .child(assets_col);
+        // The column scrolls BELOW the window's caption strip, not under it:
+        // that strip is the drag region and carries the window's own
+        // buttons, and a balance scrolled up beneath ✕ was drawn through it.
+        div()
+            .flex_1()
+            .min_w(px(0.))
+            .h_full()
+            .pt(px(WALLET_PAD_TOP.max(crate::window_frame::CAPTION_H)))
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .child(column)
+                    .children(crate::ui::vertical_scrollbar(theme, &self.content_scroll)),
+            )
     }
 
     // -- column 2 (contacts): header + group rail + sectioned list -----------
@@ -4334,6 +4383,9 @@ impl WalletPage {
         let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
         cx.observe(&host, |_, _, cx| cx.notify()).detach();
         self.send_host = Some(host);
+        // Every send starts on 全部: a chip left lit from the last one would
+        // hide tokens with nothing on screen saying why.
+        self.send_class = flows_live::SendClass::All;
     }
 
     /// The display currency, as the send machine's context: its code, the
@@ -4353,6 +4405,15 @@ impl WalletPage {
     }
 
     /// The live send machines' views, when the flow is live.
+    /// The picker's rows narrowed to the sidebar's network and the lit chip —
+    /// on the token picker only. BOTH the drawing and the bindings go through
+    /// this, so a row and the listener it gets are the same token.
+    fn narrow_for_picker(&self, panel: FlowPanel, view: &mut vela_core::app::send::SendView) {
+        if panel == FlowPanel::Dsd1 {
+            flows_live::narrow_send_tokens(view, self.chain_filter, self.send_class);
+        }
+    }
+
     fn send_views(
         &self,
         cx: &Context<Self>,
@@ -4427,7 +4488,8 @@ impl WalletPage {
         // What currency every `≈` figure below is drawn in.
         let currency = self.money(cx);
         let host = self.send_host.clone()?;
-        let (view, fee) = self.send_views(cx)?;
+        let (mut view, fee) = self.send_views(cx)?;
+        self.narrow_for_picker(panel, &mut view);
         let contact_addresses = if panel == FlowPanel::Dsd2e {
             flows_live::contact_addresses(&resident::resident::<Contacts>(cx).read(cx).view())
         } else {
@@ -4861,7 +4923,8 @@ impl WalletPage {
             | FlowPanel::Dsd2f
             | FlowPanel::Dsd3
             | FlowPanel::Dsd4 => match self.send_views(cx) {
-                Some((send, fee)) => {
+                Some((mut send, fee)) => {
+                    self.narrow_for_picker(panel, &mut send);
                     let identity = self.identity();
                     let speed = self.send_speed(cx);
                     let inputs = flows_live::SendInputs {
@@ -4876,9 +4939,13 @@ impl WalletPage {
                         speed: speed.as_ref(),
                     };
                     match panel {
-                        FlowPanel::Dsd1 => flow_fixtures::FlowBody::SendPick(
-                            flows_live::send_pick_with(&inputs, self.send_sweeping),
-                        ),
+                        FlowPanel::Dsd1 => {
+                            flow_fixtures::FlowBody::SendPick(flows_live::send_pick_with(
+                                &inputs,
+                                self.send_sweeping,
+                                self.send_class,
+                            ))
+                        }
                         FlowPanel::Dsd2 | FlowPanel::Dsd2b => {
                             flow_fixtures::FlowBody::SendForm(flows_live::send_form(&inputs))
                         }
@@ -5023,6 +5090,7 @@ impl WalletPage {
             address_field: None,
             add_to_wallet: None,
             open_send_rows: Vec::new(),
+            send_class_chips: Vec::new(),
             sweep_select_all: None,
             send_pick_cta: None,
             amount_field: None,
@@ -5212,6 +5280,15 @@ impl WalletPage {
             match panel {
                 FlowPanel::Dsd1 => {
                     actions.open_send_form = None;
+                    actions.send_class_chips = flows_live::SendClass::CHIPS
+                        .iter()
+                        .map(|&class| -> panels::Click {
+                            Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                                this.send_class = class;
+                                cx.notify();
+                            }))
+                        })
+                        .collect();
                     let sweeping = send.sweeping;
                     let chain_ids = send.token_chain_ids.clone();
                     let pinned = send.multi_chain_id;
@@ -10641,6 +10718,7 @@ impl WalletPage {
             secure,
             placeholder: self.explore.search_placeholder.clone(),
             draft: self.address_draft.clone().map(SharedString::from),
+            selected: self.address_selected,
         };
         let field = explore_components::address_field(theme, &mut self.icons, &bar);
         // Editable once somebody is signed in: a click takes the page's URL
@@ -10812,7 +10890,11 @@ impl WalletPage {
             };
             #[cfg(target_os = "linux")]
             let current: Option<String> = None;
-            self.address_draft = Some(current.unwrap_or_default());
+            let current = current.unwrap_or_default();
+            // As a browser does: the URL taken into the field is selected, so
+            // typing replaces it and a paste lands in its place.
+            self.address_selected = !current.is_empty();
+            self.address_draft = Some(current);
         }
         window.focus(&self.address_focus, cx);
         cx.notify();
@@ -10826,9 +10908,42 @@ impl WalletPage {
             return;
         };
         let ks = &event.keystroke;
+        let selected = self.address_selected && !draft.is_empty();
+        // The same four chords as every other well (`ui::edit_chord`): ⌘ on
+        // macOS, Ctrl on Windows and Linux.
+        if let Some(chord) = crate::ui::edit_chord(ks) {
+            match chord {
+                crate::ui::EditChord::SelectAll => self.address_selected = !draft.is_empty(),
+                crate::ui::EditChord::Copy => {
+                    if selected {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(draft.clone()));
+                    }
+                }
+                crate::ui::EditChord::Cut => {
+                    if selected {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(draft.clone()));
+                        draft.clear();
+                        self.address_selected = false;
+                    }
+                }
+                crate::ui::EditChord::Paste => {
+                    if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                        if selected {
+                            draft.clear();
+                        }
+                        // A pasted URL is one line; a newline in it is the end.
+                        draft.push_str(text.lines().next().unwrap_or_default().trim());
+                        self.address_selected = false;
+                    }
+                }
+            }
+            cx.notify();
+            return;
+        }
         match ks.key.as_str() {
             "enter" => {
                 cx.stop_propagation();
+                self.address_selected = false;
                 let typed = self.address_draft.take().unwrap_or_default();
                 if let Some(url) = vela_core::app::dapp_rpc::browser_input(&typed) {
                     self.open_typed_url(url, cx);
@@ -10837,20 +10952,27 @@ impl WalletPage {
             "escape" => {
                 // One layer only: the typing stops, the column stays.
                 cx.stop_propagation();
+                self.address_selected = false;
                 self.address_draft = None;
+            }
+            "backspace" | "delete" if selected => {
+                draft.clear();
+                self.address_selected = false;
             }
             "backspace" => {
                 draft.pop();
             }
-            "v" if ks.modifiers.platform || ks.modifiers.control => {
-                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                    // A pasted URL is one line; a newline in it is the end.
-                    draft.push_str(text.lines().next().unwrap_or_default().trim());
-                }
-            }
+            "left" | "right" | "home" | "end" => self.address_selected = false,
             _ if ks.modifiers.platform || ks.modifiers.control || ks.modifiers.alt => return,
             _ => match &ks.key_char {
-                Some(ch) if !ch.chars().any(char::is_control) => draft.push_str(ch),
+                // A selection is replaced by whatever is typed over it.
+                Some(ch) if !ch.chars().any(char::is_control) => {
+                    if selected {
+                        draft.clear();
+                    }
+                    draft.push_str(ch);
+                    self.address_selected = false;
+                }
                 _ => return,
             },
         }
@@ -13744,6 +13866,7 @@ impl Render for WalletPage {
         // Typing stops when the address bar loses the keyboard.
         if self.address_draft.is_some() && !self.address_focus.is_focused(window) {
             self.address_draft = None;
+            self.address_selected = false;
         }
 
         // The column was closed under a live send: its machines go with it.
