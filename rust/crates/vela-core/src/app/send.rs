@@ -2826,6 +2826,19 @@ fn tap_max(model: &mut Model) -> Cmd {
     if model.split_mode || model.multi_select_mode {
         return Command::done();
     }
+    // A Continue in flight owns the form (078 M-01), as it owns the pipeline
+    // slot `schedule_form_estimate` defers to. Max used to take that slot for
+    // its own estimate: during the pre-check the check's answer then found
+    // nobody waiting and `estimating_gas` stayed set — Continue read
+    // "Estimating…" for good — and during the credential load the Continue
+    // was silently dropped. The figure under check stays the figure, and Max
+    // works again once the check has answered.
+    if matches!(
+        model.pipeline,
+        Pipeline::ContinueCredential { .. } | Pipeline::PreCheck { .. }
+    ) {
+        return Command::done();
+    }
     let Some(token) = model.selected_token.clone() else {
         return Command::done();
     };

@@ -1639,6 +1639,83 @@ fn a_fee_in_another_asset_never_claims_this_balance() {
     assert_eq!(sut.view().amount_warning, None);
 }
 
+/// 078 M-01: Max while Continue's pre-check is out. It used to take the
+/// pipeline for its own estimate, which dropped the pre-check's answer and
+/// left `estimating_gas` set — Continue read "Estimating…" for good.
+#[test]
+fn max_during_the_continue_precheck_leaves_the_continue_to_finish() {
+    let mut sut = boot(vec![usdc("100")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "10".to_owned(),
+    });
+    let ops = sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee { .. },
+                Op::ProbeTreasury { .. },
+                Op::StartTimer { .. }
+            ]
+        ),
+        "pre-check trio expected, got {ops:?}"
+    );
+    assert!(sut.view().estimating_gas);
+
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(ops.is_empty(), "the Continue owns the form: {ops:?}");
+    assert_eq!(
+        sut.view().amount,
+        "10",
+        "the figure being checked stays the figure"
+    );
+
+    assert!(sut.resolve(fee_ok(usdc_fee(1, 1_000_000))).is_empty());
+    sut.resolve(covered());
+    let view = sut.view();
+    assert!(!view.estimating_gas, "the check settles");
+    assert_eq!(view.stage, SendStage::Confirm);
+}
+
+/// 078 M-01: Max while Continue is still loading the credential. It used to
+/// replace the Continue, so the credential's answer found nobody waiting.
+#[test]
+fn max_during_the_continue_credential_load_does_not_cancel_the_continue() {
+    let mut sut = boot(vec![eth("2")]);
+    let ops = sut.dispatch(Event::SelectToken {
+        token_id: eth("2").id(),
+    });
+    assert_eq!(ops.len(), 1);
+    sut.drop_oldest(); // prefetch lost
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    let ops = sut.dispatch(Event::Continue);
+    assert!(matches!(ops.as_slice(), [Op::LoadAccountCredential { .. }]));
+    drain_form_quote(&mut sut);
+
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(ops.is_empty(), "the Continue owns the form: {ops:?}");
+
+    let ops = sut.resolve(credential(Some(PK)));
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee { .. },
+                Op::ProbeTreasury { .. },
+                Op::StartTimer { .. }
+            ]
+        ),
+        "the Continue carries on to its pre-check: {ops:?}"
+    );
+    assert!(sut.view().estimating_gas);
+}
+
 #[test]
 fn max_without_a_quote_estimates_on_demand_and_falls_back_to_full_balance() {
     let mut sut = boot(vec![eth("2")]);

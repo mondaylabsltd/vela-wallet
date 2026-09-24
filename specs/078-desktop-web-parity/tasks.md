@@ -41,7 +41,7 @@ screenshot checked against the web.
 - [x] T022 C-01 delete contact / group asks first (danger button).
 - [x] T023 E-02 custom-group rows open their own site; unique ids.
 - [x] T024 H-07 hero decimals split on the person's decimal mark.
-- [ ] T025 M-01 core: Max during the fee check or the credential load does not
+- [x] T025 M-01 core: Max during the fee check or the credential load does not
       strand Continue; test in `tests/app_send.rs`.
 
 ## Phase 3 — P1 features
