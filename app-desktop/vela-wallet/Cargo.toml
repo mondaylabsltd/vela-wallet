@@ -336,7 +336,21 @@ raw-window-handle = "0.6"
 # scripts), so the call was verified in an isolated crate against
 # x86_64-pc-windows-gnu instead. Note 0.59 exports only TIME_ZONE_ID_INVALID
 # of the four ids; the other three are matched by value.
-windows-sys = { version = "0.59", features = ["Win32_System_Time"] }
+#
+# The rest is `scheme_relay.rs` (spec 076): the named pipe a second process
+# hands a `velawallet://sign-result` to the running wallet over, and the one
+# call that brings that wallet's window back in front of the browser.
+windows-sys = { version = "0.59", features = [
+    "Win32_System_Time",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is
 # where gpui's LoadImageW looks for it. Declared unconditionally rather than

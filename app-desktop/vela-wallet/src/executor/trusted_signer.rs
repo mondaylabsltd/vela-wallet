@@ -44,8 +44,9 @@
 //!
 //! macOS delivers the callback as an Apple Event to the running app
 //! (`on_open_urls`); Windows and Linux start the app with the URL as an
-//! argument, which `main` reads. The warm-start gap there is written down in
-//! `main.rs` rather than left to be discovered.
+//! argument, which `main` reads. On Windows a second process started that way
+//! hands it to the running wallet over a pipe (`scheme_relay`); Linux's
+//! warm-start gap is still open, and written down there.
 //!
 //! ## What the screen sees
 //!
@@ -643,6 +644,9 @@ impl Line for SchemeLine {
             }
             if let Some(query) = take_delivered_answer(&self.token) {
                 channel.rest();
+                // The answer settled this request, and the person is looking
+                // at the browser that sent it.
+                crate::scheme_relay::bring_to_front();
                 break trusted_signer::parse_callback(&query, &self.token).map_err(|error| {
                     if !matches!(error, TrustedSignerError::Declined) {
                         eprintln!("[vela-wallet] trusted signer: answer not accepted: {error}");
