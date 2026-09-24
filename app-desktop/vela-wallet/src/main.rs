@@ -277,6 +277,19 @@ fn main() {
     // Spec 038: a panic on a worker thread becomes a sheet, not a vanished
     // window. Installed before anything can spawn.
     panic_report::install();
+    // Windows: the in-app browser is a WebView2 CHILD window, and gpui's
+    // default renderer composes the whole window through DirectComposition
+    // with `CreateTargetForHwnd(hwnd, topmost = true)` — its visual sits ABOVE
+    // every child window, so pages loaded and were never seen (Explore "does
+    // not open pages" on Windows, while macOS's WKWebView, a subview over the
+    // layer, did). gpui's own fallback, a flip-model swap chain on the HWND,
+    // composes child windows over the content as Win32 always has. Set before
+    // the first window exists, and only if the person did not choose.
+    #[cfg(windows)]
+    if std::env::var_os("GPUI_DISABLE_DIRECT_COMPOSITION").is_none() {
+        // SAFETY: first thing in `main`, before any thread is spawned.
+        unsafe { std::env::set_var("GPUI_DISABLE_DIRECT_COMPOSITION", "1") };
+    }
     // Spec 076: the Trusted Signer's answer comes back as a navigation to
     // `velawallet://sign-result`, because the published page carries
     // `default-src 'none'` in its hashed bytes and cannot open a socket at all.

@@ -10906,12 +10906,12 @@ impl WalletPage {
                 self.arm_dapp_requests(cx);
                 gpui::canvas(
                     |_, _, _| (),
-                    move |bounds, (), window, _| {
+                    move |bounds, (), window, cx| {
                         // Placed from the PAINT pass of the element that owns
                         // this rectangle, so the webview follows the column
                         // through a resize and through the signing panel
                         // opening beside it.
-                        crate::webview::place(bounds, window, &home);
+                        crate::webview::place(bounds, window, &home, cx);
                     },
                 )
                 .size_full()

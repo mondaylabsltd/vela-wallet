@@ -59,6 +59,15 @@ fn main() {
         return;
     }
 
+    // An 8 MB main-thread stack, as Zed's own build sets for gpui on Windows
+    // (`crates/zed/build.rs`: "to avoid stack overflow"). The default 1 MB
+    // overflowed on gpui's HWND swap-chain path, which `main` selects so the
+    // in-app browser's WebView2 child window is composed above the content.
+    // MSVC's spelling; the GNU target is only type-checked (check-windows.sh).
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        println!("cargo:rustc-link-arg-bins=/STACK:{}", 8 * 1024 * 1024);
+    }
+
     let icon = "packaging/icons/app.getvela.VelaWallet.ico";
     println!("cargo:rerun-if-changed={icon}");
     println!("cargo:rerun-if-changed=build.rs");
