@@ -295,6 +295,10 @@ pub const SIDEBAR_PAD: f32 = 16.;
 pub const SIDEBAR_TOP: f32 = 36.;
 /// Content column padding.
 pub const WALLET_PAD_X: f32 = 24.;
+/// The Wallet column's widest, and its rows' — the web's
+/// `--layout-maxContentWidth` and `--layout-rowMeasure`.
+pub const WALLET_CONTENT_MAX_W: f32 = 800.;
+pub const WALLET_ROW_MEASURE: f32 = 560.;
 pub const WALLET_PAD_TOP: f32 = 28.;
 /// Row heights / avatar sizes.
 pub const WALLET_AVATAR: f32 = 40.;

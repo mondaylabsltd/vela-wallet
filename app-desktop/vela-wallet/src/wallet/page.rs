@@ -76,7 +76,7 @@ use crate::theme::{
     self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_HEADER_H, CONTACTS_HERO_AVATAR,
     CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W, GALLERY_BAR_H, SETTINGS_DIALOG_W,
     SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W, THIRD_PANEL_W,
-    Theme, ThemeMode, WALLET_PAD_TOP, WALLET_PAD_X,
+    Theme, ThemeMode, WALLET_CONTENT_MAX_W, WALLET_PAD_TOP, WALLET_PAD_X, WALLET_ROW_MEASURE,
 };
 use crate::wallet::browser_host::{BROWSER_TAB, BrowserHost};
 use crate::wallet::live as wallet_live;
@@ -2923,72 +2923,97 @@ impl WalletPage {
         // A column that scrolls, and a bar that says so. It was
         // `overflow_hidden`: every holding was laid out and whatever fell
         // below the window's edge was simply cut, with nothing to reach it by.
+        // The web's column (`WalletDesktop.svelte`): the content is at most
+        // `--layout-maxContentWidth` (800) and sits left, and everything
+        // two-ended — the actions, both section headers, both lists — lives
+        // in one `--layout-rowMeasure` (560), so no row is wider than the eye
+        // can cross. The balance stays outside it: one-ended, and a large one
+        // needs the room. Full-screen, the rows used to run the width of the
+        // monitor with a token's name at one end and its amount at the other.
         let column = div()
             .id("wallet-content")
             .track_scroll(&self.content_scroll)
             .size_full()
             .overflow_y_scroll()
-            .px(px(WALLET_PAD_X))
-            .pb(px(WALLET_PAD_TOP))
-            .flex()
-            .flex_col()
-            .child(balance_display(
-                theme,
-                &mut self.icons,
-                &balance,
-                // Tap-to-hide, spec 025's gesture — the figure IS the control,
-                // as it is on the phone and on the web. A session is what makes
-                // it real: the fixture hero has no privacy to keep.
-                self.identity.is_some().then(|| {
-                    Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                        crate::executor::balance_dashboard::dispatch(
-                            vela_core::app::balance_dashboard::Event::PrivacyToggled,
-                            cx,
-                        );
-                    }) as crate::wallet::components::BalanceToggle
-                }),
-            ))
-            .child(pills)
             .child(
                 div()
-                    .id("section-activity")
-                    .cursor_pointer()
-                    .child(section_header(theme, &mut self.icons, s_activity, s_all))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.enter_flow(FlowEntry::Activity, cx);
-                        cx.notify();
-                    })),
-            )
-            .child(activity_col)
-            .child({
-                // The two halves lead to two different panels: the title names
-                // the assets list, and the action reads 添加, so it opens the
-                // add-token panel stacked on it — which is what makes DT3L's
-                // back chevron lead somewhere.
-                let (title, action) = section_header_parts(theme, &mut self.icons, s_assets, s_add);
-                section_header_row()
+                    .max_w(px(WALLET_CONTENT_MAX_W))
+                    .pl(px(WALLET_PAD_X))
+                    .pr(px(32.))
+                    .pb(px(32.))
+                    .flex()
+                    .flex_col()
+                    .child(balance_display(
+                        theme,
+                        &mut self.icons,
+                        &balance,
+                        // Tap-to-hide, spec 025's gesture — the figure IS the control,
+                        // as it is on the phone and on the web. A session is what makes
+                        // it real: the fixture hero has no privacy to keep.
+                        self.identity.is_some().then(|| {
+                            Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                crate::executor::balance_dashboard::dispatch(
+                                    vela_core::app::balance_dashboard::Event::PrivacyToggled,
+                                    cx,
+                                );
+                            })
+                                as crate::wallet::components::BalanceToggle
+                        }),
+                    ))
                     .child(
                         div()
-                            .id("section-assets")
-                            .cursor_pointer()
-                            .child(title)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.enter_flow(FlowEntry::Assets, cx);
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        div()
-                            .id("section-assets-add")
-                            .cursor_pointer()
-                            .child(action)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.enter_flow(FlowEntry::AddToken, cx);
-                                cx.notify();
-                            })),
-                    )
-            })
-            .child(assets_col);
+                            .max_w(px(WALLET_ROW_MEASURE))
+                            .flex()
+                            .flex_col()
+                            .child(pills)
+                            .child(
+                                div()
+                                    .id("section-activity")
+                                    .cursor_pointer()
+                                    .child(section_header(
+                                        theme,
+                                        &mut self.icons,
+                                        s_activity,
+                                        s_all,
+                                    ))
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.enter_flow(FlowEntry::Activity, cx);
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(activity_col)
+                            .child({
+                                // The two halves lead to two different panels: the title names
+                                // the assets list, and the action reads 添加, so it opens the
+                                // add-token panel stacked on it — which is what makes DT3L's
+                                // back chevron lead somewhere.
+                                let (title, action) =
+                                    section_header_parts(theme, &mut self.icons, s_assets, s_add);
+                                section_header_row()
+                                    .child(
+                                        div()
+                                            .id("section-assets")
+                                            .cursor_pointer()
+                                            .child(title)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.enter_flow(FlowEntry::Assets, cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("section-assets-add")
+                                            .cursor_pointer()
+                                            .child(action)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.enter_flow(FlowEntry::AddToken, cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                            })
+                            .child(assets_col),
+                    ),
+            );
         // The column scrolls BELOW the window's caption strip, not under it:
         // that strip is the drag region and carries the window's own
         // buttons, and a balance scrolled up beneath ✕ was drawn through it.
