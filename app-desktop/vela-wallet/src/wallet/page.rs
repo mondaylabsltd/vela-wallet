@@ -112,7 +112,6 @@ use super::components::{
     section_header_row, skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
-use crate::flows::components::mono_field;
 use crate::flows::{
     FlowEntry, FlowPanel, FlowStep, FlowStrings, fixtures as flow_fixtures, live as flows_live,
     panels,
@@ -1716,33 +1715,36 @@ impl WalletPage {
         self.contact_qr = None;
     }
 
-    /// The add/edit contact sheet.
-    ///
-    /// 030 recorded "there is no add/edit form sheet on desktop" as a design
-    /// gap. By 031 the app had a dialog idiom (four of them), an editable text
-    /// field and every word this form needs already in the corpus — so what was
-    /// left was composition, not design.
+    /// The add/edit contact form — the third column, as the web draws it
+    /// (078 C-05): "a sheet sliding up the bottom of a desktop window is a
+    /// phone control at the wrong size", and a dialog over the list hid the
+    /// list the person was adding to.
     ///
     /// The ADDRESS is the identity the core keys on, so an edit keeps it fixed:
     /// changing it would be a delete and an add wearing one button, and the old
     /// contact would quietly survive.
-    fn contact_form_dialog(
+    fn contact_form_body(
         &mut self,
         theme: &Theme,
         window: &Window,
         cx: &mut Context<Self>,
-    ) -> Option<gpui::AnyElement> {
+    ) -> Option<(SharedString, bool, Div)> {
         let form = self.contact_form.clone()?;
         let s = &self.contacts;
         let title = if form.editing {
-            s.edit_title.clone()
+            if form.unsaved {
+                s.save_to_contacts.clone()
+            } else {
+                s.edit_title.clone()
+            }
         } else {
             s.add_title.clone()
         };
-        // The core refuses a malformed address anyway; this is the same rule
-        // said before the press rather than after it, so the button does not
-        // look available for something it will not do.
-        let can_save = is_evm_address(&form.address);
+        // The web's gate, both halves: an address the core's `is_address`
+        // accepts, AND a name — a contact nobody named is the history row it
+        // already was.
+        let valid_address = is_evm_address(&form.address);
+        let can_save = valid_address && !form.name.trim().is_empty();
         let name_focus = self.contact_form_name_focus.clone();
         let address_focus = self.contact_form_address_focus.clone();
 
@@ -1756,7 +1758,7 @@ impl WalletPage {
             label: s.address_label.clone(),
             placeholder: s.address_placeholder.clone(),
             helper: SharedString::from(""),
-            too_long_hint: SharedString::from(""),
+            too_long_hint: s.invalid_address.clone(),
         };
 
         let mut card = div()
@@ -1827,22 +1829,37 @@ impl WalletPage {
             ));
 
         if form.editing {
-            // Fixed, and shown as such: this is what the panel is about.
-            card = card.child(mono_field(
-                theme,
-                Some(s.address_label.clone()),
-                SharedString::from(form.address.clone()),
-            ));
+            // Fixed, and shown as such — the web's `.fixed-address`: a small
+            // muted label over the address in the mono face, whole.
+            card = card.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_muted)
+                            .child(s.address_label.clone()),
+                    )
+                    .child(
+                        div()
+                            .font_family(theme::font_mono())
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_base)
+                            .child(SharedString::from(form.address.clone())),
+                    ),
+            );
         } else {
             card = card.child(crate::ui::text_field(
                 "contact-form-address",
                 theme,
                 &address_strings,
                 &form.address,
-                // Red once there is something typed that is not an address —
-                // not while the field is still empty, which is a person who has
-                // not started rather than one who is wrong.
-                !form.address.is_empty() && !can_save,
+                // Red, and saying why, once there is something typed that is
+                // not an address — not while the field is still empty, which
+                // is a person who has not started rather than one who is wrong.
+                !form.address.is_empty() && !valid_address,
                 false,
                 &address_focus,
                 window,
@@ -1870,6 +1887,7 @@ impl WalletPage {
                     return;
                 };
                 let now_ms = crate::executor::now_ms();
+                let address = form.address.clone();
                 resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
                     resident.dispatch(
                         ContactEvent::Save {
@@ -1890,24 +1908,37 @@ impl WalletPage {
                         cx,
                     );
                 });
+                // The column that held the form shows what it made, as the
+                // web's does on the desktop.
+                this.open_contact_by_address(&address, cx);
                 cx.notify();
             }),
         );
 
-        Some(
-            crate::ui::dialog::dialog(
-                "contact-form",
-                theme,
-                window,
-                title,
-                None,
-                self.dialog_close_icon(theme),
-                card.child(save),
-                &self.dialog_scroll("contact-form"),
-                Self::closer(cx, |this, _| this.contact_form = None),
-            )
-            .into_any_element(),
-        )
+        Some((title, form.editing, card.child(save)))
+    }
+
+    /// 编辑 on a contact: the form over the core's RECORD, not the row's
+    /// display name — the display of a nameless contact is its short address,
+    /// and saving that back would name them "0x4444…4444".
+    fn open_edit_contact(&mut self, address: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let Some(contact) = view
+            .contacts
+            .iter()
+            .find(|contact| contact.address.eq_ignore_ascii_case(address))
+        else {
+            return;
+        };
+        self.contact_form = Some(ContactForm {
+            editing: true,
+            address: contact.address.clone(),
+            name: contact.name.clone().unwrap_or_default(),
+            unsaved: contact.source == vela_core::app::contacts::ContactSource::Auto,
+        });
+        self.menu = None;
+        window.focus(&self.contact_form_name_focus, cx);
+        cx.notify();
     }
 
     /// What the last address-book import did.
@@ -4431,11 +4462,7 @@ impl WalletPage {
                 // key the core stores under, so changing it would be a delete
                 // and an add wearing one button, and the old contact would
                 // quietly survive.
-                let editing = live_address.clone().map(|address| ContactForm {
-                    editing: true,
-                    address: address.to_string(),
-                    name: model.name.to_string(),
-                });
+                let editing = live_address.clone();
                 text_action(
                     "contact-edit",
                     theme,
@@ -4444,12 +4471,10 @@ impl WalletPage {
                     edit,
                 )
                 .on_click(cx.listener(move |this, _, window, cx| {
-                    let Some(form) = editing.clone() else {
+                    let Some(address) = editing.clone() else {
                         return;
                     };
-                    this.contact_form = Some(form);
-                    window.focus(&this.contact_form_name_focus, cx);
-                    cx.notify();
+                    this.open_edit_contact(&address, window, cx);
                 }))
             })
             .child(
@@ -4575,6 +4600,13 @@ impl WalletPage {
                             &mut self.icons,
                         ))
                         .on_click(cx.listener(|this, _, _, cx| {
+                            // The contact form's column closes the FORM: the
+                            // detail it was opened over is still there.
+                            if this.section == Section::Contacts && this.contact_form.is_some() {
+                                this.contact_form = None;
+                                cx.notify();
+                                return;
+                            }
                             // Closing the SIGNING column is an answer, and the
                             // core decides which one: a request not yet
                             // submitted is rejected (4001), one already
@@ -13314,6 +13346,42 @@ impl WalletPage {
                 .child(self.settings_nav(theme, cx))
                 .child(self.settings_panel(theme, window, cx)),
         };
+        // The contact form takes the third column over whatever it was about
+        // (078 C-05); closing it gives the column back.
+        let form = if self.section == Section::Contacts {
+            self.contact_form_body(theme, window, cx)
+        } else {
+            None
+        };
+        if let Some((title, editing, body)) = form {
+            // An edit came from a detail it can step back to; an add has
+            // nothing behind it but the close.
+            let back = editing.then(|| {
+                div()
+                    .id("contact-form-back")
+                    .w(px(28.))
+                    .h(px(28.))
+                    .rounded(px(14.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(|el| el.bg(theme.bg_sunken))
+                    .child(crate::wallet::components::icon_img(
+                        &mut self.icons,
+                        Icon::ChevronLeft,
+                        false,
+                        theme.fg_muted,
+                        16.,
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.contact_form = None;
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            });
+            return columns.child(self.panel_scaffold_with(theme, title, back, false, body, cx));
+        }
         columns = match self.panel {
             PanelId::None => columns,
             PanelId::Receive => {
@@ -14710,14 +14778,7 @@ impl WalletPage {
                     // button.
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, window, cx| {
-                            this.menu = None;
-                            this.contact_form = Some(ContactForm {
-                                address: edit_address.clone(),
-                                name: name.clone(),
-                                editing: true,
-                            });
-                            window.focus(&this.contact_form_name_focus, cx);
-                            cx.notify();
+                            this.open_edit_contact(&edit_address, window, cx);
                         })) as contacts_components::MenuAction,
                     ),
                     // 移入分组 — the picker this shell has been pointing at
@@ -15223,7 +15284,6 @@ impl Render for WalletPage {
         let confirm = self.confirm_dialog(&theme, window, cx);
         let settings_dialog = self.settings_dialog_overlay(&theme, window, cx);
         let import_result = self.import_result_dialog(&theme, window, cx);
-        let contact_form = self.contact_form_dialog(&theme, window, cx);
         let group_form = self.group_form_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
         let contact_qr = self.contact_qr_dialog(&theme, window, cx);
@@ -15268,9 +15328,6 @@ impl Render for WalletPage {
         // The import's answer, over the menu it was started from.
         if let Some(import_result) = import_result {
             root = root.child(import_result);
-        }
-        if let Some(contact_form) = contact_form {
-            root = root.child(contact_form);
         }
         if let Some(contact_qr) = contact_qr {
             root = root.child(contact_qr);
@@ -15848,4 +15905,7 @@ struct ContactForm {
     editing: bool,
     address: String,
     name: String,
+    /// The row is the core's history suggestion (`ContactSource::Auto`):
+    /// saving is what makes it a contact, and the title says so.
+    unsaved: bool,
 }

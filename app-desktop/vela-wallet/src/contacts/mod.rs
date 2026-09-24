@@ -45,6 +45,11 @@ pub struct ContactsStrings {
     /// idiom and a text field to put them in.
     pub add_title: SharedString,
     pub edit_title: SharedString,
+    /// The form's title over a history-suggested row nobody has saved yet
+    /// (the web's `saveToContacts`, issue 191).
+    pub save_to_contacts: SharedString,
+    /// Under an address field that holds something that is not one.
+    pub invalid_address: SharedString,
     pub name_label: SharedString,
     pub name_placeholder: SharedString,
     pub address_placeholder: SharedString,
@@ -109,6 +114,8 @@ impl ContactsStrings {
             import_fail_body: s("contacts.importFailBody"),
             add_title: s("contacts.addTitle"),
             edit_title: s("contacts.editTitle"),
+            save_to_contacts: s("contacts.saveToContacts"),
+            invalid_address: s("contacts.invalidAddress"),
             name_label: s("contacts.nameLabel"),
             name_placeholder: s("contacts.namePlaceholder"),
             address_placeholder: s("contacts.addressPlaceholder"),
