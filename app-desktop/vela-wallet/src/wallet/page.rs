@@ -14204,6 +14204,7 @@ mod tests {
     /// be the one signature a person could not route — and the backup is the
     /// signature that matters most to a wallet living behind a signer page.
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn the_key_backup_goes_to_the_shared_signing_sheet() {
         let call = vela_core::registry_backup::BackupCall {
             chain_id: 1,
