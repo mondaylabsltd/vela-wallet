@@ -17,7 +17,7 @@ use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{
     self, CONTACTS_BUTTON_H, CONTACTS_MENU_ROW_H, CONTACTS_MENU_W, CONTACTS_RAIL_LABEL_H,
-    CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme, WALLET_CONTROL_H,
+    CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme,
 };
 use crate::wallet::components::{empty_state, icon_img, identicon_avatar};
 
@@ -525,31 +525,60 @@ pub fn text_action(
 
 // -- SearchField --------------------------------------------------------------
 
-/// Page-local search (DC1 header) with the ⌘F badge. Visual only in this
-/// feature — the fixtures ship any filtered list.
-pub fn search_field(theme: &Theme, icons: &mut IconCache, placeholder: SharedString) -> Div {
-    div()
+/// The live half of the header search: the input the page owns, whether it
+/// has focus, and the ✕ that clears it (present once something is typed).
+pub struct SearchInput {
+    pub input: gpui::AnyElement,
+    pub focused: bool,
+    pub clear: Option<gpui::AnyElement>,
+}
+
+/// Page-local search (DC1 header) — the web's `SearchHeader` in its desktop
+/// layout: 36 high, padding 12, gap 8, radius 12 on `bg-sunken` with a
+/// hairline, a 14 glyph, 13 text; while focused the hairline is `fg-muted`.
+///
+/// `live: None` is the board's picture, which keeps the mock's ⌘F badge. A
+/// live field has none (founder, 2026-09-05: nothing listens for the chord,
+/// and a key cap that promises one is a control that lies) and shows the ✕
+/// in its place once there is something to clear.
+pub fn search_field(
+    theme: &Theme,
+    icons: &mut IconCache,
+    placeholder: SharedString,
+    live: Option<SearchInput>,
+) -> Div {
+    let focused = live.as_ref().is_some_and(|live| live.focused);
+    let well = div()
         .w(px(CONTACTS_SEARCH_W))
         .flex_none()
         .flex()
         .items_center()
         .gap(px(8.))
-        .h(px(WALLET_CONTROL_H))
+        // `--size-control-sm`.
+        .h(px(36.))
         .px(px(12.))
-        .rounded(px(10.))
-        .bg(theme.bg_raised)
+        .rounded(px(12.))
+        .bg(theme.bg_sunken)
         .border_1()
-        .border_color(theme.divider)
+        .border_color(if focused {
+            theme.fg_muted
+        } else {
+            theme.border_card
+        })
         .text_size(theme::text_row_sub())
         .text_color(theme.fg_subtle)
-        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
-        .child(div().flex_1().min_w(px(0.)).truncate().child(placeholder))
-        .child(
-            div()
-                .font_family(theme::font_mono())
-                .text_size(theme::text_label())
-                .child("⌘F"),
-        )
+        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.));
+    match live {
+        Some(live) => well.child(live.input).children(live.clear),
+        None => well
+            .child(div().flex_1().min_w(px(0.)).truncate().child(placeholder))
+            .child(
+                div()
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_label())
+                    .child("⌘F"),
+            ),
+    }
 }
 
 // -- EmptyStateCTA ------------------------------------------------------------

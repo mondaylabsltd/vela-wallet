@@ -288,6 +288,8 @@ pub struct FlowStrings {
     pub send_action: SharedString,
     pub select_token_title: SharedString,
     pub send_search: SharedString,
+    /// What a token search that hides every row says (078 X-05).
+    pub no_matching_tokens: SharedString,
     pub filter_all: SharedString,
     pub filter_stable: SharedString,
     pub filter_gas: SharedString,
@@ -581,6 +583,7 @@ impl FlowStrings {
             send_action: s("componentsUi.dock.send"),
             select_token_title: s("send.selectTokenTitle"),
             send_search: s("send.searchPlaceholder"),
+            no_matching_tokens: s("send.noMatchingTokens"),
             filter_all: s("history.filterAll"),
             filter_stable: s("send.filterStable"),
             filter_gas: s("send.filterGas"),
@@ -753,6 +756,7 @@ mod tests {
             (s.native_alias_title.as_ref(), "addToken.nativeAliasTitle"),
             (s.bad_amount.as_ref(), "send.badAmount"),
             (s.batch_dup.as_ref(), "send.batchDup"),
+            (s.no_matching_tokens.as_ref(), "send.noMatchingTokens"),
             (
                 s.scan_from_gallery.as_ref(),
                 "componentsUi.scanner.fromGallery",

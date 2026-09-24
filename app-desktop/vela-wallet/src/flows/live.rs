@@ -194,6 +194,7 @@ pub fn assets(
             s.assets_add.clone(),
         )),
         search_placeholder: s.assets_search.clone(),
+        no_match: s.no_matching_tokens.clone(),
         rows: rows.clone(),
         add_by_address: s.add_by_address.clone(),
         empty: (rows.is_empty() && (settled || filtered_empty)).then(|| AssetsEmpty {
@@ -617,6 +618,7 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
             &rows.len().to_string(),
         )),
         search_placeholder: s.receive_search.clone(),
+        empty_text: s.search_empty.clone(),
         rows,
     }
 }
@@ -1275,6 +1277,7 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> S
         selection: None,
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
+        no_match: s.no_matching_tokens.clone(),
         filters: SendClass::CHIPS
             .iter()
             .map(|chip| FilterChip {

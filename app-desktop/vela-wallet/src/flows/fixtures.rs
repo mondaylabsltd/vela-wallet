@@ -191,6 +191,8 @@ pub struct AddressCard {
 pub struct ReceiveList {
     pub subtitle: SharedString,
     pub search_placeholder: SharedString,
+    /// Template carrying `{{query}}`: a search that hides every network.
+    pub empty_text: String,
     pub rows: Vec<NetworkRow>,
 }
 
@@ -318,6 +320,8 @@ pub struct AssetsPanel {
     pub filter: Option<(Vec<Hsla>, SharedString, SharedString)>,
     pub search_placeholder: SharedString,
     pub rows: Vec<AssetRowModel>,
+    /// A search that hides every row.
+    pub no_match: SharedString,
     pub add_by_address: SharedString,
     /// DT4L: the guided-empty body replaces the rows entirely.
     pub empty: Option<AssetsEmpty>,
@@ -367,6 +371,8 @@ pub struct SendPick {
     /// sidebar's network filter is the one, and it narrows these rows too.
     pub filters: Vec<FilterChip>,
     pub rows: Vec<AssetRowModel>,
+    /// A search that hides every row.
+    pub no_match: SharedString,
     pub cta: SharedString,
     /// Spec 033 — the sweep picker (SD1b). `None` is the ordinary
     /// one-token list, which is what the mock draws.
@@ -754,6 +760,7 @@ fn receive_list(s: &FlowStrings) -> ReceiveList {
         )
         .into(),
         search_placeholder: s.receive_search.clone(),
+        empty_text: s.search_empty.clone(),
         rows: NETWORKS
             .iter()
             .map(|n| NetworkRow {
@@ -993,6 +1000,7 @@ fn assets_panel(s: &FlowStrings, empty: bool) -> AssetsPanel {
             s.assets_add.clone(),
         )),
         search_placeholder: s.assets_search.clone(),
+        no_match: s.no_matching_tokens.clone(),
         rows: if empty { Vec::new() } else { assets_rows() },
         add_by_address: s.add_by_address.clone(),
         empty: empty.then(|| AssetsEmpty {
@@ -1062,6 +1070,7 @@ fn send_pick(s: &FlowStrings) -> SendPick {
         selection: None,
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
+        no_match: s.no_matching_tokens.clone(),
         filters: vec![
             FilterChip {
                 label: s.filter_all.clone(),

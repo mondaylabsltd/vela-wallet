@@ -26,8 +26,11 @@ screenshot checked against the web.
       every confirm, sign-out, remove network, the contact / group / explore
       name forms, the contact QR, the import result. Account removal is
       inline (H-01).
-- [ ] T014 X-05 search field as a real input that filters: token pick,
+- [x] T014 X-05 search field as a real input that filters: token pick,
       contact pick, receive list, contacts (with ✕), empty-result line.
+      (Assets too. Contacts filter in the shell, as the web's
+      `letterSections` does — W-06's "never dispatches `query`" is the
+      web's own design, not a gap; per-group import/export still open.)
 - [ ] T015 X-06 copy button with tick feedback; wire fact rows, receive
       network rows, key rows (reset after 1.2 s), contacts.
 

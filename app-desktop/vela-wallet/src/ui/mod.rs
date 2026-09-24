@@ -21,6 +21,7 @@ pub use launch_animation::LaunchAnimation;
 pub use logo::{vela_mark, vela_wordmark};
 pub use name_field::{
     EditChord, NameFieldStrings, bare_text_field, edit_chord, hero_amount_field, name_field,
+    search_input,
     text_field,
 };
 pub use rail::{RailSlot, onboarding_rail};

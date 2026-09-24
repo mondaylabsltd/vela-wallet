@@ -493,6 +493,69 @@ pub fn bare_text_field(
         .on_key_down(edit_keys(value.to_owned(), focus.clone(), false, on_change))
 }
 
+/// The typing half of a search field (078 X-05) — the web's `<input
+/// type="search">`: one line in the UI face, at 13, the placeholder in
+/// `fg-subtle` until something is typed. The well around it (height, fill,
+/// glyph, focus edge) is the caller's, because the flows and the contacts
+/// header draw different wells around the same input.
+///
+/// Same keys as every other well (`edit_keys`), so Ctrl+V and Ctrl+A mean
+/// here what they mean in the send form.
+pub fn search_input(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    value: &str,
+    placeholder: SharedString,
+    focus: &FocusHandle,
+    window: &Window,
+    on_change: impl Fn(String, &mut Window, &mut App) + 'static,
+) -> gpui::Stateful<Div> {
+    let focused = focus.is_focused(window);
+    let selected = focused && !value.is_empty() && is_selected(focus);
+    let text = if value.is_empty() {
+        div()
+            .text_color(theme.fg_subtle)
+            .truncate()
+            .child(placeholder)
+    } else {
+        div()
+            .min_w(px(0.))
+            .text_color(theme.fg_base)
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .when(selected, |el| {
+                el.bg(theme.accent.opacity(0.28)).rounded(px(2.))
+            })
+            .child(SharedString::from(value.to_owned()))
+    };
+    let mut line = div().flex().items_center().min_w(px(0.));
+    // The caret after the text, or before the placeholder, as an input draws
+    // it — never after a placeholder, which would read as typed.
+    if value.is_empty() {
+        line = line
+            .when(focused, |el| el.child(caret(theme, px(16.))))
+            .child(text);
+    } else {
+        line = line
+            .child(text)
+            .when(focused && !selected, |el| el.child(caret(theme, px(16.))));
+    }
+    div()
+        .id(id)
+        .track_focus(focus)
+        .cursor_text()
+        .flex_1()
+        .min_w(px(0.))
+        .h_full()
+        .flex()
+        .items_center()
+        .overflow_hidden()
+        .text_size(theme::text_row_sub())
+        .child(line)
+        .on_click(click_to_edit(focus.clone()))
+        .on_key_down(edit_keys(value.to_owned(), focus.clone(), false, on_change))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

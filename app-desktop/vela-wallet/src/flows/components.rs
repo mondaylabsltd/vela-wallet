@@ -268,24 +268,75 @@ pub fn status_chip(theme: &Theme, chip: &StatusChip) -> Div {
         .child(chip.text.clone())
 }
 
-/// The filled search field. Filtering is live and animation-free by design.
-pub fn flow_search(theme: &Theme, icons: &mut IconCache, placeholder: SharedString) -> Div {
-    div()
+/// The filled search field — the web's `flows/ui/SearchField.svelte`: 52 high
+/// (`--size-control-lg`), padding 12, gap 8, radius 12 on `bg-raised`, an 18
+/// glyph in `fg-subtle`, 13 text, and while focused the one hairline edge in
+/// `fg-muted` every field wears (`[data-field]:focus-within`).
+///
+/// Filtering is live and animation-free by design; the panel does it. `field`
+/// is the input the page owns — `None` (the gallery) draws the placeholder.
+pub fn flow_search(
+    theme: &Theme,
+    icons: &mut IconCache,
+    placeholder: SharedString,
+    field: Option<super::panels::AddressField>,
+    window: &gpui::Window,
+) -> Div {
+    let focused = field.as_ref().is_some_and(|f| f.focus.is_focused(window));
+    let well = div()
         .flex()
+        .flex_none()
         .items_center()
         .gap(px(8.))
-        .h(px(40.))
+        .h(px(52.))
         .px(px(12.))
         .rounded(px(12.))
-        .bg(theme.bg_sunken)
-        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 15.))
-        .child(
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(if focused {
+            theme.fg_muted
+        } else {
+            gpui::transparent_black()
+        })
+        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 18.));
+    match field {
+        Some(field) => well.child(crate::ui::search_input(
+            "flow-search",
+            theme,
+            &field.value,
+            placeholder,
+            &field.focus,
+            window,
+            field.on_change,
+        )),
+        None => well.child(
             div()
                 .flex_1()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
                 .child(placeholder),
-        )
+        ),
+    }
+}
+
+/// The web's live filter (`query.trim().toLowerCase()` in each screen's
+/// `shown`): nothing typed keeps every row; otherwise a row stays when what it
+/// is called contains the query, ignoring case.
+pub fn search_matches(query: &str, haystack: &str) -> bool {
+    let query = query.trim().to_lowercase();
+    query.is_empty() || haystack.to_lowercase().contains(&query)
+}
+
+/// The line a search that hides every row leaves (13 `fg-subtle`, centred,
+/// 24 above and below).
+pub fn search_empty(theme: &Theme, text: SharedString) -> Div {
+    div()
+        .py(px(24.))
+        .flex()
+        .justify_center()
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_subtle)
+        .child(text)
 }
 
 /// The token-class filter chips.
@@ -1049,6 +1100,18 @@ pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The web's filter: trimmed, case-blind, a substring of what the row is
+    /// called; nothing typed keeps everything (078 X-05).
+    #[test]
+    fn a_search_matches_the_way_the_web_filters() {
+        assert!(search_matches("", "USDC Ethereum"));
+        assert!(search_matches("   ", "USDC Ethereum"));
+        assert!(search_matches(" usdc ", "USDC Ethereum"));
+        assert!(search_matches("ETHER", "USDC Ethereum"));
+        assert!(search_matches("c eth", "USDC Ethereum"));
+        assert!(!search_matches("gnosis", "USDC Ethereum"));
+    }
 
     /// The card encodes a payload that a camera could actually read back.
     ///

@@ -19,6 +19,7 @@ use crate::wallet::components::{
 };
 
 use super::components::{
+    search_empty, search_matches,
     accent_button, address_card, danger_button, fact_row, fee_refresh_icon, fee_row,
     fee_speed_note, fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search,
     ghost_button, inline_mark, max_chip, mono_field, network_pill, network_row, qr_card,
@@ -143,6 +144,10 @@ pub struct PanelActions {
     pub remove_recipient_rows: Vec<Click>,
     /// DSD2bL, live: "Use X for the empty rows".
     pub fill_empty: Option<Click>,
+    /// DR1L / DT1L / DSD1L / DSD2eL: the search field over the list (078
+    /// X-05). The page owns the query; the panel filters with it. `None` draws
+    /// the placeholder and filters nothing.
+    pub search: Option<AddressField>,
 }
 
 /// An editable field the page owns the state of.
@@ -265,9 +270,15 @@ pub fn render(
     actions: PanelActions,
 ) -> Div {
     match body {
-        FlowBody::Receive(model) => {
-            receive(model, theme, icons, actions.open_qr, actions.open_qr_rows)
-        }
+        FlowBody::Receive(model) => receive(
+            model,
+            theme,
+            icons,
+            window,
+            actions.search,
+            actions.open_qr,
+            actions.open_qr_rows,
+        ),
         FlowBody::ReceiveQr(model) => receive_qr(
             model,
             theme,
@@ -284,6 +295,8 @@ pub fn render(
             model,
             theme,
             icons,
+            window,
+            actions.search,
             actions.open_add_token,
             actions.open_receive,
         ),
@@ -300,6 +313,8 @@ pub fn render(
             model,
             theme,
             icons,
+            window,
+            actions.search,
             actions.open_send_form,
             actions.open_send_rows,
             actions.send_class_chips,
@@ -312,6 +327,8 @@ pub fn render(
             theme,
             icons,
             identicons,
+            window,
+            actions.search,
             actions.open_scan,
             actions.pick_contact_rows,
             actions.pick_group_rows,
@@ -340,9 +357,12 @@ fn receive(
     model: &ReceiveList,
     theme: &Theme,
     icons: &mut IconCache,
+    window: &Window,
+    search: Option<AddressField>,
     mut open_qr: Option<Click>,
     per_row: Vec<Click>,
 ) -> Div {
+    let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
     let mut col = column()
         .child(
             div()
@@ -350,21 +370,45 @@ fn receive(
                 .text_color(theme.fg_muted)
                 .child(model.subtitle.clone()),
         )
-        .child(flow_search(theme, icons, model.search_placeholder.clone()));
+        .child(flow_search(
+            theme,
+            icons,
+            model.search_placeholder.clone(),
+            search,
+            window,
+        ));
     // A live panel binds one listener per row; the fixture binds one and gives
     // it to the first, because every mock row opens the same address anyway.
-    let mut per_row = per_row.into_iter();
+    // Indexed, not iterated: a search hides rows, and row N must still open
+    // network N.
+    let mut per_row = per_row.into_iter().map(Some).collect::<Vec<_>>();
+    let mut shown = 0;
     for (i, row) in model.rows.iter().enumerate() {
-        if i > 0 {
+        if !search_matches(&query, &row.name) {
+            continue;
+        }
+        if shown > 0 {
             col = col.child(divider(theme));
         }
+        shown += 1;
         let action = per_row
-            .next()
+            .get_mut(i)
+            .and_then(Option::take)
             .or_else(|| if i == 0 { open_qr.take() } else { None });
         col = col.child(clickable(
             ElementId::from(("network", i)),
             action,
             network_row(theme, icons, row),
+        ));
+    }
+    if shown == 0 && !model.rows.is_empty() {
+        col = col.child(search_empty(
+            theme,
+            SharedString::from(crate::wallet::fill(
+                &model.empty_text,
+                "query",
+                query.trim(),
+            )),
         ));
     }
     col
@@ -693,6 +737,8 @@ fn assets(
     model: &AssetsPanel,
     theme: &Theme,
     icons: &mut IconCache,
+    window: &Window,
+    search: Option<AddressField>,
     open_add_token: Option<Click>,
     open_receive: Option<Click>,
 ) -> Div {
@@ -712,7 +758,14 @@ fn assets(
                 ),
         );
     }
-    col = col.child(flow_search(theme, icons, model.search_placeholder.clone()));
+    let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
+    col = col.child(flow_search(
+        theme,
+        icons,
+        model.search_placeholder.clone(),
+        search,
+        window,
+    ));
 
     if let Some(empty) = &model.empty {
         return col
@@ -759,13 +812,21 @@ fn assets(
             );
     }
 
+    let mut shown = 0;
     for (i, row) in model.rows.iter().enumerate() {
+        if !search_matches(&query, &format!("{} {}", row.ticker, row.chain)) {
+            continue;
+        }
+        shown += 1;
         col = col.child(asset_row(
             ElementId::from(("flow-asset", i)),
             theme,
             icons,
             row,
         ));
+    }
+    if shown == 0 && !model.rows.is_empty() {
+        col = col.child(search_empty(theme, model.no_match.clone()));
     }
     // DT1L hangs this centred and quiet under the list — it is the way out of
     // "my token is missing", not a call to action competing with the rows.
@@ -1065,6 +1126,8 @@ fn send_pick(
     model: &SendPick,
     theme: &Theme,
     icons: &mut IconCache,
+    window: &Window,
+    search: Option<AddressField>,
     mut open_form: Option<Click>,
     per_row: Vec<Click>,
     chip_clicks: Vec<Click>,
@@ -1073,8 +1136,15 @@ fn send_pick(
 ) -> Div {
     // No network pill here: the sidebar's network filter already narrows
     // these rows, and a second one beside it could disagree with the first.
+    let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
     let mut col = column()
-        .child(flow_search(theme, icons, model.search_placeholder.clone()))
+        .child(flow_search(
+            theme,
+            icons,
+            model.search_placeholder.clone(),
+            search,
+            window,
+        ))
         .child(filter_chips(theme, &model.filters, chip_clicks));
 
     // SD1b's chain lock, in the corpus's own sentence: the first pick names
@@ -1108,10 +1178,18 @@ fn send_pick(
 
     // A live panel binds one listener per row; the fixture binds one and
     // gives it to the first, because every mock row opens the same drawing.
-    let mut per_row = per_row.into_iter();
+    // Indexed, not iterated: a search hides rows, and row N must still open
+    // token N.
+    let mut per_row = per_row.into_iter().map(Some).collect::<Vec<_>>();
+    let mut shown = 0;
     for (i, row) in model.rows.iter().enumerate() {
+        if !search_matches(&query, &format!("{} {}", row.ticker, row.chain)) {
+            continue;
+        }
+        shown += 1;
         let action = per_row
-            .next()
+            .get_mut(i)
+            .and_then(Option::take)
             .or_else(|| if i == 0 { open_form.take() } else { None });
         let selected = model
             .selection
@@ -1135,6 +1213,9 @@ fn send_pick(
             clickable(ElementId::from(("flow-send-row", i)), action, drawn).into_any_element()
         });
         col = col.child(wrapper);
+    }
+    if shown == 0 && !model.rows.is_empty() {
+        col = col.child(search_empty(theme, model.no_match.clone()));
     }
 
     if let Some(selection) = model.selection.as_ref() {
@@ -1663,18 +1744,30 @@ pub fn speed_control(
     block
 }
 
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 fn contact_pick(
     model: &ContactPick,
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
+    window: &Window,
+    search: Option<AddressField>,
     open_scan: Option<Click>,
     per_row: Vec<Click>,
     mut group_rows: Vec<Click>,
 ) -> Div {
-    let mut per_row = per_row.into_iter();
+    let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
+    // Indexed, not iterated: a search hides rows, and row N must still pick
+    // contact N.
+    let mut per_row = per_row.into_iter().map(Some).collect::<Vec<_>>();
     let mut col = column()
-        .child(flow_search(theme, icons, model.search_placeholder.clone()))
+        .child(flow_search(
+            theme,
+            icons,
+            model.search_placeholder.clone(),
+            search,
+            window,
+        ))
         // Scan sits above the saved people: most sends go to someone already in
         // the book, but the ones that don't are the ones where a person is
         // holding a phone in one hand and an address in the other.
@@ -1703,17 +1796,27 @@ fn contact_pick(
                     theme.fg_subtle,
                     12.,
                 )),
-        ))
-        .child(
+        ));
+
+    // Groups only while nothing is typed, and only when there are some: a
+    // search is for a person, and the web drops the section as the query
+    // starts (`ContactPick.svelte`).
+    let groups: &[_] = if query.trim().is_empty() {
+        &model.groups
+    } else {
+        &[]
+    };
+    if !groups.is_empty() {
+        col = col.child(
             div()
                 .pt(px(4.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
                 .child(model.groups_title.clone()),
         );
-
+    }
     let mut per_group = std::mem::take(&mut group_rows).into_iter();
-    for (index, (name, count, first, second)) in model.groups.iter().enumerate() {
+    for (index, (name, count, first, second)) in groups.iter().enumerate() {
         let row = div()
             .flex()
             .items_center()
@@ -1763,6 +1866,9 @@ fn contact_pick(
     );
 
     for (i, contact) in model.contacts.iter().enumerate() {
+        if !search_matches(&query, &format!("{} {}", contact.name, contact.address)) {
+            continue;
+        }
         let mut name_row = div().flex().items_center().gap(px(6.)).child(
             div()
                 .text_size(theme::text_row_title())
@@ -1814,7 +1920,7 @@ fn contact_pick(
             ));
         col = col.child(clickable(
             ElementId::from(("flow-contact", i)),
-            per_row.next(),
+            per_row.get_mut(i).and_then(Option::take),
             entry,
         ));
     }

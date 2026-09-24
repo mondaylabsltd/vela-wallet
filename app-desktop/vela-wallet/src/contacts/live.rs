@@ -237,25 +237,42 @@ fn row(contact: &Contact, letter: SharedString) -> ContactRowModel {
 /// The run-length grouping this used to do also had a bug the core does not:
 /// two non-adjacent contacts under one letter became two sections.
 #[must_use]
-pub fn sections(view: &ContactsView) -> Vec<(SharedString, Vec<ContactRowModel>)> {
+pub fn sections(view: &ContactsView, query: &str) -> Vec<(SharedString, Vec<ContactRowModel>)> {
     let by_address: HashMap<String, &Contact> = view
         .contacts
         .iter()
         .map(|contact| (contact.address.to_lowercase(), contact))
         .collect();
+    let query = query.trim().to_lowercase();
     view.sections
         .iter()
         .map(|section| {
             let letter = SharedString::from(section.letter.clone());
-            let rows = section
+            let rows: Vec<ContactRowModel> = section
                 .addresses
                 .iter()
                 .filter_map(|address| by_address.get(&address.to_lowercase()).copied())
+                .filter(|contact| matches_query(contact, &query))
                 .map(|contact| row(contact, letter.clone()))
                 .collect();
             (letter, rows)
         })
+        // A letter with nobody left under it is a heading over nothing.
+        .filter(|(_, rows)| !rows.is_empty())
         .collect()
+}
+
+/// The web's contacts search (`letterSections`): what the row is called, the
+/// name a resolver gave it, or the address — ignoring case. `query` is
+/// already trimmed and lower-cased; empty keeps everyone.
+fn matches_query(contact: &Contact, query: &str) -> bool {
+    query.is_empty()
+        || display_name(contact).to_lowercase().contains(query)
+        || contact
+            .resolved_name
+            .as_deref()
+            .is_some_and(|name| name.to_lowercase().contains(query))
+        || contact.address.to_lowercase().contains(query)
 }
 
 #[cfg(test)]
@@ -372,7 +389,7 @@ mod tests {
             None,
         )]);
         assert_eq!(rows(&view)[0].section, SharedString::from("A"));
-        assert_eq!(sections(&view)[0].0, SharedString::from("A"));
+        assert_eq!(sections(&view, "")[0].0, SharedString::from("A"));
     }
 
     /// The run-length grouping this file used to do produced TWO `A` sections
@@ -396,13 +413,13 @@ mod tests {
                 None,
             ),
         ]);
-        let letters: Vec<_> = sections(&view).into_iter().map(|(l, _)| l).collect();
+        let letters: Vec<_> = sections(&view, "").into_iter().map(|(l, _)| l).collect();
         assert_eq!(
             letters,
             vec![SharedString::from("A"), SharedString::from("B")]
         );
         assert_eq!(
-            sections(&view)[0].1.len(),
+            sections(&view, "")[0].1.len(),
             2,
             "Ada and Amy share their letter"
         );
@@ -572,7 +589,7 @@ mod tests {
             contact("0x2", Some("Zack"), None),
             contact("0x3", Some("Ada"), None),
         ]);
-        let sections = sections(&rows);
+        let sections = sections(&rows, "");
         assert_eq!(sections.len(), 2);
         assert_eq!(
             sections[0].0,
@@ -600,5 +617,29 @@ mod tests {
             None,
         )]));
         assert_eq!(rows[0].section, SharedString::from("#"));
+    }
+
+    /// The search keeps a row by its name, its resolved name or its address,
+    /// in any case, and drops a letter nobody is left under (078 X-05).
+    #[test]
+    fn a_search_narrows_by_name_resolved_name_or_address() {
+        let view = view(vec![
+            contact("0xaaaa000000000000000000000000000000000001", Some("Alice"), None),
+            contact("0xbbbb000000000000000000000000000000000002", None, Some("bob.eth")),
+            contact("0xcccc000000000000000000000000000000000003", Some("Carol"), None),
+        ]);
+        let names = |query: &str| -> Vec<String> {
+            sections(&view, query)
+                .into_iter()
+                .flat_map(|(_, rows)| rows)
+                .map(|row| row.name.to_string())
+                .collect()
+        };
+        assert_eq!(names("").len(), 3);
+        assert_eq!(names("  ALI "), vec!["Alice"]);
+        assert_eq!(names("BOB.E"), vec!["bob.eth"]);
+        assert_eq!(names("0xCCCC"), vec!["Carol"]);
+        assert!(names("zzz").is_empty());
+        assert!(sections(&view, "zzz").is_empty(), "no empty letters");
     }
 }

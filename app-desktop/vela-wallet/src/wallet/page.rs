@@ -519,6 +519,15 @@ pub struct WalletPage {
     /// validates the address and clears the found cards on every keystroke, so
     /// a second copy here would be a second opinion about what was typed.
     add_token_focus: gpui::FocusHandle,
+    /// The flow list search (078 X-05): which panel the query was typed on,
+    /// and the query. A different panel on top clears it, as leaving a
+    /// screen on the web drops that screen's query.
+    flow_query: (Option<FlowPanel>, String),
+    flow_query_focus: gpui::FocusHandle,
+    /// The contacts header search (078 X-05 / C-02): the web filters the
+    /// A–Z list as it is typed, in the shell (`letterSections`).
+    contacts_query: String,
+    contacts_query_focus: gpui::FocusHandle,
     /// Spec 032: the send journey's two machines, alive while the flow is
     /// open and discarded with it — a second send starts from a fresh
     /// machine, never a resumed one.
@@ -994,6 +1003,10 @@ impl WalletPage {
             tx_detail: None,
             asset_detail: None,
             add_token_focus: cx.focus_handle(),
+            flow_query: (None, String::new()),
+            flow_query_focus: cx.focus_handle(),
+            contacts_query: String::new(),
+            contacts_query_focus: cx.focus_handle(),
             send_host: None,
             #[cfg(not(target_os = "linux"))]
             signing_host: None,
@@ -3024,7 +3037,13 @@ impl WalletPage {
         )
     }
 
-    fn contacts_header(&mut self, theme: &Theme, caption: bool, cx: &mut Context<Self>) -> Div {
+    fn contacts_header(
+        &mut self,
+        theme: &Theme,
+        caption: bool,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let title = self.contacts.title.clone();
         let placeholder = self.contacts.search_placeholder.clone();
         let add = self.contacts.add_contact.clone();
@@ -3052,7 +3071,10 @@ impl WalletPage {
                     .child(title),
             )
             .child(div().flex_1().min_w(px(0.)))
-            .child(search_field(theme, &mut self.icons, placeholder))
+            .child({
+                let live = self.contacts_search_input(theme, placeholder.clone(), window, cx);
+                search_field(theme, &mut self.icons, placeholder, Some(live))
+            })
             .child(
                 outline_button(
                     "contacts-add",
@@ -3658,7 +3680,22 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> Vec<(gpui::SharedString, Vec<ContactRowModel>)> {
         if self.identity.is_none() {
-            return contacts_fixtures::sections_model();
+            let query = self.contacts_query.trim().to_lowercase();
+            return contacts_fixtures::sections_model()
+                .into_iter()
+                .map(|(letter, rows)| {
+                    let rows: Vec<ContactRowModel> = rows
+                        .into_iter()
+                        .filter(|row| {
+                            query.is_empty()
+                                || row.name.to_lowercase().contains(&query)
+                                || row.address_full.to_lowercase().contains(&query)
+                        })
+                        .collect();
+                    (letter, rows)
+                })
+                .filter(|(_, rows)| !rows.is_empty())
+                .collect();
         }
         let view = resident::resident::<Contacts>(cx).read(cx).view();
         if !view.loaded {
@@ -3667,7 +3704,55 @@ impl WalletPage {
             // waits (spec 030 FR-008).
             return Vec::new();
         }
-        contacts_live::sections(&view)
+        contacts_live::sections(&view, &self.contacts_query)
+    }
+
+    /// The header search's input and its ✕ (078 X-05 / C-02).
+    fn contacts_search_input(
+        &mut self,
+        theme: &Theme,
+        placeholder: SharedString,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> crate::contacts::components::SearchInput {
+        let page = cx.entity().downgrade();
+        let input = crate::ui::search_input(
+            "contacts-search",
+            theme,
+            &self.contacts_query,
+            placeholder,
+            &self.contacts_query_focus,
+            window,
+            move |text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    this.contacts_query = text;
+                    cx.notify();
+                });
+            },
+        )
+        .into_any_element();
+        let clear = (!self.contacts_query.is_empty()).then(|| {
+            div()
+                .id("contacts-search-clear")
+                .flex_none()
+                .flex()
+                .items_center()
+                .cursor_pointer()
+                .child(icon_img(&mut self.icons, Icon::X, false, theme.fg_subtle, 14.))
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.contacts_query.clear();
+                    // The web's clear leaves the person where they were
+                    // typing, ready for the next name.
+                    this.contacts_query_focus.focus(window, cx);
+                    cx.notify();
+                }))
+                .into_any_element()
+        });
+        crate::contacts::components::SearchInput {
+            input,
+            focused: self.contacts_query_focus.is_focused(window),
+            clear,
+        }
     }
 
     /// DC1: the A–Z sectioned roster.
@@ -3699,8 +3784,20 @@ impl WalletPage {
             .flex()
             .flex_col();
 
+        let sections = self.contact_sections(cx);
+        if sections.is_empty() && !self.contacts_query.trim().is_empty() {
+            // A search that leaves nobody says so, and what it searched for
+            // (`contacts.noResults`), rather than showing an empty column.
+            return list.child(div().pt(px(48.)).child(empty_state(
+                theme,
+                &mut self.icons,
+                Icon::Search,
+                contacts_fixtures::no_results_label(&self.contacts, self.contacts_query.trim()),
+                self.contacts.search_placeholder.clone(),
+            )));
+        }
         let mut index = 0usize;
-        for (letter, rows) in self.contact_sections(cx) {
+        for (letter, rows) in sections {
             list = list.child(section_letter(theme, letter));
             let last = rows.len() - 1;
             for (i, contact) in rows.iter().enumerate() {
@@ -3965,8 +4062,14 @@ impl WalletPage {
             ))
     }
 
-    fn contacts_content(&mut self, theme: &Theme, caption: bool, cx: &mut Context<Self>) -> Div {
-        let header = self.contacts_header(theme, caption, cx);
+    fn contacts_content(
+        &mut self,
+        theme: &Theme,
+        caption: bool,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let header = self.contacts_header(theme, caption, window, cx);
         let rail = self.contacts_rail(theme, cx);
         let body: gpui::AnyElement = if self.contacts_empty {
             self.contacts_empty_view(theme).into_any_element()
@@ -5186,6 +5289,7 @@ impl WalletPage {
             split_amount_fields: Vec::new(),
             remove_recipient_rows: Vec::new(),
             fill_empty: None,
+            search: None,
         };
         // DR1L, live: one listener per network row, each remembering WHICH
         // chain it opened. The fixture keeps its single first-row listener,
@@ -6398,7 +6502,7 @@ impl WalletPage {
             RailState::Default,
         ));
 
-        let search = search_field(theme, &mut self.icons, s_search);
+        let search = search_field(theme, &mut self.icons, s_search, None);
 
         let dropdown = menu_card(
             theme,
@@ -12782,7 +12886,7 @@ impl WalletPage {
             .child(self.sidebar(theme, cx));
         columns = match self.section {
             Section::Wallet => columns.child(self.content(theme, cx)),
-            Section::Contacts => columns.child(self.contacts_content(theme, caption, cx)),
+            Section::Contacts => columns.child(self.contacts_content(theme, caption, window, cx)),
             Section::Explore => columns.child(self.explore_content(theme, cx)),
             Section::Settings => columns
                 .child(self.settings_nav(theme, cx))
@@ -12867,7 +12971,7 @@ impl WalletPage {
                     };
                     let focus = self.add_token_focus.clone();
                     let placeholder = self.flow_strings.token_address_label.clone();
-                    let actions = Self::flow_actions(
+                    let mut actions = Self::flow_actions(
                         panel,
                         self.identity.is_some(),
                         tx_ids,
@@ -12877,6 +12981,7 @@ impl WalletPage {
                         send,
                         cx,
                     );
+                    actions.search = Some(self.flow_search_field(panel, cx));
                     let rendered = panels::render(
                         &body,
                         theme,
@@ -12894,6 +12999,29 @@ impl WalletPage {
             },
         };
         columns
+    }
+
+    /// The query under the flow panel on top, as the field the panel draws.
+    fn flow_search_field(
+        &mut self,
+        panel: FlowPanel,
+        cx: &mut Context<Self>,
+    ) -> panels::AddressField {
+        if self.flow_query.0 != Some(panel) {
+            self.flow_query = (Some(panel), String::new());
+        }
+        let page = cx.entity().downgrade();
+        panels::AddressField {
+            focus: self.flow_query_focus.clone(),
+            value: self.flow_query.1.clone(),
+            placeholder: SharedString::default(),
+            on_change: Box::new(move |text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    this.flow_query.1 = text;
+                    cx.notify();
+                });
+            }),
+        }
     }
 
     /// The anchored menu overlay (DC5/DC6). Appended last in the page root and
