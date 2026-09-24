@@ -11440,6 +11440,7 @@ impl WalletPage {
         // A new request opens closed: the last one's decision to look at the
         // bytes is not this one's.
         self.signing_advanced_open = false;
+        crate::signing::components::reset_slide();
         // The same question, once, for a request the core answered before
         // any observation fires — a refusal on arrival.
         self.signing_host_changed(&host, tab.as_deref(), cx);

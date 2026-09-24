@@ -992,17 +992,63 @@ pub fn slide_to_confirm(
     label: SharedString,
     enabled: bool,
     action: Option<crate::flows::panels::Click>,
-) -> Div {
-    let slide = div()
+) -> gpui::Stateful<Div> {
+    // The web's `SlideToConfirm`: the knob is DRAGGED and commits only past
+    // 88% of its travel; let go short and it goes back. It was a click
+    // anywhere on the track — a signature one mis-tap away, under a label
+    // that said "slide". There is no reject button beside it: closing the
+    // column IS the rejection, so this is the one deliberate act here.
+    let armed = enabled && action.is_some();
+    let progress = SLIDE.with_borrow(|slide| if armed { slide.progress } else { 0. });
+    let travel = SLIDE.with_borrow(|slide| slide.travel());
+    let action = std::rc::Rc::new(action);
+    let knob_x = 4. + progress * travel;
+    div()
+        .id("signing-confirm")
+        .relative()
+        .overflow_hidden()
         .h(px(SLIDE_H))
         .rounded_full()
         .bg(theme.bg_sunken)
         .flex()
         .items_center()
-        .opacity(if enabled { 1.0 } else { 0.45 })
+        .when(!enabled, |el| el.opacity(0.45))
+        .when(armed, |el| el.cursor_pointer())
+        // Where the track is, measured as it paints: the travel is its width
+        // less the knob and its padding (48 + 4 + 4), as the web's `W − 56`.
+        .child(
+            gpui::canvas(
+                |bounds, _, _| SLIDE.with_borrow_mut(|slide| slide.bounds = Some(bounds)),
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
+        )
+        // The fill follows the knob (`--color-accent-soft`).
         .child(
             div()
-                .ml(px(4.))
+                .absolute()
+                .left_0()
+                .top_0()
+                .bottom_0()
+                .w(px(knob_x + SLIDE_KNOB))
+                .bg(theme.accent_soft),
+        )
+        .child(
+            div()
+                .flex_1()
+                .text_center()
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_muted)
+                // The label fades as the knob crosses it.
+                .opacity(1. - progress)
+                .child(label),
+        )
+        .child(
+            div()
+                .absolute()
+                .left(px(knob_x))
                 .w(px(SLIDE_KNOB))
                 .h(px(SLIDE_KNOB))
                 .rounded_full()
@@ -1018,21 +1064,88 @@ pub fn slide_to_confirm(
                     20.,
                 )),
         )
-        .child(
-            div()
-                .flex_1()
-                .text_center()
-                .text_size(theme::text_row_title())
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme.fg_muted)
-                .child(label),
-        )
-        .child(div().w(px(SLIDE_KNOB)));
-    // A shut slide answers to nothing. The drawings have no reject button —
-    // closing the column IS the rejection — so the only thing this control
-    // can do is confirm, and it may only do that when all three machines
-    // agreed.
-    crate::flows::panels::clickable("signing-confirm", action, slide)
+        .on_mouse_down(gpui::MouseButton::Left, move |_, window, _| {
+            if armed {
+                SLIDE.with_borrow_mut(|slide| slide.dragging = !slide.done);
+                window.refresh();
+            }
+        })
+        .on_mouse_move(move |event, window, _| {
+            let moved = SLIDE.with_borrow_mut(|slide| {
+                let (true, Some(bounds)) = (slide.dragging, slide.bounds) else {
+                    return false;
+                };
+                let x = f32::from(event.position.x - bounds.left()) - 28.;
+                slide.progress = (x / slide.travel()).clamp(0., 1.);
+                true
+            });
+            if moved {
+                window.refresh();
+            }
+        })
+        .on_mouse_up(gpui::MouseButton::Left, {
+            let action = action.clone();
+            move |_, window, cx| release(&action, window, cx)
+        })
+        .on_mouse_up_out(gpui::MouseButton::Left, move |_, window, cx| {
+            release(&action, window, cx);
+        })
+}
+
+/// The slide's state. One confirm is on screen at a time, and a new request
+/// starts it over ([`reset_slide`]).
+#[derive(Default)]
+struct Slide {
+    progress: f32,
+    dragging: bool,
+    done: bool,
+    bounds: Option<gpui::Bounds<gpui::Pixels>>,
+}
+
+impl Slide {
+    fn travel(&self) -> f32 {
+        self.bounds
+            .map_or(1., |bounds| (f32::from(bounds.size.width) - 56.).max(1.))
+    }
+}
+
+thread_local! {
+    static SLIDE: std::cell::RefCell<Slide> = std::cell::RefCell::new(Slide::default());
+}
+
+/// Past this share of its travel the knob commits (the web's `COMMIT`).
+const SLIDE_COMMIT: f32 = 0.88;
+
+/// Let go: past the mark it confirms, once; short of it the knob goes home.
+fn release(
+    action: &std::rc::Rc<Option<crate::flows::panels::Click>>,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) {
+    let commit = SLIDE.with_borrow_mut(|slide| {
+        if !slide.dragging {
+            return false;
+        }
+        slide.dragging = false;
+        if slide.progress >= SLIDE_COMMIT {
+            slide.progress = 1.;
+            slide.done = true;
+            true
+        } else {
+            slide.progress = 0.;
+            false
+        }
+    });
+    if commit && let Some(action) = action.as_ref() {
+        action(&gpui::ClickEvent::default(), window, cx);
+    }
+    window.refresh();
+}
+
+/// A new request's slide starts at rest — the last one's committed knob is
+/// not this one's.
+pub fn reset_slide() {
+    SLIDE.with_borrow_mut(|slide| *slide = Slide::default());
 }
 
 use super::fixtures::ChipState;
