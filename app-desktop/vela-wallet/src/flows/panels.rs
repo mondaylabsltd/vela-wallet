@@ -2602,6 +2602,7 @@ fn scan_placeholder(model: &ScanModal, theme: &Theme) -> Div {
 ///
 /// A scanner is a viewfinder and a 400px column is the wrong shape for one, so
 /// this is the single flow the third column does not host.
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 pub fn scan_modal(
     model: &ScanModal,
     theme: &Theme,
@@ -2609,84 +2610,135 @@ pub fn scan_modal(
     mut tool_actions: Vec<Option<Click>>,
     close: Option<Click>,
     preview: Option<std::sync::Arc<gpui::RenderImage>>,
+    notice: Option<SharedString>,
+    no_camera: bool,
+    width: f32,
 ) -> Div {
+    // The web's desktop scanner (`ScanSurface` as `variant="modal"` in the
+    // wallet's `.scan-modal`), measured (078 F-03): `min(90vw, 440)` wide,
+    // radius 20 on the canvas colour with `shadow-lg`, padding 0/20/20; a
+    // 16-high title row with the 17 bold title and a borderless 36 close; the
+    // viewfinder the full width at 3:2 with four 30px corner brackets; the
+    // hint at 13, left; the tools as equal outlined buttons with no glyphs.
+    // It was 560 wide with a fixed 336 well and pills as wide as their words
+    // — "按钮很丑" (owner).
+    let inner = width - 40.;
+    let frame_h = inner * 2. / 3.;
+
     let mut tools = div().flex().gap(px(8.));
     let mut bound = tool_actions.drain(..);
     for (i, label) in model.tools.iter().enumerate() {
-        tools = tools.child(clickable(
-            ElementId::from(("scan-tool", i)),
-            bound.next().flatten(),
-            ghost_button(theme, label.clone()),
-        ));
+        // Flip needs a camera to flip; without one it is drawn dimmed, as the
+        // web dims a torch a webcam does not have, rather than armed and
+        // doing nothing.
+        let is_flip = i == 1;
+        let dim = is_flip && no_camera;
+        let tool = div()
+            .w_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .py(px(8.))
+            .rounded(px(12.))
+            .border_1()
+            .border_color(theme.border_strong)
+            .text_size(theme::text_label())
+            .text_color(theme.fg_base)
+            .when(dim, |el| el.opacity(theme::OPACITY_DISABLED))
+            .child(label.clone());
+        let action = bound.next().flatten().filter(|_| !dim);
+        // The WRAPPER is the flex item `clickable` hands back, so it is the
+        // one that takes the equal share.
+        tools = tools.child(clickable(ElementId::from(("scan-tool", i)), action, tool).flex_1());
+    }
+
+    // Brackets, not a border: the frame aims the camera, and a closed
+    // rectangle around a code competes with the code's own quiet zone.
+    let corner = |top: bool, left: bool| {
+        let c = div()
+            .absolute()
+            .size(px(30.))
+            .border_color(theme.fg_base)
+            .when(top, |el| el.top_0().border_t(px(1.5)))
+            .when(!top, |el| el.bottom_0().border_b(px(1.5)))
+            .when(left, |el| el.left_0().border_l(px(1.5)))
+            .when(!left, |el| el.right_0().border_r(px(1.5)));
+        match (top, left) {
+            (true, true) => c.rounded_tl(px(8.)),
+            (true, false) => c.rounded_tr(px(8.)),
+            (false, true) => c.rounded_bl(px(8.)),
+            (false, false) => c.rounded_br(px(8.)),
+        }
+    };
+    let mut frame = div()
+        .relative()
+        .w_full()
+        .h(px(frame_h))
+        .child({
+            let well = div()
+                .absolute()
+                .inset_0()
+                .rounded(px(8.))
+                .overflow_hidden()
+                .bg(theme.bg_sunken);
+            match preview {
+                Some(image) => well.child(
+                    gpui::img(gpui::ImageSource::Render(image))
+                        .w_full()
+                        .h(px(frame_h)),
+                ),
+                None => well,
+            }
+        });
+    for (top, left) in [(true, true), (true, false), (false, true), (false, false)] {
+        frame = frame.child(corner(top, left));
     }
 
     div()
-        .w(px(560.))
-        .p(px(24.))
+        .w(px(width))
+        .px(px(20.))
+        .pb(px(20.))
         .rounded(px(20.))
         .bg(theme.bg_base)
+        .shadow(crate::ui::dialog::shadow_lg())
         .flex()
         .flex_col()
-        .gap(px(16.))
         .child(
             div()
+                .py(px(16.))
                 .flex()
                 .items_center()
                 .justify_between()
                 .child(
                     div()
-                        .text_size(theme::text_panel_title())
+                        .text_size(theme::text_button())
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_base)
                         .child(model.title.clone()),
                 )
-                // A BUTTON, not a drawing of one. For as long as the scanner had
-                // a camera this was an 18px picture of an X with nothing behind
-                // it, inside a card that swallows every press — so the only way
-                // out was a click on the dimmed window around it, which nobody
-                // finds: the founder had to quit the app to change method
-                // (2026-09-19). 32px of target, because 18 is an icon's size
-                // and not a finger's or a trackpad's.
                 .child(clickable(
                     "scan-close",
                     close,
                     div()
-                        .size(px(32.))
+                        .size(px(36.))
                         .rounded_full()
-                        .bg(theme.bg_sunken)
                         .flex()
                         .items_center()
                         .justify_center()
-                        .child(icon_img(icons, Icon::X, false, theme.fg_muted, 18.)),
+                        .hover(|el| el.bg(theme.bg_sunken))
+                        .child(icon_img(icons, Icon::X, false, theme.fg_base, 20.)),
                 )),
         )
+        .child(frame)
         .child(
-            // The viewfinder is landscape, not square — roughly what a webcam
-            // hands you, and what DS1L measures. With a camera running it
-            // holds the camera; without one it stays the empty well it has
-            // always been, and the toolbar's other door still works.
-            {
-                let well = div()
-                    .w_full()
-                    .h(px(336.))
-                    .rounded(px(8.))
-                    .overflow_hidden()
-                    .bg(theme.bg_sunken);
-                match preview {
-                    Some(image) => well.child(
-                        gpui::img(gpui::ImageSource::Render(image))
-                            .w_full()
-                            .h(px(336.)),
-                    ),
-                    None => well,
-                }
-            },
-        )
-        .child(
+            // What is true right now: the hint, or — when the hint is not —
+            // why (the web's `notice ?? model.hint`).
             div()
+                .py(px(12.))
                 .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_muted)
-                .child(model.hint.clone()),
+                .child(notice.unwrap_or_else(|| model.hint.clone())),
         )
         .child(tools)
 }

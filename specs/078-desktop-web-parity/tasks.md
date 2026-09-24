@@ -53,7 +53,7 @@ screenshot checked against the web.
       web's text order and colours.
 - [x] T033 F-01 scan from the send form (recipient card button, contact
       picker row) → scanner → `scan_resolved`.
-- [ ] T034 F-02 scanner notices; F-03 scanner look after `ScanSurface`.
+- [x] T034 F-02 scanner notices; F-03 scanner look after `ScanSurface`.
 - [ ] T035 F-04 send receipt stages; G-04 dApp receipt.
 - [ ] T036 H-04 activity day headers; H-05 listening line.
 - [ ] T037 H-06 asset detail parity (logo + name, facts, copy, explorer).

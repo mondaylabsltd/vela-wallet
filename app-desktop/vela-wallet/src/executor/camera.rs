@@ -37,10 +37,32 @@ pub struct Shared {
     pub frame: Option<RgbaImage>,
     /// The first payload any frame decoded to. Taken once by the screen.
     pub payload: Option<String>,
-    /// The camera could not be used. The reason is logged, not shown: the
-    /// screen's answer is the same for all of them, and "AVFoundation error
-    /// -11852" is not a sentence for a person.
-    pub failed: bool,
+    /// Why the camera could not be used, when it could not (078 F-02). The
+    /// driver's own words are logged, not shown — "AVFoundation error -11852"
+    /// is not a sentence for a person — but WHICH of three things went wrong
+    /// is: each has a different thing to do about it.
+    pub failure: Option<CameraFailure>,
+}
+
+/// The three ways a camera is not there, as the web's scanner tells them
+/// apart (`scanner.svelte.ts` `classify`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    not(target_os = "macos"),
+    expect(
+        dead_code,
+        reason = "only the macOS capture can be refused or busy; elsewhere it is Absent"
+    )
+)]
+pub enum CameraFailure {
+    /// The person said no (or said no once and was never asked again).
+    Denied,
+    /// No camera to open — including every desktop this build has no capture
+    /// backend for.
+    Absent,
+    /// A camera that would not start: another app has it, or the driver
+    /// refused.
+    Unavailable,
 }
 
 /// A running capture. Dropping it stops the thread.
@@ -56,12 +78,12 @@ impl Drop for Session {
 }
 
 impl Session {
-    /// The newest frame and whether the camera is usable, cloned out.
+    /// The newest frame and why the camera is not usable, if it is not.
     #[must_use]
-    pub fn snapshot(&self) -> (Option<RgbaImage>, bool) {
+    pub fn snapshot(&self) -> (Option<RgbaImage>, Option<CameraFailure>) {
         match self.shared.lock() {
-            Ok(shared) => (shared.frame.clone(), shared.failed),
-            Err(_) => (None, true),
+            Ok(shared) => (shared.frame.clone(), shared.failure),
+            Err(_) => (None, Some(CameraFailure::Unavailable)),
         }
     }
 
@@ -92,10 +114,10 @@ fn spawn_capture(shared: &Arc<Mutex<Shared>>, stop: &Arc<AtomicBool>) {
         use nokhwa::pixel_format::RgbFormat;
         use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 
-        let fail = |shared: &Arc<Mutex<Shared>>, why: &str| {
+        let fail = |shared: &Arc<Mutex<Shared>>, failure: CameraFailure, why: &str| {
             eprintln!("[vela-wallet] camera: {why}");
             if let Ok(mut shared) = shared.lock() {
-                shared.failed = true;
+                shared.failure = Some(failure);
             }
         };
 
@@ -123,18 +145,22 @@ fn spawn_capture(shared: &Arc<Mutex<Shared>>, stop: &Arc<AtomicBool>) {
             return;
         }
         if !granted.load(Ordering::SeqCst) {
-            fail(&shared, "permission was not granted");
+            fail(&shared, CameraFailure::Denied, "permission was not granted");
             return;
         }
 
         let format =
             RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
         let Ok(mut camera) = nokhwa::Camera::new(CameraIndex::Index(0), format) else {
-            fail(&shared, "no camera could be opened");
+            fail(&shared, CameraFailure::Absent, "no camera could be opened");
             return;
         };
         if camera.open_stream().is_err() {
-            fail(&shared, "the camera would not start streaming");
+            fail(
+                &shared,
+                CameraFailure::Unavailable,
+                "the camera would not start streaming",
+            );
             return;
         }
 
@@ -171,6 +197,6 @@ fn spawn_capture(shared: &Arc<Mutex<Shared>>, stop: &Arc<AtomicBool>) {
 #[cfg(not(target_os = "macos"))]
 fn spawn_capture(shared: &Arc<Mutex<Shared>>, _stop: &Arc<AtomicBool>) {
     if let Ok(mut shared) = shared.lock() {
-        shared.failed = true;
+        shared.failure = Some(CameraFailure::Absent);
     }
 }

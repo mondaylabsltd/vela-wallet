@@ -220,6 +220,13 @@ pub struct FlowStrings {
     pub scan_hint: SharedString,
     pub scan_from_gallery: SharedString,
     pub scan_flip: SharedString,
+    /// What the scanner says instead of its hint when the hint is not true
+    /// (078 F-02, the web's `scanNotice`).
+    pub scan_invalid: SharedString,
+    pub scan_no_qr: SharedString,
+    pub scan_permission: SharedString,
+    pub scan_no_camera: SharedString,
+    pub scan_unavailable: SharedString,
 
     // Activity.
     pub history_title: SharedString,
@@ -528,6 +535,11 @@ impl FlowStrings {
             scan_hint: s("componentsUi.scanner.hint"),
             scan_from_gallery: s("componentsUi.scanner.fromGallery"),
             scan_flip: s("componentsUi.scanner.flipCamera"),
+            scan_invalid: s("home.invalidQrTitle"),
+            scan_no_qr: s("componentsUi.scanner.noQrFoundMsg"),
+            scan_permission: s("componentsUi.scanner.permissionText"),
+            scan_no_camera: s("componentsUi.scanner.noCamera"),
+            scan_unavailable: s("componentsUi.scanner.cameraUnavailable"),
 
             history_title: s("history.navTitle"),
             history_empty_filter: s("history.emptyFilter"),
@@ -757,6 +769,11 @@ mod tests {
             (s.bad_amount.as_ref(), "send.badAmount"),
             (s.batch_dup.as_ref(), "send.batchDup"),
             (s.no_matching_tokens.as_ref(), "send.noMatchingTokens"),
+            (s.scan_invalid.as_ref(), "home.invalidQrTitle"),
+            (s.scan_no_qr.as_ref(), "componentsUi.scanner.noQrFoundMsg"),
+            (s.scan_permission.as_ref(), "componentsUi.scanner.permissionText"),
+            (s.scan_no_camera.as_ref(), "componentsUi.scanner.noCamera"),
+            (s.scan_unavailable.as_ref(), "componentsUi.scanner.cameraUnavailable"),
             (
                 s.scan_from_gallery.as_ref(),
                 "componentsUi.scanner.fromGallery",

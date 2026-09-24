@@ -524,6 +524,15 @@ pub struct WalletPage {
     /// screen on the web drops that screen's query.
     flow_query: (Option<FlowPanel>, String),
     flow_query_focus: gpui::FocusHandle,
+    /// What the scanner has to say about the last thing it read (078 F-02),
+    /// the camera's own failure aside.
+    scan_notice: Option<ScanNotice>,
+    /// Payloads the camera reads before this instant are dropped — the web's
+    /// two-second re-arm after an unusable code, so the same poster in frame
+    /// is not refused thirty times a second.
+    scan_quiet_until: Option<std::time::Instant>,
+    /// Why the camera is not running, as the last frame reported it.
+    scan_camera_failure: Option<crate::executor::camera::CameraFailure>,
     /// The contacts header search (078 X-05 / C-02): the web filters the
     /// A–Z list as it is typed, in the shell (`letterSections`).
     contacts_query: String,
@@ -1009,6 +1018,9 @@ impl WalletPage {
             add_token_focus: cx.focus_handle(),
             flow_query: (None, String::new()),
             flow_query_focus: cx.focus_handle(),
+            scan_notice: None,
+            scan_quiet_until: None,
+            scan_camera_failure: None,
             contacts_query: String::new(),
             balance_detail_open: false,
             contacts_query_focus: cx.focus_handle(),
@@ -13383,7 +13395,20 @@ impl WalletPage {
         let close: panels::Click = Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
             this.close_scanner(cx);
         }));
-        let card = panels::scan_modal(&model, theme, &mut self.icons, tools, Some(close), preview);
+        let notice = self.scan_notice_text();
+        let no_camera = self.scan_camera_failure.is_some();
+        let width = (f32::from(window.viewport_size().width) * 0.9).min(440.);
+        let card = panels::scan_modal(
+            &model,
+            theme,
+            &mut self.icons,
+            tools,
+            Some(close),
+            preview,
+            notice,
+            no_camera,
+            width,
+        );
         Some(
             div()
                 .id("scan-scrim")
@@ -13409,6 +13434,22 @@ impl WalletPage {
                 )
                 .into_any_element(),
         )
+    }
+
+    /// The sentence under the viewfinder when the hint is not true — the
+    /// web's `scanNotice`, in its order: a code that was read and cannot be
+    /// used, a picture with no code, then why the camera is not there.
+    fn scan_notice_text(&self) -> Option<SharedString> {
+        use crate::executor::camera::CameraFailure;
+        let s = &self.flow_strings;
+        match (self.scan_notice, self.scan_camera_failure) {
+            (Some(ScanNotice::Unusable), _) => Some(s.scan_invalid.clone()),
+            (Some(ScanNotice::NothingFound), _) => Some(s.scan_no_qr.clone()),
+            (None, Some(CameraFailure::Denied)) => Some(s.scan_permission.clone()),
+            (None, Some(CameraFailure::Absent)) => Some(s.scan_no_camera.clone()),
+            (None, Some(CameraFailure::Unavailable)) => Some(s.scan_unavailable.clone()),
+            (None, None) => None,
+        }
     }
 
     /// Close the scanner — and ONLY the scanner.
@@ -13439,6 +13480,9 @@ impl WalletPage {
     /// stack (`VELA_FLOW=DS1`) where no click happened.
     fn pump_camera(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.scan_camera.is_none() {
+            // A scanner just opened: what the last one said is not true of it.
+            self.scan_notice = None;
+            self.scan_quiet_until = None;
             self.scan_camera = Some(crate::executor::camera::start());
             // The camera has its own thread and no way to reach this window;
             // this asks for a repaint at roughly the rate a preview needs one,
@@ -13471,11 +13515,19 @@ impl WalletPage {
         // A code the camera saw. Taken once, so one QR held up to the lens
         // starts one send.
         if let Some(text) = session.take_payload() {
-            self.stop_camera(window);
-            self.scan_resolved(text, cx);
-            return;
+            let quiet = self
+                .scan_quiet_until
+                .is_some_and(|until| std::time::Instant::now() < until);
+            if !quiet && self.scan_resolved(text, cx) {
+                self.stop_camera(window);
+                return;
+            }
         }
-        let (frame, _failed) = session.snapshot();
+        let Some(session) = self.scan_camera.as_ref() else {
+            return;
+        };
+        let (frame, failure) = session.snapshot();
+        self.scan_camera_failure = failure;
         let Some(frame) = frame else {
             return;
         };
@@ -13523,11 +13575,17 @@ impl WalletPage {
         // no screenshot pass and no headless run can ever reach the far side
         // of a scan.
         if let Ok(path) = std::env::var("VELA_SCAN_FILE") {
-            if let Ok(bytes) = std::fs::read(&path)
-                && let Some(text) = crate::executor::qr::decode_first(&bytes)
+            self.scan_notice = None;
+            match std::fs::read(&path)
+                .ok()
+                .and_then(|bytes| crate::executor::qr::decode_first(&bytes))
             {
-                self.scan_resolved(text, cx);
+                Some(text) => {
+                    self.scan_resolved(text, cx);
+                }
+                None => self.scan_notice = Some(ScanNotice::NothingFound),
             }
+            cx.notify();
             return;
         }
         let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
@@ -13546,22 +13604,44 @@ impl WalletPage {
             let Ok(bytes) = std::fs::read(&path) else {
                 return;
             };
-            let Some(text) = crate::executor::qr::decode_first(&bytes) else {
-                // No code in that picture. The modal stays up: a person who
-                // picked the wrong file wants to pick another one, not to be
-                // returned to the wallet.
-                return;
-            };
-            page.update(cx, |this, cx| this.scan_resolved(text, cx))
-                .ok();
+            let found = crate::executor::qr::decode_first(&bytes);
+            page.update(cx, |this, cx| match found {
+                Some(text) => {
+                    this.scan_resolved(text, cx);
+                }
+                // No code in that picture. The modal stays up and says so: a
+                // person who picked the wrong file wants to pick another one,
+                // not to be returned to the wallet — and not to wonder whether
+                // the button did anything.
+                None => {
+                    this.scan_notice = Some(ScanNotice::NothingFound);
+                    cx.notify();
+                }
+            })
+            .ok();
         })
         .detach();
     }
 
     /// What a scanned string does, in the two places a scan can happen.
-    fn scan_resolved(&mut self, text: String, cx: &mut Context<Self>) {
+    ///
+    /// Returns whether the scan was acted on. `false` is a code that is not a
+    /// payment, read outside a send: the scanner stays up and says "Invalid
+    /// QR" (078 F-02) — it used to close without a word.
+    fn scan_resolved(&mut self, text: String, cx: &mut Context<Self>) -> bool {
         use vela_core::app::send::SendScan;
         let request = crate::flows::eip681::parse(&text);
+        if self.send_host.is_none()
+            && request.is_none()
+            && !crate::flows::eip681::is_hex_address(text.trim())
+        {
+            self.scan_notice = Some(ScanNotice::Unusable);
+            self.scan_quiet_until =
+                Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
+            cx.notify();
+            return false;
+        }
+        self.scan_notice = None;
         self.flows.retain(|panel| *panel != FlowPanel::Ds1);
 
         // Inside a live send the CORE rules on it — the shell only tokenizes.
@@ -13583,7 +13663,7 @@ impl WalletPage {
             }
             self.panel = PanelId::Flow;
             cx.notify();
-            return;
+            return true;
         }
 
         // From the home there is no session yet. A request that names a chain
@@ -13607,11 +13687,9 @@ impl WalletPage {
             None => {
                 let address = text.trim().to_owned();
                 if !crate::flows::eip681::is_hex_address(&address) {
-                    // Not a payment and not an address: nothing to open. The
-                    // scanner closes rather than starting a send to a string.
-                    self.panel = PanelId::None;
-                    cx.notify();
-                    return;
+                    // Refused above, before the scanner came down; kept so a
+                    // string can never start a send.
+                    return false;
                 }
                 (
                     SendOpenParams {
@@ -13629,6 +13707,7 @@ impl WalletPage {
         self.panel = PanelId::Flow;
         self.open_send(params, cx);
         cx.notify();
+        true
     }
 
     /// Read an address-book backup and hand it to the core.
@@ -14652,6 +14731,15 @@ impl Render for WalletPage {
 
         window_frame(root, &theme, window)
     }
+}
+
+/// What the scanner read that it cannot act on (078 F-02).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScanNotice {
+    /// A code was read and is not a payment or an address.
+    Unusable,
+    /// A picked picture had no code in it.
+    NothingFound,
 }
 
 /// The contacts route's copies (078 X-06): the toast's key, and the QR
