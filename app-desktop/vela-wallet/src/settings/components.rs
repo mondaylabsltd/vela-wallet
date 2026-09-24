@@ -1200,62 +1200,83 @@ pub fn danger_card(
     }
 }
 
-// -- ConfirmCard --------------------------------------------------------------
+// -- ConfirmSheet -------------------------------------------------------------
 
 /// What a destructive action asks before it happens (spec 072 FR-010): a
-/// title naming what goes, the consequence, an optional red callout (what
-/// is lost) and note (what is not), and the two answers.
+/// title naming what goes, the consequence, an optional quieter note (what is
+/// not lost) and red callout (what is), and the answers.
 pub struct ConfirmCopy {
     pub title: gpui::SharedString,
     pub body: gpui::SharedString,
     pub callout: Option<gpui::SharedString>,
     pub note: Option<gpui::SharedString>,
     pub confirm: gpui::SharedString,
-    pub cancel: gpui::SharedString,
+    /// The stacked "keep it" answer under the confirm — the settings sheets'.
+    /// `None` is the contacts question, where the dialog's ✕ is the refusal
+    /// and the one answer sits at the row's end.
+    pub cancel: Option<gpui::SharedString>,
     /// Red for what cannot be undone; the accent for what rebuilds itself.
     pub danger: bool,
 }
 
-/// The one confirmation card every settings question is drawn with — the
-/// sign-out dialog's shape, so a person meets one kind of question.
-pub fn confirm_card(
+/// The body every question is drawn with, inside `ui::dialog` (whose title is
+/// `copy.title`).
+///
+/// With a cancel it is the web's `settings/ui/ConfirmSheet.svelte`: the body
+/// at 15 in the base colour, the note at 13 subtle, the callout, then the
+/// answer and "cancel" stacked 12 apart at full width. Without one it is the
+/// contacts route's dialog: the body at 13 muted and one answer at the end of
+/// the row.
+pub fn confirm_sheet(
     theme: &Theme,
     copy: ConfirmCopy,
     on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    let (fg, bg, hover) = if copy.danger {
-        (theme.error_base, theme.error_soft, theme.error_base)
+    use crate::flows::components::{accent_button, danger_button, secondary_button};
+
+    let answer = if copy.danger {
+        danger_button(theme, copy.confirm)
     } else {
-        (theme.accent, theme.bg_sunken, theme.accent)
+        accent_button(theme, copy.confirm)
     };
-    let hover_cancel = theme.bg_sunken;
-    let mut card = div()
-        .w(px(400.))
+    let answer = answer
+        .id("confirm-accept")
+        .cursor_pointer()
+        .on_click(on_confirm);
+
+    let Some(cancel) = copy.cancel else {
+        return div()
+            .flex()
+            .flex_col()
+            .child(crate::ui::dialog::dialog_body(theme, copy.body))
+            .child(crate::ui::dialog::dialog_actions().child(div().child(answer.w_auto())));
+    };
+
+    let mut sheet = div()
         .flex()
         .flex_col()
         .gap(px(16.))
-        .p(px(28.))
-        .rounded(px(20.))
-        .bg(theme.bg_raised)
-        .border_1()
-        .border_color(theme.border_card)
+        .pt(px(8.))
+        .pb(px(16.))
         .child(
             div()
-                .text_size(theme::text_panel_title())
-                .font_weight(gpui::FontWeight::BOLD)
+                .text_size(theme::text_row_title())
+                .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_base)
-                .child(copy.title),
-        )
-        .child(
-            div()
-                .text_size(theme::text_row_sub())
-                .line_height(theme::line_height_body())
-                .text_color(theme.fg_muted)
                 .child(copy.body),
         );
+    if let Some(note) = copy.note {
+        sheet = sheet.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(1.4))
+                .text_color(theme.fg_subtle)
+                .child(note),
+        );
+    }
     if let Some(callout) = copy.callout {
-        card = card.child(
+        sheet = sheet.child(
             div()
                 .p(px(12.))
                 .rounded(px(10.))
@@ -1266,51 +1287,13 @@ pub fn confirm_card(
                 .child(callout),
         );
     }
-    if let Some(note) = copy.note {
-        card = card.child(
-            div()
-                .text_size(theme::text_row_sub())
-                .line_height(theme::line_height_body())
-                .text_color(theme.fg_subtle)
-                .child(note),
-        );
-    }
-    card.child(
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(8.))
-            .child(
-                div()
-                    .id("confirm-accept")
-                    .h(px(44.))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(bg)
-                    .text_size(theme::text_row_title())
-                    .text_color(fg)
-                    .hover(move |style| style.bg(hover).text_color(theme.fg_inverse))
-                    .on_click(on_confirm)
-                    .child(copy.confirm),
-            )
-            .child(
-                div()
-                    .id("confirm-cancel")
-                    .h(px(44.))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_base)
-                    .hover(move |style| style.bg(hover_cancel))
-                    .on_click(on_cancel)
-                    .child(copy.cancel),
-            ),
+    sheet.child(
+        div().flex().flex_col().gap(px(12.)).child(answer).child(
+            secondary_button(theme, cancel)
+                .id("confirm-cancel")
+                .cursor_pointer()
+                .on_click(on_cancel),
+        ),
     )
 }
 

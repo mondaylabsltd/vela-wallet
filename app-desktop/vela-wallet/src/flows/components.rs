@@ -1014,6 +1014,20 @@ pub fn ghost_button(theme: &Theme, label: SharedString) -> Div {
         .text_color(theme.fg_muted)
 }
 
+/// `secondary`, `rounded`: the outline at the web's 12 radius — the "cancel"
+/// under a confirm sheet's answer, which the web does not draw as a pill.
+pub fn secondary_button(theme: &Theme, label: SharedString) -> Div {
+    ghost_button(theme, label).rounded(px(12.))
+}
+
+/// A button that cannot act yet: the same fill at `--opacity-disabled`, which
+/// hovering does not lift. The caller withholds the click and the pointer.
+pub fn disabled_button(button: Div) -> Div {
+    button
+        .opacity(theme::OPACITY_DISABLED)
+        .hover(|el| el.opacity(theme::OPACITY_DISABLED))
+}
+
 /// `primary`, `rounded`: the accent CTA. In this product the accent means
 /// "this moves the money" — and "done", on a receipt that has landed.
 pub fn accent_button(theme: &Theme, label: SharedString) -> Div {

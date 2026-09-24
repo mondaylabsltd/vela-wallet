@@ -58,7 +58,7 @@ use crate::executor::format_prefs;
 use crate::executor::passkey::WindowHandle;
 use crate::hardware;
 use crate::settings::components::{
-    CalloutTone, ConfirmCopy, callout, chain_logo_mark, chain_mark, check_list, confirm_card,
+    CalloutTone, ConfirmCopy, callout, chain_logo_mark, chain_mark, check_list, confirm_sheet,
     danger_card, dropdown_menu, dropdown_menu_choices, dropdown_menu_picks, dropdown_trigger,
     editable_url_field, form_row, key_value_row, network_row, rpc_banner, segmented,
     segmented_picks, settings_nav_row, status_pill, storage_bar, storage_group, storage_group_with,
@@ -74,7 +74,7 @@ use crate::signing::live as signing_live;
 use crate::signing::trusted_signer as signing_trusted_signer;
 use crate::theme::{
     self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_HEADER_H, CONTACTS_HERO_AVATAR,
-    CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W, GALLERY_BAR_H, SETTINGS_DIALOG_W,
+    CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W, GALLERY_BAR_H,
     SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W, THIRD_PANEL_W,
     Theme, ThemeMode, WALLET_CONTENT_MAX_W, WALLET_PAD_TOP, WALLET_PAD_X, WALLET_ROW_MEASURE,
 };
@@ -666,6 +666,8 @@ pub struct WalletPage {
     contact_form: Option<ContactForm>,
     /// The contact whose address is being shown as a code, if any.
     contact_qr: Option<(SharedString, SharedString)>,
+    /// The QR dialog's copy pill has copied; reset when the dialog goes.
+    contact_qr_copied: bool,
     /// The group name sheet: `Some((id, name))`, with `None` for a new group.
     /// One dialog for 新建分组 and 重命名分组, because they are one question.
     group_form: Option<(Option<String>, String)>,
@@ -734,6 +736,8 @@ pub struct WalletPage {
     /// name, over whichever section is on screen.
     account_switcher: bool,
     switcher_scroll: gpui::ScrollHandle,
+    /// Each `ui::dialog`'s body scroll, by dialog id (078 X-04).
+    dialog_scrolls: std::collections::HashMap<&'static str, gpui::ScrollHandle>,
     /// 078 H-02 — the identicon viewer, over everything, switcher included.
     identicon_viewer: Option<IdenticonViewer>,
     /// DC3: the fixture roster is empty.
@@ -1050,6 +1054,7 @@ impl WalletPage {
             import_result: None,
             contact_form: None,
             contact_qr: None,
+            contact_qr_copied: false,
             group_form: None,
             group_form_focus: cx.focus_handle(),
             contact_form_name_focus: cx.focus_handle(),
@@ -1072,6 +1077,7 @@ impl WalletPage {
             removing_account: None,
             account_switcher: false,
             switcher_scroll: gpui::ScrollHandle::new(),
+            dialog_scrolls: std::collections::HashMap::new(),
             identicon_viewer: None,
             contacts_empty: false,
             menu: None,
@@ -1222,7 +1228,6 @@ impl WalletPage {
             }
             _ => !form.text.trim().is_empty(),
         };
-        let hover_accent = theme.accent_hover;
         let focus = self.explore_form_focus.clone();
         // No label: the card's heading is already this field's name, and
         // repeating it verbatim in small caps under itself ("添加到收藏" over
@@ -1234,26 +1239,13 @@ impl WalletPage {
             helper: SharedString::from(""),
             too_long_hint: SharedString::from(""),
         };
-        let cancel = c.cancel.clone();
         let save_label = c.save.clone();
 
-        let card = div()
-            .w(px(400.))
+        let body = div()
             .flex()
             .flex_col()
             .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(title),
-            )
+            .pb(px(16.))
             .child(crate::ui::text_field(
                 "explore-form-name",
                 theme,
@@ -1275,66 +1267,51 @@ impl WalletPage {
                     }
                 },
             ))
-            .child(
-                div()
-                    .flex()
-                    .gap(px(12.))
-                    .child(
-                        div()
-                            .id("explore-form-cancel")
-                            .flex_1()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .border_1()
-                            .border_color(theme.outline_strong)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(cancel)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.explore_form = None;
-                                cx.notify();
-                            })),
-                    )
-                    .child({
-                        let save = div()
-                            .id("explore-form-save")
-                            .flex_1()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(theme::text_row_title())
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child(save_label);
-                        if can_save {
-                            save.cursor_pointer()
-                                .bg(theme.accent)
-                                .hover(move |el| el.bg(hover_accent))
-                                .text_color(theme.fg_inverse)
-                                .on_click(cx.listener(|this, _, _, cx| this.save_explore_form(cx)))
-                        } else {
-                            save.bg(theme.bg_sunken).text_color(theme.fg_subtle)
-                        }
-                    }),
-            );
+            .child(self.form_save(
+                theme,
+                "explore-form-save",
+                save_label,
+                can_save,
+                cx.listener(|this, _, _, cx| this.save_explore_form(cx)),
+            ));
 
         Some(
-            div()
-                .id("explore-form-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "explore-form",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("explore-form"),
+                Self::closer(cx, |this, _| this.explore_form = None),
+            )
+            .into_any_element(),
         )
+    }
+
+    /// A dialog form's one answer (the web's `GroupForm`): the primary button
+    /// at full width, 8 under the field, dimmed until it can act. The ✕ is
+    /// the way out, so there is no Cancel beside it.
+    fn form_save(
+        &self,
+        theme: &Theme,
+        id: &'static str,
+        label: SharedString,
+        can_save: bool,
+        on_save: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+    ) -> gpui::AnyElement {
+        let button = crate::flows::components::accent_button(theme, label).mt(px(8.));
+        if can_save {
+            button
+                .id(id)
+                .cursor_pointer()
+                .on_click(on_save)
+                .into_any_element()
+        } else {
+            crate::flows::components::disabled_button(button).into_any_element()
+        }
     }
 
     /// Take the typed name and give it to whichever machine asked.
@@ -1430,7 +1407,6 @@ impl WalletPage {
         };
         // A group with no name is a row nobody can tell from another.
         let can_save = !name.trim().is_empty();
-        let hover_accent = theme.accent_hover;
         let focus = self.group_form_focus.clone();
         let strings = crate::ui::NameFieldStrings {
             label: s.group_name_label.clone(),
@@ -1438,26 +1414,13 @@ impl WalletPage {
             helper: SharedString::from(""),
             too_long_hint: SharedString::from(""),
         };
-        let cancel = s.cancel.clone();
         let save_label = s.save.clone();
 
-        let card = div()
-            .w(px(400.))
+        let body = div()
             .flex()
             .flex_col()
             .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(title),
-            )
+            .pb(px(16.))
             .child(crate::ui::text_field(
                 "group-form-name",
                 theme,
@@ -1479,90 +1442,47 @@ impl WalletPage {
                     }
                 },
             ))
-            .child(
-                div()
-                    .flex()
-                    .gap(px(12.))
-                    .child(
-                        div()
-                            .id("group-form-cancel")
-                            .flex_1()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .border_1()
-                            .border_color(theme.outline_strong)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(cancel)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.group_form = None;
-                                cx.notify();
-                            })),
-                    )
-                    .child({
-                        let save = div()
-                            .id("group-form-save")
-                            .flex_1()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(theme::text_row_title())
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child(save_label);
-                        if can_save {
-                            save.cursor_pointer()
-                                .bg(theme.accent)
-                                .hover(move |el| el.bg(hover_accent))
-                                .text_color(theme.fg_inverse)
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    let Some((id, name)) = this.group_form.take() else {
-                                        return;
-                                    };
-                                    resident::resident::<Contacts>(cx).update(
-                                        cx,
-                                        |resident, cx| {
-                                            resident.dispatch(
-                                                ContactEvent::GroupSave {
-                                                    input: ContactGroupInput {
-                                                        id,
-                                                        name: name.trim().to_owned(),
-                                                        color: None,
-                                                        // `None` leaves membership
-                                                        // alone — a rename must not
-                                                        // empty the group.
-                                                        members: None,
-                                                    },
-                                                },
-                                                cx,
-                                            );
-                                        },
-                                    );
-                                    cx.notify();
-                                }))
-                        } else {
-                            save.bg(theme.bg_sunken).text_color(theme.fg_subtle)
-                        }
-                    }),
-            );
+            .child(self.form_save(
+                theme,
+                "group-form-save",
+                save_label,
+                can_save,
+                cx.listener(|this, _, _, cx| {
+                    let Some((id, name)) = this.group_form.take() else {
+                        return;
+                    };
+                    resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            ContactEvent::GroupSave {
+                                input: ContactGroupInput {
+                                    id,
+                                    name: name.trim().to_owned(),
+                                    color: None,
+                                    // `None` leaves membership alone — a
+                                    // rename must not empty the group.
+                                    members: None,
+                                },
+                            },
+                            cx,
+                        );
+                    });
+                    cx.notify();
+                }),
+            ));
 
         Some(
-            div()
-                .id("group-form-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "group-form",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("group-form"),
+                Self::closer(cx, |this, _| this.group_form = None),
+            )
+            .into_any_element(),
         )
     }
 
@@ -1580,11 +1500,17 @@ impl WalletPage {
     fn contact_qr_dialog(
         &mut self,
         theme: &Theme,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (name, address) = self.contact_qr.clone()?;
-        let close = self.strings.close_viewer.clone();
-        let hover_accent = theme.accent_hover;
+        let s = &self.contacts;
+        let title = s.action_qr.clone();
+        let copy_label = if self.contact_qr_copied {
+            s.copied.clone()
+        } else {
+            s.copy_address.clone()
+        };
 
         // 21 modules for a 42-character address is not a given, so the module
         // size is derived from the code's own width rather than assumed.
@@ -1616,23 +1542,14 @@ impl WalletPage {
             None => div(),
         };
 
-        let card = div()
-            // The card takes its own clicks: without this the scrim's
-            // dismiss fires when somebody clicks the CODE, and — because a
-            // gpui hitbox does not block what is under it unless it says so —
-            // the same click also lands on whatever row the dialog is drawn
-            // over, quietly opening a different contact behind it.
-            .id("contact-qr-card")
-            .occlude()
+        // The web's `ContactQr`: the code, the name at 17 bold, the address in
+        // full in the mono face, and a hairline pill that copies it.
+        let body = div()
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
+            .gap(px(8.))
+            .pb(px(16.))
             .child(crate::wallet::components::identicon_avatar(
                 &mut self.identicons,
                 &address,
@@ -1640,58 +1557,70 @@ impl WalletPage {
             ))
             .child(
                 div()
-                    .text_size(theme::text_panel_title())
+                    .mt(px(8.))
+                    .rounded(px(14.))
+                    .overflow_hidden()
+                    .child(matrix),
+            )
+            .child(
+                div()
+                    .mt(px(8.))
+                    .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::BOLD)
                     .text_color(theme.fg_base)
                     .child(name),
             )
-            .child(div().rounded(px(14.)).overflow_hidden().child(matrix))
             .child(
                 div()
-                    .max_w(px(260.))
+                    .max_w(px(300.))
                     .font_family(theme::font_mono())
                     .text_size(theme::text_label())
                     .text_color(theme.fg_muted)
-                    .child(address),
+                    .text_center()
+                    .child(address.clone()),
             )
             .child(
                 div()
-                    .id("contact-qr-close")
-                    .px(px(20.))
-                    .py(px(10.))
-                    .rounded(px(10.))
-                    .bg(theme.accent)
+                    .id("contact-qr-copy")
+                    .h(px(36.))
+                    .px(px(16.))
+                    .flex()
+                    .items_center()
+                    .rounded_full()
+                    .border_1()
+                    .border_color(theme.border_card)
+                    .bg(theme.bg_raised)
                     .cursor_pointer()
-                    .hover(move |el| el.bg(hover_accent))
+                    .hover(|el| el.opacity(0.92))
                     .text_size(theme::text_row_sub())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_inverse)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.contact_qr = None;
+                    .text_color(theme.fg_base)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(address.to_string()));
+                        this.contact_qr_copied = true;
                         cx.notify();
                     }))
-                    .child(close),
+                    .child(copy_label),
             );
 
         Some(
-            div()
-                .id("contact-qr-scrim")
-                // A scrim that only dims is not a scrim: the page beneath it
-                // still takes the click.
-                .occlude()
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.contact_qr = None;
-                    cx.notify();
-                }))
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "contact-qr",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("contact-qr"),
+                Self::closer(cx, |this, _| this.close_contact_qr()),
+            )
+            .into_any_element(),
         )
+    }
+
+    fn close_contact_qr(&mut self) {
+        self.contact_qr = None;
+        self.contact_qr_copied = false;
     }
 
     /// The add/edit contact sheet.
@@ -1721,7 +1650,6 @@ impl WalletPage {
         // said before the press rather than after it, so the button does not
         // look available for something it will not do.
         let can_save = is_evm_address(&form.address);
-        let hover_accent = theme.accent_hover;
         let name_focus = self.contact_form_name_focus.clone();
         let address_focus = self.contact_form_address_focus.clone();
 
@@ -1739,15 +1667,10 @@ impl WalletPage {
         };
 
         let mut card = div()
-            .w(px(400.))
             .flex()
             .flex_col()
             .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
+            .pb(px(16.))
             // Tab, between the two fields this form has. Nothing in this shell
             // bound it, so a person who typed a name and pressed Tab — the
             // reflex every other form on their machine has taught them —
@@ -1788,13 +1711,6 @@ impl WalletPage {
                     cx.stop_propagation();
                 }
             })
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(title),
-            )
             .child(crate::ui::text_field(
                 "contact-form-name",
                 theme,
@@ -1851,93 +1767,53 @@ impl WalletPage {
             ));
         }
 
-        let buttons = div()
-            .flex()
-            .gap(px(12.))
-            .child(
-                div()
-                    .id("contact-form-cancel")
-                    .flex_1()
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .border_1()
-                    .border_color(theme.outline_strong)
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_base)
-                    .child(s.cancel.clone())
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.contact_form = None;
-                        cx.notify();
-                    })),
-            )
-            .child({
-                let save = div()
-                    .id("contact-form-save")
-                    .flex_1()
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(theme::text_row_title())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(s.save.clone());
-                if can_save {
-                    save.cursor_pointer()
-                        .bg(theme.accent)
-                        .hover(move |el| el.bg(hover_accent))
-                        .text_color(theme.fg_inverse)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let Some(form) = this.contact_form.take() else {
-                                return;
-                            };
-                            let now_ms = crate::executor::now_ms();
-                            resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(
-                                    ContactEvent::Save {
-                                        input: ContactSaveInput {
-                                            address: form.address,
-                                            // An empty name CLEARS the name —
-                                            // the core reads `Some("")` that
-                                            // way, and a person who deleted the
-                                            // text meant to.
-                                            name: Some(form.name.trim().to_owned()),
-                                            note: None,
-                                            favorite: None,
-                                            kind: None,
-                                            resolved_name: None,
-                                            resolved_source: None,
-                                        },
-                                        now_ms,
-                                    },
-                                    cx,
-                                );
-                            });
-                            cx.notify();
-                        }))
-                } else {
-                    // Dimmed, not hidden: the button is where it will be, and
-                    // the address field beside it says what is missing.
-                    save.bg(theme.bg_sunken).text_color(theme.fg_subtle)
-                }
-            });
+        let save = self.form_save(
+            theme,
+            "contact-form-save",
+            s.save.clone(),
+            can_save,
+            cx.listener(|this, _, _, cx| {
+                let Some(form) = this.contact_form.take() else {
+                    return;
+                };
+                let now_ms = crate::executor::now_ms();
+                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(
+                        ContactEvent::Save {
+                            input: ContactSaveInput {
+                                address: form.address,
+                                // An empty name CLEARS the name — the core
+                                // reads `Some("")` that way, and a person who
+                                // deleted the text meant to.
+                                name: Some(form.name.trim().to_owned()),
+                                note: None,
+                                favorite: None,
+                                kind: None,
+                                resolved_name: None,
+                                resolved_source: None,
+                            },
+                            now_ms,
+                        },
+                        cx,
+                    );
+                });
+                cx.notify();
+            }),
+        );
 
         Some(
-            div()
-                .id("contact-form-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card.child(buttons))
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "contact-form",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                card.child(save),
+                &self.dialog_scroll("contact-form"),
+                Self::closer(cx, |this, _| this.contact_form = None),
+            )
+            .into_any_element(),
         )
     }
 
@@ -1948,190 +1824,101 @@ impl WalletPage {
     /// the CORE's — it applied existing-wins and is the only thing that knows
     /// how many rows were new.
     fn import_result_dialog(
-        &self,
+        &mut self,
         theme: &Theme,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (title, body) = self.import_result.clone()?;
-        let hover_accent = theme.accent_hover;
-        let card = div()
-            .w(px(400.))
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(title),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_muted)
-                    .child(body),
-            )
-            .child(
-                div()
-                    .id("import-result-ok")
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(theme.accent)
-                    .hover(move |el| el.bg(hover_accent))
-                    .text_size(theme::text_row_title())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_inverse)
-                    .child(self.flow_strings.done.clone())
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.import_result = None;
-                        cx.notify();
-                    })),
-            );
+        let done = crate::flows::components::accent_button(theme, self.flow_strings.done.clone())
+            .w_auto()
+            .id("import-result-ok")
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.import_result = None;
+                cx.notify();
+            }));
         Some(
-            div()
-                .id("import-result-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "import-result",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(crate::ui::dialog::dialog_body(theme, body))
+                    .child(crate::ui::dialog::dialog_actions().child(done)),
+                &self.dialog_scroll("import-result"),
+                Self::closer(cx, |this, _| this.import_result = None),
+            )
+            .into_any_element(),
         )
     }
 
-    fn sign_out_dialog(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+    fn sign_out_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
         let view = session::view(cx);
         let dialog = view.sign_out?;
         let s = &self.strings;
 
-        let mut card = div()
-            .w(px(400.))
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(s.sign_out_title.clone()),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_muted)
-                    .child(s.sign_out_keeps.clone()),
-            );
-
-        // What this takes, when it is more than one wallet. `keeps` above is
-        // true either way — the address returns, the history is still there —
-        // and on a machine holding six it was ALSO how the dialog managed to
+        // What this takes, when it is more than one wallet, goes first; `keeps`
+        // is true either way — the address returns, the history is still there
+        // — and on a machine holding six it was ALSO how the dialog managed to
         // say nothing about signing in six times (owner, 2026-09-23).
-        if dialog.account_count > 1 {
-            card = card.child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_base)
-                    .child(SharedString::from(
-                        s.sign_out_desc_many
-                            .replace("{{count}}", &dialog.account_count.to_string()),
-                    )),
-            );
-        }
-
-        if dialog.pending_upload_warning {
-            card = card.child(
-                div()
-                    .p(px(12.))
-                    .rounded(px(10.))
-                    .bg(theme.warning_soft)
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_base)
-                    .child(s.sign_out_warning.clone()),
-            );
-        }
-
+        let (body, note) = if dialog.account_count > 1 {
+            (
+                SharedString::from(
+                    s.sign_out_desc_many
+                        .replace("{{count}}", &dialog.account_count.to_string()),
+                ),
+                Some(s.sign_out_keeps.clone()),
+            )
+        } else {
+            (s.sign_out_keeps.clone(), None)
+        };
         // The destructive label changes with the warning, as the shipping
         // client does: "Sign Out Anyway" is the acknowledgement.
-        let confirm_label = if dialog.pending_upload_warning {
-            s.sign_out_anyway.clone()
+        let (confirm, callout) = if dialog.pending_upload_warning {
+            (s.sign_out_anyway.clone(), Some(s.sign_out_warning.clone()))
         } else {
-            s.sign_out_title.clone()
+            (s.sign_out_title.clone(), None)
         };
-        let hover_confirm = theme.error_base;
-        let hover_cancel = theme.bg_sunken;
-        card = card.child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(8.))
-                .child(
-                    div()
-                        .id("sign-out-confirm")
-                        .h(px(44.))
-                        .rounded(px(12.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor_pointer()
-                        .bg(theme.error_soft)
-                        .text_size(theme::text_row_title())
-                        .text_color(theme.error_base)
-                        .hover(move |style| style.bg(hover_confirm).text_color(theme.fg_inverse))
-                        .on_click(cx.listener(|_, _, _, cx| session::sign_out_confirmed(cx)))
-                        .child(confirm_label),
-                )
-                .child(
-                    div()
-                        .id("sign-out-cancel")
-                        .h(px(44.))
-                        .rounded(px(12.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor_pointer()
-                        .text_size(theme::text_row_title())
-                        .text_color(theme.fg_base)
-                        .hover(move |style| style.bg(hover_cancel))
-                        .on_click(cx.listener(|_, _, _, cx| session::sign_out_dismissed(cx)))
-                        .child(s.sign_out_cancel.clone()),
-                ),
+        let copy = ConfirmCopy {
+            title: SharedString::default(),
+            body,
+            callout,
+            note,
+            confirm,
+            cancel: Some(s.sign_out_cancel.clone()),
+            danger: true,
+        };
+        let title = s.sign_out_title.clone();
+        let sheet = confirm_sheet(
+            theme,
+            copy,
+            cx.listener(|_, _: &gpui::ClickEvent, _, cx| session::sign_out_confirmed(cx)),
+            cx.listener(|_, _: &gpui::ClickEvent, _, cx| session::sign_out_dismissed(cx)),
         );
-
         Some(
-            div()
-                .id("sign-out-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.backdrop)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "sign-out",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                sheet,
+                &self.dialog_scroll("sign-out"),
+                Self::closer(cx, |_, cx| session::sign_out_dismissed(cx)),
+            )
+            .into_any_element(),
         )
     }
 
@@ -2163,6 +1950,7 @@ impl WalletPage {
                 theme,
                 window,
                 title,
+                None,
                 close_icon,
                 body,
                 &self.switcher_scroll,
@@ -2292,111 +2080,54 @@ impl WalletPage {
     fn network_remove_dialog(
         &mut self,
         theme: &Theme,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (id, name) = self.network_remove.clone()?;
         let s = &self.settings;
-        let hover_confirm = theme.error_base;
-        let hover_cancel = theme.bg_sunken;
-        let card = div()
-            .w(px(400.))
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(s.network_remove_title.clone()),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_muted)
-                    // The corpus asks "Remove this custom network?"; the name
-                    // says WHICH, because the dialog covers the row it is about.
-                    .child(SharedString::from(format!(
-                        "{} · {name}",
-                        s.network_remove_body
-                    ))),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .id("network-remove-confirm")
-                            .h(px(44.))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .bg(theme.error_soft)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.error_base)
-                            .hover(move |style| {
-                                style.bg(hover_confirm).text_color(theme.fg_inverse)
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                resident::resident::<NetworkAdmin>(cx).update(
-                                    cx,
-                                    |resident, cx| {
-                                        resident.dispatch(
-                                            NetEvent::DeleteConfirmed { id: id.clone() },
-                                            cx,
-                                        );
-                                    },
-                                );
-                                // The hero was counting that chain a moment ago.
-                                crate::executor::balance_dashboard::refresh(cx);
-                                this.network_remove = None;
-                                this.settings_expanded_network = None;
-                                cx.notify();
-                            }))
-                            .child(s.network_remove_confirm.clone()),
-                    )
-                    .child(
-                        div()
-                            .id("network-remove-cancel")
-                            .h(px(44.))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .hover(move |style| style.bg(hover_cancel))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.network_remove = None;
-                                cx.notify();
-                            }))
-                            .child(s.network_remove_cancel.clone()),
-                    ),
-            );
-
+        let copy = ConfirmCopy {
+            title: SharedString::default(),
+            // The corpus asks "Remove this custom network?"; the name says
+            // WHICH, because the dialog covers the row it is about.
+            body: SharedString::from(format!("{} · {name}", s.network_remove_body)),
+            callout: None,
+            note: None,
+            confirm: s.network_remove_confirm.clone(),
+            cancel: Some(s.network_remove_cancel.clone()),
+            danger: true,
+        };
+        let title = s.network_remove_title.clone();
+        let sheet = confirm_sheet(
+            theme,
+            copy,
+            cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(NetEvent::DeleteConfirmed { id: id.clone() }, cx);
+                });
+                // The hero was counting that chain a moment ago.
+                crate::executor::balance_dashboard::refresh(cx);
+                this.network_remove = None;
+                this.settings_expanded_network = None;
+                cx.notify();
+            }),
+            cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.network_remove = None;
+                cx.notify();
+            }),
+        );
         Some(
-            div()
-                .id("network-remove-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.backdrop)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "network-remove",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                sheet,
+                &self.dialog_scroll("network-remove"),
+                Self::closer(cx, |this, _| this.network_remove = None),
+            )
+            .into_any_element(),
         )
     }
 
@@ -2655,7 +2386,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: s.storage_clear.clone(),
-                cancel: s.cancel.clone(),
+                cancel: Some(s.cancel.clone()),
                 danger: true,
             },
             Confirm::ClearCaches => ConfirmCopy {
@@ -2664,7 +2395,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: s.storage_clear_confirm.clone(),
-                cancel: s.cancel.clone(),
+                cancel: Some(s.cancel.clone()),
                 danger: false,
             },
             Confirm::Disconnect { name, .. } => ConfirmCopy {
@@ -2673,7 +2404,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: self.explore.disconnect.clone(),
-                cancel: s.cancel.clone(),
+                cancel: Some(s.cancel.clone()),
                 danger: true,
             },
             Confirm::DisconnectAll => ConfirmCopy {
@@ -2682,7 +2413,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: s.storage_disconnect_all.clone(),
-                cancel: s.cancel.clone(),
+                cancel: Some(s.cancel.clone()),
                 danger: true,
             },
             Confirm::ResetEndpoints => ConfirmCopy {
@@ -2691,7 +2422,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: s.endpoints_reset_confirm.clone(),
-                cancel: s.endpoints_reset_cancel.clone(),
+                cancel: Some(s.endpoints_reset_cancel.clone()),
                 danger: true,
             },
             Confirm::DeleteContact { name, .. } => ConfirmCopy {
@@ -2704,7 +2435,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: self.contacts.delete.clone(),
-                cancel: self.contacts.cancel.clone(),
+                cancel: None,
                 danger: true,
             },
             Confirm::DeleteGroup { name, .. } => ConfirmCopy {
@@ -2717,38 +2448,111 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: self.contacts.delete.clone(),
-                cancel: self.contacts.cancel.clone(),
+                cancel: None,
                 danger: true,
             },
         }
     }
 
     /// The question over the window, when one is pending.
-    fn confirm_dialog(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+    fn confirm_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
         let action = self.confirm.as_ref()?;
-        let card = confirm_card(
+        let mut copy = self.confirm_copy(action);
+        let title = std::mem::take(&mut copy.title);
+        let sheet = confirm_sheet(
             theme,
-            self.confirm_copy(action),
+            copy,
             cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.confirmed(cx)),
             cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                this.confirm = None;
-                this.erase_failed = None;
+                this.dismiss_confirm();
                 cx.notify();
             }),
         );
         Some(
-            div()
-                .id("confirm-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.backdrop)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "confirm",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                sheet,
+                &self.dialog_scroll("confirm"),
+                Self::closer(cx, |this, _| this.dismiss_confirm()),
+            )
+            .into_any_element(),
         )
+    }
+
+    fn dismiss_confirm(&mut self) {
+        self.confirm = None;
+        self.erase_failed = None;
+    }
+
+    /// The ✕ every dialog carries (`--icon-md`, `fg-muted`).
+    fn dialog_close_icon(&mut self, theme: &Theme) -> gpui::AnyElement {
+        icon_img(&mut self.icons, Icon::X, false, theme.fg_muted, 18.).into_any_element()
+    }
+
+    /// A dialog's close — its ✕ and its scrim — as the page's own change.
+    fn closer<F: Fn(&mut Self, &mut Context<Self>) + 'static>(
+        cx: &mut Context<Self>,
+        close: F,
+    ) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static + use<F> {
+        let page = cx.entity().downgrade();
+        move |_, _, cx| {
+            // Gone only if the page is: nothing left to close.
+            let _ = page.update(cx, |this, cx| {
+                close(this, cx);
+                cx.notify();
+            });
+        }
+    }
+
+    /// A dialog's body scroll, kept per dialog so two stacked ones do not
+    /// share a position.
+    fn dialog_scroll(&mut self, id: &'static str) -> gpui::ScrollHandle {
+        self.dialog_scrolls
+            .entry(id)
+            .or_default()
+            .clone()
+    }
+
+    /// Escape: the dialog on top goes, and only that one — the same order
+    /// `render` stacks them in, read from the top. False when none was open.
+    fn dismiss_top_dialog(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.identicon_viewer.is_some() {
+            self.identicon_viewer = None;
+        } else if self.account_switcher {
+            self.close_account_switcher(cx);
+        } else if self.confirm.is_some() {
+            self.dismiss_confirm();
+        } else if self.network_remove.is_some() {
+            self.network_remove = None;
+        } else if session::view(cx).sign_out.is_some() {
+            session::sign_out_dismissed(cx);
+        } else if self.group_form.is_some() {
+            self.group_form = None;
+        } else if self.explore_form.is_some() {
+            self.explore_form = None;
+        } else if self.contact_qr.is_some() {
+            self.close_contact_qr();
+        } else if self.contact_form.is_some() {
+            self.contact_form = None;
+        } else if self.import_result.is_some() {
+            self.import_result = None;
+        } else if self.settings_dialog.is_some() {
+            self.close_settings_dialog(cx);
+        } else {
+            return false;
+        }
+        cx.notify();
+        true
     }
 
     /// Close the settings dialog, and forget what the add-network wizard was
@@ -4328,6 +4132,7 @@ impl WalletPage {
                 action_pill("contact-qr", theme, &mut self.icons, Icon::QrCode, qr).on_click(
                     cx.listener(move |this, _, _, cx| {
                         this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
+                        this.contact_qr_copied = false;
                         cx.notify();
                     }),
                 ),
@@ -9887,111 +9692,25 @@ impl WalletPage {
             SettingsDialog::EraseDevice => self.settings_erase_body(theme, cx),
         };
 
-        let mut header = div()
-            .flex()
-            .items_start()
-            .justify_between()
-            .gap(px(12.))
-            .child({
-                let mut titles = div().flex().flex_col().gap(px(6.)).child(
-                    div()
-                        .text_size(theme::text_panel_title())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .child(title),
-                );
-                if let Some(subtitle) = subtitle {
-                    titles = titles.child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(subtitle),
-                    );
-                }
-                titles
-            });
-        header = header.child(
-            div()
-                .id("settings-dialog-close")
-                .size(px(32.))
-                .flex_none()
-                .rounded_full()
-                .bg(theme.bg_sunken)
-                .flex()
-                .items_center()
-                .justify_center()
-                .cursor_pointer()
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.close_settings_dialog(cx);
-                    cx.notify();
-                }))
-                .child(icon_img(
-                    &mut self.icons,
-                    Icon::X,
-                    false,
-                    theme.fg_muted,
-                    18.,
-                )),
-        );
-
-        // The body scrolls, the header does not — the same shape `hardware.rs`
-        // gives the wallet picker, and for the same reason.
-        //
-        // The card had no height cap and nothing to scroll: its height was
-        // whatever its content was. At the window's 1280x800 minimum the
-        // add-network verdict already reached within a few points of both
-        // window edges in English, and German — one of fifteen locales, at the
-        // smallest of six text scales — was tighter still. One more checklist
-        // row, one step up in text scale, or a longer language and the CTA sits
-        // below the window with no way to reach it.
-        //
-        // Measured off the window rather than a constant, because the constant
-        // would be wrong on every other window size: the card keeps 48px of
-        // breathing room top and bottom, and the header, the two 28px paddings
-        // and the 20px gap come off before the body gets what is left.
-        let chrome = 28. + 32. + 20. + 28.;
-        let body_max = (f32::from(window.viewport_size().height) - 96. - chrome).max(200.);
-        let card = div()
-            .w(px(SETTINGS_DIALOG_W))
-            .flex()
-            .flex_col()
-            .gap(px(20.))
-            .p(px(28.))
-            .rounded(px(16.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(header)
-            .child(
-                div()
-                    .id("settings-dialog-body")
-                    .w_full()
-                    .max_h(px(body_max))
-                    .min_h(px(0.))
-                    .overflow_y_scroll()
-                    .child(body),
-            );
-
+        // The body scrolls, the header does not, and the card stops at 80% of
+        // the window (`ui::dialog`). It once had no cap and nothing to scroll:
+        // at the 1280x800 minimum the add-network verdict reached within a few
+        // points of both window edges in English, and one more checklist row,
+        // one step up in text scale or a longer language put the CTA below
+        // the window with no way to reach it.
         Some(
-            div()
-                .id("settings-dialog-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                // The wheel stops at the modal too. Once the body became a
-                // scroll region, a notch over the dialog scrolled the settings
-                // list behind the scrim as well — measured at ~7,700 changed
-                // background pixels for one notch, with rows visibly moving
-                // under a dialog that is supposed to have taken over. The body
-                // is a child and handles the event first; this only stops what
-                // is left from reaching the page.
-                .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "settings-dialog",
+                theme,
+                window,
+                title,
+                subtitle,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("settings-dialog"),
+                Self::closer(cx, |this, cx| this.close_settings_dialog(cx)),
+            )
+            .into_any_element(),
         )
     }
 
@@ -14377,17 +14096,17 @@ impl Render for WalletPage {
         let send_prompt = self.send_prompts(&theme, window, cx);
         let trusted_signer_prompt = self.trusted_signer_prompt(&theme, cx);
         let menu = self.menu_overlay(&theme, cx);
-        let sign_out = self.sign_out_dialog(&theme, cx);
-        let network_remove = self.network_remove_dialog(&theme, cx);
+        let sign_out = self.sign_out_dialog(&theme, window, cx);
+        let network_remove = self.network_remove_dialog(&theme, window, cx);
         let account_switcher = self.account_switcher_dialog(&theme, window, cx);
         let identicon_viewer = self.identicon_viewer_dialog(&theme, cx);
-        let confirm = self.confirm_dialog(&theme, cx);
+        let confirm = self.confirm_dialog(&theme, window, cx);
         let settings_dialog = self.settings_dialog_overlay(&theme, window, cx);
-        let import_result = self.import_result_dialog(&theme, cx);
+        let import_result = self.import_result_dialog(&theme, window, cx);
         let contact_form = self.contact_form_dialog(&theme, window, cx);
         let group_form = self.group_form_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
-        let contact_qr = self.contact_qr_dialog(&theme, cx);
+        let contact_qr = self.contact_qr_dialog(&theme, window, cx);
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
@@ -14488,38 +14207,10 @@ impl Render for WalletPage {
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
-                // Esc peels one layer at a time: the identicon viewer first
-                // (it is over everything), then the switcher, then the
-                // sign-out dialog, then the anchored menu, then the third
-                // column (desktop SPEC keyboard map).
-                if ks.key == "escape" && this.identicon_viewer.is_some() {
-                    this.identicon_viewer = None;
-                    cx.notify();
-                    return;
-                }
-                if ks.key == "escape" && this.account_switcher {
-                    this.close_account_switcher(cx);
-                    return;
-                }
-                if ks.key == "escape" && session::view(cx).sign_out.is_some() {
-                    session::sign_out_dismissed(cx);
-                    cx.notify();
-                    return;
-                }
-                if ks.key == "escape" && this.network_remove.is_some() {
-                    this.network_remove = None;
-                    cx.notify();
-                    return;
-                }
-                if ks.key == "escape" && this.confirm.is_some() {
-                    this.confirm = None;
-                    this.erase_failed = None;
-                    cx.notify();
-                    return;
-                }
-                if ks.key == "escape" && this.settings_dialog.is_some() {
-                    this.close_settings_dialog(cx);
-                    cx.notify();
+                // Esc peels one layer at a time: the dialog on top first, then
+                // the anchored menu, then the third column (desktop SPEC
+                // keyboard map).
+                if ks.key == "escape" && this.dismiss_top_dialog(cx) {
                     return;
                 }
                 if ks.key == "escape" && this.flows.last() == Some(&FlowPanel::Ds1) {

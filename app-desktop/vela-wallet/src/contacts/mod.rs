@@ -49,7 +49,6 @@ pub struct ContactsStrings {
     pub name_placeholder: SharedString,
     pub address_placeholder: SharedString,
     pub save: SharedString,
-    pub cancel: SharedString,
     pub group_name_label: SharedString,
     pub group_name_placeholder: SharedString,
     pub export_all: SharedString,
@@ -75,6 +74,8 @@ pub struct ContactsStrings {
     pub action_send: SharedString,
     pub action_receive: SharedString,
     pub copy_address: SharedString,
+    /// What the copy button says once it has (078 X-04, the QR dialog).
+    pub copied: SharedString,
     pub label_sent: SharedString,
     pub label_received: SharedString,
     pub yesterday: SharedString,
@@ -110,7 +111,6 @@ impl ContactsStrings {
             name_placeholder: s("contacts.namePlaceholder"),
             address_placeholder: s("contacts.addressPlaceholder"),
             save: s("contacts.save"),
-            cancel: s("contacts.cancel"),
             group_name_label: s("contacts.groupNameLabel"),
             group_name_placeholder: s("contacts.groupNamePlaceholder"),
             export_all: s("contacts.exportAll"),
@@ -133,6 +133,7 @@ impl ContactsStrings {
             action_send: s("componentsUi.dock.send"),
             action_receive: s("componentsUi.dock.receive"),
             copy_address: s("componentsUi.identiconViewer.copyAddress"),
+            copied: s("componentsUi.identiconViewer.copied"),
             label_sent: s("history.labelSent"),
             label_received: s("history.labelReceived"),
             yesterday: s("componentsUi.dayGroup.yesterday"),
@@ -171,7 +172,6 @@ mod tests {
             (s.edit_title.as_ref(), "contacts.editTitle"),
             (s.name_label.as_ref(), "contacts.nameLabel"),
             (s.save.as_ref(), "contacts.save"),
-            (s.cancel.as_ref(), "contacts.cancel"),
             (s.group_name_label.as_ref(), "contacts.groupNameLabel"),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");

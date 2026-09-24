@@ -20,11 +20,12 @@ screenshot checked against the web.
       `ghost_button` / `accent_button` call sites.
 - [x] T012 X-03 third column: header 16/24, close 36 with a 20 icon, content
       0/24/24, scrolls with the bar, scroll reset on a new subject.
-- [ ] T013 X-04 (primitive landed in `ui/dialog.rs`, used by the switcher
-      and the identicon viewer; the remove dialog is now inline; settings,
-      contact and QR dialogs not moved yet) dialog primitive: 520 / 24 / r16 /
-      hairline / shadow-lg / scrim .35 / Escape + scrim close; move settings,
-      contact, QR and remove dialogs onto it.
+- [x] T013 X-04 dialog primitive (`ui/dialog.rs`): 520 / 24 / r16 /
+      hairline / shadow-lg / scrim .35 / Escape + scrim close. On it: the
+      switcher, the identicon viewer, settings (add network, fix RPC, erase),
+      every confirm, sign-out, remove network, the contact / group / explore
+      name forms, the contact QR, the import result. Account removal is
+      inline (H-01).
 - [ ] T014 X-05 search field as a real input that filters: token pick,
       contact pick, receive list, contacts (with ✕), empty-result line.
 - [ ] T015 X-06 copy button with tick feedback; wire fact rows, receive

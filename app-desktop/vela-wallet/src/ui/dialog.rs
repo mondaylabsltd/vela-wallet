@@ -25,6 +25,8 @@ const PAD: f32 = 24.;
 const CLOSE: f32 = 32.;
 /// `margin-bottom: var(--space-xl)` under the header.
 const HEADER_GAP: f32 = 16.;
+/// `--space-md` between the title and its subtitle.
+const SUBTITLE_GAP: f32 = 8.;
 
 /// `--shadow-lg`: `0 4px 16px 0 rgba(26,26,24,.08)` — the web's, not gpui's
 /// Tailwind one, which is twice as dark and reads as a floating window.
@@ -67,7 +69,8 @@ pub fn card(id: impl Into<ElementId>, theme: &Theme, width: f32) -> Stateful<Div
         .shadow(shadow_lg())
 }
 
-/// The web's `Dialog`: title 20 bold, a 32 round close on sunken, and a body
+/// The web's `Dialog`: title 20 bold (and, under it, an optional subtitle at
+/// 13 subtle, 8 below), a 32 round close on sunken, and a body
 /// that scrolls inside `max-height: 80%` of the window while the header stays.
 ///
 /// `close` is the ✕ and the scrim both, as on the web; Escape is the page's
@@ -78,11 +81,13 @@ pub fn dialog(
     theme: &Theme,
     window: &Window,
     title: SharedString,
+    subtitle: Option<SharedString>,
     close_icon: impl gpui::IntoElement,
     body: impl gpui::IntoElement,
     scroll: &gpui::ScrollHandle,
     close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
+    let has_subtitle = subtitle.is_some();
     let close = std::rc::Rc::new(close);
     let close_x = std::rc::Rc::clone(&close);
     let header = div()
@@ -94,10 +99,22 @@ pub fn dialog(
         .child(
             div()
                 .min_w(px(0.))
-                .text_size(theme::text_panel_title())
-                .font_weight(FontWeight::BOLD)
-                .text_color(theme.fg_base)
-                .child(title),
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .text_size(theme::text_panel_title())
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(theme.fg_base)
+                        .child(title),
+                )
+                .children(subtitle.map(|subtitle| {
+                    div()
+                        .mt(px(SUBTITLE_GAP))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(subtitle)
+                })),
         )
         .child(
             div()
@@ -114,10 +131,17 @@ pub fn dialog(
                 .child(close_icon),
         );
 
-    // `max-height: 80%` of the window, less the chrome the body does not own.
+    // `max-height: 80%` of the window, less the chrome the body does not own
+    // — a subtitle's line among it.
+    let subtitle_h = if has_subtitle {
+        SUBTITLE_GAP + f32::from(theme::text_row_sub()) * 1.4
+    } else {
+        0.
+    };
     let body_max: Pixels = px((f32::from(window.viewport_size().height) * 0.8
         - PAD * 2.
         - CLOSE
+        - subtitle_h
         - HEADER_GAP)
         .max(160.));
     let content = div()
@@ -141,4 +165,21 @@ pub fn dialog(
                 .child(header)
                 .child(content),
         )
+}
+
+/// The web's dialog paragraph (`.dialog-body`): 13, muted, `leading-normal`,
+/// 16 above the actions.
+pub fn dialog_body(theme: &Theme, text: impl Into<SharedString>) -> Div {
+    div()
+        .mb(px(HEADER_GAP))
+        .text_size(theme::text_row_sub())
+        .line_height(gpui::relative(1.4))
+        .text_color(theme.fg_muted)
+        .child(text.into())
+}
+
+/// The web's `.dialog-actions`: the answers at the row's end, 8 apart, each
+/// as wide as what it says.
+pub fn dialog_actions() -> Div {
+    div().flex().justify_end().gap(px(8.))
 }
