@@ -2617,7 +2617,7 @@ fn send_receipt(
 /// the same ring that closes and turns green on the confirmation, so the tick
 /// arrives as the end of what the person was watching. Without an estimate
 /// the ring roams rather than filling.
-fn status_hero(
+pub fn status_hero(
     theme: &Theme,
     icons: &mut IconCache,
     stage: crate::flows::fixtures::ReceiptStage,

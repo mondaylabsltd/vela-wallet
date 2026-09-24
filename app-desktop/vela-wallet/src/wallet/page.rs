@@ -536,6 +536,14 @@ pub struct WalletPage {
     /// A once-a-second redraw is running for a waiting receipt (078 F-04):
     /// the countdown and the ring move with the clock, not with the core.
     receipt_ticking: bool,
+    /// A dApp transaction landing in the signing column (078 G-04, spec 077):
+    /// the operation, its chain, and when the column raised it.
+    dapp_landing: Option<DappLanding>,
+    /// The operation a landing was last raised for — dismissed or not. One
+    /// landing per operation: the handoff stays in the view after Done, and
+    /// gating on "is one showing" raised the same receipt again forever (the
+    /// web measured exactly that in its packaged extension).
+    dapp_landed_op: Option<String>,
     /// The contacts header search (078 X-05 / C-02): the web filters the
     /// A–Z list as it is typed, in the shell (`letterSections`).
     contacts_query: String,
@@ -1025,6 +1033,8 @@ impl WalletPage {
             scan_quiet_until: None,
             scan_camera_failure: None,
             receipt_ticking: false,
+            dapp_landing: None,
+            dapp_landed_op: None,
             contacts_query: String::new(),
             balance_detail_open: false,
             contacts_query_focus: cx.focus_handle(),
@@ -11595,6 +11605,8 @@ impl WalletPage {
         .detach();
         self.signing_host = Some(host.clone());
         self.panel = PanelId::Signing;
+        // A new request is what the column is about now.
+        self.dapp_landing = None;
         // A new request opens closed: the last one's decision to look at the
         // bytes is not this one's.
         self.signing_advanced_open = false;
@@ -11615,6 +11627,19 @@ impl WalletPage {
     ) {
         let answers = host.update(cx, |host, _| host.take_answers());
         let closed = host.read(cx).closed;
+        // The transaction was handed to the tracker: it is landing HERE (the
+        // web's `watchLanding`). Raised once per operation.
+        if self.signing_host.as_ref() == Some(host)
+            && let Some(handoff) = host.read(cx).view.tracker_handoff.clone()
+            && self.dapp_landed_op.as_deref() != Some(handoff.user_op_hash.as_str())
+        {
+            self.dapp_landed_op = Some(handoff.user_op_hash.clone());
+            self.dapp_landing = Some(DappLanding {
+                op_hash: handoff.user_op_hash,
+                chain_id: handoff.chain_id,
+                raised_at_ms: crate::executor::now_ms(),
+            });
+        }
         // WHETHER there is a column is the core's answer, not this file's —
         // and only for the column on screen: a column already replaced (its
         // request over) must not close the one that took its place.
@@ -11624,7 +11649,9 @@ impl WalletPage {
                 // machines — a decoded intent must never outlive the request
                 // it decoded.
                 self.signing_host = None;
-                if self.panel == PanelId::Signing {
+                // …unless its transaction is landing: the column stays for
+                // the receipt until the person is done with it.
+                if self.panel == PanelId::Signing && self.dapp_landing.is_none() {
                     self.panel = PanelId::None;
                 }
             } else {
@@ -12959,6 +12986,11 @@ impl WalletPage {
                 let title = self.explore.connection_title.clone();
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
+            PanelId::Signing if self.dapp_landing.is_some() && self.signing_host.is_none() => {
+                let body = self.dapp_receipt_body(theme, window, cx);
+                let title = self.signing.panel_title.clone();
+                columns.child(self.panel_scaffold(theme, title, body, cx))
+            }
             PanelId::Signing => {
                 let body = self.signing_body(theme, window, cx);
                 let title = self.signing.panel_title.clone();
@@ -13299,6 +13331,190 @@ impl WalletPage {
                 let go_on = page
                     .update(cx, |this, cx| {
                         let go_on = waiting(this, cx);
+                        if go_on {
+                            cx.notify();
+                        } else {
+                            this.receipt_ticking = false;
+                        }
+                        go_on
+                    })
+                    .unwrap_or(false);
+                if !go_on {
+                    return;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// The landing receipt (the web's `DappReceipt` over `StatusHero`): where
+    /// a dApp transaction stands, read from the tracker the signing host
+    /// already handed it to — submitting until the tracker has it, submitted
+    /// with the ring, confirmed with its transaction hash and explorer, or
+    /// failed. Nothing here answers the request: the site was answered before
+    /// this was drawn, so Done closes a surface, never a conversation.
+    fn dapp_receipt_body(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        use crate::flows::fixtures::ReceiptStage;
+        use vela_core::app::tx_tracker::TrackStatus;
+        let Some(landing) = self.dapp_landing.clone() else {
+            return div();
+        };
+        let entry = resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
+            .read(cx)
+            .view()
+            .entries
+            .into_iter()
+            .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(&landing.op_hash));
+        let s = &self.signing;
+        // `Unreachable` is NOT a failure: the wallet could not ask, which is
+        // not the chain saying no, and a cross for it would be a verdict this
+        // wallet does not have.
+        let (stage, title, captions, hash, explorer) = match entry.as_ref() {
+            None => (ReceiptStage::Submitting, s.receipt_confirming.clone(), vec![], None, None),
+            Some(entry) => match (entry.status, entry.tx_hash.clone()) {
+                (TrackStatus::Confirmed, Some(tx)) => {
+                    let url = crate::executor::custom_tokens::explorer_base(landing.chain_id)
+                        .map(|base| SharedString::from(format!("{base}/tx/{tx}")));
+                    (
+                        ReceiptStage::Confirmed,
+                        s.receipt_confirmed.clone(),
+                        vec![],
+                        Some((s.receipt_tx_hash.clone(), tx)),
+                        url.map(|url| (s.receipt_explorer.clone(), url)),
+                    )
+                }
+                (TrackStatus::Dropped | TrackStatus::Rejected, _) => (
+                    ReceiptStage::Failed,
+                    s.receipt_failed.clone(),
+                    vec![s.receipt_failed_hint.clone()],
+                    Some((s.receipt_op_hash.clone(), landing.op_hash.clone())),
+                    None,
+                ),
+                _ => (
+                    ReceiptStage::Submitted,
+                    s.receipt_submitted.clone(),
+                    vec![s.receipt_confirming_hint.clone()],
+                    // The OPERATION hash: there is no transaction until it
+                    // lands, and labelling one as the other sends a person to
+                    // search an explorer for nothing.
+                    Some((s.receipt_op_hash.clone(), landing.op_hash.clone())),
+                    None,
+                ),
+            },
+        };
+        let progress = match stage {
+            ReceiptStage::Submitted => {
+                let since = entry
+                    .as_ref()
+                    .and_then(|entry| entry.submitted_at_ms)
+                    .unwrap_or(landing.raised_at_ms);
+                let elapsed = ((crate::executor::now_ms() - since) / 1000.).max(0.) as u64;
+                vela_core::app::network_admin::typical_inclusion_s(landing.chain_id).and_then(
+                    |typical| flows_live::ring_progress(elapsed, u64::from(typical)),
+                )
+            }
+            ReceiptStage::Confirmed => Some(1.),
+            _ => None,
+        };
+        if stage == ReceiptStage::Submitted {
+            self.tick_landing(cx);
+        }
+
+        let hero = panels::status_hero(theme, &mut self.icons, stage, progress, &title, &captions);
+        // Centred in the column, as the web's `.receipt` (`min-height: 100%;
+        // justify-content: center`): the column's height less its header.
+        let mut body = div()
+            .min_h(px((f32::from(window.viewport_size().height) - 120.).max(0.)))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(8.))
+            .p(px(16.))
+            .child(hero);
+        if let Some((label, value)) = hash {
+            // A click copies the whole hash and answers with a tick for 1.5 s
+            // where the hash was (`DappReceipt`'s own affordance).
+            let copied = self.copied.as_deref() == Some("dapp-receipt-hash");
+            let short = if value.len() > 20 {
+                format!("{}…{}", &value[..10], &value[value.len() - 8..])
+            } else {
+                value.clone()
+            };
+            body = body.child(
+                div()
+                    .id("dapp-receipt-hash")
+                    .flex()
+                    .items_baseline()
+                    .gap(px(4.))
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .child(div().text_color(theme.fg_muted).child(label))
+                    .child(
+                        div()
+                            .font_family(theme::font_mono())
+                            .text_color(if copied { theme.success_base } else { theme.fg_base })
+                            .child(SharedString::from(if copied { "✓".to_owned() } else { short })),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.copy_text(
+                            "dapp-receipt-hash",
+                            value.clone(),
+                            std::time::Duration::from_millis(1500),
+                            cx,
+                        );
+                    })),
+            );
+        }
+        if let Some((label, url)) = explorer {
+            body = body.child(
+                div()
+                    .id("dapp-receipt-explorer")
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.accent)
+                    .child(label)
+                    .on_click(move |_, _, cx| cx.open_url(&url)),
+            );
+        }
+        body.child(
+            div().mt(px(8.)).w_full().child(
+                // `<Button variant="primary">` — the default pill shape.
+                crate::flows::components::accent_button(theme, self.signing.receipt_done.clone())
+                    .rounded_full()
+                    .id("dapp-receipt-done")
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.dapp_landing = None;
+                        if this.panel == PanelId::Signing && this.signing_host.is_none() {
+                            this.panel = PanelId::None;
+                        }
+                        cx.notify();
+                    })),
+            ),
+        )
+    }
+
+    /// Keep a landing receipt's ring moving: redraw once a second while it
+    /// waits (the web's `nowMs` tick). Stops by itself.
+    fn tick_landing(&mut self, cx: &mut Context<Self>) {
+        if self.receipt_ticking {
+            return;
+        }
+        self.receipt_ticking = true;
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(1))
+                    .await;
+                let go_on = page
+                    .update(cx, |this, cx| {
+                        let go_on = this.dapp_landing.is_some() && this.panel == PanelId::Signing;
                         if go_on {
                             cx.notify();
                         } else {
@@ -14779,6 +14995,14 @@ impl Render for WalletPage {
 
         window_frame(root, &theme, window)
     }
+}
+
+/// A dApp transaction landing in the signing column (078 G-04).
+#[derive(Clone, Debug)]
+struct DappLanding {
+    op_hash: String,
+    chain_id: u32,
+    raised_at_ms: f64,
 }
 
 /// What the scanner read that it cannot act on (078 F-02).

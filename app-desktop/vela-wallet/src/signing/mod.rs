@@ -34,6 +34,19 @@ pub enum Tone {
 )]
 pub struct SigningStrings {
     pub panel_title: SharedString,
+    /// Where a dApp transaction lands (078 G-04): the send receipt's own words
+    /// (`componentsTx.receipt.*`), so the two cannot say different things
+    /// about the same moment.
+    pub receipt_confirming: SharedString,
+    pub receipt_confirming_hint: SharedString,
+    pub receipt_submitted: SharedString,
+    pub receipt_confirmed: SharedString,
+    pub receipt_failed: SharedString,
+    pub receipt_failed_hint: SharedString,
+    pub receipt_op_hash: SharedString,
+    pub receipt_tx_hash: SharedString,
+    pub receipt_explorer: SharedString,
+    pub receipt_done: SharedString,
     pub signing_account: SharedString,
     pub advanced_toggle: SharedString,
     /// "Sign with" and its choices, in the core's order (`SIGN_METHODS`):
@@ -237,6 +250,16 @@ impl SigningStrings {
         };
         Self {
             panel_title: s("signatureRequest"),
+            receipt_confirming: loc.t("componentsTx.receipt.confirming"),
+            receipt_confirming_hint: loc.t("componentsTx.receipt.confirmingHint"),
+            receipt_submitted: loc.t("componentsTx.receipt.statusSubmitted"),
+            receipt_confirmed: loc.t("componentsTx.receipt.statusConfirmed"),
+            receipt_failed: loc.t("componentsTx.receipt.statusFailed"),
+            receipt_failed_hint: loc.t("componentsTx.receipt.failedHint"),
+            receipt_op_hash: loc.t("componentsTx.receipt.userOpHash"),
+            receipt_tx_hash: loc.t("componentsTx.receipt.txHash"),
+            receipt_explorer: loc.t("componentsTx.receipt.explorer"),
+            receipt_done: loc.t("componentsTx.receipt.done"),
             signing_account: s("signingAccount"),
             advanced_toggle: s("advancedToggle"),
             sign_with: s("signWith"),
@@ -499,6 +522,28 @@ mod tests {
         }
         assert!(s.summary_send.contains("{{amount}}"));
         assert!(s.byte_size.contains("{{n}}"));
+    }
+
+    /// The landing receipt's words are the send receipt's own keys, outside
+    /// this catalogue's `componentsUi.signing.` prefix — resolved under it
+    /// they came back as the keys themselves (078 G-04, seen on screen).
+    #[test]
+    fn the_landing_receipt_words_resolve() {
+        let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
+        for text in [
+            &s.receipt_confirming,
+            &s.receipt_confirming_hint,
+            &s.receipt_submitted,
+            &s.receipt_confirmed,
+            &s.receipt_failed,
+            &s.receipt_failed_hint,
+            &s.receipt_op_hash,
+            &s.receipt_tx_hash,
+            &s.receipt_explorer,
+            &s.receipt_done,
+        ] {
+            assert!(!text.contains("componentsTx"), "echoed a key: {text}");
+        }
     }
 
     #[test]
