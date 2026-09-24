@@ -363,8 +363,15 @@ pub fn hero_amount_field(
 ) -> gpui::Stateful<Div> {
     let focused = focus.is_focused(window);
     let selected = focused && !value.is_empty() && is_selected(focus);
-    let size = theme::text_amount_hero(value.chars().count());
+    let rung = theme::amount_hero_rung(value.chars().count(), unit.chars().count());
+    let size = theme::text_amount_hero(rung);
+    // Past the last rung the figure is cut at its END, with an ellipsis —
+    // the web's `p.value` — so the cut says it is one, and the unit beside
+    // it never moves. Centred and clipped, both ends of a long Max vanished.
     let figure = div()
+        .min_w(px(0.))
+        .overflow_hidden()
+        .text_ellipsis()
         .font_weight(FontWeight::BOLD)
         .text_size(size)
         .text_color(if value.is_empty() {
@@ -398,9 +405,10 @@ pub fn hero_amount_field(
         })
         .child(
             div()
+                .flex_none()
                 .ml(px(8.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_size(theme::text_amount_unit())
+                .text_size(theme::text_amount_unit(rung))
                 .text_color(theme.fg_muted)
                 .child(unit),
         )

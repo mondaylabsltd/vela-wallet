@@ -437,24 +437,30 @@ pub fn text_balance_hero() -> Pixels {
     scaled(40.)
 }
 /// The send form's typed figure, on the web's ladder (`AmountInput`):
-/// `--text-hero` 46, `--text-heroCompact` 38 past 9 characters,
-/// `--text-heroTight` 31 past 12 — so a long figure steps down instead of
-/// running off the column.
-pub fn text_amount_hero(chars: usize) -> Pixels {
-    scaled(match chars {
-        0..=9 => 46.,
-        10..=12 => 38.,
+/// `--text-hero` 46, `--text-heroCompact` 38, `--text-heroTight` 31, stepped
+/// by the DRAWN length — the figure plus half its unit, which is set smaller
+/// — at 8 and 11, exactly as the web counts it. A Max of an 18-decimal coin
+/// steps down instead of running off the column.
+pub fn amount_hero_rung(figure_chars: usize, unit_chars: usize) -> f32 {
+    match figure_chars + unit_chars / 2 {
+        0..=8 => 46.,
+        9..=11 => 38.,
         _ => 31.,
-    })
+    }
+}
+pub fn text_amount_hero(rung: f32) -> Pixels {
+    scaled(rung)
 }
 /// The line the figure sits on — the hero rung's on every rung, so the block
 /// is one height whatever is typed and nothing below it moves.
 pub fn line_amount_hero() -> Pixels {
     scaled(46. * 1.2)
 }
-/// The unit after the figure (`--text-3xl`): lighter, so the number reads first.
-pub fn text_amount_unit() -> Pixels {
-    scaled(26.)
+/// The unit after the figure (`--text-3xl` at the hero rung), stepping down
+/// with it so the pair keeps its proportion: lighter, so the number reads
+/// first.
+pub fn text_amount_unit(rung: f32) -> Pixels {
+    scaled(26. * rung / 46.)
 }
 pub fn text_balance_decimals() -> Pixels {
     scaled(24.)

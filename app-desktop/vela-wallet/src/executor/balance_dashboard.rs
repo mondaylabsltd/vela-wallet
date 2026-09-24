@@ -97,6 +97,20 @@ fn carry_over_unanswered(
     fresh
 }
 
+/// What this address last settled to — empty for one never fetched in this
+/// run. Read at the START of a fetch, so switching back to an account shows
+/// what it held a moment ago instead of an empty strip while every chain is
+/// asked again (the web's `tokenCache`, which answers the same switch from
+/// memory).
+fn last_settled(address: &str) -> Vec<BalanceToken> {
+    LAST_SETTLED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_ref()
+        .and_then(|snapshots| snapshots.get(&address.to_lowercase()).cloned())
+        .unwrap_or_default()
+}
+
 /// Settle one round against the last one for this address, and remember it.
 fn settle_with_carry_over(
     address: &str,
@@ -146,8 +160,21 @@ impl Machine for BalanceDashboard {
                 // same fan-out and deliberately does NOT stream — it fills a
                 // switcher row for somebody else's account, and its snapshots
                 // would be merged into the active one.
+                let previous = last_settled(&address);
                 Answer::Streaming(Box::new(move |sink| {
                     let sink = sink.clone();
+                    // What this account held last time, first: the core merges
+                    // it like any chain's snapshot, each chain then replaces
+                    // its own rows as it answers, and the settle below stays
+                    // the authority. Without it the strip went blank on every
+                    // switch back until the first chain answered. Only within
+                    // this run — nothing about holdings is written to disk.
+                    if !previous.is_empty() {
+                        sink.send(Event::ChainAssetsArrived {
+                            address: address.clone(),
+                            tokens: previous,
+                        });
+                    }
                     let streamed_for = address.clone();
                     let arrived: std::sync::Arc<balances::ChainSink> =
                         std::sync::Arc::new(move |tokens| {
@@ -572,6 +599,19 @@ mod tests {
         assert_eq!(third.len(), 1, "the same account, however it is cased");
         let answered = settle_with_carry_over(address, Vec::new(), &[]);
         assert!(answered.is_empty(), "Gnosis answered with nothing: spent");
+    }
+
+    /// Switching back to an account starts from what it last settled to —
+    /// the seed a fetch sends before any chain answers — whatever the case of
+    /// the address, and nothing for an account never fetched in this run.
+    #[test]
+    fn a_fetch_starts_from_what_the_account_last_held() {
+        let address = "0xSwitchBackTest";
+        assert!(last_settled(address).is_empty(), "never fetched");
+        let _ = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[]);
+        assert_eq!(last_settled(address).len(), 1);
+        assert_eq!(last_settled(&address.to_uppercase()).len(), 1);
+        assert!(last_settled("0xSomebodyElse").is_empty());
     }
 
     /// Privacy persists as the '1'/'0' string the other clients wrote.
