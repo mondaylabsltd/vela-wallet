@@ -136,9 +136,12 @@ pub fn compose_svg(card: &ShareCard<'_>, theme: &Theme) -> String {
     let centre_y = qr_y + QR_CARD / 2.0;
 
     // The identicon, already circular from the core's own assembler — the
-    // same artwork the avatars draw, from the same seed.
-    let identicon = vela_core::identicon::identicon_params(card.seed)
-        .map(|params| vela_core::identicon::assemble_svg_circular(&params))
+    // same artwork the avatars draw, from the same seed AS THEY NORMALISE IT
+    // (`normalize_seed`, spec 003). It used to take the checksummed address
+    // raw, and the generator is case-sensitive: the saved card drew a
+    // different creature from the one on every screen, beside the address a
+    // payer checks it against.
+    let identicon = identicon_svg_for(card.seed)
         .map(|svg| {
             svg.replacen(
                 "<svg",
@@ -260,9 +263,41 @@ pub fn render_png(card: &ShareCard<'_>, theme: &Theme) -> Option<Vec<u8>> {
     pixmap.encode_png().ok()
 }
 
+/// The circular identicon for `seed`, exactly as the avatars draw it:
+/// through `normalize_seed` first, then the core's generator. The one place
+/// the card turns an address into a face, so it cannot drift from the screens
+/// again by skipping the normalisation.
+fn identicon_svg_for(seed: &str) -> Result<String, vela_core::CoreError> {
+    vela_core::identicon::identicon_params(&vela_core::normalize_seed(seed))
+        .map(|params| vela_core::identicon::assemble_svg_circular(&params))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The card's face is the screens' face for the same address, however
+    /// the address is cased. The generator is case-sensitive, so the
+    /// checksummed spelling drawn raw is a DIFFERENT creature — which is what
+    /// the saved card showed until this was normalised.
+    #[test]
+    fn the_card_draws_the_same_identicon_as_the_avatars() {
+        let checksummed = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c";
+        let on_screen =
+            vela_core::identicon::identicon_params(&vela_core::normalize_seed(checksummed))
+                .map(|params| vela_core::identicon::assemble_svg_circular(&params))
+                .ok();
+        assert!(on_screen.is_some());
+        assert_eq!(identicon_svg_for(checksummed).ok(), on_screen);
+        assert_eq!(
+            identicon_svg_for(&checksummed.to_ascii_lowercase()).ok(),
+            on_screen
+        );
+        let raw = vela_core::identicon::identicon_params(checksummed)
+            .map(|params| vela_core::identicon::assemble_svg_circular(&params))
+            .ok();
+        assert_ne!(raw, on_screen, "the raw spelling is the wrong face");
+    }
 
     fn card<'a>() -> ShareCard<'a> {
         ShareCard {
