@@ -9,8 +9,15 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Deps, Mirror, ReleaseInfo, ReleaseStore } from './downloads';
 
-/** A key for the edge cache. Never requested: `caches` wants a URL, not a truth. */
-const LIST_KEY = 'https://getvela.app/__cache/downloads/latest-release.json';
+/**
+ * A key for the edge cache. Never requested: `caches` wants a URL, not a truth.
+ *
+ * The `v2` is a lever, not decoration: a deploy cannot purge what is already in
+ * the cache, and v0.9.5's poisoned entry (read in the eleven minutes between
+ * its Release and its macOS images) would otherwise outlive this fix by a week.
+ * Bump it whenever a stored list must be abandoned.
+ */
+const LIST_KEY = 'https://getvela.app/__cache/downloads/latest-release.v2.json';
 /** Kept long and judged by `fetchedAt`, so a stale list exists when GitHub does not. */
 const LIST_KEPT_SECONDS = 7 * 24 * 3600;
 
