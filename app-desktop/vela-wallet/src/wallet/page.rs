@@ -555,7 +555,11 @@ pub struct WalletPage {
     /// Which key rows are open, by founding position; and the `row:label` of
     /// the value just copied, for the button's "Copied".
     keys_open: std::collections::HashSet<usize>,
-    keys_copied: Option<String>,
+    /// What was copied a moment ago, by key, while its feedback shows —
+    /// a tick, a "Copied", a toast (078 X-06). `copied_press` counts the
+    /// copies, so an older copy's timer never clears a newer one's tick.
+    copied: Option<SharedString>,
+    copied_press: u64,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
     /// The explore name dialog: renaming a tile, or naming a new group.
@@ -675,8 +679,6 @@ pub struct WalletPage {
     contact_form: Option<ContactForm>,
     /// The contact whose address is being shown as a code, if any.
     contact_qr: Option<(SharedString, SharedString)>,
-    /// The QR dialog's copy pill has copied; reset when the dialog goes.
-    contact_qr_copied: bool,
     /// The group name sheet: `Some((id, name))`, with `None` for a new group.
     /// One dialog for 新建分组 and 重命名分组, because they are one question.
     group_form: Option<(Option<String>, String)>,
@@ -1023,7 +1025,8 @@ impl WalletPage {
             } else {
                 std::collections::HashSet::new()
             },
-            keys_copied: None,
+            copied: None,
+            copied_press: 0,
             menu_origin: None,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
@@ -1067,7 +1070,6 @@ impl WalletPage {
             import_result: None,
             contact_form: None,
             contact_qr: None,
-            contact_qr_copied: false,
             group_form: None,
             group_form_focus: cx.focus_handle(),
             contact_form_name_focus: cx.focus_handle(),
@@ -1519,7 +1521,7 @@ impl WalletPage {
         let (name, address) = self.contact_qr.clone()?;
         let s = &self.contacts;
         let title = s.action_qr.clone();
-        let copy_label = if self.contact_qr_copied {
+        let copy_label = if self.copied.as_deref() == Some(CONTACT_QR_COPY) {
             s.copied.clone()
         } else {
             s.copy_address.clone()
@@ -1608,9 +1610,7 @@ impl WalletPage {
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(address.to_string()));
-                        this.contact_qr_copied = true;
-                        cx.notify();
+                        this.copy_text(CONTACT_QR_COPY, address.to_string(), CONTACTS_COPY_HOLD, cx);
                     }))
                     .child(copy_label),
             );
@@ -1633,7 +1633,6 @@ impl WalletPage {
 
     fn close_contact_qr(&mut self) {
         self.contact_qr = None;
-        self.contact_qr_copied = false;
     }
 
     /// The add/edit contact sheet.
@@ -4124,11 +4123,9 @@ impl WalletPage {
         // paste into a send field.
         let copy_address: Option<contacts_components::MenuAction> =
             live_address.clone().map(|address| {
-                Box::new(
-                    move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(address.to_string()));
-                    },
-                ) as contacts_components::MenuAction
+                Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                    this.copy_text(CONTACTS_TOAST, address.to_string(), CONTACTS_COPY_HOLD, cx);
+                })) as contacts_components::MenuAction
             });
         let recent = self.contacts.recent_activity.clone();
         let view_all = self.contacts.view_all_activity.clone();
@@ -4235,7 +4232,6 @@ impl WalletPage {
                 action_pill("contact-qr", theme, &mut self.icons, Icon::QrCode, qr).on_click(
                     cx.listener(move |this, _, _, cx| {
                         this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
-                        this.contact_qr_copied = false;
                         cx.notify();
                     }),
                 ),
@@ -5290,6 +5286,7 @@ impl WalletPage {
             remove_recipient_rows: Vec::new(),
             fill_empty: None,
             search: None,
+            copy: None,
         };
         // DR1L, live: one listener per network row, each remembering WHICH
         // chain it opened. The fixture keeps its single first-row listener,
@@ -7527,7 +7524,7 @@ impl WalletPage {
         self.backup_for = Some(account.address.clone());
         self.backup_check = None;
         self.keys_check = None;
-        self.keys_copied = None;
+        self.copied = None;
         // The record's key list in founding order; a legacy record is one key.
         let device: Vec<vela_core::wallet_keys::DeviceKey> = if account.keys.is_empty() {
             vec![vela_core::wallet_keys::DeviceKey {
@@ -7971,7 +7968,8 @@ impl WalletPage {
                                 .child(shown);
                             if copyable {
                                 let copy_id = format!("{index}:{slot}");
-                                let done = self.keys_copied.as_deref() == Some(copy_id.as_str());
+                                let copy_id = format!("key:{copy_id}");
+                                let done = self.copied.as_deref() == Some(copy_id.as_str());
                                 line = line.child(
                                     div()
                                         .id(("settings-key-copy", index * 8 + slot))
@@ -7990,11 +7988,14 @@ impl WalletPage {
                                             copy_label.clone()
                                         })
                                         .on_click(cx.listener(move |page, _, _, cx| {
-                                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                            // `KeysBlock`: "Copied" for 1.2 s, then
+                                            // the button is a button again.
+                                            page.copy_text(
+                                                copy_id.clone(),
                                                 value.clone(),
-                                            ));
-                                            page.keys_copied = Some(copy_id.clone());
-                                            cx.notify();
+                                                std::time::Duration::from_millis(1200),
+                                                cx,
+                                            );
                                         })),
                                 );
                             }
@@ -12982,6 +12983,7 @@ impl WalletPage {
                         cx,
                     );
                     actions.search = Some(self.flow_search_field(panel, cx));
+                    actions.copy = Some(self.flow_copy_action(cx));
                     let rendered = panels::render(
                         &body,
                         theme,
@@ -12999,6 +13001,77 @@ impl WalletPage {
             },
         };
         columns
+    }
+
+    /// Copy `text`, and show that it was copied — under `key` — for `hold`
+    /// (078 X-06). The web's holds: a tick 150 ms, a key row's "Copied"
+    /// 1.2 s, the contacts toast 1.5 s.
+    fn copy_text(
+        &mut self,
+        key: impl Into<SharedString>,
+        text: String,
+        hold: std::time::Duration,
+        cx: &mut Context<Self>,
+    ) {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        self.copied = Some(key.into());
+        self.copied_press += 1;
+        let press = self.copied_press;
+        cx.notify();
+        cx.spawn(async move |page, cx| {
+            cx.background_executor().timer(hold).await;
+            let _ = page.update(cx, |this, cx| {
+                if this.copied_press == press {
+                    this.copied = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// The flow panels' copy buttons: a tick for 150 ms (`ReceiveList`,
+    /// `TxDetail` — long enough to register, short enough that three copies
+    /// in a row never leave two ticks standing).
+    fn flow_copy_action(&self, cx: &mut Context<Self>) -> panels::CopyAction {
+        let page = cx.entity().downgrade();
+        panels::CopyAction {
+            copied: self.copied.clone(),
+            on_copy: std::rc::Rc::new(move |key, text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    this.copy_text(key, text.to_string(), std::time::Duration::from_millis(150), cx);
+                });
+            }),
+        }
+    }
+
+    /// The contacts route's "Copied" toast: centred 32 above the bottom, a
+    /// pill in the ink colour, while a contact's address is on the clipboard
+    /// from the list or the detail panel.
+    fn contacts_toast(&self, theme: &Theme) -> Option<Div> {
+        if self.section != Section::Contacts || self.copied.as_deref() != Some(CONTACTS_TOAST) {
+            return None;
+        }
+        Some(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .bottom(px(32.))
+                .flex()
+                .justify_center()
+                .child(
+                    div()
+                        .px(px(16.))
+                        .py(px(8.))
+                        .rounded_full()
+                        .bg(theme.fg_base)
+                        .text_color(theme.bg_base)
+                        .text_size(theme::text_label())
+                        .shadow(crate::ui::dialog::shadow_lg())
+                        .child(self.contacts.copied.clone()),
+                ),
+        )
     }
 
     /// The query under the flow panel on top, as the field the panel draws.
@@ -13708,8 +13781,7 @@ impl WalletPage {
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
-                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy_me.clone()));
-                            cx.notify();
+                            this.copy_text(CONTACTS_TOAST, copy_me.clone(), CONTACTS_COPY_HOLD, cx);
                         })) as contacts_components::MenuAction,
                     ),
                     // 编辑 — the same sheet 新建联系人 opens, with the address
@@ -14250,6 +14322,9 @@ impl Render for WalletPage {
         if let Some(toast) = toast {
             root = root.child(toast);
         }
+        if let Some(toast) = self.contacts_toast(&theme) {
+            root = root.child(toast);
+        }
         // The cable's dialogs and the core's alert, over the send flow.
         if let Some(prompt) = send_prompt {
             root = root.child(prompt);
@@ -14388,6 +14463,12 @@ impl Render for WalletPage {
         window_frame(root, &theme, window)
     }
 }
+
+/// The contacts route's copies (078 X-06): the toast's key, and the QR
+/// dialog's pill's; the web holds both 1.5 s.
+const CONTACTS_TOAST: &str = "contacts-toast";
+const CONTACT_QR_COPY: &str = "contact-qr";
+const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
 
 /// The Ethereum key backup, as a request for the SHARED signing sheet.
 ///

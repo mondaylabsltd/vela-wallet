@@ -9,7 +9,7 @@
 use gpui::IntoElement as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Div, Hsla, InteractiveElement as _, ParentElement, SharedString,
+    Div, ElementId, Hsla, InteractiveElement as _, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, div, px,
 };
 use qrcode::{Color as QrColorModule, QrCode};
@@ -50,7 +50,32 @@ pub const QR_CARD: f32 = 344.;
 /// Both actions sit on the row rather than behind it. The point of the panel is
 /// that ONE address serves every network, so the fastest path is to copy it
 /// from whichever line you looked at, without opening anything.
-pub fn network_row(theme: &Theme, icons: &mut IconCache, row: &NetworkRow) -> Div {
+/// R1's network row (`flows/ui/NetworkRow.svelte`): the chain, the address on
+/// it, and the two things a person does with an address — copy it, or show it.
+/// `copy` is the copy button's state and click (the tick holds 150 ms); `qr`
+/// opens that network's code. `None` draws the glyph inert.
+pub fn network_row(
+    theme: &Theme,
+    icons: &mut IconCache,
+    row: &NetworkRow,
+    index: usize,
+    copy: Option<CopyButton>,
+    qr: Option<super::panels::Click>,
+) -> Div {
+    let copied = copy.as_ref().is_some_and(|copy| copy.copied);
+    let copy_glyph = icon_img(
+        icons,
+        if copied { Icon::Check } else { Icon::Copy },
+        false,
+        if copied {
+            theme.success_base
+        } else {
+            theme.fg_muted
+        },
+        18.,
+    )
+    .into_any_element();
+    let qr_glyph = icon_img(icons, Icon::QrCode, false, theme.fg_muted, 18.).into_any_element();
     div()
         .flex()
         .items_center()
@@ -92,8 +117,59 @@ pub fn network_row(theme: &Theme, icons: &mut IconCache, row: &NetworkRow) -> Di
                         .child(row.address.clone()),
                 ),
         )
-        .child(icon_img(icons, Icon::Copy, false, theme.fg_muted, 16.))
-        .child(icon_img(icons, Icon::QrCode, false, theme.fg_muted, 16.))
+        .child(row_button(
+            theme,
+            ElementId::from(("network-copy", index)),
+            copy_glyph,
+            copy.map(|copy| copy.on_click),
+        ))
+        .child(row_button(
+            theme,
+            ElementId::from(("network-qr", index)),
+            qr_glyph,
+            qr,
+        ))
+}
+
+/// A copy button's state and its click, as the page bound it: `copied` while
+/// the tick shows.
+pub struct CopyButton {
+    pub copied: bool,
+    pub on_click: super::panels::Click,
+}
+
+/// A 36 round glyph button on a row (`--size-control-sm`), raised on hover.
+/// Its click is the row's own: it stops there, so a row that also opens
+/// something on a click is not opened by the button inside it.
+fn row_button(
+    theme: &Theme,
+    id: ElementId,
+    glyph: impl gpui::IntoElement,
+    on_click: Option<super::panels::Click>,
+) -> gpui::AnyElement {
+    let button = div()
+        .size(px(36.))
+        .flex_none()
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(glyph);
+    match on_click {
+        Some(on_click) => {
+            let raised = theme.bg_raised;
+            button
+                .id(id)
+                .cursor_pointer()
+                .hover(move |el| el.bg(raised))
+                .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    on_click(event, window, cx);
+                })
+                .into_any_element()
+        }
+        None => button.into_any_element(),
+    }
 }
 
 /// The token mark inside a line of text.
@@ -195,6 +271,7 @@ pub fn fact_row(
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     fact: &FactRow,
+    copy: Option<CopyButton>,
 ) -> Div {
     let mut value_side = div().flex().items_center().gap(px(6.)).min_w(px(0.));
 
@@ -215,8 +292,39 @@ pub fn fact_row(
     };
     value_side = value_side.child(value.text_color(theme.fg_base).child(fact.value.clone()));
 
-    if fact.copyable {
-        value_side = value_side.child(icon_img(icons, Icon::Copy, false, theme.fg_subtle, 13.));
+    // `FactRow.svelte`: a 20 box with a 14 glyph in `fg-subtle`, a tick in
+    // the success colour for 150 ms after it copies.
+    if fact.copy.is_some() {
+        let copied = copy.as_ref().is_some_and(|copy| copy.copied);
+        let glyph = icon_img(
+            icons,
+            if copied { Icon::Check } else { Icon::Copy },
+            false,
+            if copied {
+                theme.success_base
+            } else {
+                theme.fg_subtle
+            },
+            14.,
+        );
+        let button = div()
+            .size(px(20.))
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(glyph);
+        value_side = value_side.child(match copy {
+            Some(copy) => button
+                .id(ElementId::Name(SharedString::from(format!(
+                    "fact-copy-{}",
+                    fact.label
+                ))))
+                .cursor_pointer()
+                .on_click(copy.on_click)
+                .into_any_element(),
+            None => button.into_any_element(),
+        });
     }
 
     let row = div()

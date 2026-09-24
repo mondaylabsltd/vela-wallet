@@ -143,7 +143,10 @@ pub struct FactRow {
     pub lead: FactLead,
     /// Renders the value in the mono face (addresses, hashes).
     pub mono: bool,
-    pub copyable: bool,
+    /// What the row's copy button puts on the clipboard — the whole address
+    /// or hash, not the shortened one the row shows (the web's
+    /// `copyValue`). `None` draws no button.
+    pub copy: Option<SharedString>,
     /// One calm sentence under the row, saying why its value is what it is —
     /// the confirm's speed row uses it for a speed taken because it was free
     /// (issue 686), so the tier and its reason reach the last screen together.
@@ -178,6 +181,8 @@ pub struct NetworkRow {
     pub code: SharedString,
     pub badge: Hsla,
     pub address: SharedString,
+    /// The whole address, for the row's copy button.
+    pub address_full: SharedString,
 }
 
 #[derive(Clone)]
@@ -712,7 +717,7 @@ fn fact(label: &SharedString, value: impl Into<SharedString>) -> FactRow {
         value: value.into(),
         lead: FactLead::None,
         mono: false,
-        copyable: false,
+        copy: None,
         note: None,
     }
 }
@@ -768,6 +773,7 @@ fn receive_list(s: &FlowStrings) -> ReceiveList {
                 code: n.code.into(),
                 badge: (n.color)(),
                 address: ADDRESS_DISPLAY.into(),
+                address_full: crate::wallet::fixtures::ADDRESS_FULL.into(),
             })
             .collect(),
     }
@@ -919,7 +925,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
                 HOLD_ON_FULL.into()
             }),
             mono: received,
-            copyable: true,
+            copy: Some(if received { ALICE_FULL } else { HOLD_ON_FULL }.into()),
             note: None,
         },
         FactRow {
@@ -927,7 +933,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             value: network.name.into(),
             lead: FactLead::Token(mark(network.code, (network.color)())),
             mono: false,
-            copyable: false,
+            copy: None,
             note: None,
         },
     ];
@@ -941,7 +947,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             value: USDT_CONTRACT_SHORT.into(),
             lead: FactLead::None,
             mono: true,
-            copyable: true,
+            copy: Some(USDT_CONTRACT.into()),
             note: None,
         });
     }
@@ -958,7 +964,14 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
         },
         lead: FactLead::None,
         mono: true,
-        copyable: true,
+        copy: Some(
+            if received {
+                TX_HASH_RECEIVED
+            } else {
+                TX_HASH_SENT
+            }
+            .into(),
+        ),
         note: None,
     });
 
@@ -1328,7 +1341,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 value: wallet::WALLET_NAME.into(),
                 lead: FactLead::Identicon(wallet::ADDRESS_FULL.into()),
                 mono: false,
-                copyable: false,
+                copy: None,
                 note: None,
             },
             FactRow {
@@ -1336,7 +1349,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 value: ALICE_DISPLAY.into(),
                 lead: FactLead::Identicon(ALICE_FULL.into()),
                 mono: true,
-                copyable: false,
+                copy: None,
                 note: None,
             },
             FactRow {
@@ -1344,7 +1357,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 value: NETWORKS[0].name.into(),
                 lead: FactLead::Token(mark(NETWORKS[0].code, (NETWORKS[0].color)())),
                 mono: false,
-                copyable: false,
+                copy: None,
                 note: None,
             },
             fact(&s.est_fee, "~0.0021 ETH · ≈$0.55"),

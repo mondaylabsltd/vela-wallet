@@ -31,7 +31,7 @@ screenshot checked against the web.
       (Assets too. Contacts filter in the shell, as the web's
       `letterSections` does — W-06's "never dispatches `query`" is the
       web's own design, not a gap; per-group import/export still open.)
-- [ ] T015 X-06 copy button with tick feedback; wire fact rows, receive
+- [x] T015 X-06 copy button with tick feedback; wire fact rows, receive
       network rows, key rows (reset after 1.2 s), contacts.
 
 ## Phase 2 — P0 behaviour

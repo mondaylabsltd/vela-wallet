@@ -390,7 +390,7 @@ pub fn tx_detail(
             // A name is prose; an address is a string somebody compares
             // character by character, and that needs the mono face.
             mono: named.is_none(),
-            copyable: true,
+            copy: Some(SharedString::from(counterparty.clone())),
             note: None,
         });
     }
@@ -403,7 +403,7 @@ pub fn tx_detail(
             logos: crate::marks::token_logos(item.chain_id, &item.symbol, None, &[]),
         }),
         mono: false,
-        copyable: false,
+        copy: None,
         note: None,
     });
     facts.push(FactRow {
@@ -411,7 +411,7 @@ pub fn tx_detail(
         value: SharedString::from(stamp(item.timestamp, s, locale)),
         lead: FactLead::None,
         mono: false,
-        copyable: false,
+        copy: None,
         note: None,
     });
     // Only if there IS one. An empty hash row on an off-chain signature invites
@@ -423,7 +423,7 @@ pub fn tx_detail(
             value: SharedString::from(hash.clone()),
             lead: FactLead::None,
             mono: true,
-            copyable: true,
+            copy: Some(SharedString::from(hash.clone())),
             note: None,
         });
     }
@@ -609,6 +609,7 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
             code: SharedString::from(symbol),
             badge: tint(chain_id),
             address: SharedString::from(shorten(address)),
+            address_full: SharedString::from(address.to_owned()),
         })
         .collect();
     ReceiveList {
@@ -2346,7 +2347,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             value: i.identity_name.to_owned().into(),
             lead: FactLead::Identicon(i.identity_address.to_owned().into()),
             mono: false,
-            copyable: false,
+            copy: None,
             note: None,
         },
         FactRow {
@@ -2357,7 +2358,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                 .into(),
             lead: FactLead::Identicon(send.recipient.clone().into()),
             mono: to_name.is_none(),
-            copyable: false,
+            copy: None,
             note: None,
         },
         FactRow {
@@ -2369,7 +2370,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                 logos: crate::marks::chain_logos(chain_id),
             }),
             mono: false,
-            copyable: false,
+            copy: None,
             note: None,
         },
         FactRow {
@@ -2388,7 +2389,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             },
             lead: FactLead::None,
             mono: false,
-            copyable: false,
+            copy: None,
             note: None,
         },
     ];
@@ -2405,7 +2406,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             value: tier_name(s, speed.tier),
             lead: FactLead::None,
             mono: false,
-            copyable: false,
+            copy: None,
             note: (!speed.picked).then(|| s.fee_speed_free.clone()),
         });
     }

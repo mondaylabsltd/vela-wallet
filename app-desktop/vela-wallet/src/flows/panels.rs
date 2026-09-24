@@ -19,7 +19,7 @@ use crate::wallet::components::{
 };
 
 use super::components::{
-    search_empty, search_matches,
+    CopyButton, search_empty, search_matches,
     accent_button, address_card, danger_button, fact_row, fee_refresh_icon, fee_row,
     fee_speed_note, fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search,
     ghost_button, inline_mark, max_chip, mono_field, network_pill, network_row, qr_card,
@@ -33,7 +33,9 @@ use super::fixtures::{
 
 /// One prepared click listener. The page builds these from `cx.listener`
 /// before rendering, because a panel body has no entity to listen on.
-pub type Click = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
+pub type Click = Box<ClickFn>;
+/// What a `Click` holds.
+pub type ClickFn = dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static;
 
 /// The steps a panel can take, as listeners the page has already bound.
 ///
@@ -148,6 +150,33 @@ pub struct PanelActions {
     /// X-05). The page owns the query; the panel filters with it. `None` draws
     /// the placeholder and filters nothing.
     pub search: Option<AddressField>,
+    /// Every copy button in the panel (078 X-06): the page writes the text and
+    /// shows the tick. `None` draws the buttons inert.
+    pub copy: Option<CopyAction>,
+}
+
+/// The page's copy, handed to a panel: which value was copied a moment ago
+/// (by key, while its tick shows), and how to copy another.
+pub struct CopyAction {
+    pub copied: Option<SharedString>,
+    pub on_copy: OnCopy,
+}
+
+/// Copy `text` (the second) as the value named `key` (the first).
+pub type OnCopy = std::rc::Rc<dyn Fn(SharedString, SharedString, &mut Window, &mut App)>;
+
+impl CopyAction {
+    /// The button for one value: `key` names it among the panel's copies,
+    /// `text` is what goes on the clipboard.
+    pub fn button(&self, key: impl Into<SharedString>, text: SharedString) -> CopyButton {
+        let key = key.into();
+        let copied = self.copied.as_ref() == Some(&key);
+        let on_copy = self.on_copy.clone();
+        CopyButton {
+            copied,
+            on_click: Box::new(move |_, window, cx| on_copy(key.clone(), text.clone(), window, cx)),
+        }
+    }
 }
 
 /// An editable field the page owns the state of.
@@ -181,6 +210,22 @@ pub fn clickable(id: impl Into<ElementId>, action: Option<Click>, body: impl Int
 
 /// "View on Explorer", opening the page it names — or the plain drawn button
 /// where there is none (the mocks, a transaction with no hash).
+/// One prepared click for two targets — the row and its QR glyph — since a
+/// `Click` is a `Box` and cannot be cloned.
+fn split_click(click: Option<Click>) -> (Option<Click>, Option<Click>) {
+    match click {
+        Some(click) => {
+            let shared: std::rc::Rc<ClickFn> = std::rc::Rc::from(click);
+            let other = shared.clone();
+            (
+                Some(Box::new(move |event, window, cx| shared(event, window, cx))),
+                Some(Box::new(move |event, window, cx| other(event, window, cx))),
+            )
+        }
+        None => (None, None),
+    }
+}
+
 fn explorer_button(
     id: &'static str,
     theme: &Theme,
@@ -276,6 +321,7 @@ pub fn render(
             icons,
             window,
             actions.search,
+            actions.copy,
             actions.open_qr,
             actions.open_qr_rows,
         ),
@@ -290,7 +336,14 @@ pub fn render(
         FlowBody::History(model) => {
             history(model, theme, icons, actions.open_tx, actions.open_tx_rows)
         }
-        FlowBody::TxDetail(model) => tx_detail(model, theme, icons, identicons, actions.delete_tx),
+        FlowBody::TxDetail(model) => tx_detail(
+            model,
+            theme,
+            icons,
+            identicons,
+            actions.copy,
+            actions.delete_tx,
+        ),
         FlowBody::Assets(model) => assets(
             model,
             theme,
@@ -353,12 +406,14 @@ pub fn render(
     }
 }
 
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 fn receive(
     model: &ReceiveList,
     theme: &Theme,
     icons: &mut IconCache,
     window: &Window,
     search: Option<AddressField>,
+    copy: Option<CopyAction>,
     mut open_qr: Option<Click>,
     per_row: Vec<Click>,
 ) -> Div {
@@ -395,10 +450,17 @@ fn receive(
             .get_mut(i)
             .and_then(Option::take)
             .or_else(|| if i == 0 { open_qr.take() } else { None });
+        // The row's two buttons, as the web draws them: copy writes this
+        // network's address and ticks; the QR glyph opens its code, as a
+        // click anywhere on the row does.
+        let copy = copy
+            .as_ref()
+            .map(|copy| copy.button(format!("network:{i}"), row.address_full.clone()));
+        let (row_click, qr_click) = split_click(action);
         col = col.child(clickable(
             ElementId::from(("network", i)),
-            action,
-            network_row(theme, icons, row),
+            row_click,
+            network_row(theme, icons, row, i, copy, qr_click),
         ));
     }
     if shown == 0 && !model.rows.is_empty() {
@@ -664,6 +726,7 @@ fn tx_detail(
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
+    copy: Option<CopyAction>,
     delete_tx: Option<Click>,
 ) -> Div {
     let mut col = column()
@@ -704,7 +767,10 @@ fn tx_detail(
         if i > 0 {
             col = col.child(divider(theme));
         }
-        col = col.child(fact_row(theme, icons, identicons, fact));
+        let button = fact.copy.clone().zip(copy.as_ref()).map(|(text, copy)| {
+            copy.button(format!("fact:{i}"), text)
+        });
+        col = col.child(fact_row(theme, icons, identicons, fact, button));
     }
     if !model.breakdown.is_empty() {
         col = col.child(breakdown_list(
@@ -983,7 +1049,7 @@ fn add_token(
                         .child(status_chip(theme, chip)),
                 );
             for fact in facts {
-                card = card.child(fact_row(theme, icons, identicons, fact));
+                card = card.child(fact_row(theme, icons, identicons, fact, None));
             }
             col.child(card)
         }
@@ -2377,7 +2443,7 @@ fn send_confirm(
         if i > 0 {
             card = card.child(divider(theme));
         }
-        card = card.child(fact_row(theme, icons, identicons, fact));
+        card = card.child(fact_row(theme, icons, identicons, fact, None));
     }
     col = col.child(card);
 
