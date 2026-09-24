@@ -11359,6 +11359,9 @@ impl WalletPage {
         .detach();
         self.signing_host = Some(host.clone());
         self.panel = PanelId::Signing;
+        // A new request opens closed: the last one's decision to look at the
+        // bytes is not this one's.
+        self.signing_advanced_open = false;
         // The same question, once, for a request the core answered before
         // any observation fires — a refusal on arrival.
         self.signing_host_changed(&host, tab.as_deref(), cx);
@@ -11396,10 +11399,11 @@ impl WalletPage {
                 self.answer_dapp_signing(tab, answer.id, answer.payload, answer.user_op_hash, cx);
             }
         }
-        // A new request opens closed: the last one's decision to look at the
-        // bytes is not this one's.
-        self.signing_host = Some(host.clone());
-        self.panel = PanelId::Signing;
+        // Nothing after this may reopen the column. A merge (145de4f7) left
+        // `signing_host = Some(host); panel = Signing` here — the old ending
+        // of `open_signing_request` — which put back the host the branch
+        // above had just dropped: every Close (the Ethereum backup's first)
+        // reopened the column it closed.
         cx.notify();
     }
 
@@ -14098,6 +14102,20 @@ impl Render for WalletPage {
                         this.menu = None;
                         cx.notify();
                     } else if this.panel != PanelId::None {
+                        // Escape is the ✕: a signing column tells its core,
+                        // as the web's `onclose` does, or the dApp's request
+                        // hangs and every later one is refused as busy.
+                        #[cfg(not(target_os = "linux"))]
+                        if this.panel == PanelId::Signing
+                            && let Some(host) = this.signing_host.clone()
+                        {
+                            host.update(cx, |host, cx| {
+                                host.dispatch_sign(
+                                    vela_core::app::sign_request::Event::SwipeDismissed,
+                                    cx,
+                                );
+                            });
+                        }
                         this.panel = PanelId::None;
                         cx.notify();
                     }
