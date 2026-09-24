@@ -663,6 +663,8 @@ pub struct WalletPage {
     /// DSD2bL, live: one focus handle per split row, made on first use. A
     /// shared handle would send every keystroke to whichever row drew last.
     split_focuses: Vec<gpui::FocusHandle>,
+    /// One per split row's address field (078 F-06).
+    split_address_focuses: Vec<gpui::FocusHandle>,
     /// DSD2fL is the page's own overlay: the core has no flag for it.
     send_fee_picker: bool,
     /// The scanner's camera, alive only while DS1 is on screen — a capture
@@ -855,6 +857,7 @@ struct SendBindings {
     /// would be a second opinion about what a row is.
     recipients: Vec<SendRecipientDraft>,
     split_focuses: Vec<gpui::FocusHandle>,
+    split_address_focuses: Vec<gpui::FocusHandle>,
     /// "Use X for the empty rows": the figure the offer copies, when the
     /// form offers it (`flows_live::split_fill_source`).
     fill_empty: Option<String>,
@@ -1106,6 +1109,7 @@ impl WalletPage {
             send_recipient_focus: cx.focus_handle(),
             send_rate_focus: cx.focus_handle(),
             split_focuses: Vec::new(),
+            split_address_focuses: Vec::new(),
             send_fee_picker: false,
             send_sweeping: false,
             send_class: flows_live::SendClass::All,
@@ -4810,6 +4814,12 @@ impl WalletPage {
                 }
                 self.split_focuses[..view.recipients.len()].to_vec()
             },
+            split_address_focuses: {
+                while self.split_address_focuses.len() < view.recipients.len() {
+                    self.split_address_focuses.push(cx.focus_handle());
+                }
+                self.split_address_focuses[..view.recipients.len()].to_vec()
+            },
             recipients: view.recipients.clone(),
             fill_empty: flows_live::split_fill_source(&view).map(str::to_owned),
             sweeping: self.send_sweeping,
@@ -5377,6 +5387,8 @@ impl WalletPage {
             notice_dismiss: None,
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
+            split_address_fields: Vec::new(),
+            pick_recipient_rows: Vec::new(),
             remove_recipient_rows: Vec::new(),
             fill_empty: None,
             search: None,
@@ -5634,6 +5646,36 @@ impl WalletPage {
                     // been drawn on that card since spec 021 with nothing
                     // behind it. Every edit sends the WHOLE list back, because
                     // `RecipientsChanged` is the event the machine offers.
+                    // …and its own address and book (078 F-06).
+                    for (index, focus) in send.split_address_focuses.iter().enumerate() {
+                        let rows = send.recipients.clone();
+                        actions.split_address_fields.push(panels::AddressField {
+                            focus: focus.clone(),
+                            value: rows
+                                .get(index)
+                                .map(|r| r.address.clone())
+                                .unwrap_or_default(),
+                            placeholder: SharedString::from("0x…"),
+                            on_change: Box::new({
+                                let host = host.clone();
+                                move |address: String, _: &mut Window, cx: &mut gpui::App| {
+                                    let next =
+                                        flows_live::split_address_edited(&rows, index, &address);
+                                    host.update(cx, |host, cx| {
+                                        host.dispatch(
+                                            SendEvent::RecipientsChanged { recipients: next },
+                                            cx,
+                                        );
+                                    });
+                                }
+                            }),
+                        });
+                        if let Some(id) = send.recipients.get(index).map(|r| r.id.clone()) {
+                            actions
+                                .pick_recipient_rows
+                                .push(to_host(SendEvent::OpenContactPicker { target: Some(id) }));
+                        }
+                    }
                     for (index, focus) in send.split_focuses.iter().enumerate() {
                         let rows = send.recipients.clone();
                         actions.split_amount_fields.push(panels::AddressField {
@@ -13136,6 +13178,15 @@ impl WalletPage {
                     // wallet holding ETH and xDAI. The web's rule, same
                     // reason (`flows/live-send.ts`).
                     let title = match (&send, panel) {
+                        // A sweep is several coins: "Send tokens", never the
+                        // first pick's "Send ETH" (the web's `multiSendTitle`).
+                        (Some(_), FlowPanel::Dsd2 | FlowPanel::Dsd2b)
+                            if self
+                                .send_views(cx)
+                                .is_some_and(|(view, _)| view.multi_select_mode) =>
+                        {
+                            self.flow_strings.multi_send_title.clone()
+                        }
                         (Some(_), FlowPanel::Dsd2 | FlowPanel::Dsd2b) => self
                             .send_views(cx)
                             .and_then(|(view, _)| view.selected_token)

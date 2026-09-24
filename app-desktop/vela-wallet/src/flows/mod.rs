@@ -393,6 +393,10 @@ pub struct FlowStrings {
     /// Template carrying `{{remaining}}`: inside the chain's usual time the
     /// receipt counts DOWN (078 F-04, the web's `etaLines`).
     pub tx_remaining: String,
+    /// SD2d, the sweep form (078 F-05): "{{n}} tokens · {{chain}}", and the
+    /// note under its one recipient.
+    pub multi_send_summary: String,
+    pub multi_send_same_recipient: SharedString,
     pub recipient_count_other: String,
     pub tx_close_background: SharedString,
     pub tx_hash: SharedString,
@@ -671,6 +675,8 @@ impl FlowStrings {
             tx_slow_confirm: s("send.txSlowConfirm"),
             tx_elapsed: raw("send.txElapsed"),
             tx_remaining: raw("send.txRemaining"),
+            multi_send_summary: raw("send.multiSendSummary"),
+            multi_send_same_recipient: s("send.multiSendSameRecipient"),
             recipient_count_other: raw("send.recipientCount_other"),
             tx_close_background: s("send.txCloseBackground"),
             tx_hash: s("componentsTx.receipt.txHash"),

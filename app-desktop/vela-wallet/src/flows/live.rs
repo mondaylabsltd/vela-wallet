@@ -45,7 +45,8 @@ use crate::flows::fixtures::{
     CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeSpeedModel,
     FeeSpeedOption, FeeTokenPick, FeeTokenRow, FilterChip, HistoryGroup, HistoryPanel, NetworkRow,
     ReceiptStage, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm,
-    SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
+    SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, SweepForm, SweepRow, TokenMark,
+    address_lines,
 };
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
@@ -1590,6 +1591,22 @@ pub fn split_amount_edited(
     next
 }
 
+/// A split row's address, typed (078 F-06): the whole list goes back to the
+/// core with that one row's address replaced — `RecipientsChanged` is the
+/// event the machine offers, and it validates the rest.
+#[must_use]
+pub fn split_address_edited(
+    rows: &[SendRecipientDraft],
+    index: usize,
+    address: &str,
+) -> Vec<SendRecipientDraft> {
+    let mut next = rows.to_vec();
+    if let Some(row) = next.get_mut(index) {
+        row.address = address.trim().to_owned();
+    }
+    next
+}
+
 /// An amount field's edit as the core reads it (spec 073;
 /// `vela_core::l10n::amount_text` says why): a decimal-comma keyboard's
 /// "4,5" is 4.5 — raw, the send machine read 4 in fiat mode, and a custom
@@ -1740,6 +1757,15 @@ mod split_tests {
 
         // An index nobody has is not a reason to lose the list.
         assert_eq!(split_amount_edited(&rows, 9, "1".to_owned()), rows);
+
+        // A row's address, typed (078 F-06): that row only, trimmed, its
+        // amount and identity kept.
+        let typed = split_address_edited(&rows, 2, "  0xDDD ");
+        assert_eq!(typed[2].address, "0xDDD");
+        assert_eq!(typed[2].amount, "3");
+        assert_eq!(typed[2].id, "rcpt_3");
+        assert_eq!(typed[0], rows[0]);
+        assert_eq!(split_address_edited(&rows, 9, "0x1"), rows);
 
         let removed = split_row_removed(&rows, 1);
         assert_eq!(removed.len(), 2);
@@ -2179,6 +2205,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
         ),
     };
 
+    let sweeping = send.multi_select_mode;
     let recipient = (!split).then(|| {
         let lines = if send.recipient.is_empty() {
             (String::new(), String::new())
@@ -2186,10 +2213,67 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             address_lines(&send.recipient)
         };
         (
-            recipient_note(send, s).unwrap_or_else(|| s.recipient_label.clone()),
+            // The field is "Recipient", always (078 F-08): the trust line is
+            // a note UNDER it, not the label's replacement — a name the core
+            // resolved used to become the field's title.
+            s.recipient_label.clone(),
             (lines.0.into(), lines.1.into()),
             SharedString::from(send.recipient.clone()),
         )
+    });
+    let recipient_note = if sweeping {
+        Some(s.multi_send_same_recipient.clone())
+    } else if split {
+        None
+    } else {
+        recipient_note(send, s)
+    };
+    // SD2d (078 F-05): the picked coins, each at the amount it will move —
+    // the same reading the confirm lists (`sweep_breakdown`).
+    let sweep = sweeping.then(|| {
+        let picked: Vec<_> = send
+            .tokens
+            .iter()
+            .filter(|token| send.multi_selected_ids.contains(&token.id()))
+            .collect();
+        let chain_id = send
+            .multi_chain_id
+            .or_else(|| picked.first().map(|token| token.chain_id))
+            .unwrap_or(1);
+        SweepForm {
+            summary: fill(
+                &fill(&s.multi_send_summary, "n", &picked.len().to_string()),
+                "chain",
+                &chain_name(chain_id),
+            )
+            .into(),
+            rows: picked
+                .iter()
+                .map(|token| {
+                    let amount = send
+                        .multi_specs
+                        .iter()
+                        .find(|spec| spec.token_address == token.token_address)
+                        .map_or(token.balance.as_str(), |spec| spec.amount.as_str());
+                    SweepRow {
+                        mark: TokenMark {
+                            ticker: token.symbol.clone().into(),
+                            badge: tint(token.chain_id),
+                            logos: crate::marks::token_logos(
+                                token.chain_id,
+                                &token.symbol,
+                                token.token_address.as_deref(),
+                                &token.logo_urls,
+                            ),
+                        },
+                        symbol: token.symbol.clone().into(),
+                        balance: fill(&s.balance_label, "amount", &trimmed_str(&token.balance))
+                            .into(),
+                        amount: trimmed_str(amount).into(),
+                    }
+                })
+                .collect(),
+        }
     });
 
     // Which unit the figure is TYPED in: the figure's own code, never the
@@ -2212,7 +2296,9 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
 
     SendForm {
         token: header,
-        amount: (!split).then(|| {
+        sweep,
+        recipient_note,
+        amount: (!split && !sweeping).then(|| {
             (
                 SharedString::from(if send.amount.is_empty() {
                     "0".to_owned()
@@ -2222,13 +2308,15 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                 other_line,
             )
         }),
-        amount_unit: (!split)
+        amount_unit: (!split && !sweeping)
             .then(|| SharedString::from(fiat_code.cloned().unwrap_or_else(|| symbol.clone()))),
         // ⇄ exists only where the core offers it, and is live only where
         // pressing it would change something; its refusal is the notice's.
-        denom_toggle: (!split && send.denom_toggle_shown).then_some(send.denom_toggle_enabled),
+        denom_toggle: (!split && !sweeping && send.denom_toggle_shown)
+            .then_some(send.denom_toggle_enabled),
         recipient,
-        add_recipient: (!split).then(|| s.add_recipient.clone()),
+        // A sweep is one person by definition: no door into a split.
+        add_recipient: (!split && !sweeping).then(|| s.add_recipient.clone()),
         recipients: if split {
             send.recipients
                 .iter()

@@ -979,6 +979,9 @@ pub fn fee_speed_option(
 /// gallery gets, and what this screen was on the desktop until spec 033.
 pub struct RecipientRowActions {
     pub amount: Option<crate::flows::panels::AddressField>,
+    /// The row's address, typed (078 F-06) — and the book for this row.
+    pub address: Option<crate::flows::panels::AddressField>,
+    pub pick: Option<crate::flows::panels::Click>,
     pub remove: Option<crate::flows::panels::Click>,
 }
 
@@ -991,7 +994,94 @@ pub fn recipient_card(
     row: RecipientRowActions,
     window: &gpui::Window,
 ) -> Div {
-    let RecipientRowActions { amount, remove } = row;
+    let RecipientRowActions {
+        amount,
+        address,
+        pick,
+        remove,
+    } = row;
+    // Live, the row is also where the person is typed (the web's
+    // `RecipientCard`, spec 028 Phase 10): a well holding the address, with
+    // the book's door beside it. The drawn card keeps its name line.
+    let who: gpui::AnyElement = match address {
+        // At rest a filled row reads as the drawn card does — the address's
+        // two ends — and a click puts the whole of it back in hand (the web's
+        // `.reading` over the input): forty clipped hex strings in boxes is a
+        // form, not a payroll.
+        Some(field) if !field.value.is_empty() && !field.focus.is_focused(window) => {
+            let focus = field.focus.clone();
+            let mut reading = div().flex().items_center().gap(px(4.)).child(
+                div()
+                    .id(gpui::ElementId::from(("split-reading", index)))
+                    .cursor_text()
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_mono_address())
+                    .text_color(theme.fg_base)
+                    .child(gpui::SharedString::from(
+                        crate::wallet::live::shorten_address(&field.value),
+                    ))
+                    .on_click(move |_, window, cx| focus.focus(window, cx)),
+            );
+            if let Some(pick) = pick {
+                reading = reading.child(crate::flows::panels::clickable(
+                    gpui::ElementId::from(("split-pick", index)),
+                    Some(pick),
+                    div().p(px(4.)).rounded_full().child(icon_img(
+                        icons,
+                        Icon::NavContacts,
+                        false,
+                        theme.fg_muted,
+                        14.,
+                    )),
+                ));
+            }
+            reading.into_any_element()
+        }
+        Some(field) => {
+            let mut well = div()
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .px(px(8.))
+                .rounded(px(8.))
+                .bg(theme.bg_raised)
+                .border_1()
+                .border_color(if field.focus.is_focused(window) {
+                    theme.fg_muted
+                } else {
+                    theme.border_card
+                })
+                .child(crate::ui::bare_text_field(
+                    gpui::ElementId::from(("split-address", index)),
+                    theme,
+                    &field.value,
+                    field.placeholder.clone(),
+                    &field.focus,
+                    window,
+                    field.on_change,
+                ));
+            if let Some(pick) = pick {
+                well = well.child(crate::flows::panels::clickable(
+                    gpui::ElementId::from(("split-pick", index)),
+                    Some(pick),
+                    div().p(px(4.)).rounded_full().child(icon_img(
+                        icons,
+                        Icon::NavContacts,
+                        false,
+                        theme.fg_muted,
+                        14.,
+                    )),
+                ));
+            }
+            well.into_any_element()
+        }
+        None => div()
+            .font_family(theme::font_mono())
+            .text_size(theme::text_mono_address())
+            .text_color(theme.fg_base)
+            .child(recipient.name.clone())
+            .into_any_element(),
+    };
     let card = div()
         .flex()
         .items_center()
@@ -1006,19 +1096,14 @@ pub fn recipient_card(
                 .min_w(px(0.))
                 .flex()
                 .flex_col()
+                .gap(px(2.))
                 .child(
                     div()
                         .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
                         .child(recipient.ordinal.clone()),
                 )
-                .child(
-                    div()
-                        .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
-                        .text_color(theme.fg_base)
-                        .child(recipient.name.clone()),
-                ),
+                .child(who),
         )
         .child(match amount {
             // Live: this row's own amount, typed. A split whose rows cannot be

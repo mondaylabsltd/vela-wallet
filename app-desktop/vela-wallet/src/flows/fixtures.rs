@@ -501,6 +501,14 @@ pub enum CtaState {
 #[derive(Clone)]
 pub struct SendForm {
     pub token: (TokenMark, SharedString, SharedString, Option<SharedString>),
+    /// SD2d — several tokens to one person (078 F-05). Present, it stands
+    /// where the token card and the amount would: there is no one token and
+    /// no one figure, only what each picked coin will move.
+    pub sweep: Option<SweepForm>,
+    /// The trust line under the recipient field — a name the core knows, the
+    /// first-interaction note, or the sweep's "same address" (078 F-08). The
+    /// field's label stays "Recipient".
+    pub recipient_note: Option<SharedString>,
     pub amount: Option<(SharedString, SharedString)>,
     pub recipient: Option<(SharedString, (SharedString, SharedString), SharedString)>,
     pub add_recipient: Option<SharedString>,
@@ -689,6 +697,25 @@ pub struct ScanModal {
     /// A desktop webcam has no torch, so the modal offers two tools where the
     /// phone offers three.
     pub tools: Vec<SharedString>,
+}
+
+/// The sweep form's head and its rows (the web's `sweepSummary` and
+/// `sweepRows`).
+#[derive(Clone)]
+pub struct SweepForm {
+    pub summary: SharedString,
+    pub rows: Vec<SweepRow>,
+}
+
+/// One picked coin: its mark, its name, "Balance …" under it, and the amount
+/// the sweep will move — the core's reserved spec, net of the gas the fee
+/// coin pays.
+#[derive(Clone)]
+pub struct SweepRow {
+    pub mark: TokenMark,
+    pub symbol: SharedString,
+    pub balance: SharedString,
+    pub amount: SharedString,
 }
 
 /// The receipt's four states (`ReceiptStage` on the web).
@@ -1164,6 +1191,8 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
 
     if split {
         return SendForm {
+            sweep: None,
+            recipient_note: None,
             token,
             amount: None,
             recipient: None,
@@ -1220,6 +1249,8 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
     }
 
     SendForm {
+        sweep: None,
+        recipient_note: None,
         token,
         amount: Some(("120".into(), "≈ $120.00".into())),
         recipient: Some((

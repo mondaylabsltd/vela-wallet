@@ -429,7 +429,11 @@ pub fn balance_display(
                             |dot, delta| {
                                 // Out and back in one cycle: the web's
                                 // `alternate` over two 800 ms halves.
-                                let t = if delta < 0.5 { delta * 2. } else { 2. - delta * 2. };
+                                let t = if delta < 0.5 {
+                                    delta * 2.
+                                } else {
+                                    2. - delta * 2.
+                                };
                                 dot.opacity(1. - 0.65 * t)
                             },
                         ),

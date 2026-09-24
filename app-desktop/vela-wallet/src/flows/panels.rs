@@ -142,6 +142,10 @@ pub struct PanelActions {
     /// DSD2bL, live: each split row's own amount field and its remove — in the
     /// order the rows draw, so row N edits payee N.
     pub split_amount_fields: Vec<AddressField>,
+    /// DSD2bL, live: each split row's own address, and the book for that row
+    /// (078 F-06) — in the order the rows draw.
+    pub split_address_fields: Vec<AddressField>,
+    pub pick_recipient_rows: Vec<Click>,
     pub remove_recipient_rows: Vec<Click>,
     /// DSD2bL, live: "Use X for the empty rows".
     pub fill_empty: Option<Click>,
@@ -1353,6 +1357,18 @@ fn send_form(
     // Max lives on the token card, as the web's `TokenHeaderCard` draws it. A
     // live form makes that one chip the button rather than drawing a second,
     // working one under the field (#288).
+    // A sweep has no one token and no one figure (078 F-05): what stands
+    // there is the summary and every picked coin at what it will move.
+    if model.sweep.is_some() || model.amount.is_none() {
+        actions.amount_field = None;
+        actions.tap_max = None;
+    }
+    // A split's people are its rows (the web's `mode === 'split'` has no
+    // single field): the one-recipient card above them was the single form
+    // left standing, with nothing to say who it was for.
+    if model.recipient.is_none() {
+        actions.recipient_field = None;
+    }
     let live = actions.amount_field.is_some();
     let mut card = token_header_card(
         theme,
@@ -1368,7 +1384,63 @@ fn send_form(
             max_chip(theme, max.clone()),
         ));
     }
-    let mut col = column().child(card);
+    let mut col = match &model.sweep {
+        None => column().child(card),
+        Some(sweep) => {
+            let mut rows = div().flex().flex_col();
+            for (i, row) in sweep.rows.iter().enumerate() {
+                rows = rows.child(
+                    div()
+                        .id(ElementId::from(("sweep-row", i)))
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .py(px(12.))
+                        .child(token_icon_logos(
+                            theme,
+                            row.mark.ticker.as_ref(),
+                            row.mark.badge,
+                            &row.mark.logos,
+                        ))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .flex()
+                                .flex_col()
+                                .child(
+                                    div()
+                                        .text_size(theme::text_row_title())
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(theme.fg_base)
+                                        .child(row.symbol.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(theme::text_row_sub())
+                                        .text_color(theme.fg_subtle)
+                                        .child(row.balance.clone()),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(row.amount.clone()),
+                        ),
+                );
+            }
+            column()
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(sweep.summary.clone()),
+                )
+                .child(rows)
+        }
+    };
 
     if let Some(field) = actions.amount_field.take() {
         // Live: the web's `AmountInput` — the figure large and centred with
@@ -1551,7 +1623,15 @@ fn send_form(
                         .text_color(theme.fg_subtle)
                         .child(label),
                 )
-                .child(card),
+                .child(card)
+                // The trust line under the field (`RecipientField`'s `.note`,
+                // 078 F-08): who the core says this is, or that it is new.
+                .children(model.recipient_note.clone().map(|note| {
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(note)
+                })),
         );
     } else if let Some((label, lines, seed)) = &model.recipient {
         // The drawn form: the same raised card as the live one, holding the
@@ -1636,6 +1716,8 @@ fn send_form(
     }
 
     let mut amounts = actions.split_amount_fields.drain(..);
+    let mut addresses = actions.split_address_fields.drain(..);
+    let mut picks = actions.pick_recipient_rows.drain(..);
     let mut removes = actions.remove_recipient_rows.drain(..);
     for (index, recipient) in model.recipients.iter().enumerate() {
         col = col.child(recipient_card(
@@ -1646,6 +1728,8 @@ fn send_form(
             index,
             crate::flows::components::RecipientRowActions {
                 amount: amounts.next(),
+                address: addresses.next(),
+                pick: picks.next(),
                 remove: removes.next(),
             },
             window,
