@@ -19,10 +19,10 @@ use crate::wallet::components::{
 };
 
 use super::components::{
-    accent_button, address_card, fact_row, fee_refresh_icon, fee_row, fee_speed_note,
-    fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button,
-    inline_mark, max_chip, mono_field, network_pill, network_row, qr_card, recipient_card,
-    segmented_toggle, status_chip, token_header_card,
+    accent_button, address_card, danger_button, fact_row, fee_refresh_icon, fee_row,
+    fee_speed_note, fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search,
+    ghost_button, inline_mark, max_chip, mono_field, network_pill, network_row, qr_card,
+    recipient_card, segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -676,13 +676,14 @@ fn tx_detail(
         model.view_on_explorer.clone(),
         model.explorer_url.as_ref(),
     ));
-    // Under the explorer, in the danger colour (the web's `variant="danger"`).
+    // Under the explorer, filled in the danger colour (the web's
+    // `variant="danger"`).
     // It removes the local record only; the chain keeps the transaction.
     if let Some(label) = &model.delete_label {
         col = col.child(clickable(
             "tx-delete",
             delete_tx,
-            ghost_button(theme, label.clone()).text_color(theme.error_base),
+            danger_button(theme, label.clone()),
         ));
     }
     col

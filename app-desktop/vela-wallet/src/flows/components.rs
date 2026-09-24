@@ -980,37 +980,51 @@ pub fn max_chip(theme: &Theme, max: SharedString) -> Div {
         .child(max)
 }
 
-/// A full-width outline button — every CTA in the flows except the confirm.
-pub fn ghost_button(theme: &Theme, label: SharedString) -> Div {
+/// The web's `Button` (`ui/Button.svelte`), one shape for every CTA: at
+/// least 52 high (`--size-control-lg`), padding 8/24, 17 semibold
+/// (`--text-xl`), hover at 0.92. The desktop's buttons were 37 high and 13
+/// regular, the largest single reason the flows read as a rough copy.
+fn button_base(label: SharedString) -> Div {
     div()
         .w_full()
-        .py(px(10.))
-        .rounded(px(999.))
-        .border_1()
-        .border_color(theme.border_card)
+        .min_h(px(52.))
+        .px(px(24.))
+        .py(px(8.))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(theme::text_row_sub())
-        .text_color(theme.fg_base)
+        .text_size(theme::text_button())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .hover(|el| el.opacity(0.92))
         .child(label)
 }
 
-/// The accent CTA. Exactly one per journey (DSD3L's confirm) — in this product
-/// the accent means "this moves the money".
+/// `secondary`, pill-shaped: a hairline in `--color-border-strong` and muted
+/// text — the outline every secondary action wears.
+pub fn ghost_button(theme: &Theme, label: SharedString) -> Div {
+    button_base(label)
+        .rounded(px(999.))
+        .border_1()
+        .border_color(theme.border_strong)
+        .text_color(theme.fg_muted)
+}
+
+/// `primary`, `rounded`: the accent CTA. In this product the accent means
+/// "this moves the money" — and "done", on a receipt that has landed.
 pub fn accent_button(theme: &Theme, label: SharedString) -> Div {
-    div()
-        .w_full()
-        .py(px(12.))
+    button_base(label)
         .rounded(px(12.))
         .bg(theme.accent)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(theme::text_row_sub())
-        .font_weight(gpui::FontWeight::BOLD)
         .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
-        .child(label)
+}
+
+/// `danger`: filled with the error colour — delete a transaction, a contact,
+/// a group. Only where the web draws one.
+pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
+    button_base(label)
+        .rounded(px(12.))
+        .bg(theme.error_base)
+        .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
 }
 
 #[cfg(test)]

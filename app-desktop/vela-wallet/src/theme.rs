@@ -60,10 +60,8 @@ pub struct Theme {
     pub fg_muted: Hsla,
     pub fg_subtle: Hsla,
     pub fg_inverse: Hsla,
-    /// The onboarding rail's surface. Light steps DOWN to the sunken tone and
-    /// dark stays on the base — the same pair the wallet home's sidebar uses
-    /// (spec 015 deviation 4: dark `bg_sunken` is LIGHTER than the canvas and
-    /// would invert the hierarchy), so the two rails are visibly one app.
+    /// The onboarding rail's surface: the sunken tone in both themes, as the
+    /// wallet home's sidebar is, so the two rails are visibly one app.
     pub rail_surface: Hsla,
     /// The onboarding rail's step ordinal and its `/03`. A WATERMARK on the
     /// rail's own surface — one step above the background and well below any
@@ -77,6 +75,12 @@ pub struct Theme {
     pub accent_active: Hsla,
     // structure
     pub border_card: Hsla,
+    /// The web's `--color-border-strong`: the edge of an outline button, a
+    /// field, the scanner's tools. `border_card` could not stand in for it —
+    /// in dark it IS the raised colour, so every outline vanished.
+    pub border_strong: Hsla,
+    /// The web's `--color-accent-soft`: the slide-to-confirm fill.
+    pub accent_soft: Hsla,
     pub outline_strong: Hsla,
     pub divider: Hsla,
     /// The 1 px edge between content column and action panel.
@@ -156,6 +160,8 @@ impl Theme {
             accent_hover: c(0xd14a20),
             accent_active: c(0xbf421c),
             border_card: c(0xecebe4),
+            border_strong: c(0xd8d6ce),
+            accent_soft: c(0xfff0eb),
             outline_strong: c(0x554b46),
             divider: c(0xecebe4),
             panel_edge: c(0xecebe4),
@@ -182,19 +188,29 @@ impl Theme {
             dark: true,
             bg_base: c(0x141412),
             bg_raised: c(0x1e1e1b),
-            bg_sunken: c(0x262622),
+            // The web's dark `--color-bg-sunken`: BELOW the canvas, as sunken
+            // means. It was #262622 here — lighter than raised — after an
+            // early mock; the web is the reference now (spec 078 X-01).
+            bg_sunken: c(0x0f0f0d),
             backdrop: c(0x000000).opacity(0.35),
             fg_base: c(0xe8e6e1),
             fg_muted: c(0x9a9790),
             fg_subtle: c(0x85827a),
             fg_inverse: c(0xffffff),
-            rail_surface: c(0x141412),
+            // The web's dark sidebar and onboarding rail sit on the sunken
+            // tone, now that sunken is darker than the canvas (078 H-11).
+            rail_surface: c(0x0f0f0d),
             rail_ordinal: c(0x2e2e27),
             rail_ordinal_soft: c(0x3b3b33),
             accent: c(0xe8572a),
             accent_hover: c(0xf26a40),
             accent_active: c(0xd44d22),
-            border_card: c(0x1e1e1b), // no visible card border in the dark mock
+            // The web's dark `--color-border-base`. It was the raised colour
+            // ("no visible card border in the dark mock"), so dark cards had
+            // no edge where the web's have one (078 X-01).
+            border_card: c(0x2c2c28),
+            border_strong: c(0x3e3e38),
+            accent_soft: c(0x2c1a12),
             outline_strong: c(0x554b46),
             divider: c(0x2c2c28),
             panel_edge: c(0x1e1e1b),
@@ -209,7 +225,9 @@ impl Theme {
             error_soft: c(0x2d1515),
             info_base: c(0x5a7cf6),
             info_soft: c(0x131b33),
-            bg_well: c(0x121210),
+            // The web has no separate well: its fields and code blocks sit on
+            // `--color-bg-sunken`, #0F0F0D in dark (078 X-01).
+            bg_well: c(0x0f0f0d),
             success: c(0x3da872),
             warning: c(0xd4a54a),
             warning_border: c(0x3d3020),
@@ -464,6 +482,10 @@ pub fn text_amount_unit(rung: f32) -> Pixels {
 }
 pub fn text_balance_decimals() -> Pixels {
     scaled(24.)
+}
+/// A button's label (`--text-xl`), as the web's `Button` sets it.
+pub fn text_button() -> Pixels {
+    scaled(17.)
 }
 pub fn text_row_title() -> Pixels {
     scaled(15.)

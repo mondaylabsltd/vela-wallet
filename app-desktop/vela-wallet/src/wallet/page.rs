@@ -2659,10 +2659,9 @@ impl WalletPage {
 
     fn sidebar(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.strings;
-        let bg = match self.theme_mode() {
-            ThemeMode::Light => theme.bg_sunken,
-            ThemeMode::Dark => theme.bg_base,
-        };
+        // Sunken in both themes, as the web's `.sidebar` is — dark sunken is
+        // below the canvas now (078 X-01), so the old dark exception went.
+        let bg = theme.bg_sunken;
 
         let section = self.section;
         let nav = [
