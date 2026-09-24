@@ -384,13 +384,16 @@ fn win_failure(error: vela_passkey_win::WinError) -> PasskeyFailure {
 /// picker.
 ///
 /// `Hybrid` never reaches here — `register` and `assert` hand it to the app's
-/// own caBLE client before the Windows half is consulted. It maps to the
-/// security key only so the match is total.
+/// own caBLE client before the Windows half is consulted. Neither does
+/// `TrustedSigner`: `executor` sends it to the signer page before this module
+/// is called at all. Both map to the security key only so the match is total.
 #[cfg(windows)]
 fn win_attachment(method: KeyMethod) -> vela_passkey_win::Attachment {
     match method {
         KeyMethod::Platform => vela_passkey_win::Attachment::ThisDevice,
-        KeyMethod::SecurityKey | KeyMethod::Hybrid => vela_passkey_win::Attachment::SecurityKey,
+        KeyMethod::SecurityKey | KeyMethod::Hybrid | KeyMethod::TrustedSigner => {
+            vela_passkey_win::Attachment::SecurityKey
+        }
     }
 }
 
