@@ -93,6 +93,11 @@
   </supports>
 
   <releases>
+    <release version="0.9.5" date="2026-09-24" type="development">
+      <description>
+        <p>Pre-release: A dApp transaction now lands on a receipt instead of closing on you, and the browser extension's side panel is the wallet itself; the Clear Signer shows what you are signing on this device's own browser and answers back over velawallet://; and the Trusted Signer lets a key you trust sign for you.</p>
+      </description>
+    </release>
     <release version="0.9.4" date="2026-09-21" type="development">
       <description>
         <p>Pre-release: A passkey says where it lives (cloud-synced or on this device); sign-in checks what an index tells it against the chain; the fee can be refreshed and a speed chosen, with the amount's unit shown; and fixes to sending, the receive code on Android, and the web layout.</p>
