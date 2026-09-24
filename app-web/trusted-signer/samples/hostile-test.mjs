@@ -292,7 +292,8 @@ try {
     check('create from evil.test: refused, and the site hears "refused"',
       refusedCreate && refusedCreate.vela === 'error' && refusedCreate.code === 'refused');
     check('create from evil.test: the card says only a Vela wallet may ask, and names the real site',
-      /Only a Vela wallet may ask this page to create a key/.test(text) && text.includes('evil.test'));
+      /Only a Vela wallet may ask this page to create a key/.test(text) && text.includes('evil.test'),
+      text.replace(/\n/g, ' / ').slice(0, 220));
     const made = await popup.send('WebAuthn.getCredentials', { authenticatorId: popup.authenticatorId });
     check('create from evil.test: no key exists afterwards', made.credentials.length === 0 && !(await popup.ev('!!window.__slider')));
 
@@ -315,9 +316,13 @@ try {
     })).toString('base64url');
     const viaUrl = await Page.open(9397, `${SIGNER}?ch=url&lang=en#i=${payload}`);
     await viaUrl.waitFor("window.__velaState && window.__velaState.phase === 'refused'");
-    check('create over a URL fragment: refused, whatever its context claims',
-      /Only a Vela wallet may ask/.test(await viaUrl.text()) &&
-      (await viaUrl.ev("document.querySelector('.slide').classList.contains('slide-off')")));
+    // …and the reason names what is actually wrong: the answer would not reach
+    // a wallet. On this channel nothing can prove who asked, so "nothing
+    // proves one is asking" would be asking for proof that cannot exist.
+    check('create over a URL fragment with no wallet callback: refused, whatever its context claims',
+      /answer would not reach one/.test(await viaUrl.text()) &&
+      (await viaUrl.ev("document.querySelector('.slide').classList.contains('slide-off')")),
+      String(await viaUrl.text()).replace(/\n/g, ' / ').slice(0, 220));
     await viaUrl.close();
   }
 

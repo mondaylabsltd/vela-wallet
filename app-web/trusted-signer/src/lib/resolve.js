@@ -834,25 +834,49 @@ window.VelaCS = window.VelaCS || {};
     try { return new URL(url).protocol; } catch (e) { return ''; }
   }
 
+  /** The scheme a Vela wallet's answer goes back on (`trusted_signer::CALLBACK_URL`). */
+  var WALLET_SCHEME = 'velawallet:';
+
   /**
-   * Is the requester a Vela wallet? Only two kinds of evidence count:
+   * Is the requester a Vela wallet? Three kinds of evidence count:
    *
    *  · an app channel: the loopback WebSocket (the app that opened this page
    *    proved it with its one-time token), the tunnel (the wallet's key matches
    *    the link's `rk`, and the person compares the code), BLE (proximity and
-   *    the code);
+   *    the code) — all retired, kept because the shape of the rule is theirs;
    *  · an origin the BROWSER vouches for (postMessage)
    *    that is https://getvela.app or a subdomain — or this machine's loopback,
-   *    where the web wallet runs in development and in tests.
+   *    where the web wallet runs in development and in tests;
+   *  · **where the answer is going.** On the URL channel — now the only one the
+   *    clients have — nothing can tell this page who opened it, and a fragment
+   *    is no evidence: any site can open this page with one. But the page does
+   *    know the address it will send the answer to, because sending it is what
+   *    the page will do. If that address is the wallet's own scheme, then
+   *    whoever asked, the answer reaches a Vela wallet and nobody else.
    *
-   * A URL fragment is no evidence: any site can open this page with one.
+   * Why that is protection and not a rubber stamp: somebody who wants the key
+   * this page creates has to RECEIVE it, so they have to name a callback they
+   * can receive on. Name the wallet's scheme and the key goes to the wallet,
+   * which is no use to them; name their own and this returns false. The way
+   * round it is to register `velawallet://` on the device and win the
+   * collision — which is precisely the limit the transport documents, and
+   * which no page can do anything about (`trusted_signer::CALLBACK_URL`).
+   *
+   * Note what this does NOT claim: not that Vela asked, only that Vela
+   * answers. The card says it in those words, because that is the true one.
    */
   function walletRequester(ctx) {
     if (ctx.channel === 'ws' || ctx.channel === 'relay' || ctx.channel === 'ble') return true;
+    if (ctx.channel === 'url') return answersToWallet(ctx);
     if (ctx.originVerified !== true || typeof ctx.requester !== 'string') return false;
     var host = hostOf(ctx.requester);
     if (LOOPBACK_HOST.test(host)) return true;
     return schemeOf(ctx.requester) === 'https:' && (host === 'getvela.app' || /\.getvela\.app$/.test(host));
+  }
+
+  /** Will this request's answer go to a Vela wallet on this device? */
+  function answersToWallet(ctx) {
+    return schemeOf(ctx.callback) === WALLET_SCHEME;
   }
 
   // Anything that could be the bytes to sign, anywhere the requester controls:
@@ -895,11 +919,20 @@ window.VelaCS = window.VelaCS || {};
     return body.slice(0, 8) + '…' + body.slice(-6);
   }
 
-  // Who is asking, in words the person can check: the verified site, or the
-  // kind of channel the request came over.
+  // Who is asking, in words the person can check: the verified site, where the
+  // answer will go, or the kind of channel the request came over.
   function requesterLine(ctx) {
     if (ctx.originVerified === true && ctx.requester) {
       return { origin: hostOf(ctx.requester) || ctx.requester, verified: true };
+    }
+    if (ctx.channel === 'url') {
+      // Say the destination, not a name. The page cannot know who opened it,
+      // and a self-reported name beside a mark reads as an identity the page
+      // checked (owner, 2026-09-24: the page answers a `velawallet://` and
+      // nothing else, so 「某个钱包」 and its logo were both inappropriate).
+      return answersToWallet(ctx)
+        ? { originKey: 'value.answerToThisWallet', verified: true }
+        : { origin: schemeOf(ctx.callback) || null, originKey: schemeOf(ctx.callback) ? null : 'value.answerToNobody', verified: false, elsewhere: true };
     }
     var byChannel = { ws: 'value.viaApp', relay: 'value.viaTunnel', ble: 'value.viaBle' }[ctx.channel];
     return { originKey: byChannel || 'value.viaUnknown', verified: false };
@@ -951,7 +984,16 @@ window.VelaCS = window.VelaCS || {};
     view.dapp.letter = 'V';
     view.dapp.tone = '#ff6a1a';
     view.dapp.icon = null;
-    if (!who.verified) {
+    if (who.elsewhere) {
+      // The answer is going somewhere that is not a Vela wallet. Say the
+      // destination and nothing else: no name, no mark, nothing borrowed from
+      // whoever asked. The ceremony rules refuse this case anyway; the card's
+      // job is to make the reason readable.
+      view.dapp.name = null;
+      view.dapp.nameKey = 'tag.notThisWallet';
+      view.dapp.letter = '?';
+      view.dapp.tone = toneFor(String(ctx.callback || ''));
+    } else if (!who.verified) {
       // A name it gave for itself, said as such; otherwise no name at all.
       //
       // The mark is a monogram in a colour DERIVED from that name, never an
@@ -1059,7 +1101,13 @@ window.VelaCS = window.VelaCS || {};
     } else if ((kind === 'create' || kind === 'memberProof') && !fromWallet) {
       view.refuse = true;
       view.risk = 'danger';
-      view.warnings.push({ tone: 'danger', key: kind === 'create' ? 'refuse.createNotWallet' : 'refuse.memberNotWallet' });
+      // The reason has to be the real one for THIS channel: on the url channel
+      // nothing can prove who asked, so saying "nothing proves it" would send
+      // a person looking for proof that cannot exist.
+      var why = ctx.channel === 'url'
+        ? (kind === 'create' ? 'refuse.createNotForWallet' : 'refuse.memberNotForWallet')
+        : (kind === 'create' ? 'refuse.createNotWallet' : 'refuse.memberNotWallet');
+      view.warnings.push({ tone: 'danger', key: why });
     } else if (bad) {
       view.refuse = true;
       view.risk = 'danger';
@@ -1174,6 +1222,7 @@ window.VelaCS = window.VelaCS || {};
 
   ns.resolve = resolve;
   ns.resolve.walletRequester = walletRequester;
+  ns.resolve.answersToWallet = answersToWallet;
   // The waiting card draws the same mark as the request card.
   ns.resolve.toneFor = toneFor;
   ns.format = { units: formatUnits, date: formatDate, short: shortAddress, group: group, amountPhrase: amountPhrase };

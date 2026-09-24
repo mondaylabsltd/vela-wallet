@@ -196,12 +196,18 @@ window.VelaCS.i18n.register('en', {
   'intent.proofRecover': 'Recover with your key',
   'intent.memberProof': 'Confirm the key joins',
   'tag.someWallet': 'A wallet',
+  'tag.notThisWallet': 'Not the Vela wallet',
   'tag.selfReported': 'the name and mark it gave for itself',
   'tag.velaWallet': 'Vela wallet',
   'tag.stepOne': '1 of 2',
   'tag.stepTwo': '2 of 2',
   'value.viaApp': 'the Vela app on this device',
   'value.viaUnknown': 'a requester this page cannot identify',
+  // Where the answer goes. Not who asked — this page cannot know that —
+  // but what it will DO, which is the one thing about the other end it can
+  // state and a person can hold it to.
+  'value.answerToThisWallet': 'the answer goes to the Vela wallet on this device',
+  'value.answerToNobody': 'nowhere — this request named no address for the answer',
   'value.yourWallet': 'Your Vela wallet',
   'value.unnamedWallet': '(no name given)',
   'value.randomChallenge': '32 random bytes made on this page',
@@ -221,8 +227,16 @@ window.VelaCS.i18n.register('en', {
   'sentence.memberProof': 'Your passkey confirms that this key joins {wallet} in the public-key registry. The page asked the registry itself, for exactly the keys shown below.',
   'sentence.memberProofUnnamed': 'Your passkey confirms that this key joins your wallet in the public-key registry. The page asked the registry itself, for exactly the keys shown below.',
   'refuse.suppliedChallenge': 'The requester tried to supply the challenge. This page signs only challenges it makes itself — bytes chosen by someone else could be a transaction in disguise. Not signing.',
+  // The reason, as the rule now states it: not "nobody proved who asked"
+  // (nothing can) but "the answer would not reach a Vela wallet".
+  // Two reasons, because there are two. On a channel that could have vouched
+  // for the requester and did not, the reason is that nobody proved who is
+  // asking. On the url channel nothing CAN prove that, so the reason is the
+  // one the page can state: the answer would not reach a Vela wallet.
   'refuse.createNotWallet': 'Only a Vela wallet may ask this page to create a key, and nothing proves one is asking. Not creating.',
+  'refuse.createNotForWallet': 'A key made here is handed to a Vela wallet, and this request’s answer would not reach one. Not creating.',
   'refuse.memberNotWallet': 'Only a Vela wallet may ask for a key’s registry confirmation, and nothing proves one is asking. Not signing.',
+  'refuse.memberNotForWallet': 'A key’s registry confirmation is for a Vela wallet, and this request’s answer would not reach one. Not signing.',
   'refuse.badCeremony': 'This request is malformed, so there is nothing sound to sign. Not signing.',
   'refuse.memberMismatch': 'The registry’s challenge is not the one these keys give. What would be signed is not what is shown. Not signing.',
   'refuse.registryUnavailable': 'The registry did not answer, so this key’s challenge cannot be checked. Try again from the wallet.',

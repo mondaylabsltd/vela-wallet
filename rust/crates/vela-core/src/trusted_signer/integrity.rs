@@ -69,6 +69,12 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // the bytes are committed at
     // `app-web/trusted-signer/dist/b/<this hash>/sign.html`.
 
+    // The create ceremony works over the custom scheme, and the card names
+    // where the answer goes instead of borrowing an identity it cannot check.
+    // Until this page, `walletRequester` vouched only for the socket channels —
+    // so with those retired, creating a wallet through the page was refused
+    // outright (owner, 2026-09-24: 「创建钱包时，滑动签名不可用」).
+    "4563215b962d9b615c5dc93bb8121ae02aba6d6b3c20b62e9146d69f03b1e505",
     // The page renamed to Trusted Signer. Its own words changed, so its bytes
     // did, so its hash did — which is the discipline working rather than a
     // nuisance: the page cannot be edited without saying so here.

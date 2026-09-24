@@ -202,12 +202,17 @@ window.VelaCS.i18n.register('zh', {
   'intent.proofRecover': '用你的钥匙恢复',
   'intent.memberProof': '确认钥匙加入',
   'tag.someWallet': '某个钱包',
+  'tag.notThisWallet': '不是 Vela 钱包',
   'tag.selfReported': '名字和图标都是它自报的',
   'tag.velaWallet': 'Vela 钱包',
   'tag.stepOne': '第 1 步 / 共 2 步',
   'tag.stepTwo': '第 2 步 / 共 2 步',
   'value.viaApp': '这台设备上的 Vela App',
   'value.viaUnknown': '无法确认身份的请求方',
+  // 答复去哪里。不是「谁在请求」——本页无从知道——而是本页将要做的事，
+  // 这一点可以说，也可以被人核对。
+  'value.answerToThisWallet': '答复交回本机的 Vela 钱包',
+  'value.answerToNobody': '没有指定答复地址',
   'value.yourWallet': '你的 Vela 钱包',
   'value.unnamedWallet': '（未命名）',
   'value.randomChallenge': '本页生成的 32 个随机字节',
@@ -227,8 +232,13 @@ window.VelaCS.i18n.register('zh', {
   'sentence.memberProof': '由你的 passkey 确认：这把钥匙在公钥注册表里加入「{wallet}」。挑战码是本页自己向注册表要的，针对的正是下面列出的钥匙。',
   'sentence.memberProofUnnamed': '由你的 passkey 确认：这把钥匙在公钥注册表里加入你的钱包。挑战码是本页自己向注册表要的，针对的正是下面列出的钥匙。',
   'refuse.suppliedChallenge': '请求方试图自带挑战码。本页只签自己生成的挑战码 —— 别人挑的字节可能是一笔乔装的交易。不签。',
+  // 两条理由，因为确实是两件事。在本该能为请求方作保的通道上没作保，理由是
+  // 「没人证明是谁在请求」；在 url 通道上没有任何东西能证明这件事，理由就是
+  // 本页能说的那一条：答复到不了 Vela 钱包。
   'refuse.createNotWallet': '只有 Vela 钱包才能让本页创建钥匙，而没有任何东西证明这是 Vela 钱包在请求。不创建。',
+  'refuse.createNotForWallet': '本页创建的钥匙只交给 Vela 钱包，而这个请求的答复到不了 Vela 钱包。不创建。',
   'refuse.memberNotWallet': '只有 Vela 钱包才能请求钥匙的注册表确认，而没有任何东西证明这是 Vela 钱包在请求。不签。',
+  'refuse.memberNotForWallet': '钥匙的注册表确认只为 Vela 钱包做，而这个请求的答复到不了 Vela 钱包。不签。',
   'refuse.badCeremony': '这份请求格式不对，没有可以放心签的东西。不签。',
   'refuse.memberMismatch': '注册表给的挑战码不是这些钥匙应得的那一个。要签的和屏幕上显示的对不上。不签。',
   'refuse.registryUnavailable': '注册表没有应答，这把钥匙的挑战码无从核对。请回到钱包重试。',

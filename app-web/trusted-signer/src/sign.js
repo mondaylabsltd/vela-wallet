@@ -114,8 +114,13 @@
     // a loopback socket and a URL fragment are not.
     waitingState.requesterApp = (session && session.requesterApp) || '';
     waitingState.requesterIcon = (session && session.requesterIcon) || '';
+    // Vela's mark only where something vouches for the other end. On the url
+    // channel that is the callback's scheme: the answer goes to a Vela wallet
+    // and to nothing else, which is a fact about this page's own behaviour
+    // rather than a name the requester handed over.
     waitingState.requesterVerified = !!(session && session.channel === 'post')
-      || !!(session && session.channel === 'ext');
+      || !!(session && session.channel === 'ext')
+      || !!(session && session.channel === 'url' && ns.resolve.answersToWallet({ callback: session.callback }));
     window.__slider = null;
     draw(ns.render.waiting(waitingState));
     phase('waiting');
@@ -344,6 +349,10 @@
       // dialled in would be the page vouching for something it cannot check.
       requesterApp: session.requesterApp || '',
       requesterIcon: session.requesterIcon || '',
+      // Where the answer will go. The channel's, never the requester's: it is
+      // what this page will DO, and on the url channel it is the only thing
+      // the page can say about the other end truthfully.
+      callback: session.callback || '',
       rpId: ns.signer.relyingPartyId(),
     });
     var view = ns.resolve(request.intent, context);

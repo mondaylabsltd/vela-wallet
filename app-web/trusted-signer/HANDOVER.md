@@ -32,16 +32,24 @@ cd app-web/trusted-signer
 export CHROME_BIN="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 export SB=<任意可写目录>   # 需要 tls-serve.py / cert.pem / key.pem，见下
 
-node samples/safeop-test.mjs      #  9/9  摘要对拍 vela-core 的 wasm
-node samples/identicon-test.mjs   #  9/9  头像与 vela-core 逐字节一致
-node samples/secure-vectors.mjs   # 82/82 secure.js 对拍 vela-core 的会话向量（Node + Chrome）
-node samples/ble-loopback.mjs     # 10/10 BLE 分帧/握手/加密/防重放
-node samples/mock-tunnel-test.mjs  # 14/14 模拟隧道守 tunnel.md §1 的房间规则
-node samples/hostile-test.mjs     # 39/39 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
-node samples/channels-test.mjs    # 36/36 各通道 + 真 WebAuthn + 交易 + 篡改拒签
-node samples/ceremony-test.mjs    # 55/55 四种仪式 + 多请求会话 + 隧道与比对码
-node samples/desktop-demo.mjs --auto      #  8/8 桌面应用全流程 + 自验签
+bun samples/safeop-test.mjs        #  9/9  摘要对拍 vela-core 的 wasm
+bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
+bun samples/hostile-test.mjs       # 35/35 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
+bun samples/channels-test.mjs      # 19/19 各通道 + 真 WebAuthn + 交易 + 篡改拒签
+bun samples/ceremony-test.mjs      # 47/47 四种仪式 + 多请求会话
+bun samples/slider-test.mjs        # 14/14 真触摸拖动滑块：签名与创建，以及答复要交去别处就拖不动
+bun samples/single-file-test.mjs   # 12/12 发布出去的单文件页：CSP 实测、自定义 scheme 不被 CSP 拦
+bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签
 ```
+
+> 数字是 2026-09-24 实测的。`secure-vectors.mjs`、`ble-loopback.mjs`、
+> `mock-tunnel-test.mjs` 随隧道和 BLE 一起删了，不要再照旧文档去找。
+>
+> `ceremony-test.mjs` 曾经**一直是红的而没人知道**：`0801564b` 把仪式校验从
+> web core 里删掉（web 钱包不再需要），这个套件却还在调它，于是每次跑到第 14 项
+> 就死，还照样报「14/14 通过」。现在它自己会说清楚：哪些判定改成了形状检查，
+> 以及真正的核判定在哪里跑（Android / iOS / Rust 三处）。**报的数字要和文件里
+> 的 check 数对得上，对不上就是有东西悄悄停了。**
 
 **`$SB` 里需要三个文件**（几个测试要把页面架在真实的 `getvela.app` 源上，
 因为 passkey 的 rpId 准入检查在浏览器进程里，绕不过）：

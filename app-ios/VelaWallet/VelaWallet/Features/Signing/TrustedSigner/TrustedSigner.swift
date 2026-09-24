@@ -225,7 +225,9 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     private func run(_ ask: TrustedSignerAsk, page: String?) async -> TrustedSignerChannel.Ending {
         if let conversation {
             model?.stage = .waiting
-            return await conversation.send(ask)
+            let ending = await conversation.send(ask)
+            hideTab()
+            return ending
         }
         guard !busy else { return .outcome(.refused(refusal: .declined)) }
         busy = true
@@ -238,7 +240,22 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         self.model = model
         model.cancel = { [weak self] in self?.cancelled() }
         guard present(model) else { return .unavailable }
-        return await onThisDevice(ask, page: wanted, model: model)
+        let ending = await onThisDevice(ask, page: wanted, model: model)
+        hideTab()
+        return ending
+    }
+
+    /// A visit ends with its answer, so the page goes and the wallet's own
+    /// sheet is what the person sees again.
+    ///
+    /// On the custom-scheme channel there is no session for the page to hold:
+    /// the next request of a flow opens it again. Leaving the tab up is what
+    /// the socket channel did, and it strands a person on the page's own
+    /// "handed back to the wallet" screen while the wallet, which has the
+    /// answer, sits behind it (owner, 2026-09-24).
+    private func hideTab() {
+        guard let sheet = hostSheet, sheet.presentedViewController != nil else { return }
+        sheet.dismiss(animated: true)
     }
 
     /// The custom-scheme channel and the in-app tab (071, 076).

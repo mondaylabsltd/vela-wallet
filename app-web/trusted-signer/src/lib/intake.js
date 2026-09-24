@@ -100,6 +100,8 @@ window.VelaCS = window.VelaCS || {};
     this.inFlight = null;    // the request on screen, until it is answered
     this.comparisonCode = null;
     /** The requester's own name for itself, where a channel carries one. */
+    /** Where this channel will send the answer, where it knows (the url channel). */
+    this.callback = '';
     this.requesterApp = '';
     /** And its own mark: inline, raster, unverified. */
     this.requesterIcon = '';
@@ -290,6 +292,9 @@ window.VelaCS = window.VelaCS || {};
       }
 
       var session = new Session('url', false, options);
+      // The one fact this channel gives about the requester: where the answer
+      // is going. Not who asked — nothing can tell this page that.
+      session.callback = callback || '';
       session.push({
         id: null,
         intent: payload.intent,

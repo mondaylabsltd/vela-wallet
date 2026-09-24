@@ -241,12 +241,19 @@ class TrustedSignerChannel(
                 // A flow that did not answer has no session left to reuse.
                 endFlow()
             } else {
-                // Answered — for now. The page stays open for the flow's next
-                // request, but the wallet has nothing pending on it, so no sheet
-                // of ours may sit over whatever the flow shows next. (A refused
-                // ceremony lands here too: its own alert is what the person
-                // needs to read, not our waiting card.)
+                // Answered. On the custom-scheme channel a visit ENDS with its
+                // answer — there is no session to keep, and the next request
+                // opens the page again — so the person must be brought back to
+                // the wallet now.
+                //
+                // Leaving the tab up is what the socket channel did, because
+                // there the next request arrived on the same connection and the
+                // page itself moved on. Here nothing moves the page, and the
+                // owner found exactly that: 「签完名后，会卡在 完成，结果已交回
+                // 钱包」 — the page says it handed the answer back and the
+                // wallet, which had it, was behind the tab.
                 _state.value = State.Idle
+                bringBack()
             }
             Put(answer, mine)
         }

@@ -43,8 +43,54 @@ const text = (hex) => Buffer.from(fromHex(hex)).toString('utf8');
 // The wallet's own judge (spec 075 T003): vela-core, over the operation the
 // machine asked for, exactly as a shell hands it over.
 const credHex = (b64) => Buffer.from(unb64url(b64)).toString('hex');
-const judge = (operation, answer, expected) =>
-  JSON.parse(core.trustedSignerVerifyCeremony(JSON.stringify(operation), JSON.stringify(answer), 'https://getvela.app', expected));
+
+// The wallet's own judge, WHERE THIS SUITE CAN STILL REACH IT.
+//
+// `0801564b` ("the Clear Signer has one channel") removed the ceremony
+// verifier from the web core, because the web wallet stopped supporting the
+// Trusted Signer and nothing in the shipped bundle called it any more. That was
+// right — and it left this suite calling a function that is not there, so every
+// run since has died at the first verdict and quietly reported 14 checks
+// instead of 47. A suite that stops testing without saying so is worse than one
+// that fails.
+//
+// So: where the core is reachable, judge with it. Where it is not, say so once,
+// loudly, and name where the property IS asserted — against the real core, with
+// real WebAuthn bytes, on the clients that actually use this page:
+//
+//   · Android  app/src/testDebug/…/TrustedSignerCeremonyTest.kt
+//   · iOS      VelaWalletTests/TrustedSignerRouteTests.swift
+//   · Rust     crates/vela-core/tests/trusted_signer_ceremony.rs
+//
+// Re-exporting the verifier from the web core would restore these checks here,
+// at the price of shipping a function the web wallet does not use. That is the
+// owner's call, not this file's.
+const CORE_JUDGES = typeof core.trustedSignerVerifyCeremony === 'function';
+const judge = (operation, answer, expected) => (CORE_JUDGES
+  ? JSON.parse(core.trustedSignerVerifyCeremony(
+    JSON.stringify(operation), JSON.stringify(answer), 'https://getvela.app', expected))
+  : null);
+
+/**
+ * A verdict check that the web core can no longer give.
+ *
+ * `shape` says what the page must have produced for the core to be ABLE to
+ * accept it — which is this suite's business either way — and the core's
+ * verdict is added on top wherever it is available.
+ */
+function judged(name, verdict, shape, detail) {
+  if (!CORE_JUDGES) {
+    check(`${name} — SHAPE ONLY (the web core no longer judges ceremonies; see the note above)`,
+      shape, detail);
+    return;
+  }
+  check(name, verdict && shape, detail);
+}
+if (!CORE_JUDGES) {
+  console.log('\n  NOTE: this web core carries no ceremony verifier, so the verdicts below are');
+  console.log('        shape checks. The core\'s judgement is asserted on Android, iOS and in');
+  console.log('        the Rust suite — see the note in this file.\n');
+}
 const challengeText = (answer) => Buffer.from(unb64url(clientData(answer).challenge)).toString('utf8');
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -144,9 +190,16 @@ try {
     check('create: vela-core reads a P-256 key out of the attestation', /^0x[0-9a-f]{64}$/.test(key.x), key.x.slice(0, 18) + '…');
     check('create: transports are joined with commas', !/[[\]"]/.test(reg.transports), JSON.stringify(reg.transports));
     const judgedCreate = judge({ type: 'register_passkey', name: WALLET, exclude_credential_ids: [], method: 'trusted_signer' }, answer);
-    check('core: vela-core accepts the registration, as a key living behind https://getvela.app',
-      !!judgedCreate.registration && judgedCreate.registration.signer_origin === 'https://getvela.app' &&
-      judgedCreate.registration.credential_id === credHex(credentialId), JSON.stringify(judgedCreate).slice(0, 140));
+    judged('core: vela-core accepts the registration, as a key living behind https://getvela.app',
+      judgedCreate && !!judgedCreate.registration
+        && judgedCreate.registration.signer_origin === 'https://getvela.app'
+        && judgedCreate.registration.credential_id === credHex(credentialId),
+      // The shape the core requires: this credential, and an origin the PAGE
+      // signed rather than one it wrote beside the answer.
+      answer.registration.credentialId === credentialId
+        && clientData(answer.registration).origin === 'https://getvela.app'
+        && clientData(answer.registration).type === 'webauthn.create',
+      JSON.stringify(judgedCreate || { shape: clientData(answer.registration) }).slice(0, 140));
 
     check('session: after the answer the page is back to "waiting for the wallet"',
       await page.waitFor("window.__velaState.phase === 'waiting'") &&
@@ -186,11 +239,17 @@ try {
     const memberOp = { type: 'sign_member_proof', credential_id: credHex(credentialId), public_key_hex: publicKeyHex,
       attestation_hex: '', transports: '', method: 'trusted_signer', group_public_key_hex: group };
     const judgedMember = judge(memberOp, proof, unb64url(expected.challengeBase64url));
-    check('core: vela-core accepts the member proof over the challenge the WALLET fetched', !!judgedMember.assertion,
-      JSON.stringify(judgedMember).slice(0, 140));
+    judged('core: vela-core accepts the member proof over the challenge the WALLET fetched',
+      judgedMember && !!judgedMember.assertion,
+      // The property the core's verdict rests on: the bytes signed are the
+      // registry's challenge for these inputs, and nothing else.
+      clientData(proof.assertion).challenge === expected.challengeBase64url,
+      JSON.stringify(judgedMember || { signed: clientData(proof.assertion).challenge }).slice(0, 140));
     const strayMember = judge(memberOp, proof, new Uint8Array(32).fill(7));
-    check('core: …and refuses it against any other challenge', strayMember.refused && strayMember.refused.code === 'wrong_challenge',
-      JSON.stringify(strayMember));
+    judged('core: …and refuses it against any other challenge',
+      strayMember && strayMember.refused && strayMember.refused.code === 'wrong_challenge',
+      clientData(proof.assertion).challenge !== b64url(new Uint8Array(32).fill(7)),
+      JSON.stringify(strayMember || { signed: clientData(proof.assertion).challenge }));
 
     await page.waitFor("window.__velaState.phase === 'waiting'");
     wallet.bye();
@@ -224,12 +283,20 @@ try {
     check('sign-in: the user handle is "name\\0uuid", so the wallet reads its name back',
       handle[0] === WALLET && UUID_V4.test(handle[1] || ''), JSON.stringify(handle));
     const judgedSignIn = judge({ type: 'authenticate_passkey', method: 'trusted_signer' }, answer);
-    check('core: vela-core accepts the sign-in, found behind https://getvela.app',
-      !!judgedSignIn.assertion && judgedSignIn.assertion.signer_origin === 'https://getvela.app' &&
-      judgedSignIn.assertion.credential_id === credHex(credentialId), JSON.stringify(judgedSignIn).slice(0, 140));
+    judged('core: vela-core accepts the sign-in, found behind https://getvela.app',
+      judgedSignIn && !!judgedSignIn.assertion
+        && judgedSignIn.assertion.signer_origin === 'https://getvela.app'
+        && judgedSignIn.assertion.credential_id === credHex(credentialId),
+      answer.assertion.credentialId === credentialId
+        && clientData(answer.assertion).origin === 'https://getvela.app',
+      JSON.stringify(judgedSignIn || { shape: clientData(answer.assertion) }).slice(0, 140));
     const asProof = judge({ type: 'sign_proof', credential_id: credHex(credentialId), transports: '', method: 'trusted_signer', purpose: 'verify' }, answer);
-    check('core: a sign-in answer is not a proof — vela-core refuses it by its challenge',
-      asProof.refused && asProof.refused.code === 'wrong_challenge', JSON.stringify(asProof));
+    judged('core: a sign-in answer is not a proof — vela-core refuses it by its challenge',
+      asProof && asProof.refused && asProof.refused.code === 'wrong_challenge',
+      // A sign-in signs the sign-in form; a proof signs a proof form. The two
+      // can never be each other, which is what the core's refusal rests on.
+      /^vela-signin-/i.test(challengeText(answer.assertion)),
+      JSON.stringify(asProof || { signed: challengeText(answer.assertion) }));
 
     // Each further request waits for its own card, then the person slides.
     async function approve(id, intent, kind) {
@@ -248,7 +315,11 @@ try {
       verify.answer.assertion.credentialId === credentialId && await verifies(verify.answer.assertion, key),
       challengeText(verify.answer.assertion));
     const judgedVerify = judge({ type: 'sign_proof', credential_id: credHex(credentialId), transports: '', method: 'trusted_signer', purpose: 'verify' }, verify.answer);
-    check('core: vela-core accepts the verify proof for the named key', !!judgedVerify.assertion, JSON.stringify(judgedVerify).slice(0, 140));
+    judged('core: vela-core accepts the verify proof for the named key',
+      judgedVerify && !!judgedVerify.assertion,
+      verify.answer.assertion.credentialId === credentialId
+        && /verify/i.test(challengeText(verify.answer.assertion)),
+      JSON.stringify(judgedVerify || { signed: challengeText(verify.answer.assertion) }).slice(0, 140));
 
     const first = await approve('r1', { method: 'vela_proof', params: [{ purpose: 'recover_first' }], origin: '' }, 'proof');
     const second = await approve('r2', { method: 'vela_proof', params: [{ credentialId, purpose: 'recover_second' }], origin: '' }, 'proof');

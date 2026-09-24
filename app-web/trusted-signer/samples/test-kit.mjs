@@ -92,7 +92,21 @@ export async function startBrowser({ cdp, tlsPort = 8443, hosts = [] }) {
   for (let i = 0; i < 80; i++) {
     try { await (await fetch(`http://127.0.0.1:${cdp}/json/version`)).json(); break; } catch { await sleep(250); }
   }
-  await sleep(800);
+  // …and wait for the PAGE SERVER too. Chrome being up says nothing about
+  // python being up, and a navigation that arrives first gets
+  // ERR_CONNECTION_REFUSED with no retry — a failure that looks like the page
+  // is broken and is really a race in this harness. Measured: it fails perhaps
+  // one run in three, on whichever sample happens to go first.
+  let served = false;
+  for (let i = 0; i < 80; i++) {
+    try {
+      await fetch(`https://127.0.0.1:${tlsPort}/src/sign.html`, { tls: { rejectUnauthorized: false } });
+      served = true;
+      break;
+    } catch { await sleep(250); }
+  }
+  if (!served) throw new Error(`the page server never came up on ${tlsPort} — is another run holding it?`);
+  await sleep(200);
   return {
     cdp,
     kill() {
@@ -121,7 +135,10 @@ export class Page {
       } else if (message.method === 'Runtime.exceptionThrown') {
         this.console.push('exception: ' + JSON.stringify(message.params.exceptionDetails).slice(0, 300));
       } else if (message.method === 'Log.entryAdded' && message.params.entry.level === 'error') {
-        this.console.push(message.params.entry.text);
+        // With the URL: "Failed to load resource: 404" names nothing on its
+        // own, and a suite that reports it cannot be acted on.
+        const entry = message.params.entry;
+        this.console.push(entry.text + (entry.url ? ' <' + entry.url + '>' : ''));
       }
     });
   }

@@ -67,13 +67,16 @@ class TrustedSignerChannelTest {
     private val keys = listOf(WalletKeyRecord(credentialId = hex(credential), publicKeyHex = uncompressed(signer)))
     private val request = """{"intent":{"method":"personal_sign","params":["0x68"],"origin":"https://app.example"},"context":{"chainId":100}}"""
 
+    /** How many times the wallet was brought back over the page. */
+    private val broughtBack = java.util.concurrent.atomic.AtomicInteger(0)
+
     private fun channel(timeoutMs: Long = 20_000L, page: (Visit) -> Unit) = TrustedSignerChannel(
         signerUrl = { "https://sign.getvela.app/" },
         openPage = { url ->
             thread { page(Visit(url)) }
             true
         },
-        bringBack = {},
+        bringBack = { broughtBack.incrementAndGet() },
         words = { words },
         timeoutMs = timeoutMs,
     )
@@ -97,6 +100,18 @@ class TrustedSignerChannelTest {
         val assertion = onThisDevice { channel.sign(request, digest, keys) }
         assertEquals("112233", assertion.credentialIdHex)
         assertTrue("DER, as the Safe envelope takes", assertion.signatureDerHex.startsWith("30"))
+    }
+
+    @Test
+    fun `an answered request brings the wallet back over the page`() {
+        // A visit ends with its answer on this channel: there is no session for
+        // the page to hold, and the next request opens it again. Leaving the tab
+        // in front is what the socket channel did, and it stranded the person on
+        // the page's own "handed back to the wallet" screen while the wallet,
+        // which had the answer, sat behind it (owner, 2026-09-24).
+        val channel = channel { visit -> visit.answer(answer(signer)) }
+        onThisDevice { channel.sign(request, digest, keys) }
+        assertTrue("the wallet was never brought back", broughtBack.get() > 0)
     }
 
     @Test
