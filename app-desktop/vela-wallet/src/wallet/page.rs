@@ -8290,6 +8290,16 @@ impl WalletPage {
             .ok();
         })
         .detach();
+        self.ask_ethereum_backup(cx);
+    }
+
+    /// The backup half of the check, alone — what "Could not check" asks
+    /// again, without taking the key list back to its skeleton.
+    fn ask_ethereum_backup(&mut self, cx: &mut Context<Self>) {
+        let Some(account) = money::active_account() else {
+            return;
+        };
+        self.backup_check = None;
         let address = account.address.clone();
         let key = account.keys.first().map_or_else(
             || account.public_key_hex.clone(),
@@ -8324,21 +8334,34 @@ impl WalletPage {
     fn backup_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         use vela_core::registry_backup::BackupState;
         let s = &self.settings;
-        let (subtitle, colour, call) = match &self.backup_check {
-            None => (s.backup_checking.clone(), theme.fg_subtle, None),
-            Some((BackupState::BackedUp, _)) => (s.backup_backed_up.clone(), theme.success, None),
+        // The web's four states (`ethereumBackupRow`): what the row says, in
+        // which colour, and what — if anything — pressing it does.
+        let (subtitle, colour, call, retry) = match &self.backup_check {
+            None => (s.backup_checking.clone(), theme.fg_subtle, None, false),
+            Some((BackupState::BackedUp, _)) => {
+                (s.backup_backed_up.clone(), theme.success, None, false)
+            }
             Some((BackupState::NotBackedUp, call)) => (
                 s.backup_not_backed_up.clone(),
-                theme.fg_subtle,
+                theme.warning_base,
                 call.clone(),
+                false,
             ),
-            Some((BackupState::CouldNotCheck, _)) => {
-                (s.backup_could_not_check.clone(), theme.fg_subtle, None)
-            }
+            // Pressable, and what it does is ask again — the state a person is
+            // most likely to press, and the only one where "nothing happened"
+            // was the whole experience.
+            Some((BackupState::CouldNotCheck, _)) => (
+                s.backup_could_not_check.clone(),
+                theme.fg_subtle,
+                None,
+                true,
+            ),
             Some((BackupState::Unavailable | BackupState::NotRegistered, _)) => return None,
         };
+        let backed_up = matches!(&self.backup_check, Some((BackupState::BackedUp, _)));
         let title = s.backup_title.clone();
-        let actionable = call.is_some();
+        let actionable = call.is_some() || retry;
+        let accent = theme.accent;
         let mut row = div()
             .id("settings-ethereum-backup")
             .flex()
@@ -8362,13 +8385,27 @@ impl WalletPage {
             )
             .child(
                 div()
+                    .flex_1()
+                    .min_w(px(0.))
                     .flex()
                     .flex_col()
                     .gap(px(2.))
                     .child(
                         div()
+                            // An id, so the element keeps the group's hover
+                            // between frames: a text's colour is fixed at
+                            // layout, before the group's hitbox exists, and
+                            // without its own state it never saw the hover.
+                            .id("backup-row-title")
                             .text_size(theme::text_row_title())
                             .text_color(theme.fg_base)
+                            // The web: the title takes the accent while the
+                            // row is a button, and only then.
+                            .when(actionable, |title| {
+                                title.group_hover("backup-row", move |style| {
+                                    style.text_color(accent)
+                                })
+                            })
                             .child(title),
                     )
                     .child(
@@ -8378,12 +8415,30 @@ impl WalletPage {
                             .child(subtitle),
                     ),
             );
+        // What the row's end says it will do: ask again, go on, or — done.
+        let trailing = if retry {
+            Some((Icon::RefreshCw, theme.fg_muted))
+        } else if actionable {
+            Some((Icon::ChevronRight, theme.fg_muted))
+        } else if backed_up {
+            Some((Icon::Check, theme.success))
+        } else {
+            None
+        };
+        if let Some((icon, tint)) = trailing {
+            row = row.child(icon_img(&mut self.icons, icon, false, tint, 14.));
+        }
         if actionable {
             row = row
+                .group("backup-row")
                 .cursor_pointer()
                 .on_click(cx.listener(move |page, _, _, cx| {
                     if let Some(call) = call.clone() {
                         page.open_backup_signing(call, cx);
+                    } else {
+                        // Could not check: ask the chain again.
+                        page.ask_ethereum_backup(cx);
+                        cx.notify();
                     }
                 }));
         }
@@ -13639,6 +13694,12 @@ impl WalletPage {
             .min_h(px(0.))
             .flex()
             .child(self.sidebar(theme, cx));
+        // The backup row's answer is about the visit it was asked on: leaving
+        // the Account page forgets it, so coming back asks the chain again, as
+        // the web's page does each time it meets an account (078 S-02).
+        if !(self.section == Section::Settings && self.settings_page == SettingsPage::Account) {
+            self.backup_for = None;
+        }
         columns = match self.section {
             Section::Wallet => columns.child(self.content(theme, cx)),
             Section::Contacts => columns.child(self.contacts_content(theme, caption, window, cx)),
