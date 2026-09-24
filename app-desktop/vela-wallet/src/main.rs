@@ -292,11 +292,11 @@ fn main() {
     //
     // While the wallet is already running — which is the ordinary case, since
     // the person pressed Sign in it — that argument lands in a SECOND process,
-    // and the request it answers lives in the first. On Windows the second
-    // hands it over the first one's pipe (`scheme_relay`) and exits before a
-    // window opens; only when no wallet is running is this a cold start, read
-    // here. Linux has no relay yet. macOS has no such gap: the Apple Event goes
-    // to the running app.
+    // and the request it answers lives in the first. The second hands it over
+    // the first one's pipe (Windows) or socket (Linux) — `scheme_relay` — and
+    // exits before a window opens; only when no wallet is running is this a
+    // cold start, read here. macOS has no such gap: the Apple Event goes to
+    // the running app.
     let mut relayed = false;
     for argument in std::env::args().skip(1) {
         if argument.starts_with(vela_core::trusted_signer::CALLBACK_URL) {

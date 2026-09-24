@@ -44,9 +44,9 @@
 //!
 //! macOS delivers the callback as an Apple Event to the running app
 //! (`on_open_urls`); Windows and Linux start the app with the URL as an
-//! argument, which `main` reads. On Windows a second process started that way
-//! hands it to the running wallet over a pipe (`scheme_relay`); Linux's
-//! warm-start gap is still open, and written down there.
+//! argument, which `main` reads. A second process started that way hands it
+//! to the running wallet — over a pipe on Windows, a Unix socket on Linux
+//! (`scheme_relay`).
 //!
 //! ## What the screen sees
 //!
