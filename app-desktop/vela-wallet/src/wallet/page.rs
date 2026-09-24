@@ -254,13 +254,6 @@ enum ContactsMenu {
     /// Spec 034 — right-click on a contact row. Drawn since spec 018, opened
     /// by nothing until now.
     Contact,
-    /// Spec 034 — which contacts this group holds, ticked. The same question
-    /// as `ContactGroups`, asked from the group's screen.
-    GroupMembers,
-    /// Spec 034 — which groups this contact is in, ticked. A menu rather than
-    /// a dialog for the same reason the explore one is: the question is
-    /// "which of these", and the answer is visible on every row.
-    ContactGroups,
     /// Spec 032 phase 41 — "move to a group", listing the person's own
     /// groups. A menu rather than a new picker component: the question is
     /// "which of these", which is what a menu is.
@@ -733,6 +726,9 @@ pub struct WalletPage {
     /// changed it would be a delete and an add wearing one button. So editing
     /// an existing contact keeps it fixed and only the name is a draft.
     contact_form: Option<ContactForm>,
+    /// 添加成员 / 移入分组 — the web's tick list with a Save (078 C-06).
+    pick: Option<PickDialog>,
+    pick_query_focus: gpui::FocusHandle,
     /// The contact whose address is being shown as a code, if any.
     contact_qr: Option<(SharedString, SharedString)>,
     /// The group name sheet: `Some((id, name))`, with `None` for a new group.
@@ -1141,6 +1137,8 @@ impl WalletPage {
             field_blurs: Vec::new(),
             import_result: None,
             contact_form: None,
+            pick: None,
+            pick_query_focus: cx.focus_handle(),
             contact_qr: None,
             group_form: None,
             group_form_focus: cx.focus_handle(),
@@ -1571,6 +1569,306 @@ impl WalletPage {
                 body,
                 &self.dialog_scroll("group-form"),
                 Self::closer(cx, |this, _| this.group_form = None),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// 添加成员 from the open group.
+    fn open_member_pick(&mut self, cx: &mut Context<Self>) {
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let Some(group) = self.group.and_then(|index| view.groups.get(index)) else {
+            return;
+        };
+        self.pick = Some(PickDialog {
+            subject: PickSubject::Members {
+                group_id: group.id.clone(),
+            },
+            checked: group
+                .members
+                .iter()
+                .map(|member| member.address.to_lowercase())
+                .collect(),
+            query: String::new(),
+        });
+        self.menu = None;
+        cx.notify();
+    }
+
+    /// 移入分组 for one contact.
+    fn open_group_pick(&mut self, address: &str, cx: &mut Context<Self>) {
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let lower = address.to_lowercase();
+        self.pick = Some(PickDialog {
+            subject: PickSubject::Groups {
+                address: address.to_owned(),
+            },
+            checked: view
+                .groups
+                .iter()
+                .filter(|group| {
+                    group
+                        .members
+                        .iter()
+                        .any(|member| member.address.to_lowercase() == lower)
+                })
+                .map(|group| group.id.clone())
+                .collect(),
+            query: String::new(),
+        });
+        self.menu = None;
+        cx.notify();
+    }
+
+    /// The web's `PickList` in its desktop dialog (078 C-06): every contact
+    /// or every group, the current ones ticked, a search past six rows, and a
+    /// Save that hands the WHOLE ticked set to the core — which is the shape
+    /// both of its events take, and which it normalises.
+    fn pick_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let pick = self.pick.clone()?;
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let s = &self.contacts;
+        let (title, rows): (SharedString, Vec<PickRow>) = match &pick.subject {
+            PickSubject::Members { .. } => (
+                s.add_member.clone(),
+                contacts_live::rows(&view)
+                    .into_iter()
+                    .map(|row| {
+                        let address = row.address_full.to_string();
+                        PickRow {
+                            id: address.to_lowercase(),
+                            name: row.name.clone(),
+                            detail: SharedString::from(crate::wallet::live::shorten_address(
+                                &address,
+                            )),
+                            seed: Some(address),
+                        }
+                    })
+                    .collect(),
+            ),
+            PickSubject::Groups { .. } => (
+                s.move_group.clone(),
+                view.groups
+                    .iter()
+                    .map(|group| PickRow {
+                        id: group.id.clone(),
+                        name: SharedString::from(group.name.clone()),
+                        detail: SharedString::from(crate::wallet::fill(
+                            &s.group_members,
+                            "count",
+                            &group.members.len().to_string(),
+                        )),
+                        seed: None,
+                    })
+                    .collect(),
+            ),
+        };
+        let total = rows.len();
+        let query = pick.query.trim().to_lowercase();
+        let shown: Vec<_> = rows
+            .into_iter()
+            .filter(|row| {
+                query.is_empty()
+                    || format!("{} {}", row.name, row.detail)
+                        .to_lowercase()
+                        .contains(&query)
+            })
+            .collect();
+        let empty = s.group_no_contacts.clone();
+        let placeholder = s.search_placeholder.clone();
+        let save_label = s.save.clone();
+
+        let mut body = div().flex().flex_col().gap(px(8.)).pb(px(16.));
+        if total > 6 {
+            let page = cx.entity().downgrade();
+            let field = crate::flows::panels::AddressField {
+                focus: self.pick_query_focus.clone(),
+                value: pick.query.clone(),
+                placeholder: placeholder.clone(),
+                on_change: Box::new(move |text: String, _: &mut Window, cx: &mut gpui::App| {
+                    let _ = page.update(cx, |this, cx| {
+                        if let Some(pick) = this.pick.as_mut() {
+                            pick.query = text;
+                        }
+                        cx.notify();
+                    });
+                }),
+            };
+            body = body.child(crate::flows::components::flow_search(
+                theme,
+                &mut self.icons,
+                placeholder,
+                Some(field),
+                window,
+            ));
+        }
+        if total == 0 {
+            body = body.child(
+                div()
+                    .py(px(20.))
+                    .text_center()
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_muted)
+                    .child(empty),
+            );
+        } else {
+            let mut list = div()
+                .id("pick-list")
+                .flex()
+                .flex_col()
+                .max_h(window.viewport_size().height * 0.5)
+                .overflow_y_scroll();
+            for (
+                index,
+                PickRow {
+                    id,
+                    name,
+                    detail,
+                    seed,
+                },
+            ) in shown.into_iter().enumerate()
+            {
+                let on = pick.checked.contains(&id);
+                let avatar: gpui::AnyElement = match seed {
+                    Some(seed) => crate::wallet::components::identicon_avatar(
+                        &mut self.identicons,
+                        &seed,
+                        30.,
+                    )
+                    .into_any_element(),
+                    None => div()
+                        .size(px(30.))
+                        .flex_none()
+                        .rounded_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(theme.bg_raised)
+                        .child(icon_img(
+                            &mut self.icons,
+                            Icon::UsersRound,
+                            false,
+                            theme.fg_muted,
+                            18.,
+                        ))
+                        .into_any_element(),
+                };
+                let mut tick = div()
+                    .size(px(20.))
+                    .flex_none()
+                    .rounded(px(4.))
+                    .border_1()
+                    .flex()
+                    .items_center()
+                    .justify_center();
+                tick = if on {
+                    tick.border_color(theme.accent)
+                        .bg(theme.accent)
+                        .child(icon_img(
+                            &mut self.icons,
+                            Icon::Check,
+                            false,
+                            gpui::Hsla::from(gpui::rgb(0xffffff)),
+                            14.,
+                        ))
+                } else {
+                    tick.border_color(theme.border_strong)
+                };
+                let raised = theme.bg_raised;
+                list = list.child(
+                    div()
+                        .id(ElementId::from(("pick-row", index)))
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .py(px(8.))
+                        .px(px(4.))
+                        .border_b_1()
+                        .border_color(theme.divider)
+                        .cursor_pointer()
+                        .hover(move |el| el.bg(raised))
+                        .child(avatar)
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .flex()
+                                .flex_col()
+                                .gap(px(2.))
+                                .child(
+                                    div()
+                                        .text_size(theme::text_body())
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(theme.fg_base)
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .child(name),
+                                )
+                                .child(
+                                    div()
+                                        .font_family(theme::font_mono())
+                                        .text_size(theme::text_label())
+                                        .text_color(theme.fg_muted)
+                                        .child(detail),
+                                ),
+                        )
+                        .child(tick)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if let Some(pick) = this.pick.as_mut() {
+                                if let Some(at) = pick.checked.iter().position(|c| *c == id) {
+                                    pick.checked.remove(at);
+                                } else {
+                                    pick.checked.push(id.clone());
+                                }
+                            }
+                            cx.notify();
+                        })),
+                );
+            }
+            body = body.child(list);
+        }
+        body = body.child(self.form_save(
+            theme,
+            "pick-save",
+            save_label,
+            true,
+            cx.listener(|this, _, _, cx| {
+                let Some(pick) = this.pick.take() else {
+                    return;
+                };
+                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                    let event = match pick.subject {
+                        PickSubject::Members { group_id } => ContactEvent::SetGroupMembers {
+                            id: group_id,
+                            members: pick.checked,
+                        },
+                        PickSubject::Groups { address } => ContactEvent::SetContactGroups {
+                            address,
+                            group_ids: pick.checked,
+                        },
+                    };
+                    resident.dispatch(event, cx);
+                });
+                cx.notify();
+            }),
+        ));
+
+        Some(
+            crate::ui::dialog::dialog(
+                "contact-pick",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("contact-pick"),
+                Self::closer(cx, |this, _| this.pick = None),
             )
             .into_any_element(),
         )
@@ -2659,6 +2957,8 @@ impl WalletPage {
             session::sign_out_dismissed(cx);
         } else if self.group_form.is_some() {
             self.group_form = None;
+        } else if self.pick.is_some() {
+            self.pick = None;
         } else if self.explore_form.is_some() {
             self.explore_form = None;
         } else if self.contact_qr.is_some() {
@@ -3506,55 +3806,6 @@ impl WalletPage {
         cx.notify();
     }
 
-    /// Every group, and whether the open contact is in it.
-    ///
-    /// The pair is what the menu draws AND what the next tap sends back, so
-    /// the tick a person sees and the set the core is given cannot disagree.
-    fn contact_group_state(&mut self, cx: &mut Context<Self>) -> Vec<(SharedString, bool)> {
-        let view = resident::resident::<Contacts>(cx).read(cx).view();
-        let Some(address) = contacts_live::rows(&view)
-            .into_iter()
-            .nth(self.contact)
-            .map(|row| row.address_full.to_string().to_lowercase())
-        else {
-            return Vec::new();
-        };
-        view.groups
-            .iter()
-            .map(|group| {
-                (
-                    SharedString::from(group.name.clone()),
-                    group
-                        .members
-                        .iter()
-                        .any(|member| member.address.to_lowercase() == address),
-                )
-            })
-            .collect()
-    }
-
-    /// Every contact, and whether the open group holds it.
-    ///
-    /// The book's own order, so the menu reads like the list behind it.
-    fn group_member_state(&mut self, cx: &mut Context<Self>) -> Vec<(SharedString, bool)> {
-        let view = resident::resident::<Contacts>(cx).read(cx).view();
-        let Some(group) = self.group.and_then(|index| view.groups.get(index)) else {
-            return Vec::new();
-        };
-        let members: Vec<String> = group
-            .members
-            .iter()
-            .map(|member| member.address.to_lowercase())
-            .collect();
-        contacts_live::rows(&view)
-            .into_iter()
-            .map(|row| {
-                let address = row.address_full.to_string().to_lowercase();
-                (row.name.clone(), members.contains(&address))
-            })
-            .collect()
-    }
-
     /// Tell the hero which accounts are on screen — once per opening.
     ///
     /// The core fetches a total for each while the switcher is open and stops
@@ -4118,13 +4369,8 @@ impl WalletPage {
             // answered from the contact's side.
             .child(
                 ghost_add_row("group-add-member", theme, &mut self.icons, add_member).on_click(
-                    cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
-                        this.menu = Some((
-                            ContactsMenu::GroupMembers,
-                            event.position(),
-                            Anchor::TopLeft,
-                        ));
-                        cx.notify();
+                    cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.open_member_pick(cx);
                     }),
                 ),
             )
@@ -4318,13 +4564,60 @@ impl WalletPage {
         let receive = self.contacts.action_receive.clone();
         let qr = self.contacts.action_qr.clone();
 
-        // DC2 shows membership pills only: the desktop entry point for adding
-        // a group is the contact context menu's 移入分组, so the mobile
-        // `+ 分组` chip stays off this panel (it lives on the component board).
-        let mut chips = div().flex().flex_wrap().gap(px(6.));
+        // The membership chips, and the web's `+` chip after them — 移入分组
+        // from where the groups are shown, not only from a right-click
+        // (078 C-06).
+        let mut chips = div().flex().flex_wrap().gap(px(4.));
         for chip in &model.chips {
             chips = chips.child(group_chip(theme, chip.clone()));
         }
+        if let Some(address) = live_address.clone() {
+            chips = chips.child(
+                div()
+                    .id("contact-add-group")
+                    .cursor_pointer()
+                    .child(add_chip(
+                        theme,
+                        &mut self.icons,
+                        self.contacts.move_group.clone(),
+                    ))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.open_group_pick(&address, cx);
+                    })),
+            );
+        }
+        // Nobody has named this contact: the way to, under the name — "Save to
+        // contacts" over a history suggestion, "Edit" otherwise (the web's
+        // `nameAction`, issue 191).
+        let name_action = live_address.clone().and_then(|address| {
+            let view = resident::resident::<Contacts>(cx).read(cx).view();
+            let contact = view
+                .contacts
+                .iter()
+                .find(|contact| contact.address.eq_ignore_ascii_case(&address))?;
+            if contact.name.as_deref().is_some_and(|name| !name.is_empty()) {
+                return None;
+            }
+            let label = if contact.source == vela_core::app::contacts::ContactSource::Auto {
+                self.contacts.save_to_contacts.clone()
+            } else {
+                self.contacts.edit.clone()
+            };
+            Some((address, label))
+        });
+        let name_action = name_action.map(|(address, label)| {
+            div()
+                .id("contact-name-action")
+                .cursor_pointer()
+                .child(contacts_components::name_action_pill(
+                    theme,
+                    &mut self.icons,
+                    label,
+                ))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.open_edit_contact(&address, window, cx);
+                }))
+        });
 
         let hero = div()
             .flex()
@@ -4341,7 +4634,8 @@ impl WalletPage {
                     .min_w(px(0.))
                     .flex()
                     .flex_col()
-                    .gap(px(6.))
+                    .items_start()
+                    .gap(px(8.))
                     .child(
                         div()
                             .text_size(theme::text_panel_title())
@@ -4351,6 +4645,7 @@ impl WalletPage {
                             .truncate()
                             .child(model.name.clone()),
                     )
+                    .children(name_action)
                     .child(chips),
             );
 
@@ -14781,18 +15076,13 @@ impl WalletPage {
                             this.open_edit_contact(&edit_address, window, cx);
                         })) as contacts_components::MenuAction,
                     ),
-                    // 移入分组 — the picker this shell has been pointing at
-                    // since spec 018 (DC2's comment) and never opened.
-                    Some(
-                        Box::new(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
-                            this.menu = Some((
-                                ContactsMenu::ContactGroups,
-                                event.position(),
-                                Anchor::TopLeft,
-                            ));
-                            cx.notify();
-                        })) as contacts_components::MenuAction,
-                    ),
+                    // 移入分组 — the tick list, as the web's `group-pick`.
+                    Some({
+                        let address = address.clone();
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.open_group_pick(&address, cx);
+                        })) as contacts_components::MenuAction
+                    }),
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
@@ -14805,104 +15095,6 @@ impl WalletPage {
                         })) as contacts_components::MenuAction,
                     ),
                 ]
-            }
-
-            // One tap per group: the whole membership goes back, with this one
-            // flipped. The core normalises the set — a shell that sent "add"
-            // and "remove" separately would be inventing two events where the
-            // machine offers one.
-            ContactsMenu::ContactGroups => {
-                let view = resident::resident::<Contacts>(cx).read(cx).view();
-                let Some(row) = contacts_live::rows(&view).into_iter().nth(self.contact) else {
-                    return Vec::new();
-                };
-                let address = row.address_full.to_string();
-                let lower = address.to_lowercase();
-                let groups: Vec<(String, bool)> = view
-                    .groups
-                    .iter()
-                    .map(|group| {
-                        (
-                            group.id.clone(),
-                            group
-                                .members
-                                .iter()
-                                .any(|member| member.address.to_lowercase() == lower),
-                        )
-                    })
-                    .collect();
-                groups
-                    .iter()
-                    .map(|(id, _member)| {
-                        let address = address.clone();
-                        let id = id.clone();
-                        let groups = groups.clone();
-                        Some(
-                            Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.menu = None;
-                                let group_ids = contacts_live::set_after_toggle(&groups, &id);
-                                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                    resident.dispatch(
-                                        ContactEvent::SetContactGroups {
-                                            address: address.clone(),
-                                            group_ids,
-                                        },
-                                        cx,
-                                    );
-                                });
-                                cx.notify();
-                            })) as contacts_components::MenuAction,
-                        )
-                    })
-                    .collect()
-            }
-
-            // The same toggle from the group's side. One tap sends the whole
-            // membership back — `SetGroupMembers` carries the set, and the
-            // core normalises it.
-            ContactsMenu::GroupMembers => {
-                let view = resident::resident::<Contacts>(cx).read(cx).view();
-                let Some(group) = self.group.and_then(|index| view.groups.get(index)) else {
-                    return Vec::new();
-                };
-                let id = group.id.clone();
-                let members: Vec<String> = group
-                    .members
-                    .iter()
-                    .map(|member| member.address.to_lowercase())
-                    .collect();
-                let current: Vec<(String, bool)> = contacts_live::rows(&view)
-                    .into_iter()
-                    .map(|row| {
-                        let address = row.address_full.to_string();
-                        let member = members.contains(&address.to_lowercase());
-                        (address, member)
-                    })
-                    .collect();
-                current
-                    .iter()
-                    .map(|(address, _)| {
-                        let id = id.clone();
-                        let address = address.clone();
-                        let current = current.clone();
-                        Some(
-                            Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.menu = None;
-                                let members = contacts_live::set_after_toggle(&current, &address);
-                                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                    resident.dispatch(
-                                        ContactEvent::SetGroupMembers {
-                                            id: id.clone(),
-                                            members,
-                                        },
-                                        cx,
-                                    );
-                                });
-                                cx.notify();
-                            })) as contacts_components::MenuAction,
-                        )
-                    })
-                    .collect()
             }
 
             // One row per network, in the order the menu drew them. The site
@@ -15155,12 +15347,6 @@ impl WalletPage {
                     .collect::<Vec<_>>(),
             ),
             ContactsMenu::Contact => contacts_fixtures::contact_context(&self.contacts),
-            ContactsMenu::ContactGroups => {
-                contacts_fixtures::contact_group_pick(&self.contact_group_state(cx))
-            }
-            ContactsMenu::GroupMembers => {
-                contacts_fixtures::group_member_pick(&self.group_member_state(cx))
-            }
         };
         let actions = self.menu_actions(kind, cx);
         let card = menu_card(theme, &mut self.icons, &model, actions);
@@ -15285,6 +15471,7 @@ impl Render for WalletPage {
         let settings_dialog = self.settings_dialog_overlay(&theme, window, cx);
         let import_result = self.import_result_dialog(&theme, window, cx);
         let group_form = self.group_form_dialog(&theme, window, cx);
+        let pick = self.pick_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
         let contact_qr = self.contact_qr_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
@@ -15328,6 +15515,9 @@ impl Render for WalletPage {
         // The import's answer, over the menu it was started from.
         if let Some(import_result) = import_result {
             root = root.child(import_result);
+        }
+        if let Some(pick) = pick {
+            root = root.child(pick);
         }
         if let Some(contact_qr) = contact_qr {
             root = root.child(contact_qr);
@@ -15896,6 +16086,33 @@ fn is_evm_address(value: &str) -> bool {
         .strip_prefix("0x")
         .or_else(|| value.strip_prefix("0X"))
         .is_some_and(|body| body.len() == 40 && body.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// What a pick list is choosing, and for whom.
+#[derive(Clone)]
+enum PickSubject {
+    /// 添加成员: which contacts this group holds.
+    Members { group_id: String },
+    /// 移入分组: which groups hold this contact.
+    Groups { address: String },
+}
+
+/// One row of a pick list. `seed` is the address behind a contact's
+/// identicon; a group has none and wears the users tile.
+struct PickRow {
+    id: String,
+    name: SharedString,
+    detail: SharedString,
+    seed: Option<String>,
+}
+
+/// The tick list's draft: the ids ticked NOW, which the core hears only on
+/// Save — a dismissed list changes nothing, as the web's.
+#[derive(Clone)]
+struct PickDialog {
+    subject: PickSubject,
+    checked: Vec<String>,
+    query: String,
 }
 
 /// The add/edit contact sheet's draft.

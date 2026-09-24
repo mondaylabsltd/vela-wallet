@@ -41,27 +41,6 @@ fn display_name(contact: &Contact) -> SharedString {
         )
 }
 
-/// The set one tap produces: everything currently in it, with the tapped key
-/// flipped.
-///
-/// Both directions of group membership go through this. The core offers ONE
-/// event for each — `SetContactGroups` (which groups hold this contact) and
-/// `SetGroupMembers` (which contacts this group holds) — and both carry the
-/// WHOLE set, so "add" and "remove" are the same call with a different answer.
-///
-/// Written here rather than inline in the menus because the thing that goes
-/// wrong is silent: a toggle that rebuilt the set from the tapped key alone
-/// would empty every OTHER membership, and the menu is covering the rows that
-/// would have shown it.
-#[must_use]
-pub fn set_after_toggle(current: &[(String, bool)], tapped: &str) -> Vec<String> {
-    current
-        .iter()
-        .filter(|(key, member)| if key == tapped { !member } else { *member })
-        .map(|(key, _)| key.clone())
-        .collect()
-}
-
 /// One group's members — DC4.
 ///
 /// `None` when the index names no group: the rail can change under an open
@@ -337,36 +316,6 @@ mod tests {
             export: None,
             recipient: None,
         }
-    }
-
-    /// Ticking one group leaves the others exactly as they were.
-    ///
-    /// The menu covers the chips that would show the damage, so a toggle that
-    /// dropped the other memberships would be invisible until the person
-    /// closed it — and by then the core has already been told.
-    #[test]
-    fn ticking_one_group_does_not_empty_the_others() {
-        let groups = vec![
-            ("family".to_owned(), true),
-            ("payroll".to_owned(), false),
-            ("friends".to_owned(), true),
-        ];
-
-        // Joining one: the two it was already in survive.
-        let joined = set_after_toggle(&groups, "payroll");
-        assert_eq!(joined, vec!["family", "payroll", "friends"]);
-
-        // Leaving one: only that one goes.
-        let left = set_after_toggle(&groups, "family");
-        assert_eq!(left, vec!["friends"]);
-
-        // Leaving the last one is an empty set, not "leave it alone" — the
-        // core reads the set it is given.
-        let one = vec![("family".to_owned(), true)];
-        assert!(set_after_toggle(&one, "family").is_empty());
-
-        // A group nobody tapped changes nothing.
-        assert_eq!(set_after_toggle(&groups, "nope"), vec!["family", "friends"]);
     }
 
     /// A contact saved without a name shows the identity the core resolved for

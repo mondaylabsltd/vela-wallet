@@ -278,32 +278,57 @@ pub fn menu_card(
 
 /// A membership pill on the contact detail (DC2: `家人`).
 pub fn group_chip(theme: &Theme, label: SharedString) -> Div {
+    // The web's `.chip`: `--icon-xl` high, 12 across, a full radius on the
+    // raised surface, 11 muted.
     div()
-        .h(px(24.))
-        .px(px(10.))
-        .rounded(px(12.))
+        .h(px(26.))
+        .px(px(12.))
+        .rounded_full()
         .flex()
         .items_center()
-        .bg(theme.bg_sunken)
+        .bg(theme.bg_raised)
         .text_size(theme::text_label())
         .text_color(theme.fg_muted)
         .child(label)
 }
 
-/// The trailing `+ 分组` add chip (dashed-equivalent: outlined, not filled).
+/// The trailing `+ 分组` add chip — the web's `.chip.add`: the chip's size,
+/// no fill, a dashed hairline.
 pub fn add_chip(theme: &Theme, icons: &mut IconCache, label: SharedString) -> Div {
     div()
-        .h(px(24.))
-        .px(px(10.))
-        .rounded(px(12.))
+        .h(px(26.))
+        .px(px(12.))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .border_1()
+        .border_dashed()
+        .border_color(theme.border_card)
+        .text_size(theme::text_label())
+        .text_color(theme.fg_muted)
+        .child(icon_img(icons, Icon::Plus, false, theme.fg_muted, 12.))
+        .child(label)
+}
+
+/// Under a contact nobody has named: the way to name them, where the missing
+/// name is noticed (the web's `.name-action`, issue 191) — a raised pill with
+/// a hairline, 11 semibold.
+pub fn name_action_pill(theme: &Theme, icons: &mut IconCache, label: SharedString) -> Div {
+    div()
+        .h(px(26.))
+        .px(px(12.))
+        .rounded_full()
         .flex()
         .items_center()
         .gap(px(4.))
         .border_1()
-        .border_color(theme.divider)
+        .border_color(theme.border_card)
+        .bg(theme.bg_raised)
         .text_size(theme::text_label())
-        .text_color(theme.fg_subtle)
-        .child(icon_img(icons, Icon::Plus, false, theme.fg_subtle, 12.))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(theme.fg_base)
+        .child(icon_img(icons, Icon::Pencil, false, theme.fg_base, 12.))
         .child(label)
 }
 

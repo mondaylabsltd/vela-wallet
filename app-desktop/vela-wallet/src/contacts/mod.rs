@@ -66,6 +66,10 @@ pub struct ContactsStrings {
     pub delete_title: SharedString,
     pub delete_body: String,
     pub move_group: SharedString,
+    /// A group's line in 移入分组: template carrying `{{count}}`.
+    pub group_members: String,
+    /// A pick list with nothing to pick from (078 C-06).
+    pub group_no_contacts: SharedString,
     pub recent_activity: SharedString,
     pub view_all_activity: SharedString,
     /// 最近往来 with nothing in it (078 C-04) — the web's `noActivity`.
@@ -131,6 +135,8 @@ impl ContactsStrings {
             delete_title: s("contacts.deleteTitle"),
             delete_body: s("contacts.deleteBody").to_string(),
             move_group: s("contacts.moveGroup"),
+            group_members: raw("contacts.groupMembers"),
+            group_no_contacts: s("contacts.groupNoContacts"),
             recent_activity: s("contacts.recentActivity"),
             view_all_activity: s("contacts.viewAllActivity"),
             no_activity: s("history.emptyTitle"),
