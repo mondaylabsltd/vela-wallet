@@ -263,8 +263,9 @@ mod menu_tests {
 
     /// The site menu's ORDER is a contract with the page.
     ///
-    /// `page.rs` arms three of these six by position — refresh, disconnect,
-    /// close — because that is how the menu component takes its actions. An
+    /// `page.rs` arms all seven by position (078 E-03: the web's order —
+    /// refresh, share, copy link, favourite, system browser, disconnect,
+    /// close) because that is how the menu component takes its actions. An
     /// item inserted into the drawing would slide every action below it onto
     /// the wrong row, and "Add to favourites" would start revoking a site's
     /// access. Nothing crashes; it would just quietly do the wrong thing, so
@@ -281,13 +282,14 @@ mod menu_tests {
             labels,
             vec![
                 s.refresh.to_string(),
-                s.site_menu.to_string(),
+                s.share.to_string(),
+                s.copy_link.to_string(),
                 s.add_to_favorites.to_string(),
-                s.open_in_new_tab.to_string(),
+                s.open_in_system_browser.to_string(),
                 s.disconnect.to_string(),
-                s.close.to_string(),
+                s.close_page.to_string(),
             ],
-            "the site menu was reordered; page.rs arms items 0, 4 and 5 by position"
+            "the site menu was reordered; page.rs arms every item by position"
         );
     }
 }

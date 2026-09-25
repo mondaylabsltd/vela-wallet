@@ -3877,7 +3877,16 @@ impl WalletPage {
     /// closed (spec 070): the scrim covers where it was.
     #[cfg(not(target_os = "linux"))]
     fn dialog_over_browser(&self) -> bool {
-        self.account_switcher || self.identicon_viewer.is_some()
+        // The site menus drop over the page too, and a native view paints
+        // over them: the ⋯ menu showed a sliver above the page and nothing
+        // else (found verifying 078 E-03). While one is open the page steps
+        // aside, as it does for a dialog, and comes back when it closes.
+        self.account_switcher
+            || self.identicon_viewer.is_some()
+            || matches!(
+                self.menu,
+                Some((ContactsMenu::Site | ContactsMenu::SiteNetwork, _, _))
+            )
     }
 
     /// 078 H-02 — every artwork with an address behind it opens this.
@@ -12103,32 +12112,7 @@ impl WalletPage {
                             cx.notify();
                             return;
                         }
-                        #[cfg(not(target_os = "linux"))]
-                        if let Some(url) = crate::webview::current_url() {
-                            // The page's own title when it has reported one;
-                            // the host otherwise. The core keeps whichever
-                            // arrives until somebody renames the tile.
-                            let title = this
-                                .browser_title
-                                .clone()
-                                .or_else(crate::webview::host)
-                                .unwrap_or_default();
-                            resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(
-                                    vela_core::app::explore_sites::Event::FavoriteAdded {
-                                        url,
-                                        // The page's own title arrives with the
-                                        // next meta report; the host is what is
-                                        // certainly true right now, and the core
-                                        // lets a later title replace it while
-                                        // nobody has renamed the tile.
-                                        title: (!title.is_empty()).then_some(title),
-                                        now_ms: crate::executor::now_ms(),
-                                    },
-                                    cx,
-                                );
-                            });
-                        }
+                        this.pin_current_page(cx);
                         cx.notify();
                     })),
             )
@@ -12180,6 +12164,8 @@ impl WalletPage {
             placeholder: self.explore.search_placeholder.clone(),
             draft: self.address_draft.clone().map(SharedString::from),
             selected: self.address_selected,
+            notice: (self.copied.as_deref() == Some(EXPLORE_COPY))
+                .then(|| self.explore.copied.clone()),
         };
         let field = explore_components::address_field(theme, &mut self.icons, &bar);
         // Editable once somebody is signed in: a click takes the page's URL
@@ -12341,6 +12327,35 @@ impl WalletPage {
                     cx.notify();
                 })),
             )
+    }
+
+    /// Pin the page that is loaded — read from the WEBVIEW, never from the
+    /// address bar's text: what is pinned has to be the document that is
+    /// actually open. The star and the site menu's "Add to favorites" both.
+    fn pin_current_page(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(url) = crate::webview::current_url() {
+            // The page's own title when it has reported one; the host
+            // otherwise. The core keeps whichever arrives until somebody
+            // renames the tile.
+            let title = self
+                .browser_title
+                .clone()
+                .or_else(crate::webview::host)
+                .unwrap_or_default();
+            resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+                resident.dispatch(
+                    vela_core::app::explore_sites::Event::FavoriteAdded {
+                        url,
+                        title: (!title.is_empty()).then_some(title),
+                        now_ms: crate::executor::now_ms(),
+                    },
+                    cx,
+                );
+            });
+        }
+        #[cfg(target_os = "linux")]
+        let _ = cx;
     }
 
     /// The address bar takes the keyboard: it starts from the page that is
@@ -15644,59 +15659,81 @@ impl WalletPage {
                     },
                 )) as contacts_components::MenuAction),
             ],
-            // The site menu, in the order it is drawn: refresh, share, add to
-            // favourites, open in a new tab, disconnect, close.
-            //
-            // Three of the six have a machine (or a webview) behind them; the
-            // other three are favourites and tabs, which nothing in
-            // `vela-core` owns yet. `None` leaves an item drawn and inert
-            // rather than armed and lying — the same rule the allowance chips
-            // follow.
-            ContactsMenu::Site => vec![
-                Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    this.menu = None;
-                    #[cfg(not(target_os = "linux"))]
-                    crate::webview::reload();
-                    cx.notify();
-                })) as contacts_components::MenuAction),
-                None,
-                None,
-                None,
-                // Disconnect is the CORE's: the site on screen, by name — its
-                // grant goes, and every open page of it hears
-                // `accountsChanged []` and `disconnect`.
-                Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    this.menu = None;
-                    let origin = this
-                        .browser_host
-                        .as_ref()
-                        .and_then(|host| host.read(cx).tab().and_then(|tab| tab.origin.clone()));
-                    if let Some(origin) = origin {
-                        this.revoke_site(origin, cx);
-                    }
-                    cx.notify();
-                })) as contacts_components::MenuAction),
-                // Close closes the PAGE — the tab on screen, as the phones'
-                // "Close page" does. Its requests are settled by the core
-                // when its document goes; merely leaving Explore settles
-                // nothing.
-                Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    this.menu = None;
-                    this.panel = PanelId::None;
-                    let selected = resident::resident::<ExploreSites>(cx)
-                        .read(cx)
-                        .view()
-                        .selected_tab;
-                    match selected {
-                        Some(id) => this.close_browser_tab(&id, cx),
-                        None => {
-                            this.browsing = false;
-                            this.close_browser_page(cx);
+            // The site menu, in the web's order (078 E-03): refresh, share,
+            // copy link, add to favourites, open in the system browser,
+            // disconnect, close. All seven act. There is no share sheet a
+            // gpui window can raise, so Share hands the link over the one way
+            // this machine shares everything — the clipboard — and says so.
+            ContactsMenu::Site => {
+                #[cfg(not(target_os = "linux"))]
+                let url = crate::webview::current_url().filter(|url| url != "about:blank");
+                #[cfg(target_os = "linux")]
+                let url: Option<String> = None;
+                let copy = |url: Option<String>| {
+                    url.map(|url| {
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            this.copy_text(EXPLORE_COPY, url.clone(), CONTACTS_COPY_HOLD, cx);
+                        })) as contacts_components::MenuAction
+                    })
+                };
+                vec![
+                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        #[cfg(not(target_os = "linux"))]
+                        crate::webview::reload();
+                        cx.notify();
+                    })) as contacts_components::MenuAction),
+                    copy(url.clone()),
+                    copy(url.clone()),
+                    // Pins the page that is loaded — the star's own act.
+                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        this.pin_current_page(cx);
+                        cx.notify();
+                    })) as contacts_components::MenuAction),
+                    url.clone().map(|url| {
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            cx.open_url(&url);
+                            cx.notify();
+                        })) as contacts_components::MenuAction
+                    }),
+                    // Disconnect is the CORE's: the site on screen, by name — its
+                    // grant goes, and every open page of it hears
+                    // `accountsChanged []` and `disconnect`.
+                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        let origin = this.browser_host.as_ref().and_then(|host| {
+                            host.read(cx).tab().and_then(|tab| tab.origin.clone())
+                        });
+                        if let Some(origin) = origin {
+                            this.revoke_site(origin, cx);
                         }
-                    }
-                    cx.notify();
-                })) as contacts_components::MenuAction),
-            ],
+                        cx.notify();
+                    })) as contacts_components::MenuAction),
+                    // Close closes the PAGE — the tab on screen, as the phones'
+                    // "Close page" does. Its requests are settled by the core
+                    // when its document goes; merely leaving Explore settles
+                    // nothing.
+                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        this.panel = PanelId::None;
+                        let selected = resident::resident::<ExploreSites>(cx)
+                            .read(cx)
+                            .view()
+                            .selected_tab;
+                        match selected {
+                            Some(id) => this.close_browser_tab(&id, cx),
+                            None => {
+                                this.browsing = false;
+                                this.close_browser_page(cx);
+                            }
+                        }
+                        cx.notify();
+                    })) as contacts_components::MenuAction),
+                ]
+            }
             // "Move to a group": the person's own groups, newest last, with
             // "new group" at the top. The index is the position in the SAME
             // list the menu was built from — read again here rather than
@@ -16348,6 +16385,8 @@ enum ScanNotice {
 /// The contacts route's copies (078 X-06): the toast's key, and the QR
 /// dialog's pill's; the web holds both 1.5 s.
 const CONTACTS_TOAST: &str = "contacts-toast";
+/// The site menu's copy, said in the address bar (078 E-03).
+const EXPLORE_COPY: &str = "explore-copy";
 const CONTACT_QR_COPY: &str = "contact-qr";
 const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
 

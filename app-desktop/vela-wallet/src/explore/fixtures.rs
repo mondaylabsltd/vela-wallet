@@ -419,39 +419,22 @@ pub fn tile_menu(strings: &ExploreStrings) -> MenuModel {
 
 /// The browsing toolbar's ⋯ (M3): what you can do to the page you are on.
 pub fn site_menu(strings: &ExploreStrings) -> MenuModel {
+    // The web's `siteMenuItems`, in its order (078 E-03).
+    let item = |icon, label: &SharedString| MenuItemModel {
+        icon,
+        label: label.clone(),
+        destructive: false,
+    };
     MenuModel {
         items: vec![
-            MenuItemModel {
-                icon: Icon::RefreshCw,
-                label: strings.refresh.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::Share2,
-                label: strings.site_menu.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::Star,
-                label: strings.add_to_favorites.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::ExternalLink,
-                label: strings.open_in_new_tab.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::Power,
-                label: strings.disconnect.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::X,
-                label: strings.close.clone(),
-                destructive: false,
-            },
+            item(Icon::RefreshCw, &strings.refresh),
+            item(Icon::Share2, &strings.share),
+            item(Icon::Copy, &strings.copy_link),
+            item(Icon::Star, &strings.add_to_favorites),
+            item(Icon::ExternalLink, &strings.open_in_system_browser),
+            item(Icon::Power, &strings.disconnect),
+            item(Icon::X, &strings.close_page),
         ],
-        divider_after: Some(3),
+        divider_after: Some(4),
     }
 }

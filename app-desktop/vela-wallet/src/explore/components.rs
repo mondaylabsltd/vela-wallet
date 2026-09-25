@@ -380,6 +380,10 @@ pub struct AddressBar {
     pub draft: Option<SharedString>,
     /// The whole draft is selected: drawn highlighted, with no caret.
     pub selected: bool,
+    /// A word said in the bar for a moment — "Copied" after the site menu
+    /// copied its link. The page is a native view gpui cannot draw over, so
+    /// a toast over it would be under it; the bar is what stays visible.
+    pub notice: Option<SharedString>,
 }
 
 /// The address field's contents, for the page to wrap in whatever makes it
@@ -423,6 +427,16 @@ pub fn address_field(theme: &Theme, icons: &mut IconCache, bar: &AddressBar) -> 
         return row
             .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
             .child(typed);
+    }
+    if let Some(notice) = &bar.notice {
+        return row
+            .child(icon_img(icons, Icon::Check, false, theme.success, 12.))
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.success)
+                    .child(notice.clone()),
+            );
     }
     if bar.browsing {
         let (glyph, tint) = if bar.secure {
