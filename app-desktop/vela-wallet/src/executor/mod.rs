@@ -35,6 +35,7 @@ pub mod balance_dashboard;
 pub mod balances;
 pub mod batch;
 pub mod browser_history;
+pub mod bug_report;
 pub mod camera;
 pub mod chain;
 pub mod chain_tokens;

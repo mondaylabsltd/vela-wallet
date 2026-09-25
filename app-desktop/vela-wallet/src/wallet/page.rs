@@ -693,6 +693,10 @@ pub struct WalletPage {
     /// shows the page `sign_pref` holds. The core validates it on Save, not
     /// per keystroke: half an address is not an error yet.
     signer_page_draft: Option<String>,
+    /// The Feedback page's report (078 S-03): what the person typed, whether
+    /// the steps box is open, whether the preview is, the send in flight and
+    /// how the last one ended.
+    feedback: FeedbackDraft,
     signer_page_focus: Option<gpui::FocusHandle>,
     /// Spec 075: the tunnel, the same way — typed until Save, and the core
     /// says whether it is one (https/wss only, loopback allowed).
@@ -1129,6 +1133,7 @@ impl WalletPage {
             window_handle: crate::onboarding::native_window_handle(window),
             endpoint_focuses: Vec::new(),
             signer_page_draft: None,
+            feedback: FeedbackDraft::new(cx),
             signer_page_focus: None,
             tunnel_focus: None,
             settings_probed_network: None,
@@ -7535,6 +7540,10 @@ impl WalletPage {
                 self.settings.nav_storage.clone(),
                 Some(self.settings.storage_subtitle.clone()),
             ),
+            SettingsPage::Feedback => (
+                self.settings.bug_title.clone(),
+                Some(self.settings.bug_subtitle.clone()),
+            ),
             SettingsPage::About => (self.settings.nav_about.clone(), None),
         };
 
@@ -7622,6 +7631,7 @@ impl WalletPage {
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
             SettingsPage::Signing => self.settings_signing(theme, window, cx),
             SettingsPage::Storage => self.settings_storage(theme, cx),
+            SettingsPage::Feedback => self.settings_feedback(theme, window, cx),
             SettingsPage::About => self.settings_about(theme, cx),
         };
 
@@ -10144,6 +10154,336 @@ impl WalletPage {
             .max_w(px(560.))
             .child(list)
             .child(section.child(actions))
+    }
+
+    /// What this device may say about itself in a report, and nothing more
+    /// (the web's `deviceFacts`): the build, the platform, the language, the
+    /// NAMES of the networks it cannot reach. No failure counters exist on
+    /// this shell yet, so that line honestly says none.
+    fn feedback_facts(&self, cx: &mut Context<Self>) -> crate::executor::bug_report::DeviceFacts {
+        let unreachable = if self.identity.is_some() {
+            resident::resident::<BalanceDashboard>(cx)
+                .read(cx)
+                .view()
+                .banner_chain_ids
+                .iter()
+                .map(|chain_id| crate::executor::custom_tokens::network_name(*chain_id))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        crate::executor::bug_report::DeviceFacts {
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            commit: env!("VELA_GIT_COMMIT").to_owned(),
+            platform: crate::executor::bug_report::desktop_platform(),
+            language: self.locale.to_string(),
+            unreachable,
+            failures: Vec::new(),
+        }
+    }
+
+    /// Send the report, off the frame, and keep what comes back.
+    fn send_feedback(&mut self, cx: &mut Context<Self>) {
+        use crate::executor::bug_report;
+        if self.feedback.sending || self.feedback.what.trim().is_empty() {
+            return;
+        }
+        let payload = bug_report::build_bug_report(
+            &self.feedback.what,
+            &self.feedback.steps,
+            bug_report::AREA_OTHER,
+            &self.settings.bug_labels,
+            &self.feedback_facts(cx),
+        );
+        self.feedback.sending = true;
+        self.feedback.result = None;
+        cx.notify();
+        cx.spawn(async move |page, cx| {
+            let outcome = cx
+                .background_executor()
+                .spawn(
+                    async move { bug_report::send_bug_report(&payload, &bug_report::endpoint()) },
+                )
+                .await;
+            page.update(cx, |this, cx| {
+                this.feedback.sending = false;
+                this.feedback.result = Some(outcome);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// ST15 / the web's `FeedbackBody` (078 S-03): what went wrong, the
+    /// optional steps, exactly what will be sent — open, with the consent
+    /// note beside the button it is about — and the two ways a send ends.
+    fn settings_feedback(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
+        use crate::executor::bug_report::{self, BugReportOutcome};
+        let s = &self.settings;
+        let mut col = div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .pt(px(8.))
+            .max_w(px(560.));
+        let info = theme.info_base;
+
+        // Filed. The number is the point: somebody who reported something is
+        // owed a way back to it.
+        if let Some(BugReportOutcome::Filed {
+            number,
+            url,
+            deduped,
+        }) = self.feedback.result.clone()
+        {
+            let body = crate::wallet::fill(
+                if deduped {
+                    &s.bug_success_deduped
+                } else {
+                    &s.bug_success_new
+                },
+                "number",
+                &number.to_string(),
+            );
+            return col
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.success)
+                        .child(icon_img(
+                            &mut self.icons,
+                            Icon::Check,
+                            false,
+                            theme.success,
+                            18.,
+                        ))
+                        .child(s.bug_success_title.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_body())
+                        .text_color(theme.fg_base)
+                        .child(SharedString::from(body)),
+                )
+                .child(
+                    div()
+                        .id("feedback-view-issue")
+                        .cursor_pointer()
+                        .text_size(theme::text_body())
+                        .text_color(info)
+                        .child(s.bug_view_issue.clone())
+                        .on_click(move |_, _, cx| cx.open_url(&url)),
+                );
+        }
+
+        let what_placeholder = s.bug_what_placeholder.clone();
+        let what_focus = self.feedback.what_focus.clone();
+        let page = cx.entity().downgrade();
+        col = col.child(crate::ui::text_area(
+            "feedback-what",
+            theme,
+            &self.feedback.what,
+            what_placeholder,
+            4,
+            &what_focus,
+            window,
+            move |text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    this.feedback.what = text;
+                    cx.notify();
+                });
+            },
+        ));
+        if self.feedback.steps_open {
+            let steps_focus = self.feedback.steps_focus.clone();
+            let page = cx.entity().downgrade();
+            col = col.child(crate::ui::text_area(
+                "feedback-steps",
+                theme,
+                &self.feedback.steps,
+                s.bug_steps_placeholder.clone(),
+                3,
+                &steps_focus,
+                window,
+                move |text, _, cx| {
+                    let _ = page.update(cx, |this, cx| {
+                        this.feedback.steps = text;
+                        cx.notify();
+                    });
+                },
+            ));
+        } else {
+            col = col.child(
+                div().flex().child(
+                    div()
+                        .id("feedback-add-steps")
+                        .cursor_pointer()
+                        .text_size(theme::text_body())
+                        .text_color(info)
+                        .child(s.bug_add_steps.clone())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.feedback.steps_open = true;
+                            this.feedback.steps_focus.focus(window, cx);
+                            cx.notify();
+                        })),
+                ),
+            );
+        }
+
+        // Exactly what will be sent — the same lines the payload carries.
+        let lines = bug_report::environment_lines(&s.bug_labels, &self.feedback_facts(cx));
+        let s = &self.settings;
+        let open = self.feedback.preview_open;
+        let mut disclosure = div()
+            .flex()
+            .flex_col()
+            .rounded(px(12.))
+            .bg(theme.bg_sunken)
+            .border_1()
+            .border_color(theme.divider)
+            .overflow_hidden()
+            .child(
+                div()
+                    .id("feedback-preview")
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .p(px(12.))
+                    .cursor_pointer()
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_muted)
+                    .child(s.bug_preview_toggle.clone())
+                    .child(icon_img(
+                        &mut self.icons,
+                        if open {
+                            Icon::ChevronUp
+                        } else {
+                            Icon::ChevronDown
+                        },
+                        false,
+                        theme.fg_muted,
+                        14.,
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.feedback.preview_open = !this.feedback.preview_open;
+                        cx.notify();
+                    })),
+            );
+        if open {
+            let mut body = div()
+                .flex()
+                .flex_col()
+                .px(px(12.))
+                .pb(px(12.))
+                .font_family(theme::font_mono())
+                .text_size(theme::text_label())
+                .line_height(theme::text_label() * 1.7)
+                .text_color(theme.fg_subtle);
+            for line in lines {
+                body = body.child(SharedString::from(line));
+            }
+            disclosure = disclosure.child(body);
+        }
+        col = col.child(disclosure);
+
+        // The consent sits directly above the button it is a promise about.
+        let s = &self.settings;
+        let note = |icon: Icon,
+                    fg: gpui::Hsla,
+                    bg: gpui::Hsla,
+                    text: SharedString,
+                    icons: &mut IconCache| {
+            div()
+                .flex()
+                .items_start()
+                .gap(px(8.))
+                .p(px(12.))
+                .rounded(px(12.))
+                .bg(bg)
+                .text_size(theme::text_body())
+                .line_height(theme::line_height_body())
+                .text_color(fg)
+                .child(icon_img(icons, icon, false, fg, 18.))
+                .child(div().flex_1().min_w(px(0.)).child(text))
+        };
+        col = col.child(note(
+            Icon::Info,
+            info,
+            theme.info_soft,
+            s.bug_consent.clone(),
+            &mut self.icons,
+        ));
+
+        // The endpoint could not file it: the other road, with the person's
+        // words already in it — amber, because nothing has been lost.
+        let fallback = match &self.feedback.result {
+            Some(BugReportOutcome::Fallback { fallback_url }) => Some(fallback_url.clone()),
+            _ => None,
+        };
+        if let Some(url) = fallback.clone() {
+            let s = &self.settings;
+            col = col.child(note(
+                Icon::TriangleAlert,
+                theme.warning_base,
+                theme.warning_soft,
+                SharedString::from(format!(
+                    "{} — {}",
+                    s.bug_fallback_title, s.bug_fallback_body
+                )),
+                &mut self.icons,
+            ));
+            col = col.child(
+                div()
+                    .id("feedback-open-github")
+                    .cursor_pointer()
+                    .child(crate::flows::components::accent_button(
+                        theme,
+                        s.bug_open_github.clone(),
+                    ))
+                    .on_click(move |_, _, cx| cx.open_url(&url)),
+            );
+        }
+
+        // Send — secondary once the other road is on screen, since "try
+        // again" is a real answer to a 429. Busy says so rather than going
+        // dark; nothing typed is nothing to file.
+        let s = &self.settings;
+        let label = if self.feedback.sending {
+            s.bug_sending.clone()
+        } else {
+            s.bug_send.clone()
+        };
+        let ready = !self.feedback.what.trim().is_empty();
+        let button = if !ready {
+            crate::flows::components::disabled_accent_button(theme, label)
+        } else if fallback.is_some() {
+            crate::flows::components::secondary_button(theme, label)
+        } else {
+            crate::flows::components::accent_button(theme, label)
+        };
+        col = col.child(
+            div()
+                .id("feedback-send")
+                .when(ready && !self.feedback.sending, |el| el.cursor_pointer())
+                .child(button)
+                .on_click(cx.listener(|this, _, _, cx| this.send_feedback(cx))),
+        );
+        col.child(
+            div().flex().justify_center().child(
+                div()
+                    .id("feedback-github-form")
+                    .cursor_pointer()
+                    .text_size(theme::text_body())
+                    .text_color(info)
+                    .child(s.bug_open_github_form.clone())
+                    .on_click(|_, _, cx| cx.open_url(bug_report::GITHUB_ISSUE_FORM)),
+            ),
+        )
     }
 
     fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -16301,12 +16641,14 @@ mod tests {
     /// learned one knows the other.
     #[test]
     fn settings_nav_covers_every_panel() {
-        assert_eq!(SettingsPage::ALL.len(), 10);
+        assert_eq!(SettingsPage::ALL.len(), 11);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
         assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
         // "Sign with" beside the speed (spec 071).
         assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
-        assert_eq!(SettingsPage::ALL[9], SettingsPage::About);
+        // Send feedback beside About, as the web's (078 S-03).
+        assert_eq!(SettingsPage::ALL[9], SettingsPage::Feedback);
+        assert_eq!(SettingsPage::ALL[10], SettingsPage::About);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips
@@ -16368,6 +16710,36 @@ fn is_evm_address(value: &str) -> bool {
         .strip_prefix("0x")
         .or_else(|| value.strip_prefix("0X"))
         .is_some_and(|body| body.len() == 40 && body.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// The Feedback page's state — the web's `FeedbackBody` locals and the
+/// route's `feedbackSending` / `feedbackResult`.
+struct FeedbackDraft {
+    what: String,
+    steps: String,
+    steps_open: bool,
+    /// Open by default: the consent line promises the preview is what gets
+    /// sent, and a promise is only worth anything next to the thing.
+    preview_open: bool,
+    sending: bool,
+    result: Option<crate::executor::bug_report::BugReportOutcome>,
+    what_focus: gpui::FocusHandle,
+    steps_focus: gpui::FocusHandle,
+}
+
+impl FeedbackDraft {
+    fn new(cx: &mut gpui::App) -> Self {
+        Self {
+            what: String::new(),
+            steps: String::new(),
+            steps_open: false,
+            preview_open: true,
+            sending: false,
+            result: None,
+            what_focus: cx.focus_handle(),
+            steps_focus: cx.focus_handle(),
+        }
+    }
 }
 
 /// What a pick list is choosing, and for whom.

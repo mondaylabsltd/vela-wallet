@@ -13,9 +13,9 @@ use std::cell::RefCell;
 
 use crate::theme::{self, FLOW_CARET_W, FLOW_GAP_MD, FLOW_GAP_SM, INPUT_H, RADIUS_FIELD, Theme};
 use gpui::{
-    App, ClipboardItem, Div, ElementId, FocusHandle, FontWeight, InteractiveElement, KeyDownEvent,
-    Keystroke, ParentElement, SharedString, StatefulInteractiveElement, Styled, WeakFocusHandle,
-    Window, div, prelude::FluentBuilder as _, px,
+    App, ClipboardItem, Div, ElementId, FocusHandle, FontWeight, InteractiveElement, IntoElement,
+    KeyDownEvent, Keystroke, ParentElement, SharedString, StatefulInteractiveElement, Styled,
+    WeakFocusHandle, Window, div, prelude::FluentBuilder as _, px,
 };
 
 /// The four clipboard chords a text well owes a person.
@@ -554,6 +554,163 @@ pub fn search_input(
         .child(line)
         .on_click(click_to_edit(focus.clone()))
         .on_key_down(edit_keys(value.to_owned(), focus.clone(), false, on_change))
+}
+
+/// A multi-line well — the web's `<textarea>` (078 S-03): `rows` lines tall
+/// at rest and growing with what is typed, the words wrapping, Enter a new
+/// line. The same keys and clipboard chords as every single-line well, and
+/// the same all-or-nothing selection; a paste keeps its line breaks.
+#[allow(clippy::too_many_arguments, clippy::allow_attributes)]
+pub fn text_area(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    value: &str,
+    placeholder: SharedString,
+    rows: u16,
+    focus: &FocusHandle,
+    window: &Window,
+    on_change: impl Fn(String, &mut Window, &mut App) + 'static,
+) -> gpui::Stateful<Div> {
+    let focused = focus.is_focused(window);
+    let selected = focused && !value.is_empty() && is_selected(focus);
+    let line = theme::text_body() * 1.5;
+    let text: gpui::AnyElement = if value.is_empty() {
+        let mut row = div().flex().items_center().gap(px(1.));
+        if focused {
+            row = row.child(caret(theme, line));
+        }
+        row.child(div().text_color(theme.fg_subtle).child(placeholder))
+            .into_any_element()
+    } else if focused && !selected {
+        // The caret rides the end of the last line: a thin bar glyph in the
+        // accent, part of the text so it wraps where the text does.
+        let shown = format!("{value}\u{258F}");
+        let start = value.len();
+        gpui::StyledText::new(shown.clone())
+            .with_highlights([(
+                start..shown.len(),
+                gpui::HighlightStyle {
+                    color: Some(theme.accent),
+                    ..Default::default()
+                },
+            )])
+            .into_any_element()
+    } else {
+        div()
+            .when(selected, |text| {
+                text.bg(theme.accent.opacity(0.28)).rounded(px(2.))
+            })
+            .child(SharedString::from(value.to_owned()))
+            .into_any_element()
+    };
+    let current = value.to_owned();
+    let focus_for_click = focus.clone();
+    let focus_for_keys = focus.clone();
+    div()
+        .id(id)
+        .track_focus(focus)
+        .w_full()
+        .min_h(line * f32::from(rows) + px(24.))
+        .p(px(12.))
+        .rounded(px(12.))
+        .bg(theme.bg_sunken)
+        .border_1()
+        .border_color(if focused {
+            theme.outline_strong
+        } else {
+            theme.divider
+        })
+        .text_size(theme::text_body())
+        .line_height(line)
+        .text_color(theme.fg_base)
+        .cursor_text()
+        .child(text)
+        .on_click(click_to_edit(focus_for_click))
+        .on_key_down(area_keys(current, focus_for_keys, on_change))
+}
+
+/// [`edit_keys`] for a multi-line well: Enter is a line, and a paste keeps
+/// its breaks (a `\r\n` from Windows becomes one `\n`).
+fn area_keys(
+    current: String,
+    focus_for_keys: FocusHandle,
+    on_change: impl Fn(String, &mut Window, &mut App) + 'static,
+) -> impl Fn(&KeyDownEvent, &mut Window, &mut App) + 'static {
+    move |event: &KeyDownEvent, window, cx| {
+        let ks = &event.keystroke;
+        let selected = !current.is_empty() && is_selected(&focus_for_keys);
+        if let Some(chord) = edit_chord(ks) {
+            match chord {
+                EditChord::SelectAll => {
+                    if !current.is_empty() {
+                        select(Some(&focus_for_keys));
+                        window.refresh();
+                    }
+                }
+                EditChord::Copy => {
+                    if selected {
+                        cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
+                    }
+                }
+                EditChord::Cut => {
+                    if selected {
+                        cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
+                        select(None);
+                        on_change(String::new(), window, cx);
+                    }
+                }
+                EditChord::Paste => {
+                    let Some(pasted) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+                        return;
+                    };
+                    let pasted: String = pasted
+                        .replace("\r\n", "\n")
+                        .chars()
+                        .filter(|c| *c == '\n' || !c.is_control())
+                        .collect();
+                    if pasted.is_empty() {
+                        return;
+                    }
+                    let kept = if selected { "" } else { current.as_str() };
+                    select(None);
+                    on_change(format!("{kept}{pasted}"), window, cx);
+                }
+            }
+            cx.stop_propagation();
+            return;
+        }
+        if ks.modifiers.control || ks.modifiers.alt || ks.modifiers.platform {
+            return;
+        }
+        let mut next = if selected {
+            String::new()
+        } else {
+            current.clone()
+        };
+        match ks.key.as_str() {
+            "backspace" | "delete" if selected => {}
+            "backspace" => {
+                if next.pop().is_none() {
+                    return;
+                }
+            }
+            "enter" => next.push('\n'),
+            "left" | "right" | "up" | "down" | "home" | "end" | "escape" => {
+                if selected {
+                    select(None);
+                    window.refresh();
+                }
+                return;
+            }
+            _ => match &ks.key_char {
+                Some(ch) if !ch.chars().any(char::is_control) => next.push_str(ch),
+                _ => return,
+            },
+        }
+        select(None);
+        cx.stop_propagation();
+        on_change(next, window, cx);
+    }
 }
 
 #[cfg(test)]

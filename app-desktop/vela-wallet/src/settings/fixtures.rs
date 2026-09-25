@@ -35,13 +35,17 @@ pub enum SettingsPage {
     /// 071) — beside the speed, where every shell puts the two.
     Signing,
     Storage,
+    /// Send feedback (078 S-03) — beside About, as the web's desktop and
+    /// the phone put it: "something is wrong" and "what is this" are one
+    /// errand.
+    Feedback,
     About,
 }
 
 impl SettingsPage {
     /// The nav column, in order. One array so the rail and the tests can never
     /// disagree about what the section contains.
-    pub const ALL: [SettingsPage; 10] = [
+    pub const ALL: [SettingsPage; 11] = [
         SettingsPage::Account,
         SettingsPage::Appearance,
         SettingsPage::Localization,
@@ -51,6 +55,7 @@ impl SettingsPage {
         SettingsPage::FeeSpeed,
         SettingsPage::Signing,
         SettingsPage::Storage,
+        SettingsPage::Feedback,
         SettingsPage::About,
     ];
 
@@ -65,6 +70,7 @@ impl SettingsPage {
             SettingsPage::FeeSpeed => Icon::Clock,
             SettingsPage::Signing => Icon::Lock,
             SettingsPage::Storage => Icon::HardDrive,
+            SettingsPage::Feedback => Icon::MessageSquareText,
             SettingsPage::About => Icon::Info,
         }
     }
@@ -80,6 +86,7 @@ impl SettingsPage {
             SettingsPage::FeeSpeed => s.nav_fee_speed.clone(),
             SettingsPage::Signing => s.nav_signing.clone(),
             SettingsPage::Storage => s.nav_storage.clone(),
+            SettingsPage::Feedback => s.nav_feedback.clone(),
             SettingsPage::About => s.nav_about.clone(),
         }
     }
