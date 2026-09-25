@@ -12853,6 +12853,63 @@ impl WalletPage {
     }
 
     /// DE1/DE2's start page.
+    /// The web's `ExploreEmpty`: the 56 mark, the title at 20 bold, the
+    /// caption, and a 52-high outline pill. The web's pill flips its gallery
+    /// to a demo page; there is no curated list to browse here, so it does
+    /// what the caption asks first — puts the cursor in the address bar.
+    fn explore_empty(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        let e = &self.explore;
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(12.))
+            .py(px(48.))
+            .text_center()
+            // The web's BrandMark 56 is the artwork's TIGHT size; this mark
+            // draws it inside a 420/260 box (`ui::logo`), so a 90 box is a 56
+            // sail, and the box's extra air comes off so the gaps stay the
+            // web's.
+            .child(
+                div()
+                    .my(px(-17.))
+                    .child(crate::ui::vela_mark(theme, px(90.))),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .child(e.start_title.clone()),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_muted)
+                    .child(e.start_hint.clone()),
+            )
+            .child(
+                div()
+                    .id("explore-start-cta")
+                    .mt(px(12.))
+                    .h(px(52.))
+                    .px(px(32.))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(theme.border_strong)
+                    .flex()
+                    .items_center()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(e.start_cta.clone())
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.edit_address(window, cx);
+                    })),
+            )
+    }
+
     fn explore_start(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
         let mut column = div()
             .id("explore-start")
@@ -12876,6 +12933,20 @@ impl WalletPage {
         } else {
             explore_fixtures::favorites()
         };
+        // Nothing pinned, nothing visited, no groups: the web's start page
+        // (078 E-01) — the mark, what this is for, and a way to begin —
+        // instead of a lone "Favorites" over an add tile and nothing else.
+        if live_grid
+            && favorites.is_empty()
+            && explore_live::custom_groups(&explore_view).is_empty()
+            && resident::resident::<BrowserHistory>(cx)
+                .read(cx)
+                .view()
+                .entries
+                .is_empty()
+        {
+            return column.child(self.explore_empty(theme, cx));
+        }
         // What each tile opens and what its menu acts on — the ORIGIN, which
         // is the site's identity, kept beside the row so a click and a
         // right-click cannot disagree about which site they mean.
