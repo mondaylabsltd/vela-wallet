@@ -68,7 +68,7 @@ screenshot checked against the web.
 - [x] T039 F-07 add token parity.
 - [x] T040 C-02…C-08 contacts features.
 - [x] T041 S-02…S-05 settings features.
-- [ ] T042 E-01, E-03 explore features; G-05 technical details.
+- [x] T042 E-01, E-03 explore features; G-05 technical details.
 - [ ] T043 M-02, M-03 core Max estimates the real transfer; a fee-coin switch
       re-quotes before Max uses it; M-04 decimal mark.
 

@@ -13499,54 +13499,86 @@ impl WalletPage {
     /// The request, as text. Empty when there is no live request — the drawn
     /// boards have no payload of their own, and inventing one would put bytes
     /// on screen that nobody is being asked to sign.
-    fn signing_raw_rows(&self, cx: &mut Context<Self>) -> Vec<(SharedString, SharedString)> {
+    /// The technical details (078 G-05), the web's `techModel` with the
+    /// desktop's fuller raw layers: the contract's name for the collapsed
+    /// row, WHO is being called — name, address, where to look it up — and
+    /// the request itself, method and, for a transaction, each call's
+    /// destination and calldata; for a message or typed data, the payload.
+    fn signing_tech(&self, cx: &mut Context<Self>) -> Option<SigningTech> {
         // Linux has no in-app browser, so no dApp request ever reaches this
-        // shell there and `signing_host` does not exist — the same cut
-        // `connection_body` makes a few hundred lines down.
+        // shell there and `signing_host` does not exist.
         #[cfg(target_os = "linux")]
         {
             let _ = cx;
-            return Vec::new();
+            None
         }
         #[cfg(not(target_os = "linux"))]
         {
-            let Some(host) = self.signing_host.as_ref() else {
-                return Vec::new();
-            };
-            let host = host.read(cx);
+            let host = self.signing_host.as_ref()?.read(cx);
             let (method, params) = host.raw.clone();
+            let result = host.clear_view.result.as_ref();
+            let summary = result
+                .and_then(|result| result.contract_name.clone())
+                .map(SharedString::from);
+            let party = result.and_then(|result| {
+                let address = result.contract_address.clone()?;
+                let name = result
+                    .contract_name
+                    .clone()
+                    .unwrap_or_else(|| crate::wallet::live::shorten_address(&address));
+                let explorer = crate::executor::custom_tokens::explorer_base(host.chain_id)
+                    .map(|base| format!("{}/address/{address}", base.trim_end_matches('/')));
+                Some((
+                    SharedString::from(name),
+                    SharedString::from(address),
+                    explorer,
+                ))
+            });
             let mut rows = vec![(
                 self.signing.tech_function.clone(),
                 SharedString::from(method.clone()),
+                false,
             )];
             match crate::executor::sign_request::calls_of(&method, &params) {
-                // A transaction: each leg's destination and its calldata, which is
-                // what a person compares against the summary above.
                 Some(calls) => {
+                    let single = calls.len() == 1;
                     for (i, call) in calls.iter().enumerate() {
-                        let label = if calls.len() > 1 {
-                            SharedString::from(format!(
-                                "{} {}",
-                                self.signing.label_interacting,
-                                i + 1
-                            ))
-                        } else {
-                            self.signing.label_interacting.clone()
-                        };
-                        rows.push((label, SharedString::from(call.to.clone())));
+                        // One call to the party already named above is said
+                        // once, not twice.
+                        let named = single
+                            && party.as_ref().is_some_and(|(_, address, _)| {
+                                address.eq_ignore_ascii_case(&call.to)
+                            });
+                        if !named {
+                            let label = if single {
+                                self.signing.label_interacting.clone()
+                            } else {
+                                SharedString::from(format!(
+                                    "{} {}",
+                                    self.signing.label_interacting,
+                                    i + 1
+                                ))
+                            };
+                            rows.push((label, SharedString::from(call.to.clone()), false));
+                        }
                         rows.push((
                             self.signing.tech_raw_data.clone(),
                             SharedString::from(call.data.clone()),
+                            true,
                         ));
                     }
                 }
-                // A message or typed data: the payload itself.
                 None => rows.push((
                     self.signing.tech_raw_data.clone(),
                     SharedString::from(params),
+                    true,
                 )),
             }
-            rows
+            Some(SigningTech {
+                summary,
+                party,
+                rows,
+            })
         }
     }
 
@@ -13889,54 +13921,131 @@ impl WalletPage {
         // A refused request shows no bytes (the web's `live.ts` hides the
         // request data when blocked): they describe a transaction that will
         // never be signed, and reading them only invites "so why can't I?".
-        let raw_rows = if refused {
-            Vec::new()
-        } else {
-            self.signing_raw_rows(cx)
-        };
-        column = column
-            .when(!refused, |column| column.child(row_divider(theme)))
-            .when(!refused, |column| {
-                column.child(
+        let tech = if refused { None } else { self.signing_tech(cx) };
+        if let Some(tech) = tech {
+            // The web's `TechDetails`: the toggle says what it folds — "
+            // Advanced · <contract>" — and, open, the whole section is one
+            // sunken card: the party, then the raw layers in mono 13.
+            let title = match &tech.summary {
+                Some(summary) => {
+                    SharedString::from(format!("{} · {summary}", self.signing.advanced_toggle))
+                }
+                None => self.signing.advanced_toggle.clone(),
+            };
+            let toggle = div()
+                .id("signing-advanced")
+                .py(px(12.))
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.signing_advanced_open = !this.signing_advanced_open;
+                    cx.notify();
+                }))
+                .child(icon_img(
+                    &mut self.icons,
+                    if open {
+                        Icon::ChevronDown
+                    } else {
+                        Icon::ChevronRight
+                    },
+                    false,
+                    theme.fg_muted,
+                    14.,
+                ))
+                .child(
                     div()
-                        .id("signing-advanced")
-                        .py(px(10.))
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .when(!raw_rows.is_empty(), |el| {
-                            el.cursor_pointer().on_click(cx.listener(|this, _, _, cx| {
-                                this.signing_advanced_open = !this.signing_advanced_open;
-                                cx.notify();
-                            }))
-                        })
-                        .child(icon_img(
-                            &mut self.icons,
-                            if open {
-                                Icon::ChevronDown
-                            } else {
-                                Icon::ChevronRight
-                            },
-                            false,
-                            theme.fg_muted,
-                            12.,
-                        ))
-                        .child(
+                        .flex_1()
+                        .min_w(px(0.))
+                        .text_size(theme::text_body())
+                        .text_color(theme.fg_muted)
+                        .child(title),
+                );
+            let mut section = div().flex().flex_col().child(toggle);
+            if open {
+                section = section.px(px(16.)).rounded(px(16.)).bg(theme.bg_sunken);
+                let mut panel = div().flex().flex_col().gap(px(8.)).pb(px(12.));
+                if let Some((name, address, explorer)) = tech.party.clone() {
+                    let copy_address = address.to_string();
+                    let mut tools = div().flex().items_center().gap(px(8.)).child(
+                        div()
+                            .id("signing-tech-copy")
+                            .cursor_pointer()
+                            .child(icon_img(
+                                &mut self.icons,
+                                Icon::Copy,
+                                false,
+                                theme.fg_muted,
+                                14.,
+                            ))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.copy_text(
+                                    SIGNING_TECH_COPY,
+                                    copy_address.clone(),
+                                    CONTACTS_COPY_HOLD,
+                                    cx,
+                                );
+                            })),
+                    );
+                    if let Some(url) = explorer {
+                        tools = tools.child(
                             div()
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.fg_muted)
-                                .child(self.signing.advanced_toggle.clone()),
-                        ),
-                )
-            });
-        if open {
-            for (label, value) in raw_rows {
-                column = column.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.))
-                        .pb(px(10.))
+                                .id("signing-tech-explorer")
+                                .cursor_pointer()
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::ExternalLink,
+                                    false,
+                                    theme.fg_muted,
+                                    14.,
+                                ))
+                                .on_click(move |_, _, cx| cx.open_url(&url)),
+                        );
+                    }
+                    let copied = self.copied.as_deref() == Some(SIGNING_TECH_COPY);
+                    panel = panel.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .py(px(8.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.))
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(2.))
+                                    .child(
+                                        div()
+                                            .text_size(theme::text_label())
+                                            .text_color(theme.fg_subtle)
+                                            .child(SharedString::from(format!(
+                                                "{} · {name}",
+                                                self.signing.label_interacting
+                                            ))),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_family(theme::font_mono())
+                                            .text_size(theme::text_body())
+                                            .text_color(theme.fg_base)
+                                            .child(address),
+                                    ),
+                            )
+                            .child(if copied {
+                                div()
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.success)
+                                    .child(self.contacts.copied.clone())
+                            } else {
+                                tools
+                            }),
+                    );
+                }
+                for (label, value, raw) in tech.rows {
+                    panel = panel
                         .child(
                             div()
                                 .text_size(theme::text_label())
@@ -13946,12 +14055,15 @@ impl WalletPage {
                         .child(
                             div()
                                 .font_family(theme::font_mono())
-                                .text_size(theme::text_label())
-                                .text_color(theme.fg_base)
+                                .text_size(theme::text_body())
+                                .line_height(theme::text_body() * 1.7)
+                                .text_color(if raw { theme.fg_muted } else { theme.fg_base })
                                 .child(value),
-                        ),
-                );
+                        );
+                }
+                section = section.child(panel);
             }
+            column = column.child(row_divider(theme)).child(section);
         }
         let (on_fee, on_fee_pick) = self.fee_actions(cx);
         if let Some(fee) =
@@ -16387,6 +16499,8 @@ enum ScanNotice {
 const CONTACTS_TOAST: &str = "contacts-toast";
 /// The site menu's copy, said in the address bar (078 E-03).
 const EXPLORE_COPY: &str = "explore-copy";
+/// The technical details' address copy (078 G-05).
+const SIGNING_TECH_COPY: &str = "signing-tech-copy";
 const CONTACT_QR_COPY: &str = "contact-qr";
 const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
 
@@ -16850,6 +16964,16 @@ impl FeedbackDraft {
             steps_focus: cx.focus_handle(),
         }
     }
+}
+
+/// The signing column's technical details (078 G-05).
+struct SigningTech {
+    /// The contract's name, beside the toggle while it is folded.
+    summary: Option<SharedString>,
+    /// Who is being called: name, address, the explorer page for it.
+    party: Option<(SharedString, SharedString, Option<String>)>,
+    /// (label, value, raw) — a raw value is drawn in the muted colour.
+    rows: Vec<(SharedString, SharedString, bool)>,
 }
 
 /// What a pick list is choosing, and for whom.
