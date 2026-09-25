@@ -10525,21 +10525,47 @@ impl WalletPage {
             // is none until somebody picks one. The mock's "Zora · 链 ID 7777777"
             // sat over a live wizard that had resolved nothing, which is the
             // dialog telling somebody it already knows what they are adding.
-            SettingsDialog::AddNetwork if self.identity.is_some() => (
-                s.add_network.clone(),
-                resident::resident::<NetworkAdmin>(cx)
+            //
+            // While searching it says what to type, as the web's does; once a
+            // chain is chosen it names it (078 S-05).
+            SettingsDialog::AddNetwork if self.identity.is_some() => {
+                use vela_core::app::network_admin::NetWizardPhase;
+                let wizard = resident::resident::<NetworkAdmin>(cx)
                     .read(cx)
                     .view()
-                    .wizard
-                    .chain_info
-                    .map(|info| {
-                        gpui::SharedString::from(format!(
-                            "{} · {}",
-                            info.name,
-                            settings_fixtures::chain_meta(s, u64::from(info.chain_id))
-                        ))
-                    }),
-            ),
+                    .wizard;
+                let searching = matches!(
+                    wizard.phase,
+                    NetWizardPhase::Idle | NetWizardPhase::Searching | NetWizardPhase::Suggested
+                );
+                let resolving = matches!(
+                    wizard.phase,
+                    NetWizardPhase::Resolving | NetWizardPhase::Checking
+                );
+                let subtitle = if searching {
+                    s.add_network_desc.clone()
+                } else {
+                    // No chain behind a refusal (already added, not found):
+                    // the web keeps its instruction there, not "Searching…".
+                    wizard.chain_info.map_or_else(
+                        || {
+                            if resolving {
+                                s.wizard_searching.clone()
+                            } else {
+                                s.add_network_desc.clone()
+                            }
+                        },
+                        |info| {
+                            gpui::SharedString::from(format!(
+                                "{} · {}",
+                                info.name,
+                                settings_fixtures::chain_meta(s, u64::from(info.chain_id))
+                            ))
+                        },
+                    )
+                };
+                (s.add_network.clone(), Some(subtitle))
+            }
             SettingsDialog::AddNetwork => (
                 s.add_network.clone(),
                 Some(gpui::SharedString::from(format!(
@@ -10589,85 +10615,146 @@ impl WalletPage {
 
     /// DST4b's body, live: type a chain, see its verdict, add it.
     ///
-    /// 030 proved the pipeline end to end by dispatching the events by hand
-    /// (SC-001: Zora 12→13, still there after a relaunch). What it could not do
-    /// was let a person type — the search box was a placeholder. This is that
-    /// box.
+    /// Two states, as the web's `AddNetworkPanel` has them (078 S-05): the
+    /// search and its results, or the chosen chain — its row, its verdict and
+    /// what can be done about it. They never coexist; the custom RPC belongs
+    /// to a chain, so it is asked only once there is one.
     fn settings_add_network_live(
         &mut self,
         theme: &Theme,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
+        use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
+        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+        let wizard = view.wizard.clone();
+        if matches!(
+            wizard.phase,
+            NetWizardPhase::Idle | NetWizardPhase::Searching | NetWizardPhase::Suggested
+        ) {
+            return self.add_network_search(theme, &wizard, window, cx);
+        }
+
         let s = &self.settings;
-        let description = s.add_network_desc.clone();
-        let search_placeholder = s.search_placeholder.clone();
         let custom_title = s.custom_rpc_title.clone();
         let custom_placeholder = s.custom_rpc_placeholder.clone();
         let checks_title = s.compatibility_check.clone();
-        let cta = s.add_network.clone();
-        let retry = s.recheck.clone();
         let hover_accent = theme.accent_hover;
+        let chain_id = wizard.chain_info.as_ref().map(|info| info.chain_id);
 
-        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
-        let wizard = view.wizard.clone();
-        let search_focus = self.endpoint_focus(WIZARD_SEARCH_FOCUS, cx);
-        let rpc_focus = self.endpoint_focus(WIZARD_RPC_FOCUS, cx);
-
-        let mut col = div()
-            .flex()
-            .flex_col()
-            .gap(px(20.))
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(description),
-            )
-            .child(editable_url_field(
-                ElementId::from("wizard-search"),
-                theme,
-                None,
-                &wizard.query,
-                search_placeholder,
-                None,
-                None,
-                None,
-                &search_focus,
-                window,
-                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
-                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                        resident.dispatch(NetEvent::SearchInput { query: text }, cx);
-                    });
+        // The verdict, in the web's words: what the candidate row says under
+        // its name, its pill, and which of the tail's parts appear.
+        struct Verdict {
+            meta: SharedString,
+            pill: (Tone, SharedString),
+            checks: Option<Vec<(SharedString, bool)>>,
+            callout: Option<SharedString>,
+            custom_rpc: bool,
+            primary: Option<SharedString>,
+            setup_tool: bool,
+            recheck: bool,
+        }
+        let checking = || Verdict {
+            meta: s.wizard_checking.clone(),
+            pill: (Tone::Neutral, s.compatibility_check.clone()),
+            checks: None,
+            callout: None,
+            custom_rpc: false,
+            primary: None,
+            setup_tool: false,
+            recheck: false,
+        };
+        let verdict = match wizard.phase {
+            NetWizardPhase::Checked => match wizard.compat.as_ref() {
+                Some(compat) if compat.rpc_failure.is_none() && compat.compatible => Verdict {
+                    meta: compat.best_rpc_latency_ms.map_or_else(
+                        || settings_fixtures::chain_meta(s, u64::from(compat.chain_id)),
+                        // Whole milliseconds: the probe's own timer is a
+                        // float, and "775.3942999999999ms" is noise.
+                        |ms| {
+                            SharedString::from(crate::wallet::fill(
+                                &s.best_rpc,
+                                "latencyMs",
+                                &format!("{ms:.0}"),
+                            ))
+                        },
+                    ),
+                    pill: (Tone::Ok, s.compatible.clone()),
+                    checks: settings_live::compat_checks(compat, s),
+                    // Spec 081 FR-009: works, and a wallet with more than one
+                    // passkey still cannot be made here — both true.
+                    callout: (!compat.multi_key_ready).then(|| s.single_key_only.clone()),
+                    custom_rpc: true,
+                    // `can_add` is the core's whole judgement; the button
+                    // appears only when it says yes.
+                    primary: wizard.can_add.then(|| s.add_network.clone()),
+                    setup_tool: false,
+                    recheck: false,
                 },
-                // The search runs as it is typed; there is nothing to commit.
-                |_, _| {},
-            ));
+                Some(compat) if compat.rpc_failure.is_none() => Verdict {
+                    meta: s.compatibility_check.clone(),
+                    pill: (Tone::Error, s.wizard_incompatible.clone()),
+                    checks: settings_live::compat_checks(compat, s),
+                    callout: Some(s.wizard_incompatible_hint.clone()),
+                    custom_rpc: false,
+                    primary: None,
+                    setup_tool: true,
+                    recheck: true,
+                },
+                // The probes never reached a verdict — "unable to verify",
+                // never "incompatible" (the core's invariant ③).
+                _ => Verdict {
+                    meta: s.compatibility_check.clone(),
+                    pill: (Tone::Warn, s.wizard_unable_to_verify.clone()),
+                    checks: None,
+                    callout: None,
+                    custom_rpc: true,
+                    primary: Some(s.wizard_retry.clone()),
+                    setup_tool: false,
+                    recheck: true,
+                },
+            },
+            // The wizard stopped: why, in a warning, and the way on. A probe
+            // that failed is "unable to verify" and gets no setup tool; a chain
+            // that is already here, unknown, or endpoint-less says so.
+            NetWizardPhase::Error => {
+                let refusal =
+                    settings_live::wizard_notice(&wizard, s).and_then(|notice| match notice {
+                        settings_live::WizardNotice::Refusal(text) => Some(text),
+                        settings_live::WizardNotice::Progress(_) => None,
+                    });
+                let incompatible =
+                    matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }));
+                Verdict {
+                    callout: Some(if incompatible {
+                        s.wizard_incompatible_hint.clone()
+                    } else {
+                        refusal.unwrap_or_else(|| s.wizard_unable_to_verify.clone())
+                    }),
+                    setup_tool: incompatible,
+                    recheck: chain_id.is_some(),
+                    ..checking()
+                }
+            }
+            _ => checking(),
+        };
+        let error = wizard.phase == NetWizardPhase::Error;
 
-        // The suggestions the index answered with. Each one is a click that
-        // resolves and checks that chain — which is the whole pipeline 030
-        // proved and could not reach from the keyboard.
-        for (i, entry) in wizard.suggestions.iter().take(6).enumerate() {
-            let chain_id = entry.chain_id;
-            let selected = wizard
-                .chain_info
-                .as_ref()
-                .is_some_and(|c| c.chain_id == chain_id);
+        let mut col = div().flex().flex_col().gap(px(16.));
+
+        // The candidate: the web's row — mark, name at 17 bold, the line under
+        // it, and the verdict's pill. An error with no chain has none.
+        if let Some(info) = wizard.chain_info.as_ref().filter(|_| !error) {
+            let badge = pill(verdict.pill.0, verdict.pill.1.clone());
             col = col.child(
                 div()
-                    .id(ElementId::from(("wizard-suggestion", i)))
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .p(px(8.))
-                    .rounded(px(10.))
-                    .cursor_pointer()
-                    .when(selected, |el| el.bg(theme.bg_sunken))
-                    .hover(|el| el.bg(theme.bg_sunken))
                     .child(chain_logo_mark(
-                        u64::from(chain_id),
-                        crate::settings::model::lettermark(&entry.name),
-                        crate::settings::model::chain_tint(u64::from(chain_id))
+                        u64::from(info.chain_id),
+                        crate::settings::model::lettermark(&info.name),
+                        crate::settings::model::chain_tint(u64::from(info.chain_id))
                             .unwrap_or(0x8A_8F_98),
                         32.,
                     ))
@@ -10675,226 +10762,79 @@ impl WalletPage {
                         div()
                             .flex_1()
                             .min_w(px(0.))
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(gpui::SharedString::from(entry.name.clone())),
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_panel_title())
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(theme.fg_base)
+                                    .child(SharedString::from(info.name.clone())),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_subtle)
+                                    .child(verdict.meta.clone()),
+                            ),
                     )
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(gpui::SharedString::from(chain_id.to_string())),
-                    )
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                            resident.dispatch(
-                                NetEvent::ChainSelected {
-                                    chain_id,
-                                    // A fresh pick throws away a custom RPC
-                                    // typed for a DIFFERENT chain. Keeping it
-                                    // would check chain A against chain B's
-                                    // endpoint.
-                                    keep_custom_rpc: false,
-                                },
-                                cx,
-                            );
-                        });
-                        cx.notify();
-                    })),
+                    // Its own width, always: a long line beside it shrinks,
+                    // the verdict does not.
+                    .child(div().flex_none().child(status_pill(theme, &badge))),
             );
         }
-
-        // What the wizard is doing, or why it stopped. Everything below this
-        // line — the check list, the RPC field, the CTA — draws only once the
-        // core has a verdict, so without it the dialog answers a click with
-        // nothing at all. (The 032 phase 6 rule, applied to somebody else's
-        // screen: the core computed a refusal; the screen must say it.)
-        if let Some(notice) = settings_live::wizard_notice(&wizard, &self.settings) {
-            col = col.child(match notice {
-                settings_live::WizardNotice::Progress(body) => div()
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .child(crate::ui::spinner(theme.fg_subtle, px(14.), px(2.)))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(body),
-                    ),
-                settings_live::WizardNotice::Refusal(body) => div()
-                    .p(px(12.))
-                    .rounded(px(12.))
-                    .bg(theme.error_soft)
-                    .border_1()
-                    .border_color(theme.error_base)
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
-                    .child(body),
-            });
+        if let Some(checks) = verdict.checks.as_ref() {
+            col = col.child(check_list(theme, &mut self.icons, checks_title, checks));
         }
-
-        if let Some(compat) = wizard.compat.as_ref() {
-            match settings_live::compat_checks(compat, &self.settings) {
-                Some(checks) => {
-                    // The VERDICT, before the list that explains it. The core
-                    // reaches one and the live dialog never said it: every
-                    // other client shows this pill, and after spec 081 gave the
-                    // checklist a crossed row, a desktop reader saw a red cross
-                    // and a warning with nothing anywhere saying the chain
-                    // works. `settings.compatible` had been loaded and unused.
-                    let badge = settings_fixtures::pill(
-                        if compat.compatible {
-                            settings_fixtures::Tone::Ok
-                        } else {
-                            settings_fixtures::Tone::Error
-                        },
-                        if compat.compatible {
-                            self.settings.compatible.clone()
-                        } else {
-                            self.settings.wizard_incompatible.clone()
-                        },
-                    );
-                    col = col.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .child(status_pill(theme, &badge)),
-                    );
-                    col = col.child(check_list(theme, &mut self.icons, checks_title, &checks));
-                    // Spec 081 FR-009. The core can say "this chain works" and
-                    // "a wallet with more than one key cannot be created here"
-                    // at the same time; both are true, and the second one is
-                    // the sentence a person with several passkeys needs.
-                    if compat.compatible && !compat.multi_key_ready {
-                        col = col.child(crate::settings::components::callout(
-                            theme,
-                            &mut self.icons,
-                            crate::settings::components::CalloutTone::Warning,
-                            self.settings.single_key_only.clone(),
-                        ));
-                    }
-                    // Spec 081: an INCOMPATIBLE verdict needs somewhere to go.
-                    // The web has offered both of these since it was wired;
-                    // desktop drew the red rows, then the custom-RPC field,
-                    // and then nothing — so a person could type the RPC that
-                    // would have changed the answer and have no way to ask
-                    // again. The re-check keeps what they typed, for the same
-                    // reason the retry below does.
-                    if !compat.compatible {
-                        let chain_id = compat.chain_id;
-                        col = col.child(
-                            div()
-                                .id("wizard-recheck-rpc")
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .h(px(CONTACTS_BUTTON_H))
-                                .rounded(px(12.))
-                                .cursor_pointer()
-                                .border_1()
-                                .border_color(theme.outline_strong)
-                                .text_size(theme::text_row_title())
-                                .text_color(theme.fg_base)
-                                .child(self.settings.recheck_with_rpc.clone())
-                                .on_click(cx.listener(move |_, _, _, cx| {
-                                    resident::resident::<NetworkAdmin>(cx).update(
-                                        cx,
-                                        |resident, cx| {
-                                            resident.dispatch(
-                                                NetEvent::ChainSelected {
-                                                    chain_id,
-                                                    keep_custom_rpc: true,
-                                                },
-                                                cx,
-                                            );
-                                        },
-                                    );
-                                    cx.notify();
-                                })),
-                        );
-                        col = col.child(
-                            div()
-                                .id("wizard-chain-setup-tool")
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.info_base)
-                                .child(self.settings.open_chain_setup_tool.clone())
-                                .on_click(|_, _, cx| {
-                                    cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL);
-                                }),
-                        );
-                    }
-                }
-                // The probe could not reach a verdict. A retry, never a
-                // condemnation — the core's invariant ③, and the difference
-                // between "this chain does not work" and "we could not ask".
-                None => {
-                    let chain_id = compat.chain_id;
-                    col = col.child(
-                        div()
-                            .id("wizard-retry")
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .cursor_pointer()
-                            .border_1()
-                            .border_color(theme.outline_strong)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(retry)
-                            .on_click(cx.listener(move |_, _, _, cx| {
-                                resident::resident::<NetworkAdmin>(cx).update(
-                                    cx,
-                                    |resident, cx| {
-                                        resident.dispatch(
-                                            NetEvent::ChainSelected {
-                                                chain_id,
-                                                // A recheck KEEPS the typed RPC:
-                                                // it is often the reason to recheck.
-                                                keep_custom_rpc: true,
-                                            },
-                                            cx,
-                                        );
-                                    },
-                                );
-                                cx.notify();
-                            })),
-                    );
-                }
-            }
+        // Under the list, which it explains (spec 081 FR-009).
+        if let Some(text) = verdict.callout.clone() {
+            col = col.child(crate::settings::components::callout(
+                theme,
+                &mut self.icons,
+                crate::settings::components::CalloutTone::Warning,
+                text,
+            ));
         }
-
-        col = col.child(editable_url_field(
-            ElementId::from("wizard-rpc"),
-            theme,
-            Some(custom_title),
-            &wizard.custom_rpc,
-            custom_placeholder,
-            None,
-            None,
-            None,
-            &rpc_focus,
-            window,
-            move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+        if verdict.custom_rpc {
+            let rpc_focus = self.endpoint_focus(WIZARD_RPC_FOCUS, cx);
+            col = col.child(editable_url_field(
+                ElementId::from("wizard-rpc"),
+                theme,
+                Some(custom_title),
+                &wizard.custom_rpc,
+                custom_placeholder,
+                None,
+                None,
+                None,
+                &rpc_focus,
+                window,
+                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(NetEvent::CustomRpcEdited { value: text }, cx);
+                    });
+                },
+                // A draft the wizard's own button commits.
+                |_, _| {},
+            ));
+        }
+        let recheck = move |cx: &mut gpui::App| {
+            // A re-check KEEPS the typed RPC: it is often the reason to ask
+            // again.
+            if let Some(chain_id) = chain_id {
                 resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(NetEvent::CustomRpcEdited { value: text }, cx);
+                    resident.dispatch(
+                        NetEvent::ChainSelected {
+                            chain_id,
+                            keep_custom_rpc: true,
+                        },
+                        cx,
+                    );
                 });
-            },
-            // A draft the wizard's own Add button commits.
-            |_, _| {},
-        ));
-
-        // The CTA renders only when the core says it may. `can_add` is its
-        // whole judgement — resolved, checked, compatible, not already added —
-        // and re-deriving any part of it here would be a second opinion about
-        // whether a chain is safe to add.
-        if wizard.can_add {
+            }
+        };
+        if let Some(primary) = verdict.primary.clone() {
+            let adds = wizard.phase == NetWizardPhase::Checked && wizard.can_add;
             col = col.child(
                 div()
                     .id("settings-add-network-confirm")
@@ -10909,17 +10849,19 @@ impl WalletPage {
                     .text_size(theme::text_row_title())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
-                    .child(cta)
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    .child(primary)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if !adds {
+                            // Retry: ask the same chain again.
+                            recheck(cx);
+                            cx.notify();
+                            return;
+                        }
                         let now_iso = crate::executor::now_iso();
                         // Close on the core's word, not on the click. Every
-                        // gate in `add_confirmed` — not loaded, not Checked,
-                        // not compatible — refuses by returning `done()`, so a
-                        // dialog that closes itself would be the phase 6
-                        // pattern in its worst form: the person's press
-                        // disappears the screen and nothing was added. If the
-                        // core did not record it, the dialog stays up with its
-                        // state, and the notice above says why.
+                        // gate in `add_confirmed` refuses by returning
+                        // `done()`, so a dialog that closed itself would say
+                        // "added" over a chain that was not.
                         let added =
                             resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
                                 let before = resident.view().last_added_chain_id;
@@ -10928,18 +10870,190 @@ impl WalletPage {
                             });
                         if added {
                             this.close_settings_dialog(cx);
-                            // A chain the person just added is a chain nobody
-                            // has counted yet. The web forces the same read at
-                            // the same moment; without it the new network sits
-                            // in the list contributing nothing until something
-                            // else happens to refresh.
+                            // A chain nobody has counted yet: the same forced
+                            // read the web makes at the same moment.
                             crate::executor::balance_dashboard::refresh(cx);
                         }
                         cx.notify();
                     })),
             );
         }
+        // Where a chain this wallet refuses can be made ready — an outline
+        // button, never the accent: it is not the action somebody came for.
+        if verdict.setup_tool {
+            col = col.child(
+                div()
+                    .id("wizard-chain-setup-tool")
+                    .h(px(CONTACTS_BUTTON_H))
+                    .rounded(px(12.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .border_1()
+                    .border_color(theme.outline_strong)
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(self.settings.open_chain_setup_tool.clone())
+                    .on_click(|_, _, cx| {
+                        cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL);
+                    }),
+            );
+        }
+        // The web's re-check: a link in the info colour with its refresh.
+        if verdict.recheck {
+            col = col.child(
+                div()
+                    .id("wizard-recheck-rpc")
+                    .h(px(44.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(8.))
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.info_base)
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::RefreshCw,
+                        false,
+                        theme.info_base,
+                        14.,
+                    ))
+                    .child(self.settings.recheck_with_rpc.clone())
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        recheck(cx);
+                        cx.notify();
+                    })),
+            );
+        }
         col
+    }
+
+    /// The search half: the field with its icon, and the index's answers as
+    /// the web's `NetworkRow`s — mark, name, "Chain N" in the mono face, a
+    /// chevron — each a click that resolves and checks that chain.
+    fn add_network_search(
+        &mut self,
+        theme: &Theme,
+        wizard: &vela_core::app::network_admin::NetWizardView,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let s = &self.settings;
+        let placeholder = s.search_placeholder.clone();
+        let search_focus = self.endpoint_focus(WIZARD_SEARCH_FOCUS, cx);
+        let input = crate::ui::search_input(
+            "wizard-search",
+            theme,
+            &wizard.query,
+            placeholder,
+            &search_focus,
+            window,
+            move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(NetEvent::SearchInput { query: text }, cx);
+                });
+            },
+        );
+        let focused = search_focus.is_focused(window);
+        let field = div()
+            .h(px(44.))
+            .px(px(12.))
+            .rounded(px(12.))
+            .bg(theme.bg_sunken)
+            .border_1()
+            .border_color(if focused {
+                theme.fg_muted
+            } else {
+                theme.divider
+            })
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::Search,
+                false,
+                theme.fg_subtle,
+                18.,
+            ))
+            .child(div().flex_1().min_w(px(0.)).child(input));
+
+        let mut results = div().flex().flex_col();
+        for (i, entry) in wizard.suggestions.iter().enumerate() {
+            let chain_id = entry.chain_id;
+            let meta = settings_fixtures::chain_meta(&self.settings, u64::from(chain_id));
+            results = results.child(
+                div()
+                    .id(ElementId::from(("wizard-suggestion", i)))
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .py(px(12.))
+                    .border_b_1()
+                    .border_color(theme.divider)
+                    .cursor_pointer()
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
+                        crate::settings::model::lettermark(&entry.name),
+                        crate::settings::model::chain_tint(u64::from(chain_id))
+                            .unwrap_or(0x8A_8F_98),
+                        32.,
+                    ))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme.fg_base)
+                                    .child(SharedString::from(entry.name.clone())),
+                            )
+                            .child(
+                                div()
+                                    .font_family(theme::font_mono())
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.fg_subtle)
+                                    .child(meta),
+                            ),
+                    )
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::ChevronRight,
+                        false,
+                        theme.fg_subtle,
+                        14.,
+                    ))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                            resident.dispatch(
+                                NetEvent::ChainSelected {
+                                    chain_id,
+                                    // A fresh pick throws away a custom RPC
+                                    // typed for a DIFFERENT chain.
+                                    keep_custom_rpc: false,
+                                },
+                                cx,
+                            );
+                        });
+                        cx.notify();
+                    })),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .child(field)
+            .child(results)
     }
 
     /// DST4b's body: the chosen chain, its verdict, and the CTA.

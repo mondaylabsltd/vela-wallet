@@ -186,9 +186,6 @@ pub struct SettingsStrings {
     pub health_https_required: SharedString,
     pub health_offline: SharedString,
     pub health_invalid: SharedString,
-    /// The wizard's retry, for a chain the probe could not reach — never a
-    /// condemnation (the core's invariant ③).
-    pub recheck: SharedString,
     /// Spec 081: the two ways out of an INCOMPATIBLE verdict, which the web
     /// has always offered and desktop did not — a person could type a custom
     /// RPC under a red verdict and have nothing to press.
@@ -212,6 +209,10 @@ pub struct SettingsStrings {
     pub wizard_incompatible: SharedString,
     /// Spec 038 #E1: the probes failed — not a verdict.
     pub wizard_unable_to_verify: SharedString,
+    /// The unverifiable verdict's CTA, and the incompatible one's sentence
+    /// (the web's `retry` / `incompatibleHint`, 078 S-05).
+    pub wizard_retry: SharedString,
+    pub wizard_incompatible_hint: SharedString,
     pub endpoints_reset: SharedString,
     /// Spec 072 (FR-010): the question the reset asks first.
     pub endpoints_reset_title: SharedString,
@@ -408,7 +409,6 @@ impl SettingsStrings {
             health_https_required: s("settingsModals.health.httpsRequired"),
             health_offline: s("settingsModals.health.offline"),
             health_invalid: s("settingsModals.health.invalid"),
-            recheck: s("settingsModals.addNetwork.recheck"),
             recheck_with_rpc: s("settingsModals.addNetwork.recheckWithRpc"),
             open_chain_setup_tool: s("settingsModals.addNetwork.openChainSetupTool"),
             wizard_searching: s("settingsModals.addNetwork.searching"),
@@ -418,6 +418,8 @@ impl SettingsStrings {
             wizard_no_rpc: raw("assets.rpcUnavailableSingle"),
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
+            wizard_retry: s("settingsModals.addNetwork.retry"),
+            wizard_incompatible_hint: s("settingsModals.addNetwork.incompatibleHint"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
             endpoints_reset_title: s("settingsModals.endpoints.resetTitle"),
             endpoints_reset_body: s("settingsModals.endpoints.resetBody"),
