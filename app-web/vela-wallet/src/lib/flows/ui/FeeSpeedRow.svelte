@@ -186,17 +186,18 @@
 	}
 
 	.label {
-		flex: 0 0 auto;
+		flex: 0 1 auto;
+		min-width: min-content;
 	}
 
 	/* The tier in force, carrying the weight: it is the answer somebody is
-	   scanning for, and the word "Speed" beside it is only the question. */
+	   scanning for, and the word "Speed" beside it is only the question. It
+	   wraps rather than elides (078 round 3: "Geschwindigkeit" and a speed
+	   at the largest size were cut to "…"). */
 	.current {
 		flex: 1 1 auto;
 		min-width: 0;
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
 		text-align: end;
 		color: var(--color-fg-base);
 	}
@@ -277,16 +278,14 @@
 		font-weight: var(--weight-semibold);
 	}
 
-	/* The money never wraps and the name, a short word, elides instead: three
-	   rows being COMPARED must be one height each, their figures ending on one
-	   right edge ("Стандартно" once took two lines on the narrowest phone
-	   while its neighbours took one). */
+	/* The money never wraps; the name wraps between its words when it must,
+	   and is never elided (078 round 3 — a speed cut to "…" at the largest
+	   text size is a choice nobody can read). A word breaks only when it could
+	   not fit its column even alone. */
 	.name {
 		grid-area: name;
 		min-width: 0;
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
 	}
 
 	.values {

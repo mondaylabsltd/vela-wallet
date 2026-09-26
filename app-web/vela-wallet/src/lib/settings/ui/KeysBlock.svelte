@@ -247,12 +247,12 @@
 		min-width: 9em;
 	}
 
+	/* Wraps, never "…" (078 round 3): "Respaldar las llaves pública…" was the
+	   backup row's own title cut short on a phone at the standard size. */
 	.name {
-		overflow: hidden;
 		color: var(--color-fg-base);
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
 	}
 
 	.meta {

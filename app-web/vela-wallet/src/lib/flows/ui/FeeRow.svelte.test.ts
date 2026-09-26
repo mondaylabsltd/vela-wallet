@@ -48,7 +48,8 @@ const drawn = async (width: string, fee: typeof FEE = FEE, onrefresh?: () => voi
 		refresh: screen.container.querySelector('button.refresh') as HTMLButtonElement,
 		stale: screen.container.querySelector('.stale') as HTMLElement | null,
 		label: row.querySelector('.label') as HTMLElement,
-		mark: row.querySelector('.label + *') as HTMLElement,
+		mark: row.querySelector('.amount > *') as HTMLElement,
+		amount: row.querySelector('.amount') as HTMLElement,
 		values: [...row.querySelectorAll<HTMLElement>('.value')]
 	};
 };
@@ -65,8 +66,8 @@ describe('FeeRow', () => {
 	});
 
 	it('breaks no figure: each half is one line, and both stay inside the column', async () => {
-		// Narrower still, so the money HAS to give way — the case the row is for.
-		const { column, row, label, values } = await drawn('220px');
+		// Narrow, so the label and the fee cannot share a line.
+		const { column, row, label, values, amount } = await drawn('220px');
 		// No "·": a dropped line that began with one read as a leftover.
 		expect(values.map((v) => v.textContent?.trim())).toEqual(['0.001329 AVAX', '≈ $0.01']);
 		expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(oneLine(label) + 0.5);
@@ -77,60 +78,74 @@ describe('FeeRow', () => {
 			expect(box.left).toBeGreaterThanOrEqual(column.left - 0.5);
 		}
 		expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
-		// The money dropped WHOLE onto its own line, right-aligned under the coin.
-		const [coin, money] = values.map((v) => v.getBoundingClientRect());
-		expect(money.top).toBeGreaterThanOrEqual(coin.bottom - 0.5);
-		expect(Math.abs(money.right - coin.right)).toBeLessThanOrEqual(0.5);
+		// The fee went under the label WHOLE, at the row's end.
+		expect(amount.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			label.getBoundingClientRect().bottom - 0.5
+		);
 	});
 
-	it("never paints the coin's mark over the figure: the label gives way, elided on its line", async () => {
-		// The row used to let the VALUE column shrink below its figure, which
-		// then ran leftward under the mark — "0 [ETH] 01329 AVAX" — with
-		// nothing overflowing the row, so no width check could see it. The
-		// longest shipped labels at a 320px phone's column, and a worst case.
+	// 078 round 3 (founder, German at the largest size): the label was broken
+	// mid-word ("Netzwerkg / ebühr") and the value ended in "…". The label is
+	// a whole: never elided, never broken inside a word; when it and the fee
+	// cannot share a line, it keeps its own and the fee goes under it.
+	it('keeps the label whole — never elided, never broken — the fee under it when they do not fit', async () => {
 		const cases: [string, string, string][] = [
+			['Netzwerkgebühr', '342px', '1.35'],
+			['Netzwerkgebühr', '272px', '1.35'],
 			['Commissione di rete', '272px', '1'],
 			['ネットワーク手数料', '272px', '1'],
 			['Commissione di rete', '240px', '1.3'],
+			['Сетевая комиссия', '272px', '1.35'],
 			['Network fee', '220px', '1']
 		];
 		for (const [text, width, scale] of cases) {
 			document.documentElement.style.setProperty('--text-scale', scale);
-			const { column, row, label, mark, values } = await drawn(width, { ...FEE, label: text });
+			const { column, row, label, mark, values, amount } = await drawn(width, {
+				...FEE,
+				label: text
+			});
 			const at = `${text} @ ${width} × ${scale}`;
-			const labelBox = label.getBoundingClientRect();
-			const markBox = mark.getBoundingClientRect();
-			expect(markBox.width, at).toBeGreaterThan(0);
-			expect(markBox.left, at).toBeGreaterThanOrEqual(labelBox.right - 0.5);
+			// Whole: nothing clipped, and no word split across lines.
+			expect(label.scrollWidth, at).toBeLessThanOrEqual(label.clientWidth + 0.5);
+			expect(getComputedStyle(label).textOverflow, at).not.toBe('ellipsis');
+			const words = text.split(' ');
+			if (words.length === 1) {
+				expect(label.getBoundingClientRect().height, at).toBeLessThanOrEqual(oneLine(label) + 0.5);
+			}
+			// The fee is beside the label, or wholly under it — never over it.
+			const [labelBox, amountBox, markBox] = [label, amount, mark].map((el) =>
+				el.getBoundingClientRect()
+			);
+			const beside = amountBox.left >= labelBox.right - 0.5;
+			const under = amountBox.top >= labelBox.bottom - 0.5;
+			expect(beside || under, at).toBe(true);
+			// And the figures are never painted under the coin's mark.
 			for (const value of values) {
 				const box = value.getBoundingClientRect();
 				expect(box.left, at).toBeGreaterThanOrEqual(markBox.right - 0.5);
 				expect(box.right, at).toBeLessThanOrEqual(column.right + 0.5);
 				expect(box.height, at).toBeLessThanOrEqual(oneLine(value) + 0.5);
 			}
-			expect(labelBox.height, at).toBeLessThanOrEqual(oneLine(label) + 0.5);
 			expect(row.scrollWidth, at).toBeLessThanOrEqual(row.clientWidth);
 		}
 		document.documentElement.style.removeProperty('--text-scale');
 	});
 
-	it('gives the money up before the label: a label is elided only once the money has dropped', async () => {
-		// Every width on the way down: the label is never short of room while
-		// the money is still beside the coin — and there IS a width where the
-		// money has dropped and the label is still whole.
-		let droppedWithLabelWhole = false;
-		for (let width = 400; width >= 200; width -= 10) {
-			const { label, values } = await drawn(`${width}px`);
-			const [coin, money] = values.map((v) => v.getBoundingClientRect());
-			const dropped = money.top >= coin.bottom - 0.5;
-			const elided = label.scrollWidth > label.clientWidth;
-			if (elided) expect(dropped, `${width}px`).toBe(true);
-			if (dropped && !elided) droppedWithLabelWhole = true;
+	it('shares one line while there is room, and gives the label its own only when there is not', async () => {
+		// Every width on the way down: the label is never elided, and there IS a
+		// width where the two share the line and one where the fee drops.
+		let shared = false;
+		let dropped = false;
+		for (let width = 600; width >= 200; width -= 10) {
+			const { label, amount } = await drawn(`${width}px`);
+			expect(label.scrollWidth, `${width}px`).toBeLessThanOrEqual(label.clientWidth + 0.5);
+			const under =
+				amount.getBoundingClientRect().top >= label.getBoundingClientRect().bottom - 0.5;
+			if (under) dropped = true;
+			else shared = true;
 		}
-		expect(droppedWithLabelWhole).toBe(true);
-		// …and with room for everything, nothing is elided.
-		const wide = await drawn('600px', { ...FEE, label: 'Commissione di rete' });
-		expect(wide.label.scrollWidth).toBeLessThanOrEqual(wide.label.clientWidth);
+		expect(shared).toBe(true);
+		expect(dropped).toBe(true);
 	});
 
 	it('is one line when there is room, and draws no separator with no money to follow', async () => {
@@ -183,6 +198,37 @@ describe('FeeRow', () => {
 				).toBeLessThanOrEqual(1);
 				screen.unmount();
 			}
+		}
+	});
+
+	// 078 round 3: what is SEEN of the refresh is a small round icon button —
+	// a fixed circle at the card's vertical centre — while its tap area is the
+	// card's height. Nothing visible stretches with a two-line card.
+	it('draws the refresh as a fixed circle at the centre, whatever the card’s height', async () => {
+		let circle: number | null = null;
+		for (const [width, scale] of [
+			['360px', '1'],
+			['220px', '1.35']
+		] as const) {
+			const { screen, refresh } = await drawn(width, { ...FEE, label: 'Netzwerkgebühr' }, () => {});
+			screen.container.style.setProperty('--text-scale', scale);
+			await tick();
+			const turn = refresh.querySelector('.turn') as HTMLElement;
+			const [t, card] = [turn, refresh.parentElement as HTMLElement].map((el) =>
+				el.getBoundingClientRect()
+			);
+			expect(Math.abs(t.width - t.height), width).toBeLessThanOrEqual(0.5);
+			if (circle === null) circle = t.width;
+			else expect(t.width, 'the same circle at every size').toBe(circle);
+			expect(getComputedStyle(turn).borderRadius).not.toBe('0px');
+			expect(
+				Math.abs((t.top + t.bottom) / 2 - (card.top + card.bottom) / 2),
+				width
+			).toBeLessThanOrEqual(1);
+			// The button around it paints nothing of its own.
+			expect(getComputedStyle(refresh).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+			expect(refresh.hasAttribute('data-focus-inner')).toBe(true);
+			screen.unmount();
 		}
 	});
 

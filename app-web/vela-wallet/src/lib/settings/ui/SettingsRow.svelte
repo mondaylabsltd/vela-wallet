@@ -38,19 +38,29 @@
 		<span class="glyph"><Icon icon={UTILITY_ICONS[row.icon]} size="lg" /></span>
 	{/if}
 
-	<span class="text">
-		<span class="title">{row.title}</span>
-		{#if row.subtitle !== undefined}
-			<span class="subtitle">{row.subtitle}</span>
+	<!-- The title block and the value: side by side while both fit at their own
+	     widths; otherwise the value takes a line of its own under the title,
+	     with the row's whole width (iOS's `TitleAndValue`, the same rule). A
+	     title may wrap; it is never "…" — "Idi…" beside "Español (México) ·
+	     Sistema" at the largest text size was the founder's report. -->
+	<span class="body">
+		<span class="text">
+			<span class="title">{row.title}</span>
+			{#if row.subtitle !== undefined}
+				<span class="subtitle">{row.subtitle}</span>
+			{/if}
+		</span>
+		{#if row.badge !== undefined || row.value !== undefined}
+			<span class="aside">
+				{#if row.badge !== undefined}
+					<StatusPill pill={row.badge} />
+				{/if}
+				{#if row.value !== undefined}
+					<span class="value">{row.value}</span>
+				{/if}
+			</span>
 		{/if}
 	</span>
-
-	{#if row.badge !== undefined}
-		<StatusPill pill={row.badge} />
-	{/if}
-	{#if row.value !== undefined}
-		<span class="value">{row.value}</span>
-	{/if}
 
 	{#if trailing === 'chevron'}
 		<span class="trailing"><Icon icon={UTILITY_ICONS['chevron-right']} size="sm" /></span>
@@ -91,35 +101,55 @@
 		color: var(--color-fg-muted);
 	}
 
+	/* Two pieces that wrap as wholes: at their natural widths they share the
+	   line, the value at the far end (`space-between`); when they do not fit,
+	   the value drops to a line of its own — and alone on a line,
+	   `space-between` puts it at the START, under the title. */
+	.body {
+		display: flex;
+		flex: 1;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		column-gap: var(--space-lg);
+		row-gap: var(--space-xs);
+		min-width: 0;
+	}
+
 	.text {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-xs);
-		flex: 1;
+		flex: 0 1 auto;
 		min-width: 0;
 	}
 
+	/* Wraps — never "…". A word too long for the row breaks rather than spills. */
 	.title {
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
 	}
 
 	.subtitle {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
+	}
+
+	.aside {
+		display: flex;
+		align-items: center;
+		gap: var(--space-lg);
+		min-width: 0;
 	}
 
 	.value {
+		min-width: 0;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
 		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
+		overflow-wrap: break-word;
 	}
 
 	.trailing {

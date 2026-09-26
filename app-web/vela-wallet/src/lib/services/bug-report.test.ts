@@ -16,11 +16,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	AREA_OTHER,
+	MAX_SCREENSHOTS,
+	SCREENSHOT_TIMEOUT_MS,
 	buildBugReport,
 	environmentLines,
 	fingerprintOf,
 	prefilledIssueURL,
 	redact,
+	reportTimeoutMs,
 	sendBugReport,
 	type DeviceFacts,
 	type EnvironmentLabels
@@ -212,9 +215,122 @@ describe('the fallback road', () => {
 			ok: true,
 			number: 42,
 			url: 'https://github.com/x/y/issues/42',
-			deduped: true
+			deduped: true,
+			screenshotsDropped: 0
 		});
 	});
+});
+
+// 078 round 3: screenshots ride in the same JSON body, as plain base64.
+describe('screenshots', () => {
+	/** A tiny "JPEG": SOI + EOI, base64 — enough to ride the wire. */
+	const JPEG = btoa(String.fromCharCode(0xff, 0xd8, 0xff, 0xd9));
+
+	it('are ABSENT from a text-only report — the payload is what it always was', () => {
+		const none = buildBugReport({ what: 'x', area: AREA_OTHER, labels: LABELS, facts: FACTS });
+		const empty = buildBugReport({
+			what: 'x',
+			area: AREA_OTHER,
+			labels: LABELS,
+			facts: FACTS,
+			screenshots: []
+		});
+		expect('screenshots' in none).toBe(false);
+		expect('screenshots' in empty).toBe(false);
+	});
+
+	it('go in tile order, at most five, and never into the GitHub form', () => {
+		const shots = ['a', 'b', 'c', 'd', 'e', 'f'].map((tag) => `${JPEG}${tag}`);
+		const payload = buildBugReport({
+			what: 'x',
+			area: AREA_OTHER,
+			labels: LABELS,
+			facts: FACTS,
+			screenshots: shots
+		});
+		expect(payload.screenshots).toEqual(shots.slice(0, MAX_SCREENSHOTS));
+		expect(prefilledIssueURL(payload)).not.toContain(JPEG.slice(0, 4));
+	});
+
+	it('get the 30 s timeout; text alone keeps the usual one', () => {
+		const text = buildBugReport({ what: 'x', area: AREA_OTHER, labels: LABELS, facts: FACTS });
+		const withShots = { ...text, screenshots: [JPEG] };
+		expect(reportTimeoutMs(withShots)).toBe(SCREENSHOT_TIMEOUT_MS);
+		expect(reportTimeoutMs(text)).toBeLessThan(SCREENSHOT_TIMEOUT_MS);
+	});
+
+	it('do not count against the text cap — images have caps of their own', async () => {
+		let sent = '';
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_url: string, init: RequestInit) => {
+				sent = String(init.body);
+				return new Response(JSON.stringify({ number: 7, url: 'https://github.com/x/y/issues/7' }), {
+					status: 200
+				});
+			})
+		);
+		const big = 'A'.repeat(200_000);
+		const payload = {
+			...buildBugReport({ what: 'x', area: AREA_OTHER, labels: LABELS, facts: FACTS }),
+			screenshots: [big]
+		};
+		const outcome = await sendBugReport(payload, 'https://example.test/api/bug-report');
+		expect(outcome.ok).toBe(true);
+		expect(JSON.parse(sent).screenshots).toEqual([big]);
+	});
+
+	it('says how many images the endpoint could not store', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							number: 9,
+							url: 'https://github.com/x/y/issues/9',
+							deduped: false,
+							screenshots: 1,
+							screenshotsDropped: 1
+						}),
+						{ status: 200 }
+					)
+			)
+		);
+		const payload = buildBugReport({
+			what: 'x',
+			area: AREA_OTHER,
+			labels: LABELS,
+			facts: FACTS,
+			screenshots: [JPEG, JPEG]
+		});
+		const outcome = await sendBugReport(payload, 'https://example.test/api/bug-report');
+		expect(outcome).toMatchObject({ ok: true, number: 9, screenshotsDropped: 1 });
+	});
+
+	it.each([
+		[413, 'too_large'],
+		[415, 'rejected'],
+		[400, 'rejected']
+	] as const)(
+		'an image refusal (%i) falls back to the form like any other',
+		async (status, reason) => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async () => new Response('{}', { status }))
+			);
+			const payload = buildBugReport({
+				what: 'x',
+				area: AREA_OTHER,
+				labels: LABELS,
+				facts: FACTS,
+				screenshots: [JPEG]
+			});
+			const outcome = await sendBugReport(payload, 'https://example.test/api/bug-report');
+			expect(outcome).toMatchObject({ ok: false, reason });
+			if (!outcome.ok) expect(outcome.fallbackUrl).toContain('what=x');
+		}
+	);
 });
 
 describe('the dedup marker', () => {

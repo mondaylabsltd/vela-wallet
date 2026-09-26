@@ -236,6 +236,26 @@ const WEB_ADDITIONS = [
 		'078 round 2 (founder, 2026-09-26): the phone tab bar is icons only — the labels truncated in es/pt/de/it — so its glyph steps up from icon-xl (26) to 28, the size all four shells draw'
 	],
 	[
+		'size-screenshotTile',
+		'72px',
+		'078 round 3: one attached screenshot in the bug report — a square tile, the same on all three shells. The LARGEST a tile is: v2 keeps all five in one row, so a tile is min(72, (row − 4 gaps) / 5)'
+	],
+	[
+		'size-screenshotBadge',
+		'22px',
+		"078 round 3: the tile's remove badge — a small visible circle over the corner; its tap area is larger"
+	],
+	[
+		'size-screenshotAdd',
+		'56px',
+		'078 round 3: the empty screenshots section’s one full-width add target'
+	],
+	[
+		'layout-successMeasure',
+		'300px',
+		'078 feedback v2 (A7): the filed report’s thank-you body — centred, balanced, and no wider than this (times the text scale), so it reads as a note rather than a paragraph across the panel'
+	],
+	[
 		'layout-tabBarHeight',
 		'56px',
 		'078 round 2: the icon-only phone tab bar, without the safe area — the bar lost its label line, so it is no longer the 86 dock the export names'

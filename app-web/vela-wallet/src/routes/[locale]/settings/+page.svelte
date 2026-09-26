@@ -237,7 +237,11 @@
 	 * URL — by the form's FIELD IDS, because `template=bug.yml` makes GitHub
 	 * ignore `&body=` entirely.
 	 */
-	async function sendFeedback(report: { what: string; steps: string }): Promise<void> {
+	async function sendFeedback(report: {
+		what: string;
+		steps: string;
+		screenshots: string[];
+	}): Promise<void> {
 		if (feedbackSending) return;
 		feedbackSending = true;
 		feedbackResult = undefined;
@@ -246,13 +250,24 @@
 			steps: report.steps,
 			area: AREA_OTHER,
 			labels: feedbackLabels(m),
-			facts: deviceFacts
+			facts: deviceFacts,
+			screenshots: report.screenshots
 		});
 		const outcome = await sendBugReport(payload);
 		feedbackSending = false;
 		feedbackResult = outcome.ok
-			? { filed: true, number: outcome.number, url: outcome.url, deduped: outcome.deduped }
-			: { filed: false, fallbackUrl: outcome.fallbackUrl };
+			? {
+					filed: true,
+					number: outcome.number,
+					url: outcome.url,
+					deduped: outcome.deduped,
+					screenshotsDropped: outcome.screenshotsDropped
+				}
+			: {
+					filed: false,
+					fallbackUrl: outcome.fallbackUrl,
+					withScreenshots: report.screenshots.length > 0
+				};
 	}
 
 	// --- The Ethereum backup row (spec 062) ---------------------------------
@@ -713,6 +728,7 @@
 				onfeedbacksend={(report) => void sendFeedback(report)}
 				{feedbackSending}
 				{feedbackResult}
+				onfeedbackdone={() => (feedbackResult = undefined)}
 				onethereumbackup={startBackup}
 			/>
 		</div>
@@ -735,6 +751,7 @@
 				onfeedbacksend={(report) => void sendFeedback(report)}
 				{feedbackSending}
 				{feedbackResult}
+				onfeedbackdone={() => (feedbackResult = undefined)}
 				onethereumbackup={startBackup}
 			/>
 		</main>

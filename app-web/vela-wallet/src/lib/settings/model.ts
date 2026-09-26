@@ -506,11 +506,45 @@ export interface FeedbackModel {
 	send: string;
 	/** The button's own busy label — busy is never disabled (founder's rule). */
 	sending: string;
-	/** Filed: the two bodies carry `{{number}}`. */
-	success: { title: string; bodyNew: string; bodyDeduped: string; view: string };
-	/** The endpoint could not; the prefilled form still can. */
-	fallback: { title: string; body: string; open: string };
+	/**
+	 * Filed: the two bodies carry `{{number}}`. `dropped` is said when the
+	 * report filed but some screenshots could not be stored; `done` closes.
+	 */
+	success: {
+		title: string;
+		bodyNew: string;
+		bodyDeduped: string;
+		view: string;
+		dropped: string;
+		done: string;
+	};
+	/**
+	 * The endpoint could not; the prefilled form still can. `screenshots` is
+	 * the line added when images were attached — the form cannot carry them.
+	 */
+	/**
+	 * The endpoint could not file it: `title` and `body` are separate lines
+	 * (never glued with a dash), `screenshots` a paragraph of its own, and
+	 * `retry` (common.tryAgain) is what the send button reads in this state.
+	 */
+	fallback: { title: string; body: string; open: string; screenshots: string; retry: string };
 	githubLink: string;
+	/**
+	 * Screenshots (078 round 3). Copy only; which images are attached is the
+	 * sheet's own state until Send. `hint` and `limit` are filled with the
+	 * cap; `remove` keeps `{{index}}` (1-based) for each tile.
+	 */
+	screenshots: {
+		label: string;
+		add: string;
+		hint: string;
+		public: string;
+		remove: string;
+		limit: string;
+		unsupported: string;
+		dropHint: string;
+		max: number;
+	};
 }
 
 /**
@@ -527,8 +561,12 @@ export interface FeedbackResult {
 	number?: number;
 	url?: string;
 	deduped?: boolean;
+	/** Filed, but this many screenshots could not be stored. */
+	screenshotsDropped?: number;
 	/** Not filed: the prefilled form, with the person's own words in it. */
 	fallbackUrl?: string;
+	/** The send carried screenshots — the fallback says they cannot follow. */
+	withScreenshots?: boolean;
 }
 
 /** SR1: the amber "these networks are down" banner and its per-chain fixes. */

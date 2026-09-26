@@ -626,9 +626,12 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					// "Ethereum · Balance 0.043968": the balance through the SAME
 					// call the asset list's row makes for this token, so the figure
 					// here and the figure on the home row are one figure.
+					// The balance phrase in one unbreakable piece: when the line
+					// wraps at the largest text size it breaks after "·", never
+					// between "Balance" and its figure.
 					detail: `${chainName(token.chain_id)} · ${fill(m['send.balanceLabel'], {
 						amount: tokenAmountText(token.balance)
-					})}`,
+					}).replace(/ /g, '\u00a0')}`,
 					// `Max` fills the SINGLE amount. In a split there is no single
 					// amount — the button wrote a field nobody could see and changed
 					// nothing on screen — so a split does not offer it.

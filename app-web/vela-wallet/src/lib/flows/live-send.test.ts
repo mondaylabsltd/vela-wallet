@@ -470,7 +470,12 @@ describe('one figure for one balance (spec 078)', () => {
 			false
 		);
 		expect(row.balance).toBe('0.043968');
+		// The balance phrase is one unbreakable piece (078 round 3): a wrap at
+		// the largest size falls after "·", never inside "Balance 0.043968".
 		expect(model.token?.detail).toBe(
+			`Ethereum · ${fill(m['send.balanceLabel'], { amount: row.balance }).replace(/ /g, '\u00a0')}`
+		);
+		expect(model.token?.detail?.replace(/\u00a0/g, ' ')).toBe(
 			`Ethereum · ${fill(m['send.balanceLabel'], { amount: row.balance })}`
 		);
 	});

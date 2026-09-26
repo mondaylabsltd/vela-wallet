@@ -50,6 +50,7 @@ export {
 	MOBILE_SETTINGS_STATES as MOBILE_STATES
 } from './model';
 import { BUILD_COMMIT, BUILD_VERSION } from '$lib/build/info';
+import { MAX_SCREENSHOTS } from '$lib/services/bug-report';
 
 /** The signed-in account the mocks draw. Shared with the wallet fixtures. */
 export const ACCOUNT_NAME = '大表哥';
@@ -864,14 +865,29 @@ function feedback(m: SettingsMessages): FeedbackModel {
 			title: m.bugReport.successTitle,
 			bodyNew: m.bugReport.successBodyNew,
 			bodyDeduped: m.bugReport.successBodyDeduped,
-			view: m.bugReport.viewIssue
+			view: m.bugReport.viewIssue,
+			dropped: m.bugReport.screenshotsDropped,
+			done: m.bugReport.done
 		},
 		fallback: {
 			title: m.bugReport.fallbackTitle,
 			body: m.bugReport.fallbackBody,
-			open: m.bugReport.openGithub
+			open: m.bugReport.openGithub,
+			screenshots: m.bugReport.fallbackScreenshots,
+			retry: m.common.tryAgain
 		},
-		githubLink: m.bugReport.openGithubForm
+		githubLink: m.bugReport.openGithubForm,
+		screenshots: {
+			label: m.bugReport.screenshotsLabel,
+			add: m.bugReport.addScreenshots,
+			hint: fill(m.bugReport.screenshotsHint, { max: MAX_SCREENSHOTS }),
+			public: m.bugReport.screenshotsPublic,
+			remove: m.bugReport.removeScreenshot,
+			limit: fill(m.bugReport.screenshotsLimit, { max: MAX_SCREENSHOTS }),
+			unsupported: m.bugReport.screenshotUnsupported,
+			dropHint: m.bugReport.dropHint,
+			max: MAX_SCREENSHOTS
+		}
 	};
 }
 

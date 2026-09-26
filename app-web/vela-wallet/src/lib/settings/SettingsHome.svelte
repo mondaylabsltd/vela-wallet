@@ -96,7 +96,9 @@
 		 * `onsend`, and nothing ever passed one, so the button was inert on the
 		 * real screen while the sheet promised a report was being filed.
 		 */
-		onfeedbacksend?: (report: { what: string; steps: string }) => void;
+		onfeedbacksend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		/** 完成 on the filed report: the route forgets the outcome, so the next report starts fresh. */
+		onfeedbackdone?: () => void;
 		/** The route is waiting on the bug-report endpoint. */
 		feedbackSending?: boolean;
 		/** How the last send ended: filed (with its issue) or fell back. */
@@ -120,6 +122,7 @@
 		onaccountsopen,
 		onclearcaches,
 		onfeedbacksend,
+		onfeedbackdone,
 		feedbackSending = false,
 		feedbackResult
 	}: Props = $props();
@@ -272,7 +275,9 @@
 			case 'fee-speed':
 				return model.feeSpeedSheet.subtitle;
 			case 'feedback':
-				return model.feedback.subtitle;
+				// Once filed, the sheet is a thank-you: "tell us what happened"
+				// above it would ask for what was just given.
+				return feedbackResult?.filed === true ? undefined : model.feedback.subtitle;
 			default:
 				return undefined;
 		}
@@ -566,6 +571,10 @@
 						onsend={onfeedbacksend}
 						sending={feedbackSending}
 						result={feedbackResult}
+						ondone={() => {
+							onfeedbackdone?.();
+							close();
+						}}
 					/>
 				{:else if overlay === 'rpc-fix'}
 					<RpcFixBody panel={model.rpcFix} onprimary={close} />

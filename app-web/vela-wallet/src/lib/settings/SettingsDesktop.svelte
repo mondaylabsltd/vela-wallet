@@ -78,7 +78,9 @@
 		/** "Clear all caches" was confirmed. Absent in the gallery. */
 		onclearcaches?: () => void;
 		/** 发送 in the report panel (spec 081 FR-016). Absent in the gallery. */
-		onfeedbacksend?: (report: { what: string; steps: string }) => void;
+		onfeedbacksend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		/** 完成 on the filed report: the route forgets the outcome, so the next report starts fresh. */
+		onfeedbackdone?: () => void;
 		feedbackSending?: boolean;
 		feedbackResult?: FeedbackResult;
 	}
@@ -99,6 +101,7 @@
 		onstorageclear,
 		onclearcaches,
 		onfeedbacksend,
+		onfeedbackdone,
 		feedbackSending = false,
 		feedbackResult
 	}: Props = $props();
@@ -135,7 +138,11 @@
 			case 'storage':
 				return { title: model.storage.title, description: model.storage.subtitle };
 			case 'feedback':
-				return { title: model.feedback.title, description: model.feedback.subtitle };
+				// Filed = a thank-you; the "tell us what happened" line goes with the form.
+				return {
+					title: model.feedback.title,
+					description: feedbackResult?.filed === true ? undefined : model.feedback.subtitle
+				};
 			case 'about':
 				return { title: model.about.title, description: undefined };
 			default:
@@ -379,6 +386,7 @@
 					onsend={onfeedbacksend}
 					sending={feedbackSending}
 					result={feedbackResult}
+					ondone={onfeedbackdone}
 				/>
 			{:else if page === 'about'}
 				<AboutPanel panel={model.about} layout="inline" />

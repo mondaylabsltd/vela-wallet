@@ -314,6 +314,21 @@ export interface SettingsMessages {
 		fallbackBody: string;
 		openGithub: string;
 		openGithubForm: string;
+		/** Screenshots (078 round 3). `{{max}}` = 5, `{{index}}` 1-based. */
+		screenshotsLabel: string;
+		addScreenshots: string;
+		screenshotsHint: string;
+		screenshotsPublic: string;
+		removeScreenshot: string;
+		screenshotsLimit: string;
+		screenshotUnsupported: string;
+		/** Web only: the section is a drop target and paste adds images. */
+		dropHint: string;
+		/** Filed, but some images could not be stored. */
+		screenshotsDropped: string;
+		/** Fell back: the GitHub form cannot carry the images. */
+		fallbackScreenshots: string;
+		done: string;
 	};
 	rescue: {
 		/** Templates with `{{name}}` / `{{count}}`. */
@@ -654,6 +669,17 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.fallbackBody',
 	'componentsUi.bugReport.openGithub',
 	'componentsUi.bugReport.openGithubForm',
+	'componentsUi.bugReport.screenshotsLabel',
+	'componentsUi.bugReport.addScreenshots',
+	'componentsUi.bugReport.screenshotsHint',
+	'componentsUi.bugReport.screenshotsPublic',
+	'componentsUi.bugReport.removeScreenshot',
+	'componentsUi.bugReport.screenshotsLimit',
+	'componentsUi.bugReport.screenshotUnsupported',
+	'componentsUi.bugReport.dropHint',
+	'componentsUi.bugReport.screenshotsDropped',
+	'componentsUi.bugReport.fallbackScreenshots',
+	'componentsUi.bugReport.done',
 	'assets.rpcUnavailableSingle',
 	'assets.rpcUnavailableMultiple',
 	'assets.rpcFix',

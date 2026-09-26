@@ -152,7 +152,15 @@
 		color: var(--color-fg-base);
 	}
 
+	/* The scroll box spans the whole sheet, its content still on the gutter
+	   column: whatever reaches a little past the column — a tap area around
+	   a corner badge, a focus ring — lands in the gutter, still inside this
+	   box, instead of being cut off or scrolling the sheet sideways. The
+	   sideways axis clips; a sheet never scrolls horizontally. */
 	.content {
+		margin-inline: calc(-1 * var(--layout-screenPaddingX));
+		padding-inline: var(--layout-screenPaddingX);
+		overflow-x: clip;
 		overflow-y: auto;
 	}
 </style>

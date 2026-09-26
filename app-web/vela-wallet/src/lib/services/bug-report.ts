@@ -62,8 +62,24 @@ export const BUG_REPORT_ENDPOINT = 'https://getvela.app/api/bug-report';
 /** The repository's issue form, for the fallback road. */
 export const GITHUB_ISSUE_FORM = 'https://github.com/mondaylabsltd/vela-wallet/issues/new';
 
-/** The endpoint's own cap (`MAX_BODY_CHARS`), honoured before the request. */
+/**
+ * The endpoint's own cap (`MAX_BODY_CHARS`), honoured before the request. It
+ * counts the TEXT of a report — the screenshots have caps of their own.
+ */
 export const MAX_REPORT_CHARS = 16_000;
+
+/** At most this many screenshots per report (the endpoint's cap). */
+export const MAX_SCREENSHOTS = 5;
+
+/** Each screenshot, decoded, at most this many bytes (the endpoint's cap). */
+export const MAX_SCREENSHOT_BYTES = 2_000_000;
+
+/**
+ * How long a send may take. Text alone keeps the REST timeout every other
+ * relay call has; a report carrying up to five images gets 30 s, because a
+ * few megabytes on a slow uplink is not a dead endpoint.
+ */
+export const SCREENSHOT_TIMEOUT_MS = 30_000;
 
 /**
  * The issue form's `area` dropdown, spelled exactly as `.github/ISSUE_TEMPLATE/
@@ -77,8 +93,9 @@ export const MAX_REPORT_CHARS = 16_000;
 export const AREA_OTHER = 'Other (explain above)';
 
 /**
- * The five fields the endpoint accepts. Nothing else is sent, and this type is
- * the reason a sixth cannot appear by accident.
+ * The five text fields the endpoint accepts, and the images the person chose
+ * to attach. Nothing else is sent, and this type is the reason another field
+ * cannot appear by accident.
  */
 export interface BugReportPayload {
 	/** What the person typed. They wrote it; they can see it. */
@@ -91,6 +108,14 @@ export interface BugReportPayload {
 	environment: string;
 	/** Dedup marker: stable for the same complaint, meaningless on its own. */
 	fingerprint: string;
+	/**
+	 * Up to {@link MAX_SCREENSHOTS} images the person attached and saw as
+	 * tiles, in tile order: plain base64 (no `data:` prefix) of JPEGs this
+	 * device re-encoded — which is what strips their EXIF and location
+	 * (`screenshot-prep.ts`). ABSENT, not empty, when there are none, so a
+	 * text-only report is byte-for-byte what it always was.
+	 */
+	screenshots?: string[];
 }
 
 /**
@@ -193,6 +218,8 @@ export interface BugReportDraft {
 	area: string;
 	labels: EnvironmentLabels;
 	facts: DeviceFacts;
+	/** Base64 JPEGs from `screenshot-prep.ts`, in tile order. */
+	screenshots?: readonly string[];
 }
 
 /** The whole payload, from the allowlist and nothing else. */
@@ -200,13 +227,20 @@ export function buildBugReport(draft: BugReportDraft): BugReportPayload {
 	const what = draft.what.trim();
 	const steps = (draft.steps ?? '').trim();
 	const environment = environmentLines(draft.labels, draft.facts).join('\n');
+	const shots = (draft.screenshots ?? []).slice(0, MAX_SCREENSHOTS);
 	return {
 		what,
 		steps,
 		area: draft.area,
 		environment,
-		fingerprint: fingerprintOf(what, draft.area, draft.facts.version)
+		fingerprint: fingerprintOf(what, draft.area, draft.facts.version),
+		...(shots.length > 0 ? { screenshots: [...shots] } : {})
 	};
+}
+
+/** How long {@link sendBugReport} waits for this payload. */
+export function reportTimeoutMs(payload: BugReportPayload): number {
+	return (payload.screenshots?.length ?? 0) > 0 ? SCREENSHOT_TIMEOUT_MS : NET_TIMEOUTS.bundlerRest;
 }
 
 /**
@@ -236,6 +270,8 @@ export interface BugReportFiled {
 	number: number;
 	url: string;
 	deduped: boolean;
+	/** Screenshots the endpoint could not store; the report filed without them. */
+	screenshotsDropped: number;
 }
 
 /**
@@ -264,19 +300,22 @@ export async function sendBugReport(
 	endpoint: string = BUG_REPORT_ENDPOINT
 ): Promise<BugReportOutcome> {
 	const fallbackUrl = prefilledIssueURL(payload);
-	const body = JSON.stringify(payload);
 	// Checked here as well as there: a 413 round trip costs the person a
-	// spinner to learn what this line knows before the request leaves.
-	if (body.length > MAX_REPORT_CHARS) {
+	// spinner to learn what this line knows before the request leaves. The
+	// cap is on the TEXT; the screenshots are capped by count and size.
+	const { screenshots: _images, ...text } = payload;
+	void _images;
+	if (JSON.stringify(text).length > MAX_REPORT_CHARS) {
 		return { ok: false, reason: 'too_large', fallbackUrl };
 	}
+	const body = JSON.stringify(payload);
 
 	let response: Response;
 	try {
 		response = await fetchWithTimeout(
 			endpoint,
 			{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body },
-			{ timeoutMs: NET_TIMEOUTS.bundlerRest }
+			{ timeoutMs: reportTimeoutMs(payload) }
 		);
 	} catch (error) {
 		console.error('[bug-report]', isTimeoutError(error) ? 'timed out' : 'network error');
@@ -301,11 +340,20 @@ export async function sendBugReport(
 			number?: number;
 			url?: string;
 			deduped?: boolean;
+			screenshotsDropped?: number;
 		};
 		if (typeof filed.number !== 'number' || typeof filed.url !== 'string') {
 			return { ok: false, reason: 'rejected', fallbackUrl };
 		}
-		return { ok: true, number: filed.number, url: filed.url, deduped: filed.deduped === true };
+		const dropped = filed.screenshotsDropped;
+		return {
+			ok: true,
+			number: filed.number,
+			url: filed.url,
+			deduped: filed.deduped === true,
+			screenshotsDropped:
+				typeof dropped === 'number' && Number.isFinite(dropped) && dropped > 0 ? dropped : 0
+		};
 	} catch {
 		// A 200 this client cannot read is not a filed report it can point at.
 		return { ok: false, reason: 'rejected', fallbackUrl };

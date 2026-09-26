@@ -558,7 +558,18 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			fallbackTitle: k('componentsUi.bugReport.fallbackTitle'),
 			fallbackBody: k('componentsUi.bugReport.fallbackBody'),
 			openGithub: k('componentsUi.bugReport.openGithub'),
-			openGithubForm: k('componentsUi.bugReport.openGithubForm')
+			openGithubForm: k('componentsUi.bugReport.openGithubForm'),
+			screenshotsLabel: k('componentsUi.bugReport.screenshotsLabel'),
+			addScreenshots: k('componentsUi.bugReport.addScreenshots'),
+			screenshotsHint: k('componentsUi.bugReport.screenshotsHint'),
+			screenshotsPublic: k('componentsUi.bugReport.screenshotsPublic'),
+			removeScreenshot: k('componentsUi.bugReport.removeScreenshot'),
+			screenshotsLimit: k('componentsUi.bugReport.screenshotsLimit'),
+			screenshotUnsupported: k('componentsUi.bugReport.screenshotUnsupported'),
+			dropHint: k('componentsUi.bugReport.dropHint'),
+			screenshotsDropped: k('componentsUi.bugReport.screenshotsDropped'),
+			fallbackScreenshots: k('componentsUi.bugReport.fallbackScreenshots'),
+			done: k('componentsUi.bugReport.done')
 		},
 		rescue: {
 			rpcUnavailableSingle: k('assets.rpcUnavailableSingle'),

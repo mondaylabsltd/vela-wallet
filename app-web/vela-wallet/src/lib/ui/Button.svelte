@@ -31,6 +31,13 @@
 		 * ActivityIndicator replacing text").
 		 */
 		loading?: boolean;
+		/**
+		 * Opt-in: while `loading`, show this text BESIDE the spinner instead of
+		 * a bare spinner where the label was — for a wait long enough to name
+		 * (a bug report carrying screenshots: "Sending…"). Absent = the rule
+		 * above, unchanged.
+		 */
+		busyLabel?: string;
 		onclick?: () => void;
 		children: Snippet;
 	}
@@ -42,6 +49,7 @@
 		external = false,
 		disabled = false,
 		loading = false,
+		busyLabel,
 		onclick,
 		children
 	}: Props = $props();
@@ -65,10 +73,14 @@
 		{onclick}
 		type="button"
 	>
-		<!-- Hidden rather than removed: the label goes on holding the button's
-		     width and height, so the spinner's arrival reflows nothing. -->
-		<span class="label">{@render children()}</span>
-		{#if loading}<span class="spinner" aria-hidden="true"></span>{/if}
+		{#if loading && busyLabel !== undefined}
+			<span class="busy"><span class="spinner inline" aria-hidden="true"></span>{busyLabel}</span>
+		{:else}
+			<!-- Hidden rather than removed: the label goes on holding the button's
+			     width and height, so the spinner's arrival reflows nothing. -->
+			<span class="label">{@render children()}</span>
+			{#if loading}<span class="spinner" aria-hidden="true"></span>{/if}
+		{/if}
 	</button>
 {/if}
 
@@ -140,6 +152,18 @@
 		/* One revolution, slower than any transition in the system: this is a
 		   wait, not a state change (the desktop spinner's 800ms, same reason). */
 		animation: spin 800ms linear infinite;
+	}
+
+	/* `busyLabel`: the spinner in the line, beside its words. */
+	.busy {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-md);
+	}
+
+	.spinner.inline {
+		position: static;
+		flex: none;
 	}
 
 	@keyframes spin {

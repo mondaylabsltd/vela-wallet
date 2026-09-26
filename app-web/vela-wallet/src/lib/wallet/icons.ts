@@ -183,7 +183,9 @@ export type UtilityIconId =
 	| 'info'
 	| 'log-out'
 	| 'message-square-text'
-	| 'circle-alert';
+	| 'circle-alert'
+	// 078 round 3: the bug report's screenshots
+	| 'image-plus';
 
 export const UTILITY_ICONS: Record<UtilityIconId, IconDef> = {
 	'arrow-down-left': {
@@ -453,6 +455,17 @@ export const UTILITY_ICONS: Record<UtilityIconId, IconDef> = {
 			{ tag: 'rect', width: '18', height: '18', x: '3', y: '3', rx: '2' },
 			{ tag: 'circle', cx: '9', cy: '9', r: '2' },
 			{ tag: 'path', d: 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21' }
+		]
+	},
+	// lucide `image-plus`: the frame opened at its top-right for the plus.
+	'image-plus': {
+		style: 'stroke',
+		elements: [
+			{ tag: 'path', d: 'M16 5h6' },
+			{ tag: 'path', d: 'M19 2v6' },
+			{ tag: 'path', d: 'M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5' },
+			{ tag: 'path', d: 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21' },
+			{ tag: 'circle', cx: '9', cy: '9', r: '2' }
 		]
 	},
 	zap: {
