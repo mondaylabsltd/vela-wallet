@@ -866,6 +866,7 @@ mod tests {
                     signer_origin: None,
                 })
                 .collect(),
+            signed_in_with: None,
         }
     }
 

@@ -966,6 +966,9 @@ fn the_wallet_signs_with_its_first_key_over_the_route_it_was_made_on() {
                 Some(vela_core::app::SignInKey {
                     credential_id: CRED.to_owned(),
                     method: KeyMethod::Platform,
+                    // What the fixture authenticator reported when it made
+                    // the key.
+                    transports: "hybrid,internal".to_owned(),
                     signer_origin: None,
                 }),
                 "key 1 was made on this device; the security key joined after"

@@ -670,6 +670,7 @@ fn sign_in_key(model: &Model) -> Option<SignInKey> {
     Some(SignInKey {
         credential_id: assertion.credential_id.clone(),
         method: model.method,
+        transports: transports_from_attachment(&assertion.authenticator_attachment),
         signer_origin: assertion.signer_origin.clone(),
     })
 }

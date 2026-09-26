@@ -39,13 +39,12 @@ pub struct SettingsStrings {
     pub nav_fee_speed: SharedString,
     pub fee_speed_title: SharedString,
     pub fee_speed_subtitle: SharedString,
-    /// "Sign with" (spec 071): the nav row is the page's title; the sentence
-    /// under it; the choices in the core's order with the Trusted Signer's
-    /// line; and the Trusted Signer page's section.
+    /// The Trusted Signer (spec 071): the nav row is the page's title — and
+    /// the caption of a key that lives behind a page — the sentence under it,
+    /// and the page's section. How a signature is routed is not a setting
+    /// (founder, 2026-09-26), so the page no longer offers a "Sign with".
     pub nav_signing: SharedString,
     pub signing_subtitle: SharedString,
-    pub sign_with_options: Vec<(&'static str, SharedString)>,
-    pub trusted_signer_body: SharedString,
     pub signer_page_title: SharedString,
     pub signer_page_subtitle: SharedString,
     pub signer_page_official: SharedString,
@@ -318,13 +317,8 @@ impl SettingsStrings {
             nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
             fee_speed_title: s("settings.feeSpeed.title"),
             fee_speed_subtitle: s("settings.feeSpeed.subtitle"),
-            nav_signing: s("settings.signing.title"),
-            signing_subtitle: s("settings.signing.subtitle"),
-            sign_with_options: vela_core::wallet_keys::SIGN_METHODS
-                .iter()
-                .map(|method| (*method, s(crate::signing::sign_method_key(method))))
-                .collect(),
-            trusted_signer_body: s("componentsUi.signing.trustedSignerBody"),
+            nav_signing: s("componentsUi.signing.trustedSignerTitle"),
+            signing_subtitle: s("componentsUi.signing.trustedSignerBody"),
             signer_page_title: s("settings.signing.pageTitle"),
             signer_page_subtitle: s("settings.signing.pageSubtitle"),
             signer_page_official: s("settings.signing.pageOfficial"),
@@ -591,17 +585,15 @@ mod tests {
         }
     }
 
-    /// The "Sign with" page's words (spec 071), every one of them a key the
-    /// corpus already carries in fifteen languages — and its choices are the
-    /// core's five, in the core's order.
+    /// The Trusted Signer page's words (spec 071), every one of them a key the
+    /// corpus already carries in fifteen languages.
     #[test]
-    fn the_sign_with_words_resolve() {
+    fn the_trusted_signer_words_resolve() {
         let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
         for (value, key) in [
-            (&s.nav_signing, "settings.signing.title"),
-            (&s.signing_subtitle, "settings.signing.subtitle"),
+            (&s.nav_signing, "componentsUi.signing.trustedSignerTitle"),
             (
-                &s.trusted_signer_body,
+                &s.signing_subtitle,
                 "componentsUi.signing.trustedSignerBody",
             ),
             (&s.signer_page_title, "settings.signing.pageTitle"),
@@ -616,7 +608,5 @@ mod tests {
             assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
             assert!(!value.is_empty(), "`{key}` resolved empty");
         }
-        let ids: Vec<&str> = s.sign_with_options.iter().map(|(id, _)| *id).collect();
-        assert_eq!(ids, vela_core::wallet_keys::SIGN_METHODS);
     }
 }
