@@ -7,4 +7,16 @@ export type FeeEvent = { "type": "quote_requested", chain_id: number, account: s
  * `None` = native. On Tempo, `None` means the default TIP-20
  * (`estimateTempoFee`'s `gasFeeToken ?? TEMPO_DEFAULT_FEE_TOKEN`).
  */
-fee_token: string | null, } | { "type": "select_fee_asset", token: string | null, } | { "type": "requote" } | { "type": "leave_confirm" } | { "type": "chain_changed", chain_id: number, } | { "type": "quote_expired" };
+fee_token: string | null, 
+/**
+ * Nobody has chosen a fee coin yet, so the machine chooses one that
+ * can pay — see [`auto_pick`]. `fee_token` is then only where the
+ * search falls back to when no coin can. `false` = `fee_token` is
+ * the person's own pick and is priced exactly as asked.
+ *
+ * The default used to be the native coin whatever the account held:
+ * a wallet with 0 ETH and 500 USDC was quoted in ETH, refused, and
+ * sent to the picker to fix what the machine could have seen.
+ * `#[serde(default)]`: a shell that does not send it keeps that.
+ */
+auto_fee_token: boolean, } | { "type": "select_fee_asset", token: string | null, } | { "type": "requote" } | { "type": "leave_confirm" } | { "type": "chain_changed", chain_id: number, } | { "type": "quote_expired" };

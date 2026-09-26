@@ -53,9 +53,10 @@ use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
 
 use super::fee_policy::{
-    encode_erc20_transfer, from_base_units, max_native_sendable, reserve_fee_token,
-    reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset, FeeAssetView, FeeCall,
-    FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec,
+    encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable,
+    reserve_fee_token, reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset,
+    FeeAssetView, FeeCall, FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec,
+    TEMPO_DEFAULT_FEE_TOKEN,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
 
@@ -81,6 +82,11 @@ pub const ESTIMATE_TIMEOUT_MS: u32 = 15_000;
 /// every digit; short enough that the fee is on the row before their thumb
 /// reaches Continue.
 pub const FORM_ESTIMATE_DEBOUNCE_MS: u32 = 400;
+
+/// How many chains the picker reads fees ahead for ([`SendOperation::PrewarmFees`]):
+/// enough for where nearly everybody's money is, few enough that opening Send
+/// is not a burst of a dozen relay calls.
+pub const PREWARM_CHAINS: usize = 4;
 
 /// The literal fallback in `t('send.warnNeedGas', { sym: ... ?? 'gas token' })`
 /// stays in the shell: the core reports `symbol: None` and the shell words it.
@@ -827,10 +833,31 @@ pub enum SendOperation {
         batch: Option<Vec<FeeCall>>,
         gas_fee_token: Option<String>,
         public_key_hex: Option<String>,
+        /// Nobody has chosen the fee coin on this form: the shell passes it
+        /// on as `fee_policy`'s `auto_fee_token`, the fee machine pays in a
+        /// coin that can, and the estimate's `fee_asset` says which. Every
+        /// reader downstream — Max, the balance gates, the submit — takes
+        /// the coin from that estimate, never from `gas_fee_token`.
+        #[serde(default)]
+        auto_fee_token: bool,
     },
     /// `probeTreasury(chainId)`.
     ProbeTreasury {
         chain_id: u32,
+    },
+    /// Read ahead, into the shell's own fee caches, what a quote on each of
+    /// these chains will need — the deployment read, the gas signals, the
+    /// relay's gas quote, the in-band rows (Tempo: the fee recipient). Nothing
+    /// is priced and nothing comes back: answer `FeesPrewarmed` at once.
+    ///
+    /// Asked when the picker opens, for the chains the person holds value on
+    /// (highest first, at most [`PREWARM_CHAINS`]). Measured on the live relay
+    /// those reads are 3–5 s of a 4.5–6 s first quote and cacheable for 8–15 s;
+    /// read while the person is choosing, the quote a pick starts is left
+    /// with only its simulation.
+    PrewarmFees {
+        account: String,
+        chain_ids: Vec<u32>,
     },
     /// `findAccountByCredentialId(id)` → the stored public key.
     LoadAccountCredential {
@@ -916,6 +943,8 @@ pub enum SendShellResult {
         chains: Vec<SendChainInfo>,
     },
     TokenCacheCleared,
+    /// `PrewarmFees` was taken; the reads run on without the core.
+    FeesPrewarmed,
     TokenMetadata {
         meta: Option<SendTokenMeta>,
     },
@@ -1003,6 +1032,19 @@ pub enum Event {
     /// A progressive `fetchTokens` chunk (`onProgress`) — display-only, never
     /// consulted by lock resolution.
     TokensPartial {
+        tokens: Vec<SendToken>,
+    },
+    /// The asset list's holdings changed while this screen is open.
+    ///
+    /// Send shows the SAME holdings the asset list does — one source, so the
+    /// balance beside the token here is the balance on the home row, and the
+    /// screen opens on what is already in memory instead of walking every
+    /// chain again. The shell answers `FetchTokens` from its balance machine
+    /// and dispatches this whenever that machine's tokens move afterwards (a
+    /// pull, a poll, a confirmed transfer), mapped exactly as it answers
+    /// `FetchTokens`. Without it a refresh started from here landed on the
+    /// home screen only, and this screen kept the old balance.
+    HoldingsUpdated {
         tokens: Vec<SendToken>,
     },
     /// The user added/removed a custom token — re-pull without a page refresh.
@@ -1307,6 +1349,19 @@ struct PersistCtx {
     chain_id: u32,
 }
 
+/// What `Max` stands for while it is in force.
+#[derive(Clone, Debug, PartialEq)]
+enum MaxFill {
+    /// Pressed before a quote for the fee coin was in hand. The field stays
+    /// blank until the quote ALREADY in flight answers — never a second,
+    /// competing estimate: that is what made an early Max take twice as long.
+    Waiting,
+    /// The exact sendable amount, in token units. The field shows it rounded
+    /// on the balance line's ladder ([`max_figure`]); every gate, the confirm
+    /// figure and the signed call read this ([`model_token_amount`]).
+    Exact(String),
+}
+
 #[derive(Default)]
 pub struct Model {
     account: Option<SendAccountRef>,
@@ -1333,6 +1388,9 @@ pub struct Model {
     /// fields are private to `money`, so from here the unit can only change by
     /// [`DenominatedAmount::convert`] — which restates the digits or fails.
     amount: DenominatedAmount,
+    /// `Max` is in force (see [`tap_max`]); `None` once the figure is typed,
+    /// the token changes, or a batch mode takes over.
+    max_fill: Option<MaxFill>,
     /// The TOKEN figure the ⇄ was last pressed on, kept so pressing it twice
     /// gives back what the person typed.
     ///
@@ -1718,6 +1776,7 @@ impl App for Send {
                 render()
             }
             Event::TokensPartial { tokens } => tokens_partial(model, tokens),
+            Event::HoldingsUpdated { tokens } => holdings_updated(model, tokens),
             Event::RefreshTokens => refresh_tokens(model),
             Event::SelectToken { token_id } => select_token(model, &token_id),
             Event::ToggleMultiToken { token_id } => toggle_multi_token(model, token_id),
@@ -1755,6 +1814,8 @@ impl App for Send {
                 }
                 // The text field edits the figure; the unit is whatever the
                 // ⇄ toggle last established and only `convert` may change it.
+                // A typed figure is the person's, so Max is over.
+                model.max_fill = None;
                 model.amount = model.amount.with_value(amount);
                 Command::all([schedule_form_estimate(model), render()])
             }
@@ -1798,8 +1859,10 @@ impl App for Send {
             Event::ChooseFeeToken { token } => {
                 model.gas_fee_token = token;
                 model.fee_coin_chosen = true;
-                // On the form the fee coin is part of what the quote is about.
-                Command::all([schedule_form_estimate(model), render()])
+                // On the form the fee coin is part of what the quote is about
+                // — and so is a Max, which holds back a fee only in the coin
+                // being sent.
+                Command::all([schedule_form_estimate(model), follow_max(model), render()])
             }
             Event::FeeUpdated { estimate } => fee_updated(model, estimate),
             Event::FeeBusyChanged { busy } => {
@@ -2042,7 +2105,7 @@ impl App for Send {
             estimating_gas: model.estimating_gas,
             fee_busy: model.fee_busy,
             fee: selected_fee(model).map(fee_to_view),
-            gas_fee_token: model.gas_fee_token.clone(),
+            gas_fee_token: quoted_fee_token(model, selected_fee(model)),
             amount_warning: warning,
             same_asset_fee_issue: issue,
             can_continue,
@@ -2174,6 +2237,37 @@ fn tokens_partial(model: &mut Model, tokens: Vec<SendToken>) -> Cmd {
     render()
 }
 
+/// The asset list moved (see [`Event::HoldingsUpdated`]): the picker always
+/// follows; on the form, so do the selected token's balance and price and a
+/// Max that depends on them.
+///
+/// Only on the form. A confirm page is about the token as it was confirmed —
+/// a Max refilled from a new balance there would change the signed amount
+/// under a person who has already read it — and a receipt is history.
+///
+/// A first load still in flight owns the list — its answer is what a locked
+/// request and a hand-off are matched against — so an update meanwhile is
+/// left to it. A token the update no longer lists keeps the row it had: a
+/// chain that did not answer this round is not an emptied balance.
+fn holdings_updated(model: &mut Model, tokens: Vec<SendToken>) -> Cmd {
+    if matches!(model.flights.tokens, Some((_, TokensPurpose::Initial))) {
+        return Command::done();
+    }
+    model.tokens = non_zero_sorted(&tokens);
+    if model.step != SendStep::EnterDetails {
+        return render();
+    }
+    if let Some(selected) = model.selected_token.as_ref() {
+        let id = selected.id();
+        if let Some(fresh) = tokens.iter().find(|t| t.id() == id) {
+            if fresh != selected {
+                model.selected_token = Some(fresh.clone());
+            }
+        }
+    }
+    Command::all([follow_max(model), render()])
+}
+
 fn refresh_tokens(model: &mut Model) -> Cmd {
     let Some(address) = model.account.as_ref().map(|a| a.address.clone()) else {
         return Command::done();
@@ -2216,7 +2310,8 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
     model.tokens = non_zero_sorted(&full);
     model.loading = false;
     if purpose == TokensPurpose::Refresh {
-        return render();
+        // A refresh answers the same question an asset-list update does.
+        return holdings_updated(model, full);
     }
 
     if model.params.locked {
@@ -2236,6 +2331,7 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
             model.multi_selected_ids = picked.iter().map(|t| t.id()).collect();
             model.multi_chain_id = Some(first.chain_id);
             model.multi_select_mode = true;
+            model.max_fill = None;
             model.selected_token = Some(first);
             model.step = SendStep::EnterDetails;
             return warm_estimate_start(model);
@@ -2294,8 +2390,29 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
 fn picker_without_a_token(model: &mut Model) -> Cmd {
     if model.selected_token.is_none() {
         model.step = SendStep::SelectToken;
+        return Command::all([prewarm_fees(model), render()]);
     }
     render()
+}
+
+/// The picker is open: read ahead the fees of the chains the person holds
+/// value on, highest first, so the quote a pick starts finds its reads done.
+fn prewarm_fees(model: &mut Model) -> Cmd {
+    let Some(account) = model.account.as_ref().map(|a| a.address.clone()) else {
+        return Command::done();
+    };
+    let mut chain_ids: Vec<u32> = Vec::new();
+    for token in model.tokens.iter().filter(|t| !t.spam) {
+        if !chain_ids.contains(&token.chain_id) {
+            chain_ids.push(token.chain_id);
+        }
+    }
+    chain_ids.truncate(PREWARM_CHAINS);
+    if chain_ids.is_empty() {
+        return Command::done();
+    }
+    let id = next(model);
+    issue(id, SendOperation::PrewarmFees { account, chain_ids })
 }
 
 // ---------------------------------------------------------------------------
@@ -2394,6 +2511,7 @@ fn finish_lock_resolution(model: &mut Model, token: SendToken) -> Cmd {
         // `fromBaseUnits(BigInt(base), tok.decimals)` in a try/catch — an
         // unparsable amount is simply skipped.
         if let Ok(units) = base.trim().parse::<u128>() {
+            model.max_fill = None;
             model.amount = DenominatedAmount::token(from_base_units(units, token.decimals));
         }
     }
@@ -2490,6 +2608,12 @@ fn select_token(model: &mut Model, token_id: &str) -> Cmd {
     };
     model.multi_select_mode = false; // single-token path
     model.fee_estimate = None; // a prior network's quote must never gate this token
+    // A fee coin picked for another token's form is a contract on that
+    // token's chain; carried across, it priced this send in a coin the chain
+    // may not have. The new form starts from the fee machine's own pick.
+    model.gas_fee_token = None;
+    model.fee_coin_chosen = false;
+    model.max_fill = None;
     model.selected_token = Some(token);
     model.step = SendStep::EnterDetails;
     // The credential prefetch (`useSendController.ts:643-648`) AND a warm
@@ -2596,6 +2720,7 @@ fn confirm_multi_selection(model: &mut Model) -> Cmd {
         return select_token(model, &id);
     }
     model.multi_select_mode = true;
+    model.max_fill = None;
     model.selected_token = Some(first);
     model.step = SendStep::EnterDetails;
     warm_estimate_start(model)
@@ -2653,6 +2778,9 @@ fn display_price(model: &Model, token: &SendToken) -> Option<TokenPrice> {
 /// call builder and the confirm screen read (`resolveTokenAmount`'s job, now
 /// asked of the figure itself so the unit cannot be lost on the way).
 fn model_token_amount(model: &Model, token: &SendToken) -> String {
+    if let Some(MaxFill::Exact(exact)) = &model.max_fill {
+        return exact.clone();
+    }
     model
         .amount
         .to_token_units(display_price(model, token).as_ref(), token.decimals)
@@ -2738,6 +2866,7 @@ fn redenominate_to_display(model: &mut Model) {
     if code == model.display.code {
         return; // same currency: the figure stands, rate change or not
     }
+    model.max_fill = None; // the field empties, and a Max behind it with it
     model.amount = DenominatedAmount::fiat("", &model.display.code);
 }
 
@@ -2776,6 +2905,25 @@ fn toggle_fiat_input(model: &mut Model) -> Cmd {
     };
     if target.is_fiat() && price.is_none() {
         return Command::done(); // the door into fiat stays shut
+    }
+    // Max stays Max across the swap: the exact amount is still what is sent,
+    // only the figure changes denomination — restated from the exact amount,
+    // never from the rounded figure on the field.
+    if let Some(MaxFill::Exact(exact)) = model.max_fill.clone() {
+        model.fiat_origin = None;
+        model.amount = if target.is_fiat() {
+            DenominatedAmount::token(exact)
+                .convert(
+                    &target,
+                    price.as_ref(),
+                    token.decimals,
+                    model.display.fiat_decimals,
+                )
+                .unwrap_or_else(|_| DenominatedAmount::token(""))
+        } else {
+            DenominatedAmount::token(max_figure(&exact))
+        };
+        return render();
     }
     let converted = model
         .amount
@@ -2855,34 +3003,61 @@ fn tap_max(model: &mut Model) -> Cmd {
     // figure; the one that waits for an estimate leaves the field blank
     // meanwhile rather than re-labelling whatever was typed before.
     model.amount = DenominatedAmount::token("");
+    model.fiat_origin = None;
+    model.max_fill = Some(MaxFill::Waiting);
+    max_follow_up(model, &token)
+}
 
+/// Bring a Max in force up to date with what is in hand: fill it from the
+/// quote for the fee coin in force, wait for the quote already on its way, or
+/// — only when nothing is on its way — ask for one.
+///
+/// The tap calls it, and so does everything a Max depends on: every quote
+/// that lands, a fee-coin switch, a balance refresh. A Max used to be a
+/// figure written once; after the fee machine picked another coin, or the
+/// balance moved, it was a stale number the gates then refused.
+fn max_follow_up(model: &mut Model, token: &SendToken) -> Cmd {
+    if model.max_fill.is_none() {
+        return Command::done();
+    }
     // Only a quote for the fee coin chosen NOW (078 M-03): after a switch the
     // quote in hand priced the other coin, and its reserve is a figure about
     // an asset this send no longer pays in.
     if let Some(fee) = max_quote(model).cloned() {
-        apply_max_with_fee(model, &token, &fee);
+        set_max(model, max_with_fee(token, &fee));
         return render();
     }
-
-    // No usable quote yet → estimate on demand, like `handleMaxAmount`'s
-    // `await estimateTransactionFee(...)` — but of the transfer Max is about
-    // to fill (078 M-02), not a placeholder call: the placeholder's gas was
-    // not this transfer's, so Continue's re-quote could land above the reserve
-    // and send the person back to the amount.
-    let needs_estimate =
-        model.account.is_some() && (token.is_native() || token.token_address.is_some());
-    if !needs_estimate {
-        model.amount = DenominatedAmount::token(full_balance(&token));
+    let Some(account) = model
+        .account
+        .as_ref()
+        .map(|a| a.address.clone())
+        .filter(|_| token.is_native() || token.token_address.is_some())
+    else {
+        set_max(model, full_balance(token));
         return render();
-    }
-    let account = match model.account.as_ref() {
-        Some(a) => a.address.clone(),
-        None => {
-            model.amount = DenominatedAmount::token(full_balance(&token));
-            return render();
-        }
     };
-    let tx = max_estimate_call(model, &token, &account);
+    // A quote is already on its way — the warm-up the token pick started, or
+    // the form's own. It prices this transfer; wait for it rather than race
+    // it with a second estimate, which is what made an early Max twice as slow
+    // (the first answer then found nobody waiting and was thrown away).
+    if matches!(
+        model.pipeline,
+        Pipeline::WarmCredential { .. }
+            | Pipeline::WarmEstimate { .. }
+            | Pipeline::FormDebounce { .. }
+            | Pipeline::FormEstimate { .. }
+            | Pipeline::MaxEstimate { .. }
+    ) {
+        return render();
+    }
+    if model.pipeline != Pipeline::Idle {
+        // A pre-check or a submit owns the slot and brings its own quote.
+        return render();
+    }
+    // Nothing on its way → estimate on demand, like `handleMaxAmount`'s
+    // `await estimateTransactionFee(...)` — of the transfer Max is about to
+    // fill (078 M-02), not a placeholder call.
+    let tx = max_estimate_call(model, token, &account);
     let id = next(model);
     model.pipeline = Pipeline::MaxEstimate { id };
     Command::all([
@@ -2895,10 +3070,27 @@ fn tap_max(model: &mut Model) -> Cmd {
                 batch: None,
                 gas_fee_token: model.gas_fee_token.clone(),
                 public_key_hex: model.public_key_hex.clone(),
+                auto_fee_token: !model.fee_coin_chosen,
             },
         ),
         render(),
     ])
+}
+
+/// [`max_follow_up`] for whatever token is selected — the form after a quote
+/// or a balance lands.
+fn follow_max(model: &mut Model) -> Cmd {
+    match model.selected_token.clone() {
+        Some(token) if model.max_fill.is_some() => max_follow_up(model, &token),
+        _ => Command::done(),
+    }
+}
+
+/// Put an exact Max on the field: the figure rounded as the balance line
+/// rounds, the exact amount behind it for everything that counts.
+fn set_max(model: &mut Model, exact: String) {
+    model.amount = DenominatedAmount::token(max_figure(&exact));
+    model.max_fill = Some(MaxFill::Exact(exact));
 }
 
 // ---------------------------------------------------------------------------
@@ -2987,6 +3179,7 @@ fn form_estimate_fire(model: &mut Model) -> Cmd {
             batch,
             gas_fee_token: model.gas_fee_token.clone(),
             public_key_hex: model.public_key_hex.clone(),
+            auto_fee_token: !model.fee_coin_chosen,
         },
     )
 }
@@ -3051,7 +3244,7 @@ fn full_balance(token: &SendToken) -> String {
 /// sent. `None` — gas is paid in a separate asset, so the whole balance is
 /// sendable.
 ///
-/// One rule, two readers: the fill ([`apply_max_with_fee`]) and the sentence
+/// One rule, two readers: the fill ([`max_with_fee`]) and the sentence
 /// that explains a fill of nothing ([`fee_over_balance`]). Written twice they
 /// would eventually disagree, and the shape of that disagreement is a screen
 /// showing `0` while insisting the balance covers the fee.
@@ -3073,24 +3266,89 @@ fn max_fee_reserve(token: &SendToken, fee: &FeeEstimate) -> Option<u128> {
     }
 }
 
-/// The Max fill given a fee (`useSendController.ts:801-848`).
-fn apply_max_with_fee(model: &mut Model, token: &SendToken, fee: &FeeEstimate) {
+/// The exact Max given a fee (`useSendController.ts:801-848`).
+fn max_with_fee(token: &SendToken, fee: &FeeEstimate) -> String {
     // Gas paid in native or a separate fee asset — full balance sendable.
     let Some(reserve) = max_fee_reserve(token, fee) else {
-        model.amount = DenominatedAmount::token(full_balance(token));
-        return;
+        return full_balance(token);
     };
     match to_base_units(&token.balance, token.decimals) {
         // String-exact `balance − reserve`: `to_base_units(result) + reserve
         // == balance`, so the gas pre-check never trips on its own Max fill
         // (invariant ⑨). A reserve at or above the balance answers `"0"`, and
         // `derive_amount_warning` is what says so out loud.
-        Some(balance) => {
-            model.amount =
-                DenominatedAmount::token(max_native_sendable(balance, reserve, token.decimals));
-        }
+        Some(balance) => max_native_sendable(balance, reserve, token.decimals),
         // TS `balanceToWei` would throw → catch → full balance.
-        None => model.amount = DenominatedAmount::token(full_balance(token)),
+        None => full_balance(token),
+    }
+}
+
+/// How a Max reads on the field: the exact amount on the ladder the balance
+/// line uses (`l10n::number::format_token_amount` — 2 places from 1000, 4
+/// from 1, 6 below), half up, trailing zeros dropped, so the figure Max
+/// writes and the balance above it agree digit for digit. A figure too small
+/// to survive six places keeps two significant digits instead of reading `0`.
+///
+/// Display only. The exact amount stays in [`MaxFill::Exact`] and is what
+/// every gate and the signed call read: `0.043790209243313861` — balance less
+/// a fee to the wei — used to be written onto the field whole, and ran off
+/// both sides of it on every shell.
+pub fn max_figure(exact: &str) -> String {
+    let exact = exact.trim();
+    let (int_raw, frac_raw) = exact.split_once('.').unwrap_or((exact, ""));
+    if int_raw.is_empty() && frac_raw.is_empty()
+        || !int_raw.bytes().all(|b| b.is_ascii_digit())
+        || !frac_raw.bytes().all(|b| b.is_ascii_digit())
+    {
+        return exact.to_owned();
+    }
+    let int_digits = int_raw.trim_start_matches('0');
+    let places = match int_digits.len() {
+        0 => 6,
+        1..=3 => 4,
+        _ => 2,
+    };
+    let mut digits: Vec<u8> = int_digits
+        .bytes()
+        .chain(frac_raw.bytes().chain(std::iter::repeat(b'0')).take(places))
+        .map(|b| b - b'0')
+        .collect();
+    let round_up = frac_raw.as_bytes().get(places).is_some_and(|b| *b >= b'5');
+    if round_up {
+        let mut i = digits.len();
+        loop {
+            if i == 0 {
+                digits.insert(0, 1);
+                break;
+            }
+            i -= 1;
+            if digits[i] == 9 {
+                digits[i] = 0;
+            } else {
+                digits[i] += 1;
+                break;
+            }
+        }
+    }
+    let split = digits.len() - places;
+    let int_part: String = digits[..split].iter().map(|d| char::from(b'0' + d)).collect();
+    let frac_part: String = digits[split..].iter().map(|d| char::from(b'0' + d)).collect();
+    let int_part = if int_part.is_empty() { "0".to_owned() } else { int_part };
+    let frac_part = frac_part.trim_end_matches('0');
+    if int_part == "0" && frac_part.is_empty() {
+        // Below the ladder's last place: two significant digits, cut — never
+        // a bare zero for an amount that is not one.
+        let lead = frac_raw.bytes().take_while(|b| *b == b'0').count();
+        if lead == frac_raw.len() {
+            return "0".to_owned();
+        }
+        let keep = (lead + 2).min(frac_raw.len());
+        return format!("0.{}", frac_raw[..keep].trim_end_matches('0'));
+    }
+    if frac_part.is_empty() {
+        int_part
+    } else {
+        format!("{int_part}.{frac_part}")
     }
 }
 
@@ -3144,6 +3402,7 @@ fn enter_split_mode(model: &mut Model) -> Cmd {
     // Split rows are token-denominated, so the single-send figure follows them
     // into token units — RESTATED through the same resolution the first row
     // got, not merely re-labelled.
+    model.max_fill = None;
     model.amount = DenominatedAmount::token(row_amount);
     model.split_mode = true;
     render()
@@ -3166,6 +3425,7 @@ fn seed_split(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
     rows.truncate(BATCH_MAX_RECIPIENTS); // the importer's trim (invariant ⑩)
                                          // The imported rows replace the single-send figure outright; there is
                                          // nothing left to restate, so the field goes empty in token units.
+    model.max_fill = None;
     model.amount = DenominatedAmount::token("");
     model.recipients = rows;
     model.split_mode = true;
@@ -3239,6 +3499,7 @@ fn append_split(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
         kept.push(row);
     }
     kept.truncate(BATCH_MAX_RECIPIENTS);
+    model.max_fill = None;
     model.amount = DenominatedAmount::token("");
     model.recipients = kept;
     model.split_mode = true;
@@ -3956,6 +4217,7 @@ fn start_precheck(model: &mut Model, public_key_hex: String) -> Cmd {
                 batch,
                 gas_fee_token: model.gas_fee_token.clone(),
                 public_key_hex: Some(public_key_hex),
+                auto_fee_token: !model.fee_coin_chosen,
             },
         ),
         issue(treasury_id, SendOperation::ProbeTreasury { chain_id }),
@@ -4007,6 +4269,9 @@ fn edit_amount(model: &mut Model) -> Cmd {
 /// (`useSendController.ts:467-473`).
 fn leave_confirm(model: &mut Model) {
     model.gas_fee_token = None;
+    // The reset is back to "nobody chose" — the fee machine's pick — rather
+    // than to the native coin, which is what "no choice" used to mean.
+    model.fee_coin_chosen = false;
     if matches!(
         model.fee_estimate.as_ref().map(|f| &f.fee_asset),
         Some(FeeAsset::Erc20 { .. })
@@ -4108,6 +4373,29 @@ fn submit_treasury_recheck(model: &mut Model, gen: u64, public_key_hex: String) 
         issue(id, SendOperation::ProbeTreasury { chain_id }),
         render(),
     ])
+}
+
+/// The coin this send pays its fee in: the person's pick when there is one,
+/// otherwise the coin the quote in hand is denominated in — the fee machine's
+/// own choice (`auto_fee_token`).
+///
+/// The submit signs `quoted_fee.amount` in THIS coin. With the choice left to
+/// the fee machine, `gas_fee_token` stays `None` while the quote is in USDC;
+/// handing `None` on would have built a native fee leg carrying a USDC amount.
+/// So the coin comes from the same estimate as the amount — displayed = signed.
+/// Tempo's default TIP-20 stays `None`, which is how that chain names it.
+fn quoted_fee_token(model: &Model, fee: Option<&FeeEstimate>) -> Option<String> {
+    if model.fee_coin_chosen {
+        return model.gas_fee_token.clone();
+    }
+    match fee.map(|f| (&f.fee_asset, f.chain_id)) {
+        Some((FeeAsset::Erc20 { token, .. }, chain_id))
+            if !(is_tempo_chain(chain_id) && token.eq_ignore_ascii_case(TEMPO_DEFAULT_FEE_TOKEN)) =>
+        {
+            Some(token.clone())
+        }
+        _ => None,
+    }
 }
 
 /// Build the submit batch + activity lines and hand them to the shell's
@@ -4252,7 +4540,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
                 public_key_hex,
                 calls,
                 max_fee_per_gas,
-                gas_fee_token: model.gas_fee_token.clone(),
+                gas_fee_token: quoted_fee_token(model, current_fee.as_ref()),
                 quoted_fee,
             },
         ),
@@ -4333,6 +4621,7 @@ fn handle_back(model: &mut Model) -> Cmd {
                 model.step = SendStep::SelectToken;
             } else {
                 model.selected_token = None;
+                model.max_fill = None;
                 model.amount = DenominatedAmount::token("");
                 // A recipient HANDED IN — a scan, a contact, a payment request
                 // — survives the trip back to the picker (owner, 2026-09-23).
@@ -4368,7 +4657,8 @@ fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {
         // The sim depends on the estimate (reserve math) — re-run it.
         return Command::all([confirm_probes(model), render()]);
     }
-    render()
+    // A requote or a chip switch on the form moves what Max holds back.
+    Command::all([follow_max(model), render()])
 }
 
 fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOutcome) -> Cmd {
@@ -4485,6 +4775,7 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
         }
         // Fire-and-forget acknowledgements.
         R::TokenCacheCleared
+        | R::FeesPrewarmed
         | R::PasskeyCancelAcknowledged
         | R::AlertAcknowledged
         | R::HapticPlayed
@@ -4516,7 +4807,18 @@ fn accept_credential(model: &mut Model, id: u64, public_key_hex: Option<String>)
                         (model.selected_token.clone(), model.account.clone())
                     else {
                         model.pipeline = Pipeline::Idle;
-                        return Command::done();
+                        return follow_max(model);
+                    };
+                    // The single form warms the very transfer Max fills —
+                    // the token's whole balance to the payee, or to the
+                    // account itself while there is none — so the quote in
+                    // hand when Max is pressed is one Max can use as it is,
+                    // and the fee machine sees what the send moves when it
+                    // picks the coin. A sweep keeps its rough shape.
+                    let tx = if model.multi_select_mode {
+                        None
+                    } else {
+                        max_estimate_call(model, &token, &account.address)
                     };
                     let fee_id = next(model);
                     model.pipeline = Pipeline::WarmEstimate { id: fee_id };
@@ -4525,17 +4827,20 @@ fn accept_credential(model: &mut Model, id: u64, public_key_hex: Option<String>)
                         SendOperation::EstimateFee {
                             chain_id: token.chain_id,
                             account: account.address,
-                            tx: None,
+                            tx,
                             batch: None,
                             gas_fee_token: model.gas_fee_token.clone(),
                             public_key_hex: Some(pk),
+                            auto_fee_token: !model.fee_coin_chosen,
                         },
                     )
                 }
                 None => {
-                    // Best-effort warm-up: failure is swallowed (`catch {}`).
+                    // Best-effort warm-up: failure is swallowed (`catch {}`)
+                    // — but a Max pressed while it was out was waiting for
+                    // the quote it would have started, and asks for its own.
                     model.pipeline = Pipeline::Idle;
-                    Command::done()
+                    follow_max(model)
                 }
             }
         }
@@ -4596,25 +4901,33 @@ fn accept_fee(model: &mut Model, id: u64, outcome: SendFeeOutcome) -> Cmd {
             let Some(token) = model.selected_token.clone() else {
                 return Command::done();
             };
+            if model.max_fill.is_none() {
+                // Typed over while it was in flight: the quote still prices
+                // this transfer, so it is kept — only the fill is not wanted.
+                if let SendFeeOutcome::Ok { estimate } = outcome {
+                    model.fee_estimate = parse_fee_view(&estimate);
+                }
+                return Command::all([schedule_form_estimate(model), render()]);
+            }
             match outcome {
                 SendFeeOutcome::Ok { estimate } => match parse_fee_view(&estimate) {
                     Some(fee) => {
-                        apply_max_with_fee(model, &token, &fee);
                         // The quote Max reserved against is the one the fee
                         // row shows: two different figures for one fee is
                         // how a screen stops adding up.
-                        model.fee_estimate = Some(fee);
+                        model.fee_estimate = Some(fee.clone());
+                        set_max(model, max_with_fee(&token, &fee));
                         render()
                     }
                     None => {
-                        model.amount = DenominatedAmount::token(full_balance(&token));
+                        set_max(model, full_balance(&token));
                         render()
                     }
                 },
                 SendFeeOutcome::Failed { .. } => {
                     // Estimation failed — full balance; the pre-check still
                     // warns (`useSendController.ts:819-821, 841-843`).
-                    model.amount = DenominatedAmount::token(full_balance(&token));
+                    set_max(model, full_balance(&token));
                     render()
                 }
             }
@@ -4624,15 +4937,15 @@ fn accept_fee(model: &mut Model, id: u64, outcome: SendFeeOutcome) -> Cmd {
             if let SendFeeOutcome::Ok { estimate } = outcome {
                 if let Some(fee) = parse_fee_view(&estimate) {
                     model.fee_estimate = Some(fee);
-                    // The warm quote knows no payee. A form that became
-                    // complete while it was in flight could not arm its own
-                    // quote (the pipeline slot was taken); it is armed now,
-                    // and the warm figure stays on screen until it answers.
-                    return Command::all([schedule_form_estimate(model), render()]);
                 }
             }
-            // Warm-up failure swallowed — and the form's quote gets its turn.
-            Command::all([schedule_form_estimate(model), render()])
+            // The warm quote knows no payee. A form that became complete while
+            // it was in flight could not arm its own quote (the pipeline slot
+            // was taken); it is armed now, and the warm figure stays on screen
+            // until it answers. A Max pressed meanwhile was waiting for THIS
+            // answer — and if it failed, Max asks for its own now. A failed
+            // warm-up is otherwise swallowed.
+            Command::all([follow_max(model), schedule_form_estimate(model), render()])
         }
         Pipeline::FormEstimate { id: expect, key } if expect == id => {
             model.pipeline = Pipeline::Idle;
@@ -4640,12 +4953,13 @@ fn accept_fee(model: &mut Model, id: u64, outcome: SendFeeOutcome) -> Cmd {
                 if let Some(fee) = parse_fee_view(&estimate) {
                     model.fee_estimate = Some(fee);
                     model.form_quote_key = Some(key);
-                    return render();
+                    return Command::all([follow_max(model), render()]);
                 }
             }
             // Best-effort: a failed form quote is not a refusal. Continue's
-            // pre-check asks again and says so if it must (invariant ②).
-            Command::done()
+            // pre-check asks again and says so if it must (invariant ②). A Max
+            // waiting on it asks for its own.
+            follow_max(model)
         }
         _ => Command::done(),
     }
