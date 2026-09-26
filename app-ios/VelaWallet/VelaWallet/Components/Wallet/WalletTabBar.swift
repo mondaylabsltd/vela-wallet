@@ -4,8 +4,14 @@
 //
 //  TabBar (spec 015 vocabulary #13): custom HStack, NOT TabView — 钱包 /
 //  通讯录 / 探索 / 设置. Selected: lucide-derived solid glyph + accent tint;
-//  unselected: lucide outline + subtle tint (FR-007, research D2 rev). Only
-//  钱包 has content in this feature; taps re-select it (spec assumption).
+//  unselected: lucide outline + subtle tint (FR-007, research D2 rev).
+//
+//  **Icons only** (founder, 2026-09-26): the visible labels truncated in
+//  es/pt/de/it ("Configuración", "Einstellungen"), so the bar draws a 28pt
+//  glyph centred in its 56pt and nothing else — as the web's mobile bar and
+//  Android do; the desktop's sidebar keeps its words. Every tab keeps its
+//  localized label as its ACCESSIBLE name, with the selected trait, so
+//  VoiceOver still says "设置, 已选定" / "Settings, selected".
 //
 
 import SwiftUI
@@ -18,7 +24,6 @@ enum WalletTab: String, CaseIterable {
 
 struct WalletTabBar: View {
     @Environment(\.theme) private var theme
-    @Environment(\.walletTextScale) private var textScale
 
     let tabs: TabsModel
     /// Which destination reads as selected (solid glyph + accent).
@@ -39,23 +44,26 @@ struct WalletTabBar: View {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 let isSelected = item.tab == selected
                 Button {
+                    // A tab is a button under the finger (the founder's rule:
+                    // press = deformation + haptic; tabs too since
+                    // 2026-09-26). Only a tab that CHANGES the destination
+                    // buzzes — re-tapping the one in force is not a switch.
+                    if !isSelected { VelaHaptic.press.play() }
                     onSelect(item.tab)
                 } label: {
-                    VStack(spacing: Tokens.Space.s4) {
-                        LucideIcon(isSelected ? item.fill : item.outline, size: LucideIconSize.tab)
-                        Text(verbatim: item.label)
-                            .typeRole(Typography.tab.scaled(textScale))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(isSelected ? theme.accentBase : theme.fgSubtle)
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
+                    LucideIcon(isSelected ? item.fill : item.outline, size: LucideIconSize.tabBar)
+                        .foregroundStyle(isSelected ? theme.accentBase : theme.fgSubtle)
+                        // The whole quarter of the bar is the target, as before.
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // The label the eye no longer reads is the name the ear does.
+                .accessibilityLabel(item.label)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .padding(.top, Tokens.Space.s8)
-        .frame(minHeight: WalletGeometry.tabBarHeight, alignment: .top)
+        .frame(height: WalletGeometry.tabBarHeight)
         .background(theme.bgBase)
         .overlay(alignment: .top) {
             Rectangle()

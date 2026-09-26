@@ -2397,6 +2397,24 @@ struct RootView: View {
         )
     }
 
+    /// What the feedback sheet's preview says about this device — the build,
+    /// the OS, the language in use, and the networks the RPC pool could not
+    /// reach (by name; the routing core's own list, as the web reads it).
+    private var feedbackFacts: SettingsLive.FeedbackFacts {
+        let names = settings.networkAdmin?.networks ?? []
+        return SettingsLive.FeedbackFacts(
+            version: BuildInfo.version,
+            commit: BuildInfo.commit,
+            platform: "iOS \(UIDevice.current.systemVersion)",
+            language: loc.resolvedLanguage,
+            unreachable: pool.failedChains.map { chainId in
+                names.first { $0.chainId == chainId }?.displayName
+                    ?? ChainCatalog.meta(chainId)?.displayName
+                    ?? "chain-\(chainId)"
+            }
+        )
+    }
+
     /// The stored default speed and the resolved number preset, into the speed
     /// core (spec 069). Repeating it is free.
     private func configureSpeed() {
@@ -2602,7 +2620,7 @@ struct RootView: View {
     /// A picked photo with no code in it. Its own alert rather than a silent
     /// return: somebody who chose a picture is owed an answer about it.
     private var scanAlert: FlowAlertModel? {
-        scanNotice.map { FlowAlertModel(title: $0.title, message: $0.body) }
+        scanNotice.map { FlowAlertModel(title: $0.title, message: $0.body, dismiss: loc.t("common.gotIt")) }
     }
 
     /// Everything the live scanner needs, as one value.
@@ -2730,20 +2748,23 @@ struct RootView: View {
     private var sendRefusal: FlowAlertModel? {
         guard let kind = send.alert else { return nil }
         let text = SendLive.alertText(kind, loc: loc)
-        return FlowAlertModel(title: text.title, message: text.body)
+        return FlowAlertModel(title: text.title, message: text.body, dismiss: loc.t("common.gotIt"))
     }
 
     private var saveAlert: FlowAlertModel? {
         switch saveOutcome {
         case .saved:
             FlowAlertModel(title: loc.t("receive.request.savedTitle"),
-                           message: loc.t("receive.request.savedBody"))
+                           message: loc.t("receive.request.savedBody"),
+                           dismiss: loc.t("common.gotIt"))
         case .denied:
             FlowAlertModel(title: loc.t("receive.request.permTitle"),
-                           message: loc.t("receive.request.permBody"))
+                           message: loc.t("receive.request.permBody"),
+                           dismiss: loc.t("common.gotIt"))
         case .failed:
             FlowAlertModel(title: loc.t("addToken.errorTitle"),
-                           message: loc.t("receive.request.shareError"))
+                           message: loc.t("receive.request.shareError"),
+                           dismiss: loc.t("common.gotIt"))
         case nil:
             nil
         }
@@ -3081,6 +3102,7 @@ struct RootView: View {
                 ?? ChainCatalog.chains.count,
             on: model, loc: loc
         )
+        model = SettingsLive.withFeedback(feedbackFacts, on: model, loc: loc)
         // A partial wipe names what stayed, in the sheet itself (spec 081
         // FR-017, the rule 028 set for the web and Android): the person is
         // still signed in, and the button is still live so they can retry.

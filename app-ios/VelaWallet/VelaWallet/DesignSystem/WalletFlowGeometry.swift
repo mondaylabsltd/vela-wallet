@@ -56,6 +56,9 @@ enum WalletFlowGeometry {
     /// block is one height whatever is typed and the recipient, the fee row
     /// and Continue never jump under a finger reaching for them.
     static let amountHeroLine: CGFloat = amountHero * Tokens.Leading.tight
+    /// The confirm page's unit beside its 32pt figure (round 2): the Send
+    /// form's hero proportion, figure 46 : unit 26, carried to 32 → 18.
+    static let confirmUnitSize: CGFloat = (Tokens.TextSize.t32 * Tokens.TextSize.t26 / amountHero).rounded()
     /// Room after the last digit for the caret, so it is never the thing that
     /// overflows; taken off the unit's gap so the figure and its unit sit the
     /// same distance apart typed or drawn.

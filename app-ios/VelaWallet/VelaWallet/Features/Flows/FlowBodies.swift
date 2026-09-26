@@ -1171,11 +1171,24 @@ struct SendConfirmBody: View {
                     TokenIconView(mark: mark)
                     .padding(.bottom, Tokens.Space.s8)
                 }
-                Text(verbatim: model.amount)
-                    .typeRole(Typography.display.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                    .minimumScaleFactor(WalletGeometry.heroMinScale)
-                    .lineLimit(1)
+                // The figure and its coin, as the Send form's hero draws them
+                // (round 2): the coin a smaller, quieter word on the same
+                // baseline, the hero's gap apart. Read as one: "0.45767 xDAI".
+                HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                    Text(verbatim: model.amount)
+                        .typeRole(Typography.display.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                        .minimumScaleFactor(WalletGeometry.heroMinScale)
+                        .lineLimit(1)
+                    if let unit = model.amountUnit {
+                        Text(verbatim: unit)
+                            .typeRole(Typography.confirmUnit.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                }
+                .accessibilityElement(children: .combine)
                 Text(verbatim: model.subline)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)

@@ -209,6 +209,11 @@ enum LucideGlyph: String {
 /// recipes so swapping renderers didn't move any layout.
 enum LucideIconSize {
     static let tab: CGFloat = 22
+    /// The mobile tab bar's glyph, drawn alone (round 2, 2026-09-26): the
+    /// labels truncated in es/pt/de/it ("Configuración", "Einstellungen"), so
+    /// the bar went icons-only and the glyph grew to carry it — the same 28 the
+    /// web's mobile bar and Android draw. The label stays, as the accessible name.
+    static let tabBar: CGFloat = 28
     static let action: CGFloat = 20
     static let rowGlyph: CGFloat = 15
     static let nameChevron: CGFloat = 12

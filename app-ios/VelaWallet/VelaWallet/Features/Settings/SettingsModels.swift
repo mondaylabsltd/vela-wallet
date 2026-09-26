@@ -571,7 +571,9 @@ struct SettingsScreenModel {
     /// the person is told where they are looking rather than sent away with a
     /// phone that was not erased (FR-017).
     var eraseSheet: ConfirmSheetModel
-    let feedback: FeedbackModel
+    /// `var` since 2026-09-26: the live builder replaces the fixture preview
+    /// with this device's own lines (`SettingsLive.withFeedback`).
+    var feedback: FeedbackModel
     let rpcBanner: RpcBannerModel?
     /// `var` since 058: the hero's status line opens these, and what they show
     /// is this device's chains rather than the drawing's two.

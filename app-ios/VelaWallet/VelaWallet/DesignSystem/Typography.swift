@@ -135,6 +135,14 @@ enum Typography {
     static let amountUnit = TypeRole(fontName: FontName.medium, size: Tokens.TextSize.t26, relativeTo: .title2, leading: Tokens.Leading.none)
     static let amountUnitCompact = TypeRole(fontName: FontName.medium, size: Tokens.TextSize.t20, relativeTo: .title3, leading: Tokens.Leading.none)
     static let amountUnitTight = TypeRole(fontName: FontName.medium, size: Tokens.TextSize.t17, relativeTo: .body, leading: Tokens.Leading.none)
+    /// The confirm page's unit ("xDAI" beside "0.45767"): medium and muted,
+    /// in the Send hero's figure-to-unit proportion (`confirmUnitSize`), and
+    /// scaling with the `.largeTitle` figure it sits beside.
+    static let confirmUnit = TypeRole(fontName: FontName.medium, size: WalletFlowGeometry.confirmUnitSize, relativeTo: .largeTitle, leading: Tokens.Leading.none)
+    /// Body copy, emphasised — text.t15, semibold, body's leading. A chosen
+    /// row's name (the speed list): weight says "selected", colour stays ink —
+    /// accent is for moving money and submitting only.
+    static let bodyStrong = TypeRole(fontName: FontName.semiBold, size: Tokens.TextSize.t15, relativeTo: .subheadline, leading: Tokens.Leading.normal)
     /// Row title (activity/asset primary line) — text.t17, semibold.
     static let rowTitle = TypeRole(fontName: FontName.semiBold, size: Tokens.TextSize.t17, relativeTo: .body, leading: Tokens.Leading.tight)
     /// Row trailing value (amount/balance) — text.t17, semibold.

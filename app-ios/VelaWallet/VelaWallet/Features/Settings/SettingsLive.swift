@@ -1343,6 +1343,62 @@ enum SettingsLive {
     /// `commit` is `unknown` unless the archive passed one (see `Info.plist`),
     /// and the caller substitutes the build number in that case — the page
     /// never prints a hash that is not this build's.
+    /// What this device may say about itself in a bug report — the web's
+    /// `DeviceFacts`, minus what iOS has no honest source for.
+    struct FeedbackFacts {
+        let version: String
+        let commit: String
+        /// "iOS 26.2".
+        let platform: String
+        /// The UI language tag in use.
+        let language: String
+        /// Display NAMES of networks whose whole RPC pool failed. Never URLs.
+        let unreachable: [String]
+    }
+
+    /// The feedback sheet's "what will be sent" block, from THIS device
+    /// (founder, 2026-09-26): the fixture's `v1.0.0 (6ab8f) · iOS 26.0 · zh`
+    /// was shown under a consent note promising it IS what leaves the phone.
+    ///
+    /// The lines are the web's (`environmentLines`), label and value each,
+    /// every one redacted of addresses and URLs. The failures line is left
+    /// OUT: its source on the web is the net counters (`*:final_failure`),
+    /// which this client does not keep, and a "none" there would be a claim,
+    /// not a reading.
+    static func withFeedback(_ facts: FeedbackFacts, on model: SettingsScreenModel, loc: Loc) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        var live = model
+        let unreachable = facts.unreachable.isEmpty
+            ? loc.t(k.bugPreviewNone)
+            : facts.unreachable.joined(separator: ", ")
+        live.feedback = FeedbackModel(
+            title: model.feedback.title,
+            subtitle: model.feedback.subtitle,
+            placeholder: model.feedback.placeholder,
+            addSteps: model.feedback.addSteps,
+            previewToggle: model.feedback.previewToggle,
+            previewLines: [
+                "\(loc.t(k.bugPreviewVersion)): v\(facts.version) (\(facts.commit))",
+                "\(loc.t(k.bugPreviewPlatform)): \(facts.platform)",
+                "\(loc.t(k.bugPreviewLanguage)): \(facts.language)",
+                "\(loc.t(k.bugPreviewRpc)): \(unreachable)",
+            ].map(redact),
+            consent: model.feedback.consent,
+            send: model.feedback.send,
+            githubLink: model.feedback.githubLink
+        )
+        return live
+    }
+
+    /// The web's `redact`: an address or a URL in a report line is replaced,
+    /// visibly, rather than dropped — somebody can name a network after its
+    /// own RPC URL, and a URL may carry an API key in its path.
+    static func redact(_ line: String) -> String {
+        line
+            .replacingOccurrences(of: "0x[0-9a-fA-F]{40}\\b", with: "[address]", options: .regularExpression)
+            .replacingOccurrences(of: "\\b[a-zA-Z][a-zA-Z0-9+.-]*://\\S+", with: "[url]", options: .regularExpression)
+    }
+
     static func withAbout(
         version: String,
         commit: String,
@@ -1374,12 +1430,16 @@ enum SettingsLive {
             links: model.about.links,
             footer: model.about.footer
         )
-        // The home row's subtitle names the same version.
+        // The home row names the same version, in the slot the design gives
+        // it — the trailing value — and nowhere else. It used to write the
+        // REAL version into `subtitle` while `value` kept the fixture's
+        // "1.0.0", so one row showed two versions (founder, 2026-09-26).
         for index in live.sections.indices {
             for row in live.sections[index].rows.indices
             where live.sections[index].rows[row].id == "about" {
-                live.sections[index].rows[row].subtitle =
+                live.sections[index].rows[row].value =
                     loc.t(k.aboutSubtitle, vars: ["version": version])
+                live.sections[index].rows[row].subtitle = nil
             }
         }
         return live

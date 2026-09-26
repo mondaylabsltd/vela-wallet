@@ -694,6 +694,33 @@ struct SendHoldingsAndFeesTests {
         }
     }
 
+    // MARK: - Fiat rounding (round 2, item E)
+
+    /// Every fiat figure rounds to NEAREST, an exact tie going up — the web's
+    /// `toFixed(2)`. printf alone broke an exact binary tie to even.
+    @Test func fiatRoundsHalfUpLikeToFixed() {
+        let before = Formats.current
+        defer { Formats.current = before }
+        Formats.current = Formats.Current(number: .commaDot, date: .iso, time: .h24)
+        func money(_ value: Double) -> String {
+            Formats.number(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
+        }
+        #expect(money(0.125) == "0.13", "an exact tie goes up (printf said 0.12)")
+        #expect(money(0.375) == "0.38")
+        #expect(money(10.625) == "10.63")
+        #expect(money(0.995) == "0.99", "0.995 is 0.99499… in binary — toFixed says 0.99 too")
+        #expect(money(1.005) == "1.00", "1.00499… in binary")
+        #expect(money(2.675) == "2.67", "2.67499… in binary")
+        #expect(money(12.34) == "12.34", "never truncated")
+        #expect(money(12.339) == "12.34", "rounded, not cut")
+        #expect(money(0.005) == "0.01", "0.005000000000000000104… rounds up")
+        #expect(Formats.halfUp(9.995, places: 2) == String(format: "%.2f", 9.995))
+        #expect(Formats.halfUp(0.5, places: 0) == "1", "a whole tie goes up")
+        #expect(Formats.halfUp(1.5, places: 0) == "2")
+        #expect(Formats.halfUp(2.5, places: 0) == "3", "printf says 2")
+        #expect(Formats.halfUp(99.5, places: 0) == "100")
+    }
+
     // MARK: - The figure
 
     /// 46 / 38 / 31 by drawn length — figure + prefix + half the suffix — the
