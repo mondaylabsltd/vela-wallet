@@ -59,7 +59,7 @@
 				"passkeys": "Como as passkeys funcionam",
 				"signers": "Signatários e chaves de segurança",
 				"clear-signing": "Assinatura legível",
-				"clear-signing-self-host": "Hospedar a página de assinatura",
+				"clear-signing-self-host": "Trusted Signer",
 				"self-hosting": "Guia de auto-hospedagem",
 				"bybit-attack": "O ataque à Bybit",
 				"recovery": "Recuperação e login",
@@ -229,7 +229,7 @@
 				},
 				{
 					"feature": "Conferência extra",
-					"vela": "Uma página de assinatura independente, pronta, mas ainda não conectada aos apps",
+					"vela": "O Trusted Signer: uma página independente que decodifica e assina por conta própria, se você escolher usá-lo",
 					"metamask": "Alertas de risco de terceiros",
 					"base": "—"
 				},
@@ -355,8 +355,8 @@
 				"body": "Hoje, alguns apps ignoram partes de Configurações → Endpoints de serviço — o app de iPhone por completo, o app web ao criar uma carteira ou fazer login, e o Android ao buscar nomes. Todos deveriam respeitar essa configuração."
 			},
 			{
-				"title": "A página de assinatura independente, conectada",
-				"body": "A página de assinatura que decodifica e assina uma solicitação por conta própria já está pronta. Próximo passo: deixar os apps entregarem suas solicitações a ela, para que um programa que você mesmo carregou confira cada assinatura."
+				"title": "Uma verificação do Trusted Signer que recusa",
+				"body": "O app de desktop já compara a página de assinatura com as versões que vêm com ele, mas só registra uma divergência no log. Próximo passo: recusar uma página que não corresponda e fazer essa verificação também nos celulares."
 			},
 			{
 				"title": "Mais cobertura de assinatura legível",
@@ -368,6 +368,10 @@
 			}
 		],
 		"shipped": [
+			{
+				"title": "Trusted Signer",
+				"body": "Uma página de assinatura independente em sign.getvela.app que decodifica uma solicitação e a assina por conta própria, com cada versão endereçada por conteúdo e reproduzível. Os apps de desktop, iPhone e Android podem usá-la como a sua forma de assinar."
+			},
 			{
 				"title": "Suas chaves on-chain, com backup no Ethereum",
 				"body": "Faça login direto pelo registro on-chain quando o índice estiver fora do ar, veja todas as chaves com que sua carteira foi criada e copie o seu registro para o Ethereum."
@@ -487,9 +491,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "a9482909de80",
+		"home": "9d4250ccd810",
 		"about": "44b20f016140",
-		"roadmap": "92efac5dc4ef",
+		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

@@ -59,7 +59,7 @@
 				"passkeys": "Geçiş anahtarları nasıl çalışır",
 				"signers": "İmzalayıcılar ve güvenlik anahtarları",
 				"clear-signing": "Açık imzalama",
-				"clear-signing-self-host": "İmza sayfasını kendiniz barındırın",
+				"clear-signing-self-host": "Trusted Signer",
 				"self-hosting": "Kendi sunucunuzda barındırma kılavuzu",
 				"bybit-attack": "Bybit saldırısı",
 				"recovery": "Kurtarma ve giriş",
@@ -229,7 +229,7 @@
 				},
 				{
 					"feature": "Ek bir kontrol",
-					"vela": "Bağımsız bir imza sayfası; hazır ama henüz uygulamalara bağlanmadı",
+					"vela": "Trusted Signer: seçerseniz, kendi başına çözen ve imzalayan bağımsız bir sayfa",
 					"metamask": "Üçüncü taraf risk uyarıları",
 					"base": "—"
 				},
@@ -355,8 +355,8 @@
 				"body": "Bugün bazı uygulamalar Ayarlar → Servis Uç Noktaları bölümünün bir kısmını yok sayıyor — iPhone uygulaması tamamen, web uygulaması cüzdan oluştururken ya da giriş yaparken, Android ise adresler için ad ararken. Hepsinin bu ayarlara uyması gerekiyor."
 			},
 			{
-				"title": "Bağımsız imza sayfasını bağlamak",
-				"body": "Bir isteği kendi başına çözen ve imzalayan imza sayfası hazır. Sırada: uygulamaların isteklerini ona iletmesi; böylece her imzayı sizin kendi yüklediğiniz bir program kontrol eder."
+				"title": "Reddeden bir Trusted Signer kontrolü",
+				"body": "Masaüstü uygulaması imza sayfasını kendisiyle birlikte gelen sürümlerle zaten karşılaştırıyor, ama bir uyuşmazlığı yalnızca günlüğe yazıyor. Sırada: eşleşmeyen bir sayfayı reddetmek ve bu kontrolü telefonlarda da yapmak."
 			},
 			{
 				"title": "Daha geniş açık imzalama kapsamı",
@@ -368,6 +368,10 @@
 			}
 		],
 		"shipped": [
+			{
+				"title": "Trusted Signer",
+				"body": "sign.getvela.app adresinde, bir isteği kendi başına çözen ve imzalayan bağımsız bir imza sayfası; her sürümü içerik adresli ve yeniden üretilebilir. Masaüstü, iPhone ve Android uygulamaları onu imzalama yönteminiz olarak kullanabilir."
+			},
 			{
 				"title": "Anahtarlarınız zincir üstünde, yedeği Ethereum'da",
 				"body": "Dizin çalışmadığında doğrudan zincir üstündeki kayıt defterinden giriş yapın, cüzdanınızın hangi anahtarlarla oluşturulduğunu görün ve kaydı Ethereum'a kopyalayın."
@@ -487,9 +491,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "a9482909de80",
+		"home": "9d4250ccd810",
 		"about": "44b20f016140",
-		"roadmap": "92efac5dc4ef",
+		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

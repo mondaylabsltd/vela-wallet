@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
-source: d0be29438317
+source: 227acd1acf3d
 ---
 
 <script>
@@ -235,8 +235,10 @@ lưu ký mang lại cho bạn là Vela không phải một bên thứ hai có đ
   mã và lớp chặn cấp quyền trong chính ứng dụng, các bản build macOS đã công chứng, và việc tự
   biên dịch tiện ích hoặc ứng dụng từ mã nguồn (các gói phát hành có checksum SHA-256 và các
   attestation nguồn gốc bản dựng của GitHub nêu rõ commit và lần chạy workflow; trình cài
-  đặt Windows vẫn chưa được ký mã). Một trang ký độc lập không dùng chung mã với ứng dụng đã được làm xong nhưng
-  chưa được kết nối.
+  đặt Windows vẫn chưa được ký mã). [Trusted Signer](/vi/docs/clear-signing-self-host),
+  một trang ký độc lập không dùng chung mã với ứng dụng, có thể được chọn làm cách ký trong
+  các ứng dụng máy tính, iPhone và Android; bước kiểm tra tính toàn vẹn trên máy tính chỉ ghi
+  lại một trang không khớp vào nhật ký, và các ứng dụng điện thoại chưa kiểm tra.
 - **Bất cứ thứ gì được phục vụ từ tên miền** — bất kỳ trang nào trên getvela.app hoặc các tên
   miền con của nó, kể cả một script mà trang đó tải, đều có thể xin chữ ký từ passkey của Vela,
   và lời nhắc chỉ hiện "getvela.app". Vì vậy trang web cấm chính các trang của mình dùng

@@ -1,7 +1,7 @@
 ---
 title: 셀프 호스팅 가이드
 description: "Vela가 대신 운영하는 모든 것, 각각의 역할, 그리고 릴레이, 공개 키 인덱스, 체인 데이터, 환율, 앱을 직접 운영하는 것으로 바꾸는 방법. 바꿀 수 없는 단 하나와, getvela.app 없이 지내는 방법도 다룹니다."
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -74,8 +74,9 @@ wallet.getvela.app에서 만든 지갑에는 서명할 수 없습니다. 그래�
 때문입니다. 휴대폰 자체의 패스키("이 기기")를 쓰려면 앱이 Vela의 서명을 받아야 하는데, 직접
 빌드한 앱은 그렇지 않습니다.
 
-[서명 페이지](/ko/docs/clear-signing-self-host)는 그 자체로는 들어가는 방법이 아닙니다.
-다른 프로그램이 보낸 요청에 서명할 뿐인데, 아직 이 페이지로 요청을 보내는 Vela 앱이 없습니다.
+[Trusted Signer](/ko/docs/clear-signing-self-host)는 그 자체로는 들어가는 방법이 아닙니다.
+앱(Vela 데스크톱 앱과 휴대폰 앱)이 보낸 요청에 서명할 뿐이고, 내 도메인에 둔 사본은 그
+도메인용으로 만든 패스키로만 서명합니다.
 
 <Callout type="warning" title="도메인을 가진 쪽은 서명을 요청할 수 있습니다">
 getvela.app이나 그 하위 도메인에서 서비스되는 페이지는, 그리고 앞으로 이 도메인을 갖게 될
@@ -302,4 +303,4 @@ Vela는 P-256 프리컴파일과, Vela가 확인하는 표준 컨트랙트를 �
 그리고 다음은 Vela의 것이 아닙니다. 공개 셀렉터 데이터베이스, 휴대폰 로그인에 쓰이는 Apple과
 Google의 터널, 그리고 직접 고른 RPC 공급자입니다.
 
-다음: [직접 운영할 수 있는 서명 페이지](/ko/docs/clear-signing-self-host).
+다음: [Trusted Signer, 그리고 내 사본을 운영하는 방법](/ko/docs/clear-signing-self-host).

@@ -149,7 +149,11 @@ trade-off:
   because a capped approval breaks Permit2 and batched swaps. An "unlimited"
   approval (2^200 or more; 2^152 for Permit2) is shown in red and sent as the dApp
   asked unless you cap it. Signed permits can't be capped anywhere.
-- **The independent signing page is not connected** to any app yet.
+- **The Trusted Signer is opt-in, and its integrity check does not refuse yet.**
+  The independent signing page is used only on a device where you chose it when
+  you created your wallet or signed in, and the web wallet can't use it. The
+  desktop app compares the page with the versions it ships with but only logs a
+  mismatch; the phone apps don't check yet.
 - **The website loads a third-party analytics script** on the same domain as the
   passkeys. The site forbids its pages from using passkeys (a Permissions-Policy
   header), and keeps the script off the page that holds a key.

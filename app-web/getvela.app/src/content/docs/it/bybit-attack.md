@@ -1,7 +1,7 @@
 ---
 title: L'attacco a Bybit, e la strada che ha usato
 description: "A febbraio 2025 Bybit ha perso circa 1,5 miliardi di dollari. I contratti Safe non sono stati violati — l'interfaccia sì. Questa pagina spiega la strada usata e cosa, nel design di Vela, la chiude."
-source: 14ae76da6694
+source: d8217ceb16b2
 ---
 
 # L'attacco a Bybit, e la strada che ha usato
@@ -85,14 +85,17 @@ completo quanto il payload di Bybit — un modulo abilitato può poi eseguire un
 successo a quello di `Safe{Wallet}`, anche la decodifica sarebbe dell'attaccante —
 ed è a questo che serve il punto successivo.
 
-**Una strada indipendente che può controllare l'interfaccia.** Vela ha costruito
-una [pagina di firma](/it/docs/clear-signing-self-host) senza build e senza
-dipendenze, che decodifica la richiesta ed esegue la firma WebAuthn per conto
-proprio: una sola cartella di file statici che puoi leggere da cima a fondo,
-ospitare tu o caricare come estensione del browser. Il suo scopo è essere una
-seconda opinione che non condivide la catena di fornitura dell'app principale.
-*Stato: costruita e testata; non pubblicata, e nessuna app Vela le invia ancora
-richieste.* Quando la situazione cambierà, questa pagina lo dirà chiaramente.
+**Una strada indipendente che può controllare l'interfaccia.** Il
+[Trusted Signer](/it/docs/clear-signing-self-host) di Vela è una pagina in un solo
+file su sign.getvela.app che decodifica la richiesta ed esegue la firma WebAuthn per
+conto proprio: una pagina che puoi leggere da cima a fondo, ricostruire byte per
+byte o ospitare tu. È una seconda opinione che non condivide la catena di fornitura
+dell'app principale: l'app gli consegna solo la richiesta, e ciò che viene firmato
+lo calcola la pagina stessa. *Stato: pubblicato; l'app desktop e le app per iPhone e
+Android lo usano su un dispositivo in cui l'hai scelto creando il wallet o
+accedendo. L'app desktop confronta la pagina con le versioni che porta con sé, ma
+una discrepanza la registra soltanto nel log, e le app per telefono non fanno
+ancora questo controllo.*
 
 **Nessun ruolo di amministrazione che possiamo perdere.** Gli account di Vela sono
 [Safe v1.4.1 non modificati](/it/docs/account-contract), e Vela non vi detiene

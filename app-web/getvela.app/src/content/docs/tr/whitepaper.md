@@ -1,7 +1,7 @@
 ---
 title: Teknik doküman
 description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
-source: d0be29438317
+source: 227acd1acf3d
 ---
 
 <script>
@@ -254,8 +254,11 @@ olmamasıdır.
   (notarized) macOS derlemeleri ve uzantıyı ya da uygulamaları kaynak koddan kendiniz
   derlemeniz (sürüm paketleri SHA-256 sağlama toplamları ve commit ile iş akışı
   çalışmasını adlandıran GitHub derleme kökeni attestation'larını taşır; Windows
-  yükleyicisi hâlâ kod imzalı değil). Uygulamanın
-  kodunu paylaşmayan bağımsız bir imza sayfası hazır ama henüz bağlanmadı.
+  yükleyicisi hâlâ kod imzalı değil). Uygulamanın kodunu paylaşmayan bağımsız bir imza
+  sayfası olan [Trusted Signer](/tr/docs/clear-signing-self-host), masaüstü, iPhone ve
+  Android uygulamalarında imzalama yönteminiz olarak seçilebilir; masaüstünün bütünlük
+  kontrolü eşleşmeyen bir sayfayı yalnızca günlüğe yazar, telefon uygulamaları ise henüz
+  kontrol etmiyor.
 - **Alan adından sunulan her şey** — getvela.app ya da alt alan adlarındaki herhangi bir
   sayfa, yüklediği bir betik dahil, Vela geçiş anahtarlarından imza isteyebilir ve istem
   yalnızca "getvela.app"i gösterir. Bu yüzden web sitesi kendi sayfalarının geçiş

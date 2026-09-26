@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
-source: d0be29438317
+source: 227acd1acf3d
 ---
 
 <script>
@@ -255,8 +255,11 @@ kedua yang bisa melakukannya.
   dan pengaman persetujuan di aplikasi itu sendiri, build macOS yang dinotarisasi, dan
   mengompilasi ekstensi atau aplikasinya sendiri dari kode sumber (paket rilis disertai
   checksum SHA-256 dan atestasi build-provenance GitHub yang menyebut commit serta proses
-  workflow-nya; penginstal Windows masih belum ditandatangani kodenya). Halaman tanda tangan independen yang tidak
-  berbagi kode dengan aplikasi sudah dibuat, tetapi belum terhubung.
+  workflow-nya; penginstal Windows masih belum ditandatangani kodenya).
+  [Trusted Signer](/id/docs/clear-signing-self-host), halaman tanda tangan independen yang
+  tidak berbagi kode dengan aplikasi, bisa dipilih sebagai cara menandatangani di aplikasi
+  desktop, iPhone, dan Android; pemeriksaan integritas di desktop hanya mencatat halaman yang
+  tidak cocok di log, dan aplikasi ponsel belum memeriksanya.
 - **Apa pun yang disajikan dari domain itu** — halaman mana pun di getvela.app atau
   subdomainnya, termasuk skrip yang dimuatnya, bisa meminta tanda tangan dari passkey
   Vela, dan permintaan konfirmasinya hanya menampilkan "getvela.app". Karena itu situs web

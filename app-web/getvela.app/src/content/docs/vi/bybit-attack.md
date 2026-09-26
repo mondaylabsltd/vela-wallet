@@ -1,7 +1,7 @@
 ---
 title: Vụ tấn công Bybit, và con đường nó đã dùng
 description: "Tháng 2/2025, Bybit mất khoảng 1,5 tỷ USD. Hợp đồng Safe không bị phá — giao diện mới bị phá. Trang này giải thích con đường tấn công đó, và những gì trong thiết kế của Vela chặn nó lại."
-source: 14ae76da6694
+source: d8217ceb16b2
 ---
 
 # Vụ tấn công Bybit, và con đường nó đã dùng
@@ -75,13 +75,15 @@ mô-đun đã được bật sau đó có thể tự chạy `delegatecall` của
 Vela bị thay, như mã của `Safe{Wallet}` đã bị, thì phần giải mã cũng sẽ là của kẻ tấn
 công — đó là lý do có điểm tiếp theo.
 
-**Một đường độc lập có thể kiểm tra lại giao diện.** Vela đã làm một
-[trang ký](/vi/docs/clear-signing-self-host) không cần build, không có thư viện phụ
-thuộc, tự giải mã yêu cầu và tự thực hiện chữ ký WebAuthn — một thư mục tệp tĩnh duy nhất
-mà bạn đọc được từ đầu đến cuối, tự phục vụ, hoặc nạp như một tiện ích trình duyệt. Mục
-đích của nó là làm ý kiến thứ hai không dùng chung chuỗi cung ứng với ứng dụng chính.
-*Tình trạng: đã làm xong và đã thử nghiệm; chưa phát hành, và chưa có ứng dụng Vela nào
-gửi yêu cầu tới nó.* Trang này sẽ nói rõ khi điều đó thay đổi.
+**Một đường độc lập có thể kiểm tra lại giao diện.**
+[Trusted Signer](/vi/docs/clear-signing-self-host) của Vela là một trang chỉ gồm một tệp tại
+sign.getvela.app, tự giải mã yêu cầu và tự thực hiện chữ ký WebAuthn — một trang bạn đọc được
+từ đầu đến cuối, build lại giống hệt đến từng byte, hoặc tự phục vụ. Nó là ý kiến thứ hai
+không dùng chung chuỗi cung ứng với ứng dụng chính: ứng dụng chỉ chuyển yêu cầu sang, còn thứ
+được ký thì do chính trang tự tính. *Tình trạng: đã phát hành; các ứng dụng máy tính, iPhone
+và Android dùng nó trên thiết bị mà bạn đã chọn nó khi tạo ví hoặc đăng nhập. Ứng dụng máy
+tính so sánh trang với các phiên bản đi kèm ứng dụng nhưng chỉ ghi lại việc không khớp vào nhật
+ký, và các ứng dụng điện thoại chưa kiểm tra việc này.*
 
 **Chúng tôi không có vai trò quản trị nào để bị mất.** Tài khoản Vela là
 [Safe v1.4.1 nguyên bản](/vi/docs/account-contract), và Vela không giữ vai trò đặc quyền

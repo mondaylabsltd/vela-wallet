@@ -1,7 +1,7 @@
 ---
 title: L'attaque de Bybit, et le chemin qu'elle a emprunté
 description: "En février 2025, Bybit a perdu environ 1,5 milliard de dollars. Les contrats Safe n'ont pas été cassés — c'est l'interface qui l'a été. Cette page explique le chemin emprunté, et ce qui, dans la conception de Vela, le ferme."
-source: 14ae76da6694
+source: d8217ceb16b2
 ---
 
 # L'attaque de Bybit, et le chemin qu'elle a emprunté
@@ -85,14 +85,17 @@ exécuter son propre `delegatecall`. Et si le code de Vela lui-même était remp
 comme l'a été celui de `Safe{Wallet}`, le décodage serait lui aussi celui de
 l'attaquant — c'est à cela que sert le point suivant.
 
-**Un chemin indépendant capable de contrôler l'interface.** Vela a construit une
-[page de signature](/fr/docs/clear-signing-self-host) sans build ni dépendances,
-qui décode la demande et effectue la signature WebAuthn par elle-même — un unique
-dossier de fichiers statiques que vous pouvez lire de bout en bout, servir
-vous-même, ou charger comme extension de navigateur. Son rôle est d'être un second
-avis qui ne partage pas la chaîne d'approvisionnement de l'app principale.
-*État : construite et testée ; pas publiée, et aucune app Vela ne lui envoie encore
-de demandes.* Cette page le dira clairement quand cela changera.
+**Un chemin indépendant capable de contrôler l'interface.** Le
+[Trusted Signer](/fr/docs/clear-signing-self-host) de Vela est une page d'un seul
+fichier, sur sign.getvela.app, qui décode la demande et effectue la signature
+WebAuthn par elle-même — une page que vous pouvez lire de bout en bout, reconstruire
+octet pour octet, ou servir vous-même. C'est un second avis qui ne partage pas la
+chaîne d'approvisionnement de l'app principale : l'app ne lui transmet que la
+demande, et la page calcule elle-même ce qui est signé. *État : publié ; les apps de
+bureau, iPhone et Android l'utilisent sur un appareil où vous l'avez choisi en créant
+le portefeuille ou en vous connectant. L'app de bureau compare la page aux versions
+qu'elle embarque, mais ne fait que journaliser une différence, et les apps mobiles ne
+vérifient pas encore.*
 
 **Aucun rôle d'administrateur que l'on pourrait nous voler.** Les comptes Vela sont
 des [Safe v1.4.1 non modifiés](/fr/docs/account-contract), et Vela n'y détient

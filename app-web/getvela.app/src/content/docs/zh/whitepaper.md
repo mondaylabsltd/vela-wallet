@@ -1,7 +1,7 @@
 ---
 title: 白皮书
 description: "Vela 如何运作，以及使用它时你需要信任什么、不需要信任什么：账户、钥匙、手续费、威胁模型、恢复，以及 Vela 消失了会怎样。"
-source: d0be29438317
+source: 227acd1acf3d
 ---
 
 <script>
@@ -182,7 +182,9 @@ Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——
   这就是 [Bybit](/zh/docs/bybit-attack) 那一类攻击。目前的缓解手段有限：App 自身的解码与授权闸门、
   经过公证的 macOS 构建，以及你亲自从源码编译扩展或 App（发布包附有 SHA-256 校验值，
   以及标明提交和工作流运行的 GitHub 构建溯源证明；Windows 安装包仍未做代码签名）。
-  一个不与 App 共享代码的独立签名页已经做好，但尚未接入。
+  [可信签名器](/zh/docs/clear-signing-self-host)是一个不与 App 共享代码的独立签名页，可以在桌面版、
+  iPhone 和 Android App 里选作你的签名方式；桌面版的完整性检查遇到不匹配的页面只写进日志，
+  手机端还不做这项检查。
 - **域名上提供的任何内容**——getvela.app 或其子域名上的任何页面，包括它加载的脚本，都可以请求 Vela
   通行密钥签名，而弹窗只显示“getvela.app”。因此网站禁止自己的页面使用通行密钥，并且不在保存着密钥
   的那个页面上加载统计脚本。如果域名易主，新主人还将控制哪些 App 可以使用这些通行密钥。扩展和自编译

@@ -1,7 +1,7 @@
 ---
 title: Audits und bekannte Probleme
 description: "Jeder Vertrag, von dem Vela abhängt, wer welche Version auditiert hat, ob die auditierte Version die bereitgestellte ist, die offenen Befunde, die wir beobachten, und was überhaupt nicht auditiert wurde."
-source: 377855411c74
+source: 09a0c3d8acc0
 ---
 
 „Auditiert“ ist eine Aussage über bestimmten Code in einer bestimmten Version, deshalb
@@ -161,7 +161,12 @@ bewusster Kompromiss ausgewiesen ist:
   scheitern. Eine „unbegrenzte“ Freigabe (2^200 oder mehr; 2^152 bei Permit2) wird
   rot angezeigt und so gesendet, wie die dApp sie angefragt hat, sofern du sie nicht
   begrenzt. Signierte Permits lassen sich nirgends begrenzen.
-- **Die unabhängige Signaturseite ist noch an keine App angebunden.**
+- **Der Trusted Signer ist nur aktiv, wenn du ihn wählst, und seine Integritätsprüfung
+  lehnt noch nichts ab.** Die unabhängige Signaturseite wird nur auf einem Gerät
+  genutzt, auf dem du sie beim Erstellen deiner Wallet oder bei der Anmeldung gewählt
+  hast, und die Web-Wallet kann sie nicht nutzen. Die Desktop-App vergleicht die Seite
+  mit den Versionen, die sie mitbringt, protokolliert eine Abweichung aber nur; die
+  Handy-Apps prüfen noch nicht.
 - **Die Website lädt ein Analyse-Skript eines Drittanbieters** auf derselben Domain
   wie die Passkeys. Die Website verbietet ihren Seiten die Nutzung von Passkeys (über
   einen Permissions-Policy-Header) und hält das Skript von der Seite fern, auf der ein

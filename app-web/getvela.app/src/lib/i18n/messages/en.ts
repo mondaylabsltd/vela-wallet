@@ -110,7 +110,7 @@ export const en = {
 				passkeys: 'How passkeys work',
 				signers: 'Signers & security keys',
 				'clear-signing': 'Clear signing',
-				'clear-signing-self-host': 'Self-host the signing page',
+				'clear-signing-self-host': 'Trusted Signer',
 				'self-hosting': 'Self-hosting guide',
 				'bybit-attack': 'The Bybit attack',
 				recovery: 'Recovery & sign-in',
@@ -421,7 +421,7 @@ export const en = {
 				},
 				{
 					feature: 'An extra check',
-					vela: 'An independent signing page, built but not yet connected to the apps',
+					vela: 'The Trusted Signer: an independent page that decodes and signs on its own, if you choose it',
 					metamask: 'Third-party risk alerts',
 					base: '\u2014'
 				},
@@ -584,8 +584,8 @@ export const en = {
 				body: 'Today some apps ignore parts of Settings → Service Endpoints — the iPhone app entirely, the web app when creating a wallet or signing in, and Android when looking up names. They should all honour it.'
 			},
 			{
-				title: 'The independent signing page, connected',
-				body: 'The signing page that decodes and signs a request on its own is built. Next: let the apps hand their requests to it, so a program you loaded yourself checks every signature.'
+				title: 'A Trusted Signer check that refuses',
+				body: 'The desktop app already compares the signing page with the versions it ships with, but only logs a mismatch. Next: refuse a page that does not match, and check it on the phones too.'
 			},
 			{
 				title: 'Wider clear-signing coverage',
@@ -597,6 +597,10 @@ export const en = {
 			}
 		],
 		shipped: [
+			{
+				title: 'Trusted Signer',
+				body: 'An independent signing page at sign.getvela.app that decodes a request and signs it on its own, each version content-addressed and reproducible. The desktop, iPhone and Android apps can use it as the way you sign.'
+			},
 			{
 				title: 'Your keys on-chain, with a backup on Ethereum',
 				body: 'Sign in straight from the on-chain registry when the index is down, see every key your wallet was created with, and copy the record to Ethereum.'

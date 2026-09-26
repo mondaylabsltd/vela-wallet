@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Cómo funciona Vela y en qué tienes (y en qué no tienes) que confiar para usarla: la cuenta, las llaves, la comisión, el modelo de amenazas, la recuperación y qué pasa si Vela desaparece."
-source: d0be29438317
+source: 227acd1acf3d
 ---
 
 <script>
@@ -264,8 +264,11 @@ que pueda hacerlo.
   mismo la extensión o las apps desde el código fuente (los paquetes publicados traen
   sumas de verificación SHA-256 y atestiguados de procedencia de compilación de GitHub
   que nombran el commit y la ejecución del flujo de trabajo; el instalador de Windows
-  sigue sin firma de código). Hay una página de firma independiente que no comparte el
-  código de la app, ya construida pero todavía no conectada.
+  sigue sin firma de código). El [Trusted Signer](/es-MX/docs/clear-signing-self-host),
+  una página de firma independiente que no comparte el código de la app, se puede
+  elegir como tu forma de firmar en las apps de escritorio, iPhone y Android; la
+  verificación de integridad del escritorio solo registra en el log una página que no
+  coincide, y las apps de celular todavía no hacen esta revisión.
 - **Cualquier cosa servida desde el dominio**: cualquier página de getvela.app o de
   sus subdominios, incluido un script que cargue, podría pedir firmas a las passkeys
   de Vela, y el aviso solo muestra «getvela.app». Por eso el sitio web prohíbe que sus

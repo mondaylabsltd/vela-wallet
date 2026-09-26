@@ -79,13 +79,16 @@ can then run a `delegatecall` of its own. And if Vela's own code were replaced,
 as `Safe{Wallet}`'s was, the decoding would be the attacker's too — which is what
 the next point is for.
 
-**An independent path that can check the interface.** Vela has built a
-zero-build, zero-dependency [signing page](/docs/clear-signing-self-host) that
-decodes the request and performs the WebAuthn signature on its own — a single
-folder of static files you can read end to end, serve yourself, or load as a
-browser extension. Its purpose is to be a second opinion that does not share the
-main app's supply chain. *Status: built and tested; not published, and no Vela
-app sends requests to it yet.* This page will say so plainly when that changes.
+**An independent path that can check the interface.** Vela's
+[Trusted Signer](/docs/clear-signing-self-host) is a single-file page at
+sign.getvela.app that decodes the request and performs the WebAuthn signature on
+its own — a page you can read end to end, rebuild byte for byte, or serve
+yourself. It is a second opinion that does not share the main app's supply
+chain: the app only hands it the request, and the page computes what gets signed
+itself. *Status: published; the desktop, iPhone and Android apps use it on a
+device where you chose it when creating the wallet or signing in. The desktop app
+compares the page with the versions it ships with but only logs a mismatch, and
+the phone apps don't check yet.*
 
 **No admin role for us to lose.** Vela's accounts are
 [unmodified Safe v1.4.1](/docs/account-contract), and Vela holds no privileged

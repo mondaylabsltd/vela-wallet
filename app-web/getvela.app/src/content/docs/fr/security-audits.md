@@ -1,7 +1,7 @@
 ---
 title: Audits et problèmes connus
 description: "Chaque contrat dont Vela dépend, qui a audité quelle version, si la version auditée est bien celle qui est déployée, les constats ouverts que nous surveillons, et ce qui n'a pas été audité du tout."
-source: 377855411c74
+source: 09a0c3d8acc0
 ---
 
 « Audité » est une affirmation qui porte sur un code précis, dans une version
@@ -165,7 +165,12 @@ correction, sauf là où il est indiqué qu'il s'agit d'un compromis délibéré
   « illimitée » (2^200 ou plus ; 2^152 pour Permit2) s'affiche en rouge et est
   envoyée telle que la dApp l'a demandée, sauf si vous la plafonnez. Les permits
   signés ne peuvent être plafonnés nulle part.
-- **La page de signature indépendante n'est encore reliée** à aucune app.
+- **Le Trusted Signer est facultatif, et son contrôle d'intégrité ne refuse encore
+  rien.** La page de signature indépendante n'est utilisée que sur un appareil où
+  vous l'avez choisie en créant votre portefeuille ou en vous connectant, et le
+  portefeuille web ne peut pas l'utiliser. L'app de bureau compare la page aux
+  versions qu'elle embarque, mais ne fait que journaliser une différence ; les apps
+  mobiles ne vérifient pas encore.
 - **Le site web charge un script d'analyse d'audience tiers** sur le même domaine
   que les passkeys. Le site interdit à ses pages d'utiliser les passkeys (un en-tête
   Permissions-Policy), et tient ce script à l'écart de la page qui détient une clé.

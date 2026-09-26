@@ -85,7 +85,7 @@ and shipped: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | [`app-ios/VelaWallet`](app-ios/VelaWallet) | iOS app, SwiftUI | `./rust/scripts/build-ios-xcframework.sh`, then Xcode — and `./rust/scripts/check-ios-core-fresh.sh` before any device test, because `xcodebuild` never rebuilds the Rust |
 | [`app-android/vela-wallet`](app-android/vela-wallet) | Android app, Jetpack Compose | generate the bindings ([ci.yml](.github/workflows/ci.yml) `android`), then `./gradlew :app:installDebug` |
 | [`app-web/getvela.app`](app-web/getvela.app) | The website and the user docs | `bun install && bun run dev` |
-| [`app-web/clearsigning`](app-web/clearsigning/README.md) | Standalone signing page, zero build | `python3 -m http.server`, or open `index.html` |
+| [`app-web/trusted-signer`](app-web/trusted-signer/README.md) | Trusted Signer — the independent signing page published at sign.getvela.app, one reproducible file per version | `bun samples/build-single.mjs` (or `node`) to build; `python3 -m http.server` to try |
 | [`scripts/`](scripts/package.json) | Generators and CI gates the apps share | [Tooling](docs/ARCHITECTURE.md#tooling) |
 | [`specs/`](specs/) | Every feature's spec, plan and delivery report, numbered in order | the latest one |
 
