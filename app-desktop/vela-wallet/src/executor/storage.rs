@@ -20,6 +20,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Map, Value, json};
 
@@ -71,6 +72,18 @@ type Result<T> = std::result::Result<T, StorageError>;
 /// the session machine's migration write-back and an onboarding save — and the
 /// file is rewritten whole, so an interleave would lose one of them.
 static LOCK: Mutex<()> = Mutex::new(());
+
+/// How many times this process has rewritten the document. A reader that keeps
+/// an answer derived from it — the logo host, which every row of every column
+/// asks for on every frame — compares this instead of re-reading the file:
+/// a scroll is a frame per display refresh, and each of them was opening and
+/// parsing the whole wallet a hundred times.
+static WRITES: AtomicU64 = AtomicU64::new(0);
+
+/// See [`WRITES`]. Moves whenever `write_all` has run, whatever it wrote.
+pub fn generation() -> u64 {
+    WRITES.load(Ordering::Acquire)
+}
 
 /// Where the file lives.
 ///
@@ -124,10 +137,17 @@ fn write_all(map: Map<String, Value>) -> Result<()> {
     // direct write leaves a truncated account list, and an account list that
     // parses as EMPTY is indistinguishable from being signed out.
     let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, body)
-        .map_err(|error| StorageError(format!("{}: {error}", temporary.display())))?;
-    fs::rename(&temporary, &path)
-        .map_err(|error| StorageError(format!("{}: {error}", path.display())))
+    let written = fs::write(&temporary, body)
+        .map_err(|error| StorageError(format!("{}: {error}", temporary.display())))
+        .and_then(|()| {
+            fs::rename(&temporary, &path)
+                .map_err(|error| StorageError(format!("{}: {error}", path.display())))
+        });
+    // Counted once the file is in place, and counted when it failed too. After
+    // the rename, not before it: a reader that read the old document between
+    // the two would otherwise file it under the new count and keep it.
+    WRITES.fetch_add(1, Ordering::AcqRel);
+    written
 }
 
 fn read_list(key: &str) -> Result<Vec<Value>> {

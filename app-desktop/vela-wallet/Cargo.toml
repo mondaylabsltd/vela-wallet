@@ -360,3 +360,15 @@ windows-sys = { version = "0.59", features = [
 # TARGET instead, and this crate is tiny and builds anywhere.
 [build-dependencies]
 winresource = "0.1"
+
+# `cargo run` has to scroll like the release build. gpui lays the whole window
+# out again on every scroll step, and unoptimized taffy (the layout engine) and
+# gpui (its text measuring) turned that into ~12 frames a second on a wallet
+# of 23 holdings; optimized, the debug build holds 120. Zed's own workspace
+# does the same for taffy. Both are git dependencies, so this costs one
+# rebuild of them, not a slower edit-compile loop.
+[profile.dev.package.taffy]
+opt-level = 3
+
+[profile.dev.package.gpui]
+opt-level = 3

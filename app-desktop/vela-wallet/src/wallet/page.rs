@@ -3531,7 +3531,14 @@ impl WalletPage {
         // wrong opens somebody's ETH panel from their USDC row, and the next
         // thing that panel offers is 转账.
         let asset_indices = self.visible_assets(cx);
-        let mut assets_col = div().flex().flex_col();
+        // Block, not a flex column — and so are the two boxes the column sits
+        // in, below. All three only stack their children, which block layout
+        // does identically; but gpui lays this whole column out again on every
+        // scroll step, and as nested flex columns each level measured every
+        // row again before placing it. On a wallet of 23 holdings that was
+        // 5 ms of a 120 Hz frame's 8.3 (70 ms in a debug build); as blocks it
+        // is 1.3. No vertical margins live in here, so nothing collapses.
+        let mut assets_col = div();
         for (i, row) in assets.iter().enumerate() {
             let index = asset_indices.get(i).copied();
             assets_col = assets_col.child(
@@ -3582,13 +3589,12 @@ impl WalletPage {
             .size_full()
             .overflow_y_scroll()
             .child(
+                // Block: see `assets_col`.
                 div()
                     .max_w(px(WALLET_CONTENT_MAX_W))
                     .pl(px(WALLET_PAD_X))
                     .pr(px(32.))
                     .pb(px(32.))
-                    .flex()
-                    .flex_col()
                     .child(balance_display(
                         theme,
                         &mut self.icons,
@@ -3615,8 +3621,6 @@ impl WalletPage {
                     .child(
                         div()
                             .max_w(px(WALLET_ROW_MEASURE))
-                            .flex()
-                            .flex_col()
                             .child(pills)
                             .child(
                                 div()
