@@ -23,7 +23,8 @@ import type { ContactEvent } from '$lib/core/generated/ContactEvent';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
 import { createContactsSession, type ContactsSession } from './contacts';
 
-class ContactsBook {
+/** Exported for tests, which build a fresh one each; the app uses `contactsBook`. */
+export class ContactsBook {
 	/** `null` until the session's first view; then the core's, always. */
 	view = $state<ContactsView | null>(null);
 
@@ -56,14 +57,14 @@ class ContactsBook {
 	 * on its next write re-save, what was just cleared. A session per visit
 	 * used to re-read on every mount; the resident is told instead.
 	 */
-	reload(): void {
-		if (!this.#session) return;
+	reload(): Promise<void> {
+		if (!this.#session) return Promise.resolve();
 		const address = this.#told ?? null;
 		this.#session.dispose();
 		this.#session = null;
 		this.#booting = null;
 		this.view = null;
-		void this.#boot(address);
+		return this.#boot(address);
 	}
 
 	#boot(address: string | null): Promise<void> {
