@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use super::shell::{CompletionMode, Effect, ShellOperation, ShellResult};
 use super::{
     name_fits_user_handle, public_key_hex_from_attestation, Account, AccountKey, FailureKind,
-    KeyMethod, PendingUpload, PromptKind, RegistryPublishMember, StatusKey,
+    KeyMethod, PendingUpload, PromptKind, RegistryPublishMember, SignInKey, StatusKey,
 };
 use crate::error::CoreError;
 use crate::registry_metadata::{RegistryMetadata, REGISTRY_METADATA_VERSION};
@@ -286,6 +286,9 @@ pub struct PreparedKey {
     pub proof: Option<RegistryProof>,
     /// Spec 075: the Trusted Signer page the key was minted behind, if any.
     pub signer_origin: Option<String>,
+    /// The route the person chose for it — for the first key, how this device
+    /// signs from now on ([`super::SignInKey`]).
+    pub method: KeyMethod,
 }
 
 /// Derived from the drafts, not yet persisted anywhere. `keys[0]` is the
@@ -322,6 +325,13 @@ impl Prepared {
                     signer_origin: key.signer_origin.clone(),
                 })
                 .collect(),
+            // Creating is this device's first sign-in: the first key signs,
+            // over the route it was made on.
+            signed_in_with: Some(SignInKey {
+                credential_id: first.credential_id.clone(),
+                method: first.method,
+                signer_origin: first.signer_origin.clone(),
+            }),
         }
     }
 }
@@ -944,6 +954,7 @@ fn finish_keys(model: &mut Model) -> Command<Effect, Event> {
             transports: crate::passkey::allowlist_transports(&draft.transports),
             proof: draft.proof,
             signer_origin: draft.signer_origin,
+            method: draft.method,
         })
         .collect();
 

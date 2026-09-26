@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use super::shell::{CompletionMode, Effect, ProofPurpose, ShellOperation, ShellResult};
 use super::{
     address_from_public_key_hex, valid_display_name, Account, AccountKey, Assertion, FailureKind,
-    KeyMethod, PromptKind, RegistryPublishMember,
+    KeyMethod, PromptKind, RegistryPublishMember, SignInKey,
 };
 use crate::error::CoreError;
 use crate::primitives;
@@ -156,6 +156,9 @@ pub struct Model {
     /// The authenticator the person chose on the sign-in screen. Carried so the
     /// "who are you?" ceremony runs on the route they asked for.
     method: KeyMethod,
+    /// Entering as the stored account at this index, whose record is being
+    /// re-saved to name the key that just signed in ([`enter_known`]).
+    entering: Option<usize>,
     attempt: u64,
     health: Health,
     abort: Option<AbortHandle>,
@@ -273,6 +276,7 @@ fn sign_in(model: &mut Model, method: KeyMethod) -> Command<Effect, Event> {
     model.pending = None;
     model.candidates = Vec::new();
     model.querying = None;
+    model.entering = None;
     model.method = method;
     model.stage = Stage::CheckingSupport;
     request(model, ShellOperation::CheckPasskeySupport)
@@ -318,19 +322,8 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
                 .iter()
                 .position(|account| account.matches_credential(&assertion.credential_id))
             {
-                Some(active_index) => {
-                    // Already known here: enter immediately, no server involved.
-                    model.stage = Stage::Completing;
-                    request(
-                        model,
-                        ShellOperation::CompleteOnboarding {
-                            mode: CompletionMode::SetWallet {
-                                accounts,
-                                active_index,
-                            },
-                        },
-                    )
-                }
+                // Already known here: enter immediately, no server involved.
+                Some(active_index) => enter_known(model, active_index),
                 None => {
                     // The registry cannot be looked up by credential id, but
                     // one signature already yields two candidate keys — one
@@ -507,6 +500,9 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         // Publishing to the registry already happened before this point
         // (option B), so save simply hands the wallet over.
         (Stage::Saving, ShellResult::AccountSaved) => {
+            if let Some(active_index) = model.entering.take() {
+                return complete_known(model, active_index);
+            }
             let Some(account) = model.pending.clone() else {
                 return Command::done();
             };
@@ -519,6 +515,9 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             )
         }
         (Stage::Saving, ShellResult::StorageFailed { message }) => {
+            if let Some(active_index) = model.entering.take() {
+                return complete_known(model, active_index);
+            }
             idle_with_prompt(model, PromptKind::SignInFailed { detail: message })
         }
         (Stage::Completing, ShellResult::OnboardingCompleted) => Command::done(),
@@ -580,6 +579,8 @@ fn account_from_key(assertion: &Assertion, public_key_hex: &str, now_iso: &str) 
             transports: transports_from_attachment(&assertion.authenticator_attachment),
             signer_origin: assertion.signer_origin.clone(),
         }],
+        // Named as it is saved (`begin_save`), with the route the sign-in took.
+        signed_in_with: None,
     })
 }
 
@@ -642,32 +643,72 @@ fn resolve_name_then(
 /// crashed the web's switcher, which keyed its rows by address — issue 214
 /// follow-up, founder-reported 2026-09-16.)
 ///
-/// So the existing record wins and stays exactly as it is: it may carry a
-/// name the user chose, and its address — the only thing that decides which
-/// Safe this is — is by definition the same. Entering through `SetWallet`
-/// rather than `AddAccount` is what makes this "sign in", not "add".
-fn begin_save(model: &mut Model, account: Account) -> Command<Effect, Event> {
+/// So the existing record wins and stays as it is — but for the key it signs
+/// with ([`enter_known`]): it may carry a name the user chose, and its address
+/// — the only thing that decides which Safe this is — is by definition the
+/// same. Entering through `SetWallet` rather than `AddAccount` is what makes
+/// this "sign in", not "add".
+fn begin_save(model: &mut Model, mut account: Account) -> Command<Effect, Event> {
     if let Some(active_index) = model
         .known
         .iter()
         .position(|existing| existing.address.eq_ignore_ascii_case(&account.address))
     {
         model.pending = None;
-        model.stage = Stage::Completing;
-        let accounts = model.known.clone();
-        return request(
-            model,
-            ShellOperation::CompleteOnboarding {
-                mode: CompletionMode::SetWallet {
-                    accounts,
-                    active_index,
-                },
-            },
-        );
+        return enter_known(model, active_index);
     }
+    account.signed_in_with = sign_in_key(model);
     model.pending = Some(account.clone());
     model.stage = Stage::Saving;
     request(model, ShellOperation::SaveAccount { account })
+}
+
+/// The key that just signed in, over the route the person chose for it — how
+/// this device signs for the account from now on ([`SignInKey`]).
+fn sign_in_key(model: &Model) -> Option<SignInKey> {
+    let assertion = model.assertion.as_ref()?;
+    Some(SignInKey {
+        credential_id: assertion.credential_id.clone(),
+        method: model.method,
+        signer_origin: assertion.signer_origin.clone(),
+    })
+}
+
+/// Enter as an account this device already holds, found by credential or by
+/// address. Its record now names the key that just signed in: signing in with
+/// another key is how a person changes the key they sign with. It is re-saved
+/// only when that changed, and a failed write still enters — the sign-in
+/// itself succeeded, and the stored record keeps the key it named before. A
+/// record that does not list the credential (found by address) keeps its key
+/// too: a signature from a key the record does not hold could not be verified.
+fn enter_known(model: &mut Model, active_index: usize) -> Command<Effect, Event> {
+    let key = sign_in_key(model);
+    if let (Some(account), Some(key)) = (model.known.get_mut(active_index), key) {
+        if account.matches_credential(&key.credential_id)
+            && account.signed_in_with.as_ref() != Some(&key)
+        {
+            account.signed_in_with = Some(key);
+            let account = account.clone();
+            model.entering = Some(active_index);
+            model.stage = Stage::Saving;
+            return request(model, ShellOperation::SaveAccount { account });
+        }
+    }
+    complete_known(model, active_index)
+}
+
+fn complete_known(model: &mut Model, active_index: usize) -> Command<Effect, Event> {
+    model.stage = Stage::Completing;
+    let accounts = model.known.clone();
+    request(
+        model,
+        ShellOperation::CompleteOnboarding {
+            mode: CompletionMode::SetWallet {
+                accounts,
+                active_index,
+            },
+        },
+    )
 }
 
 /// Recover the two candidate keys from the first signature and start checking
@@ -784,6 +825,8 @@ fn reconstruct_account(
             metadata.created_at_iso.clone()
         },
         keys,
+        // Named as it is saved (`begin_save`), with the route the sign-in took.
+        signed_in_with: None,
     })
 }
 

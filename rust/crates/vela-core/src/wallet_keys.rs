@@ -399,10 +399,10 @@ pub fn step(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> Ke
 // "Sign with" — which key a ceremony is pinned to, and how it is reached
 // ---------------------------------------------------------------------------
 
-/// Every "Sign with" value, in the order every shell lists them: `auto` (do
-/// what the wallet always did), the three places a passkey can be, and the
-/// Trusted Signer (spec 071) — a separate page that checks the request and runs
-/// the ceremony itself, which [`sign_route`] does not route.
+/// Every "Sign with" value: `auto` (do what the wallet always did), the three
+/// places a passkey can be, and the Trusted Signer (spec 071) — a separate page
+/// that checks the request and runs the ceremony itself. Chosen when a wallet
+/// is created or signed into, never per signature (founder, 2026-09-26).
 pub const SIGN_METHODS: [&str; 5] = [
     "auto",
     "platform",
@@ -425,10 +425,14 @@ pub struct SignRoute {
     pub signer_origin: String,
 }
 
-/// The person chose HOW to sign this one request (founder, 2026-09-19: creating
-/// and signing in let a person say where their passkey is; signing silently
-/// took the first key's stored route). `None` for `auto` — and for anything
-/// this build does not know — which means "do what you always did".
+/// Where a signature goes for a given "Sign with" value. `None` for `auto` —
+/// and for anything this build does not know — which means "do what you always
+/// did".
+///
+/// Founder, 2026-09-26: signing no longer asks. An account signs with the key
+/// it was created or signed in with (`app::Account::sign_in_route`);
+/// this answers only for records written before that existed, which ask it
+/// for `auto`.
 ///
 /// A native ceremony is PINNED to one credential, so the choice also picks the
 /// key: the first founding key whose own stored transports describe that
@@ -467,12 +471,7 @@ pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
         }
         _ => {}
     }
-    let transports = match method {
-        "platform" => "internal",
-        "hybrid" => "hybrid,internal",
-        "security_key" => "usb,nfc,ble",
-        _ => return None,
-    };
+    let transports = transports_of_method(method)?;
     // A platform sheet reaches a Trusted Signer key only when the page was the
     // wallet's own (`*.getvela.app` passkeys are the app's passkeys). A key
     // behind anybody else's page is reachable nowhere else — route it there.
@@ -496,6 +495,19 @@ pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
         method: method.to_owned(),
         signer_origin: String::new(),
     })
+}
+
+/// The transports a pinned request carries to reach a key over `method` — what
+/// makes the platform look in the right place. `None` for a route that is not
+/// a place a passkey is (`auto`, the Trusted Signer, anything unknown).
+#[must_use]
+pub fn transports_of_method(method: &str) -> Option<&'static str> {
+    match method {
+        "platform" => Some("internal"),
+        "hybrid" => Some("hybrid,internal"),
+        "security_key" => Some("usb,nfc,ble"),
+        _ => None,
+    }
 }
 
 /// The JSON door: `null` for `auto`, an unknown method, or a wallet with no

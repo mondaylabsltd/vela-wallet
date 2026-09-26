@@ -193,9 +193,71 @@ pub struct Account {
     /// before this field existed deserialize unchanged.
     #[serde(default)]
     pub keys: Vec<AccountKey>,
+    /// The key this device signs with — see [`SignInKey`]. `None` on records
+    /// written before it existed, which sign as they always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signed_in_with: Option<SignInKey>,
+}
+
+/// Which of the wallet's keys this device signs with, and how it reaches it:
+/// the one the person created the wallet with, or last signed in with, HERE.
+///
+/// Founder, 2026-09-26: a person says where their passkey is when they create
+/// or sign in, and never again — every later signature reuses that answer. The
+/// sign-in just proved this key answers over this route on this device, so a
+/// "Sign with" choice per signature was asking a question already answered.
+/// There is no switching: a key that stops answering is replaced by signing
+/// out and signing in with another, which records that one instead.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SignInKey {
+    pub credential_id: String,
+    /// The route that reached it — the person's choice at sign-in, not what
+    /// the key reported at registration: a synced passkey minted on a phone
+    /// (`internal`) is reached from a desktop by scanning a code.
+    pub method: KeyMethod,
+    /// With `method = trusted_signer`, the page the ceremony ran on (spec 075).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_origin: Option<String>,
 }
 
 impl Account {
+    /// Where this account's signatures go: the key it was created or signed in
+    /// with, over the route that reached it ([`SignInKey`]). `None` when the
+    /// record predates that, or names a key this wallet does not hold — the
+    /// shell then signs as it always did.
+    #[must_use]
+    pub fn sign_in_route(&self) -> Option<crate::wallet_keys::SignRoute> {
+        let key = self.signed_in_with.as_ref()?;
+        if key.credential_id.is_empty() || !self.matches_credential(&key.credential_id) {
+            return None;
+        }
+        let method = key.method.name();
+        let signer_origin = if key.method == KeyMethod::TrustedSigner {
+            // The sign-in's own page, else the page the key was minted behind;
+            // empty means the person's page from Settings.
+            key.signer_origin
+                .clone()
+                .or_else(|| {
+                    self.keys
+                        .iter()
+                        .find(|held| held.credential_id == key.credential_id)
+                        .and_then(|held| held.signer_origin.clone())
+                })
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        Some(crate::wallet_keys::SignRoute {
+            credential_id: key.credential_id.clone(),
+            transports: crate::wallet_keys::transports_of_method(method)
+                .unwrap_or_default()
+                .to_owned(),
+            method: method.to_owned(),
+            signer_origin,
+        })
+    }
+
     /// The full key set in founding order; a legacy account projects its
     /// scalar field as the sole key.
     pub(crate) fn key_hexes(&self) -> Vec<String> {
@@ -321,6 +383,11 @@ impl<'de> Deserialize<'de> for Account {
             created_at_camel: Option<String>,
             #[serde(default)]
             keys: Vec<AccountKey>,
+            /// Read loosely: a record naming a route a newer build added must
+            /// cost only this field (the account signs as it always did), never
+            /// the whole account list.
+            #[serde(default)]
+            signed_in_with: Option<serde_json::Value>,
         }
         let w = Wire::deserialize(d)?;
         Ok(Account {
@@ -330,6 +397,9 @@ impl<'de> Deserialize<'de> for Account {
             public_key_hex: either(w.public_key_hex, w.public_key_hex_camel, "public_key_hex")?,
             created_at_iso: either(w.created_at_iso, w.created_at_camel, "created_at_iso")?,
             keys: w.keys,
+            signed_in_with: w
+                .signed_in_with
+                .and_then(|raw| serde_json::from_value(raw).ok()),
         })
     }
 }
@@ -500,6 +570,19 @@ pub enum KeyMethod {
     /// and the answer comes back to be verified here. A peer of the three
     /// above, offered wherever they are.
     TrustedSigner,
+}
+
+impl KeyMethod {
+    /// The wire name — the "Sign with" vocabulary (`wallet_keys::SIGN_METHODS`).
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Platform => "platform",
+            Self::Hybrid => "hybrid",
+            Self::SecurityKey => "security_key",
+            Self::TrustedSigner => crate::trusted_signer::METHOD,
+        }
+    }
 }
 
 /// How a ceremony failed. The **shell** reports the raw platform error; the
@@ -704,6 +787,105 @@ mod tests {
     fn user_name_rejects_unprintable_and_empty_names() {
         assert_eq!(handle(&format!("\u{7}bad\0{UUID}")).user_name(), None);
         assert_eq!(handle(&format!("\0{UUID}")).user_name(), None);
+    }
+
+    fn two_keys(signed_in_with: Option<SignInKey>) -> Account {
+        let key = |id: &str, origin: Option<&str>| AccountKey {
+            credential_id: id.to_owned(),
+            public_key_hex: "04ab".to_owned(),
+            name: id.to_owned(),
+            transports: "internal".to_owned(),
+            signer_origin: origin.map(str::to_owned),
+        };
+        Account {
+            id: "first".to_owned(),
+            name: "Ann".to_owned(),
+            address: "0x2222222222222222222222222222222222222222".to_owned(),
+            public_key_hex: "04ab".to_owned(),
+            created_at_iso: "2026-09-26T00:00:00.000Z".to_owned(),
+            keys: vec![key("first", None), key("second", Some("https://my.signer"))],
+            signed_in_with,
+        }
+    }
+
+    fn signed_in(credential_id: &str, method: KeyMethod) -> Option<SignInKey> {
+        Some(SignInKey {
+            credential_id: credential_id.to_owned(),
+            method,
+            signer_origin: None,
+        })
+    }
+
+    /// Founder, 2026-09-26: signing reuses the sign-in's key AND route — not
+    /// the first key, and not where that key was registered.
+    #[test]
+    fn signatures_go_to_the_sign_in_key_over_its_route() {
+        let account = two_keys(signed_in("second", KeyMethod::SecurityKey));
+        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        assert_eq!(route.credential_id, "second", "not keys[0]");
+        assert_eq!(route.method, "security_key");
+        assert_eq!(route.transports, "usb,nfc,ble");
+
+        // A synced passkey registered as `internal`, reached here by a scan.
+        let account = two_keys(signed_in("first", KeyMethod::Hybrid));
+        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (route.method.as_str(), route.transports.as_str()),
+            ("hybrid", "hybrid,internal")
+        );
+    }
+
+    #[test]
+    fn a_trusted_signer_sign_in_signs_on_its_page() {
+        let mut account = two_keys(None);
+        account.signed_in_with = Some(SignInKey {
+            credential_id: "first".to_owned(),
+            method: KeyMethod::TrustedSigner,
+            signer_origin: Some("https://sign.getvela.app".to_owned()),
+        });
+        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        assert_eq!(route.method, crate::trusted_signer::METHOD);
+        assert_eq!(route.signer_origin, "https://sign.getvela.app");
+
+        // No page on the sign-in: the page the key lives behind.
+        account.signed_in_with = signed_in("second", KeyMethod::TrustedSigner);
+        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        assert_eq!(route.signer_origin, "https://my.signer");
+    }
+
+    /// No record, or one naming a key this wallet does not hold: the shell
+    /// signs as it always did.
+    #[test]
+    fn no_usable_sign_in_key_means_no_route() {
+        assert_eq!(two_keys(None).sign_in_route(), None);
+        assert_eq!(
+            two_keys(signed_in("stranger", KeyMethod::Platform)).sign_in_route(),
+            None
+        );
+        assert_eq!(
+            two_keys(signed_in("", KeyMethod::Platform)).sign_in_route(),
+            None
+        );
+    }
+
+    #[test]
+    fn the_sign_in_key_round_trips_and_an_unknown_route_costs_only_itself() {
+        let account = two_keys(signed_in("second", KeyMethod::Hybrid));
+        let json = serde_json::to_string(&account).unwrap_or_default();
+        let back: Account = serde_json::from_str(&json).unwrap_or_else(|_| unreachable!());
+        assert_eq!(back, account);
+
+        // A route a newer build added: the account still reads.
+        let mut value = serde_json::to_value(&account).unwrap_or_default();
+        value["signed_in_with"]["method"] = "telepathy".into();
+        let back: Account = serde_json::from_value(value).unwrap_or_else(|_| unreachable!());
+        assert_eq!(back.signed_in_with, None);
+        assert_eq!(back.keys, account.keys);
+
+        // Records written before it existed carry nothing, and write nothing.
+        let old = two_keys(None);
+        let json = serde_json::to_string(&old).unwrap_or_default();
+        assert!(!json.contains("signed_in_with"), "{json}");
     }
 
     #[test]

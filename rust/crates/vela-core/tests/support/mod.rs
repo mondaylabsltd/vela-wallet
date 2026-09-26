@@ -296,6 +296,7 @@ pub fn account(id: &str, name: &str, address: &str) -> Account {
         public_key_hex: expected_public_key_hex(),
         created_at_iso: "2026-08-05T00:00:00.000Z".to_owned(),
         keys: Vec::new(),
+        signed_in_with: None,
     }
 }
 
