@@ -1,7 +1,7 @@
 ---
 title: Signature lisible
 description: "Vela décode les transactions en langage clair avant que vous ne les approuviez — intention, montants, adresses et risque — plutôt qu'en hexadécimal opaque. Quand il ne parvient pas à décoder un appel, il vous prévient au lieu de faire semblant."
-source: 7232328b724e
+source: 7c184bfe125c
 ---
 
 <script>
@@ -75,19 +75,28 @@ dangereux ressortent :
   illimitée**.
 - Un risque moindre pour les actions de routine comme le staking ou un dépôt.
 
-<Callout type="warning" title="Les approbations « illimitées » on-chain ne peuvent pas être soumises">
+<Callout type="warning" title="Une approbation « illimitée » s'affiche en rouge, avec un plafond proposé">
 Une approbation on-chain d'un montant illimité est l'une des façons les plus
 courantes de voir des fonds disparaître plus tard. Quand une dApp en demande une
 (<code>approve</code>, <code>increaseAllowance</code> ou l'<code>approve</code> de
 Permit2) au niveau « illimité » — 2^200 ou plus (2^152 pour Permit2), les valeurs
-qu'utilisent les dApps pour dire « illimité » —, Vela ne la soumet pas tant que vous
-ne l'avez pas changée en un montant précis, votre solde ou une révocation ; une
-dernière vérification avant l'envoi lit la calldata brute, si bien qu'elle
-fonctionne avec ou sans descripteur. Ce qu'elle n'arrête pas : une
-<strong>approbation finie mais élevée</strong> (même bien au-delà de votre solde),
-les <strong>permits signés</strong> (signatures EIP-2612 et Permit2) et le
-<code>setApprovalForAll</code> des NFT — chacun s'affiche avec un avertissement, et
-la décision vous appartient.
+qu'utilisent les dApps pour dire « illimité » —, Vela l'affiche en rouge et propose
+un plafond : un montant précis, votre solde (quand il peut être lu) ou — sauf pour
+<code>increaseAllowance</code> — une révocation. Si vous n'en choisissez aucun, elle
+est envoyée exactement telle que la dApp l'a construite : Permit2 est conçu autour
+d'une approbation permanente, et le lot d'un compte intelligent dépense cette
+allocation dans la même transaction, si bien qu'un plafond inférieur à cette
+dépense fait échouer tout le lot. Dans un lot, chaque approbation peut être
+plafonnée dans les apps iOS et Android ; sur le web et dans l'app de bureau, le lot
+est signalé en rouge mais n'est pas encore modifiable. Une dernière vérification
+avant l'envoi lit la calldata brute, si bien qu'une approbation illimitée que
+l'écran d'approbation n'a jamais montrée ne peut pas partir. Une <strong>approbation
+finie mais élevée</strong> (même bien au-delà de votre solde) s'affiche avec un
+avertissement. Les <strong>permits signés</strong> (signatures EIP-2612 et Permit2)
+ne peuvent pas être plafonnés — la dApp soumet sa propre copie —, donc ils sont
+signés tels que demandés ou refusés : un permit illimité en rouge, un permit limité
+avec un avertissement. Une demande d'accorder un <code>setApprovalForAll</code> de
+NFT sur toute une collection ne peut pas encore être approuvée dans les apps.
 </Callout>
 
 ## Quand Vela ne parvient pas à décoder un appel

@@ -1,7 +1,7 @@
 ---
 title: Livre blanc
 description: "Comment fonctionne Vela, et ce à quoi vous devez — ou non — faire confiance pour l'utiliser : le compte, les clés, les frais, le modèle de menaces, la récupération, et ce qui se passe si Vela disparaît."
-source: 60d297b650ac
+source: d0be29438317
 ---
 
 <script>
@@ -184,9 +184,11 @@ de chaîne, ou rapprochés de formes standards de jetons —, puis, en dernier r
 qui reste reçoit un avertissement explicite de signature à l'aveugle. Un
 descripteur récupéré n'est jamais étiqueté vérifié — seul un descripteur intégré à
 l'app, ou un descripteur récupéré identique à celui-ci, mérite ce mot. Une
-approbation on-chain au niveau « illimité » (2^200 ou plus) ne peut pas être soumise
-tant que vous ne l'avez pas réduite ; une approbation finie mais élevée et les
-permits signés s'affichent avec un avertissement, sans être bloqués. Détails :
+approbation on-chain au niveau « illimité » (2^200 ou plus) s'affiche en rouge, avec
+un plafond proposé ; si vous ne la plafonnez pas, elle est envoyée exactement telle
+que la dApp l'a construite. Une approbation finie mais élevée s'affiche avec un
+avertissement ; les permits signés ne peuvent pas être plafonnés, donc ils sont
+signés tels que demandés ou refusés. Détails :
 [signature lisible](/fr/docs/clear-signing).
 
 ### Les réseaux

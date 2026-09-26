@@ -62,17 +62,25 @@ Every decoded transaction gets a risk level so the dangerous patterns stand out:
 - **Danger** for the genuinely risky, like an **unlimited token approval**.
 - Lower risk for routine actions like staking or depositing.
 
-<Callout type="warning" title="'Unlimited' on-chain approvals can't be submitted">
+<Callout type="warning" title="An 'unlimited' approval is shown in red, with a cap on offer">
 An on-chain approval for an unlimited amount is one of the most common ways funds
 get drained later. When a dApp asks for one (<code>approve</code>,
 <code>increaseAllowance</code>, or Permit2's <code>approve</code>) at the
 "unlimited" level — 2^200 or more (2^152 for Permit2), which is what dApps use for
-"unlimited" — Vela won't submit it until you change it to a specific amount, your
-balance, or a revoke; a last check before submission reads the raw calldata, so it
-works with or without a descriptor. What it does not stop: a <strong>large finite
-approval</strong> (even far above your balance), <strong>signed permits</strong>
-(EIP-2612 and Permit2 signatures), and NFT <code>setApprovalForAll</code> — each
-is shown with a caution, and the decision is yours.
+"unlimited" — Vela shows it in red and offers a cap: a specific amount, your
+balance (when it can be read), or — except on <code>increaseAllowance</code> — a
+revoke. Unless you pick one, it is sent exactly as the dApp built it: Permit2 is
+designed around a standing approval, and a smart-account batch spends the
+allowance in the same transaction, so a cap below that spend makes the whole batch
+fail. Inside a batch, each approval can be capped in the iOS and Android apps; on
+web and desktop the batch is flagged in red but not yet editable. A last check
+before submission reads the raw calldata, so an unlimited approval the approval
+screen never showed can't go out. A <strong>large finite approval</strong> (even
+far above your balance) is shown with a caution. <strong>Signed permits</strong>
+(EIP-2612 and Permit2 signatures) can't be capped — the dApp submits its own
+copy — so they are signed as asked or rejected: an unlimited one in red, a limited
+one with a caution. A request to grant an NFT <code>setApprovalForAll</code> for a
+whole collection can't be approved in the apps yet.
 </Callout>
 
 ## When Vela can't decode a call

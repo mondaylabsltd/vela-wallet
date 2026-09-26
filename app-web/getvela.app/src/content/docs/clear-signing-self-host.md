@@ -40,8 +40,11 @@ around — with no origin, there is no relying party and nothing can be signed.
   refusal, not a signature.
 - **It checks the transaction is the one that was requested.** The call the
   site asked for has to actually be inside the operation being signed.
-- **It refuses an approval at the "unlimited" level.** Not a warning — a refusal, with a
-  pointer to what to do instead.
+- **It says when an approval is unlimited.** It can't change an amount — it signs
+  the bytes that arrived or nothing — so an unlimited approval or permit (2^128 or
+  more on this page) is shown in red with that reason and can be signed as it
+  stands; an on-chain cap is chosen on the wallet's own approval screen, before
+  the request gets here. An approval for a whole NFT collection is refused.
 - **It says when it cannot read something,** instead of showing a friendly
   summary it cannot stand behind.
 - **It shows the account's address and identicon,** and does not show a

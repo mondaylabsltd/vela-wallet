@@ -105,7 +105,7 @@
 | **"为什么我们收费"宣言博文** | 品类唯一付费钱包=自带话题性;把定价决策本身写成信任故事(对齐 honest-alpha 品牌),投 HN/CT | C→A 扩散 |
 | Product Hunt | 主推**免费 Web 版**("Try now, no install",lead #10),付费移动版作为 upsell 出现 | B/D/E |
 | Hacker News | 开源 + 自托管 + "paid app, no token" 激励对齐角度(Show HN) | C/E |
-| Crypto Twitter | clear-signing/never-unlimited 的对比演示短视频(打 MetaMask 盲签痛点) | A |
+| Crypto Twitter | clear-signing/无限授权红色警示+可设上限（2026-09-26 起不再拦截无限授权，见 claim ledger C-approve-1） 的对比演示短视频(打 MetaMask 盲签痛点) | A |
 | ASO | 关键词打 "no seed phrase / passkey wallet / smart wallet";副标题用 lead #1;**付费 App 下载速度低→商店排名弱,ASO 预期只做长尾,主漏斗在 Web**【推理】 | B/D 残量 |
 | 竞品差评矿 | MetaMask/Rainbow 1–3 星差评中"被 drain/助记词丢失"用户的原话进文案(leads 研究缺口既定计划) | B |
 | 本地化市场 | 15 语言 + 区域定价,拉美/东南亚/东亚做本地化内容 | D |

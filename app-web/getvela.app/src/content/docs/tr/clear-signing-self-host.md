@@ -57,8 +57,12 @@ için yeterlidir — kaynak (origin) olmadığı için bağlı olan taraf da yok
   rettir.
 - **İşlemin istenen işlem olduğunu kontrol eder.** Sitenin istediği çağrının,
   imzalanan işlemin içinde gerçekten bulunması gerekir.
-- **"Sınırsız" düzeydeki bir onayı reddeder.** Uyarı değil — ret; bunun yerine ne
-  yapılacağına dair bir yönlendirmeyle.
+- **Bir onayın sınırsız olduğunu söyler.** Bir tutarı değiştiremez — gelen baytları
+  imzalar ya da hiçbir şey imzalamaz — bu yüzden sınırsız bir onay ya da izin (bu
+  sayfada 2^128 ya da daha fazlası) bu gerekçeyle birlikte kırmızıyla gösterilir ve
+  olduğu haliyle imzalanabilir; zincir üstü bir üst sınır, istek buraya ulaşmadan önce
+  cüzdanın kendi onay ekranında seçilir. Bütün bir NFT koleksiyonu için verilen bir onay
+  reddedilir.
 - **Bir şeyi okuyamadığında bunu söyler;** arkasında duramayacağı dost görünümlü bir
   özet göstermez.
 - **Hesabın adresini ve identicon'unu gösterir** ve imzayı isteyenin verdiği bir alıcı

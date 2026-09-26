@@ -1,7 +1,7 @@
 ---
 title: Klartext-Signatur
 description: "Vela übersetzt Transaktionen vor der Freigabe in verständliche Sprache – Absicht, Beträge, Adressen und Risiko – statt undurchsichtigem Hex. Kann es einen Aufruf nicht dekodieren, warnt es dich, statt so zu tun, als ob."
-source: 7232328b724e
+source: 7c184bfe125c
 ---
 
 <script>
@@ -70,18 +70,28 @@ auffallen:
 - **Gefahr** bei wirklich Riskantem, etwa einer **unbegrenzten Token-Freigabe**.
 - Niedrigeres Risiko bei Routineaktionen wie Staking oder Einzahlungen.
 
-<Callout type="warning" title="„Unbegrenzte“ On-Chain-Freigaben lassen sich nicht absenden">
+<Callout type="warning" title="Eine „unbegrenzte“ Freigabe wird rot angezeigt, mit einer Obergrenze zur Auswahl">
 Eine On-Chain-Freigabe über einen unbegrenzten Betrag ist einer der häufigsten Wege,
 auf denen Guthaben später abgezogen wird. Fordert eine dApp eine solche Freigabe
 (<code>approve</code>, <code>increaseAllowance</code> oder das <code>approve</code> von
 Permit2) in „unbegrenzter“ Höhe an – 2^200 oder mehr (2^152 bei Permit2), also die
-Werte, die dApps für „unbegrenzt“ verwenden –, sendet Vela sie erst ab, wenn du sie
-auf einen bestimmten Betrag, dein Guthaben oder einen Widerruf änderst; eine letzte
-Prüfung vor dem Absenden liest die rohe Calldata und greift deshalb mit und ohne
-Deskriptor. Was sie nicht aufhält: eine <strong>große, aber begrenzte Freigabe</strong>
-(selbst weit über deinem Guthaben), <strong>signierte Permits</strong> (EIP-2612- und
-Permit2-Signaturen) und NFT-<code>setApprovalForAll</code> – all das wird mit einem
-Vorsichtshinweis angezeigt, und die Entscheidung liegt bei dir.
+Werte, die dApps für „unbegrenzt“ verwenden –, zeigt Vela sie rot an und bietet eine
+Obergrenze an: einen bestimmten Betrag, dein Guthaben (wenn es sich auslesen lässt)
+oder – außer bei <code>increaseAllowance</code> – einen Widerruf. Wählst du nichts
+davon, wird sie genau so gesendet, wie die dApp sie gebaut hat: Permit2 ist auf eine
+dauerhafte Freigabe ausgelegt, und ein Batch eines Smart Accounts verbraucht die
+Freigabe in derselben Transaktion, sodass eine Obergrenze unter diesem Betrag den
+ganzen Batch scheitern lässt. Innerhalb eines Batches lässt sich jede Freigabe in den
+iOS- und Android-Apps begrenzen; im Web und auf dem Desktop wird der Batch rot
+markiert, ist aber noch nicht bearbeitbar. Eine letzte Prüfung vor dem Absenden liest
+die rohe Calldata, sodass keine unbegrenzte Freigabe hinausgehen kann, die der
+Freigabebildschirm nie gezeigt hat. Eine <strong>große, aber begrenzte Freigabe</strong>
+(selbst weit über deinem Guthaben) wird mit einem Vorsichtshinweis angezeigt.
+<strong>Signierte Permits</strong> (EIP-2612- und Permit2-Signaturen) lassen sich nicht
+begrenzen – die dApp reicht ihre eigene Kopie ein –, deshalb werden sie wie angefragt
+signiert oder abgelehnt: ein unbegrenztes in Rot, ein begrenztes mit einem
+Vorsichtshinweis. Eine Anfrage, ein NFT-<code>setApprovalForAll</code> für eine ganze
+Sammlung zu erteilen, lässt sich in den Apps noch nicht genehmigen.
 </Callout>
 
 ## Wenn Vela einen Aufruf nicht dekodieren kann

@@ -1,7 +1,7 @@
 ---
 title: Kiểm toán & vấn đề đã biết
 description: "Mọi hợp đồng Vela phụ thuộc vào, ai đã kiểm toán phiên bản nào, phiên bản được kiểm toán có phải là phiên bản đang được triển khai không, những phát hiện còn mở mà chúng tôi đang theo dõi, và những gì hoàn toàn chưa được kiểm toán."
-source: d0bb95c016da
+source: a9c5e58e7ed3
 ---
 
 "Đã kiểm toán" là một khẳng định về một đoạn mã cụ thể ở một phiên bản cụ thể, nên trang
@@ -144,11 +144,15 @@ trang này sẽ thông báo khi điều đó diễn ra.
 ### Những chỗ hở trong lớp phòng vệ của chính Vela
 
 Đây không phải phát hiện về hợp đồng, mà là những chỗ ví bảo vệ bạn ít hơn bạn có thể
-tưởng. Mỗi mục đều đang được theo dõi để sửa:
+tưởng. Mỗi mục đều đang được theo dõi để sửa, trừ chỗ ghi rõ đó là một sự đánh đổi có
+chủ ý:
 
-- **Lớp chặn cấp quyền chỉ chặn số lượng "không giới hạn"** (từ 2^200 trở lên; 2^152 với
-  Permit2). Một lệnh cấp quyền lớn nhưng hữu hạn, một permit dạng chữ ký, hoặc
-  `setApprovalForAll` cho NFT chỉ nhận cảnh báo thận trọng, không bị chặn.
+- **Lệnh cấp quyền không giới hạn sẽ được gửi đi nếu bạn giữ nguyên** — một sự đánh đổi có
+  chủ ý, vì một lệnh cấp quyền bị đặt hạn mức sẽ làm hỏng Permit2 và các giao dịch hoán đổi
+  gộp. Một lệnh cấp quyền "không giới hạn" (từ 2^200 trở lên; 2^152 với Permit2) được hiện
+  màu đỏ và gửi đi đúng như dApp yêu cầu, trừ khi bạn đặt hạn mức. Trên web và ứng dụng máy
+  tính, lệnh cấp quyền nằm trong một giao dịch gộp chưa thể đặt hạn mức, và permit dạng chữ
+  ký thì không thể đặt hạn mức ở bất cứ đâu.
 - **Trang ký độc lập chưa được kết nối** với ứng dụng nào.
 - **Trang web tải một script phân tích của bên thứ ba** trên cùng tên miền với passkey.
   Trang web cấm chính các trang của mình dùng passkey (bằng header Permissions-Policy), và

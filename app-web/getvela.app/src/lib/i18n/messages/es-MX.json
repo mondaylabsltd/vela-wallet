@@ -402,7 +402,7 @@
 			},
 			{
 				"title": "Firma legible (ERC-7730)",
-				"body": "Las transacciones muestran lo que hacen (monto, destinatario, intención) en vez de hexadecimal crudo, y una aprobación de nivel «ilimitado» no se puede enviar hasta que la reduzcas."
+				"body": "Las transacciones muestran lo que hacen (monto, destinatario, intención) en vez de hexadecimal crudo, y una aprobación de nivel «ilimitado» se muestra en rojo, con la opción de ponerle un tope."
 			},
 			{
 				"title": "Nace Vela",
@@ -489,7 +489,7 @@
 	"_fingerprints": {
 		"home": "a9482909de80",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "92efac5dc4ef",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

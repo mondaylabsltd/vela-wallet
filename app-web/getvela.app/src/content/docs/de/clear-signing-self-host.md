@@ -61,8 +61,13 @@ lässt sich signieren.
   berechnen kann, führt zur Ablehnung, nicht zu einer Signatur.
 - **Sie prüft, dass die Transaktion die angeforderte ist.** Der Aufruf, den die Website
   angefordert hat, muss tatsächlich in der Operation stecken, die signiert wird.
-- **Sie lehnt eine Freigabe in „unbegrenzter“ Höhe ab.** Keine Warnung – eine
-  Ablehnung, mit einem Hinweis, was du stattdessen tun kannst.
+- **Sie sagt, wenn eine Freigabe unbegrenzt ist.** Einen Betrag kann sie nicht
+  ändern – sie signiert die Bytes, die angekommen sind, oder gar nichts –, deshalb
+  wird eine unbegrenzte Freigabe oder ein unbegrenztes Permit (auf dieser Seite 2^128
+  oder mehr) rot und mit genau dieser Begründung angezeigt und kann unverändert
+  signiert werden; eine On-Chain-Obergrenze wählst du auf dem eigenen
+  Freigabebildschirm der Wallet, bevor die Anfrage hier ankommt. Eine Freigabe für
+  eine ganze NFT-Sammlung wird abgelehnt.
 - **Sie sagt, wenn sie etwas nicht lesen kann,** statt eine freundliche
   Zusammenfassung zu zeigen, für die sie nicht geradestehen kann.
 - **Sie zeigt die Adresse und das Identicon des Kontos** und zeigt keinen

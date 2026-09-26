@@ -1,7 +1,7 @@
 ---
 title: Firma leggibile
 description: "Vela decodifica le transazioni in linguaggio chiaro prima che tu le approvi — intento, importi, indirizzi e rischio — invece di esadecimale incomprensibile. Quando non riesce a decodificare una chiamata, ti avvisa invece di fingere."
-source: 7232328b724e
+source: 7c184bfe125c
 ---
 
 <script>
@@ -71,19 +71,28 @@ pericolosi saltano all'occhio:
   illimitata**.
 - Rischio più basso per azioni di routine come staking o depositi.
 
-<Callout type="warning" title="Le approvazioni on-chain «illimitate» non si possono inviare">
+<Callout type="warning" title="Un'approvazione «illimitata» appare in rosso, con un limite proposto">
 Un'approvazione on-chain per un importo illimitato è uno dei modi più comuni in cui
 i fondi vengono prosciugati in seguito. Quando una dApp ne chiede una
 (<code>approve</code>, <code>increaseAllowance</code> o l'<code>approve</code> di
 Permit2) al livello «illimitato» — 2^200 o più (2^152 per Permit2), che è ciò che
-le dApp usano per dire «illimitato» — Vela non la invia finché non la trasformi in
-un importo preciso, in un importo pari al tuo saldo o in una revoca; un ultimo
-controllo prima
-dell'invio legge la calldata grezza, quindi funziona con o senza descrittore. Cosa
-non blocca: un'<strong>approvazione finita ma elevata</strong> (anche molto oltre
-il tuo saldo), i <strong>permit firmati</strong> (firme EIP-2612 e Permit2) e il
-<code>setApprovalForAll</code> degli NFT — ciascuno viene mostrato con un avviso, e
-la decisione è tua.
+le dApp usano per dire «illimitato» — Vela la mostra in rosso e propone un limite:
+un importo preciso, il tuo saldo (quando Vela riesce a leggerlo) o — tranne che con
+<code>increaseAllowance</code> — una revoca. Se non ne scegli uno, viene inviata
+esattamente come l'ha costruita la dApp: Permit2 è pensato attorno a
+un'approvazione permanente, e il batch di uno smart account spende l'allowance
+nella stessa transazione, quindi un limite inferiore a quella spesa fa fallire
+l'intero batch. Dentro un batch, ogni approvazione si può limitare nelle app iOS e
+Android; sul web e su desktop il batch viene segnalato in rosso ma non è ancora
+modificabile. Un ultimo controllo prima dell'invio legge la calldata grezza, quindi
+un'approvazione illimitata che la schermata di approvazione non ha mai mostrato non
+può partire. Un'<strong>approvazione finita ma elevata</strong> (anche molto oltre
+il tuo saldo) viene mostrata con un avviso. I <strong>permit firmati</strong>
+(firme EIP-2612 e Permit2) non si possono limitare — la dApp invia la propria
+copia — quindi si firmano così come richiesti o si rifiutano: uno illimitato in
+rosso, uno limitato con un avviso. Una richiesta di concedere un
+<code>setApprovalForAll</code> degli NFT su un'intera collezione non si può ancora
+approvare nelle app.
 </Callout>
 
 ## Quando Vela non riesce a decodificare una chiamata

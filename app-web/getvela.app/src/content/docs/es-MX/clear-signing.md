@@ -1,7 +1,7 @@
 ---
 title: Firma legible
 description: "Vela decodifica las transacciones en lenguaje claro antes de que las apruebes (intención, montos, direcciones y riesgo) en lugar de hexadecimal opaco. Cuando no puede decodificar una llamada, te advierte en vez de fingir."
-source: 7232328b724e
+source: 7c184bfe125c
 ---
 
 <script>
@@ -71,18 +71,27 @@ peligrosos resalten:
   ilimitada**.
 - Un riesgo menor para acciones de rutina, como hacer staking o depositar.
 
-<Callout type="warning" title="Las aprobaciones on-chain «ilimitadas» no se pueden enviar">
+<Callout type="warning" title="Una aprobación «ilimitada» se muestra en rojo, con la opción de ponerle un tope">
 Una aprobación on-chain por un monto ilimitado es una de las formas más comunes en
 que después vacían fondos. Cuando una dApp pide una (<code>approve</code>,
 <code>increaseAllowance</code> o el <code>approve</code> de Permit2) en el nivel
 «ilimitado» (2^200 o más, o 2^152 para Permit2, que es lo que usan las dApps para
-decir «ilimitado»), Vela no la envía hasta que la cambies por un monto específico,
-tu saldo o una revocación; una última revisión antes del envío lee el calldata
-crudo, así que funciona con o sin descriptor. Lo que no detiene: una
-<strong>aprobación finita grande</strong> (aunque esté muy por encima de tu saldo),
-los <strong>permisos firmados</strong> (firmas EIP-2612 y Permit2) y el
-<code>setApprovalForAll</code> de NFT; cada uno se muestra con una advertencia, y la
-decisión es tuya.
+decir «ilimitado»), Vela la muestra en rojo y te ofrece ponerle un tope: un monto
+específico, tu saldo (cuando se puede leer) o, salvo en <code>increaseAllowance</code>,
+una revocación. Si no eliges ninguno, se envía tal como la armó la dApp: Permit2 está
+diseñado en torno a una aprobación permanente, y el lote de una cuenta inteligente
+gasta esa autorización en la misma transacción, así que un tope por debajo de ese
+gasto hace que falle todo el lote. Dentro de un lote, a cada aprobación se le puede
+poner un tope en las apps de iOS y Android; en la web y en escritorio, el lote se
+marca en rojo, pero todavía no se puede editar. Una última revisión antes del envío
+lee el calldata crudo, así que no puede salir una aprobación ilimitada que la
+pantalla de aprobación nunca mostró. Una <strong>aprobación finita grande</strong>
+(aunque esté muy por encima de tu saldo) se muestra con una advertencia. A los
+<strong>permisos firmados</strong> (firmas EIP-2612 y Permit2) no se les puede poner
+tope (la dApp envía su propia copia), así que se firman tal como se piden o se
+rechazan: uno ilimitado, en rojo; uno limitado, con una advertencia. Una solicitud
+para otorgar un <code>setApprovalForAll</code> de NFT sobre toda una colección
+todavía no se puede aprobar en las apps.
 </Callout>
 
 ## Cuando Vela no puede decodificar una llamada

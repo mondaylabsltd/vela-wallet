@@ -62,8 +62,12 @@ uma olhada — sem origem, não há relying party e nada pode ser assinado.
   recusa, não uma assinatura.
 - **Ela confere se a transação é a que foi solicitada.** A chamada que o site pediu
   precisa estar de fato dentro da operação que está sendo assinada.
-- **Ela recusa uma aprovação no nível “ilimitado”.** Não é um aviso — é uma recusa,
-  com uma indicação do que fazer no lugar.
+- **Ela diz quando uma aprovação é ilimitada.** Ela não consegue mudar um valor — ou
+  assina os bytes que chegaram, ou nada —, então uma aprovação ou um permit ilimitado
+  (2^128 ou mais nesta página) aparece em vermelho com esse motivo e pode ser
+  assinado como está; um limite on-chain é escolhido na própria tela de aprovação da
+  carteira, antes de a solicitação chegar aqui. Uma aprovação para uma coleção
+  inteira de NFTs é recusada.
 - **Ela diz quando não consegue ler algo,** em vez de mostrar um resumo amigável que
   não pode sustentar.
 - **Ela mostra o endereço e o identicon da conta,** e não mostra um nome de

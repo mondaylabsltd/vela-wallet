@@ -402,7 +402,7 @@
 			},
 			{
 				"title": "Ký minh bạch (ERC-7730)",
-				"body": "Giao dịch hiện rõ việc nó làm — số tiền, người nhận, ý định — thay vì hex thô, và một lệnh cấp quyền ở mức “không giới hạn” không thể gửi đi cho đến khi bạn giảm nó xuống."
+				"body": "Giao dịch hiện rõ việc nó làm — số tiền, người nhận, ý định — thay vì hex thô, và một lệnh cấp quyền ở mức “không giới hạn” được hiện màu đỏ, kèm lựa chọn đặt hạn mức."
 			},
 			{
 				"title": "Vela ra đời",
@@ -489,7 +489,7 @@
 	"_fingerprints": {
 		"home": "a9482909de80",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "92efac5dc4ef",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

@@ -142,11 +142,14 @@ module supporting v0.9, and this page will say when it happens.
 ### Gaps in Vela's own defences
 
 Not contract findings, but places where the wallet protects you less than you
-might assume. Each is tracked for a fix:
+might assume. Each is tracked for a fix, except where it says it is a deliberate
+trade-off:
 
-- **The approval guard stops only "unlimited" amounts** (2^200 or more; 2^152 for
-  Permit2). A large finite approval, a signed permit, or an NFT
-  `setApprovalForAll` gets a caution, not a block.
+- **An unlimited approval goes out if you keep it** — a deliberate trade-off,
+  because a capped approval breaks Permit2 and batched swaps. An "unlimited"
+  approval (2^200 or more; 2^152 for Permit2) is shown in red and sent as the dApp
+  asked unless you cap it. On web and desktop an approval inside a batch can't be
+  capped yet, and signed permits can't be capped anywhere.
 - **The independent signing page is not connected** to any app yet.
 - **The website loads a third-party analytics script** on the same domain as the
   passkeys. The site forbids its pages from using passkeys (a Permissions-Policy

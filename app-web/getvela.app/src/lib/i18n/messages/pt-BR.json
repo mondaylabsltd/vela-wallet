@@ -402,7 +402,7 @@
 			},
 			{
 				"title": "Assinatura legível (ERC-7730)",
-				"body": "As transações mostram o que fazem — valor, destinatário, intenção — em vez de hexadecimal cru, e uma aprovação no nível “ilimitado” não pode ser enviada até que você a reduza."
+				"body": "As transações mostram o que fazem — valor, destinatário, intenção — em vez de hexadecimal cru, e uma aprovação no nível “ilimitado” aparece em vermelho, com a opção de limitá-la."
 			},
 			{
 				"title": "A Vela nasce",
@@ -489,7 +489,7 @@
 	"_fingerprints": {
 		"home": "a9482909de80",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "92efac5dc4ef",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

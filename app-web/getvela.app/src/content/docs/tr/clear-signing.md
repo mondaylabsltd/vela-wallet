@@ -1,7 +1,7 @@
 ---
 title: Açık imzalama
 description: "Vela, siz onaylamadan önce işlemleri anlaşılmaz hex yerine sade bir dile çevirir — niyet, tutarlar, adresler ve risk. Bir çağrıyı çözemediğinde anlamış gibi yapmaz, sizi uyarır."
-source: 7232328b724e
+source: 7c184bfe125c
 ---
 
 <script>
@@ -66,17 +66,27 @@ sayı hiçbir zaman kontrol edilmiş gibi görünmez.
 - Gerçekten riskli olanlar için **Tehlike**; örneğin **sınırsız token onayı**.
 - Stake etme ya da yatırma gibi rutin işlemler için daha düşük risk.
 
-<Callout type="warning" title="Zincir üstündeki 'sınırsız' onaylar gönderilemez">
+<Callout type="warning" title="'Sınırsız' bir onay kırmızıyla gösterilir ve bir üst sınır önerilir">
 Sınırsız tutar için verilen zincir üstü bir onay, paranın sonradan boşaltılmasının en
 yaygın yollarından biridir. Bir dApp "sınırsız" düzeyde bir onay istediğinde
 (<code>approve</code>, <code>increaseAllowance</code> ya da Permit2'nin
 <code>approve</code>'u) — 2^200 ya da daha fazla (Permit2 için 2^152); dApp'lerin
-"sınırsız" için kullandığı değer budur — Vela, siz onu belirli bir tutara ya da
-bakiyenize düşürene veya onayı iptal edene kadar göndermez; gönderimden hemen önceki son kontrol ham
-calldata'yı okur, yani tanımlayıcı olsun olmasın çalışır. Durdurmadığı şeyler:
-<strong>büyük ama sınırlı bir onay</strong> (bakiyenizin çok üstünde olsa bile),
-<strong>imzalı izinler</strong> (EIP-2612 ve Permit2 imzaları) ve NFT
-<code>setApprovalForAll</code> — her biri bir uyarıyla gösterilir ve karar sizindir.
+"sınırsız" için kullandığı değer budur — Vela onu kırmızıyla gösterir ve bir üst sınır
+önerir: belirli bir tutar, bakiyeniz (okunabildiğinde) ya da —
+<code>increaseAllowance</code> hariç — onayın iptali. Bunlardan birini seçmezseniz onay,
+dApp'in oluşturduğu haliyle aynen gönderilir: Permit2 kalıcı bir onay üzerine
+kurulmuştur ve akıllı hesabın toplu işlemi bu harcama iznini aynı işlem içinde harcar;
+bu yüzden o harcamanın altında kalan bir üst sınır, toplu işlemin tamamını başarısız
+kılar. Toplu işlemin içindeki her onaya iOS ve Android uygulamalarında üst sınır
+konabilir; web ve masaüstünde toplu işlem kırmızıyla işaretlenir ama henüz
+düzenlenemez. Gönderimden hemen önceki son kontrol ham calldata'yı okur; böylece onay
+ekranının hiç göstermediği sınırsız bir onay gönderilemez. <strong>Büyük ama sınırlı
+bir onay</strong> (bakiyenizin çok üstünde olsa bile) bir uyarıyla gösterilir.
+<strong>İmzalı izinlere</strong> (EIP-2612 ve Permit2 imzaları) üst sınır konamaz —
+dApp kendi kopyasını gönderir — bu yüzden istendiği gibi imzalanır ya da reddedilir:
+sınırsız olan kırmızıyla, sınırlı olan bir uyarıyla gösterilir. Bir NFT koleksiyonunun
+tamamı için <code>setApprovalForAll</code> verilmesini isteyen bir talep, uygulamalarda
+henüz onaylanamaz.
 </Callout>
 
 ## Vela bir çağrıyı çözemediğinde

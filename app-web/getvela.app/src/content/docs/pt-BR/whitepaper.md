@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Como a Vela funciona e em que você precisa — e não precisa — confiar para usá-la: a conta, as chaves, a taxa, o modelo de ameaças, a recuperação e o que acontece se a Vela deixar de existir."
-source: 60d297b650ac
+source: d0be29438317
 ---
 
 <script>
@@ -173,9 +173,11 @@ correspondidos a formatos padrão de tokens — e, como último recurso, com um 
 dados público de seletores, marcado como melhor esforço. O que sobrar recebe um aviso
 explícito de assinatura às cegas. Um descritor buscado nunca recebe o rótulo de
 verificado — só um embutido no app, ou um buscado idêntico a ele, merece essa
-palavra. Uma aprovação on-chain no nível “ilimitado” (2^200 ou mais) não pode ser
-enviada até que você a reduza; uma aprovação finita alta e permits assinados
-aparecem com um alerta, mas não são bloqueados. Detalhes:
+palavra. Uma aprovação on-chain no nível “ilimitado” (2^200 ou mais) aparece em
+vermelho, com a opção de limitá-la; a menos que você a limite, ela é enviada
+exatamente como o dApp a montou. Uma aprovação finita alta aparece com um alerta;
+permits assinados não podem ser limitados, então são assinados como foram pedidos ou
+recusados. Detalhes:
 [assinatura legível](/pt-BR/docs/clear-signing).
 
 ### Redes

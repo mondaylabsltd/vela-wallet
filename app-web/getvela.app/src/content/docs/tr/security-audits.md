@@ -1,7 +1,7 @@
 ---
 title: Denetimler ve bilinen sorunlar
 description: "Vela'nın bağlı olduğu her sözleşme, hangi sürümü kimin denetlediği, denetlenen sürümün dağıtılan sürüm olup olmadığı, izlediğimiz açık bulgular ve hiç denetlenmemiş olanlar."
-source: d0bb95c016da
+source: a9c5e58e7ed3
 ---
 
 "Denetlendi", belirli bir kodun belirli bir sürümü hakkında bir iddiadır; bu yüzden bu
@@ -149,11 +149,15 @@ bağlı; olduğunda bu sayfa bunu yazacak.
 ### Vela'nın kendi savunmalarındaki eksikler
 
 Bunlar sözleşme bulguları değil, cüzdanın sizi sandığınızdan daha az koruduğu yerler.
-Her biri düzeltilmek üzere takip ediliyor:
+Her biri düzeltilmek üzere takip ediliyor; bilinçli bir ödünleşim olduğu belirtilenler
+hariç:
 
-- **Onay koruması yalnızca "sınırsız" tutarları durdurur** (2^200 ya da daha fazla;
-  Permit2 için 2^152). Büyük ama sınırlı bir onay, imzalı bir izin (permit) ya da bir NFT
-  `setApprovalForAll` engellenmez, yalnızca uyarı alır.
+- **Sınırsız bir onay, olduğu gibi bırakırsanız gönderilir** — bilinçli bir ödünleşim,
+  çünkü üst sınır konmuş bir onay Permit2'yi ve toplu takasları bozar. "Sınırsız" bir
+  onay (2^200 ya da daha fazla; Permit2 için 2^152) kırmızıyla gösterilir ve siz üst
+  sınır koymadıkça dApp'in istediği gibi gönderilir. Web ve masaüstünde toplu işlemin
+  içindeki bir onaya henüz üst sınır konamaz; imzalı izinlere (permit) ise hiçbir yerde
+  üst sınır konamaz.
 - **Bağımsız imza sayfası** henüz hiçbir uygulamaya **bağlı değil**.
 - **Web sitesi, geçiş anahtarlarıyla aynı alan adında üçüncü taraf bir analitik
   betiği yükler.** Site kendi sayfalarının geçiş anahtarı kullanmasını yasaklar (bir

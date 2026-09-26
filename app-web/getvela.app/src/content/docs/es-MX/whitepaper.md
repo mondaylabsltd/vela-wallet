@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Cómo funciona Vela y en qué tienes (y en qué no tienes) que confiar para usarla: la cuenta, las llaves, la comisión, el modelo de amenazas, la recuperación y qué pasa si Vela desaparece."
-source: 60d297b650ac
+source: d0be29438317
 ---
 
 <script>
@@ -173,9 +173,11 @@ una base de datos pública de selectores, con la etiqueta de mejor esfuerzo. Lo 
 quede recibe una advertencia explícita de firma a ciegas. A un descriptor obtenido
 nunca se le pone la etiqueta de verificado: esa palabra se la gana solo uno integrado
 en la app, o uno obtenido que sea idéntico a él. Una aprobación on-chain de nivel
-«ilimitado» (2^200 o más) no se puede enviar hasta que la reduzcas; una aprobación
-finita grande y los permisos firmados se muestran con una advertencia, pero no se
-bloquean. Detalles: [firma legible](/es-MX/docs/clear-signing).
+«ilimitado» (2^200 o más) se muestra en rojo, con la opción de ponerle un tope; si
+no se lo pones, se envía tal como la armó la dApp. Una aprobación finita grande se
+muestra con una advertencia; a los permisos firmados no se les puede poner tope, así
+que se firman tal como se piden o se rechazan. Detalles:
+[firma legible](/es-MX/docs/clear-signing).
 
 ### Redes
 

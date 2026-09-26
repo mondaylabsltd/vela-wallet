@@ -631,7 +631,7 @@ export const en = {
 			},
 			{
 				title: 'Clear signing (ERC-7730)',
-				body: 'Transactions show what they do — amount, recipient, intent — instead of raw hex, and an approval at the “unlimited” level can’t be submitted until you reduce it.'
+				body: 'Transactions show what they do — amount, recipient, intent — instead of raw hex, and an approval at the “unlimited” level is shown in red, with a cap on offer.'
 			},
 			{
 				title: 'Vela is born',

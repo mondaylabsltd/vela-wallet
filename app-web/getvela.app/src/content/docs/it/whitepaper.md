@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Come funziona Vela e di cosa devi — e non devi — fidarti per usarlo: l'account, le chiavi, la commissione, il modello delle minacce, il recupero e cosa succede se Vela sparisce."
-source: 60d297b650ac
+source: d0be29438317
 ---
 
 <script>
@@ -175,9 +175,11 @@ ultima risorsa, con un database pubblico di selettori, etichettato come best
 effort. Tutto il resto riceve un avviso esplicito di firma alla cieca. Un
 descrittore scaricato non viene mai etichettato come verificato: quella parola se
 la guadagna solo uno integrato nell'app, o uno scaricato identico a quello.
-Un'approvazione on-chain di livello «illimitato» (2^200 o più) non si può inviare
-finché non la riduci; un'approvazione finita ma elevata e i permit firmati vengono
-mostrati con un avviso, ma non bloccati. Dettagli:
+Un'approvazione on-chain di livello «illimitato» (2^200 o più) viene mostrata in
+rosso con un limite proposto; se non la limiti, viene inviata esattamente come l'ha
+costruita la dApp. Un'approvazione finita ma elevata viene mostrata con un avviso;
+i permit firmati non si possono limitare, quindi si firmano così come richiesti o si
+rifiutano. Dettagli:
 [firma leggibile](/it/docs/clear-signing).
 
 ### Reti
