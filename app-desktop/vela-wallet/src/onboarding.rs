@@ -58,6 +58,7 @@ use crate::ui::{
     ButtonState, ButtonVariant, LaunchAnimation, NameFieldStrings, RailSlot, onboarding_rail,
     text_field, vela_button, welcome_cta, welcome_cta_state,
 };
+use crate::wallet::components::balanced_wrap_width;
 use crate::window_frame::{
     CAPTION_H, FRAME_SHADOW, frame_tiling, owns_titlebar, round_to_frame, titlebar, window_frame,
 };
@@ -720,13 +721,25 @@ impl OnboardingPage {
                     .text_color(theme.fg_base)
                     .child(self.t("heroTitle"))
             })
-            .child(
+            .child({
+                // Two sentences that overrun the column by a word or two.
+                // Wrapped at full width they leave that word alone on a second
+                // line («… never goes to / Vela.», «…ことはあ / りません。»);
+                // balanced, as the web sets it, the lines come out near-even.
+                let subtitle = self.t("heroSubtitle");
+                let width = balanced_wrap_width(
+                    window,
+                    &subtitle,
+                    theme::text_flow_sub(),
+                    px(FLOW_COLUMN_W),
+                );
                 div()
+                    .max_w(width)
                     .text_size(theme::text_flow_sub())
                     .line_height(theme::line_height_flow_sub())
                     .text_color(theme.fg_muted)
-                    .child(self.t("heroSubtitle")),
-            );
+                    .child(subtitle)
+            });
 
         // The registry is unreachable. Sign-in stays attemptable — the CORE
         // decides that, not this screen — so this only says so, and offers the

@@ -382,27 +382,42 @@
 		color: var(--color-fg-base);
 		font-size: var(--text-heroCompact);
 		font-weight: var(--weight-bold);
-		/* The design breaks the headline across two lines. The break lives in
-		   the corpus as a newline rather than as markup, so each locale picks
-		   its own — a Chinese line length is not a German one. */
+		/* The design breaks the headline across two lines — three where a
+		   locale's sentence fits no two-line split (fr, id, ja, ru). The break
+		   lives in the corpus as a newline rather than as markup, so each
+		   locale picks its own — a Chinese line length is not a German one. */
 		white-space: pre-line;
 		line-height: var(--leading-tight);
 		letter-spacing: -0.02em;
 	}
 
 	/* A locale whose headline is too wide for its rung drops one step down the
-	   ladder — 46 → 38 → 31 — rather than wrapping into a third line the design
-	   has no room for. Which locales those are is not guessed here: the corpus
+	   ladder — 46 → 38 → 31 — rather than wrapping into a line it did not
+	   author. Which locales those are is not guessed here: the corpus
 	   carries `heroTitleFit` beside the string it describes. */
 	.headline.long {
 		font-size: var(--text-heroTight);
 	}
 
+	/* Two sentences that overrun the column by a word or two. Wrapped greedily
+	   they leave that word alone on the last line («… never goes to / Vela.»,
+	   «…ことはあ / りません。»); balanced, the lines come out near-even — the
+	   desktop does the same with `balanced_wrap_width`. Japanese breaks at
+	   phrase boundaries and Korean between words, as the site's headings do. */
 	.sub {
 		margin: 0;
 		color: var(--color-fg-muted);
 		font-size: var(--text-lg);
 		line-height: var(--leading-normal);
+		text-wrap: balance;
+	}
+
+	:global(html[lang='ja']) .sub {
+		word-break: auto-phrase;
+	}
+
+	:global(html[lang='ko']) .sub {
+		word-break: keep-all;
 	}
 
 	.actions {
