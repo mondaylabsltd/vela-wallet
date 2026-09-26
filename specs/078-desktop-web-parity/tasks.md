@@ -86,7 +86,7 @@ screenshot checked against the web.
 - [x] T049 W-08…W-11.
 
 ## Phase 4 — P2 visuals, surface by surface (screenshot each)
-- [ ] T050 Wallet home H-08…H-12.
+- [x] T050 Wallet home H-08…H-12.
 - [ ] T051 Flows F-09…F-11.
 - [ ] T052 Contacts C-09.
 - [ ] T053 Settings S-06…S-13.

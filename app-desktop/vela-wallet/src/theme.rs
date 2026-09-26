@@ -480,8 +480,13 @@ pub fn line_amount_hero() -> Pixels {
 pub fn text_amount_unit(rung: f32) -> Pixels {
     scaled(26. * rung / 46.)
 }
+/// The hero's decimals (`--text-3xl`, 078 H-10).
 pub fn text_balance_decimals() -> Pixels {
-    scaled(24.)
+    scaled(26.)
+}
+/// A token circle's ticker (`--text-xs`, 078 H-09).
+pub fn text_glyph() -> Pixels {
+    scaled(10.)
 }
 /// A button's label (`--text-xl`), as the web's `Button` sets it.
 pub fn text_button() -> Pixels {
@@ -535,8 +540,14 @@ pub const UI_FONT_FILES: [&[u8]; 4] = [
 ];
 
 pub fn font_mono() -> &'static str {
+    // A face the host actually has: an absent one falls back to the UI face,
+    // silently, and every "mono" address and hash was proportional on Windows
+    // (found comparing 078 H-11) — Windows ships no DejaVu. The web's IBM Plex
+    // Mono is not bundled; each host's own programming face stands in.
     if cfg!(target_os = "macos") {
         "Menlo"
+    } else if cfg!(windows) {
+        "Consolas"
     } else {
         "DejaVu Sans Mono"
     }

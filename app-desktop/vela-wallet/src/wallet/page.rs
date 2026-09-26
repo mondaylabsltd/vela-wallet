@@ -3318,7 +3318,8 @@ impl WalletPage {
             .track_scroll(&self.networks_scroll)
             .flex()
             .flex_col()
-            .gap(px(2.))
+            // Row against row, as the web's list items sit: each is already
+            // a 44 hit target (078 H-11).
             .size_full()
             .overflow_y_scroll();
         let chain_rows = self.chain_models(cx);
@@ -3373,6 +3374,8 @@ impl WalletPage {
                 } else {
                     (None, None)
                 };
+                // 20 under the header before the nav, as the web's `.top`
+                // pads it (078 H-11): the column's gap supplies 16.
                 wallet_header(
                     theme,
                     &mut self.icons,
@@ -3383,6 +3386,7 @@ impl WalletPage {
                     on_identicon,
                     on_account,
                 )
+                .mb(px(4.))
             })
             .child(nav_col)
             // The network list is the Wallet's filter, as on the web (spec 028
@@ -3391,10 +3395,14 @@ impl WalletPage {
             .when(self.section == Section::Wallet, |sidebar| {
                 sidebar
                     .child(div().h(px(1.)).bg(theme.divider))
+                    // 8 from the title to its list (078 H-11); the column's
+                    // gap puts 16 there.
                     .child(
                         div()
                             .px(px(12.))
+                            .mb(px(-8.))
                             .text_size(theme::text_label())
+                            .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_subtle)
                             .child(self.strings.networks_title.clone()),
@@ -3489,6 +3497,7 @@ impl WalletPage {
                     div()
                         .py(px(4.))
                         .text_size(theme::text_label())
+                        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
                         .text_color(theme.fg_subtle)
                         .child(day),
                 );

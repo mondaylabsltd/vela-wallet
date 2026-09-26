@@ -94,6 +94,22 @@ different).
   fg-base, title→list 8, nav radius 12 and hover = text colour only, dark
   sidebar on `bg-sunken`.
 - **H-12 P2 · Action pills**: icon 20, hover opacity .92.
+  *Fixed (T050, H-08…H-12):* measured against the web's d1 at the same size
+  and scale, by text bands down each column. The root cause of most of the
+  drift was gpui's default ~1.6 line height: web rows are BUTTONS (line
+  `normal` = Plus Jakarta Sans' 1.26 → 64 tall), headings and labels sit on
+  1.4, the hero on 1.12. After: every band in the content column is a
+  constant 1.7 below the web (the caption strip's top padding) with no drift
+  down the page; the sidebar a constant 8 (the 34 px drag strip SIDEBAR_TOP
+  must clear). Also: decimals 26 on the integer's baseline; skeleton 55 % ×
+  32 r8 breathing; section action a 4-padded button, chevron 14, words and
+  chevron to fg-base on hover (text hover needs an id'd element in gpui);
+  asset rows flush, no wash; token ring 1 px border-base, badge 12 / 16 with
+  a logo, ring 1.5; glyph 10; header gap 12, two-line name, chevron fg-base;
+  nav radius 12, hover = text colour (icon with it); filter rows 44 with no
+  gap; pills icon 20, hover .92 (ink 26 → 44 measured). Found on the way:
+  `font_mono()` named DejaVu Sans Mono, absent on Windows, so every "mono"
+  address was proportional — now Consolas there (Plex is not bundled).
 
 ## Money flows (F)
 

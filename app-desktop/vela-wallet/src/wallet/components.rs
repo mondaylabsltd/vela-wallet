@@ -6,7 +6,7 @@ use gpui::AnimationExt as _;
 use gpui::{
     Div, ElementId, ImageSource, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     SharedString, Stateful, StatefulInteractiveElement as _, Styled, StyledImage as _, canvas, div,
-    fill as quad_fill, img, px,
+    fill as quad_fill, img, prelude::FluentBuilder as _, px,
 };
 
 use crate::icons::{Icon, IconCache};
@@ -151,6 +151,7 @@ pub fn wallet_header(
         .id("wallet-header-account")
         .flex()
         .flex_col()
+        .gap(px(2.))
         .min_w(px(0.))
         .child(
             div()
@@ -159,22 +160,26 @@ pub fn wallet_header(
                 .gap(px(4.))
                 .min_w(px(0.))
                 .child(
+                    // Two lines, then the ellipsis (078 H-11): one line cut
+                    // "xiaoxiao · Key 1" and "… Key 2" to the same "xiaoxiao ·
+                    // K…", and the END of a name is what tells two apart.
                     div()
                         .min_w(px(0.))
                         .text_size(theme::text_section())
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_base)
-                        .whitespace_nowrap()
-                        .truncate()
+                        .line_height(gpui::relative(1.2))
+                        .line_clamp(2)
+                        .text_ellipsis()
                         .child(name),
                 )
-                .child(icon_img(
+                .child(div().flex_none().child(icon_img(
                     icons,
                     Icon::ChevronDown,
                     false,
-                    theme.fg_subtle,
+                    theme.fg_base,
                     14.,
-                )),
+                ))),
         )
         .child(
             div()
@@ -189,10 +194,45 @@ pub fn wallet_header(
     div()
         .flex()
         .items_center()
-        .gap(px(10.))
+        .gap(px(12.))
         .min_w(px(0.))
         .child(avatar)
         .child(account)
+}
+
+/// `line-height: normal` for Plus Jakarta Sans (its hhea 1038 + 222 over
+/// 1000) — what a web BUTTON's text sits on, since buttons do not inherit the
+/// body's line height.
+pub const LINE_NORMAL: f32 = 1.26;
+/// The web body's `--leading-normal`.
+pub const LINE_BODY: f32 = 1.4;
+
+/// An icon that follows its control's hover colour — the web's
+/// `currentColor`. An `icon_img` has its colour baked in, so the hovered one
+/// is drawn over the resting one and shown while `group` is hovered.
+pub fn hover_icon(
+    icons: &mut IconCache,
+    icon: Icon,
+    solid: bool,
+    rest: gpui::Hsla,
+    hover: gpui::Hsla,
+    size: f32,
+    group: &'static str,
+) -> Div {
+    div()
+        .relative()
+        .flex_none()
+        .size(px(size))
+        .child(icon_img(icons, icon, solid, rest, size))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .invisible()
+                .group_hover(group, |style| style.visible())
+                .child(icon_img(icons, icon, solid, hover, size)),
+        )
 }
 
 /// One sidebar nav row: solid icon + raised wash when selected, outline
@@ -210,25 +250,37 @@ pub fn nav_row(
     } else {
         theme.fg_muted
     };
+    // Hover is the text colour only (078 H-11): the raised wash is what
+    // SELECTED looks like, and a hover that borrows it makes two rows look
+    // chosen at once.
     let row = div()
         .id(id)
+        .group("nav-row")
         .flex()
         .items_center()
         .gap(px(12.))
         .h(px(WALLET_NAV_ROW_H))
         .flex_none()
         .px(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .cursor_pointer()
         .text_size(theme::text_row_title())
         .text_color(fg)
-        .child(icon_img(icons, icon, selected, fg, 20.))
+        .child(hover_icon(
+            icons,
+            icon,
+            selected,
+            fg,
+            theme.fg_base,
+            20.,
+            "nav-row",
+        ))
         .child(label);
     if selected {
         row.bg(theme.bg_raised)
             .font_weight(gpui::FontWeight::SEMIBOLD)
     } else {
-        row.hover(|el| el.bg(theme.bg_raised))
+        row.hover(|el| el.text_color(theme.fg_base))
     }
 }
 
@@ -339,6 +391,7 @@ pub fn balance_display(
     let mut root = div().flex().flex_col().gap(px(8.)).child(
         div()
             .text_size(theme::text_label())
+            .line_height(gpui::relative(LINE_BODY))
             .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(theme.fg_subtle)
             // The code the figure beneath is DRAWN in, not a constant: the
@@ -350,12 +403,26 @@ pub fn balance_display(
     );
 
     root = match model.state {
+        // The web's `SkeletonRow variant="block"` (078 H-10): 55 % of the
+        // column, one `--text-4xl` tall, radius 8, breathing 1 → .4 → 1.
         BalanceState::Loading => root.child(
             div()
-                .w(px(220.))
-                .h(px(44.))
+                .w(gpui::relative(0.55))
+                .h(px(32.))
                 .rounded(px(8.))
-                .bg(theme.bg_sunken),
+                .bg(theme.bg_sunken)
+                .with_animation(
+                    "balance-skeleton",
+                    gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+                    |block, delta| {
+                        let t = if delta < 0.5 {
+                            delta * 2.
+                        } else {
+                            2. - delta * 2.
+                        };
+                        block.opacity(1. - 0.6 * t)
+                    },
+                ),
         ),
         BalanceState::Hidden => root.child(pressable(
             div()
@@ -365,6 +432,7 @@ pub fn balance_display(
                 .child(
                     div()
                         .text_size(theme::text_balance_hero())
+                        .line_height(gpui::relative(1.12))
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_base)
                         .child(model.integer.clone()),
@@ -376,9 +444,14 @@ pub fn balance_display(
             on_toggle,
         )),
         BalanceState::Normal | BalanceState::ZeroLive => {
-            let mut amount = div().flex().items_end().child(
+            // `--leading-amountHero` 1.12: gpui's default line is ~1.6, and
+            // at 40 px that pushed everything below the hero 10 px down.
+            // On one baseline, as the web's inline figure sets them: bottom
+            // alignment floated the smaller decimals above the integer's.
+            let mut amount = div().flex().items_baseline().child(
                 div()
                     .text_size(theme::text_balance_hero())
+                    .line_height(gpui::relative(1.12))
                     .font_weight(gpui::FontWeight::BOLD)
                     .text_color(theme.fg_base)
                     .child(model.integer.clone()),
@@ -386,8 +459,8 @@ pub fn balance_display(
             if let Some(decimals) = model.decimals.clone() {
                 amount = amount.child(
                     div()
-                        .pb(px(4.))
                         .text_size(theme::text_balance_decimals())
+                        .line_height(gpui::relative(1.12))
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_subtle)
                         // The person's decimal mark, as the web's
@@ -495,11 +568,13 @@ pub fn action_pill(
         .border_1()
         .border_color(theme.border_card)
         .cursor_pointer()
-        .hover(|el| el.bg(theme.bg_sunken))
+        // `--opacity-hover` (078 H-12): the pill fades a touch; its colour
+        // does not change.
+        .hover(|el| el.opacity(0.92))
         .text_size(theme::text_row_title())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_base)
-        .child(icon_img(icons, icon, false, theme.fg_base, 16.))
+        .child(icon_img(icons, icon, false, theme.fg_base, 20.))
         .child(label)
 }
 
@@ -516,7 +591,7 @@ pub fn section_header(
 
 /// The header's frame, for callers that bind the halves separately.
 pub fn section_header_row() -> Div {
-    div().flex().items_center().justify_between().py(px(10.))
+    div().flex().items_center().justify_between().py(px(12.))
 }
 
 /// `section_header`, taken apart.
@@ -534,28 +609,47 @@ pub fn section_header_parts(
     (
         div()
             .text_size(theme::text_section())
+            .line_height(gpui::relative(LINE_BODY))
             .font_weight(gpui::FontWeight::BOLD)
             .text_color(theme.fg_base)
             .child(title),
+        // The web's header button (078 H-08): padded 4 and pulled back 4 at
+        // the end so the chevron still lines up with the column's edge; hover
+        // brings words and chevron to fg-base together.
         div()
+            .group("section-action")
             .flex()
             .items_center()
             .gap(px(2.))
+            .p(px(4.))
+            .mr(px(-4.))
+            .rounded(px(4.))
             .text_size(theme::text_row_sub())
+            .line_height(gpui::relative(LINE_NORMAL))
             .text_color(theme.fg_muted)
-            .child(action)
-            .child(icon_img(
+            // The words take the hover through the group, on an element with
+            // an id — gpui applies a text colour's hover only there (the same
+            // rule the backup row's title met).
+            .child(
+                div()
+                    .id("section-action-label")
+                    .group_hover("section-action", |style| style.text_color(theme.fg_base))
+                    .child(action),
+            )
+            .child(hover_icon(
                 icons,
                 Icon::ChevronRight,
                 false,
                 theme.fg_muted,
-                12.,
+                theme.fg_base,
+                14.,
+                "section-action",
             )),
     )
 }
 
 fn lead_circle(theme: &Theme, inner: impl IntoElement, badge: gpui::Hsla) -> Div {
-    lead_circle_logos(theme, inner, badge, &crate::marks::Logos::default())
+    lead_circle_logos(theme, inner, badge, &crate::marks::Logos::default(), true)
 }
 
 /// The lead circle with the endpoint's logos over it (issue 201).
@@ -572,6 +666,9 @@ fn lead_circle_logos(
     inner: impl IntoElement,
     badge: gpui::Hsla,
     logos: &crate::marks::Logos,
+    // A TOKEN's circle carries the hairline ring (`TokenIcon`'s 1 px
+    // border-base); an activity row's direction glyph does not (078 H-09).
+    ring: bool,
 ) -> Div {
     let mut circle = div()
         .relative()
@@ -584,6 +681,7 @@ fn lead_circle_logos(
                 .h_full()
                 .rounded(px(WALLET_ROW_ICON / 2.))
                 .bg(theme.bg_sunken)
+                .when(ring, |circle| circle.border_1().border_color(theme.divider))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -603,22 +701,29 @@ fn lead_circle_logos(
     if logos.badge_hidden {
         return circle;
     }
+    // 12, or 16 when it may carry a logo — a size a logo can be read at —
+    // ringed 1.5 in the page colour (078 H-09).
+    let side = if logos.badge_logo.is_some() {
+        16.
+    } else {
+        WALLET_BADGE
+    };
     let mut dot = div()
         .absolute()
         .bottom_0()
         .right_0()
-        .w(px(WALLET_BADGE))
-        .h(px(WALLET_BADGE))
-        .rounded(px(WALLET_BADGE / 2.))
+        .w(px(side))
+        .h(px(side))
+        .rounded(px(side / 2.))
         .bg(badge)
-        .border_2()
+        .border(px(1.5))
         .border_color(theme.bg_base);
     if let Some(url) = &logos.badge_logo {
         dot = dot.child(
             gpui::img(url.clone())
                 .w_full()
                 .h_full()
-                .rounded(px(WALLET_BADGE / 2.)),
+                .rounded(px(side / 2.)),
         );
     }
     circle.child(dot)
@@ -637,11 +742,15 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
     } else {
         theme.fg_base
     };
+    // Padded 12 on the font's own line (078 H-09): the web's rows are
+    // buttons, whose line-height is `normal` — Plus Jakarta Sans' 1.26 — so a
+    // row is 64 tall. gpui's default ~1.6 made it 66 and spread the lines.
     div()
         .flex()
         .items_center()
         .gap(px(12.))
-        .py(px(10.))
+        .py(px(12.))
+        .line_height(gpui::relative(LINE_NORMAL))
         .child(lead_circle_logos(
             theme,
             icon_img(icons, glyph, false, theme.fg_muted, 18.),
@@ -653,6 +762,7 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
                 badge_logo: row.badge_logo.clone(),
                 badge_hidden: false,
             },
+            false,
         ))
         .child(
             div()
@@ -702,7 +812,7 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
 fn token_glyph(theme: &Theme, ticker: &str) -> Div {
     let glyph: String = ticker.chars().take(3).collect::<String>().to_uppercase();
     div()
-        .text_size(theme::text_label())
+        .text_size(theme::text_glyph())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_muted)
         .child(SharedString::from(glyph))
@@ -720,7 +830,7 @@ pub fn token_icon_logos(
     badge: gpui::Hsla,
     logos: &crate::marks::Logos,
 ) -> Div {
-    lead_circle_logos(theme, token_glyph(theme, ticker), badge, logos)
+    lead_circle_logos(theme, token_glyph(theme, ticker), badge, logos, true)
 }
 
 /// Asset row. Caller chains `.on_click` (opens the detail panel — US2).
@@ -745,17 +855,17 @@ pub fn asset_row(
             .text_color(theme.fg_subtle)
             .child(super::fixtures::MASK),
     };
+    // The web's row (078 H-09): flush with the column, no hover wash, no
+    // radius — a list of holdings, not a stack of cards. Padded 12 on the
+    // font's own line, 64 tall.
     div()
         .id(id)
         .flex()
         .items_center()
         .gap(px(12.))
-        .py(px(10.))
-        .px(px(8.))
-        .mx(px(-8.))
-        .rounded(px(10.))
+        .py(px(12.))
+        .line_height(gpui::relative(LINE_NORMAL))
         .cursor_pointer()
-        .hover(|el| el.bg(theme.bg_raised))
         .child(token_icon_logos(
             theme,
             row.ticker.as_ref(),
