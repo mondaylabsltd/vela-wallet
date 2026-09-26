@@ -155,7 +155,7 @@ class SendRefusalsTest {
         try {
             withTimeout(30_000) { send.first { it.stage == SendStage.Confirm && it.can_confirm } }
         } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
-            throw AssertionError("DIAG never reached confirm: send=${send.value} || fee=${fee.value}", timeout)
+            throw AssertionError("DIAG never reached confirm: alert=${alert.value} || send=${send.value} || fee=${fee.value}", timeout)
         }
     }
 

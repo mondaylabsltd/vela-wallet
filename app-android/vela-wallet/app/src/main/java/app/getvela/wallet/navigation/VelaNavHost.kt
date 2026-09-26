@@ -462,6 +462,13 @@ fun VelaNavHost(
                 }
                 LaunchedEffect(session.address) {
                     if (session.address.isEmpty()) return@LaunchedEffect
+                    // Read the book as the wallet opens, not when 通讯录 is
+                    // first tapped: that tap used to meet an unloaded book and
+                    // draw title + search before the list popped in — the flash
+                    // iOS never had, because its store is read at sign-in. The
+                    // screen's own open is then the same account again, which
+                    // the core keeps as it is (only the history is re-read).
+                    application.container.contacts.open(session.address)
                     // ORDER MATTERS. The pool asks the network machine which
                     // endpoints a chain has, so a fetch dispatched before that
                     // machine has read storage finds no chains at all and settles
@@ -2280,7 +2287,7 @@ private fun SendAlertDialog(kind: SendAlertKind, strings: VelaStrings, onDismiss
         onDismissRequest = onDismiss,
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text(strings.t(I18nKeys.Flows.DONE))
+                androidx.compose.material3.Text(strings.t(I18nKeys.Common.GOT_IT))
             }
         },
         title = { androidx.compose.material3.Text(title) },

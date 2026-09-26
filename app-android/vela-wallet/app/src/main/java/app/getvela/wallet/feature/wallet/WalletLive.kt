@@ -327,9 +327,11 @@ object WalletLive {
             )
         }
 
-        // `valueOf`, not the constructor: `BigDecimal(12.34)` is the binary
-        // double's exact expansion, 12.3399…, and cutting THAT printed $12.33.
-        val rounded = BigDecimal.valueOf(money.convert(total)).setScale(2, RoundingMode.DOWN)
+        // The exact binary value rounded HALF UP — `Formats.fixed2`'s rule and
+        // the web's `toFixed(2)`, so the hero and its rows agree with each
+        // other and with the web. It used to CUT: `BigDecimal(12.34)` is
+        // 12.3399…, and cutting that printed $12.33.
+        val rounded = BigDecimal(money.convert(total)).setScale(2, RoundingMode.HALF_UP)
         val whole = rounded.toBigInteger()
         val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
         // A zero is "live" only once EVERY chain has answered: a zero with a

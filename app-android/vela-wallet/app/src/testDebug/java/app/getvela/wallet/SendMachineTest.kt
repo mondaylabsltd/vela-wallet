@@ -196,7 +196,14 @@ class SendMachineTest {
         c.setRecipient(recipient); c.setAmount("0.001")
         withTimeout(10_000) { c.send.first { it.can_continue } }
         c.continueTapped()
-        withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.can_confirm } }
+        try {
+            withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.can_confirm } }
+        } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+            // Which way it stopped: the core's own refusal (an estimate that
+            // outran its 15 s budget says `estimate_failed{timeout}`), or a
+            // wait that never settled (no alert, the fee view still busy).
+            throw AssertionError("DIAG never reached confirm: alert=${c.alert.value} || send=${c.send.value} || fee=${c.fee.value}", timeout)
+        }
         c.slideConfirm()
         val failed = withTimeout(30_000) { c.send.first { it.tx_error != null || it.receipt != null } }
         assertNotNull("the relay refused; the core must say so", failed.tx_error)

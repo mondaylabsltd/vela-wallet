@@ -156,6 +156,35 @@ class ContactsLiveTest {
         assertTrue(model.groups.isEmpty())
     }
 
+    /**
+     * Founder, 2026-09-26: opening 通讯录, the 分组 / 新建分组 head flashed and
+     * vanished. Before the book is read the screen is PENDING — its chrome
+     * (the title, the search field) and nothing else: no groups head (which
+     * the screen draws only for a populated book, `empty == null`), no empty
+     * state yet. Loaded and empty, it is the empty state and no longer pending,
+     * with the search field still there.
+     */
+    @Test
+    fun anUnreadBookIsPendingAndDrawsNoGroupsHeadUntilItLoads() {
+        val pending = ContactsLive.home(labels(), ContactsView(loaded = false), "", emptyState())
+        assertTrue(pending.pending)
+        assertNull("no empty state before the book is read", pending.empty)
+        assertTrue(pending.groups.isEmpty())
+        // The groups head is drawn exactly when a READ book has people.
+        assertFalse("no groups head while pending", pending.empty == null && !pending.pending)
+        assertNotNull(pending.search)
+
+        val empty = ContactsLive.home(labels(), ContactsView(loaded = true), "", emptyState())
+        assertFalse(empty.pending)
+        assertNotNull(empty.empty)
+        assertFalse("an empty book offers no groups head", empty.empty == null && !empty.pending)
+        assertEquals(pending.search.placeholder, empty.search.placeholder)
+
+        val people = ContactsLive.home(labels(), book(contact(ALICE, "Alice")), "", emptyState())
+        assertFalse(people.pending)
+        assertTrue("a read book with people draws the groups head", people.empty == null && !people.pending)
+    }
+
     // -- the detail page ------------------------------------------------------
 
     @Test

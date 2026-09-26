@@ -106,8 +106,10 @@ class SendSplitVerdictsTest {
     private fun splitWith(rows: List<SendRecipientDraft>): CoreHost<SendView> {
         val h = host()
         h.send(SendEvent.Open(account = SendAccountRef("acct", ME), display = SendDisplayContext("USD", 1.0, 2)))
-        h.settle { it.tokens.isNotEmpty() }
-        h.send(SendEvent.SelectToken(SendLive.tokenId(xdai)))
+        // The id the core LISTS: it spells a built-in chain's coin the
+        // registry's way (xDAI), and the id carries the symbol.
+        val listed = h.settle { it.tokens.isNotEmpty() }
+        h.send(SendEvent.SelectToken(SendLive.tokenId(listed.tokens.single())))
         h.settle { it.selected_token != null }
         h.send(SendEvent.EnterSplitMode)
         h.settle { it.split_mode }
@@ -155,7 +157,7 @@ class SendSplitVerdictsTest {
         h.send(SendEvent.RecipientsChanged(over.recipients.mapIndexed { i, row -> row.copy(amount = if (i == 0) "0.1" else "0.2") }))
         val under = h.settle { !it.split_over_balance && it.split_remaining != null }
         assertEquals("0.41697", under.split_remaining)
-        assertEquals("0.41697 XDAI left", SendLive.form(drawn.model, under, FeeView(), ctx()).summary?.remaining)
+        assertEquals("0.41697 xDAI left", SendLive.form(drawn.model, under, FeeView(), ctx()).summary?.remaining)
     }
 
     /** "Use X for the empty rows", end to end: the core flags the empty row, the offer copies the typed figure, the core accepts it. */
@@ -166,7 +168,7 @@ class SendSplitVerdictsTest {
         val gap = h.settle { view -> view.recipients.any { it.amount == "0.1" } && view.split_row_issues.any { it.amount == SendRowFieldState.Empty } }
         val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
         val fill = SendLive.form(drawn.model, gap, FeeView(), ctx()).fillEmpty
-        assertEquals("Use 0.1 XDAI for the empty rows", fill?.label)
+        assertEquals("Use 0.1 xDAI for the empty rows", fill?.label)
 
         h.send(SendEvent.RecipientsChanged(SplitRows.emptyFilled(gap.recipients, fill!!.amount)))
         val filled = h.settle { view -> view.recipients.all { it.amount == "0.1" } }

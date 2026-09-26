@@ -639,8 +639,14 @@ data class SendConfirmModel(
      * answerable at a glance. Absent on a sweep: several coins, no one mark.
      */
     val mark: TokenMarkModel? = null,
-    /** "120 USDT" / "3 assets". */
+    /** "120 USDT" / "3 assets" — or just "120" when [amountUnit] draws the unit. */
     val amount: String,
+    /**
+     * Spec 078 round 2: the unit drawn as its own piece beside the figure —
+     * smaller, quieter, on one baseline — the way the Send form's hero draws
+     * it. `null` = [amount] is one phrase (a split's total, a sweep's count).
+     */
+    val amountUnit: String? = null,
     /** "≈ $120.00" / "Total ≈ $200.90 · Ethereum". */
     val subline: String,
     val facts: List<FactRowModel>,

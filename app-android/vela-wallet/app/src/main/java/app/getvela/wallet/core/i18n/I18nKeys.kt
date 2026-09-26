@@ -264,6 +264,13 @@ object I18nKeys {
 
     object Common {
         const val CANCEL = "common.cancel"
+
+        /**
+         * An alert's acknowledgement (spec 078 round 2): "知道了" / "Got it".
+         * The send alert's button said "完成" (the receipt's Done), which
+         * reads as finishing the send the alert just refused.
+         */
+        const val GOT_IT = "common.gotIt"
     }
 
     /** Wallet home vocabulary (spec 015, research.md D3 key map — all pre-existing corpus keys). */

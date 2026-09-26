@@ -35,6 +35,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -1117,7 +1120,11 @@ fun FeeRow(
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // As tall as the card, so the refresh control beside it shares its top
+        // and bottom edges at every text size (spec 078 round 2) — it was a
+        // shorter square floating mid-card, and at the largest size the card
+        // grows to two lines.
+        Row(modifier = Modifier.height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -1163,7 +1170,9 @@ fun FeeRow(
                 Spacer(modifier = Modifier.width(VelaSpacing.md))
                 Box(
                     modifier = Modifier
-                        .size(VelaSizing.hitTarget)
+                        .width(VelaSizing.hitTarget)
+                        .fillMaxHeight()
+                        .heightIn(min = VelaSizing.hitTarget)
                         .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
                         .clickable(enabled = onRefresh != null) { onRefresh?.invoke() },
                     contentAlignment = Alignment.Center,
@@ -1202,30 +1211,93 @@ fun FeeRow(
  */
 @Composable
 private fun LabelBesideValue(label: @Composable () -> Unit, value: @Composable () -> Unit) {
-    val gap = VelaSpacing.md
+    // The least room between the two — they sit at opposite ends, so this is
+    // only the squeeze point. At `md` (12) "Network fee" + an in-band fee
+    // just missed one line on a 392 dp phone at the standard size (the Xiaomi).
+    val gap = VelaSpacing.sm
     val rowGap = VelaSpacing.xs
-    androidx.compose.ui.layout.Layout(contents = listOf(label, value)) { (labelPart, valuePart), constraints ->
-        val width = constraints.maxWidth
+    val policy = remember(gap, rowGap) { LabelBesideValuePolicy(gap, rowGap) }
+    androidx.compose.ui.layout.Layout(contents = listOf(label, value), measurePolicy = policy)
+}
+
+/**
+ * [LabelBesideValue]'s layout, intrinsics included: the fee row asks for its
+ * intrinsic height (so the refresh control can match the card), and the
+ * default intrinsics measure with an UNBOUNDED width — which the side-by-side
+ * arithmetic turned into a width no `Constraints` can hold, and the app died
+ * drawing the Send form (device-found on the Xiaomi, spec 078 round 2).
+ */
+private class LabelBesideValuePolicy(
+    private val gap: androidx.compose.ui.unit.Dp,
+    private val rowGap: androidx.compose.ui.unit.Dp,
+) : androidx.compose.ui.layout.MultiContentMeasurePolicy {
+
+    override fun androidx.compose.ui.layout.MeasureScope.measure(
+        measurables: List<List<androidx.compose.ui.layout.Measurable>>,
+        constraints: Constraints,
+    ): androidx.compose.ui.layout.MeasureResult {
+        val labelPart = measurables[0].first()
+        val valuePart = measurables[1].first()
         val gapPx = gap.roundToPx()
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val labelWide = labelPart.first().maxIntrinsicWidth(constraints.maxHeight)
-        val valueWide = valuePart.first().maxIntrinsicWidth(constraints.maxHeight)
-        if (labelWide + gapPx + valueWide <= width) {
-            val l = labelPart.first().measure(loose)
-            val v = valuePart.first().measure(loose.copy(maxWidth = width - l.width - gapPx))
+        val labelWide = labelPart.maxIntrinsicWidth(Constraints.Infinity)
+        val valueWide = valuePart.maxIntrinsicWidth(Constraints.Infinity)
+        val sideBySide = labelWide + gapPx + valueWide
+        // Unbounded (an intrinsic pass, a scroller): both on one line.
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else sideBySide.coerceAtLeast(constraints.minWidth)
+        return if (sideBySide <= width) {
+            val l = labelPart.measure(loose.copy(maxWidth = width))
+            val v = valuePart.measure(loose.copy(maxWidth = (width - l.width - gapPx).coerceAtLeast(0)))
             val height = maxOf(l.height, v.height)
             layout(width, height) {
                 l.placeRelative(0, (height - l.height) / 2)
                 v.placeRelative(width - v.width, (height - v.height) / 2)
             }
         } else {
-            val l = labelPart.first().measure(loose)
-            val v = valuePart.first().measure(loose)
+            val l = labelPart.measure(loose.copy(maxWidth = width))
+            val v = valuePart.measure(loose.copy(maxWidth = width))
             val top = l.height + rowGap.roundToPx()
             layout(width, top + v.height) {
                 l.placeRelative(0, 0)
                 v.placeRelative(width - v.width, top)
             }
+        }
+    }
+
+    override fun androidx.compose.ui.layout.IntrinsicMeasureScope.maxIntrinsicWidth(
+        measurables: List<List<androidx.compose.ui.layout.IntrinsicMeasurable>>,
+        height: Int,
+    ): Int = measurables[0].first().maxIntrinsicWidth(height) + gap.roundToPx() + measurables[1].first().maxIntrinsicWidth(height)
+
+    override fun androidx.compose.ui.layout.IntrinsicMeasureScope.minIntrinsicWidth(
+        measurables: List<List<androidx.compose.ui.layout.IntrinsicMeasurable>>,
+        height: Int,
+    ): Int = maxOf(measurables[0].first().minIntrinsicWidth(height), measurables[1].first().minIntrinsicWidth(height))
+
+    override fun androidx.compose.ui.layout.IntrinsicMeasureScope.minIntrinsicHeight(
+        measurables: List<List<androidx.compose.ui.layout.IntrinsicMeasurable>>,
+        width: Int,
+    ): Int = heightFor(measurables, width)
+
+    override fun androidx.compose.ui.layout.IntrinsicMeasureScope.maxIntrinsicHeight(
+        measurables: List<List<androidx.compose.ui.layout.IntrinsicMeasurable>>,
+        width: Int,
+    ): Int = heightFor(measurables, width)
+
+    private fun androidx.compose.ui.layout.IntrinsicMeasureScope.heightFor(
+        measurables: List<List<androidx.compose.ui.layout.IntrinsicMeasurable>>,
+        width: Int,
+    ): Int {
+        val label = measurables[0].first()
+        val value = measurables[1].first()
+        val gapPx = gap.roundToPx()
+        val labelWide = label.maxIntrinsicWidth(Constraints.Infinity)
+        val valueWide = value.maxIntrinsicWidth(Constraints.Infinity)
+        return if (width == Constraints.Infinity || labelWide + gapPx + valueWide <= width) {
+            val valueRoom = if (width == Constraints.Infinity) width else (width - labelWide - gapPx).coerceAtLeast(0)
+            maxOf(label.maxIntrinsicHeight(width), value.maxIntrinsicHeight(valueRoom))
+        } else {
+            label.maxIntrinsicHeight(width) + rowGap.roundToPx() + value.maxIntrinsicHeight(width)
         }
     }
 }
@@ -1277,6 +1349,12 @@ fun FeeSpeedControl(
             return@Column
         }
         SpeedNote(speed.onceNote)
+        // Two lines, not three (spec 078 round 2): [name ……… fee] over
+        // [what it buys ……… its gas bid]. The third line left a hole under
+        // the name. Chosen = the text colour, semibold, and a ✓ in its own
+        // column — never the accent, which on this screen means "moves money".
+        val lineOne = VelaTextSize.base * VelaLeading.normal
+        val lineOneDp = with(LocalDensity.current) { lineOne.toDp() }
         speed.options.forEach { option ->
             Row(
                 modifier = Modifier
@@ -1293,33 +1371,59 @@ fun FeeSpeedControl(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = option.label,
-                            color = if (option.selected) colors.accentBase else colors.fgBase,
+                            color = colors.fgBase,
                             fontFamily = VelaFontFamily,
                             fontWeight = if (option.selected) VelaFontWeight.semibold else VelaFontWeight.regular,
                             fontSize = VelaTextSize.base,
+                            lineHeight = lineOne,
                             modifier = Modifier.weight(1f),
                         )
-                        Text(text = option.value, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
+                        Text(
+                            text = option.value,
+                            color = colors.fgBase,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.base,
+                            lineHeight = lineOne,
+                            maxLines = 1,
+                        )
                     }
-                    if (speed.gasPriceLine) {
-                        // Named, because an unnamed "3,244 wei" under a fee reads
-                        // as a second charge; held open empty while measuring.
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        // The description gives way first: squeezed, it wraps
+                        // under itself — the gas bid is never cut.
+                        Text(
+                            text = option.detail,
+                            color = colors.fgSubtle,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.sm,
+                            lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                            modifier = Modifier.weight(1f),
+                        )
+                        // Named, because an unnamed "3,244 wei" under a fee
+                        // reads as a second charge. The UI font with tabular
+                        // digits, so the three bids line up — not a monospace
+                        // face for the whole string.
+                        if (speed.gasPriceLine && option.gasPrice != null) {
+                            Spacer(modifier = Modifier.width(VelaSpacing.md))
                             Text(
-                                text = option.gasPrice?.let { "${speed.gasPriceLabel}  $it" } ?: " ",
+                                text = "${speed.gasPriceLabel}  ${option.gasPrice}",
                                 color = colors.fgSubtle,
-                                fontFamily = VelaMonoFontFamily,
+                                fontFamily = VelaFontFamily,
                                 fontSize = VelaTextSize.sm,
+                                lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                                style = TextStyle(fontFeatureSettings = "tnum"),
                                 maxLines = 1,
+                                softWrap = false,
                             )
                         }
                     }
-                    Text(text = option.detail, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
                 }
                 Spacer(modifier = Modifier.width(VelaSpacing.md))
-                Box(modifier = Modifier.size(VelaIconSize.sm)) {
-                    if (option.selected) {
-                        Icon(imageVector = VelaIcons.Check, contentDescription = null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
+                // Its own column, centred on line one.
+                Box(modifier = Modifier.height(lineOneDp), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.size(VelaIconSize.sm)) {
+                        if (option.selected) {
+                            Icon(imageVector = VelaIcons.Check, contentDescription = null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.sm))
+                        }
                     }
                 }
             }

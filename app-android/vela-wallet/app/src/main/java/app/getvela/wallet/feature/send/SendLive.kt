@@ -905,7 +905,10 @@ object SendLive {
         return fallback.copy(
             // A sweep moves several coins; one mark would name the wrong one.
             mark = if (view.multi_select_mode) null else token?.let { WalletLive.mark(it.chain_id, it.symbol, it.token_address, it.logo_urls) },
-            amount = "${sentFigure(view.confirm_amount, view)} $symbol".trim(),
+            // One send: the figure and its unit as two pieces (spec 078 round
+            // 2). A split's total and a sweep keep one phrase.
+            amount = if (split || view.multi_select_mode) "${sentFigure(view.confirm_amount, view)} $symbol".trim() else sentFigure(view.confirm_amount, view),
+            amountUnit = if (split || view.multi_select_mode) null else symbol.ifEmpty { null },
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
             // The core's own verdict, resolved on this page only (single recipient).
             recipientTag = if (!split && view.recipient_risk?.first_time == true) s.t(I18nKeys.Flows.FIRST_TIME_SEND) else null,
