@@ -49,7 +49,7 @@ use gallery::GalleryView;
 use gpui::{
     App, AppContext as _, Bounds, Context, Div, IntoElement, KeyBinding, Menu, MenuItem,
     ParentElement as _, QuitMode, Render, Styled as _, TitlebarOptions, Window, WindowBounds,
-    WindowOptions, actions, div, point, px, size,
+    WindowOptions, actions, div, px, size,
 };
 use onboarding::OnboardingPage;
 use theme::{WINDOW_H, WINDOW_W};
@@ -262,9 +262,13 @@ fn open_window_with<V: gpui::Render + 'static>(
             titlebar: Some(TitlebarOptions {
                 title: Some("Vela Wallet".into()),
                 // Content owns the full canvas, as in the mocks; only the
-                // traffic lights remain, inset to the mock's position.
+                // traffic lights remain, left where AppKit puts them so they
+                // sit exactly as in every other app on this macOS version.
+                // The mock's (20, 20) inset read as too low beside Terminal
+                // and Finder, and gpui grows the native titlebar (the macOS
+                // drag strip) to 2·y + 14 around a custom position.
                 appears_transparent: true,
-                traffic_light_position: Some(point(px(20.), px(20.))),
+                traffic_light_position: None,
             }),
             ..Default::default()
         },
