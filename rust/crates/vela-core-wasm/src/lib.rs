@@ -21,6 +21,8 @@ use wasm_bindgen::prelude::*;
 mod bridge;
 mod onboarding;
 mod settings;
+/// Where an account's signatures go: its sign-in key.
+mod signing;
 /// Only the REGISTRY's relying party: the web wallet offers no Trusted Signer
 /// (owner, 2026-09-23), but it can publish a unit whose keys were minted on
 /// one.

@@ -955,6 +955,15 @@ export function safeProxyRuntimeCode(): string;
 export function sha256(data: Uint8Array): Uint8Array;
 
 /**
+ * The route an account's signatures take, as JSON
+ * (`{credential_id, transports, method, signer_origin?}`), or `null` for a
+ * record written before the account named its sign-in key — that one signs as
+ * it always did. `account_json` is the stored account record. See
+ * `vela_core::app::Account::sign_in_route`.
+ */
+export function signInRoute(account_json: string): string | undefined;
+
+/**
  * What a site's message request asks the account to sign, before the
  * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
  */
@@ -1286,6 +1295,7 @@ export interface InitOutput {
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly signInRoute: (a: number, b: number) => [number, number];
     readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signprefcore_new: () => number;

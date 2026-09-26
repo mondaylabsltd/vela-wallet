@@ -4193,6 +4193,27 @@ export function sha256(data) {
 }
 
 /**
+ * The route an account's signatures take, as JSON
+ * (`{credential_id, transports, method, signer_origin?}`), or `null` for a
+ * record written before the account named its sign-in key — that one signs as
+ * it always did. `account_json` is the stored account record. See
+ * `vela_core::app::Account::sign_in_route`.
+ * @param {string} account_json
+ * @returns {string | undefined}
+ */
+export function signInRoute(account_json) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.signInRoute(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * What a site's message request asks the account to sign, before the
  * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
  * @param {string} method

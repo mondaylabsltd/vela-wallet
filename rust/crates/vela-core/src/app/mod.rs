@@ -199,6 +199,16 @@ pub struct Account {
     pub signed_in_with: Option<SignInKey>,
 }
 
+/// The JSON door to [`Account::sign_in_route`] for the shells that hold the
+/// record as JSON (web over wasm, the phones over UniFFI): the stored account
+/// in, its route out — `None` for a record this build cannot read, or one with
+/// no usable sign-in key, which signs as it always did.
+#[must_use]
+pub fn sign_in_route_json(account_json: &str) -> Option<String> {
+    let account: Account = serde_json::from_str(account_json).ok()?;
+    serde_json::to_string(&account.sign_in_route()?).ok()
+}
+
 /// Which of the wallet's keys this device signs with, and how it reaches it:
 /// the one the person created the wallet with, or last signed in with, HERE.
 ///
@@ -886,6 +896,22 @@ mod tests {
         let old = two_keys(None);
         let json = serde_json::to_string(&old).unwrap_or_default();
         assert!(!json.contains("signed_in_with"), "{json}");
+    }
+
+    /// The door the web and the phones call: the stored record in, the route
+    /// out, and `null` rather than a guess for anything it cannot use.
+    #[test]
+    fn the_json_door_answers_like_the_account() {
+        let account = two_keys(signed_in("second", KeyMethod::Hybrid));
+        let json = serde_json::to_string(&account).unwrap_or_default();
+        let route: crate::wallet_keys::SignRoute =
+            serde_json::from_str(&sign_in_route_json(&json).unwrap_or_default())
+                .unwrap_or_else(|_| unreachable!());
+        assert_eq!(Some(route), account.sign_in_route());
+
+        let old = serde_json::to_string(&two_keys(None)).unwrap_or_default();
+        assert_eq!(sign_in_route_json(&old), None);
+        assert_eq!(sign_in_route_json("not json"), None);
     }
 
     #[test]
