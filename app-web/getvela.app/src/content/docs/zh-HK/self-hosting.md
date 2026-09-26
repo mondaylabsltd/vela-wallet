@@ -1,7 +1,7 @@
 ---
 title: 自行架設指南
 description: "Vela 為你運行的一切、每個部分的用途，以及如何換成你自己的——中繼、公鑰索引、鏈數據、匯率和各個 App；還有你唯一無法替換的東西，以及沒有 getvela.app 時如何繼續使用。"
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -64,8 +64,8 @@ openchain、4byte）、用來顯示你安全密鑰型號名稱的驗證器目錄
 App 之所以能使用手機或安全密鑰，是因為 Vela 直接與它們溝通；而手機本身的通行密鑰（「本裝置」）需要 App
 由 Vela 簽署，你編譯的版本並不是。
 
-[簽名頁](/zh-HK/docs/clear-signing-self-host)本身並不是一條獨立的途徑：它只會為其他程式傳來的請求簽署，
-而目前還沒有任何 Vela App 會發送請求給它。
+[可信簽署器](/zh-HK/docs/clear-signing-self-host)本身並不是一條獨立的途徑：它只會為 App 傳來的請求簽署
+——即 Vela 桌面版和手機 App——而放在你自己域名上的副本，只能用為該域名建立的通行密鑰簽署。
 
 <Callout type="warning" title="控制域名的人可以請求簽名">
 任何由 getvela.app 或其子域名提供的頁面——或將來控制這個域名的任何人——都可以請求你的鑰匙簽署，而系統
@@ -275,4 +275,4 @@ App 使用 `getvela.app` 通行密鑰。
 而以下這些不屬於 Vela：公共函數選擇器資料庫、Apple 和 Google 用於手機簽署的隧道，以及你選擇的任何 RPC
 服務供應商。
 
-下一步：[你可以自行運行的簽名頁](/zh-HK/docs/clear-signing-self-host)。
+下一步：[可信簽署器，以及如何運行你自己的副本](/zh-HK/docs/clear-signing-self-host)。

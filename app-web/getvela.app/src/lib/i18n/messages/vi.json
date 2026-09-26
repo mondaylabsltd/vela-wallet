@@ -59,7 +59,7 @@
 				"passkeys": "Passkey hoạt động thế nào",
 				"signers": "Khóa ký & khóa bảo mật",
 				"clear-signing": "Ký minh bạch",
-				"clear-signing-self-host": "Tự triển khai trang ký",
+				"clear-signing-self-host": "Trusted Signer",
 				"self-hosting": "Hướng dẫn tự triển khai",
 				"bybit-attack": "Vụ tấn công Bybit",
 				"recovery": "Khôi phục & đăng nhập",
@@ -229,7 +229,7 @@
 				},
 				{
 					"feature": "Một lớp kiểm tra nữa",
-					"vela": "Một trang ký độc lập, đã làm xong nhưng chưa kết nối với các ứng dụng",
+					"vela": "Trusted Signer: một trang độc lập tự giải mã và tự ký, nếu bạn chọn dùng",
 					"metamask": "Cảnh báo rủi ro của bên thứ ba",
 					"base": "—"
 				},
@@ -355,8 +355,8 @@
 				"body": "Hiện nay một số ứng dụng bỏ qua một phần của Cài đặt → Điểm cuối dịch vụ — ứng dụng iPhone bỏ qua hoàn toàn, ứng dụng web khi tạo ví hoặc đăng nhập, còn Android khi tra tên. Tất cả đều phải tuân theo thiết lập này."
 			},
 			{
-				"title": "Kết nối trang ký độc lập",
-				"body": "Trang ký tự giải mã và tự ký một yêu cầu đã làm xong. Tiếp theo: để các ứng dụng chuyển yêu cầu sang đó, nhờ vậy mọi chữ ký đều được kiểm tra bởi một chương trình do chính bạn nạp."
+				"title": "Bước kiểm tra Trusted Signer biết từ chối",
+				"body": "Ứng dụng máy tính đã so sánh trang ký với các phiên bản đi kèm ứng dụng, nhưng chỉ ghi lại việc không khớp vào nhật ký. Tiếp theo: từ chối một trang không khớp, và kiểm tra cả trên điện thoại."
 			},
 			{
 				"title": "Ký minh bạch phủ rộng hơn",
@@ -368,6 +368,10 @@
 			}
 		],
 		"shipped": [
+			{
+				"title": "Trusted Signer",
+				"body": "Một trang ký độc lập tại sign.getvela.app, tự giải mã và tự ký một yêu cầu, mỗi phiên bản được định địa chỉ theo nội dung và build tái lập được. Các ứng dụng máy tính, iPhone và Android có thể dùng nó làm cách ký của bạn."
+			},
 			{
 				"title": "Khóa của bạn trên chuỗi, có bản sao lưu trên Ethereum",
 				"body": "Đăng nhập thẳng từ sổ đăng ký trên chuỗi khi chỉ mục không hoạt động, xem mọi khóa mà ví được tạo cùng, và sao chép bản ghi sang Ethereum."
@@ -487,9 +491,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "a9482909de80",
+		"home": "9d4250ccd810",
 		"about": "44b20f016140",
-		"roadmap": "92efac5dc4ef",
+		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

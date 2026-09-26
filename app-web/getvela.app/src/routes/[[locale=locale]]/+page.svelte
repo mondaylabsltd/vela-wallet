@@ -72,8 +72,9 @@
 		{ vela: 'warn', metamask: '', base: 'yes' }, // sponsored gas
 		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // batched transactions
 		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // decoded before signing
-		// The signing page exists but no app sends it requests yet (spec 080):
-		// an extra check you cannot use today is not a green cell.
+		// The Trusted Signer is published and the desktop and phone apps use it
+		// where it was chosen (C-signpage-1) — but it is opt-in, the web wallet
+		// can't use it, and its integrity check only logs: partial, not green.
 		{ vela: 'warn', metamask: 'yes', base: '' }, // an extra check
 		{ vela: 'warn', metamask: 'yes', base: 'yes' } // maturity
 	] as const;

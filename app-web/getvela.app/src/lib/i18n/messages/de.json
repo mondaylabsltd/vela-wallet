@@ -59,7 +59,7 @@
 				"passkeys": "So funktionieren Passkeys",
 				"signers": "Signaturschlüssel und Sicherheitsschlüssel",
 				"clear-signing": "Klartext-Signatur",
-				"clear-signing-self-host": "Signaturseite selbst hosten",
+				"clear-signing-self-host": "Trusted Signer",
 				"self-hosting": "Anleitung zum Selbsthosten",
 				"bybit-attack": "Der Bybit-Angriff",
 				"recovery": "Wiederherstellung und Anmeldung",
@@ -229,7 +229,7 @@
 				},
 				{
 					"feature": "Zusätzliche Prüfung",
-					"vela": "Eine unabhängige Signaturseite, fertig gebaut, aber noch nicht an die Apps angebunden",
+					"vela": "Der Trusted Signer: eine unabhängige Seite, die selbst dekodiert und signiert, wenn du ihn wählst",
 					"metamask": "Risikowarnungen von Drittanbietern",
 					"base": "—"
 				},
@@ -355,8 +355,8 @@
 				"body": "Heute ignorieren manche Apps Teile von Einstellungen → Dienst-Endpunkte: die iPhone-App vollständig, die Web-App beim Erstellen einer Wallet und bei der Anmeldung, Android beim Nachschlagen von Namen. Alle sollen sich daran halten."
 			},
 			{
-				"title": "Die unabhängige Signaturseite, angebunden",
-				"body": "Die Signaturseite, die eine Anfrage selbstständig dekodiert und signiert, ist gebaut. Als Nächstes: Die Apps sollen ihre Anfragen an sie übergeben, damit ein Programm, das du selbst geladen hast, jede Signatur prüft."
+				"title": "Eine Trusted-Signer-Prüfung, die ablehnt",
+				"body": "Die Desktop-App vergleicht die Signaturseite schon mit den Versionen, die sie mitbringt, protokolliert eine Abweichung aber nur. Als Nächstes: eine Seite ablehnen, die nicht übereinstimmt, und die Prüfung auch auf den Handys durchführen."
 			},
 			{
 				"title": "Breitere Abdeckung der Klartext-Signatur",
@@ -368,6 +368,10 @@
 			}
 		],
 		"shipped": [
+			{
+				"title": "Trusted Signer",
+				"body": "Eine unabhängige Signaturseite unter sign.getvela.app, die eine Anfrage selbst dekodiert und signiert; jede Version ist inhaltsadressiert und reproduzierbar. Die Desktop-, iPhone- und Android-App können sie als deine Art zu signieren nutzen."
+			},
 			{
 				"title": "Deine Schlüssel on-chain, mit Sicherung auf Ethereum",
 				"body": "Du kannst dich direkt über das On-Chain-Register anmelden, wenn der Index ausfällt, jeden Schlüssel sehen, mit dem deine Wallet erstellt wurde, und den Eintrag auf Ethereum kopieren."
@@ -487,9 +491,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "a9482909de80",
+		"home": "9d4250ccd810",
 		"about": "44b20f016140",
-		"roadmap": "92efac5dc4ef",
+		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

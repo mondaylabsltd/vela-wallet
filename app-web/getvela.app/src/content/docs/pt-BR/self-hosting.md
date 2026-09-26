@@ -1,7 +1,7 @@
 ---
 title: Guia de auto-hospedagem
 description: "Tudo o que a Vela roda para você, o que cada peça faz e como substituí-la pela sua — o relay, o índice de chaves públicas, os dados de chain, as cotações e os apps —, além da única coisa que você não pode substituir e de como viver sem o getvela.app."
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -83,9 +83,10 @@ fora do ar. Um app compilado por você consegue usar um celular ou uma chave de
 segurança porque a Vela conversa diretamente com eles; a passkey do próprio celular
 (“este aparelho”) exige que o app seja assinado pela Vela, e o seu não é.
 
-A [página de assinatura](/pt-BR/docs/clear-signing-self-host) não é um caminho por
-si só: ela assina solicitações que outro programa envia, e nenhum app da Vela envia
-essas solicitações ainda.
+O [Trusted Signer](/pt-BR/docs/clear-signing-self-host) não é um caminho por si
+só: ele assina solicitações que um app envia — os apps da Vela de desktop e de
+celular —, e uma cópia no seu próprio domínio só assina com passkeys criadas para
+esse domínio.
 
 <Callout type="warning" title="Quem controla o domínio pode pedir uma assinatura">
 Qualquer página servida pelo getvela.app ou por um dos seus subdomínios — ou por
@@ -328,4 +329,4 @@ Se você substituir tudo o que está acima, sobra isto:
 E estes não são da Vela: os bancos de dados públicos de seletores, os túneis da
 Apple e do Google para login pelo celular e os provedores de RPC que você escolher.
 
-A seguir: [a página de assinatura que você mesmo pode rodar](/pt-BR/docs/clear-signing-self-host).
+A seguir: [o Trusted Signer, e como rodar o seu](/pt-BR/docs/clear-signing-self-host).

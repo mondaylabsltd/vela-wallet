@@ -1,7 +1,7 @@
 ---
 title: Guía de autoalojamiento
 description: "Todo lo que Vela opera por ti, qué hace cada pieza y cómo reemplazarla por la tuya (el relay, el índice de llaves públicas, los datos de cadena, los tipos de cambio y las apps), además de lo único que no puedes reemplazar y cómo arreglártelas sin getvela.app."
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -82,9 +82,10 @@ seguridad porque Vela habla con ellos directamente; la passkey del propio celula
 («este dispositivo») necesita que la app esté firmada por Vela, y la tuya no lo
 está.
 
-La [página de firma](/es-MX/docs/clear-signing-self-host) no es una forma de entrar
-por sí sola: firma solicitudes que le envía otro programa, y ninguna app de Vela se
-las envía todavía.
+El [Trusted Signer](/es-MX/docs/clear-signing-self-host) no es una forma de entrar
+por sí solo: firma solicitudes que le envía una app (las apps de Vela de escritorio y
+de celular), y una copia en tu propio dominio solo firma con passkeys creadas para ese
+dominio.
 
 <Callout type="warning" title="Quien controla el dominio puede pedir una firma">
 Cualquier página servida desde getvela.app o uno de sus subdominios (o por quien
@@ -329,4 +330,4 @@ Y esto no es de Vela: las bases de datos públicas de selectores, los túneles d
 Apple y Google para iniciar sesión con el celular, y los proveedores de RPC que tú
 elijas.
 
-Sigue: [la página de firma que puedes alojar tú mismo](/es-MX/docs/clear-signing-self-host).
+Sigue: [el Trusted Signer, y cómo ejecutar el tuyo](/es-MX/docs/clear-signing-self-host).

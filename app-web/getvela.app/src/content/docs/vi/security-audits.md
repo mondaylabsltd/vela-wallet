@@ -1,7 +1,7 @@
 ---
 title: Kiểm toán & vấn đề đã biết
 description: "Mọi hợp đồng Vela phụ thuộc vào, ai đã kiểm toán phiên bản nào, phiên bản được kiểm toán có phải là phiên bản đang được triển khai không, những phát hiện còn mở mà chúng tôi đang theo dõi, và những gì hoàn toàn chưa được kiểm toán."
-source: 377855411c74
+source: 09a0c3d8acc0
 ---
 
 "Đã kiểm toán" là một khẳng định về một đoạn mã cụ thể ở một phiên bản cụ thể, nên trang
@@ -152,7 +152,10 @@ chủ ý:
   gộp. Một lệnh cấp quyền "không giới hạn" (từ 2^200 trở lên; 2^152 với Permit2) được hiện
   màu đỏ và gửi đi đúng như dApp yêu cầu, trừ khi bạn đặt hạn mức. Permit dạng chữ ký không
   thể đặt hạn mức ở bất cứ đâu.
-- **Trang ký độc lập chưa được kết nối** với ứng dụng nào.
+- **Trusted Signer là tùy chọn, và bước kiểm tra tính toàn vẹn của nó chưa từ chối.**
+  Trang ký độc lập chỉ được dùng trên thiết bị mà bạn đã chọn nó khi tạo ví hoặc đăng nhập,
+  và ví web không dùng được nó. Ứng dụng máy tính so sánh trang với các phiên bản đi kèm ứng
+  dụng nhưng chỉ ghi lại việc không khớp vào nhật ký; các ứng dụng điện thoại chưa kiểm tra.
 - **Trang web tải một script phân tích của bên thứ ba** trên cùng tên miền với passkey.
   Trang web cấm chính các trang của mình dùng passkey (bằng header Permissions-Policy), và
   không tải script đó trên trang đang giữ khóa.

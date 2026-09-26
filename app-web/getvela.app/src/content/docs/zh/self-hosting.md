@@ -1,7 +1,7 @@
 ---
 title: 自托管指南
 description: "Vela 替你运行的每一样东西、各自的用途，以及如何换成你自己的——中继、公钥索引、链数据、汇率和各个 App；还有唯一无法替换的那一样，以及没有 getvela.app 时怎么办。"
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -67,8 +67,8 @@ getvela.app 认可的 App 里可用。在浏览器之外，规则要宽松一些
 的通行密钥。这项权限由浏览器在本地检查；我们实测过它可用，但还没有在域名真正下线的情况下测试过。自己编译的 App 能用手机和安全密钥，是因为 Vela 直接与它们通信；而手机
 自带的通行密钥（“本设备”）要求 App 由 Vela 签名，你编译的版本不是。
 
-[签名页](/zh/docs/clear-signing-self-host)本身不是一条独立的路：它只给别的程序发来的
-请求签名，而目前还没有任何 Vela App 会向它发送请求。
+[可信签名器](/zh/docs/clear-signing-self-host)本身不是一条独立的路：它只给 App 发来的请求签名
+——也就是 Vela 桌面版和手机 App——而部署在你自己域名上的副本，只能用为那个域名创建的通行密钥签名。
 
 <Callout type="warning" title="控制域名的人就能请求签名">
 getvela.app 或其任何子域名上的页面——或将来控制这个域名的人——都可以请求你的钥匙签名，而系统弹窗
@@ -282,4 +282,4 @@ README 里有每个 App 的编译步骤，这里是简版：
 以下这些不属于 Vela：公共函数选择器数据库、Apple 和 Google 的手机扫码隧道，以及你自己
 选择的 RPC 服务商。
 
-下一步：[可以自己运行的签名页](/zh/docs/clear-signing-self-host)。
+下一步：[可信签名器，以及如何运行你自己的副本](/zh/docs/clear-signing-self-host)。

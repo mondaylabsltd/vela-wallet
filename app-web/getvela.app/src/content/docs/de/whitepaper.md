@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Wie Vela funktioniert und worauf du vertrauen musst – und worauf nicht –, um es zu nutzen: das Konto, die Schlüssel, die Gebühr, das Bedrohungsmodell, die Wiederherstellung und was passiert, wenn Vela verschwindet."
-source: d0be29438317
+source: 227acd1acf3d
 ---
 
 <script>
@@ -267,8 +267,11 @@ Was dir Selbstverwahrung gibt: Vela ist keine zweite Partei, die das kann.
   das eigene Bauen der Erweiterung oder der Apps aus dem Quellcode (Release-Pakete
   haben SHA-256-Prüfsummen und GitHub-Build-Provenance-Attestierungen, die Commit und
   Workflow-Lauf benennen; das Windows-Installationsprogramm ist weiterhin nicht
-  codesigniert). Eine unabhängige Signaturseite, die den Code der App nicht teilt, ist
-  gebaut, aber noch nicht angebunden.
+  codesigniert). Der [Trusted Signer](/de/docs/clear-signing-self-host), eine
+  unabhängige Signaturseite, die den Code der App nicht teilt, lässt sich in der
+  Desktop-, iPhone- und Android-App als deine Art zu signieren wählen; die
+  Integritätsprüfung der Desktop-App protokolliert eine abweichende Seite nur, und die
+  Handy-Apps prüfen noch nicht.
 - **Alles, was von der Domain ausgeliefert wird** – jede Seite auf getvela.app oder
   ihren Subdomains, einschließlich eines Skripts, das sie lädt, könnte Signaturen von
   Vela-Passkeys anfordern, und die Abfrage zeigt nur „getvela.app“. Die Website

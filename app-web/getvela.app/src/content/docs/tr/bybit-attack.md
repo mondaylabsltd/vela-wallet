@@ -1,7 +1,7 @@
 ---
 title: Bybit saldırısı ve izlediği yol
 description: "Şubat 2025'te Bybit yaklaşık 1,5 milyar dolar kaybetti. Kırılan Safe sözleşmeleri değil, arayüzdü. Bu sayfa saldırının izlediği yolu ve Vela'nın tasarımında bu yolu neyin kapattığını anlatıyor."
-source: 14ae76da6694
+source: d8217ceb16b2
 ---
 
 # Bybit saldırısı ve izlediği yol
@@ -76,14 +76,16 @@ biçimde devrederdi — etkinleştirilen bir modül daha sonra kendi `delegateca
 çalıştırabilir. Vela'nın kendi kodu da `Safe{Wallet}`'inki gibi değiştirilirse,
 çözümleme de saldırganın çözümlemesi olur — bir sonraki madde bunun için var.
 
-**Arayüzü kontrol edebilen bağımsız bir yol.** Vela, isteği kendisi çözen ve WebAuthn
-imzasını kendisi yapan, derleme adımı ve bağımlılığı olmayan bir
-[imza sayfası](/tr/docs/clear-signing-self-host) geliştirdi — baştan sona
-okuyabileceğiniz, kendiniz sunabileceğiniz ya da tarayıcı uzantısı olarak
-yükleyebileceğiniz tek bir statik dosya klasörü. Amacı, ana uygulamanın tedarik
-zincirini paylaşmayan ikinci bir görüş olmak. *Durum: hazır ve test edildi; yayımlanmadı
-ve henüz hiçbir Vela uygulaması ona istek göndermiyor.* Bu değiştiğinde bu sayfa bunu
-açıkça yazacak.
+**Arayüzü kontrol edebilen bağımsız bir yol.** Vela'nın
+[Trusted Signer'ı](/tr/docs/clear-signing-self-host), sign.getvela.app adresinde
+isteği kendisi çözen ve WebAuthn imzasını kendisi yapan tek dosyalık bir sayfadır —
+baştan sona okuyabileceğiniz, bayt bayt yeniden derleyebileceğiniz ya da kendiniz
+sunabileceğiniz bir sayfa. Ana uygulamanın tedarik zincirini paylaşmayan ikinci bir
+görüştür: uygulama ona yalnızca isteği iletir, neyin imzalanacağını ise sayfa kendisi
+hesaplar. *Durum: yayımlandı; masaüstü, iPhone ve Android uygulamaları onu, cüzdanı
+oluştururken ya da giriş yaparken onu seçtiğiniz cihazda kullanır. Masaüstü uygulaması
+sayfayı kendisiyle birlikte gelen sürümlerle karşılaştırır ama bir uyuşmazlığı yalnızca
+günlüğe yazar; telefon uygulamaları ise henüz kontrol etmiyor.*
 
 **Kaybedebileceğimiz bir yönetici rolü yok.** Vela hesapları
 [değiştirilmemiş Safe v1.4.1](/tr/docs/account-contract) hesaplarıdır ve Vela'nın

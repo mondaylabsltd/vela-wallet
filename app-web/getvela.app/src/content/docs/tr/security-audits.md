@@ -1,7 +1,7 @@
 ---
 title: Denetimler ve bilinen sorunlar
 description: "Vela'nın bağlı olduğu her sözleşme, hangi sürümü kimin denetlediği, denetlenen sürümün dağıtılan sürüm olup olmadığı, izlediğimiz açık bulgular ve hiç denetlenmemiş olanlar."
-source: 377855411c74
+source: 09a0c3d8acc0
 ---
 
 "Denetlendi", belirli bir kodun belirli bir sürümü hakkında bir iddiadır; bu yüzden bu
@@ -157,7 +157,11 @@ hariç:
   onay (2^200 ya da daha fazla; Permit2 için 2^152) kırmızıyla gösterilir ve siz üst
   sınır koymadıkça dApp'in istediği gibi gönderilir. İmzalı izinlere (permit) hiçbir
   yerde üst sınır konamaz.
-- **Bağımsız imza sayfası** henüz hiçbir uygulamaya **bağlı değil**.
+- **Trusted Signer isteğe bağlıdır ve bütünlük kontrolü henüz hiçbir sayfayı
+  reddetmiyor.** Bağımsız imza sayfası yalnızca cüzdanınızı oluştururken ya da giriş
+  yaparken onu seçtiğiniz cihazda kullanılır ve web cüzdanı onu kullanamaz. Masaüstü
+  uygulaması sayfayı kendisiyle birlikte gelen sürümlerle karşılaştırır ama bir
+  uyuşmazlığı yalnızca günlüğe yazar; telefon uygulamaları henüz kontrol etmiyor.
 - **Web sitesi, geçiş anahtarlarıyla aynı alan adında üçüncü taraf bir analitik
   betiği yükler.** Site kendi sayfalarının geçiş anahtarı kullanmasını yasaklar (bir
   Permissions-Policy başlığıyla) ve betiği anahtar barındıran sayfanın dışında tutar.

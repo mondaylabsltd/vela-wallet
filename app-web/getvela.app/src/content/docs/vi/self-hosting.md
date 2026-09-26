@@ -1,7 +1,7 @@
 ---
 title: Hướng dẫn tự triển khai
 description: "Mọi thứ Vela vận hành cho bạn, mỗi thành phần làm gì, và cách thay nó bằng bản của riêng bạn — relay, chỉ mục khóa công khai, dữ liệu chuỗi, tỷ giá và các ứng dụng — cùng một thứ duy nhất bạn không thể thay, và cách sống khi không có getvela.app."
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -78,9 +78,9 @@ hoạt động. Một ứng dụng tự biên dịch dùng được điện tho�
 chuyện trực tiếp với chúng; còn passkey của chính điện thoại ("thiết bị này") đòi hỏi ứng
 dụng phải do Vela ký, mà bản của bạn thì không.
 
-[Trang ký](/vi/docs/clear-signing-self-host) tự nó không phải là một lối vào: nó ký những
-yêu cầu do một chương trình khác gửi tới, và hiện chưa có ứng dụng Vela nào gửi yêu cầu như
-vậy.
+[Trusted Signer](/vi/docs/clear-signing-self-host) tự nó không phải là một lối vào: nó ký
+những yêu cầu do một ứng dụng gửi tới — các ứng dụng Vela trên máy tính và điện thoại — và
+một bản sao trên tên miền của riêng bạn chỉ ký bằng các passkey được tạo cho tên miền đó.
 
 <Callout type="warning" title="Ai kiểm soát tên miền thì xin được chữ ký">
 Bất kỳ trang nào được phục vụ từ getvela.app hoặc một tên miền con của nó — hoặc bởi bất kỳ
@@ -313,4 +313,4 @@ Nếu bạn thay mọi thứ ở trên, vẫn còn lại:
 Và những thứ sau không thuộc về Vela: các cơ sở dữ liệu selector công khai, đường hầm đăng
 nhập bằng điện thoại của Apple và Google, và những nhà cung cấp RPC mà bạn chọn.
 
-Tiếp theo: [trang ký mà bạn có thể tự chạy](/vi/docs/clear-signing-self-host).
+Tiếp theo: [Trusted Signer, và cách chạy bản của riêng bạn](/vi/docs/clear-signing-self-host).

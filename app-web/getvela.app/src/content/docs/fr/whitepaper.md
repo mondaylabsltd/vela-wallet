@@ -1,7 +1,7 @@
 ---
 title: Livre blanc
 description: "Comment fonctionne Vela, et ce à quoi vous devez — ou non — faire confiance pour l'utiliser : le compte, les clés, les frais, le modèle de menaces, la récupération, et ce qui se passe si Vela disparaît."
-source: d0be29438317
+source: 227acd1acf3d
 ---
 
 <script>
@@ -280,8 +280,11 @@ seconde partie capable de le faire.
   de l'extension ou des apps depuis les sources par vous-même (les paquets publiés
   sont accompagnés de sommes de contrôle SHA-256 et d'attestations de provenance de
   build GitHub nommant le commit et l'exécution du workflow ; l'installateur Windows
-  n'est toujours pas signé). Une page de signature indépendante, qui ne partage pas
-  le code de l'app, est construite mais pas encore reliée.
+  n'est toujours pas signé). Le [Trusted Signer](/fr/docs/clear-signing-self-host),
+  une page de signature indépendante qui ne partage pas le code de l'app, peut être
+  choisi comme mode de signature dans les apps de bureau, iPhone et Android ; le
+  contrôle d'intégrité de l'app de bureau ne fait que journaliser une page qui ne
+  correspond pas, et les apps mobiles ne vérifient pas encore.
 - **Tout ce qui est servi depuis le domaine** — n'importe quelle page de
   getvela.app ou de ses sous-domaines, y compris un script qu'elle charge, pourrait
   demander des signatures aux passkeys Vela, et l'invite n'affiche que

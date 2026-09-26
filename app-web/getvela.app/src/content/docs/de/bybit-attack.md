@@ -1,7 +1,7 @@
 ---
 title: Der Bybit-Angriff und der Weg, den er nahm
 description: "Im Februar 2025 verlor Bybit rund 1,5 Milliarden US-Dollar. Nicht die Safe-Verträge waren kaputt, sondern die Oberfläche. Diese Seite erklärt den Angriffsweg und womit Velas Design ihn schließt."
-source: 14ae76da6694
+source: d8217ceb16b2
 ---
 
 # Der Bybit-Angriff und der Weg, den er nahm
@@ -84,14 +84,17 @@ Bybit-Payload – ein aktiviertes Modul kann danach selbst einen `delegatecall`
 ausführen. Und würde Velas eigener Code ersetzt, wie der von `Safe{Wallet}`, dann wäre
 auch die Dekodierung die des Angreifers – dafür ist der nächste Punkt da.
 
-**Ein unabhängiger Weg, der die Oberfläche prüfen kann.** Vela hat eine
-[Signaturseite](/de/docs/clear-signing-self-host) ohne Build-Schritt und ohne
-Abhängigkeiten gebaut, die die Anfrage selbst dekodiert und die WebAuthn-Signatur
-selbst durchführt – ein einzelner Ordner statischer Dateien, den du von vorn bis
-hinten lesen, selbst ausliefern oder als Browser-Erweiterung laden kannst. Ihr Zweck
-ist, eine zweite Meinung zu sein, die nicht die Lieferkette der Haupt-App teilt.
-*Stand: gebaut und getestet; nicht veröffentlicht, und noch keine Vela-App schickt
-Anfragen an sie.* Diese Seite sagt es klar, sobald sich das ändert.
+**Ein unabhängiger Weg, der die Oberfläche prüfen kann.** Velas
+[Trusted Signer](/de/docs/clear-signing-self-host) ist eine Seite aus einer einzigen
+Datei unter sign.getvela.app, die die Anfrage selbst dekodiert und die
+WebAuthn-Signatur selbst durchführt – eine Seite, die du von vorn bis hinten lesen,
+Byte für Byte nachbauen oder selbst ausliefern kannst. Er ist eine zweite Meinung, die
+nicht die Lieferkette der Haupt-App teilt: Die App übergibt ihm nur die Anfrage, und
+was signiert wird, berechnet die Seite selbst. *Stand: veröffentlicht; die Desktop-,
+iPhone- und Android-App nutzen ihn auf einem Gerät, auf dem du ihn beim Erstellen der
+Wallet oder bei der Anmeldung gewählt hast. Die Desktop-App vergleicht die Seite mit
+den Versionen, die sie mitbringt, protokolliert eine Abweichung aber nur, und die
+Handy-Apps prüfen noch nicht.*
 
 **Keine Admin-Rolle, die man uns abnehmen könnte.** Velas Konten sind
 [unveränderte Safe v1.4.1](/de/docs/account-contract), und Vela hat darauf keine

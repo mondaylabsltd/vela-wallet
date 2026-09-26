@@ -1,103 +1,117 @@
 ---
-title: Aloja tú mismo la página de firma
-description: "La página y la extensión de Chrome sin dependencias que decodifican una transacción por su cuenta y la firman con tu passkey: cómo ejecutar tu propia copia y qué copia puede firmar para tu wallet."
-source: c81389ef7aa2
+title: Trusted Signer
+description: "Una página de un solo archivo en sign.getvela.app que decodifica una solicitud y la firma con tu passkey por su cuenta: qué revisa, qué apps la usan y cómo recompilarla o ejecutar tu propia copia."
+source: 3a605b8d68ee
 ---
 
-# Aloja tú mismo la página de firma
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+# Trusted Signer
 
 Vela decodifica cada transacción antes de que la apruebes, y esa decodificación es
 un trabajo honesto, pero lo hace la misma app que armó la transacción. Si alguien
 altera la app, o el camino por el que te llega, puede mostrarte una cosa y firmar
 otra. Eso es exactamente lo que le pasó a [Bybit](/es-MX/docs/bybit-attack).
 
-La página de firma existe para partir eso en dos: la transacción viene de un lugar,
-y la revisión y la firma ocurren en otro que controlas tú.
+El Trusted Signer existe para partir eso en dos: la app solo entrega la solicitud, y
+la revisión y la firma ocurren en una página aparte, una que puedes leer de principio
+a fin, recompilar byte por byte o ejecutar tú mismo.
 
+## Dónde se ejecuta
 
-Cuando recibe una solicitud de firma, no confía en el resumen que viene con ella.
-Decodifica el calldata crudo por su cuenta, calcula su propio digest, te muestra lo
-que la firma va a autorizar en realidad y solo entonces se lo pide a tu passkey.
+La página oficial se sirve desde **sign.getvela.app**. Las apps de escritorio (macOS,
+Windows, Linux), iPhone y Android pueden enviarle una solicitud: la app abre la página
+en una pestaña del navegador con la solicitud en el enlace, ahí la revisas y la firmas
+con tu passkey, y la página le devuelve la firma a la app mediante un enlace
+`velawallet://`. La wallet web no puede usarlo.
 
-Como no hay paso de compilación, los archivos que lees son los archivos que se
-ejecutan. Puedes comparar la carpeta con el repositorio y saber qué estás
-sirviendo.
+Es opcional. Lo eliges como tu forma de firmar al crear una wallet o al iniciar
+sesión, y a partir de entonces cada firma de esa wallet en ese dispositivo pasa por
+él. También puede crear las llaves de la wallet. En `sign.getvela.app` usa las mismas
+passkeys de `getvela.app` que las apps.
 
-## Qué copia puede firmar para tu wallet
-
-Una passkey está ligada al dominio en el que se creó. Tus llaves de Vela están
-registradas bajo `getvela.app`, y un navegador solo las ofrece a una página cuya
-relying party sea `getvela.app`. Esa sola regla decide qué forma de ejecutar tu
-propia copia te sirve.
-
-**Como página en tu propio dominio, o en localhost.** Servida por HTTPS (o desde
-localhost), la relying party de la página es su propio nombre de host, así que puede
-firmar con llaves registradas bajo _ese_ nombre de host, no con llaves registradas
-bajo `getvela.app`. Por eso es la forma correcta de probar toda la ceremonia de
-punta a punta, de ejecutar el flujo de escritorio y de firmar para una wallet cuya
-llave se creó en tu propio dominio. No es una forma de firmar para una wallet
-existente de `getvela.app`.
-
-```sh
-cd app-web/trusted-signer
-python3 -m http.server 8080   # → http://localhost:8080
-```
-
-Todas las rutas de la app son relativas, así que también funciona en un subdirectorio
-de un host que ya tengas, y abrir `index.html` directamente desde el disco
-(`file://`) sirve para darle una vuelta: sin origen no hay relying party, y no se
-puede firmar nada.
+<Callout type="info" title="Lo que se ha probado hasta ahora">
+Ejecuciones de punta a punta registradas contra la página publicada: Android y
+Windows 11 (crear una wallet e iniciar sesión). Las apps de macOS, Linux e iPhone usan
+la misma conexión; ninguna tiene todavía una ejecución completa registrada.
+</Callout>
 
 ## Qué hace antes de firmar
 
-- **Decodifica la transacción por su cuenta.** Qué hace la llamada, a quién y por
+- **Decodifica la solicitud por su cuenta.** Qué hace la llamada, a quién y por
   cuánto, a partir del calldata, incluidas las llamadas anidadas dentro de un lote.
-- **Solo firma un digest que calculó ella.** Los digests EIP-191, EIP-712, SafeOp y
-  SafeMessage se calculan en la página y se contrastan con `vela-core`, el mismo
-  código que usa la wallet. Un digest que no puede calcular es un rechazo, no una
-  firma.
+- **Solo firma un digest que calculó él mismo.** Los digests EIP-191, EIP-712, SafeOp
+  y SafeMessage se calculan en la página, nunca se toman del solicitante; hay pruebas
+  que contrastan los digests SafeOp y SafeMessage con `vela-core`, el código que usa la
+  wallet, y la app rechaza una firma sobre cualquier digest distinto del que calculó
+  ella misma.
 - **Comprueba que la transacción sea la que se solicitó.** La llamada que pidió el
-  sitio tiene que estar realmente dentro de la operación que se firma.
+  sitio tiene que estar realmente dentro de la operación que se firma; si no, la página
+  la rechaza.
 - **Avisa cuando una aprobación es ilimitada.** No puede cambiar un monto (firma los
   bytes que llegaron o nada), así que una aprobación o un permiso ilimitados (2^128 o
   más en esta página) se muestran en rojo con ese motivo y se pueden firmar tal como
   están; el tope on-chain se elige en la pantalla de aprobación de la propia wallet,
   antes de que la solicitud llegue aquí. Una aprobación para toda una colección de NFT
   se rechaza.
-- **Dice cuando no puede leer algo,** en lugar de mostrar un resumen amigable que no
-  puede respaldar.
-- **Muestra la dirección y el identicon de la cuenta,** y no muestra un nombre de
-  destinatario proporcionado por quien pidió la firma. Todo lo que controla el
-  solicitante se descarta o se etiqueta como suyo.
+- **Rechaza lo que no puede respaldar:** `eth_sign`, un método que no conoce, un token
+  enviado al contrato del propio token, una operación que no puede leer y un inicio de
+  sesión cuyo desafío (challenge) proporcionó el solicitante.
+- **Muestra la dirección de la cuenta y un identicon calculado en la página.** Los
+  destinatarios y los contratos nunca se nombran a partir de la solicitud: solo la
+  tabla revisada de la propia página puede ponerle nombre a un contrato. El nombre de
+  la cuenta, que la app envía para que elijas la passkey correcta, se muestra junto a
+  su dirección.
+- **Pide verificación de usuario** (tu huella, tu rostro o tu PIN) en cada firma.
 
 ## Lo que a propósito no tiene
 
 - **Nada de editores.** La solicitud queda fija cuando llega: la firmas o no. Un
   selector de comisión o un editor de montos autorizados reescribiría el calldata,
   que es justo el mal que esta página existe para evitar.
-- **No crea llaves.** La página de firma no puede crear una passkey. Crear una sería
-  crear otra cuenta.
-- **Nada de datos de la red.** Nada de lo que muestra o firma se obtiene de fuera. Lo
-  único que carga son los logos de los tokens, como imágenes, desde el servidor de
-  datos de cadena de Vela; si fallan, una letra ocupa su lugar.
+- **Nada de acceso a la red.** La página es un solo archivo cuya política de seguridad
+  de contenido (`default-src 'none'`) está dentro de sus propios bytes, así que no
+  puede descargar nada, abrir una conexión ni cargar una imagen. Lo único que sale de
+  ella es su respuesta, cuando sigue el enlace de callback de la solicitud
+  (`velawallet://` cuando la pidió una app de Vela). Los logos de los tokens se dibujan
+  como letras.
 
-## Cómo le llega una solicitud
+## Lo que la app revisa a cambio
 
-| Solicitante                                  | Canal                                                                      |
-| -------------------------------------------- | -------------------------------------------------------------------------- |
-| Una página en el mismo navegador             | `postMessage`                                                              |
-| Una página en el mismo navegador, hacia la extensión | Puerto de la extensión                                             |
-| Una app de escritorio en la misma computadora | Fragmento de URL + callback de loopback (demo en `samples/`; la app de escritorio de Vela todavía no lo usa) |
-| Un celular u otra computadora                | Bluetooth LE (protocolo implementado; el radio todavía no se ha probado en hardware real) |
+La app tampoco confía en la página. Solo acepta una firma cuando el desafío firmado es
+el digest **que calculó la app**, se hizo la verificación de usuario, la llave es una
+de las de tu wallet y la firma P-256 es válida para esa llave.
 
-El formato de transmisión, los digests y una tabla de dónde sale cada elemento de la
-pantalla están en `PROTOCOL.md`, junto al código.
+## Cada versión publicada, verificable
 
-## Dónde encaja
+Cada versión se compila desde `app-web/trusted-signer/src/` en un solo archivo, de
+forma reproducible (Bun y Node producen los mismos bytes), y se publica en su propia
+dirección, `sign.getvela.app/b/<sha256>/sign.html`, junto a todas las versiones
+anteriores. La lista está en `sign.getvela.app/index.json`.
 
-Una vez que las apps puedan pasarle sus solicitudes, el uso previsto es sencillo:
-desde el día en que la cuenta tenga dinero que no quieras perder, cada firma pasa por
-una página cuyo código cargaste tú mismo. No solo para montos grandes: una aprobación
-pequeña puede entregar lo suficiente para vaciar una cuenta. Mientras tanto, la
-página es una forma de leer y probar exactamente cómo va a funcionar esa segunda
-opinión.
+```sh
+cd app-web/trusted-signer
+node samples/build-single.mjs --check   # rebuilds a version listed in dist/
+curl -sL https://sign.getvela.app/b/<sha256>/sign.html | shasum -a 256
+```
+
+Al arrancar, la app de escritorio descarga la versión publicada que va a abrir,
+calcula su hash y lo compara con las versiones que trae integradas. El resultado solo
+se registra en el log, y una página que no coincide se abre de todos modos. Las apps
+de celular todavía no hacen esta revisión.
+
+## Ejecuta tu propia copia
+
+Ajustes guarda la dirección de la página que abren tus apps, así que puedes apuntarla
+a tu propio despliegue: cualquier dirección HTTPS, o `localhost` para pruebas.
+Compílala con `bun samples/build-single.mjs` (o `node`) y copia `dist/` a tu host.
+
+Una copia en tu propio dominio firma con passkeys creadas para **ese** dominio, no con
+las passkeys de `getvela.app`; así que sirve para crear y usar una wallet cuyas llaves
+viven bajo tu dominio, no para firmar por una wallet existente de `getvela.app`. Todas
+las llaves de una wallet comparten un mismo dominio.
+
+El código, y los scripts que lo compilan y lo verifican, están en
+`app-web/trusted-signer/`.

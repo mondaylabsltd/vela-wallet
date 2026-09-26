@@ -1,7 +1,7 @@
 ---
 title: Audit e problemi noti
 description: "Ogni contratto da cui Vela dipende, chi ha sottoposto ad audit quale versione, se la versione controllata è quella deployata, i rilievi aperti che teniamo d'occhio e ciò che non ha avuto alcun audit."
-source: 377855411c74
+source: 09a0c3d8acc0
 ---
 
 «Ha avuto un audit» è un'affermazione su un codice specifico in una versione
@@ -163,7 +163,12 @@ indicato che si tratta di un compromesso voluto:
   Un'approvazione «illimitata» (2^200 o più; 2^152 per Permit2) viene mostrata in
   rosso e inviata come l'ha chiesta la dApp, a meno che tu non la limiti. I permit
   firmati non si possono limitare da nessuna parte.
-- **La pagina di firma indipendente non è collegata** ancora a nessuna app.
+- **Il Trusted Signer è attivo solo se lo scegli, e il suo controllo di integrità
+  non rifiuta ancora nulla.** La pagina di firma indipendente viene usata solo su un
+  dispositivo in cui l'hai scelta quando hai creato il wallet o hai effettuato
+  l'accesso, e il wallet web non può usarla. L'app desktop confronta la pagina con
+  le versioni che porta con sé, ma una discrepanza la registra soltanto nel log; le
+  app per telefono non fanno ancora questo controllo.
 - **Il sito web carica uno script di analytics di terze parti** sullo stesso
   dominio delle passkey. Il sito vieta alle proprie pagine di usare le passkey
   (con un header Permissions-Policy) e tiene lo script lontano dalla pagina che
