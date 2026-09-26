@@ -599,13 +599,26 @@ impl App for Contacts {
     fn update(&self, event: Event, model: &mut Model) -> Command<ContactEffect, Event> {
         match event {
             Event::AccountSwitched { my_address } => {
+                let my_address = my_address.map(|a| a.to_lowercase());
+                // The account already open is not a switch. A shell that
+                // opens the book whenever its screen appears (Android did, on
+                // every visit to 通讯录) used to wipe it and read it back, and
+                // every visit drew an unloaded frame — title and search, then
+                // the list or the empty state popping in: the flash the
+                // founder saw and iOS never had. The book stays; only the
+                // history, which a send since may have changed, is read again
+                // behind it. Saved contacts, tombstones and groups are already
+                // current here — every write goes through this machine.
+                if model.loaded && model.my_address == my_address {
+                    return requests(model, vec![ContactOperation::LoadSendHistory]);
+                }
                 // Everything goes: saved/tombstones/groups reload from storage,
                 // history/identity/classification are per-account state that
                 // must never survive a switch.
                 let attempt = model.attempt + 1;
                 *model = Model {
                     attempt,
-                    my_address: my_address.map(|a| a.to_lowercase()),
+                    my_address,
                     ..Model::default()
                 };
                 requests(
