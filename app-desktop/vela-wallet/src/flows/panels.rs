@@ -2804,15 +2804,32 @@ fn send_confirm(
             &mark.logos,
         ));
     }
-    let mut col = column().child(
-        hero.child(
+    // The figure and its unit on one baseline, the unit set as the Send
+    // form's hero sets it (26/46 of the digits, medium, muted): the page that
+    // signs reads "0.45767" first and "xDAI" second, as the form did.
+    let mut figure = div()
+        .flex()
+        .items_baseline()
+        .gap(px(8.))
+        .child(
             div()
                 .text_size(theme::text_amount_detail())
                 .line_height(gpui::relative(1.2))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.fg_base)
                 .child(model.amount.clone()),
-        )
+        );
+    if let Some(unit) = &model.amount_unit {
+        figure = figure.child(
+            div()
+                .text_size(theme::text_amount_detail() * (26. / 46.))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(theme.fg_muted)
+                .child(unit.clone()),
+        );
+    }
+    let mut col = column().child(
+        hero.child(figure)
         .child(
             div()
                 .text_size(theme::text_row_sub())

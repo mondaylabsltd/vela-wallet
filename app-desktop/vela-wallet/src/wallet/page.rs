@@ -5994,7 +5994,7 @@ impl WalletPage {
                     .bg(theme.accent)
                     .text_size(theme::text_row_title())
                     .text_color(theme.fg_inverse)
-                    .child(self.flow_strings.done.clone())
+                    .child(self.flow_strings.got_it.clone())
                     .on_click(dismiss),
             );
             return Some(scrim("send-alert-scrim").child(card).into_any_element());

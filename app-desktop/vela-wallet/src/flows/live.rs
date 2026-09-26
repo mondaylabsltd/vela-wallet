@@ -2788,11 +2788,11 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                 .trim()
                 .to_owned()
                 .into(),
-            None => format!("{} {symbol}", trimmed_str(&send.confirm_amount))
-                .trim()
-                .to_owned()
-                .into(),
+            None => trimmed_str(&send.confirm_amount).into(),
         },
+        // The unit beside a single transfer's figure, as the form draws it.
+        amount_unit: (sweep.is_none() && !send.split_mode && !symbol.is_empty())
+            .then(|| SharedString::from(symbol.clone())),
         subline: match &sweep {
             Some((_, total_usd)) => fill(
                 &fill(
