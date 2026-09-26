@@ -140,6 +140,8 @@ data class GuardEditorView(
      *  offered when either flag is true. */
     val requested_unlimited: Boolean = false,
     val has_balance_cap: Boolean = false,
+    /** Not on increaseAllowance, where "revoke" would sign an increase of 0. */
+    val revoke_offered: Boolean = true,
     val balance_raw: String? = null,
 )
 

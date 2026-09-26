@@ -69,6 +69,13 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // the bytes are committed at
     // `app-web/trusted-signer/dist/b/<this hash>/sign.html`.
 
+    // An unlimited ERC-20 approval, and an unlimited permit signature
+    // (EIP-2612, Permit2), are signable as they arrived, drawn in danger with
+    // the cap's absence said in words — no longer refused (owner, 2026-09-26:
+    // Permit2 bundles and Uniswap's own uint160-max permits break when capped;
+    // an on-chain cap is chosen on the wallet's own sheet, before the request
+    // reaches the page). An approve-ALL is still refused.
+    "d554facb4e2a4cae1bba8e36fa1dcc53219e7fed3b611762e72ee0cbc46aa66e",
     // The member proof computes its challenge instead of fetching it — the
     // second step of creating a wallet, which could not work on a published
     // page at all: `default-src 'none'` is in these very bytes, so the fetch it

@@ -1195,8 +1195,12 @@ fn increase_total_read_failure_still_warns_additive() {
     assert_eq!(total.total, None, "honest unknown");
 }
 
+/// `increaseAllowance` offers no Revoke: only the increment can be
+/// re-encoded, so "revoke" would sign an increase of 0 and leave the existing
+/// allowance where it was — while the resulting-total row said 0. Shown
+/// must be signed; the chip is withheld and a press on it does nothing.
 #[test]
-fn increase_revoke_totals_zero() {
+fn increase_allowance_offers_no_revoke() {
     let mut sut = Sut::new();
     sut.dispatch(approval_event(
         TX,
@@ -1209,11 +1213,49 @@ fn increase_revoke_totals_zero() {
     sut.resolve(Res::AllowanceRead {
         allowance: Some("250000000".to_owned()),
     });
+    assert!(!sut.view().editor.expect("editor").revoke_offered);
     sut.dispatch(Event::PresetSelected {
         mode: GuardEditorMode::Revoke,
     });
-    let total = sut.view().increase_total.expect("total");
-    assert_eq!(total.total.as_deref(), Some("0"), "revoke zeroes outright");
+    let view = sut.view();
+    assert_eq!(
+        view.editor.as_ref().and_then(|e| e.mode),
+        Some(GuardEditorMode::Requested),
+        "the withheld chip changed nothing"
+    );
+    let total = view.increase_total.expect("total");
+    assert_eq!(total.total.as_deref(), Some("350000000"));
+}
+
+/// Every other amount card offers Revoke, and the boolean card answers the
+/// same chip — the one row the shells draw for both, which is what made the
+/// NFT card's 撤销 do nothing.
+#[test]
+fn revoke_is_offered_where_it_really_revokes() {
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, max_u256())),
+    ));
+    assert!(sut.view().editor.expect("editor").revoke_offered);
+
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &set_approval_for_all_calldata(SPENDER, true)),
+    ));
+    sut.dispatch(Event::PresetSelected {
+        mode: GuardEditorMode::Revoke,
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.editor.as_ref().and_then(|e| e.choice.clone()),
+        Some(GuardChoice::Revoke)
+    );
+    assert!(view.confirm_allowed);
+    let rewritten: Value =
+        serde_json::from_str(&view.rewritten_params_json.expect("rewritten")).expect("json");
+    assert!(redetect_data(&out_data(&rewritten)).is_reducing);
 }
 
 /// Invariant ⑨ — unverified decimals are explicitly flagged, with the
@@ -1481,6 +1523,36 @@ fn batch_boolean_leg_requires_an_explicit_choice() {
         "…but it still grants broad access"
     );
     assert!(batch.any_uncapped, "…and the banner says so");
+}
+
+/// The consent is one flag for the whole bundle, so it must not outlive a
+/// cap that failed to land: a leg the person capped but whose re-encode
+/// failed would go out with the site's unbounded bytes. No consent then —
+/// the submit guard refuses the bundle (fail closed).
+#[test]
+fn a_cap_that_failed_to_land_withdraws_the_bundles_consent() {
+    let mut sut = Sut::new();
+    // 63 hex digits of amount: detected (≥ 2^200) but one nibble short of a
+    // word, so the re-encode refuses it.
+    let short = format!("0x095ea7b3{}{}", addr_word(SPENDER), "f".repeat(63));
+    sut.dispatch(batch_event(vec![
+        json!({ "to": USDC, "data": approve_calldata(SPENDER, max_u256()), "value": "0x0" }),
+        json!({ "to": USDC, "data": short, "value": "0x0" }),
+    ]));
+    assert!(sut.view().unlimited_consented, "both kept as asked");
+    sut.dispatch(Event::LegPresetSelected {
+        index: 1,
+        mode: GuardEditorMode::Revoke,
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.batch.as_ref().and_then(|b| b.legs[1].choice.clone()),
+        Some(GuardChoice::Revoke)
+    );
+    assert!(
+        !view.unlimited_consented,
+        "leg 0's consent must not carry leg 1's failed cap out unbounded"
+    );
 }
 
 /// Fail-closed: a leg's custom amount at or above the cap derives NO choice —

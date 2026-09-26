@@ -31,4 +31,11 @@ requested_unlimited: boolean,
 /**
  * The one-tap finite Balance cap is offered (issue #86).
  */
-has_balance_cap: boolean, balance_raw: string | null, };
+has_balance_cap: boolean, 
+/**
+ * The Revoke chip is offered. Not on `increaseAllowance`: only the
+ * increment can be re-encoded, so "revoke" would sign an increase of 0
+ * and leave the existing allowance where it was — a chip that says one
+ * thing and signs another.
+ */
+revoke_offered: boolean, balance_raw: string | null, };

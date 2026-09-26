@@ -21,7 +21,7 @@ import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
-import { buildSigningModel, type SigningLiveInputs } from './live';
+import { buildSigningModel, cappedApproval, type SigningLiveInputs } from './live';
 
 const m = resolveSigningMessages('en');
 const identity: WalletIdentity = {
@@ -543,6 +543,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 			requested_finite: false,
 			requested_unlimited: true,
 			has_balance_cap: true,
+			revoke_offered: true,
 			balance_raw: '1000'
 		}
 	};
@@ -615,6 +616,106 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
 		expect(allowance.chips.find((c) => c.id === 'balance')?.state).toBe('disabled');
+	});
+});
+
+describe('a capped unlimited approval reads the cap, not the request', () => {
+	const APPROVE: ClearSigningView = {
+		...DECODED,
+		result: {
+			...DECODED.result!,
+			intent: 'Approve',
+			risk: 'danger',
+			fields: [
+				field({ value: 'Unlimited', format: 'tokenAmount', warning: true, usd_value: null }),
+				field({ label: 'Spender', value: '0x1111', role: 'spender', address: '0x1111' })
+			]
+		}
+	};
+	const guard = (choice: GuardView['editor']): GuardView => ({
+		...INITIAL_GUARD_VIEW,
+		surface: 'approval_editor',
+		detected: {
+			kind: 'erc20_approve',
+			token_address: '0xdd',
+			spender: '0x1111',
+			amount_raw: 'f',
+			amount_bits: 256,
+			is_unbounded: true,
+			is_boolean_grant: false,
+			is_reducing: false,
+			editable: true,
+			block_reason: null,
+			deadline: null,
+			locus: { type: 'calldata_word', word_index: 1 }
+		},
+		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
+		editor: choice
+	});
+	const editor = {
+		mode: 'balance' as const,
+		custom_text: '',
+		error: null,
+		choice: { type: 'amount' as const, amount_raw: '250000000' },
+		display_amount_raw: '250000000',
+		requested_finite: false,
+		requested_unlimited: true,
+		has_balance_cap: true,
+		revoke_offered: true,
+		balance_raw: '250000000'
+	};
+
+	it('a chosen cap replaces "Unlimited" and the danger it carried', () => {
+		const shown = cappedApproval(APPROVE, guard(editor)).result!;
+		expect(shown.fields[0].value).toBe('250 USDC');
+		expect(shown.fields[0].warning).toBe(false);
+		expect(shown.fields[1].value).toBe('0x1111');
+		expect(shown.risk).toBe('caution');
+	});
+
+	it("a batch's first leg, capped, is what its decode reads too", () => {
+		const leg = guard(editor);
+		const batch: GuardView = {
+			...INITIAL_GUARD_VIEW,
+			surface: 'batch',
+			batch: {
+				legs: [
+					{
+						to: '0xdd',
+						approval: leg.detected,
+						meta: leg.meta,
+						editor,
+						choice: editor.choice,
+						needs_editor: true,
+						needs_choice: false,
+						grants_broad: false
+					}
+				],
+				any_uncapped: false,
+				any_to_own_token: false,
+				all_settled: true
+			}
+		};
+		expect(cappedApproval(APPROVE, batch).result!.fields[0].value).toBe('250 USDC');
+	});
+
+	it('increaseAllowance offers no revoke chip', () => {
+		const model = buildSigningModel(
+			inputs({ guard: guard({ ...editor, revoke_offered: false }) })
+		)!;
+		const allowance = model.blocks.find((b) => b.kind === 'allowance');
+		if (allowance?.kind !== 'allowance') throw new Error('kind');
+		expect(allowance.chips.find((c) => c.id === 'revoke')?.state).toBe('disabled');
+	});
+
+	it('kept as asked, the decode is the truth and is left alone', () => {
+		const kept = guard({
+			...editor,
+			mode: 'requested',
+			choice: { type: 'unlimited' },
+			display_amount_raw: null
+		});
+		expect(cappedApproval(APPROVE, kept)).toBe(APPROVE);
 	});
 });
 

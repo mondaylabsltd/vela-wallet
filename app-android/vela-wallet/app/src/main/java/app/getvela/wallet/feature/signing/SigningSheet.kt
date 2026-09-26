@@ -60,6 +60,9 @@ fun SigningSheet(
     /** Spec 044: the guard's chips and custom amount reach the machine. */
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
+    /** A batch leg's own chips and field — the leg index travels with them. */
+    onLegChip: (Int, String) -> Unit = { _, _ -> },
+    onLegCustomAmount: (Int, String) -> Unit = { _, _ -> },
     onSignWith: (String?) -> Unit = {},
     onFee: () -> Unit = {},
     onFeePick: (String) -> Unit = {},
@@ -81,6 +84,8 @@ fun SigningSheet(
             onConfirm = onConfirm,
             onChip = onChip,
             onCustomAmount = onCustomAmount,
+            onLegChip = onLegChip,
+            onLegCustomAmount = onLegCustomAmount,
             onSignWith = onSignWith,
             onFee = onFee,
             onFeePick = onFeePick,
@@ -100,6 +105,8 @@ fun SigningSheetContent(
     modifier: Modifier = Modifier,
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
+    onLegChip: (Int, String) -> Unit = { _, _ -> },
+    onLegCustomAmount: (Int, String) -> Unit = { _, _ -> },
     /** `null` toggles the list; an id picks a method and closes it. */
     onSignWith: (String?) -> Unit = {},
     /** Issue #262: the fee row's tap and its coin list's pick. */
@@ -146,11 +153,19 @@ fun SigningSheetContent(
                 is SigningBlock.Swap -> SigningSwapPair(block.pay, block.receive)
                 is SigningBlock.Nft -> SigningNftHero(block.id, block.collection)
                 is SigningBlock.Sentence -> SigningSentence(block.text, block.tone)
-                is SigningBlock.Allowance -> AllowanceEditor(
-                    block.label, block.value, block.valueTone, block.chips,
-                    block.note, block.resultingTotal,
-                    custom = block.custom, onChip = onChip, onCustomAmount = onCustomAmount,
-                )
+                is SigningBlock.Allowance -> {
+                    // A batch leg's card talks to its OWN leg: the single
+                    // approval's events are ignored by the core on a batch,
+                    // which is how these chips were drawn and dead.
+                    val leg = block.leg
+                    AllowanceEditor(
+                        block.label, block.value, block.valueTone, block.chips,
+                        block.note, block.resultingTotal,
+                        custom = block.custom,
+                        onChip = if (leg == null) onChip else { id -> onLegChip(leg, id) },
+                        onCustomAmount = if (leg == null) onCustomAmount else { text -> onLegCustomAmount(leg, text) },
+                    )
+                }
 
                 is SigningBlock.Party ->
                     SigningParty(block.label, block.name, block.address, block.badge)

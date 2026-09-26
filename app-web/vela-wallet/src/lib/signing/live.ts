@@ -154,6 +154,8 @@ function allowanceChips(guard: GuardView, m: SigningMessages): AllowanceChip[] {
 		if (mode === 'requested' && !editor.requested_finite && !editor.requested_unlimited)
 			return 'disabled';
 		if (mode === 'balance' && !editor.has_balance_cap) return 'disabled';
+		// increaseAllowance: "revoke" would sign an increase of 0, not a revoke.
+		if (mode === 'revoke' && !editor.revoke_offered) return 'disabled';
 		return 'idle';
 	};
 	const chips: AllowanceChip[] = [
@@ -353,7 +355,11 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		blocks.push({ kind: 'intent', text: m.intentBlind, tone: 'danger' });
 		blocks.push({ kind: 'warning', tone: 'danger', text: fill(m.warnBlindDecode, { bytes }) });
 		// The approval guard reads the raw calldata, not the descriptor — an
-		// undecodable bundle can still be known to grant unlimited.
+		// approve nobody described (Permit2's own `approve`, say) still gets
+		// its cap editor, and an undecodable bundle can still be known to
+		// grant unlimited.
+		const allowance = guardBlock(guard, m);
+		if (allowance) blocks.push(allowance);
 		if (keepsUnlimited(guard)) {
 			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
 		}
@@ -554,11 +560,61 @@ function localizedOwnBackup(clear: ClearSigningView, own: boolean, m: SigningMes
 	};
 }
 
+/**
+ * The cap the person chose, where the decode still says "Unlimited".
+ *
+ * The clear-signing result describes the REQUEST, and an unlimited approve
+ * decodes as "Unlimited" in the danger tone. Once the guard holds a finite
+ * choice for it (a cap, or revoke), that would describe bytes that are no
+ * longer the ones being signed: the approval's warning amount field reads the
+ * cap and stops being a warning, and if it was the only warning the risk falls
+ * to what an approve is anyway — caution (`clear_signing::assess_risk`). The
+ * same rule in every shell.
+ */
+export function cappedApproval(clear: ClearSigningView, guard: GuardView): ClearSigningView {
+	const result = clear.result;
+	const cap = capText(guard);
+	if (result === null || cap === null) return clear;
+	const fields = result.fields.map((field) =>
+		field.warning && field.format === 'tokenAmount'
+			? { ...field, value: cap, warning: false }
+			: field
+	);
+	const risk = result.risk === 'danger' && !fields.some((f) => f.warning) ? 'caution' : result.risk;
+	return { ...clear, result: { ...result, fields, risk } };
+}
+
+/**
+ * The guard's finite choice on an unlimited request, as the cap row prints it
+ * — the single approval's, or a batch's FIRST leg's: a bundle decodes from its
+ * first leg, so that is the line the decode's "Unlimited" sits on.
+ */
+function capText(guard: GuardView): string | null {
+	const single = guard.surface === 'approval_editor';
+	const leg = guard.surface === 'batch' ? (guard.batch?.legs[0] ?? null) : null;
+	const detected = single ? guard.detected : (leg?.approval ?? null);
+	const editor = single ? guard.editor : (leg?.editor ?? null);
+	const meta = single ? guard.meta : (leg?.meta ?? null);
+	if (
+		!detected?.is_unbounded ||
+		editor === null ||
+		meta === null ||
+		editor.display_amount_raw === null ||
+		(editor.choice?.type !== 'amount' && editor.choice?.type !== 'revoke')
+	) {
+		return null;
+	}
+	return `${exactAmount(fromBaseUnits(BigInt(editor.display_amount_raw), meta.decimals))} ${meta.symbol}`;
+}
+
 export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	if (raw.sign.surface === 'hidden' || !raw.sign.request) return null;
 	const ownRequest =
 		typeof window !== 'undefined' && raw.sign.request.origin === window.location.origin;
-	const inputs = { ...raw, clear: localizedOwnBackup(raw.clear, ownRequest, raw.m) };
+	const inputs = {
+		...raw,
+		clear: cappedApproval(localizedOwnBackup(raw.clear, ownRequest, raw.m), raw.guard)
+	};
 	const { sign, clear, guard, fee, m, identity, identicon } = inputs;
 	if (sign.surface === 'hidden' || !sign.request) return null;
 

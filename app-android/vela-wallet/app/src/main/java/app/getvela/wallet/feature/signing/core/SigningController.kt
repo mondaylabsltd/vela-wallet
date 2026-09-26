@@ -376,6 +376,9 @@ class SigningController(
     fun fundingCancelled() = dispatchSign(SignEvent.FundingCancelled)
     fun guardPreset(mode: GuardEditorMode) = guardHost.dispatch(GuardEvent.PresetSelected(mode), GuardEvent.serializer())
     fun guardCustomAmount(text: String) = guardHost.dispatch(GuardEvent.CustomAmountChanged(text), GuardEvent.serializer())
+    /** One batch leg's chip / field — the core ignores the single-approval events on a batch. */
+    fun guardLegPreset(index: Int, mode: GuardEditorMode) = guardHost.dispatch(GuardEvent.LegPresetSelected(index, mode), GuardEvent.serializer())
+    fun guardLegCustomAmount(index: Int, text: String) = guardHost.dispatch(GuardEvent.LegCustomAmountChanged(index, text), GuardEvent.serializer())
     fun guardRevoke() = guardHost.dispatch(GuardEvent.RevokeChosen, GuardEvent.serializer())
     fun guardGrant() = guardHost.dispatch(GuardEvent.GrantDeliberatelyChosen, GuardEvent.serializer())
 

@@ -97,7 +97,10 @@ enum SigningBlock: Identifiable {
     case allowance(
         label: String, value: String, valueTone: SigningTone,
         chips: [AllowanceChip], note: String? = nil, resultingTotal: SigningRow? = nil,
-        custom: AllowanceInput? = nil
+        custom: AllowanceInput? = nil,
+        /// The batch leg this card caps; `nil` = the single approval. The
+        /// sheet routes its chips and field to that leg's own events.
+        leg: Int? = nil
     )
     case party(label: String, name: String, address: String? = nil, badge: PartyBadge? = nil)
     case rows([SigningRow])
@@ -116,7 +119,7 @@ enum SigningBlock: Identifiable {
         case .swap(let pay, let receive): "swap-\(pay.value)-\(receive.value)"
         case .nft(let id, _): "nft-\(id)"
         case .sentence(let text, _): "sentence-\(text.prefix(24))"
-        case .allowance(_, let value, _, _, _, _, _): "allowance-\(value)"
+        case .allowance(_, let value, _, _, _, _, _, let leg): "allowance-\(leg.map(String.init) ?? "")-\(value)"
         case .party(let label, let name, _, _): "party-\(label)-\(name)"
         case .rows(let rows): "rows-\(rows.first?.label ?? "")"
         case .warning(_, let text): "warning-\(text.prefix(24))"

@@ -547,6 +547,11 @@ pub struct GuardEditorView {
     pub requested_unlimited: bool,
     /// The one-tap finite Balance cap is offered (issue #86).
     pub has_balance_cap: bool,
+    /// The Revoke chip is offered. Not on `increaseAllowance`: only the
+    /// increment can be re-encoded, so "revoke" would sign an increase of 0
+    /// and leave the existing allowance where it was — a chip that says one
+    /// thing and signs another.
+    pub revoke_offered: bool,
     pub balance_raw: Option<String>,
 }
 
@@ -716,11 +721,13 @@ impl App for ApprovalGuard {
         if let Some(batch) = &model.batch {
             let batch_view = build_batch_view(model, batch);
             let confirm_allowed = batch_view.all_settled;
-            let rewritten_params_json = rewritten_batch_params(model, batch, &batch_view);
-            let unlimited_consented = batch_view
-                .legs
-                .iter()
-                .any(|leg| matches!(leg.choice, Some(GuardChoice::Unlimited)));
+            let (rewritten_params_json, all_capped) =
+                rewritten_batch_params(model, batch, &batch_view);
+            let unlimited_consented = all_capped
+                && batch_view
+                    .legs
+                    .iter()
+                    .any(|leg| matches!(leg.choice, Some(GuardChoice::Unlimited)));
             return GuardView {
                 surface: GuardSurface::Batch,
                 detected: None,
@@ -1049,6 +1056,11 @@ fn set_bool_pick(editor: &mut Editor, pick: BoolPick) -> Command<GuardEffect, Ev
     }
 }
 
+/// Revoke is a real revoke only where the amount word IS the allowance.
+fn revoke_offered(detected: &GuardDetectedApproval) -> bool {
+    detected.kind != GuardApprovalKind::IncreaseAllowance
+}
+
 fn apply_preset(
     editor: &mut Editor,
     detected: &GuardDetectedApproval,
@@ -1061,6 +1073,16 @@ fn apply_preset(
     let card_reducing = detected.kind == GuardApprovalKind::DecreaseAllowance;
     let has_balance_cap = !card_reducing && balance.is_some_and(|b| !b.is_zero());
 
+    // The boolean card (setApprovalForAll / DAI permit) answers only Revoke
+    // from the chip row — the shells draw one row for both cards, and this is
+    // what made the NFT card's 撤销 do nothing.
+    if let Editor::Boolean { selected } = editor {
+        if mode == GuardEditorMode::Revoke {
+            *selected = Some(BoolPick::Revoke);
+            return render();
+        }
+        return Command::done();
+    }
     let Editor::Amount {
         mode: current,
         custom_text,
@@ -1087,7 +1109,7 @@ fn apply_preset(
             }
         }
         GuardEditorMode::Custom => *current = GuardEditorMode::Custom,
-        GuardEditorMode::Revoke => *current = GuardEditorMode::Revoke,
+        GuardEditorMode::Revoke if revoke_offered(detected) => *current = GuardEditorMode::Revoke,
         // `grant` is not an amount-card mode, and a chip that isn't rendered
         // can't be pressed.
         _ => return Command::done(),
@@ -1233,6 +1255,7 @@ fn derive_editor(
             requested_finite: false,
             requested_unlimited: false,
             has_balance_cap: false,
+            revoke_offered: true,
             balance_raw: None,
         }),
         Editor::Amount { mode, custom_text } => {
@@ -1306,6 +1329,7 @@ fn derive_editor(
                 requested_finite,
                 requested_unlimited,
                 has_balance_cap,
+                revoke_offered: revoke_offered(detected),
                 balance_raw: balance.map(|b| b.to_string()),
             })
         }
@@ -1525,10 +1549,25 @@ pub fn leg_grants_broad(
 /// The confirm-time batch rebuild (`SigningSheet.tsx:531-549`): re-encode
 /// each leg the user capped/revoked; a per-leg rewrite failure keeps the
 /// original call, which the per-leg submit guard then refuses — fail closed.
+/// Also reports whether every leg the person CAPPED was actually re-encoded:
+/// a leg whose rewrite failed goes out with the site's bytes, so the bundle
+/// must not carry the unlimited consent a different leg earned — the submit
+/// guard then refuses it (fail closed, per leg, with a request-wide flag).
 fn rewritten_batch_params(
     model: &Model,
     batch: &BatchState,
     view: &GuardBatchView,
+) -> (Option<String>, bool) {
+    let mut all_capped = true;
+    let rebuilt = rebuild_batch(model, batch, view, &mut all_capped);
+    (rebuilt, all_capped)
+}
+
+fn rebuild_batch(
+    model: &Model,
+    batch: &BatchState,
+    view: &GuardBatchView,
+    all_capped: &mut bool,
 ) -> Option<String> {
     let params = model.params.as_ref()?;
     let mut changed = false;
@@ -1551,6 +1590,7 @@ fn rewritten_batch_params(
                             }
                         }
                     }
+                    *all_capped = false;
                 }
             }
             leg.call.clone()

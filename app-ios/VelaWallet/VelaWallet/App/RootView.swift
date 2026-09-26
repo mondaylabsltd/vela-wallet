@@ -1247,6 +1247,8 @@ struct RootView: View {
                         // 无限额, and the slide stayed shut.
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
+                        onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
+                        onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
                         onSignWith: { id in signing?.signWith(id) },
                         onFee: { signing?.feeTapped() },
                         onFeePick: { id in signing?.pickFee(id) },
@@ -2943,6 +2945,8 @@ struct RootView: View {
                     onConfirm: { signing.approve() },
                     onAllowanceChip: { chip in signing.guardPreset(chip) },
                     onAllowanceAmount: { text in signing.guardCustomAmount(text) },
+                    onAllowanceLegChip: { leg, chip in signing.guardLegPreset(leg, chip) },
+                    onAllowanceLegAmount: { leg, text in signing.guardLegCustomAmount(leg, text) },
                     onSignWith: { id in signing.signWith(id) },
                     onFee: { signing.feeTapped() },
                     onFeePick: { id in signing.pickFee(id) },

@@ -22,6 +22,9 @@ struct SigningSheet: View {
     /// `revoke`. The core decides what each means.
     var onAllowanceChip: (String) -> Void = { _ in }
     var onAllowanceAmount: (String) -> Void = { _ in }
+    /// One batch leg's chip / field — the leg index travels with them.
+    var onAllowanceLegChip: (Int, String) -> Void = { _, _ in }
+    var onAllowanceLegAmount: (Int, String) -> Void = { _, _ in }
     /// `nil` toggles the "Sign with" list; an id picks a method.
     var onSignWith: (String?) -> Void = { _ in }
     /// Issue #262: the fee row's tap (retry, or open / close the coin list)
@@ -95,11 +98,15 @@ struct SigningSheet: View {
             SigningNftHero(id: id, collection: collection)
         case .sentence(let text, let tone):
             SigningSentence(text: text, tone: tone)
-        case .allowance(let label, let value, let valueTone, let chips, let note, let total, let custom):
+        case .allowance(let label, let value, let valueTone, let chips, let note, let total, let custom, let leg):
+            // A batch leg's card talks to its OWN leg: the core ignores the
+            // single-approval events on a batch, which is how these chips
+            // were drawn and dead.
             AllowanceEditorView(label: label, value: value, valueTone: valueTone,
                                 chips: chips, note: note, resultingTotal: total,
                                 custom: custom,
-                                onChip: onAllowanceChip, onCustomAmount: onAllowanceAmount)
+                                onChip: leg.map { leg in { chip in onAllowanceLegChip(leg, chip) } } ?? onAllowanceChip,
+                                onCustomAmount: leg.map { leg in { text in onAllowanceLegAmount(leg, text) } } ?? onAllowanceAmount)
         case .party(let label, let name, let address, let badge):
             SigningPartyRow(label: label, name: name, address: address, badge: badge)
         case .rows(let rows):

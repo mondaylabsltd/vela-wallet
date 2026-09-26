@@ -109,7 +109,7 @@ window.VelaCS.i18n.register('en', {
   'sentence.unknownMethod': 'The wallet does not know this method ({method}), so it will not sign.',
 
   'warn.unlimited': 'Unlimited — this contract can spend every {symbol} you have.',
-  'warn.unlimitedLocked': 'The cap cannot be edited here: a signing intent is fixed by the time it reaches this page, so it is sign or refuse. Go back to the requester and ask for a finite amount.',
+  'warn.unlimitedLocked': 'The cap cannot be edited here: a signing intent is fixed by the time it reaches this page, so it is sign or refuse. To cap it, refuse here and choose a cap on the wallet\'s own approval screen.',
   'warn.unlimitedOffline': 'Unlimited off-chain approval — an off-chain signature cannot rewrite the cap. Accept or refuse.',
   'warn.approveAll': 'Every NFT you hold in this collection, now and later, can be taken at any time.',
   'warn.approveAllLocked': 'This function is all-or-nothing, and this page cannot rewrite the request. To narrow it, go back to the requester.',

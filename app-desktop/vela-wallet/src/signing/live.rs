@@ -88,6 +88,79 @@ pub struct RequestFacts {
     pub data_bytes: usize,
 }
 
+/// The cap the person chose, where the decode still says "Unlimited".
+///
+/// The clear-signing result describes the REQUEST, and an unlimited approve
+/// decodes as "Unlimited" in the danger tone. Once the guard holds a finite
+/// choice for it (a cap, or revoke), that would describe bytes that are no
+/// longer the ones being signed: the approval's warning amount field reads the
+/// cap and stops being a warning, and if it was the only warning the risk
+/// falls to what an approve is anyway — caution (`clear_signing::assess_risk`).
+/// The same rule in every shell.
+#[must_use]
+pub fn capped_approval(clear: &ClearSigningView, guard: &GuardView) -> ClearSigningView {
+    let mut shown = clear.clone();
+    let Some(cap) = cap_text(guard) else {
+        return shown;
+    };
+    if let Some(result) = shown.result.as_mut() {
+        for field in &mut result.fields {
+            if field.warning && field.format == "tokenAmount" {
+                field.value = cap.clone();
+                field.warning = false;
+            }
+        }
+        if result.risk == ClearRisk::Danger && !result.fields.iter().any(|f| f.warning) {
+            result.risk = ClearRisk::Caution;
+        }
+    }
+    shown
+}
+
+/// The guard's finite choice on an unlimited request, as the cap row prints it
+/// — the single approval's, or a batch's FIRST leg's: a bundle decodes from
+/// its first leg, so that is the line the decode's "Unlimited" sits on.
+fn cap_text(guard: &GuardView) -> Option<String> {
+    let (detected, editor, meta) = match guard.surface {
+        GuardSurface::ApprovalEditor => (
+            guard.detected.as_ref()?,
+            guard.editor.as_ref()?,
+            &guard.meta,
+        ),
+        GuardSurface::Batch => {
+            let leg = guard.batch.as_ref()?.legs.first()?;
+            (leg.approval.as_ref()?, leg.editor.as_ref()?, &leg.meta)
+        }
+        _ => return None,
+    };
+    if !detected.is_unbounded {
+        return None;
+    }
+    if !matches!(
+        editor.choice,
+        Some(GuardChoice::Amount { .. }) | Some(GuardChoice::Revoke)
+    ) {
+        return None;
+    }
+    let units = editor
+        .display_amount_raw
+        .as_deref()?
+        .parse::<vela_core::app::approval_guard::GuardAmount>()
+        .ok()?;
+    Some(format!(
+        "{} {}",
+        vela_core::app::approval_guard::format_token_amount(
+            units,
+            meta.decimals,
+            4,
+            ",",
+            ".",
+            false,
+        ),
+        meta.symbol
+    ))
+}
+
 /// The sheet's body, dispatched by the core's own `ClearSurface`.
 ///
 /// **This is the core's dispatch, not the shell's.** Reading `result.is_some()`
@@ -499,7 +572,12 @@ pub fn guard_editor(
     // so the field was there without a chip; it now opens on Requested, and
     // a field only reachable by never touching a chip is not reachable.
     chip(s.chip_custom.clone(), GuardEditorMode::Custom, true);
-    chip(s.chip_revoke.clone(), GuardEditorMode::Revoke, true);
+    // Not on increaseAllowance: "revoke" there would sign an increase of 0.
+    chip(
+        s.chip_revoke.clone(),
+        GuardEditorMode::Revoke,
+        editor.revoke_offered,
+    );
 
     // The value row: the core's raw base units, formatted by the core's own
     // formatter with this shell's separators. A second formatter would be a
@@ -671,7 +749,9 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
         // the send flow's, because a wallet should not have two ways of saying
         // "it did not go out and your funds are safe".
         let text = match error.kind {
-            SignErrorKind::UnlimitedApproval => s.error_unlimited.clone(),
+            // Since 2026-09-26 this refusal is the approval screen not having
+            // shown the unlimited approval — a wallet fault, not a policy —
+            // so it gets the plain sentence, not "unlimited is disabled".
             SignErrorKind::UnsupportedChain => s.error_network.clone(),
             // A refusal the person just made needs no sentence telling them
             // they made it, and the sheet is closing anyway.
@@ -1512,6 +1592,7 @@ mod tests {
             requested_finite,
             requested_unlimited: false,
             has_balance_cap: true,
+            revoke_offered: true,
             balance_raw: Some("2000000000".to_owned()),
         }
     }
@@ -1570,6 +1651,74 @@ mod tests {
             !modes.contains(&GuardEditorMode::Grant),
             "a `grant all anyway` chip reached a screen"
         );
+    }
+
+    /// Once a cap is chosen, the decode's "Unlimited" reads the cap and stops
+    /// being the danger; kept as asked, the decode is left alone.
+    #[test]
+    fn a_capped_unlimited_approval_reads_the_cap() {
+        let mut amount = field("Amount", "Unlimited");
+        amount.format = "tokenAmount".to_owned();
+        amount.warning = true;
+        let mut approve = result(vec![amount, field("Spender", "0x1111")]);
+        approve.risk = ClearRisk::Danger;
+        let clear = view(approve);
+
+        let mut capped = guard_view(vela_core::app::approval_guard::GuardEditorView {
+            mode: Some(GuardEditorMode::Balance),
+            choice: Some(GuardChoice::Amount {
+                amount_raw: "1240000000".to_owned(),
+            }),
+            requested_unlimited: true,
+            ..editor_view(None, false, Some("1240000000"))
+        });
+        capped.detected = vela_core::app::approval_guard::detect_calldata_approval(
+            Some("0xdd"),
+            Some(&format!("0x095ea7b3{}{}", "0".repeat(64), "f".repeat(64))),
+        );
+        let shown = capped_approval(&clear, &capped);
+        let result = shown
+            .result
+            .unwrap_or_else(|| unreachable!("the decode is kept"));
+        assert_eq!(result.fields[0].value, "1,240 USDC");
+        assert!(!result.fields[0].warning);
+        assert_eq!(result.fields[1].value, "0x1111");
+        assert_eq!(result.risk, ClearRisk::Caution);
+
+        let mut kept = capped.clone();
+        if let Some(editor) = kept.editor.as_mut() {
+            editor.choice = Some(GuardChoice::Unlimited);
+        }
+        assert_eq!(
+            capped_approval(&clear, &kept),
+            clear,
+            "untouched without a cap"
+        );
+
+        // A bundle decodes from its first leg, so a capped first leg is what
+        // that decode reads too.
+        let mut batch = guard_view(editor_view(None, false, None));
+        batch.surface = GuardSurface::Batch;
+        batch.editor = None;
+        batch.batch = Some(vela_core::app::approval_guard::GuardBatchView {
+            legs: vec![vela_core::app::approval_guard::GuardLegView {
+                to: "0xdd".to_owned(),
+                approval: capped.detected.clone(),
+                meta: capped.meta.clone(),
+                editor: capped.editor.clone(),
+                choice: capped.editor.as_ref().and_then(|e| e.choice.clone()),
+                needs_editor: true,
+                needs_choice: false,
+                grants_broad: false,
+            }],
+            any_uncapped: false,
+            any_to_own_token: false,
+            all_settled: true,
+        });
+        let shown = capped_approval(&clear, &batch)
+            .result
+            .unwrap_or_else(|| unreachable!("the decode is kept"));
+        assert_eq!(shown.fields[0].value, "1,240 USDC");
     }
 
     /// A batch has no leg editors here — so the sentence is its whole
@@ -1728,10 +1877,13 @@ mod tests {
             ..pristine_sign()
         };
         let drawn = status_blocks(&unlimited, &s);
+        // Since 2026-09-26 this is the approval screen not having shown the
+        // unlimited approval — the plain sentence, never "unlimited is
+        // disabled", which is no longer true.
         assert!(
             drawn.iter().any(|block| matches!(
                 block,
-                Block::Warning { tone: Tone::Danger, text } if *text == s.error_unlimited
+                Block::Warning { tone: Tone::Danger, text } if *text == s.error_generic
             )),
             "the unlimited refusal drew nothing"
         );

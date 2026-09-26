@@ -177,6 +177,9 @@ struct GuardEditorViewWire: Decodable, Equatable {
     let requestedUnlimited: Bool
     /// The one-tap finite balance cap is offered.
     let hasBalanceCap: Bool
+    /// Revoke is offered — not on `increaseAllowance`, where it would sign an
+    /// increase of 0 and leave the allowance where it was.
+    let revokeOffered: Bool
     let balanceRaw: String?
 }
 

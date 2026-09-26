@@ -14150,7 +14150,10 @@ impl WalletPage {
                 // header for every surface the live builder had nothing for —
                 // which was four of the core's six, resolution included. A drawn
                 // swap under a true header is the worst thing this column can say.
-                model.blocks = signing_live::blocks(&host.clear_view, &host.facts, &self.signing);
+                // …reading the cap the person chose, not the request's
+                // "Unlimited", once there is one.
+                let clear = signing_live::capped_approval(&host.clear_view, &host.guard_view);
+                model.blocks = signing_live::blocks(&clear, &host.facts, &self.signing);
                 // What the chain says it would MOVE, under what the site says
                 // it would do. Last, because it is the answer to everything
                 // above it — and the one part of this sheet a site cannot
