@@ -414,8 +414,8 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (the Trusted Signer, then −23 as its cross-device channels went). The
 //   corpus is the UNION of both, so the total is neither, and the number below
 //   is the merged corpus's own — not a guess, and not either side's.
-if (PATHS.length !== 1728) fail(`expected 1728 paths (1639 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1639) fail(`expected 1639 leaf paths, got ${leafSet.size}`);
+if (PATHS.length !== 1729) fail(`expected 1729 paths (1640 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1640) fail(`expected 1640 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

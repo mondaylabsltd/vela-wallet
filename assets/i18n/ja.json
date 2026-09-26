@@ -1651,7 +1651,8 @@
    "credential": "クレデンシャル",
    "transport": "トランスポート",
    "attestation": "アテステーション",
-   "userVerified": "使用時に本人確認"
+   "userVerified": "使用時に本人確認",
+   "signsHere": "ログイン中"
   }
  },
  "contacts": {

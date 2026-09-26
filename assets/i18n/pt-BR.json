@@ -1654,7 +1654,8 @@
    "credential": "Credencial",
    "transport": "Transporte",
    "attestation": "Atestação",
-   "userVerified": "Verificação ao usar"
+   "userVerified": "Verificação ao usar",
+   "signsHere": "Conectada"
   }
  },
  "contacts": {

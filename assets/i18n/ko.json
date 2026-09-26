@@ -1651,7 +1651,8 @@
    "credential": "자격 증명",
    "transport": "전송 방식",
    "attestation": "증명",
-   "userVerified": "사용 시 인증 필요"
+   "userVerified": "사용 시 인증 필요",
+   "signsHere": "로그인 중"
   }
  },
  "contacts": {

@@ -8658,13 +8658,21 @@ impl WalletPage {
                 .collect()
         };
         let keys_address = account.address.clone();
+        let sign_in_credential = account
+            .sign_in_route()
+            .map(|route| route.credential_id)
+            .unwrap_or_default();
         cx.spawn(async move |page, cx| {
             let asked = keys_address.clone();
             let answer = cx
                 .background_executor()
-                .spawn(
-                    async move { crate::executor::registry::wallet_keys(&keys_address, &device) },
-                )
+                .spawn(async move {
+                    crate::executor::registry::wallet_keys(
+                        &keys_address,
+                        &device,
+                        &sign_in_credential,
+                    )
+                })
                 .await;
             page.update(cx, |page, cx| {
                 if page.backup_for.as_deref() == Some(asked.as_str()) {
@@ -16948,7 +16956,7 @@ mod tests {
                 signer_origin: None,
             },
         ];
-        let rows = match vela_core::wallet_keys::step("", &device, &[]) {
+        let rows = match vela_core::wallet_keys::step("", &device, &[], "") {
             vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
             vela_core::wallet_keys::KeysStep::Ask { .. } => {
                 unreachable!("asked with no address, so nobody can be asked")
