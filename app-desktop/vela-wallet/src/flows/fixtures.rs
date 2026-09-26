@@ -432,7 +432,9 @@ pub struct SendSelection {
     pub select_all: SharedString,
     /// "Gnosis selected — a multi-token send stays on one network…", with the
     /// chain's own mark beside it. `None` until the first pick names a chain.
-    pub notice: Option<(u32, SharedString, SharedString)>,
+    /// `(chain_id, tint, letter, text)` — the chain's logo is drawn, the
+    /// tinted letter is what shows while it loads or when it has none.
+    pub notice: Option<(u32, u32, SharedString, SharedString)>,
 }
 
 #[derive(Clone)]

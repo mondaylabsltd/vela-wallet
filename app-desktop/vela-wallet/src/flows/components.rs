@@ -81,7 +81,9 @@ pub fn network_row(
         .flex()
         .items_center()
         .gap(px(12.))
-        .py(px(10.))
+        // The web's `NetworkRow` measure (078 F-11): `--space-lg` above and
+        // below.
+        .py(px(12.))
         .child(network_mark(row))
         .child(
             div()
@@ -89,17 +91,20 @@ pub fn network_row(
                 .min_w(px(0.))
                 .flex()
                 .flex_col()
+                .gap(px(2.))
                 .child(
                     div()
                         .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.fg_base)
                         .child(row.name.clone()),
                 )
                 .child(
                     div()
                         .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
+                        .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
+                        .truncate()
                         .child(row.address.clone()),
                 ),
         )
@@ -134,7 +139,8 @@ fn network_mark(row: &NetworkRow) -> gpui::AnyElement {
             .flex()
             .items_center()
             .justify_center()
-            .text_size(theme::text_row_sub())
+            // `--text-xs`, as the web's `NetworkRow` letters it (078 F-11).
+            .text_size(theme::text_glyph())
             .font_weight(gpui::FontWeight::BOLD)
             // The chain colours are brand fills, dark enough for white in
             // both appearances — so the mode-invariant white.
@@ -398,7 +404,9 @@ pub fn status_chip(theme: &Theme, chip: &StatusChip) -> Div {
         .py(px(2.))
         .rounded(px(999.))
         .bg(bg)
-        .text_size(theme::text_label())
+        // `--text-xs` semibold (078 F-11).
+        .text_size(theme::text_glyph())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(fg)
         .child(chip.text.clone())
 }
@@ -499,18 +507,27 @@ pub fn filter_chips(theme: &Theme, chips: &[FilterChip], clicks: Vec<super::pane
         row = row.child(super::panels::clickable(
             gpui::ElementId::from(("flow-filter-chip", i)),
             clicks.next(),
+            // The web's chip (078 F-10): raised, padded 4/12, 11 medium on
+            // a button's line — the sunken 5-padded chip stood taller than
+            // the web's and read as a well rather than a control.
             div()
                 .px(px(12.))
-                .py(px(5.))
+                .py(px(4.))
                 .rounded(px(999.))
                 // The selected chip inverts rather than taking the accent:
                 // accent means "moves money", and narrowing a list does not.
                 .bg(if chip.selected {
                     theme.fg_base
                 } else {
-                    theme.bg_sunken
+                    theme.bg_raised
                 })
                 .text_size(theme::text_label())
+                .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
+                .font_weight(if chip.selected {
+                    gpui::FontWeight::SEMIBOLD
+                } else {
+                    gpui::FontWeight::MEDIUM
+                })
                 .text_color(if chip.selected {
                     theme.bg_base
                 } else {
@@ -577,11 +594,12 @@ pub fn segmented_toggle(
 /// The monospace field. Addresses are compared character by character by the
 /// people pasting them, which is the whole reason for the face.
 pub fn mono_field(theme: &Theme, label: Option<SharedString>, value: SharedString) -> Div {
+    // The web's `MonoField` (078 F-11): an 11 label over a raised field.
     let mut col = div().flex().flex_col().gap(px(6.));
     if let Some(label) = label {
         col = col.child(
             div()
-                .text_size(theme::text_row_sub())
+                .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(label),
         );
@@ -590,7 +608,7 @@ pub fn mono_field(theme: &Theme, label: Option<SharedString>, value: SharedStrin
         div()
             .p(px(12.))
             .rounded(px(12.))
-            .bg(theme.bg_sunken)
+            .bg(theme.bg_raised)
             .font_family(theme::font_mono())
             .text_size(theme::text_mono_address())
             .text_color(theme.fg_base)
@@ -615,12 +633,12 @@ pub fn address_card(
 ) -> gpui::Stateful<Div> {
     div()
         .id("receive-address-card")
+        // No well (078 F-11): the web's `AddressCard` is a row on the page —
+        // the name 15 semibold, the address in mono 11 on 1.4 beneath it.
         .flex()
         .items_center()
         .gap(px(12.))
-        .p(px(12.))
-        .rounded(px(14.))
-        .bg(theme.bg_sunken)
+        .py(px(12.))
         .child(identicon_avatar(identicons, seed, 36.))
         .child(
             div()
@@ -628,24 +646,21 @@ pub fn address_card(
                 .min_w(px(0.))
                 .flex()
                 .flex_col()
+                .gap(px(2.))
                 .child(
                     div()
                         .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.fg_base)
                         .child(name),
                 )
                 .child(
                     div()
                         .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
+                        .text_size(theme::text_label())
+                        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
                         .text_color(theme.fg_muted)
-                        .child(lines.0),
-                )
-                .child(
-                    div()
-                        .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
-                        .text_color(theme.fg_muted)
+                        .child(lines.0)
                         .child(lines.1),
                 ),
         )
@@ -901,19 +916,20 @@ pub fn fee_speed_summary(theme: &Theme, icons: &mut IconCache, speed: &FeeSpeedM
     div()
         .flex()
         .items_center()
+        // The web's folded row (078 F-11): 11, padded 4/12.
         .gap(px(8.))
         .px(px(12.))
-        .py(px(6.))
+        .py(px(4.))
         .child(
             div()
-                .text_size(theme::text_row_sub())
+                .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(speed.label.clone()),
         )
         .child(
             div()
                 .flex_1()
-                .text_size(theme::text_row_sub())
+                .text_size(theme::text_label())
                 .text_color(theme.fg_base)
                 .flex()
                 .justify_end()
@@ -1093,7 +1109,7 @@ pub fn recipient_card(
                 .gap(px(4.))
                 .px(px(8.))
                 .rounded(px(8.))
-                .bg(theme.bg_raised)
+                .bg(theme.bg_base)
                 .border_1()
                 .border_color(if field.focus.is_focused(window) {
                     theme.fg_muted
@@ -1131,13 +1147,15 @@ pub fn recipient_card(
             .child(recipient.name.clone())
             .into_any_element(),
     };
+    // A raised card padded 12, as the web's `RecipientCard` (078 F-11); its
+    // wells are the page colour inside it.
     let card = div()
         .flex()
         .items_center()
-        .gap(px(10.))
-        .p(px(10.))
+        .gap(px(12.))
+        .p(px(12.))
         .rounded(px(12.))
-        .bg(theme.bg_sunken)
+        .bg(theme.bg_raised)
         .child(identicon_avatar(identicons, recipient.seed.as_ref(), 28.))
         .child(
             div()
