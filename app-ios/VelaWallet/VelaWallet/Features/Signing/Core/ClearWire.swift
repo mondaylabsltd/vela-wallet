@@ -50,12 +50,13 @@ enum ClearSignType: String, Decodable {
 struct ClearSignFieldWire: Decodable, Equatable {
     /// `var`: the shell relabels the wallet's OWN built-in result (spec 062).
     var label: String
-    let value: String
+    /// `var`: a capped unlimited approval reads its cap here (see `capped`).
+    var value: String
     let format: String
     /// A normalised, validated token address, for the logo lookup.
     let tokenAddress: String?
     /// A high-risk field — an unlimited approval, say. Renders as danger.
-    let warning: Bool
+    var warning: Bool
     /// An amount shown with decimals that were never verified on-chain.
     /// Caution, not danger: it may well be right, and it may be off by
     /// several orders of magnitude.
@@ -92,7 +93,7 @@ struct ClearSignResultWire: Decodable, Equatable {
     let contractName: String?
     let owner: String?
     var fields: [ClearSignFieldWire]
-    let risk: ClearRisk
+    var risk: ClearRisk
     let contractAddress: String?
     /// Derived by the core from `provenance`, never claimed on its own.
     let verified: Bool
@@ -262,6 +263,23 @@ extension ClearSignResultWire {
         next.intent = intent
         for index in next.fields.indices where index < labels.count {
             next.fields[index].label = labels[index]
+        }
+        return next
+    }
+
+    /// The same result reading the cap the person chose instead of the
+    /// request's "Unlimited": the approval's warning amount field takes the
+    /// cap and stops being a warning, and if it was the only warning the risk
+    /// falls to what an approve is anyway — caution (`assess_risk`). Same rule
+    /// in every shell (`SigningLive.cappedApproval`).
+    func capped(to cap: String) -> ClearSignResultWire {
+        var next = self
+        for index in next.fields.indices where next.fields[index].warning && next.fields[index].format == "tokenAmount" {
+            next.fields[index].value = cap
+            next.fields[index].warning = false
+        }
+        if next.risk == .danger, !next.fields.contains(where: { $0.warning }) {
+            next.risk = .caution
         }
         return next
     }

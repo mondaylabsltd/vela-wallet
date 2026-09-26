@@ -1,5 +1,8 @@
 # J05 · Never-Unlimited Approval Guard & Editing UX
 
+> **Superseded 2026-09-26 (founder ruling).** Unlimited approvals are no longer refused: an unbounded request opens on its own "Requested" chip, is shown in red, a cap is offered, and unless the person caps it the dApp's bytes go out unchanged; the submit guard is waived only by the approval screen's `unlimited_consented`. Why: Permit2 / EIP-5792 bundles revert when the approve leg is re-encoded. Canonical public wording: `specs/080-site-content-accuracy/claim-ledger.md` C-approve-1; code: `rust/crates/vela-core/src/app/approval_guard.rs` module doc.
+
+
 | | |
 |---|---|
 | **Epic** | J — Simulation & Safety Guards |

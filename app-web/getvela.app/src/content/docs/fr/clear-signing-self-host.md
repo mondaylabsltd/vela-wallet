@@ -62,8 +62,12 @@ confiance, et rien ne peut être signé.
   pas calculer donne lieu à un refus, pas à une signature.
 - **Elle vérifie que la transaction est bien celle qui a été demandée.** L'appel
   demandé par le site doit réellement se trouver dans l'opération signée.
-- **Elle refuse une approbation au niveau « illimité ».** Pas un avertissement — un
-  refus, avec une indication de ce qu'il faut faire à la place.
+- **Elle signale quand une approbation est illimitée.** Elle ne peut pas modifier un
+  montant — elle signe les octets reçus ou rien —, donc une approbation ou un permit
+  illimité (2^128 ou plus sur cette page) s'affiche en rouge avec cette raison et
+  peut être signé tel quel ; un plafond on-chain se choisit sur l'écran d'approbation
+  du portefeuille lui-même, avant que la demande n'arrive ici. Une approbation
+  portant sur toute une collection de NFT est refusée.
 - **Elle dit quand elle ne parvient pas à lire quelque chose,** au lieu d'afficher
   un résumé rassurant qu'elle ne peut pas garantir.
 - **Elle affiche l'adresse et l'identicon du compte,** et n'affiche pas un nom de

@@ -1,7 +1,7 @@
 ---
 title: Auditorias e problemas conhecidos
 description: "Cada contrato de que a Vela depende, quem auditou qual versão, se a versão auditada é a que está implantada, os achados em aberto que acompanhamos e o que não foi auditado de forma alguma."
-source: d0bb95c016da
+source: 377855411c74
 ---
 
 “Auditado” é uma afirmação sobre um código específico numa versão específica, então
@@ -150,11 +150,14 @@ isso acontecer.
 ### Lacunas nas defesas da própria Vela
 
 Não são achados de contrato, mas pontos em que a carteira protege você menos do que
-você talvez imagine. Cada um está sendo acompanhado para correção:
+você talvez imagine. Cada um está sendo acompanhado para correção, exceto onde se diz
+que é uma concessão deliberada:
 
-- **A proteção de aprovações só barra valores “ilimitados”** (2^200 ou mais; 2^152
-  no Permit2). Uma aprovação finita alta, um permit assinado ou um
-  `setApprovalForAll` de NFT recebem um alerta, não um bloqueio.
+- **Uma aprovação ilimitada é enviada se você a mantiver** — uma concessão
+  deliberada, porque uma aprovação limitada quebra o Permit2 e os swaps em lote. Uma
+  aprovação “ilimitada” (2^200 ou mais; 2^152 no Permit2) aparece em vermelho e é
+  enviada como o dApp pediu, a menos que você a limite. Permits assinados não podem
+  ser limitados em lugar nenhum.
 - **A página de assinatura independente não está conectada** a nenhum app ainda.
 - **O site carrega um script de análise de terceiros** no mesmo domínio das
   passkeys. O site proíbe que as suas páginas usem passkeys (um cabeçalho

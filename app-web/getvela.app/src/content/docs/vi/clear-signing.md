@@ -1,7 +1,7 @@
 ---
 title: Ký minh bạch
 description: "Vela giải mã giao dịch thành ngôn ngữ dễ hiểu trước khi bạn duyệt — ý định, số tiền, địa chỉ và rủi ro — thay vì một chuỗi hex khó hiểu. Khi không giải mã được một lệnh gọi, nó cảnh báo bạn chứ không giả vờ đã hiểu."
-source: 7232328b724e
+source: 29a66a1584f1
 ---
 
 <script>
@@ -62,18 +62,27 @@ Mỗi giao dịch đã giải mã đều có một mức rủi ro để những 
 - **Nguy hiểm** cho những gì thật sự rủi ro, như **cấp quyền token không giới hạn**.
 - Rủi ro thấp hơn cho các thao tác thường ngày như staking hay gửi tiền vào.
 
-<Callout type="warning" title="Lệnh cấp quyền “không giới hạn” trên chuỗi không thể gửi đi">
+<Callout type="warning" title="Lệnh cấp quyền “không giới hạn” hiện màu đỏ, kèm lựa chọn đặt hạn mức">
 Một lệnh cấp quyền trên chuỗi với số lượng không giới hạn là một trong những cách phổ
 biến nhất khiến tiền bị rút sạch về sau. Khi một dApp yêu cầu lệnh như vậy
 (<code>approve</code>, <code>increaseAllowance</code>, hoặc <code>approve</code> của
 Permit2) ở mức "không giới hạn" — từ 2^200 trở lên (2^152 với Permit2), tức là con số mà
-dApp dùng cho "không giới hạn" — Vela sẽ không gửi nó đi cho đến khi bạn đổi thành một số
-lượng cụ thể, bằng số dư của bạn, hoặc thu hồi; một lần kiểm tra cuối trước khi gửi đọc
-thẳng calldata thô, nên nó hoạt động dù có bộ mô tả hay không. Những gì nó không chặn:
-một <strong>lệnh cấp quyền lớn nhưng hữu hạn</strong> (kể cả khi vượt xa số dư của bạn),
-<strong>permit dạng chữ ký</strong> (chữ ký EIP-2612 và Permit2), và
-<code>setApprovalForAll</code> cho NFT — mỗi thứ đều hiện kèm cảnh báo thận trọng, và
-quyết định là của bạn.
+dApp dùng cho "không giới hạn" — Vela hiện nó bằng màu đỏ và đề nghị một hạn mức: một số
+lượng cụ thể, bằng số dư của bạn (khi đọc được), hoặc — trừ với
+<code>increaseAllowance</code> — thu hồi. Nếu bạn không chọn, lệnh sẽ được gửi đi đúng như
+dApp đã tạo: Permit2 được thiết kế dựa trên một lệnh cấp quyền thường trực, và một giao
+dịch gộp của tài khoản thông minh tiêu khoản được cấp quyền đó ngay trong cùng giao dịch,
+nên một hạn mức thấp hơn khoản tiêu đó sẽ khiến cả giao dịch gộp thất bại. Bên trong một
+giao dịch gộp, mỗi lệnh cấp quyền không giới hạn đều có thể đặt hạn mức riêng theo cùng
+cách đó (một số lượng cụ thể hoặc thu hồi). Một lần kiểm tra cuối trước khi gửi đọc
+thẳng calldata thô, nên một lệnh cấp quyền
+không giới hạn mà màn hình cấp quyền chưa từng hiện ra thì không thể gửi đi. Một
+<strong>lệnh cấp quyền lớn nhưng hữu hạn</strong> (kể cả khi vượt xa số dư của bạn) được
+hiện kèm cảnh báo thận trọng. <strong>Permit dạng chữ ký</strong> (chữ ký EIP-2612 và
+Permit2) không thể đặt hạn mức — dApp tự gửi bản của chính nó — nên chúng chỉ có thể được
+ký đúng như yêu cầu hoặc bị từ chối: permit không giới hạn hiện màu đỏ, permit có giới hạn
+hiện kèm cảnh báo thận trọng. Yêu cầu cấp <code>setApprovalForAll</code> cho NFT trên cả
+một bộ sưu tập hiện chưa thể được chấp thuận trong các ứng dụng.
 </Callout>
 
 ## Khi Vela không giải mã được một lệnh gọi

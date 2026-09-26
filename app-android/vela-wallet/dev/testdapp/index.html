@@ -20,6 +20,7 @@
   <button id="safetx" type="button">SafeTx typed data (blocked)</button>
   <button id="send" type="button">Send dust</button>
   <button id="approve" type="button">Approve unlimited</button>
+  <button id="bundle" type="button">Bundle: approve unlimited + reset</button>
   <button id="verify" type="button">Verify sign</button>
   <button id="siwe" type="button">SIWE</button>
   <button id="siwe-bad" type="button">SIWE (other domain)</button>
@@ -108,6 +109,16 @@
     const frameOrigin = location.protocol + '//' + location.hostname + ':' + (Number(location.port || 80) + 1);
     document.getElementById('attacker').src = frameOrigin + '/attacker.html';
     document.getElementById('approve').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + MAX, value: '0x0' }]);
+    // The Permit2 shape (2026-09-26): an EIP-5792 bundle whose first leg is an
+    // unlimited approve. Kept as asked it goes out byte-identical; the second leg
+    // resets the allowance, so sliding it for real leaves nothing behind.
+    document.getElementById('bundle').onclick = () => window.__ask('wallet_sendCalls', [{
+      version: '2.0.0', from: me(), chainId: '0x64', atomicRequired: true,
+      calls: [
+        { to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + MAX, value: '0x0' },
+        { to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + '0'.repeat(64), value: '0x0' },
+      ],
+    }]);
   
     // Spec 081: the shapes the self-call guard must refuse.
     const selfAddr = () => me ? me() : window.ethereum.selectedAddress;

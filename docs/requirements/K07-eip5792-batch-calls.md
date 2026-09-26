@@ -30,7 +30,7 @@ reusing the same MultiSend engine as split/sweep (H07).
 
 - **FR-1** — Implement `wallet_sendCalls`: encode the calls into a single Safe `multiSend` UserOp (G01).
 - **FR-2** — Return a **batch id equal to the userOpHash** for receipt lookup (G09).
-- **FR-3** — Run **each leg** through `enforceNoUnlimited` (J05); one unbounded leg fails the batch.
+- **FR-3** — Run **each leg** through `enforceNoUnlimited` (J05); one unbounded leg fails the batch. *(Superseded 2026-09-26: an unbounded leg is kept as asked and shown in red; the batch is refused only if the approval screen did not report it — see J05.)*
 - **FR-4** — Advertise per-chain `atomic: supported` to dApps (K04).
 - **FR-5** — Persist the batch as a pending dApp op at submit time (L01).
 

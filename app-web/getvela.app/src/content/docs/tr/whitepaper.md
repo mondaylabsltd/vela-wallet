@@ -1,7 +1,7 @@
 ---
 title: Teknik doküman
 description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
-source: 60d297b650ac
+source: d0be29438317
 ---
 
 <script>
@@ -167,8 +167,10 @@ standart token biçimleriyle eşleştirilenler — ve son çare olarak, "elden g
 kalan her şey açık bir kör imzalama uyarısı alır. Alınan bir tanımlayıcı asla
 doğrulanmış olarak etiketlenmez; bu sözü yalnızca uygulamaya yerleşik olan ya da alınıp
 onunla birebir aynı çıkan bir tanımlayıcı hak eder. "Sınırsız" düzeydeki (2^200 ya da
-daha fazla) zincir üstü bir onay, siz onu düşürene kadar gönderilemez; büyük ama sınırlı
-bir onay ve imzalı izinler (permit) bir uyarıyla gösterilir ama engellenmez.
+daha fazla) zincir üstü bir onay kırmızıyla gösterilir ve bir üst sınır önerilir; siz
+üst sınır koymadıkça dApp'in oluşturduğu haliyle aynen gönderilir. Büyük ama sınırlı
+bir onay bir uyarıyla gösterilir; imzalı izinlere (permit) üst sınır konamaz, bu yüzden
+istendiği gibi imzalanır ya da reddedilir.
 Ayrıntılar:
 [açık imzalama](/tr/docs/clear-signing).
 

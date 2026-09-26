@@ -216,7 +216,7 @@ enum SigningFixtures {
                 panelTitle: t(loc, "signatureRequest")
             )
 
-        // -- cs5–cs8: approvals, under the never-unlimited mandate --------
+        // -- cs5–cs8: approvals — unlimited kept as asked, and said ------
         case .cs5:
             return SigningModel(
                 id: state, dapp: D.oneinch, network: network,
@@ -225,14 +225,13 @@ enum SigningFixtures {
                     .allowance(
                         label: a(loc, "spendingCap"), value: a(loc, "unlimitedValue"),
                         valueTone: .danger,
-                        // Permanently disabled, not merely unselected: an
-                        // unlimited request is the one thing this wallet will
-                        // not sign as asked.
-                        chips: [chip("requested", a(loc, "requested"), .disabled),
+                        // The site's own ask, preselected (2026-09-26): Permit2
+                        // bundles revert when the wallet re-encodes the
+                        // approve. A cap is one chip away.
+                        chips: [chip("requested", a(loc, "requested"), .selected),
                                 chip("balance", a(loc, "balanceCap"), .idle),
                                 chip("custom", a(loc, "custom"), .idle),
-                                chip("revoke", a(loc, "revoke"), .idle)],
-                        note: "\(a(loc, "unlimitedDisabled"))\n\(a(loc, "choosePrompt"))"
+                                chip("revoke", a(loc, "revoke"), .idle)]
                     ),
                     .party(label: t(loc, "spenderLabel"), name: "1inch Router",
                            address: Addr.oneinchRouter,
@@ -240,9 +239,9 @@ enum SigningFixtures {
                     .warning(tone: .danger, text: t(loc, "unlimitedWarning")),
                 ],
                 tech: tech(loc), techOpen: false, fee: onchainFee(loc), signer: signer(loc),
-                // Nothing to slide until a finite amount exists.
+                // Unlimited, seen and said — signable as asked.
                 confirm: (hint: t(loc, "slideToConfirm"), action: t(loc, "intentApprove"),
-                          enabled: false),
+                          enabled: true),
                 panelTitle: t(loc, "signatureRequest")
             )
 
@@ -253,7 +252,7 @@ enum SigningFixtures {
                     .intent(text: t(loc, "intentApprove"), tone: .neutral),
                     .allowance(
                         label: a(loc, "spendingCap"), value: "1,240 USDC", valueTone: .neutral,
-                        chips: [chip("requested", a(loc, "requested"), .disabled),
+                        chips: [chip("requested", a(loc, "requested"), .idle),
                                 chip("balance", a(loc, "balanceCap"), .selected),
                                 chip("custom", a(loc, "custom"), .idle),
                                 chip("revoke", a(loc, "revoke"), .idle)]
@@ -305,7 +304,7 @@ enum SigningFixtures {
                     .allowance(
                         label: a(loc, "spendingCap"), value: a(loc, "revokeValue"),
                         valueTone: .neutral,
-                        chips: [chip("requested", a(loc, "requested"), .disabled),
+                        chips: [chip("requested", a(loc, "requested"), .idle),
                                 chip("balance", a(loc, "balanceCap"), .idle),
                                 chip("custom", a(loc, "custom"), .idle),
                                 chip("revoke", a(loc, "revoke"), .selected)]

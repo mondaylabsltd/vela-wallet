@@ -402,7 +402,7 @@
 			},
 			{
 				"title": "Firma leggibile (ERC-7730)",
-				"body": "Le transazioni mostrano cosa fanno — importo, destinatario, intento — invece di esadecimale grezzo, e un'approvazione di livello «illimitato» non si può inviare finché non la riduci."
+				"body": "Le transazioni mostrano cosa fanno — importo, destinatario, intento — invece di esadecimale grezzo, e un'approvazione di livello «illimitato» viene mostrata in rosso, con un limite proposto."
 			},
 			{
 				"title": "Nasce Vela",
@@ -489,7 +489,7 @@
 	"_fingerprints": {
 		"home": "a9482909de80",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "92efac5dc4ef",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

@@ -14,7 +14,8 @@
 	interface Props {
 		model: SigningModel;
 		onconfirm?: () => void;
-		onchip?: (id: string) => void;
+		/** `leg`: the batch leg whose card was tapped; absent = the single approval. */
+		onchip?: (id: string, leg?: number) => void;
 		onfee?: () => void;
 		onfeepick?: (id: string) => void;
 		onspeed?: () => void;

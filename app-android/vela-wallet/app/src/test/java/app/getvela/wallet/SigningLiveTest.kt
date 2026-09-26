@@ -178,20 +178,101 @@ class SigningLiveTest {
             kind = app.getvela.wallet.feature.signing.core.GuardApprovalKind.Erc20Approve, token_address = "0xdd", spender = "0x1111111111111111111111111111111111111111",
             amount_raw = null, is_unbounded = true, editable = true, locus = app.getvela.wallet.feature.signing.core.GuardLocus.CalldataWord(1),
         )
-        val editor = app.getvela.wallet.feature.signing.core.GuardEditorView(mode = null, requested_finite = false, has_balance_cap = false)
-        val blocked = GuardView(surface = app.getvela.wallet.feature.signing.core.GuardSurface.ApprovalEditor, detected = detected, meta = app.getvela.wallet.feature.signing.core.GuardTokenMetaView("USDC", 6, true, false), editor = editor, confirm_allowed = false)
-        val blocks = SigningLive.guardBlocks(blocked, strings)
+        // Kept as the site asked (2026-09-26): the requested chip, the
+        // `unlimited` choice, the danger said, and the consent in the opts.
+        val editor = app.getvela.wallet.feature.signing.core.GuardEditorView(
+            mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Requested,
+            choice = app.getvela.wallet.feature.signing.core.GuardChoice.Unlimited,
+            requested_finite = false, requested_unlimited = true, has_balance_cap = false,
+        )
+        val kept = GuardView(surface = app.getvela.wallet.feature.signing.core.GuardSurface.ApprovalEditor, detected = detected, meta = app.getvela.wallet.feature.signing.core.GuardTokenMetaView("USDC", 6, true, false), editor = editor, confirm_allowed = true, unlimited_consented = true)
+        val blocks = SigningLive.guardBlocks(kept, strings)
         val allowance = blocks.filterIsInstance<SigningBlock.Allowance>().single()
         assertEquals(strings.t("componentsUi.signingApprove.unlimitedValue"), allowance.value)
-        assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Disabled, allowance.chips.first { it.id == "requested" }.state)
-        assertTrue(allowance.note!!.contains(strings.t("componentsUi.signingApprove.choosePrompt")))
-        assertTrue(blocks.any { it is SigningBlock.Warning })
-        val custom = blocked.copy(editor = editor.copy(mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom, custom_text = "1", display_amount_raw = "1000000", choice = app.getvela.wallet.feature.signing.core.GuardChoice.Amount("1000000")), confirm_allowed = true)
-        val bounded = SigningLive.guardBlocks(custom, strings).filterIsInstance<SigningBlock.Allowance>().single()
+        assertEquals(SigningTone.Danger, allowance.valueTone)
+        assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Selected, allowance.chips.first { it.id == "requested" }.state)
+        assertNull("no 'unlimited is disabled' note — it is not", allowance.note)
+        assertTrue(blocks.any { it is SigningBlock.Warning && it.text == strings.t("componentsUi.signing.unlimitedWarning") })
+        val opts = SigningController.approveOpts(FeeView(), ClearSigningView(), kept)
+        assertTrue(opts.unlimited_approved)
+        assertNull("the site's own bytes", opts.params_override_json)
+        assertFalse(SigningController.approveOpts(FeeView(), ClearSigningView(), GuardView()).unlimited_approved)
+
+        val custom = kept.copy(editor = editor.copy(mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom, custom_text = "1", display_amount_raw = "1000000", choice = app.getvela.wallet.feature.signing.core.GuardChoice.Amount("1000000")), unlimited_consented = false)
+        val cappedBlocks = SigningLive.guardBlocks(custom, strings)
+        val bounded = cappedBlocks.filterIsInstance<SigningBlock.Allowance>().single()
         assertEquals("1 USDC", bounded.value)
+        assertEquals(SigningTone.Neutral, bounded.valueTone)
         assertEquals("1", bounded.custom!!.value)
         assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Selected, bounded.chips.first { it.id == "custom" }.state)
+        assertFalse("a capped approval is not unlimited", cappedBlocks.any { it is SigningBlock.Warning })
     }
+
+    @Test
+    fun `a capped unlimited approval reads the cap, not the request's Unlimited`() {
+        val result = app.getvela.wallet.feature.signing.core.ClearSignResult(
+            intent = "Approve",
+            fields = listOf(
+                app.getvela.wallet.feature.signing.core.ClearSignField(label = "Amount", value = "Unlimited", format = "tokenAmount", warning = true),
+                app.getvela.wallet.feature.signing.core.ClearSignField(label = "Spender", value = "0x1111", format = "addressName"),
+            ),
+            risk = app.getvela.wallet.feature.signing.core.ClearRisk.Danger,
+        )
+        val clear = ClearSigningView(resolved = true, surface = ClearSurface.ClearSign, result = result)
+        val detected = app.getvela.wallet.feature.signing.core.GuardDetectedApproval(
+            kind = app.getvela.wallet.feature.signing.core.GuardApprovalKind.Erc20Approve, spender = "0x1111", is_unbounded = true, editable = true,
+            locus = app.getvela.wallet.feature.signing.core.GuardLocus.CalldataWord(1),
+        )
+        val kept = GuardView(
+            surface = app.getvela.wallet.feature.signing.core.GuardSurface.ApprovalEditor, detected = detected,
+            meta = app.getvela.wallet.feature.signing.core.GuardTokenMetaView("USDC", 6, true, false),
+            editor = app.getvela.wallet.feature.signing.core.GuardEditorView(choice = app.getvela.wallet.feature.signing.core.GuardChoice.Unlimited, requested_unlimited = true),
+        )
+        // Kept as asked: the decode is the truth, untouched.
+        assertEquals(clear, SigningLive.cappedApproval(clear, kept))
+        val capped = kept.copy(editor = kept.editor!!.copy(choice = app.getvela.wallet.feature.signing.core.GuardChoice.Amount("250000000"), display_amount_raw = "250000000"))
+        val shown = SigningLive.cappedApproval(clear, capped).result!!
+        assertEquals("250 USDC", shown.fields[0].value)
+        assertFalse(shown.fields[0].warning)
+        assertEquals("0x1111", shown.fields[1].value)
+        assertEquals("an approve is caution once its only warning is gone", app.getvela.wallet.feature.signing.core.ClearRisk.Caution, shown.risk)
+
+        // A bundle decodes from its first leg, so a capped first leg is what that decode reads too.
+        val batch = GuardView(
+            surface = app.getvela.wallet.feature.signing.core.GuardSurface.Batch,
+            batch = app.getvela.wallet.feature.signing.core.GuardBatchView(
+                legs = listOf(app.getvela.wallet.feature.signing.core.GuardLegView(to = "0xdd", approval = detected, meta = capped.meta, editor = capped.editor, choice = capped.editor!!.choice, needs_editor = true)),
+                all_settled = true,
+            ),
+        )
+        assertEquals("250 USDC", SigningLive.cappedApproval(clear, batch).result!!.fields[0].value)
+    }
+
+    @Test
+    fun `a batch leg's card carries its leg, so its chips reach the leg`() {
+        val leg = app.getvela.wallet.feature.signing.core.GuardLegView(
+            to = "0xdd",
+            approval = app.getvela.wallet.feature.signing.core.GuardDetectedApproval(
+                kind = app.getvela.wallet.feature.signing.core.GuardApprovalKind.Erc20Approve, spender = "0x1111", is_unbounded = true, editable = true,
+                locus = app.getvela.wallet.feature.signing.core.GuardLocus.CalldataWord(1),
+            ),
+            editor = app.getvela.wallet.feature.signing.core.GuardEditorView(
+                mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Requested,
+                choice = app.getvela.wallet.feature.signing.core.GuardChoice.Unlimited, requested_unlimited = true,
+            ),
+            needs_editor = true,
+        )
+        val batch = GuardView(
+            surface = app.getvela.wallet.feature.signing.core.GuardSurface.Batch,
+            batch = app.getvela.wallet.feature.signing.core.GuardBatchView(legs = listOf(transferLeg(), leg), any_uncapped = true, all_settled = true),
+        )
+        val cards = SigningLive.guardBlocks(batch, strings).filterIsInstance<SigningBlock.Allowance>()
+        assertEquals(listOf<Int?>(1), cards.map { it.leg })
+        assertEquals(app.getvela.wallet.feature.signing.core.GuardEditorMode.Balance, SigningLive.chipMode("balance"))
+        assertNull(SigningLive.chipMode("grant"))
+    }
+
+    private fun transferLeg() = app.getvela.wallet.feature.signing.core.GuardLegView(to = "0xdd")
 
     // -- Spec 046 US1: the balance-change block --------------------------------
 

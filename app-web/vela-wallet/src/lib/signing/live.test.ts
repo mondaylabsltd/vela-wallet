@@ -21,7 +21,7 @@ import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
-import { buildSigningModel, type SigningLiveInputs } from './live';
+import { buildSigningModel, calldataBytes, cappedApproval, type SigningLiveInputs } from './live';
 
 const m = resolveSigningMessages('en');
 const identity: WalletIdentity = {
@@ -525,40 +525,47 @@ describe('the confirm gate is an AND', () => {
 	});
 });
 
-describe('the never-unlimited mandate reaches the screen', () => {
+describe('an unlimited approval is kept as asked, and said', () => {
+	// The core's opening state for approve(spender, MAX) since 2026-09-26: the
+	// Requested chip, choice `unlimited`, the site's own bytes, consent reported.
 	const unbounded: GuardView = {
 		...INITIAL_GUARD_VIEW,
 		surface: 'approval_editor',
-		confirm_allowed: false,
+		confirm_allowed: true,
+		unlimited_consented: true,
 		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
 		editor: {
-			mode: null,
+			mode: 'requested',
 			custom_text: '',
 			error: null,
-			choice: null,
+			choice: { type: 'unlimited' },
 			display_amount_raw: null,
 			requested_finite: false,
+			requested_unlimited: true,
 			has_balance_cap: true,
+			revoke_offered: true,
 			balance_raw: '1000'
 		}
 	};
 
-	it('an unbounded request disables its own chip AND the slider', () => {
+	it('opens on its own chip, in the danger tone, with the warning, and arms the slider', () => {
 		const model = buildSigningModel(inputs({ guard: unbounded }))!;
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		expect(allowance).toBeDefined();
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
 		expect(allowance.value).toBe(m.valueUnlimited);
 		expect(allowance.valueTone).toBe('danger');
-		expect(allowance.chips.find((c) => c.id === 'requested')?.state).toBe('disabled');
-		// The gate: nothing can be signed until a finite cap is chosen.
-		expect(model.confirm.enabled).toBe(false);
+		expect(allowance.chips.find((c) => c.id === 'requested')?.state).toBe('selected');
+		expect(model.blocks).toContainEqual({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		// Permit2 bundles revert when the approve is re-encoded — so the site's
+		// ask is signable as it stands.
+		expect(model.confirm.enabled).toBe(true);
 	});
 
-	it('choosing a finite cap re-arms the slider', () => {
+	it('choosing a finite cap settles the tone and drops the warning', () => {
 		const capped: GuardView = {
 			...unbounded,
-			confirm_allowed: true,
+			unlimited_consented: false,
 			editor: {
 				...unbounded.editor!,
 				mode: 'balance',
@@ -570,8 +577,34 @@ describe('the never-unlimited mandate reaches the screen', () => {
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
 		expect(allowance.chips.find((c) => c.id === 'balance')?.state).toBe('selected');
-		expect(allowance.value).toBe('1000');
+		expect(allowance.chips.find((c) => c.id === 'requested')?.state).toBe('idle');
+		// 1000 base units at 6 decimals, in tokens — never "1000".
+		expect(allowance.value).toBe('0.001 USDC');
+		expect(allowance.valueTone).toBe('neutral');
+		expect(model.blocks.some((b) => b.kind === 'warning' && b.text === m.warnUnlimited)).toBe(
+			false
+		);
 		expect(model.confirm.enabled).toBe(true);
+	});
+
+	it('a typed cap too large to be one reads as an invalid amount, not "unlimited is disabled"', () => {
+		const huge: GuardView = {
+			...unbounded,
+			confirm_allowed: false,
+			unlimited_consented: false,
+			editor: {
+				...unbounded.editor!,
+				mode: 'custom',
+				custom_text: '1' + '0'.repeat(60),
+				error: 'unlimited_disabled',
+				choice: null
+			}
+		};
+		const model = buildSigningModel(inputs({ guard: huge }))!;
+		const allowance = model.blocks.find((b) => b.kind === 'allowance');
+		if (allowance?.kind !== 'allowance') throw new Error('kind');
+		expect(allowance.custom?.error).toBe(m.invalidAmount);
+		expect(model.confirm.enabled).toBe(false);
 	});
 
 	it('a balance cap nobody could read is offered as disabled, not as a lie', () => {
@@ -583,6 +616,160 @@ describe('the never-unlimited mandate reaches the screen', () => {
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
 		expect(allowance.chips.find((c) => c.id === 'balance')?.state).toBe('disabled');
+	});
+});
+
+describe('a capped unlimited approval reads the cap, not the request', () => {
+	const APPROVE: ClearSigningView = {
+		...DECODED,
+		result: {
+			...DECODED.result!,
+			intent: 'Approve',
+			risk: 'danger',
+			fields: [
+				field({ value: 'Unlimited', format: 'tokenAmount', warning: true, usd_value: null }),
+				field({ label: 'Spender', value: '0x1111', role: 'spender', address: '0x1111' })
+			]
+		}
+	};
+	const guard = (choice: GuardView['editor']): GuardView => ({
+		...INITIAL_GUARD_VIEW,
+		surface: 'approval_editor',
+		detected: {
+			kind: 'erc20_approve',
+			token_address: '0xdd',
+			spender: '0x1111',
+			amount_raw: 'f',
+			amount_bits: 256,
+			is_unbounded: true,
+			is_boolean_grant: false,
+			is_reducing: false,
+			editable: true,
+			block_reason: null,
+			deadline: null,
+			locus: { type: 'calldata_word', word_index: 1 }
+		},
+		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
+		editor: choice
+	});
+	const editor = {
+		mode: 'balance' as const,
+		custom_text: '',
+		error: null,
+		choice: { type: 'amount' as const, amount_raw: '250000000' },
+		display_amount_raw: '250000000',
+		requested_finite: false,
+		requested_unlimited: true,
+		has_balance_cap: true,
+		revoke_offered: true,
+		balance_raw: '250000000'
+	};
+
+	it('a chosen cap replaces "Unlimited" and the danger it carried', () => {
+		const shown = cappedApproval(APPROVE, guard(editor)).result!;
+		expect(shown.fields[0].value).toBe('250 USDC');
+		expect(shown.fields[0].warning).toBe(false);
+		expect(shown.fields[1].value).toBe('0x1111');
+		expect(shown.risk).toBe('caution');
+	});
+
+	it("a batch's first leg, capped, is what its decode reads too", () => {
+		const leg = guard(editor);
+		const batch: GuardView = {
+			...INITIAL_GUARD_VIEW,
+			surface: 'batch',
+			batch: {
+				legs: [
+					{
+						to: '0xdd',
+						approval: leg.detected,
+						meta: leg.meta,
+						editor,
+						choice: editor.choice,
+						needs_editor: true,
+						needs_choice: false,
+						grants_broad: false
+					}
+				],
+				any_uncapped: false,
+				any_to_own_token: false,
+				all_settled: true
+			}
+		};
+		expect(cappedApproval(APPROVE, batch).result!.fields[0].value).toBe('250 USDC');
+	});
+
+	it("a batch draws each unbounded leg's own cap card, tagged with its leg, and its spender", () => {
+		const leg = guard(editor);
+		const batch: GuardView = {
+			...INITIAL_GUARD_VIEW,
+			surface: 'batch',
+			confirm_allowed: true,
+			batch: {
+				legs: [
+					{
+						to: '0xdd',
+						approval: null,
+						meta: leg.meta,
+						editor: null,
+						choice: null,
+						needs_editor: false,
+						needs_choice: false,
+						grants_broad: false
+					},
+					{
+						to: '0xdd',
+						approval: leg.detected,
+						meta: leg.meta,
+						editor: {
+							...editor,
+							mode: 'requested',
+							choice: { type: 'unlimited' },
+							display_amount_raw: null
+						},
+						choice: { type: 'unlimited' },
+						needs_editor: true,
+						needs_choice: false,
+						grants_broad: true
+					}
+				],
+				any_uncapped: true,
+				any_to_own_token: false,
+				all_settled: true
+			}
+		};
+		const model = buildSigningModel(inputs({ guard: batch }))!;
+		const cards = model.blocks.filter((b) => b.kind === 'allowance');
+		expect(cards).toHaveLength(1);
+		const [card] = cards;
+		if (card.kind !== 'allowance') throw new Error('kind');
+		expect(card.leg).toBe(1);
+		expect(card.label.startsWith('#2 ')).toBe(true);
+		expect(card.value).toBe(m.valueUnlimited);
+		expect(card.chips.find((c) => c.id === 'requested')?.state).toBe('selected');
+		expect(
+			model.blocks.some((b) => b.kind === 'party' && b.address === leg.detected!.spender)
+		).toBe(true);
+		expect(model.blocks).toContainEqual({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+	});
+
+	it('increaseAllowance offers no revoke chip', () => {
+		const model = buildSigningModel(
+			inputs({ guard: guard({ ...editor, revoke_offered: false }) })
+		)!;
+		const allowance = model.blocks.find((b) => b.kind === 'allowance');
+		if (allowance?.kind !== 'allowance') throw new Error('kind');
+		expect(allowance.chips.find((c) => c.id === 'revoke')?.state).toBe('disabled');
+	});
+
+	it('kept as asked, the decode is the truth and is left alone', () => {
+		const kept = guard({
+			...editor,
+			mode: 'requested',
+			choice: { type: 'unlimited' },
+			display_amount_raw: null
+		});
+		expect(cappedApproval(APPROVE, kept)).toBe(APPROVE);
 	});
 });
 
@@ -727,5 +914,14 @@ describe('the fee coin can be switched, as it can when sending', () => {
 	it('with one coin there is nothing to choose, so nothing opens', () => {
 		const fee = feeOf({ fee: { ...two, options: [option({})] }, feeOpen: true });
 		expect(fee.kind === 'onchain' && fee.selector).toBeUndefined();
+	});
+});
+
+describe('the blind line names the real length', () => {
+	it("a batch counts its first leg's calldata, as the other shells do", () => {
+		const call = { to: '0xdd', data: '0x095ea7b3' + '00'.repeat(64) };
+		expect(calldataBytes(JSON.stringify([call]))).toBe(68);
+		expect(calldataBytes(JSON.stringify([{ version: '2.0.0', calls: [call, call] }]))).toBe(68);
+		expect(calldataBytes('not json')).toBe(0);
 	});
 });

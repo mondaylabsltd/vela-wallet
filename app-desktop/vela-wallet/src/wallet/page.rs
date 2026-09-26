@@ -630,6 +630,9 @@ pub struct WalletPage {
     explore_form_focus: gpui::FocusHandle,
     /// The cap field's focus, kept on the page so typing survives a redraw.
     cap_focus: FocusHandle,
+    /// One cap field per batch leg — two legs in Custom at once must not share
+    /// a focus handle, or typing in one lands in both.
+    leg_cap_focus: std::collections::HashMap<u32, FocusHandle>,
     /// What the open page last called itself, from the bridge's own report.
     /// The star pins with THIS rather than the host, because the host is what
     /// a tile falls back to and a page's title is what a person recognises.
@@ -1130,6 +1133,7 @@ impl WalletPage {
             explore_form_focus: cx.focus_handle(),
             browser_title: None,
             cap_focus: cx.focus_handle(),
+            leg_cap_focus: std::collections::HashMap::new(),
             browser_host: None,
             browser_consent: None,
             #[cfg(not(target_os = "linux"))]
@@ -14159,7 +14163,10 @@ impl WalletPage {
                 // header for every surface the live builder had nothing for —
                 // which was four of the core's six, resolution included. A drawn
                 // swap under a true header is the worst thing this column can say.
-                model.blocks = signing_live::blocks(&host.clear_view, &host.facts, &self.signing);
+                // …reading the cap the person chose, not the request's
+                // "Unlimited", once there is one.
+                let clear = signing_live::capped_approval(&host.clear_view, &host.guard_view);
+                model.blocks = signing_live::blocks(&clear, &host.facts, &self.signing);
                 // What the chain says it would MOVE, under what the site says
                 // it would do. Last, because it is the answer to everything
                 // above it — and the one part of this sheet a site cannot
@@ -14176,13 +14183,25 @@ impl WalletPage {
                 // The cap editor, from the guard. Placed before the pipeline's
                 // status so the decision comes above what the wallet is doing
                 // about it — and drawn at all only on the surface the core calls
-                // the editor, never over a permit (which cannot be capped) or a
-                // batch (whose per-leg editors are still owed).
+                // the editor, never over a permit (which cannot be capped); a
+                // batch's cards are its legs' own, below.
                 if let Some((editor, _)) =
                     signing_live::guard_editor(&host.guard_view, &self.signing)
                 {
                     model.blocks.push(editor);
                 }
+                // …a batch's own, one card per leg the core mounts an editor
+                // for, each with its spender under it…
+                for leg in signing_live::guard_leg_editors(&host.guard_view, &self.signing) {
+                    model.blocks.push(leg.block);
+                    model.blocks.extend(leg.spender);
+                }
+                // …and, when it will go out unlimited as the site asked, the
+                // sentence that says so.
+                model.blocks.extend(signing_live::guard_warnings(
+                    &host.guard_view,
+                    &self.signing,
+                ));
                 model
                     .blocks
                     .extend(signing_live::status_blocks(&host.view, &self.signing));
@@ -14325,35 +14344,56 @@ impl WalletPage {
             .gap(px(16.))
             .child(signing_components::header(theme, &model));
 
-        // What is typed in the cap field, from the core. Read before the
-        // block loop borrows `self`.
+        // The allowance cards that are controls, in the order the blocks list
+        // them: the single approval's, then each batch leg's. Each carries its
+        // own chips' modes, the leg its events belong to (`None` = the single
+        // approval) and what is typed in its cap field, from the core — read
+        // before the block loop borrows `self`. The mock gets none and draws
+        // exactly what the gallery has always drawn.
         #[cfg(not(target_os = "linux"))]
-        let cap_text: String = self
+        let controls: Vec<AllowanceControl> = self
             .signing_host
             .as_ref()
-            .and_then(|host| host.read(cx).guard_view.editor.clone())
-            .map(|editor| editor.custom_text)
+            .map(|host| {
+                let guard = &host.read(cx).guard_view;
+                let single = signing_live::guard_editor(guard, &self.signing).map(|(_, modes)| {
+                    AllowanceControl {
+                        modes,
+                        leg: None,
+                        custom_text: guard
+                            .editor
+                            .as_ref()
+                            .map(|e| e.custom_text.clone())
+                            .unwrap_or_default(),
+                    }
+                });
+                single
+                    .into_iter()
+                    .chain(
+                        signing_live::guard_leg_editors(guard, &self.signing)
+                            .into_iter()
+                            .map(|leg| AllowanceControl {
+                                modes: leg.modes,
+                                leg: Some(leg.leg),
+                                custom_text: leg.custom_text,
+                            }),
+                    )
+                    .collect()
+            })
             .unwrap_or_default();
         #[cfg(target_os = "linux")]
-        let cap_text = String::new();
-
-        // The allowance chips are a control when a machine is behind them.
-        // One dispatch per chip, in the order the block lists them; the mock
-        // gets none and draws exactly what the gallery has always drawn.
-        #[cfg(not(target_os = "linux"))]
-        let chip_modes: Vec<vela_core::app::approval_guard::GuardEditorMode> = self
-            .signing_host
-            .as_ref()
-            .and_then(|host| signing_live::guard_editor(&host.read(cx).guard_view, &self.signing))
-            .map(|(_, modes)| modes)
-            .unwrap_or_default();
-        #[cfg(target_os = "linux")]
-        let chip_modes: Vec<vela_core::app::approval_guard::GuardEditorMode> = Vec::new();
+        let controls: Vec<AllowanceControl> = Vec::new();
+        let mut controls = controls.into_iter();
 
         for item in &model.blocks {
-            let armed =
-                matches!(item, signing_fixtures::Block::Allowance { .. }) && !chip_modes.is_empty();
-            if armed {
+            let control = matches!(item, signing_fixtures::Block::Allowance { .. })
+                .then(|| controls.next())
+                .flatten()
+                .filter(|control| !control.modes.is_empty());
+            if let Some(control) = control {
+                let leg = control.leg;
+                let cap_text = control.custom_text;
+                let chip_modes = control.modes;
                 // The cap field, live: the value is the CORE's `custom_text`,
                 // so a keystroke it rejected never appears as though it had
                 // been taken, and every keystroke goes back to the machine
@@ -14375,8 +14415,16 @@ impl WalletPage {
                 .then(|| {
                     let host = self.signing_host.clone();
                     let previous = cap_text.clone();
+                    let focus = match leg {
+                        None => self.cap_focus.clone(),
+                        Some(index) => self
+                            .leg_cap_focus
+                            .entry(index)
+                            .or_insert_with(|| cx.focus_handle())
+                            .clone(),
+                    };
                     panels::AddressField {
-                        focus: self.cap_focus.clone(),
+                        focus,
                         value: cap_text.clone(),
                         placeholder: SharedString::from("0"),
                         on_change: Box::new(
@@ -14387,14 +14435,14 @@ impl WalletPage {
                                     return;
                                 };
                                 if let Some(host) = host.as_ref() {
-                                    host.update(cx, |host, cx| {
-                                        host.dispatch_guard(
-                                        vela_core::app::approval_guard::Event::CustomAmountChanged {
-                                            text,
-                                        },
-                                        cx,
-                                    );
-                                    });
+                                    // A batch leg's field talks to its OWN
+                                    // leg: the core ignores the single
+                                    // approval's event on a batch.
+                                    let event = match leg {
+                                        None => vela_core::app::approval_guard::Event::CustomAmountChanged { text },
+                                        Some(index) => vela_core::app::approval_guard::Event::LegCustomAmountChanged { index, text },
+                                    };
+                                    host.update(cx, |host, cx| host.dispatch_guard(event, cx));
                                 }
                             },
                         ),
@@ -14408,14 +14456,11 @@ impl WalletPage {
                             Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                                 #[cfg(not(target_os = "linux"))]
                                 if let Some(host) = page.signing_host.as_ref() {
-                                    host.update(cx, |host, cx| {
-                                        host.dispatch_guard(
-                                            vela_core::app::approval_guard::Event::PresetSelected {
-                                                mode,
-                                            },
-                                            cx,
-                                        );
-                                    });
+                                    let event = match leg {
+                                        None => vela_core::app::approval_guard::Event::PresetSelected { mode },
+                                        Some(index) => vela_core::app::approval_guard::Event::LegPresetSelected { index, mode },
+                                    };
+                                    host.update(cx, |host, cx| host.dispatch_guard(event, cx));
                                 }
                                 cx.notify();
                             })) as crate::flows::panels::Click,
@@ -17452,4 +17497,14 @@ struct ContactForm {
     /// The row is the core's history suggestion (`ContactSource::Auto`):
     /// saving is what makes it a contact, and the title says so.
     unsaved: bool,
+}
+
+/// One allowance card that is a control on the live sheet: what each of its
+/// chips chooses, the batch leg its events belong to (`None` = the single
+/// approval), and what is typed in its cap field — the core's text.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+struct AllowanceControl {
+    modes: Vec<vela_core::app::approval_guard::GuardEditorMode>,
+    leg: Option<u32>,
+    custom_text: String,
 }

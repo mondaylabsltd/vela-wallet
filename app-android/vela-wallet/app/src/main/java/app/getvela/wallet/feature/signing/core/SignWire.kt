@@ -153,6 +153,7 @@ data class SignApproveOpts(
     val fee_collector: String? = null,
     val params_override_json: String? = null,
     val intent: String? = null,
+    val unlimited_approved: Boolean = false,
 )
 
 @Serializable

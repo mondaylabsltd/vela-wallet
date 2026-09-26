@@ -140,7 +140,7 @@ struct SigningAssemblyTests {
         var guardView = GuardViewWire.empty
         guardView = GuardViewWire(
             surface: .approvalEditor, detected: nil, meta: guardView.meta, editor: nil,
-            confirmAllowed: true, rewrittenParamsJson: rewritten, increaseTotal: nil,
+            confirmAllowed: true, rewrittenParamsJson: rewritten, unlimitedConsented: false, increaseTotal: nil,
             decimalsUnverified: false, expired: false, batch: nil
         )
         let opts = SigningController.approveOpts(fee: nil, clear: .empty, guard: guardView)
@@ -340,7 +340,7 @@ struct DisplayedIsSignedTests {
         var guardView = GuardViewWire.empty
         guardView = GuardViewWire(
             surface: .approvalEditor, detected: nil, meta: guardView.meta, editor: nil,
-            confirmAllowed: true, rewrittenParamsJson: capped, increaseTotal: nil,
+            confirmAllowed: true, rewrittenParamsJson: capped, unlimitedConsented: false, increaseTotal: nil,
             decimalsUnverified: false, expired: false, batch: nil
         )
         let override = SigningController.approveOpts(
@@ -401,15 +401,48 @@ struct SigningControllerTests {
         ))
 
         #expect(controller.guardView.surface == .approvalEditor)
-        #expect(!controller.guardView.confirmAllowed, "an unlimited approval must hold the gate shut")
+        // 2026-09-26: kept as the site asked until the person picks a cap.
+        #expect(controller.guardView.editor?.choice == .unlimited)
+        #expect(controller.guardView.confirmAllowed)
+        #expect(controller.guardView.unlimitedConsented)
 
         controller.guardPreset("revoke")
 
         #expect(controller.guardView.editor?.choice == .revoke,
                 "the chip's event never reached the guard through the controller")
         #expect(controller.guardView.confirmAllowed)
+        #expect(!controller.guardView.unlimitedConsented, "a cap withdraws the consent")
         #expect(controller.guardView.rewrittenParamsJson != nil,
                 "a capped approval must produce params to sign")
+    }
+
+    /// **A batch leg's chip must reach THAT leg.** The single approval's
+    /// `preset_selected` is ignored by the core on a batch, which is how the
+    /// leg cards were drawn with chips that did nothing.
+    @Test func aBatchLegsChipReachesItsOwnLeg() async {
+        let suite = "vela.tests.signing.\(UUID().uuidString)"
+        let store = VelaStore(defaults: UserDefaults(suiteName: suite)!)
+        let unlimited = "0x095ea7b3"
+            + String(repeating: "0", count: 24) + String(repeating: "1", count: 40)
+            + String(repeating: "f", count: 64)
+
+        let controller = self.controller(store)
+        controller.open(SigningController.Incoming(
+            id: "req-b", method: "wallet_sendCalls",
+            paramsJson: #"[{"version":"1.0","chainId":"0x64","calls":[{"to":"\#(token)","value":"0x0","data":"\#(unlimited)"}]}]"#,
+            origin: "https://x.test", transportId: "tab-1", chainId: 100
+        ))
+
+        #expect(controller.guardView.surface == .batch)
+        #expect(controller.guardView.batch?.legs.first?.choice == .unlimited, "kept as asked by default")
+        #expect(controller.guardView.unlimitedConsented)
+
+        controller.guardLegPreset(0, "revoke")
+
+        #expect(controller.guardView.batch?.legs.first?.choice == .revoke,
+                "the leg chip never reached its leg")
+        #expect(!controller.guardView.unlimitedConsented)
+        #expect(controller.guardView.rewrittenParamsJson != nil, "a revoked leg is re-encoded")
     }
 }
 
@@ -523,7 +556,7 @@ struct SigningLiveTests {
         )
         let blockingGuard = GuardViewWire(
             surface: .approvalEditor, detected: nil, meta: GuardViewWire.empty.meta,
-            editor: nil, confirmAllowed: false, rewrittenParamsJson: nil,
+            editor: nil, confirmAllowed: false, rewrittenParamsJson: nil, unlimitedConsented: false,
             increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
         )
 
@@ -691,12 +724,13 @@ struct SigningLiveTests {
         }
     }
 
-    /// The "as requested" chip is **disabled** for an unlimited approval, not
-    /// merely unselected — and the cap value reads as the danger it is.
-    @Test func anUnlimitedApprovalOffersNoAsRequestedChip() {
+    /// An unlimited approval opens on its own "as requested" chip — kept as
+    /// the site asked (2026-09-26) — reads as the danger it is, says so, and
+    /// its consent rides into the approve opts.
+    @Test func anUnlimitedApprovalIsKeptAsRequestedAndSaid() {
         let editor = GuardEditorViewWire(
-            mode: nil, customText: "", error: nil, choice: nil, displayAmountRaw: nil,
-            requestedFinite: false, hasBalanceCap: false, balanceRaw: nil
+            mode: .requested, customText: "", error: nil, choice: .unlimited, displayAmountRaw: nil,
+            requestedFinite: false, requestedUnlimited: true, hasBalanceCap: false, revokeOffered: true, balanceRaw: nil
         )
         let guardView = GuardViewWire(
             surface: .approvalEditor,
@@ -707,19 +741,86 @@ struct SigningLiveTests {
                 locus: .calldataWord(index: 1)
             ),
             meta: GuardTokenMetaViewWire(symbol: "USDC", decimals: 6, verified: true, loading: false),
-            editor: editor, confirmAllowed: false, rewrittenParamsJson: nil,
+            editor: editor, confirmAllowed: true, rewrittenParamsJson: nil, unlimitedConsented: true,
             increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
         )
         let blocks = SigningLive.guardBlocks(guardView, loc: loc)
-        guard case .allowance(_, let value, let tone, let chips, _, _, _)? = blocks.first else {
+        guard case .allowance(_, let value, let tone, let chips, let note, _, _, _)? = blocks.first else {
             Issue.record("the editor block is missing")
             return
         }
         #expect(tone == .danger)
         #expect(value == loc.t("componentsUi.signingApprove.unlimitedValue"))
-        #expect(chips.first { $0.id == "requested" }?.state == .disabled)
+        #expect(chips.first { $0.id == "requested" }?.state == .selected)
         #expect(chips.first { $0.id == "custom" }?.state == .idle)
-        #expect(blocks.contains { if case .warning(.danger, _) = $0 { true } else { false } })
+        #expect(note == nil, "no 'unlimited is disabled' note — it is not")
+        #expect(blocks.contains { block in
+            if case .warning(.danger, let text) = block {
+                return text == loc.t("componentsUi.signing.unlimitedWarning")
+            }
+            return false
+        })
+        let opts = SigningController.approveOpts(fee: nil, clear: .empty, guard: guardView)
+        #expect(opts["unlimited_approved"] as? Bool == true)
+        #expect(opts["params_override_json"] is NSNull, "the site's own bytes")
+        let untouched = SigningController.approveOpts(fee: nil, clear: .empty, guard: .empty)
+        #expect(untouched["unlimited_approved"] as? Bool == false)
+    }
+
+    /// Once a cap is chosen, the decode's "Unlimited" reads the cap and stops
+    /// being the danger; kept as asked, the decode is left alone.
+    @Test func aCappedUnlimitedApprovalReadsTheCap() throws {
+        let result = try CoreJSON.decode(ClearSignResultWire.self, from: [
+            "intent": "Approve", "fields": [
+                ["label": "Amount", "value": "Unlimited", "format": "tokenAmount", "warning": true,
+                 "unverified": false, "role": "send_amount", "detail": false, "expired": false],
+                ["label": "Spender", "value": "0x1111", "format": "addressName", "warning": false,
+                 "unverified": false, "role": "spender", "detail": false, "expired": false],
+            ],
+            "risk": "danger", "verified": false, "provenance": "fetched", "sign_type": "transaction",
+            "partial": false, "best_effort": false, "to_own_token": false,
+        ])
+        var clear = ClearSigningViewWire.empty
+        clear.result = result
+        let editor = GuardEditorViewWire(
+            mode: .balance, customText: "", error: nil, choice: .amount(raw: "250000000"),
+            displayAmountRaw: "250000000", requestedFinite: false, requestedUnlimited: true,
+            hasBalanceCap: true, revokeOffered: true, balanceRaw: "250000000"
+        )
+        let capped = GuardViewWire(
+            surface: .approvalEditor,
+            detected: GuardDetectedApprovalWire(
+                kind: .erc20Approve, tokenAddress: "0xtoken", spender: "0x1111",
+                amountRaw: nil, amountBits: 256, isUnbounded: true, isBooleanGrant: false,
+                isReducing: false, editable: true, blockReason: nil, deadline: nil,
+                locus: .calldataWord(index: 1)
+            ),
+            meta: GuardTokenMetaViewWire(symbol: "USDC", decimals: 6, verified: true, loading: false),
+            editor: editor, confirmAllowed: true, rewrittenParamsJson: "[]", unlimitedConsented: false,
+            increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
+        )
+        let shown = try #require(SigningLive.cappedApproval(clear, guard: capped).result)
+        #expect(shown.fields[0].value == "250 USDC")
+        #expect(!shown.fields[0].warning)
+        #expect(shown.fields[1].value == "0x1111")
+        #expect(shown.risk == .caution, "an approve is caution once its only warning is gone")
+        #expect(SigningLive.cappedApproval(clear, guard: .empty).result == result, "untouched without a cap")
+
+        // A bundle decodes from its first leg, so a capped first leg is what
+        // that decode reads too.
+        let batch = GuardViewWire(
+            surface: .batch, detected: nil, meta: GuardViewWire.empty.meta, editor: nil,
+            confirmAllowed: true, rewrittenParamsJson: "[]", unlimitedConsented: false,
+            increaseTotal: nil, decimalsUnverified: false, expired: false,
+            batch: GuardBatchViewWire(
+                legs: [GuardLegViewWire(
+                    to: "0xtoken", approval: capped.detected, meta: capped.meta, editor: editor,
+                    choice: editor.choice, needsEditor: true, needsChoice: false, grantsBroad: false
+                )],
+                anyUncapped: false, anyToOwnToken: false, allSettled: true
+            )
+        )
+        #expect(SigningLive.cappedApproval(clear, guard: batch).result?.fields[0].value == "250 USDC")
     }
 
     /// An off-chain permit says plainly that the wallet cannot cap it, and
@@ -735,7 +836,7 @@ struct SigningLiveTests {
                 deadline: nil, locus: .typedPath(".message.value")
             ),
             meta: GuardViewWire.empty.meta, editor: nil, confirmAllowed: true,
-            rewrittenParamsJson: nil, increaseTotal: nil, decimalsUnverified: false,
+            rewrittenParamsJson: nil, unlimitedConsented: false, increaseTotal: nil, decimalsUnverified: false,
             expired: false, batch: nil
         )
         let blocks = SigningLive.guardBlocks(guardView, loc: loc)

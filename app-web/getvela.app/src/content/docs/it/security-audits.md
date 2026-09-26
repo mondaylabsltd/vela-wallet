@@ -1,7 +1,7 @@
 ---
 title: Audit e problemi noti
 description: "Ogni contratto da cui Vela dipende, chi ha sottoposto ad audit quale versione, se la versione controllata è quella deployata, i rilievi aperti che teniamo d'occhio e ciò che non ha avuto alcun audit."
-source: d0bb95c016da
+source: 377855411c74
 ---
 
 «Ha avuto un audit» è un'affermazione su un codice specifico in una versione
@@ -155,11 +155,14 @@ di Safe, e questa pagina dirà quando avverrà.
 ### Lacune nelle difese di Vela
 
 Non sono rilievi sui contratti, ma punti in cui il wallet ti protegge meno di
-quanto potresti pensare. Per ognuno è prevista una correzione:
+quanto potresti pensare. Per ognuno è prevista una correzione, tranne dove è
+indicato che si tratta di un compromesso voluto:
 
-- **Il controllo sulle approvazioni ferma solo gli importi «illimitati»** (2^200 o
-  più; 2^152 per Permit2). Un'approvazione finita ma elevata, un permit firmato o
-  un `setApprovalForAll` degli NFT ricevono un avviso, non un blocco.
+- **Un'approvazione illimitata parte se la mantieni** — un compromesso voluto,
+  perché un'approvazione limitata rompe Permit2 e gli swap in batch.
+  Un'approvazione «illimitata» (2^200 o più; 2^152 per Permit2) viene mostrata in
+  rosso e inviata come l'ha chiesta la dApp, a meno che tu non la limiti. I permit
+  firmati non si possono limitare da nessuna parte.
 - **La pagina di firma indipendente non è collegata** ancora a nessuna app.
 - **Il sito web carica uno script di analytics di terze parti** sullo stesso
   dominio delle passkey. Il sito vieta alle proprie pagine di usare le passkey

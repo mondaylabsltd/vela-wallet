@@ -60,8 +60,12 @@ dipakai, dan membuka `index.html` langsung dari disk (`file://`) bisa untuk meli
   penolakan, bukan tanda tangan.
 - **Memeriksa bahwa transaksinya memang yang diminta.** Panggilan yang diminta situs itu
   harus benar-benar ada di dalam operasi yang ditandatangani.
-- **Menolak persetujuan di tingkat "tanpa batas".** Bukan peringatan — penolakan, disertai
-  petunjuk apa yang sebaiknya dilakukan.
+- **Mengatakan kalau sebuah persetujuan tanpa batas.** Halaman ini tidak bisa mengubah
+  jumlah — ia menandatangani byte yang tiba atau tidak sama sekali — jadi persetujuan atau
+  permit tanpa batas (2^128 atau lebih di halaman ini) ditampilkan merah dengan alasan itu
+  dan bisa ditandatangani apa adanya; batas on-chain dipilih di layar persetujuan dompet itu
+  sendiri, sebelum permintaannya sampai ke sini. Persetujuan untuk seluruh koleksi NFT
+  ditolak.
 - **Mengatakan kalau tidak bisa membaca sesuatu,** alih-alih menampilkan ringkasan ramah
   yang tidak bisa dipertanggungjawabkannya.
 - **Menampilkan alamat dan identicon akun,** dan tidak menampilkan nama penerima yang

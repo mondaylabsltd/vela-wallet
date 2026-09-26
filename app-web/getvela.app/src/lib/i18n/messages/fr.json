@@ -402,7 +402,7 @@
 			},
 			{
 				"title": "Signature lisible (ERC-7730)",
-				"body": "Les transactions montrent ce qu'elles font — montant, destinataire, intention — plutôt que de l'hexadécimal brut, et une approbation au niveau « illimité » ne peut pas être soumise tant que vous ne l'avez pas réduite."
+				"body": "Les transactions montrent ce qu'elles font — montant, destinataire, intention — plutôt que de l'hexadécimal brut, et une approbation au niveau « illimité » s'affiche en rouge, avec un plafond proposé."
 			},
 			{
 				"title": "Naissance de Vela",
@@ -489,7 +489,7 @@
 	"_fingerprints": {
 		"home": "a9482909de80",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "92efac5dc4ef",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

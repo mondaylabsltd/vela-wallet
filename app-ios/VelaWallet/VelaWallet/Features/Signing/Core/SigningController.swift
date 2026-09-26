@@ -439,6 +439,17 @@ final class SigningController {
         dispatch(guardCore, ["type": "custom_amount_changed", "text": text])
     }
 
+    /// One batch leg's chip and field. The core ignores `preset_selected` /
+    /// `custom_amount_changed` on a batch — they are the SINGLE approval's —
+    /// so a leg card that sent them drew chips that did nothing.
+    func guardLegPreset(_ index: Int, _ mode: String) {
+        dispatch(guardCore, ["type": "leg_preset_selected", "index": index, "mode": mode])
+    }
+
+    func guardLegCustomAmount(_ index: Int, _ text: String) {
+        dispatch(guardCore, ["type": "leg_custom_amount_changed", "index": index, "text": text])
+    }
+
     /// The BOOLEAN card's two deliberate answers — `setApprovalForAll`, a DAI
     /// permit — where there is no amount to cap and the choice is yes or no.
     ///
@@ -561,6 +572,9 @@ final class SigningController {
             "fee_collector": NSNull(),
             "params_override_json": guardView.rewrittenParamsJson as Any? ?? NSNull(),
             "intent": clear.result?.intent as Any? ?? NSNull(),
+            // The guard showed an unbounded amount and it was kept as the site
+            // asked — the submit guard's only waiver, copied, never decided.
+            "unlimited_approved": guardView.unlimitedConsented,
         ]
     }
 

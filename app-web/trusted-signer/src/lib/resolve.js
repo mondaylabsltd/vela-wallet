@@ -485,10 +485,15 @@ window.VelaCS = window.VelaCS || {};
     return out;
   }
 
-  // The never-unlimited mandate, under the no-editing rule: this page cannot
-  // rewrite the cap, so an unlimited request is REFUSED here and the person is
-  // pointed back at whoever built it. Offering an editor would mean signing
-  // bytes other than the ones that arrived.
+  // Approvals, under the no-editing rule: this page cannot rewrite the cap —
+  // offering an editor would mean signing bytes other than the ones that
+  // arrived. An UNLIMITED amount is signable as it stands (owner, 2026-09-26:
+  // Permit2 is built on a standing approve(Permit2, MAX), and a smart account's
+  // bundle spends it in the same batch, so capping it breaks the dApp), but it
+  // is drawn as the danger it is, with the cap's absence said in words: the
+  // wallet's own sheet is where a cap is chosen, before the request gets here.
+  // An approve-ALL stays refused — the wallet only grants one on a deliberate
+  // tap, and this page has no such tap.
   function applyApprovalGuard(approval, view, ctx) {
     if (approval.mode === 'all') {
       if (approval.all) {
@@ -513,7 +518,6 @@ window.VelaCS = window.VelaCS || {};
       view.risk = 'danger';
       view.warnings.push({ tone: 'danger', key: 'warn.unlimited', params: { symbol: amount.symbol } });
       view.warnings.push({ tone: 'danger', key: 'warn.unlimitedLocked' });
-      view.refuse = true;
     } else if (approval.mode === 'increase') {
       var current = ctx.currentAllowance || 0n;
       var after = current + amount.value;
@@ -746,10 +750,12 @@ window.VelaCS = window.VelaCS || {};
         deadline: formatDate(deadline),
         amount: amountPhrase(amount),
       });
+      // An unlimited permit is signable as it arrived, like the wallet's own
+      // sheet signs one (owner, 2026-09-26): the dApp redeems its own struct,
+      // so a capped signature would only fail on-chain. Red, and said.
       if (amount.unlimited) {
         view.risk = 'danger';
         view.warnings.push({ tone: 'danger', key: 'warn.unlimitedOffline' });
-        view.refuse = true;
       } else {
         view.risk = 'caution';
         view.warnings.push({ tone: 'caution', key: 'warn.offchainNoTrace' });
@@ -777,9 +783,10 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = pAmount.unlimited
         ? text('sentence.permit2Unlimited', { spender: label(pSpender), symbol: pAmount.symbol })
         : text('sentence.permit2Limited', { spender: label(pSpender), amount: amountPhrase(pAmount) });
+      // Uniswap's own Permit2 signatures are usually for the uint160 maximum;
+      // refusing them here broke swaps the wallet's sheet signs (2026-09-26).
       if (pAmount.unlimited) {
         view.warnings.push({ tone: 'danger', key: 'warn.unlimitedOffline' });
-        view.refuse = true;
       }
       view.tech = techFor('EIP-712 · ' + primary, null, null, {
         params: [

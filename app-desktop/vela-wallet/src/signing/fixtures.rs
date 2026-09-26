@@ -518,19 +518,16 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         label: s.label_spending_cap.clone(),
                         value: s.value_unlimited.clone(),
                         value_tone: Tone::Danger,
-                        // Permanently disabled, not merely unselected: an
-                        // unlimited request is the one thing this wallet will
-                        // not sign as asked.
+                        // The site's own ask, preselected (2026-09-26): Permit2
+                        // bundles revert when the wallet re-encodes the
+                        // approve. A cap is one chip away.
                         chips: vec![
-                            (s.chip_requested.clone(), ChipState::Disabled),
+                            (s.chip_requested.clone(), ChipState::Selected),
                             (s.chip_balance.clone(), ChipState::Idle),
                             (s.chip_custom.clone(), ChipState::Idle),
                             (s.chip_revoke.clone(), ChipState::Idle),
                         ],
-                        // Two sentences, two LINES — the web's `AllowanceEditor.svelte`
-                        // rule: a space is not a sentence break in CJK, and
-                        // the first string carries no full stop.
-                        note: Some(format!("{}\n{}", s.unlimited_disabled, s.choose_prompt).into()),
+                        note: None,
                         resulting_total: None,
                         custom: None,
                     },
@@ -547,16 +544,16 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                 ],
                 &s.intent_approve,
             );
-            // Nothing to slide until a finite amount exists.
-            m.confirm_enabled = false;
+            // Unlimited, seen and said — signable as asked.
+            m.confirm_enabled = true;
             m
         }
 
-        // The typed cap. cs5 is where this starts — an unlimited request with
-        // its Requested chip dead — and this is what the card becomes once
+        // The typed cap. cs5 is where this starts — an unlimited request kept
+        // on its Requested chip — and this is what the card becomes once
         // somebody picks Custom: the field under the chips, the big number
-        // above counting what has been typed, and the slide still shut until
-        // the core says the amount is finite and real.
+        // above counting what has been typed, and the slide shut while the
+        // typed amount is not one.
         "cs34" => {
             let mut m = base(
                 s,
@@ -572,7 +569,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         value: "500 USDC".into(),
                         value_tone: Tone::Neutral,
                         chips: vec![
-                            (s.chip_requested.clone(), ChipState::Disabled),
+                            (s.chip_requested.clone(), ChipState::Idle),
                             (s.chip_balance.clone(), ChipState::Idle),
                             (s.chip_custom.clone(), ChipState::Selected),
                             (s.chip_revoke.clone(), ChipState::Idle),
@@ -619,12 +616,12 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         value: s.value_unlimited.clone(),
                         value_tone: Tone::Danger,
                         chips: vec![
-                            (s.chip_requested.clone(), ChipState::Disabled),
+                            (s.chip_requested.clone(), ChipState::Idle),
                             (s.chip_balance.clone(), ChipState::Idle),
                             (s.chip_custom.clone(), ChipState::Selected),
                             (s.chip_revoke.clone(), ChipState::Idle),
                         ],
-                        note: Some(format!("{}\n{}", s.unlimited_disabled, s.choose_prompt).into()),
+                        note: None,
                         resulting_total: None,
                         custom: Some(AllowanceInput {
                             value: "12.3.4".into(),
@@ -660,7 +657,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     value: "1,240 USDC".into(),
                     value_tone: Tone::Neutral,
                     chips: vec![
-                        (s.chip_requested.clone(), ChipState::Disabled),
+                        (s.chip_requested.clone(), ChipState::Idle),
                         (s.chip_balance.clone(), ChipState::Selected),
                         (s.chip_custom.clone(), ChipState::Idle),
                         (s.chip_revoke.clone(), ChipState::Idle),
@@ -736,7 +733,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     value: s.value_revoke.clone(),
                     value_tone: Tone::Neutral,
                     chips: vec![
-                        (s.chip_requested.clone(), ChipState::Disabled),
+                        (s.chip_requested.clone(), ChipState::Idle),
                         (s.chip_balance.clone(), ChipState::Idle),
                         (s.chip_custom.clone(), ChipState::Idle),
                         (s.chip_revoke.clone(), ChipState::Selected),
@@ -1681,19 +1678,23 @@ mod tests {
         }
     }
 
-    /// The never-unlimited mandate, asserted rather than trusted: CS5's
-    /// requested chip is disabled AND its slide is off.
+    /// Unlimited kept as asked, asserted rather than trusted (2026-09-26):
+    /// CS5 opens on its requested chip, says the danger, and may be slid.
     #[test]
-    fn unlimited_approval_cannot_be_confirmed_as_requested() {
+    fn unlimited_approval_is_kept_as_requested_and_said() {
         let strings = SigningStrings::resolve(&Loc::from_env());
         let model = build("cs5", &strings);
-        assert!(!model.confirm_enabled, "cs5 must not be confirmable");
-        let disabled = model.blocks.iter().any(|b| match b {
-            Block::Allowance { chips, .. } => {
-                chips.iter().any(|(_, state)| *state == ChipState::Disabled)
-            }
+        assert!(model.confirm_enabled, "cs5 must be confirmable as asked");
+        let kept = model.blocks.iter().any(|b| match b {
+            Block::Allowance { chips, .. } => chips
+                .first()
+                .is_some_and(|(_, state)| *state == ChipState::Selected),
             _ => false,
         });
-        assert!(disabled, "cs5 must disable the requested-amount chip");
+        assert!(kept, "cs5 must open on the requested-amount chip");
+        let said = model.blocks.iter().any(|b| {
+            matches!(b, Block::Warning { tone: Tone::Danger, text } if *text == strings.warn_unlimited)
+        });
+        assert!(said, "cs5 must say the approval is unlimited");
     }
 }

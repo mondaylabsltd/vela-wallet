@@ -91,6 +91,9 @@ sealed interface SigningBlock {
         val resultingTotal: SigningRow? = null,
         /** Spec 044: present while the Custom chip is selected. */
         val custom: AllowanceInput? = null,
+        /** The batch leg this card caps; `null` = the single approval. The
+         *  sheet routes its chips and field to the leg's own events. */
+        val leg: Int? = null,
     ) : SigningBlock
 
     data class Party(

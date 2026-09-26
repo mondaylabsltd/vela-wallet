@@ -42,7 +42,7 @@
 
 **2. Product Hunt:主推免费 Web 版**(画像 B/D/E)
 - 定位 "Try now, no install"(lead #10),付费移动版作为 pricing 区的 upsell 出现,不做主角
-- 准备:6-8 张产品图(clear-signing/never-unlimited/余额模拟 截图)、30 秒演示视频、首评(maker comment)讲"为什么 Web 免费移动收费"
+- 准备:6-8 张产品图(clear-signing/无限授权红色警示+可设上限（2026-09-26 起不再拦截无限授权，见 claim ledger C-approve-1）/余额模拟 截图)、30 秒演示视频、首评(maker comment)讲"为什么 Web 免费移动收费"
 - 与 HN 错开 ≥1 周,素材互相复用
 - 时间成本:3 天准备 + 1 天守
 

@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
-source: 60d297b650ac
+source: d0be29438317
 ---
 
 <script>
@@ -167,10 +167,11 @@ token standar — lalu, sebagai jalan terakhir, basis data selector publik, deng
 upaya terbaik (best effort). Sisanya mendapat peringatan tanda tangan buta yang tegas.
 Deskriptor yang diambil tidak pernah diberi label terverifikasi — hanya deskriptor bawaan
 aplikasi, atau deskriptor yang diambil dan identik dengannya, yang berhak atas kata itu.
-Persetujuan on-chain di tingkat "tanpa batas" (2^200 atau lebih) tidak bisa dikirim
-sampai Anda menurunkannya; persetujuan besar yang terbatas dan permit yang
-ditandatangani ditampilkan dengan peringatan hati-hati tetapi tidak diblokir.
-Detailnya:
+Persetujuan on-chain di tingkat "tanpa batas" (2^200 atau lebih) ditampilkan merah
+dengan pilihan untuk membatasinya; kecuali Anda membatasinya, persetujuan itu dikirim
+persis seperti yang dibuat dApp. Persetujuan besar yang terbatas ditampilkan dengan
+peringatan hati-hati; permit yang ditandatangani tidak bisa dibatasi, jadi permit hanya
+bisa ditandatangani sesuai permintaan atau ditolak. Detailnya:
 [clear signing](/id/docs/clear-signing).
 
 ### Jaringan

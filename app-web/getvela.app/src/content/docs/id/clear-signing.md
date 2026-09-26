@@ -1,7 +1,7 @@
 ---
 title: Clear signing
 description: "Vela mendekode transaksi menjadi bahasa yang mudah dipahami sebelum Anda menyetujuinya — maksud, jumlah, alamat, dan risiko — alih-alih hex yang tak terbaca. Kalau tidak bisa mendekode sebuah panggilan, Vela memperingatkan Anda, bukan berpura-pura paham."
-source: 7232328b724e
+source: 29a66a1584f1
 ---
 
 <script>
@@ -68,18 +68,28 @@ menonjol:
 - **Bahaya** untuk yang benar-benar berisiko, seperti **persetujuan token tanpa batas**.
 - Risiko lebih rendah untuk tindakan rutin seperti staking atau menyetor.
 
-<Callout type="warning" title="Persetujuan on-chain “tanpa batas” tidak bisa dikirim">
+<Callout type="warning" title="Persetujuan “tanpa batas” ditampilkan merah, dengan pilihan untuk membatasinya">
 Persetujuan on-chain dengan jumlah tanpa batas adalah salah satu cara paling umum dana
 dikuras di kemudian hari. Saat dApp meminta persetujuan seperti itu (<code>approve</code>,
 <code>increaseAllowance</code>, atau <code>approve</code> milik Permit2) di tingkat
 "tanpa batas" — 2^200 atau lebih (2^152 untuk Permit2), angka yang dipakai dApp untuk
-"tanpa batas" — Vela tidak akan mengirimnya sampai Anda mengubahnya menjadi jumlah
-tertentu, sebesar saldo Anda, atau pencabutan; pemeriksaan terakhir sebelum pengiriman
-membaca calldata mentah, jadi pemeriksaan ini berlaku dengan atau tanpa deskriptor. Yang
-tidak dihentikannya: <strong>persetujuan besar yang terbatas</strong> (bahkan jauh di
-atas saldo Anda), <strong>permit yang ditandatangani</strong> (tanda tangan EIP-2612 dan
-Permit2), dan <code>setApprovalForAll</code> untuk NFT — masing-masing ditampilkan dengan
-peringatan hati-hati, dan keputusannya ada di tangan Anda.
+"tanpa batas" — Vela menampilkannya dengan warna merah dan menawarkan batas: jumlah
+tertentu, sebesar saldo Anda (kalau saldonya bisa dibaca), atau — kecuali pada
+<code>increaseAllowance</code> — pencabutan. Kalau Anda tidak memilih salah satunya,
+persetujuan itu dikirim persis seperti yang dibuat dApp: Permit2 dirancang dengan
+mengandalkan persetujuan yang tetap berlaku, dan batch akun pintar membelanjakan allowance
+itu dalam transaksi yang sama, jadi batas yang lebih rendah dari pembelanjaan itu membuat
+seluruh batch gagal. Di dalam batch, setiap persetujuan tanpa batas bisa diberi batasnya
+sendiri dengan cara yang sama (jumlah tertentu atau pencabutan).
+Pemeriksaan terakhir sebelum pengiriman membaca calldata mentah, jadi persetujuan tanpa
+batas yang tidak pernah ditampilkan di layar persetujuan tidak bisa keluar.
+<strong>Persetujuan besar yang terbatas</strong> (bahkan jauh di atas saldo Anda)
+ditampilkan dengan peringatan hati-hati. <strong>Permit yang ditandatangani</strong>
+(tanda tangan EIP-2612 dan Permit2) tidak bisa dibatasi — dApp mengirim salinannya
+sendiri — jadi permit hanya bisa ditandatangani sesuai permintaan atau ditolak: yang tanpa
+batas ditampilkan merah, yang terbatas dengan peringatan hati-hati. Permintaan untuk
+memberikan <code>setApprovalForAll</code> NFT atas seluruh koleksi belum bisa disetujui di
+aplikasi.
 </Callout>
 
 ## Kalau Vela tidak bisa mendekode sebuah panggilan

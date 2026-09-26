@@ -121,7 +121,9 @@ export function signErrorMessage(notice: SignErrorNotice): string {
 		case 'unsupported_capability':
 			return `Unsupported non-optional capabilities: ${detail ?? ''}`;
 		case 'unlimited_approval':
-			return `Blocked: this would grant an unlimited approval (${detail ?? ''}). Set a finite amount and try again.`;
+			// Since 2026-09-26 an unlimited approval goes out once the approval
+			// screen showed it and it was kept; this is the screen not having.
+			return `Blocked: the wallet refused an unlimited approval its approval screen did not show (${detail ?? ''}).`;
 		case 'self_call_blocked':
 			// Spec 081: refused by the wallet, not by the person. The sheet
 			// explains it in the reader's language; this is the dApp's copy.

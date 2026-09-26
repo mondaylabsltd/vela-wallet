@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
-source: 60d297b650ac
+source: d0be29438317
 ---
 
 <script>
@@ -156,9 +156,11 @@ token tiêu chuẩn — rồi, như phương án cuối cùng, một cơ sở d�
 gắn nhãn giải mã tốt nhất có thể. Những gì còn lại đều nhận cảnh báo ký mù rõ ràng. Một bộ
 mô tả lấy về không bao giờ được gắn nhãn đã xác minh — chỉ bộ mô tả có sẵn trong ứng dụng,
 hoặc bộ lấy về mà giống hệt bản có sẵn, mới xứng với chữ đó. Một lệnh cấp quyền trên chuỗi
-ở mức "không giới hạn" (từ 2^200 trở lên) không thể gửi đi cho đến khi bạn giảm nó xuống;
-một lệnh cấp quyền lớn nhưng hữu hạn và các permit dạng chữ ký thì hiện kèm cảnh báo thận
-trọng nhưng không bị chặn. Chi tiết: [ký minh bạch](/vi/docs/clear-signing).
+ở mức "không giới hạn" (từ 2^200 trở lên) được hiện màu đỏ, kèm lựa chọn đặt hạn mức; nếu
+bạn không đặt hạn mức, nó sẽ được gửi đi đúng như dApp đã tạo. Một lệnh cấp quyền lớn nhưng
+hữu hạn được hiện kèm cảnh báo thận trọng; permit dạng chữ ký không thể đặt hạn mức, nên
+chúng chỉ có thể được ký đúng như yêu cầu hoặc bị từ chối. Chi tiết:
+[ký minh bạch](/vi/docs/clear-signing).
 
 ### Mạng
 

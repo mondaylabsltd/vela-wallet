@@ -142,7 +142,6 @@ pub struct SigningStrings {
     pub status_submitted: SharedString,
     pub error_generic: SharedString,
     pub error_network: SharedString,
-    pub error_unlimited: SharedString,
     /// Spec 081: the request would have changed who controls the account.
     pub blocked_title: SharedString,
     /// A refused request's one way out (`componentsUi.signing.close`).
@@ -349,7 +348,6 @@ impl SigningStrings {
             // safe" — and no raw relay text on a screen (SC-305).
             error_generic: loc.t("send.txErrorGeneric"),
             error_network: loc.t("send.lock.netNotFound"),
-            error_unlimited: a("unlimitedDisabled"),
             blocked_title: s("selfCallBlockedTitle"),
             close: s("close"),
             blocked_body: loc

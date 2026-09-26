@@ -47,8 +47,11 @@ không có origin, sẽ không có bên phụ thuộc và không ký được g�
   digest nó không tính được thì là từ chối, không phải một chữ ký.
 - **Nó kiểm tra giao dịch đúng là giao dịch đã được yêu cầu.** Lệnh gọi mà trang web yêu cầu
   phải thực sự nằm bên trong thao tác đang được ký.
-- **Nó từ chối lệnh cấp quyền ở mức "không giới hạn".** Không phải cảnh báo — mà là từ chối,
-  kèm chỉ dẫn nên làm gì thay thế.
+- **Nó nói rõ khi một lệnh cấp quyền là không giới hạn.** Nó không thể thay đổi số lượng —
+  nó ký đúng những byte đã đến hoặc không ký gì cả — nên một lệnh cấp quyền hay permit không
+  giới hạn (từ 2^128 trở lên trên trang này) được hiện màu đỏ kèm lý do đó và có thể được ký
+  nguyên trạng; hạn mức trên chuỗi được chọn trên màn hình cấp quyền của chính ví, trước khi
+  yêu cầu đến được đây. Lệnh cấp quyền cho cả một bộ sưu tập NFT thì bị từ chối.
 - **Nó nói rõ khi không đọc được thứ gì đó,** thay vì hiện một bản tóm tắt thân thiện mà nó
   không thể đứng ra bảo đảm.
 - **Nó hiện địa chỉ và identicon của tài khoản,** và không hiện tên người nhận do bên xin chữ

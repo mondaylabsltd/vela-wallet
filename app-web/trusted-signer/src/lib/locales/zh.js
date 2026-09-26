@@ -114,7 +114,7 @@ window.VelaCS.i18n.register('zh', {
 
   // 警告
   'warn.unlimited': '无限额 — 该合约可以花费你所有 {symbol}。',
-  'warn.unlimitedLocked': '这里改不了额度：签名意图到达这一页就已经定死，只能签或不签。请回到请求方，让它换成一个有限的额度。',
+  'warn.unlimitedLocked': '这里改不了额度：签名意图到达这一页就已经定死，只能签或不签。要设上限，请在这里拒绝，然后在钱包自己的授权界面上选择上限。',
   'warn.unlimitedOffline': '无限额离线授权 — 离线签名改不了额度，只能拒绝或接受。',
   'warn.approveAll': '这个合集里你现在和以后持有的全部 NFT，对方都能随时取走。',
   'warn.approveAllLocked': '这个函数只有全有或全无，而这一页不能改写请求。要缩小范围，请回到请求方。',

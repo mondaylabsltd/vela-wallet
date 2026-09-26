@@ -21,9 +21,10 @@
 	 */
 	interface Props {
 		blocks: Block[];
-		onchip?: (id: string) => void;
+		/** `leg`: the batch leg whose card was tapped; absent = the single approval. */
+		onchip?: (id: string, leg?: number) => void;
 		/** The custom cap's keystrokes, on their way back to the guard. */
-		oncustom?: (text: string) => void;
+		oncustom?: (text: string, leg?: number) => void;
 	}
 
 	let { blocks, onchip, oncustom }: Props = $props();
@@ -49,8 +50,8 @@
 			note={block.note}
 			resultingTotal={block.resultingTotal}
 			custom={block.custom}
-			{onchip}
-			{oncustom}
+			onchip={(id) => onchip?.(id, block.leg)}
+			oncustom={(text) => oncustom?.(text, block.leg)}
 		/>
 	{:else if block.kind === 'party'}
 		<PartyRow label={block.label} name={block.name} address={block.address} badge={block.badge} />

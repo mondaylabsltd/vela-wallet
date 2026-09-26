@@ -58,8 +58,12 @@ firmare nulla.
   rifiuto, non una firma.
 - **Verifica che la transazione sia quella richiesta.** La chiamata chiesta dal
   sito deve trovarsi davvero dentro l'operazione che viene firmata.
-- **Rifiuta un'approvazione di livello «illimitato».** Non un avviso — un rifiuto,
-  con l'indicazione di cosa fare invece.
+- **Dice quando un'approvazione è illimitata.** Non può cambiare un importo — firma
+  i byte arrivati o niente — quindi un'approvazione o un permit illimitati (2^128 o
+  più su questa pagina) vengono mostrati in rosso con questo motivo e si possono
+  firmare così come sono; un limite on-chain si sceglie nella schermata di
+  approvazione del wallet stesso, prima che la richiesta arrivi qui.
+  Un'approvazione per un'intera collezione NFT viene rifiutata.
 - **Dice quando non riesce a leggere qualcosa,** invece di mostrare un riepilogo
   rassicurante di cui non può rispondere.
 - **Mostra l'indirizzo e l'identicon dell'account,** e non mostra un nome del

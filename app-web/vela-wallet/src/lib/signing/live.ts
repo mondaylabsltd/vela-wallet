@@ -22,6 +22,7 @@ import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
+import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import {
@@ -36,7 +37,8 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { trimBalance } from '$lib/wallet/live';
+import { exactAmount, trimBalance } from '$lib/wallet/live';
+import { fromBaseUnits } from '$lib/services/eip681';
 import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
@@ -138,20 +140,20 @@ function amountLine(field: ClearSignField, outgoing: boolean): AmountLine {
 /**
  * The allowance editor's chips.
  *
- * The never-unlimited mandate is the core's: an unbounded request offers its
- * `requested` chip DISABLED and hands back no choice, which is what keeps the
- * slider shut until a finite cap is picked. The words are the corpus's; which
- * chip is selectable is `GuardView`'s.
+ * Which chip is selectable is `GuardView`'s; the words are the corpus's. An
+ * unbounded request opens on its own `requested` chip (the core's 2026-09-26
+ * ruling: Permit2 bundles revert when the wallet re-encodes the approve), so
+ * the site's ask is what goes out unless the person picks a cap.
  */
-function allowanceChips(guard: GuardView, m: SigningMessages): AllowanceChip[] {
-	const editor = guard.editor;
-	if (!editor) return [];
+function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceChip[] {
 	const state = (mode: string): AllowanceChip['state'] => {
 		if (editor.mode === mode) return 'selected';
-		// An unbounded request cannot be granted as-is: its own chip is dead
-		// until the person deliberately chooses to grant it.
-		if (mode === 'requested' && !editor.requested_finite) return 'disabled';
+		// A request of 0 has no amount of its own to keep.
+		if (mode === 'requested' && !editor.requested_finite && !editor.requested_unlimited)
+			return 'disabled';
 		if (mode === 'balance' && !editor.has_balance_cap) return 'disabled';
+		// increaseAllowance: "revoke" would sign an increase of 0, not a revoke.
+		if (mode === 'revoke' && !editor.revoke_offered) return 'disabled';
 		return 'idle';
 	};
 	const chips: AllowanceChip[] = [
@@ -163,21 +165,83 @@ function allowanceChips(guard: GuardView, m: SigningMessages): AllowanceChip[] {
 	return chips;
 }
 
+/**
+ * The request will go out granting an unbounded allowance, as the site asked:
+ * the single approval kept on its Requested chip, or any batch leg left so.
+ * Allowed since 2026-09-26 — never unsaid; each leg's own card is drawn by
+ * `legBlocks`, and this is the sentence under them.
+ */
+function keepsUnlimited(guard: GuardView): boolean {
+	if (guard.surface === 'batch') return guard.batch?.any_uncapped ?? false;
+	return guard.editor?.choice?.type === 'unlimited';
+}
+
 function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 	if (guard.surface !== 'approval_editor' || !guard.editor) return null;
-	const editor = guard.editor;
-	const symbol = guard.meta.loading ? '…' : guard.meta.symbol;
+	return allowanceBlock(guard.editor, guard.meta, m, {
+		decimalsUnverified: guard.decimals_unverified,
+		increaseTotal: guard.increase_total
+	});
+}
+
+/**
+ * A batch's own cap editors — one card per leg the core mounts an editor for
+ * (an unbounded or grant-all approval), each with its leg's spender under it,
+ * the phones' layout. Before this the web drew none: a Permit2 bundle's
+ * unlimited leg could be seen in red but not capped.
+ */
+function legBlocks(guard: GuardView, m: SigningMessages): Block[] {
+	if (guard.surface !== 'batch' || !guard.batch) return [];
+	return guard.batch.legs.flatMap((leg, index) => {
+		if (!leg.needs_editor || !leg.editor) return [];
+		const card = allowanceBlock(leg.editor, leg.meta, m, { leg: index });
+		if (card.kind !== 'allowance') return [];
+		const blocks: Block[] = [{ ...card, label: `#${index + 1} ${card.label}` }];
+		if (leg.approval) {
+			blocks.push({
+				kind: 'party',
+				label: m.labelSpender,
+				name: shortenAddress(leg.approval.spender),
+				address: leg.approval.spender
+			});
+		}
+		return blocks;
+	});
+}
+
+function allowanceBlock(
+	editor: GuardEditorView,
+	meta: GuardView['meta'],
+	m: SigningMessages,
+	extra: {
+		decimalsUnverified?: boolean;
+		increaseTotal?: GuardView['increase_total'];
+		leg?: number;
+	}
+): Block {
+	const symbol = meta.loading ? '…' : meta.symbol;
+	// Only a chosen, finite cap reads as settled; the site's unlimited ask,
+	// kept, reads as the danger it is (and `keepsUnlimited` adds the sentence).
+	const settled = editor.choice !== null && editor.choice.type !== 'unlimited';
+	const total = extra.increaseTotal ?? null;
 	return {
 		kind: 'allowance',
+		leg: extra.leg,
 		label: fill(m.labelSpendingCap, { symbol }),
-		value: editor.display_amount_raw ?? m.valueUnlimited,
-		valueTone: editor.requested_finite ? 'neutral' : 'danger',
-		chips: allowanceChips(guard, m),
-		note: guard.decimals_unverified ? m.warnUnverifiedAmount : undefined,
+		// In tokens, never base units: a 5 USDC cap drawn as "5000000" reads
+		// as five million. The send screens' exact figure, at the guard's
+		// decimals (which `decimals_unverified` flags when they are a guess).
+		value:
+			editor.display_amount_raw === null
+				? m.valueUnlimited
+				: `${exactAmount(fromBaseUnits(BigInt(editor.display_amount_raw), meta.decimals))} ${symbol}`,
+		valueTone: settled ? 'neutral' : 'danger',
+		chips: allowanceChips(editor, m),
+		note: extra.decimalsUnverified ? m.warnUnverifiedAmount : undefined,
 		resultingTotal:
-			guard.increase_total === null || guard.increase_total.total === null
+			total === null || total.total === null
 				? undefined
-				: { label: m.labelResultingTotal, value: guard.increase_total.total },
+				: { label: m.labelResultingTotal, value: total.total },
 		// The field appears only on the chip that needs one, and it carries the
 		// CORE's text: a keystroke the machine rejected must not sit on screen
 		// as though it had been taken.
@@ -187,12 +251,13 @@ function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 						value: editor.custom_text,
 						symbol,
 						placeholder: '0',
+						// A typed "cap" of 10^60 is no cap — an amount the field
+						// cannot take. Keeping the site's unlimited ask is the
+						// Requested chip, so "unlimited is disabled" would be false.
 						error:
-							editor.error === 'invalid_amount'
+							editor.error === 'invalid_amount' || editor.error === 'unlimited_disabled'
 								? m.invalidAmount
-								: editor.error === 'unlimited_disabled'
-									? m.unlimitedDisabled
-									: undefined
+								: undefined
 					}
 				: undefined
 	};
@@ -206,11 +271,17 @@ function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
  * ladder simply emits more warnings and fewer decoded rows — the ladder is the
  * core's, and this reads it rather than re-deriving it.
  */
-/** The calldata's length in bytes — what the two "unable to decode" lines name. */
-function calldataBytes(paramsJson: string): number {
+/**
+ * The calldata's length in bytes — what the two "unable to decode" lines name.
+ * A batch counts its FIRST leg, the one its decode describes (the desktop's
+ * and the phones' `first_call`); `params[0]` of a bundle has no `data`, and a
+ * bundle read as "(0 bytes)".
+ */
+export function calldataBytes(paramsJson: string): number {
 	try {
 		const params = JSON.parse(paramsJson) as unknown[];
-		const data = (params[0] as { data?: string } | undefined)?.data;
+		const first = params[0] as { data?: string; calls?: { data?: string }[] } | undefined;
+		const data = Array.isArray(first?.calls) ? first.calls[0]?.data : first?.data;
 		if (typeof data !== 'string') return 0;
 		return Math.max(0, Math.floor((data.replace(/^0x/, '').length || 0) / 2));
 	} catch {
@@ -288,6 +359,10 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		// The guard's editor sits with the approval it caps.
 		const allowance = guardBlock(guard, m);
 		if (allowance) blocks.push(allowance);
+		blocks.push(...legBlocks(guard, m));
+		if (keepsUnlimited(guard)) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		}
 
 		// Whatever the core flagged, said once, in its own words.
 		if (result.to_own_token) {
@@ -326,6 +401,16 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	if (clear.surface === 'blind_transaction' || clear.surface === 'blind_typed_data') {
 		blocks.push({ kind: 'intent', text: m.intentBlind, tone: 'danger' });
 		blocks.push({ kind: 'warning', tone: 'danger', text: fill(m.warnBlindDecode, { bytes }) });
+		// The approval guard reads the raw calldata, not the descriptor — an
+		// approve nobody described (Permit2's own `approve`, say) still gets
+		// its cap editor, and an undecodable bundle can still be known to
+		// grant unlimited.
+		const allowance = guardBlock(guard, m);
+		if (allowance) blocks.push(allowance);
+		blocks.push(...legBlocks(guard, m));
+		if (keepsUnlimited(guard)) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		}
 		return blocks;
 	}
 
@@ -523,11 +608,61 @@ function localizedOwnBackup(clear: ClearSigningView, own: boolean, m: SigningMes
 	};
 }
 
+/**
+ * The cap the person chose, where the decode still says "Unlimited".
+ *
+ * The clear-signing result describes the REQUEST, and an unlimited approve
+ * decodes as "Unlimited" in the danger tone. Once the guard holds a finite
+ * choice for it (a cap, or revoke), that would describe bytes that are no
+ * longer the ones being signed: the approval's warning amount field reads the
+ * cap and stops being a warning, and if it was the only warning the risk falls
+ * to what an approve is anyway — caution (`clear_signing::assess_risk`). The
+ * same rule in every shell.
+ */
+export function cappedApproval(clear: ClearSigningView, guard: GuardView): ClearSigningView {
+	const result = clear.result;
+	const cap = capText(guard);
+	if (result === null || cap === null) return clear;
+	const fields = result.fields.map((field) =>
+		field.warning && field.format === 'tokenAmount'
+			? { ...field, value: cap, warning: false }
+			: field
+	);
+	const risk = result.risk === 'danger' && !fields.some((f) => f.warning) ? 'caution' : result.risk;
+	return { ...clear, result: { ...result, fields, risk } };
+}
+
+/**
+ * The guard's finite choice on an unlimited request, as the cap row prints it
+ * — the single approval's, or a batch's FIRST leg's: a bundle decodes from its
+ * first leg, so that is the line the decode's "Unlimited" sits on.
+ */
+function capText(guard: GuardView): string | null {
+	const single = guard.surface === 'approval_editor';
+	const leg = guard.surface === 'batch' ? (guard.batch?.legs[0] ?? null) : null;
+	const detected = single ? guard.detected : (leg?.approval ?? null);
+	const editor = single ? guard.editor : (leg?.editor ?? null);
+	const meta = single ? guard.meta : (leg?.meta ?? null);
+	if (
+		!detected?.is_unbounded ||
+		editor === null ||
+		meta === null ||
+		editor.display_amount_raw === null ||
+		(editor.choice?.type !== 'amount' && editor.choice?.type !== 'revoke')
+	) {
+		return null;
+	}
+	return `${exactAmount(fromBaseUnits(BigInt(editor.display_amount_raw), meta.decimals))} ${meta.symbol}`;
+}
+
 export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	if (raw.sign.surface === 'hidden' || !raw.sign.request) return null;
 	const ownRequest =
 		typeof window !== 'undefined' && raw.sign.request.origin === window.location.origin;
-	const inputs = { ...raw, clear: localizedOwnBackup(raw.clear, ownRequest, raw.m) };
+	const inputs = {
+		...raw,
+		clear: cappedApproval(localizedOwnBackup(raw.clear, ownRequest, raw.m), raw.guard)
+	};
 	const { sign, clear, guard, fee, m, identity, identicon } = inputs;
 	if (sign.surface === 'hidden' || !sign.request) return null;
 

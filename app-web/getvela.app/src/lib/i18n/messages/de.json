@@ -402,7 +402,7 @@
 			},
 			{
 				"title": "Klartext-Signatur (ERC-7730)",
-				"body": "Transaktionen zeigen, was sie tun – Betrag, Empfänger, Absicht – statt rohem Hex, und eine Freigabe in „unbegrenzter“ Höhe lässt sich erst absenden, wenn du sie verringerst."
+				"body": "Transaktionen zeigen, was sie tun – Betrag, Empfänger, Absicht – statt rohem Hex, und eine Freigabe in „unbegrenzter“ Höhe wird rot angezeigt, mit einer Obergrenze zur Auswahl."
 			},
 			{
 				"title": "Vela entsteht",
@@ -489,7 +489,7 @@
 	"_fingerprints": {
 		"home": "a9482909de80",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "92efac5dc4ef",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

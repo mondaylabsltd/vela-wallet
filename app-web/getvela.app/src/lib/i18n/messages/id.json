@@ -402,7 +402,7 @@
 			},
 			{
 				"title": "Clear signing (ERC-7730)",
-				"body": "Transaksi menampilkan apa yang dilakukannya — jumlah, penerima, maksud — alih-alih hex mentah, dan persetujuan token di tingkat “tanpa batas” tidak bisa dikirim sampai Anda menurunkannya."
+				"body": "Transaksi menampilkan apa yang dilakukannya — jumlah, penerima, maksud — alih-alih hex mentah, dan persetujuan token di tingkat “tanpa batas” ditampilkan merah, dengan pilihan untuk membatasinya."
 			},
 			{
 				"title": "Vela lahir",
@@ -489,7 +489,7 @@
 	"_fingerprints": {
 		"home": "a9482909de80",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "92efac5dc4ef",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

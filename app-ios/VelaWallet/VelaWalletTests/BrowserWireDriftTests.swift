@@ -379,8 +379,13 @@ struct BrowserWireDriftTests {
         let editor = try CoreJSON.decode(GuardViewWire.self, from: try view(from: detected))
         #expect(editor.surface == .approvalEditor)
         #expect(editor.detected?.isUnbounded == true, "2^256-1 is the unbounded case")
-        #expect(!editor.confirmAllowed, "an unlimited approval holds confirm shut until a cap is named")
-        #expect(editor.editor?.requestedFinite == false, "there is no finite figure to offer as 'as requested'")
+        // Kept as the site asked (2026-09-26): the requested chip, the
+        // `unlimited` choice, and the consent the approve opts carry.
+        #expect(editor.confirmAllowed, "an unlimited approval is signable as asked")
+        #expect(editor.editor?.requestedFinite == false, "there is no finite figure")
+        #expect(editor.editor?.requestedUnlimited == true)
+        #expect(editor.editor?.choice == .unlimited, "the `unlimited` choice decodes")
+        #expect(editor.unlimitedConsented)
 
         for tag in tags(try effects(from: detected)) {
             #expect(

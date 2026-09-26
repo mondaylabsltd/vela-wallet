@@ -20,6 +20,7 @@ import app.getvela.wallet.feature.signing.core.ClearSigningView
 import app.getvela.wallet.feature.signing.core.ClearSiweBinding
 import app.getvela.wallet.feature.signing.core.ClearSurface
 import app.getvela.wallet.feature.signing.core.GuardAmountError
+import app.getvela.wallet.feature.signing.core.GuardChoice
 import app.getvela.wallet.feature.signing.core.GuardEditorMode
 import app.getvela.wallet.feature.signing.core.GuardEditorView
 import app.getvela.wallet.feature.signing.core.GuardIncreaseTotalView
@@ -114,6 +115,54 @@ object SigningLive {
         )
     }
 
+    /**
+     * The cap the person chose, where the decode still says "Unlimited".
+     *
+     * The clear-signing result describes the REQUEST, and an unlimited
+     * approve decodes as "Unlimited" in the danger tone. Once the guard holds a
+     * finite choice for it (a cap, or revoke), that line would describe bytes
+     * that are no longer the ones being signed: the approval's amount field
+     * reads the cap instead and stops being a warning, and if it was the only
+     * warning, the risk falls to what an approve is anyway — caution
+     * (`clear_signing::assess_risk`). The same rule in every shell.
+     */
+    fun cappedApproval(clear: ClearSigningView, guard: GuardView): ClearSigningView {
+        val result = clear.result ?: return clear
+        val cap = capText(guard) ?: return clear
+        val fields = result.fields.map { field ->
+            if (field.warning && field.format == "tokenAmount") field.copy(value = cap, warning = false) else field
+        }
+        val risk = if (result.risk == ClearRisk.Danger && fields.none { it.warning }) ClearRisk.Caution else result.risk
+        return clear.copy(result = result.copy(fields = fields, risk = risk))
+    }
+
+    /** A drawn chip's id, in the guard's vocabulary — the single card's and every leg's. */
+    fun chipMode(id: String): GuardEditorMode? = when (id) {
+        "requested" -> GuardEditorMode.Requested
+        "balance" -> GuardEditorMode.Balance
+        "custom" -> GuardEditorMode.Custom
+        "revoke" -> GuardEditorMode.Revoke
+        else -> null
+    }
+
+    /**
+     * The guard's finite choice on an unlimited request, as the cap row prints
+     * it — the single approval's, or a batch's FIRST leg's: a bundle decodes
+     * from its first leg, so that is the line the decode's "Unlimited" sits on.
+     */
+    private fun capText(guard: GuardView): String? {
+        val leg = guard.batch?.legs?.firstOrNull()
+        val (detected, editor, meta) = when (guard.surface) {
+            GuardSurface.ApprovalEditor -> Triple(guard.detected, guard.editor, guard.meta)
+            GuardSurface.Batch -> Triple(leg?.approval, leg?.editor, leg?.meta ?: return null)
+            else -> return null
+        }
+        if (detected?.is_unbounded != true || editor == null) return null
+        if (editor.choice !is GuardChoice.Amount && editor.choice != GuardChoice.Revoke) return null
+        val raw = editor.display_amount_raw?.toBigIntegerOrNull() ?: return null
+        return "${SendLive.fromBase(raw.toString(), meta.decimals)} ${meta.symbol}".trim()
+    }
+
     fun model(
         fallback: SigningScreenModel,
         request: IncomingRequest,
@@ -127,7 +176,7 @@ object SigningLive {
         speed: SendLive.SpeedInputs? = null,
     ): SigningScreenModel {
         val s = ctx.strings
-        val clear = localizedOwnBackup(rawClear, request.transportId == WALLET_TRANSPORT, s)
+        val clear = cappedApproval(localizedOwnBackup(rawClear, request.transportId == WALLET_TRANSPORT, s), guard)
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
         val facts = SigningController.firstCall(request.paramsJson)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0
@@ -198,11 +247,12 @@ object SigningLive {
         GuardSurface.ApprovalEditor -> buildList {
             guard.editor?.let { editor -> add(allowanceBlock(editor, guard.meta, guard.increase_total, guard.decimals_unverified, guard.expired, s)) }
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
-            if (guard.detected?.is_unbounded == true && guard.editor?.choice == null) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
+            if (guard.editor?.choice == GuardChoice.Unlimited) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
         }
         GuardSurface.Batch -> buildList {
             guard.batch?.legs?.forEachIndexed { index, leg ->
-                leg.editor?.let { editor -> add(allowanceBlock(editor, leg.meta, null, false, false, s, prefix = "#${index + 1} ")) }
+                leg.editor?.let { editor -> add(allowanceBlock(editor, leg.meta, null, false, false, s, prefix = "#${index + 1} ", leg = index)) }
                 leg.approval?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
             }
             if (guard.batch?.any_uncapped == true) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
@@ -217,6 +267,7 @@ object SigningLive {
         expired: Boolean,
         s: VelaStrings,
         prefix: String = "",
+        leg: Int? = null,
     ): SigningBlock.Allowance {
         fun chip(id: String, label: String, mode: GuardEditorMode, offered: Boolean) = AllowanceChip(
             id = id, label = label,
@@ -227,23 +278,31 @@ object SigningLive {
             },
         )
         val chips = listOf(
-            chip("requested", s.a("requested"), GuardEditorMode.Requested, editor.requested_finite),
+            // An unlimited request opens HERE — the site's own bytes, kept
+            // (Permit2 bundles revert when the wallet re-encodes the approve).
+            chip("requested", s.a("requested"), GuardEditorMode.Requested, editor.requested_finite || editor.requested_unlimited),
             chip("balance", s.a("balanceCap"), GuardEditorMode.Balance, editor.has_balance_cap),
             chip("custom", s.a("custom"), GuardEditorMode.Custom, true),
-            chip("revoke", s.a("revoke"), GuardEditorMode.Revoke, true),
+            // Not on increaseAllowance: "revoke" would sign an increase of 0.
+            chip("revoke", s.a("revoke"), GuardEditorMode.Revoke, editor.revoke_offered),
         )
         val value = editor.display_amount_raw?.toBigIntegerOrNull()?.let { units ->
             "${SendLive.fromBase(units.toString(), meta.decimals)} ${meta.symbol}".trim()
         } ?: s.a("unlimitedValue")
         val notes = buildList {
-            if (!editor.requested_finite) add(s.a("unlimitedDisabled") + "\n" + s.a("choosePrompt"))
             if (decimalsUnverified) add(s.a("decimalsUnverified"))
             if (expired) add(s.a("expired"))
         }
         return SigningBlock.Allowance(
+            leg = leg,
             label = prefix + s.a("spendingCap"),
             value = value,
-            valueTone = if (editor.choice != null) SigningTone.Neutral else SigningTone.Danger,
+            // Only a chosen, finite cap reads as settled; unlimited kept as
+            // asked reads as the danger it is.
+            valueTone = when (editor.choice) {
+                null, GuardChoice.Unlimited -> SigningTone.Danger
+                else -> SigningTone.Neutral
+            },
             chips = chips,
             note = notes.takeIf { it.isNotEmpty() }?.joinToString("\n"),
             resultingTotal = increase?.let { total ->
@@ -253,8 +312,10 @@ object SigningLive {
                 AllowanceInput(
                     value = editor.custom_text, symbol = meta.symbol, placeholder = "0",
                     error = when (editor.error) {
-                        GuardAmountError.InvalidAmount -> s.a("invalidAmount")
-                        GuardAmountError.UnlimitedDisabled -> s.a("unlimitedDisabled")
+                        // A typed "cap" of 10^60 is no cap — an amount the field
+                        // cannot take. Keeping the site's unlimited ask is the
+                        // Requested chip, so "unlimited is disabled" would be false.
+                        GuardAmountError.InvalidAmount, GuardAmountError.UnlimitedDisabled -> s.a("invalidAmount")
                         null -> null
                     },
                 )
@@ -315,7 +376,9 @@ object SigningLive {
         }
         sign.error?.let { error ->
             val text = when (error.kind) {
-                SignErrorKind.UnlimitedApproval -> s.a("unlimitedDisabled")
+                // UnlimitedApproval falls to the plain sentence: since
+                // 2026-09-26 it means the approval screen did not show the
+                // unlimited approval — a wallet fault, not "unlimited is disabled".
                 SignErrorKind.UnsupportedChain -> s.t("send.lock.netNotFound")
                 SignErrorKind.UserRejected, SignErrorKind.WalletSwitchedChains -> ""
                 else -> s.t("send.txErrorGeneric")

@@ -90,6 +90,44 @@ enum SigningLive {
         return next
     }
 
+    /// The cap the person chose, where the decode still says "Unlimited".
+    ///
+    /// The clear-signing result describes the REQUEST; once the guard holds a
+    /// finite choice for an unlimited approve (a cap, or revoke), "Unlimited"
+    /// in red would describe bytes that are no longer the ones being signed.
+    static func cappedApproval(_ clear: ClearSigningViewWire, guard guardView: GuardViewWire) -> ClearSigningViewWire {
+        guard let result = clear.result, let cap = capText(guardView) else { return clear }
+        var next = clear
+        next.result = result.capped(to: cap)
+        return next
+    }
+
+    /// The guard's finite choice on an unlimited request, as the cap row prints
+    /// it — the single approval's, or a batch's FIRST leg's: a bundle decodes
+    /// from its first leg, so that is the line the decode's "Unlimited" sits on.
+    private static func capText(_ guardView: GuardViewWire) -> String? {
+        let detected: GuardDetectedApprovalWire?
+        let editor: GuardEditorViewWire?
+        let meta: GuardTokenMetaViewWire
+        switch guardView.surface {
+        case .approvalEditor:
+            (detected, editor, meta) = (guardView.detected, guardView.editor, guardView.meta)
+        case .batch:
+            guard let leg = guardView.batch?.legs.first else { return nil }
+            (detected, editor, meta) = (leg.approval, leg.editor, leg.meta)
+        default:
+            return nil
+        }
+        guard detected?.isUnbounded == true, let editor, let raw = editor.displayAmountRaw else { return nil }
+        switch editor.choice {
+        case .amount, .revoke:
+            return "\(SendLive.fromBase(raw, decimals: meta.decimals)) \(meta.symbol)"
+                .trimmingCharacters(in: .whitespaces)
+        default:
+            return nil
+        }
+    }
+
     static func model(
         fallback: SigningModel,
         request: SigningController.Incoming,
@@ -104,7 +142,7 @@ enum SigningLive {
         let loc = context.loc
         let host = BrowserEngine.hostOf(origin: request.origin)
         let own = request.transportId == walletTransport
-        let clear = localizedOwnBackup(rawClear, own: own, loc: loc)
+        let clear = cappedApproval(localizedOwnBackup(rawClear, own: own, loc: loc), guard: guardView)
         let facts = SigningController.firstCall(paramsJson: request.paramsJson)
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
@@ -260,7 +298,9 @@ enum SigningLive {
         }
         if let error = sign.error {
             let text: String = switch error.kind {
-            case .unlimitedApproval: a(loc, "unlimitedDisabled")
+            // `.unlimitedApproval` falls to the plain sentence: since
+            // 2026-09-26 it means the approval screen did not show the
+            // unlimited approval — a wallet fault, not "unlimited is disabled".
             // The blocked sheet above already says it, in full.
             case .selfCallBlocked: ""
             case .unsupportedChain: loc.t("send.lock.netNotFound")
@@ -618,7 +658,8 @@ enum SigningLive {
                                      name: AddressText.short(detected.spender),
                                      address: detected.spender))
             }
-            if guardView.detected?.isUnbounded == true, guardView.editor?.choice == nil {
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
+            if guardView.editor?.choice == .unlimited {
                 blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
             }
             return blocks
@@ -630,7 +671,7 @@ enum SigningLive {
                     blocks.append(allowanceBlock(
                         editor: editor, meta: leg.meta, increase: nil,
                         decimalsUnverified: false, expired: false, loc: loc,
-                        prefix: "#\(index + 1) "
+                        prefix: "#\(index + 1) ", leg: index
                     ))
                 }
                 if let approval = leg.approval {
@@ -653,22 +694,28 @@ enum SigningLive {
         decimalsUnverified: Bool,
         expired: Bool,
         loc: Loc,
-        prefix: String = ""
+        prefix: String = "",
+        leg: Int? = nil
     ) -> SigningBlock {
         func chip(_ id: String, _ label: String, _ mode: GuardEditorMode, offered: Bool) -> AllowanceChip {
             AllowanceChip(
                 id: id, label: label,
-                // **Disabled, not merely unselected.** An unlimited request
-                // has no finite figure to offer, and a chip that looks
-                // available and refuses is worse than one that is plainly out.
+                // **Disabled, not merely unselected.** A balance nobody could
+                // read, or a request of zero, has nothing to offer, and a chip
+                // that looks available and refuses is worse than one that is
+                // plainly out.
                 state: !offered ? .disabled : (editor.mode == mode ? .selected : .idle)
             )
         }
         let chips = [
-            chip("requested", a(loc, "requested"), .requested, offered: editor.requestedFinite),
+            // An unlimited request opens HERE — the site's own bytes, kept
+            // (Permit2 bundles revert when the wallet re-encodes the approve).
+            chip("requested", a(loc, "requested"), .requested,
+                 offered: editor.requestedFinite || editor.requestedUnlimited),
             chip("balance", a(loc, "balanceCap"), .balance, offered: editor.hasBalanceCap),
             chip("custom", a(loc, "custom"), .custom, offered: true),
-            chip("revoke", a(loc, "revoke"), .revoke, offered: true),
+            // Not on increaseAllowance: "revoke" would sign an increase of 0.
+            chip("revoke", a(loc, "revoke"), .revoke, offered: editor.revokeOffered),
         ]
 
         let value = editor.displayAmountRaw.map { raw in
@@ -677,16 +724,15 @@ enum SigningLive {
         } ?? a(loc, "unlimitedValue")
 
         var notes: [String] = []
-        if !editor.requestedFinite {
-            notes.append(a(loc, "unlimitedDisabled") + "\n" + a(loc, "choosePrompt"))
-        }
         if decimalsUnverified { notes.append(a(loc, "decimalsUnverified")) }
         if expired { notes.append(a(loc, "expired")) }
 
         return .allowance(
             label: prefix + a(loc, "spendingCap"),
             value: value,
-            valueTone: editor.choice != nil ? .neutral : .danger,
+            // Only a chosen, finite cap reads as settled; unlimited kept as
+            // asked reads as the danger it is.
+            valueTone: (editor.choice == nil || editor.choice == .unlimited) ? .danger : .neutral,
             chips: chips,
             note: notes.isEmpty ? nil : notes.joined(separator: "\n"),
             // "increase by 100" must never read as "cap at 100" — and when the
@@ -703,11 +749,14 @@ enum SigningLive {
                 placeholder: "0",
                 error: editor.error.map { error in
                     switch error {
-                    case .invalidAmount: a(loc, "invalidAmount")
-                    case .unlimitedDisabled: a(loc, "unlimitedDisabled")
+                    // A typed "cap" of 10^60 is no cap — an amount the field
+                    // cannot take. Keeping the site's unlimited ask is the
+                    // Requested chip, so "unlimited is disabled" would be false.
+                    case .invalidAmount, .unlimitedDisabled: a(loc, "invalidAmount")
                     }
                 }
-            ) : nil
+            ) : nil,
+            leg: leg
         )
     }
 

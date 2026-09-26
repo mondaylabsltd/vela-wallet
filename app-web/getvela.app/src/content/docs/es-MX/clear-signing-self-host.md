@@ -58,8 +58,12 @@ puede firmar nada.
   firma.
 - **Comprueba que la transacción sea la que se solicitó.** La llamada que pidió el
   sitio tiene que estar realmente dentro de la operación que se firma.
-- **Rechaza una aprobación de nivel «ilimitado».** No es una advertencia: es un
-  rechazo, con una indicación de qué hacer en su lugar.
+- **Avisa cuando una aprobación es ilimitada.** No puede cambiar un monto (firma los
+  bytes que llegaron o nada), así que una aprobación o un permiso ilimitados (2^128 o
+  más en esta página) se muestran en rojo con ese motivo y se pueden firmar tal como
+  están; el tope on-chain se elige en la pantalla de aprobación de la propia wallet,
+  antes de que la solicitud llegue aquí. Una aprobación para toda una colección de NFT
+  se rechaza.
 - **Dice cuando no puede leer algo,** en lugar de mostrar un resumen amigable que no
   puede respaldar.
 - **Muestra la dirección y el identicon de la cuenta,** y no muestra un nombre de

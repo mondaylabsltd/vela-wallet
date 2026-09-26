@@ -123,6 +123,9 @@ export type Block =
 	| { kind: 'sentence'; text: string; tone: Tone }
 	| {
 			kind: 'allowance';
+			/** The batch leg this card caps; absent = the single approval. The
+			 *  sheet routes its chips and field to that leg's own events. */
+			leg?: number;
 			label: string;
 			value: string;
 			valueTone: Tone;

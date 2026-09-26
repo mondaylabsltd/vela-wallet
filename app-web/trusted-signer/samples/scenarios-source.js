@@ -118,7 +118,7 @@ window.VelaCS = window.VelaCS || {};
       ctx: base({ dapp: ONEINCH }),
     },
     {
-      code: 'CS5', title: { zh: '授权 · 无限额（已拦截）', en: 'Approval · unlimited (refused)' },
+      code: 'CS5', title: { zh: '授权 · 无限额（按请求，红色警示）', en: 'Approval · unlimited (as asked, warned)' },
       intent: tx(A.usdc, call('approve(address,uint256)', [A.oneinch, MAX]), '0x0', 'https://app.1inch.io'),
       ctx: base({ dapp: ONEINCH }),
     },
@@ -175,7 +175,7 @@ window.VelaCS = window.VelaCS || {};
       ctx: base({ dapp: SKY }),
     },
     {
-      code: 'CS16', title: { zh: 'Permit2 授权签名 · 无限额', en: 'Permit2 approval · unlimited' },
+      code: 'CS16', title: { zh: 'Permit2 授权签名 · 无限额（按请求，红色警示）', en: 'Permit2 approval · unlimited (as asked, warned)' },
       intent: typed('https://app.uniswap.org', {
         primaryType: 'PermitSingle',
         domain: { name: 'Permit2', chainId: 1, verifyingContract: A.permit2 },

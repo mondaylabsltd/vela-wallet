@@ -1,7 +1,7 @@
 ---
 title: Auditorías y problemas conocidos
 description: "Cada contrato del que depende Vela, quién auditó qué versión, si la versión auditada es la que está desplegada, los hallazgos abiertos que vigilamos y lo que no se ha auditado en absoluto."
-source: d0bb95c016da
+source: 377855411c74
 ---
 
 «Auditado» es una afirmación sobre un código específico en una versión específica,
@@ -152,11 +152,14 @@ página dirá cuándo ocurra.
 ### Huecos en las defensas propias de Vela
 
 No son hallazgos en los contratos, sino lugares donde la wallet te protege menos de
-lo que podrías suponer. Cada uno tiene seguimiento para corregirse:
+lo que podrías suponer. Cada uno tiene seguimiento para corregirse, salvo donde se
+indica que es una concesión deliberada:
 
-- **La protección de aprobaciones solo detiene los montos «ilimitados»** (2^200 o
-  más; 2^152 para Permit2). Una aprobación finita grande, un permiso firmado o un
-  `setApprovalForAll` de NFT reciben una advertencia, no un bloqueo.
+- **Una aprobación ilimitada se envía si la conservas**: una concesión deliberada,
+  porque una aprobación con tope rompe Permit2 y los swaps en lote. Una aprobación
+  «ilimitada» (2^200 o más; 2^152 para Permit2) se muestra en rojo y se envía tal
+  como la pidió la dApp, a menos que le pongas un tope. A los permisos firmados no
+  se les puede poner tope en ningún lado.
 - **La página de firma independiente no está conectada** a ninguna app todavía.
 - **El sitio web carga un script de analítica de terceros** en el mismo dominio que
   las passkeys. El sitio prohíbe que sus páginas usen passkeys (con un encabezado
