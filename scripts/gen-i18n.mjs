@@ -421,8 +421,13 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1730 (082, 2026-09-26): + `settingsModals.keys.signsHere` — the keys list
 //   marks the key this device signs with ("当前登录" / "Signed in"). One leaf
 //   under the existing `settingsModals.keys` branch: 1729 + 1 = 1730.
-if (PATHS.length !== 1730) fail(`expected 1730 paths (1641 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1641) fail(`expected 1641 leaf paths, got ${leafSet.size}`);
+// 1740 (078, 2026-09-26): + ten `componentsUi.bugReport.*` leaves — the
+//   report takes up to five screenshots (label, add, hint, the public-on-
+//   GitHub warning, remove, limit, unsupported, the web drop hint), and says
+//   when they could not be uploaded or carried into the GitHub form. All under
+//   the existing `componentsUi.bugReport` branch: 1730 + 10 = 1740.
+if (PATHS.length !== 1740) fail(`expected 1740 paths (1651 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1651) fail(`expected 1651 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
@@ -736,7 +741,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 135,345 for the per-locale halves)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 137,700 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

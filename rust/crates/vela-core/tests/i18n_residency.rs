@@ -30,7 +30,14 @@ const CORPUS_BYTES: usize = 990_499;
 /// strings went with them, which put `ja` + `en` back at 128,800 — under the
 /// original figure. A budget at twice the measurement would not fire until the
 /// corpus DOUBLED, which is not a warning, so it goes back to where it warns.
-const SC005_BUDGET: usize = 135_345;
+///
+/// 2026-09-27 (078): the in-app report learned to carry screenshots — ten new
+/// sentences and four rewritten ones, +1,783 bytes of `ja` + `en` JSON — and the
+/// runtime route measured 136,702, over a line it had cleared by 426 bytes. The
+/// words are what the founder asked for, so the line moves to just above the new
+/// measurement (~1 KB of room), which keeps it a warning rather than a ceiling
+/// nobody hears. Moving it is the owner's call; this is the reviewed proposal.
+const SC005_BUDGET: usize = 137_700;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {
