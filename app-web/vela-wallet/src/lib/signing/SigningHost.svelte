@@ -244,6 +244,12 @@
 			account: identity.address,
 			calls,
 			feeToken: null,
+			// Nobody has chosen the fee coin for this request: the fee machine
+			// pays in one that can (spec 078) instead of quoting the native coin
+			// a wallet may not hold and sending the person to the picker. The
+			// approve carries the view's `fee_token` — the coin it picked — so
+			// the coin displayed is the coin signed, exactly as after a tap.
+			autoFeeToken: true,
 			// HOW FAST is the speed control's to say: the stored default, a
 			// one-shot pick, or a free upgrade.
 			tier: speedControl.tier,
@@ -413,10 +419,20 @@
 			// Telling the session in force alone would leave the previews in
 			// the old coin, and promoting one would switch the coin back. The
 			// approve carries `fee_token` from the same view.
+			// A tap is the person's choice, never the machine's: priced as
+			// picked from here on (`autoFeeToken: false`). While the machine
+			// was still choosing, even a tap on the coin it had picked is
+			// asked again — `feeToken` there only named the fallback, and the
+			// previews must stop choosing for themselves too.
 			const token = id === 'native' ? null : id;
 			const last = fee.lastRequest;
-			if (last && last.feeToken !== token) {
-				void fee.requestQuote({ ...last, feeToken: token, tier: speedControl.tier });
+			if (last && (last.feeToken !== token || last.autoFeeToken)) {
+				void fee.requestQuote({
+					...last,
+					feeToken: token,
+					autoFeeToken: false,
+					tier: speedControl.tier
+				});
 			}
 			feeOpen = false;
 		}}

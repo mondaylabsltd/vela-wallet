@@ -82,6 +82,24 @@ describe('fetch_tokens', () => {
 			rate_limited_chain_ids: [56]
 		});
 	});
+
+	// Send's retry-once rule waits for the NEXT round to end — and a round that
+	// errored may change nothing on the view, so the end is said by the
+	// executor, settled or errored alike.
+	it('says the round ended, settled or errored', async () => {
+		const ended: string[] = [];
+		const stream = { ...sink(), roundEnded: (address: string) => ended.push(address) };
+		const executor = createBalanceExecutor(stream);
+		await executor.execute(
+			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false }),
+			new AbortController().signal
+		);
+		executor.toFailure(
+			effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: false }),
+			new Error('net')
+		);
+		expect(ended).toEqual([ADDR, ADDR]);
+	});
 });
 
 describe('the cache and the privacy byte', () => {

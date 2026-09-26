@@ -44,12 +44,14 @@ vi.mock('./bundler-service', async (original) => ({
 
 import {
 	_resetFeeSignalsCache,
+	accountIsDeployed,
 	estimateTransactionFee,
 	fetchRawBundlerQuote,
 	fetchRawGasSignals,
 	invalidateFeeSignals,
 	refreshGasPrice,
-	sendNative
+	sendNative,
+	simulateUserOpGas
 } from './safe-transaction';
 import { installFaultConsole } from './fault-injection';
 
@@ -298,6 +300,123 @@ describe('fetchRawBundlerQuote — one relay quote per 15 s (issue #212)', () =>
 		faults.clearFaults();
 		// Back to the held REAL quote — the zero did not replace it.
 		expect((await fetchRawBundlerQuote(BSC, 'fast'))?.maxFeePerGas).toBe('50000000');
+	});
+});
+
+// The founder's "the three speeds' fees appear one after another": each speed
+// row is its own fee session, and each made its own calls. The relay's gas
+// quote is ONE answer for every tier, and the simulation does not depend on the
+// speed — so every session must read the one answer, at the same moment.
+describe('the speed rows share one relay quote and one simulation', () => {
+	const SAFE = '0x' + '88'.repeat(20);
+	const hex = (n: number) => '0x' + n.toString(16);
+
+	it('one pimlico_getUserOperationGasPrice answers every tier, concurrent or later', async () => {
+		answers.set('pimlico_getUserOperationGasPrice', () => ({
+			result: {
+				slow: { maxFeePerGas: hex(40_000_000), maxPriorityFeePerGas: hex(1) },
+				standard: { maxFeePerGas: hex(50_000_000), maxPriorityFeePerGas: hex(2) },
+				fast: { maxFeePerGas: hex(60_000_000), maxPriorityFeePerGas: hex(3) }
+			}
+		}));
+		const [slow, standard, fast] = await Promise.all([
+			fetchRawBundlerQuote(BSC, 'slow'),
+			fetchRawBundlerQuote(BSC, 'standard'),
+			fetchRawBundlerQuote(BSC, 'fast')
+		]);
+		expect([slow?.maxFeePerGas, standard?.maxFeePerGas, fast?.maxFeePerGas]).toEqual([
+			'40000000',
+			'50000000',
+			'60000000'
+		]);
+		expect(count('pimlico_getUserOperationGasPrice')).toBe(1);
+		// A tier asked later in the window is read from the same answer.
+		expect((await fetchRawBundlerQuote(BSC, 'standard'))?.maxPriorityFeePerGas).toBe('2');
+		expect(count('pimlico_getUserOperationGasPrice')).toBe(1);
+	});
+
+	it('a zero row is not held, and does not stop the good rows beside it from being held', async () => {
+		answers.set('pimlico_getUserOperationGasPrice', () => ({
+			result: {
+				slow: { maxFeePerGas: '0x0' },
+				fast: { maxFeePerGas: GWEI_0_05 }
+			}
+		}));
+		expect((await fetchRawBundlerQuote(BSC, 'slow'))?.maxFeePerGas).toBe('0');
+		expect((await fetchRawBundlerQuote(BSC, 'fast'))?.maxFeePerGas).toBe('50000000');
+		expect(count('pimlico_getUserOperationGasPrice')).toBe(1);
+		// The zero row is asked again, never pinned.
+		await fetchRawBundlerQuote(BSC, 'slow');
+		expect(count('pimlico_getUserOperationGasPrice')).toBe(2);
+	});
+
+	function simulation() {
+		return simulateUserOpGas({
+			chainId: BSC,
+			account: SAFE,
+			deployed: true,
+			calls: [{ to: '0x' + '11'.repeat(20), value: '0x1', data: '0x' }]
+		});
+	}
+
+	it('the in-force session and the previews get one simulation of one exact operation', async () => {
+		answers.set('eth_call', () => ({ result: '0x' + '0'.repeat(64) }));
+		answers.set('eth_estimateUserOperationGas', () => ({
+			result: {
+				verificationGasLimit: hex(100_000),
+				callGasLimit: hex(50_000),
+				preVerificationGas: hex(40_000)
+			}
+		}));
+		const [a, b, c] = await Promise.all([simulation(), simulation(), simulation()]);
+		expect(count('eth_estimateUserOperationGas')).toBe(1);
+		expect(a).toEqual({
+			kind: 'estimated',
+			verificationGasLimit: 100_000n,
+			callGasLimit: 50_000n,
+			preVerificationGas: 40_000n
+		});
+		expect(b).toEqual(a);
+		expect(c).toEqual(a);
+		// Held for the window…
+		await simulation();
+		expect(count('eth_estimateUserOperationGas')).toBe(1);
+		// …dropped with the fee signals (a submit, a refresh, a failed quote)…
+		invalidateFeeSignals(BSC);
+		await simulation();
+		expect(count('eth_estimateUserOperationGas')).toBe(2);
+		// …and gone when the window passes.
+		vi.advanceTimersByTime(15_001);
+		await simulation();
+		expect(count('eth_estimateUserOperationGas')).toBe(3);
+	});
+
+	it('a refused simulation is shared while out, but never held', async () => {
+		answers.set('eth_call', () => ({ result: '0x' + '0'.repeat(64) }));
+		answers.set('eth_estimateUserOperationGas', () => ({
+			error: { code: -32500, message: 'AA23 reverted' }
+		}));
+		const [a, b] = await Promise.all([simulation(), simulation()]);
+		expect(a).toEqual({ kind: 'simulation_failed' });
+		expect(b).toEqual(a);
+		expect(count('eth_estimateUserOperationGas')).toBe(1);
+		await simulation();
+		expect(count('eth_estimateUserOperationGas')).toBe(2);
+	});
+
+	it('concurrent deployment reads share one eth_getCode; an undeployed answer is never held', async () => {
+		// A Safe of its own: a deployed answer is held for good, by design, and
+		// the submit tests above deploy `SAFE`.
+		const fresh = '0x' + '77'.repeat(20);
+		answers.set('eth_getCode', () => ({ result: '0x' }));
+		const [a, b] = await Promise.all([
+			accountIsDeployed(fresh, BSC),
+			accountIsDeployed(fresh, BSC)
+		]);
+		expect([a, b]).toEqual([false, false]);
+		expect(count('eth_getCode')).toBe(1);
+		await accountIsDeployed(fresh, BSC);
+		expect(count('eth_getCode')).toBe(2);
 	});
 });
 

@@ -7,7 +7,14 @@ import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildMobileState } from './fixtures';
-import { liveAssetRow, liveBalance, moneyParts, trimBalance, withLiveWallet } from './live';
+import {
+	liveAssetRow,
+	liveBalance,
+	moneyParts,
+	tokenAmountText,
+	trimBalance,
+	withLiveWallet
+} from './live';
 
 const m = resolveWalletMessages('en');
 const USD: CurrencyView = { code: 'USD', rate: 1, committed: true };
@@ -63,6 +70,53 @@ describe('trimBalance', () => {
 		expect(trimBalance('1.500000000000000000')).toBe('1.5');
 		expect(trimBalance('0')).toBe('0');
 		expect(trimBalance('12.3456789')).toBe('12.345678');
+	});
+});
+
+describe('tokenAmountText — the one token-amount formatter (spec 078)', () => {
+	// The core's own vectors for `send::max_figure`
+	// (`a_max_reads_on_the_balance_lines_ladder`): the figure Max writes and
+	// the balance it came from must agree digit for digit.
+	it.each([
+		['0.043790209243313861', '0.04379'],
+		['0.0439686', '0.043969'],
+		['1.22456789123456789', '1.2246'],
+		['1234.567', '1234.57'],
+		['2', '2'],
+		['0', '0'],
+		['0.9999996', '1'],
+		['999.99996', '1000'],
+		['0.0000001234', '0.00000012'],
+		['5.000000', '5']
+	])('%s reads %s', (exact, shown) => {
+		expect(tokenAmountText(exact)).toBe(shown);
+	});
+
+	it('rounds half up where trimBalance truncated', () => {
+		expect(tokenAmountText('0.0437909')).toBe('0.043791');
+		expect(trimBalance('0.0437909')).toBe('0.04379');
+	});
+
+	it('rounds DOWN when asked — a ceiling typed back has to fit', () => {
+		expect(tokenAmountText('0.0409086', 'down')).toBe('0.040908');
+		expect(tokenAmountText('0.9999996', 'down')).toBe('0.999999');
+		expect(tokenAmountText('0.0409086')).toBe('0.040909');
+	});
+
+	it('passes through what is not a plain decimal rather than inventing digits', () => {
+		expect(tokenAmountText('')).toBe('');
+		expect(tokenAmountText('-1.5')).toBe('-1.5');
+		expect(tokenAmountText('1e-7')).toBe('1e-7');
+	});
+
+	it('writes the preset’s decimal mark', async () => {
+		const { preferences } = await import('$lib/services/preferences.svelte');
+		preferences.setNumberFormat('dot_comma');
+		try {
+			expect(tokenAmountText('0.043968123456789012')).toBe('0,043968');
+		} finally {
+			preferences.setNumberFormat('comma_dot');
+		}
 	});
 });
 

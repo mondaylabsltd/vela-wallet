@@ -1,6 +1,7 @@
 /**
  * The fee coin the person chose is the fee coin the form shows — and the one
- * `Max` reserves for.
+ * `Max` reserves for. Before anybody chooses, the fee machine picks one that
+ * can pay (spec 078); a pick replaces it, and a Max in force follows.
  *
  * Reported against the ETH form with USDC ticked in the fee sheet: the sheet
  * showed the tick and the stablecoin figure, while the row behind it went on
@@ -150,20 +151,30 @@ test('picking a fee coin changes the fee the form shows, and what Max reserves',
 	await page.getByRole('textbox', { name: en('send.recipientLabel') }).fill(RECIPIENT);
 	await page.getByRole('textbox', { name: 'ETH' }).fill('0.1');
 
-	// The native coin pays by default, and the row says so.
+	// Nobody chose a fee coin, so the fee machine did (spec 078): a coin the
+	// send is NOT moving, and a stablecoin before the chain's coin — USDC. The
+	// row says so without being asked.
 	const feeRow = page.getByRole('button', { name: en('send.feeTokenLabel') });
-	await expect(feeRow).toContainText('ETH', { timeout: 30_000 });
+	await expect(feeRow).toContainText('USDC', { timeout: 30_000 });
+	await expect(feeRow).not.toContainText('ETH');
 
-	// Pick the stablecoin.
+	// …and Max offers the WHOLE balance: the gas is not coming out of it.
+	await page.getByRole('button', { name: en('send.maxBtn') }).click();
+	const amount = page.getByRole('textbox', { name: 'ETH' });
+	await expect(amount).toHaveValue('1.5', { timeout: 30_000 });
+
+	// Pick the native coin instead.
 	await feeRow.click();
-	await page.getByRole('button', { name: /USDC/ }).first().click();
+	await page.getByRole('button', { name: /ETH/ }).first().click();
 
 	// The row behind the sheet follows the pick — no round trip needed, and no
 	// waiting for a form the person may not have finished.
-	await expect(feeRow).toContainText('USDC', { timeout: 15_000 });
-	await expect(feeRow).not.toContainText('ETH');
+	await expect(feeRow).toContainText('ETH', { timeout: 15_000 });
+	await expect(feeRow).not.toContainText('USDC');
 
-	// …and Max now offers the WHOLE balance: the gas is not coming out of it.
-	await page.getByRole('button', { name: en('send.maxBtn') }).click();
-	await expect(page.getByRole('textbox', { name: 'ETH' })).toHaveValue('1.5', { timeout: 30_000 });
+	// …and the Max in force follows it: the fee now comes out of the ETH, so
+	// less than the whole balance is offered — rounded on the balance line's
+	// ladder, never the 18-digit remainder.
+	await expect(amount).not.toHaveValue('1.5', { timeout: 30_000 });
+	await expect(amount).toHaveValue(/^1\.4\d{0,3}$/);
 });

@@ -46,8 +46,8 @@ import {
 	liveAssetRow,
 	moneyText,
 	narrowedFeed,
-	tokenExplorerURL,
-	trimBalance
+	tokenAmountText,
+	tokenExplorerURL
 } from '$lib/wallet/live';
 import { addressLines } from './fixtures';
 import { liveBatchImport, type BatchLiveInputs } from './live-batch';
@@ -326,7 +326,7 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		mark: balanceTokenMark(token),
 		symbol: token.symbol,
 		chain: chainName(token.chain_id),
-		balance: hidden ? MASK : `${trimBalance(token.balance)} ${token.symbol}`,
+		balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
 		fiat,
 		facts,
 		rows,

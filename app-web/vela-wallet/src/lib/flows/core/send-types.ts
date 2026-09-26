@@ -29,6 +29,7 @@ import type { SendReceiptOutcome } from '$lib/core/generated/SendReceiptOutcome'
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendView } from '$lib/core/generated/SendView';
 import type { SessionOptions } from '$lib/core/types';
+import type { SendHoldingsAnswer } from './send-holdings';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type SendEffect = { id: number; operation: SendOperation };
@@ -92,6 +93,23 @@ export interface SendShellPorts {
 	 * reachable from a module.
 	 */
 	feeQuote(request: SendFeeQuoteRequest): Promise<SendFeeOutcome>;
+	/**
+	 * `FetchTokens`, answered from the asset list's holdings (`send-holdings.ts`).
+	 *
+	 * Send shows the SAME holdings the asset list does (`Event::HoldingsUpdated`):
+	 * the list already in memory instead of a second walk over every chain, so
+	 * the picker opens at once and the balance beside a token is the balance on
+	 * its home row. `walk` falls back to the chain walk (nothing settled for the
+	 * account yet); `unreadable` is two rounds in a row that reached nothing —
+	 * a round that reached nothing once is re-read before anything is answered.
+	 * Optional so a harness without a balance machine keeps the walk.
+	 */
+	holdings?(address: string): Promise<SendHoldingsAnswer> | SendHoldingsAnswer;
+	/**
+	 * The speed this send is priced at (spec 068), read when `PrewarmFees`
+	 * warms the relay's gas quote. Omitted = `fast`, the factory default.
+	 */
+	feeTier?(): FeeTier;
 }
 
 /** What `EstimateFee` asks for, in the shell's own vocabulary. */
@@ -102,6 +120,13 @@ export interface SendFeeQuoteRequest {
 	calls: FeeCall[];
 	/** `null` = native. A quote parameter: it changes the operation being priced. */
 	feeToken: string | null;
+	/**
+	 * `EstimateFee.auto_fee_token`: nobody on this form has chosen the fee
+	 * coin, so the fee machine pays in one that can and the estimate's
+	 * `fee_asset` names it. Passed straight through as `fee_policy`'s
+	 * `auto_fee_token` — the shell never picks a coin itself.
+	 */
+	autoFeeToken: boolean;
 	/**
 	 * The passkey public key `LoadAccountCredential` read for THIS account, so the
 	 * initCode the simulation builds is the one the submitted op will carry.
