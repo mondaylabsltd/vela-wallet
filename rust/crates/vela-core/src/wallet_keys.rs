@@ -39,7 +39,8 @@ use crate::{passkey, primitives};
 /// the retired client wrote camelCase at the same web origin.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct DeviceKey {
-    /// Only [`sign_route`] reads it; the keys view matches by public key.
+    /// [`sign_route`] pins it, and [`step`] finds the sign-in key's public key
+    /// by it; the keys view itself matches rows by public key.
     #[serde(default, alias = "credentialId")]
     pub credential_id: String,
     #[serde(default, alias = "publicKeyHex")]
