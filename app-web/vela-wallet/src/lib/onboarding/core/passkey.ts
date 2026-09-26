@@ -287,70 +287,6 @@ export function hasPasskeyOverride(): boolean {
 	return override !== null;
 }
 
-/**
- * HOW the person wants to sign this one request — the signing sheet's "Sign
- * with" row (founder, 2026-09-19: creating and signing in let a person choose
- * where their passkey is; signing silently took the platform authenticator).
- *
- * `auto` is what the browser does on its own and is the factory default: it looks at
- * the credentials it is allowed and, finding one on this machine, goes straight
- * to Touch ID — which is wrong for somebody who wants to approve on their phone
- * or with the security key in their hand. The other three are WebAuthn L3
- * `hints`, plus the transports that make the hint reachable: a credential
- * registered as `internal` is never offered over a QR code unless the request
- * also says `hybrid`.
- *
- * `trusted_signer` (spec 071) is not a place a passkey is: the request goes to a
- * separate page that shows it and runs the ceremony itself
- * (`$lib/signing/sign-challenge.ts` routes on it). Here it adds nothing.
- *
- * Per request, never persisted: the sheet sets it — starting at Settings'
- * default — and hands back `null` when it closes. A request signed with no
- * sheet up (the wallet's own send) is given Settings' default by
- * `sign-challenge.ts`, explicitly; the ceremonies that are not a request at
- * all (creating a wallet, proving a new key) never inherit it.
- */
-export type SignMethod = 'auto' | 'platform' | 'hybrid' | 'security_key' | 'trusted_signer';
-let signMethod: SignMethod | null = null;
-export function setSignMethod(method: SignMethod | null): void {
-	signMethod = method;
-}
-/** The open sheet's pick; `null` when no sheet has one. */
-export function getSignMethod(): SignMethod | null {
-	return signMethod;
-}
-
-const METHOD_ROUTING: Record<
-	Exclude<SignMethod, 'auto' | 'trusted_signer'>,
-	{ hint: string; transports: AuthenticatorTransport[] }
-> = {
-	platform: { hint: 'client-device', transports: ['internal'] },
-	hybrid: { hint: 'hybrid', transports: ['hybrid', 'internal'] },
-	security_key: { hint: 'security-key', transports: ['usb', 'nfc', 'ble'] }
-};
-
-type Routing = (typeof METHOD_ROUTING)[keyof typeof METHOD_ROUTING];
-
-/** Where a method points the browser; `null` = wherever it would look on its own. */
-function routing(method: SignMethod | null): Routing | null {
-	return method === null || method === 'auto' || method === 'trusted_signer'
-		? null
-		: METHOD_ROUTING[method];
-}
-
-/** The request fields the chosen method adds; nothing at all for `auto`. */
-function methodOptions(route: Routing | null): { hints?: string[] } {
-	return route === null ? {} : { hints: [route.hint] };
-}
-
-/** A credential's transports under the chosen method; its own for `auto`. */
-function routedTransports(
-	route: Routing | null,
-	own: AuthenticatorTransport[]
-): AuthenticatorTransport[] {
-	return route?.transports ?? own;
-}
-
 /** Abort the pending ceremony, if any (the core's `cancel_passkey_sign`). */
 export function cancelSign(): void {
 	pendingSign?.abort();
@@ -364,9 +300,7 @@ export function cancelSign(): void {
  */
 export async function signWithAny(
 	challengeHex: string,
-	credentials: { id: string; transports?: string }[],
-	/** Where to look; the open sheet's pick when not given. */
-	method: SignMethod | null = signMethod
+	credentials: { id: string; transports?: string }[]
 ): Promise<Assertion> {
 	if (override)
 		return override.sign(
@@ -377,22 +311,19 @@ export async function signWithAny(
 	pendingSign?.abort();
 	const controller = new AbortController();
 	pendingSign = controller;
-	const route = routing(method);
 	try {
 		const credential = (await navigator.credentials.get({
 			publicKey: {
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
-				...methodOptions(route),
 				...(credentials.length > 0
 					? {
 							allowCredentials: credentials.map((c) => {
-								const hints = (c.transports ?? '')
+								const transports = (c.transports ?? '')
 									.split(',')
 									.map((value) => value.trim())
 									.filter(Boolean) as AuthenticatorTransport[];
-								const transports = routedTransports(route, hints);
 								return {
 									type: 'public-key' as const,
 									id: hexToBytes(c.id) as BufferSource,
@@ -418,7 +349,8 @@ export async function sign(
 	credentialId: string,
 	/**
 	 * WHERE the credential lives, as its authenticator reported at registration
-	 * (`hybrid,internal`, `usb,nfc`, …), or empty when unknown.
+	 * or as the account's sign-in route reaches it (`hybrid,internal`,
+	 * `usb,nfc`, …), or empty when unknown.
 	 *
 	 * **Load-bearing, not a hint.** An `allowCredentials` entry with no
 	 * transports leaves the platform to guess where to look, and Android's
@@ -434,12 +366,10 @@ export async function sign(
 	pendingSign?.abort();
 	const controller = new AbortController();
 	pendingSign = controller;
-	const hints = transports
+	const listed = transports
 		.split(',')
 		.map((value) => value.trim())
 		.filter(Boolean) as AuthenticatorTransport[];
-	const route = routing(signMethod);
-	const routed = routedTransports(route, hints);
 
 	try {
 		const credential = (await navigator.credentials.get({
@@ -447,12 +377,11 @@ export async function sign(
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
-				...methodOptions(route),
 				allowCredentials: [
 					{
 						type: 'public-key',
 						id: hexToBytes(credentialId) as BufferSource,
-						...(routed.length > 0 ? { transports: routed } : {})
+						...(listed.length > 0 ? { transports: listed } : {})
 					}
 				]
 			},

@@ -1,15 +1,13 @@
 /**
- * The ONE resident `sign_pref` session — WEB (spec 071).
+ * The ONE resident `sign_pref` session — WEB (spec 071): which Trusted Signer
+ * page this device opens.
  *
- * App-resident for the reason `fee-tier.svelte.ts` is: more than one surface
- * reads this preference. Settings chooses it; every signing sheet starts a
- * request at its `method`; a send with no sheet signs the way it says; and
- * the Trusted Signer opens the page it names. Readers with their own copies of
- * a preference are how they come to disagree about it.
+ * App-resident for the reason `fee-tier.svelte.ts` is: readers with their own
+ * copies of a preference are how they come to disagree about it.
  *
- * What it is NOT: the signing sheet's "Sign with" row. A pick there changes
- * one request and never reaches this machine (contract §6) — the next
- * request starts at the default again.
+ * What it is NOT: where a signature goes. That is the key the account signed
+ * in with (founder, 2026-09-26), read from the account record in
+ * `$lib/signing/sign-challenge.ts`, never a preference.
  */
 
 import { SignPrefCore, loadCore } from '$lib/core/client';
@@ -25,14 +23,11 @@ import {
 } from './sign-pref-executor';
 
 /**
- * The machine's own initial view, mirrored until the core rules: `auto` and
- * the official page — what this wallet did before the preference existed. A
- * surface that renders before the read lands must show that, not a guess.
+ * The machine's own initial view, mirrored until the core rules: the official
+ * page. A surface that renders before the read lands must show that, not a
+ * guess.
  */
 const INITIAL: SignPrefView = {
-	method: 'auto',
-	method_committed: false,
-	offered: ['auto', 'platform', 'hybrid', 'security_key', 'trusted_signer'],
 	signer_url: 'https://sign.getvela.app/',
 	signer_url_is_default: true,
 	signer_url_error: null,
@@ -44,7 +39,7 @@ class SignPreference {
 
 	#loop: EffectLoop<SignPrefEvent> | null = null;
 	#booted: Promise<void> | null = null;
-	/** The stored values have been read (or could not be): the view is the person's. */
+	/** The stored value has been read (or could not be): the view is the person's. */
 	#stored = false;
 	#loaded: Promise<void>;
 	#markLoaded: () => void = () => {};
@@ -85,27 +80,12 @@ class SignPreference {
 	}
 
 	/**
-	 * Booted AND the stored values read. What a signature waits on before it
-	 * decides where to go: the view before the read is the factory default,
-	 * not what this person chose.
+	 * Booted AND the stored value read: the view before the read is the
+	 * official page, not the one this person chose.
 	 */
 	async ready(): Promise<void> {
 		await this.boot();
 		await this.#loaded;
-	}
-
-	/**
-	 * `ready()` when something has booted this preference, and nothing to wait
-	 * for otherwise: with no surface that reads it up, there is no stored
-	 * choice in play and the factory default stands.
-	 */
-	async settled(): Promise<void> {
-		if (this.#booted) await this.ready();
-	}
-
-	/** Settings: the default "Sign with". The core ignores a name it does not offer. */
-	chooseMethod(method: string): void {
-		this.#loop?.dispatch({ type: 'method_chosen', method });
 	}
 
 	/** Settings: the Trusted Signer page, as typed. The core validates it. */

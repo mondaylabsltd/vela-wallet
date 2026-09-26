@@ -116,10 +116,6 @@ export type SettingsPageId =
 	/** Spec 068 — the stored default transaction speed (desktop page; on the
 	 *  phone the same preference is a row that opens a sheet). */
 	| 'fee-speed'
-	/** Spec 071 — the default "Sign with" and the Trusted Signer's page (desktop
-	 *  page; on the phone, two rows beside the speed, each opening a sheet). */
-	| 'signing'
-
 	/**
 	 * Spec 081 FR-016 — the report, as a desktop panel. The phone opens the
 	 * same body in a sheet; a wide layout has no sheets (founder, 2026-09-05),
@@ -144,8 +140,7 @@ export type SettingsOverlayId =
 	| 'time-format'
 	/** Spec 068: the stored default transaction speed. */
 	| 'fee-speed'
-	/** Spec 071: the default "Sign with", and the Trusted Signer's page. */
-	| 'sign-with'
+	/** Spec 071: the Trusted Signer's page. */
 	| 'signer-page'
 	/** Spec 075: the tunnel a cross-device pairing goes through. */
 	| 'tunnel-page'
@@ -665,8 +660,6 @@ export interface SettingsHomeModel {
 	timeSheet: SelectSheetModel;
 	/** Spec 068 — the default transaction speed, three rows named by what they buy. */
 	feeSpeedSheet: SelectSheetModel;
-	/** Spec 071 — the default "Sign with", the four this shell offers. */
-	signWithSheet: SelectSheetModel;
 	clearCachesSheet: ConfirmSheetModel;
 	eraseSheet: ConfirmSheetModel;
 	feedback: FeedbackModel;
@@ -817,12 +810,6 @@ export interface SettingsDesktopModel {
 	 * second pattern invented for one preference.
 	 */
 	feeSpeed: {
-		title: string;
-		description: string;
-		rows: FormRowModel[];
-	};
-	/** Spec 071 — the default "Sign with" as the desktop's usual dropdown row. */
-	signing: {
 		title: string;
 		description: string;
 		rows: FormRowModel[];
