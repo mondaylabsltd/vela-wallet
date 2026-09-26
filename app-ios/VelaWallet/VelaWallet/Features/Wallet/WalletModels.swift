@@ -152,6 +152,9 @@ struct ChainRowModel: Identifiable {
     /// Which chain this row picks; `nil` is the 所有网络 row. Absent in the
     /// fixtures, which are a picture of the list rather than a picker.
     var chainId: Int?
+    /// The chain's own logo from the data endpoint, drawn over the dot — the
+    /// web's and Android's filter rows wear it; iOS drew only the dot.
+    var logoUrl: String?
 }
 
 struct ChainSheetModel {

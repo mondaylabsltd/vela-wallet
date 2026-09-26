@@ -91,17 +91,24 @@ enum FlowsLive {
         )]
         for chain in ChainCatalog.chains {
             guard let count = counts[chain.chainId] else { continue }
-            rows.append(ChainRowModel(
-                name: chain.displayName,
-                dot: .color(SettingsLive.mark(chainId: chain.chainId,
-                                              name: chain.displayName).color),
-                count: count,
-                selected: selected == chain.chainId,
-                chainId: chain.chainId
-            ))
+            rows.append(chainRow(chain, count: count, selected: selected))
         }
         return ChainSheetModel(
             title: loc.t("componentsUi.networkFilter.selectChain"), rows: rows
+        )
+    }
+
+    /// One chain's row in either filter: its colour for the dot, its logo
+    /// over it.
+    private static func chainRow(_ chain: ChainMeta, count: Int, selected: Int?) -> ChainRowModel {
+        let mark = SettingsLive.mark(chainId: chain.chainId, name: chain.displayName)
+        return ChainRowModel(
+            name: chain.displayName,
+            dot: .color(mark.color),
+            count: count,
+            selected: selected == chain.chainId,
+            chainId: chain.chainId,
+            logoUrl: mark.logoUrl
         )
     }
 
@@ -132,14 +139,7 @@ enum FlowsLive {
         // Registry order, so the list does not reshuffle as counts change.
         for chain in ChainCatalog.chains {
             guard let count = counts[chain.chainId] else { continue }
-            rows.append(ChainRowModel(
-                name: chain.displayName,
-                dot: .color(SettingsLive.mark(chainId: chain.chainId,
-                                              name: chain.displayName).color),
-                count: count,
-                selected: selected == chain.chainId,
-                chainId: chain.chainId
-            ))
+            rows.append(chainRow(chain, count: count, selected: selected))
         }
         return ChainSheetModel(
             title: loc.t("componentsUi.networkFilter.selectChain"), rows: rows
