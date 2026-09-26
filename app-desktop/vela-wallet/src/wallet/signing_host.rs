@@ -405,6 +405,10 @@ impl SigningHost {
             public_key_available,
             calls,
             None,
+            // Nobody chose the fee coin for this request yet: the fee machine
+            // pays in one that can, and the approve carries the view's
+            // `fee_token` — the coin it picked — exactly as it carries a tap.
+            true,
             cx,
         );
     }

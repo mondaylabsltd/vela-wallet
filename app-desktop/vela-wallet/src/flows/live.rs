@@ -1086,12 +1086,15 @@ fn native_symbol(chain_id: u32) -> String {
         .map_or_else(String::new, |chain| chain.native_symbol.to_owned())
 }
 
+/// A token figure held as a float (a fee in its coin, a parsed balance), on
+/// the one token-amount rule ([`crate::wallet::live::token_amount_text`]).
+/// Rust prints a float's shortest round-trip digits without an exponent, so
+/// the rule reads the same figure a string would have given it.
 fn trimmed(amount: f64) -> String {
-    format_token_amount(
-        amount,
-        crate::executor::format_prefs::current().number,
-        false,
-    )
+    if !amount.is_finite() {
+        return "0".to_owned();
+    }
+    crate::wallet::live::token_amount_text(&amount.to_string())
 }
 
 fn fiat_line(
@@ -2233,12 +2236,16 @@ fn build_notice(
             .selected_token
             .as_ref()
             .map_or(18, |token| token.decimals);
-        let human = |base: &str| {
+        let exact = |base: &str| {
             base.parse::<u128>().map_or_else(
                 |_| base.to_owned(),
                 |units| vela_core::app::fee_policy::from_base_units(units, decimals),
             )
         };
+        // The one token-amount rule — and the ceiling cut DOWN, so the figure
+        // it offers can be typed back and still clear the fee.
+        let human = |base: &str| trimmed_str(&exact(base));
+        let ceiling = |base: &str| crate::wallet::live::token_amount_text_down(&exact(base));
         let body = fill(
             &fill(
                 &fill(
@@ -2265,7 +2272,7 @@ fn build_notice(
                     &fill(
                         &s.same_fee_max,
                         "amount",
-                        &human(&issue.max_transfer_amount),
+                        &ceiling(&issue.max_transfer_amount),
                     ),
                     "symbol",
                     &issue.symbol,
@@ -2613,7 +2620,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             fill(
                 &s.split_remaining,
                 "amount",
-                format!("{} {symbol}", trimmed_str(left)).trim(),
+                format!("{} {symbol}", crate::wallet::live::token_amount_text_down(left)).trim(),
             )
             .into()
         }),
@@ -2773,7 +2780,15 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         amount: match &sweep {
             // A sweep has no single headline figure: "3 assets".
             Some((rows, _)) => fill(&s.assets_count, "n", &rows.len().to_string()).into(),
-            None => format!("{} {symbol}", send.confirm_amount)
+            // One transfer reads as the rows and the form read it — the
+            // ladder, not the eighteen digits of a balance less a fee (a Max
+            // wrote "0.00254" on the form; the confirm used to repeat it to
+            // the wei). A split's total stays exact: it is the sum of rows.
+            None if send.split_mode => format!("{} {symbol}", send.confirm_amount)
+                .trim()
+                .to_owned()
+                .into(),
+            None => format!("{} {symbol}", trimmed_str(&send.confirm_amount))
                 .trim()
                 .to_owned()
                 .into(),
@@ -2965,7 +2980,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             breakdown_title: breakdown_title.clone(),
             breakdown: breakdown.clone(),
             title: fill(
-                &fill(&s.tx_confirmed_title, "amount", &amount),
+                &fill(&s.tx_confirmed_title, "amount", &trimmed_str(&amount)),
                 "symbol",
                 &symbol,
             )
@@ -3178,9 +3193,7 @@ fn detail_parts(
 
 /// A decimal string as the shell prints token amounts.
 fn trimmed_str(value: &str) -> String {
-    value
-        .parse::<f64>()
-        .map_or_else(|_| value.to_owned(), trimmed)
+    crate::wallet::live::token_amount_text(value)
 }
 
 /// DSD2fL — the fee coin sheet. Every row the relay published, including the
@@ -3388,7 +3401,7 @@ pub fn batch_total(
             Some(left) => fill(
                 &s.split_remaining,
                 "amount",
-                &format!("{} {symbol}", trimmed_str(left)),
+                &format!("{} {symbol}", crate::wallet::live::token_amount_text_down(left)),
             ),
             None => fill(
                 &s.balance_label,

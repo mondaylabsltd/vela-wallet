@@ -26,10 +26,11 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use vela_core::app::fee_policy::{FeeBundlerQuote, FeeTier};
+use vela_core::app::fee_policy::{FeeBundlerQuote, FeeCall, FeeGasOutcome, FeeTier};
 
 use crate::executor::chain::{self, RawGasSignals};
 use crate::executor::relay;
+use crate::executor::single_flight::SingleFlight;
 
 /// The core's window (`fee_policy::FEE_SIGNALS_CACHE_TTL_MS`), the one every
 /// shell's fee-signal cache holds a reading for.
@@ -46,10 +47,25 @@ type Cache<K, T> = Mutex<Option<HashMap<K, Held<T>>>>;
 
 /// Keyed by chain and whether the tip was asked for.
 static GAS: Cache<(u32, bool), RawGasSignals> = Mutex::new(None);
-/// Keyed by the tier's debug name: `FeeTier` is not `Hash`, and a cache is no
+/// Keyed by the relay's tier name: `FeeTier` is not `Hash`, and a cache is no
 /// reason to widen a wire type's derives.
 static QUOTES: Cache<(u32, String), FeeBundlerQuote> = Mutex::new(None);
 static EPOCH: Mutex<Option<HashMap<u32, u64>>> = Mutex::new(None);
+
+/// One exact operation: the chain, the account, whether it is deployed, and
+/// every call byte for byte.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct SimKey {
+    chain_id: u32,
+    account: String,
+    deployed: bool,
+    calls: Vec<(String, String, String)>,
+}
+
+static SIMULATIONS: Cache<SimKey, FeeGasOutcome> = Mutex::new(None);
+
+const SIMULATION_TTL: Duration =
+    Duration::from_millis(vela_core::app::fee_policy::SIMULATION_CACHE_TTL_MS as u64);
 
 fn epoch(chain_id: u32) -> u64 {
     EPOCH
@@ -60,9 +76,17 @@ fn epoch(chain_id: u32) -> u64 {
 }
 
 fn fresh<K: std::hash::Hash + Eq, T: Clone>(cache: &Cache<K, T>, key: &K) -> Option<T> {
+    fresh_for(cache, key, TTL)
+}
+
+fn fresh_for<K: std::hash::Hash + Eq, T: Clone>(
+    cache: &Cache<K, T>,
+    key: &K,
+    ttl: Duration,
+) -> Option<T> {
     let guard = cache.lock().ok()?;
     let held = guard.as_ref()?.get(key)?;
-    (held.at.elapsed() < TTL).then(|| held.value.clone())
+    (held.at.elapsed() < ttl).then(|| held.value.clone())
 }
 
 fn keep<K: std::hash::Hash + Eq, T>(cache: &Mutex<Option<HashMap<K, Held<T>>>>, key: K, value: T) {
@@ -77,36 +101,88 @@ fn keep<K: std::hash::Hash + Eq, T>(cache: &Mutex<Option<HashMap<K, Held<T>>>>, 
     }
 }
 
-/// `eth_gasPrice` ∥ the latest block's base fee ∥ the tip, raw — held 15 s.
+/// `eth_gasPrice` ∥ the latest block's base fee ∥ the tip, raw — held 15 s,
+/// and read once for every session asking at the same moment.
 pub fn gas_signals(chain_id: u32, want_tip: bool) -> RawGasSignals {
     if let Some(signals) = fresh(&GAS, &(chain_id, want_tip)) {
         return signals;
     }
-    let started = epoch(chain_id);
-    let (signals, complete) = chain::read_gas_signals(chain_id, want_tip);
-    if complete && epoch(chain_id) == started {
-        keep(&GAS, (chain_id, want_tip), signals.clone());
-    }
-    signals
+    static IN_FLIGHT: SingleFlight<(u32, bool), RawGasSignals> = SingleFlight::new();
+    IN_FLIGHT.run((chain_id, want_tip), || {
+        let started = epoch(chain_id);
+        let (signals, complete) = chain::read_gas_signals(chain_id, want_tip);
+        if complete && epoch(chain_id) == started {
+            keep(&GAS, (chain_id, want_tip), signals.clone());
+        }
+        signals
+    })
 }
 
 /// One tier of the relay's gas price, raw — held 15 s. `None` and a zero cap
 /// ("the relay did not answer", which the core rejects as degenerate) are
 /// never held.
+///
+/// The relay answers every tier in one response, so one read fills every
+/// tier's row: the session for the speed in force and the previews for the
+/// other two share it, and the three rows settle together instead of one
+/// request apiece landing one after another.
 pub fn bundler_quote(chain_id: u32, tier: FeeTier) -> Option<FeeBundlerQuote> {
-    let key = (chain_id, format!("{tier:?}"));
-    if let Some(quote) = fresh(&QUOTES, &key) {
+    let wanted = relay::tier_name(tier);
+    if let Some(quote) = fresh(&QUOTES, &(chain_id, wanted.to_owned())) {
         return Some(quote);
     }
-    let started = epoch(chain_id);
-    let quote = relay::raw_bundler_quote(chain_id, tier);
-    if let Some(quote) = &quote
-        && vela_core::app::fee_policy::bundler_quote_cacheable(&quote.max_fee_per_gas)
-        && epoch(chain_id) == started
-    {
-        keep(&QUOTES, key, quote.clone());
+    static IN_FLIGHT: SingleFlight<u32, Option<Vec<(&'static str, FeeBundlerQuote)>>> =
+        SingleFlight::new();
+    let rows = IN_FLIGHT.run(chain_id, || {
+        let started = epoch(chain_id);
+        let rows = relay::raw_bundler_quotes(chain_id);
+        if epoch(chain_id) == started {
+            for (name, quote) in rows.iter().flatten() {
+                if vela_core::app::fee_policy::bundler_quote_cacheable(&quote.max_fee_per_gas) {
+                    keep(&QUOTES, (chain_id, (*name).to_owned()), quote.clone());
+                }
+            }
+        }
+        rows
+    })?;
+    rows.into_iter()
+        .find_map(|(name, quote)| (name == wanted).then_some(quote))
+}
+
+/// The relay's simulation of one exact operation, held
+/// `fee_policy::SIMULATION_CACHE_TTL_MS` and read once for every session
+/// asking at the same moment. Nothing the simulation measures depends on the
+/// speed, so the speed in force and both previews price the same operation
+/// off ONE simulation, settled together. Only a real estimate is held — a
+/// refusal or a missing context is asked again next time.
+pub fn simulation(
+    chain_id: u32,
+    account: &str,
+    deployed: bool,
+    calls: &[FeeCall],
+    simulate: impl FnOnce() -> FeeGasOutcome,
+) -> FeeGasOutcome {
+    let key = SimKey {
+        chain_id,
+        account: account.to_lowercase(),
+        deployed,
+        calls: calls
+            .iter()
+            .map(|call| (call.to.to_lowercase(), call.value.clone(), call.data.to_lowercase()))
+            .collect(),
+    };
+    if let Some(outcome) = fresh_for(&SIMULATIONS, &key, SIMULATION_TTL) {
+        return outcome;
     }
-    quote
+    static IN_FLIGHT: SingleFlight<SimKey, FeeGasOutcome> = SingleFlight::new();
+    IN_FLIGHT.run(key.clone(), || {
+        let started = epoch(chain_id);
+        let outcome = simulate();
+        if matches!(outcome, FeeGasOutcome::Estimated { .. }) && epoch(chain_id) == started {
+            keep(&SIMULATIONS, key, outcome.clone());
+        }
+        outcome
+    })
 }
 
 /// Forget this chain's held readings, so the next quote run measures again.
@@ -125,5 +201,10 @@ pub fn invalidate(chain_id: u32) {
         && let Some(map) = guard.as_mut()
     {
         map.retain(|(chain, _), _| *chain != chain_id);
+    }
+    if let Ok(mut guard) = SIMULATIONS.lock()
+        && let Some(map) = guard.as_mut()
+    {
+        map.retain(|key, _| key.chain_id != chain_id);
     }
 }

@@ -1742,8 +1742,19 @@ fn send_form_parts(
                 .items_center()
                 .py(px(16.))
                 .child(
+                    // The drawn figure steps down the same ladder as the typed
+                    // one and is cut at its end past the last rung.
                     div()
-                        .text_size(theme::text_balance_hero())
+                        .w_full()
+                        .min_w(px(0.))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_center()
+                        .text_size(theme::text_amount_hero(theme::amount_hero_rung(
+                            value.chars().count(),
+                            0,
+                        )))
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_base)
                         .child(value.clone()),

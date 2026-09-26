@@ -64,6 +64,13 @@ pub fn is_deployed(address: &str, chain_id: u32) -> Result<bool, String> {
     {
         return Ok(true);
     }
+    // The speed sessions and a prewarm ask together; one `eth_getCode`.
+    static IN_FLIGHT: crate::executor::single_flight::SingleFlight<String, Result<bool, String>> =
+        crate::executor::single_flight::SingleFlight::new();
+    IN_FLIGHT.run(cache_key.clone(), || read_deployed(address, chain_id, cache_key))
+}
+
+fn read_deployed(address: &str, chain_id: u32, cache_key: String) -> Result<bool, String> {
     let body = pool::call(chain_id, "eth_getCode", json!([address, "latest"]))
         .map_err(|_| INDETERMINATE_DEPLOYMENT.to_owned())?;
     if body.get("error").is_some() {
