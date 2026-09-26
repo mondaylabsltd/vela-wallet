@@ -39,7 +39,7 @@
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import { session } from '$lib/session/core/session.svelte';
-	import { createContactsSession, type ContactsSession } from '$lib/contacts/core/contacts';
+	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import type { ContactGroupView } from '$lib/core/generated/ContactGroupView';
 	import type { ContactsView } from '$lib/core/generated/ContactsView';
 	import { readFlowHandoff } from '$lib/flows/contact-handoff';
@@ -552,27 +552,14 @@
 	//
 	// The recipient picker (SD2e / DSD2e) showed the gallery's three fixture
 	// people in the middle of a live transfer, and `show_contact_picker` —
-	// the core's own state for it — was read by nothing. While a send is open
-	// this route holds its own ContactsCore session (024 D8: route-scoped,
-	// not a global ledger) and hands its view to the picker; a pick dispatches
-	// the core's `picked_address`, a group seeds split mode with its members.
-	let contactsView = $state<ContactsView | null>(null);
-	let contactsSession: ContactsSession | null = null;
-
-	function openContactsBook(): void {
-		if (contactsSession) return;
-		contactsSession = createContactsSession({
-			onView: (view) => (contactsView = view),
-			onError: (error) => console.error('[contacts] core fault:', error)
-		});
-		contactsSession.start({ type: 'account_switched', my_address: identity?.address ?? null });
-	}
-
-	function closeContactsBook(): void {
-		contactsSession?.dispose();
-		contactsSession = null;
-		contactsView = null;
-	}
+	// the core's own state for it — was read by nothing. The picker reads the
+	// app's one address book (`contacts-book.svelte.ts`), read at sign-in
+	// below and shared with the contacts page: it opens on a book already
+	// read, and a contact added there is here without a second read. (It was
+	// a session of this route's own, built per send — 024 D8's route scope,
+	// which the founder's "通讯录 flashes on every visit" retired.) A pick
+	// dispatches the send core's `picked_address`; a group seeds split mode.
+	const contactsView = $derived<ContactsView | null>(contactsBook.view);
 
 	/**
 	 * A whole group as split-mode recipients, amounts blank — ADDED to whoever is
@@ -618,7 +605,9 @@
 		if (sendSession || !identity) return;
 		await loadCore();
 		if (!identity) return;
-		openContactsBook();
+		// The picker's suggestions come from the send history, which may have
+		// grown since the book was read: re-read that alone (the book stays).
+		contactsBook.dispatch({ type: 'history_changed' });
 		// The tracker owns the receipt from the moment the op is accepted; the
 		// send core only hears the verdict back (invariant ⑥'s ordering half).
 		setSendTrackerSink((handoff) =>
@@ -699,7 +688,6 @@
 
 	function closeSend(): void {
 		closeBatch();
-		closeContactsBook();
 		sendSession?.dispose();
 		sendSession = null;
 		sendView = null;
@@ -1330,6 +1318,9 @@
 		if (address !== undefined) {
 			void balance.setAccount(address);
 			void feed.setAccount(address);
+			// Read at sign-in, like iOS's store: the book is in memory before
+			// anybody opens 通讯录 or the send picker.
+			void contactsBook.setAccount(address);
 		}
 	});
 

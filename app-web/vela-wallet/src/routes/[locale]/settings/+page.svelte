@@ -71,6 +71,7 @@
 		type DeviceStorageReport,
 		type StorageItemId
 	} from '$lib/services/device-storage';
+	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import {
 		feedbackLabels,
 		themeFromSegment,
@@ -458,6 +459,9 @@
 			return;
 		}
 		await clearStorageItem(id as Exclude<StorageItemId, 'dapps'>);
+		// The app's address book is resident: it must read the cleared stores
+		// again, or it would show — and re-save — what was just removed.
+		if (id === 'contacts') contactsBook.reload();
 		await refreshStorage();
 	}
 
