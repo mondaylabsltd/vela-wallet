@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Uma página de arquivo único em sign.getvela.app que decodifica uma solicitação e a assina com a sua passkey por conta própria — o que ela confere, quais apps a usam e como recompilá-la ou rodar a sua própria cópia."
-source: 43a1af6ffdcd
+source: fcfb268d3492
 ---
 
 <script>
@@ -53,7 +53,7 @@ integração; nenhum deles tem ainda uma execução completa registrada.
   recusa.
 - **Diz quando uma aprovação é ilimitada.** Ele não consegue mudar um valor — ou
   assina os bytes que chegaram, ou nada —, então uma aprovação ou um permit ilimitado
-  (2^128 ou mais nesta página) aparece em vermelho com esse motivo e pode ser
+  (2^200 ou mais, 2^152 para Permit2 — o mesmo limite dos apps) aparece em vermelho com esse motivo e pode ser
   assinado como está; um limite on-chain é escolhido na própria tela de aprovação da
   carteira, antes de a solicitação chegar aqui. Uma aprovação para uma coleção
   inteira de NFTs é recusada.

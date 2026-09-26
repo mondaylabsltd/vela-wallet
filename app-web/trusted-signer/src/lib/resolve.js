@@ -20,11 +20,13 @@ window.VelaCS = window.VelaCS || {};
   var abi = ns.abi;
   var reg = ns.registry;
 
-  // Anything at or above 2^128 raw units is past every real token supply, so it
-  // reads as unlimited. Permit2's own "unlimited" (type(uint160).max) is above
-  // this line too — a higher threshold would quietly let it through as a
-  // 22-digit number, which is exactly the kind of number nobody reads.
-  var UNLIMITED_FLOOR = 1n << 128n;
+  // Where "unlimited" starts — the wallet's own two lines
+  // (vela-core `approval_guard::UNLIMITED_CAP_256` / `_160`), so this page and
+  // the app call the same amount unlimited. 2^200 for a uint256 amount: past
+  // every real supply (about 2^128) and below every "max" sentinel (2^255,
+  // 2^256-1). 2^152 for a Permit2 uint160 amount, whose own max is 2^160-1.
+  var UNLIMITED_256 = 1n << 200n;
+  var UNLIMITED_160 = 1n << 152n;
 
 
   var UNREADABLE = new RegExp('[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\ufffd]');
@@ -122,10 +124,11 @@ window.VelaCS = window.VelaCS || {};
 
   // --- amounts ---------------------------------------------------------------
 
-  function tokenAmount(value, tokenAddress, ctx) {
+  /** `bits`: the amount field's width — 160 for Permit2's, otherwise 256. */
+  function tokenAmount(value, tokenAddress, ctx, bits) {
     var known = reg.token(tokenAddress);
     var token = known || { symbol: '?', nameKey: 'value.unknownToken', decimals: 18, tone: '#8a93a5' };
-    var unlimited = value >= UNLIMITED_FLOOR;
+    var unlimited = value >= (bits === 160 ? UNLIMITED_160 : UNLIMITED_256);
     return {
       unlimited: unlimited,
       value: value,
@@ -771,7 +774,8 @@ window.VelaCS = window.VelaCS || {};
 
     if (primary === 'PermitSingle' || primary === 'PermitTransferFrom') {
       var details = message.details || message.permitted || {};
-      var pAmount = tokenAmount(BigInt(details.amount), details.token, ctx);
+      // PermitSingle's amount is a uint160; PermitTransferFrom's is a uint256.
+      var pAmount = tokenAmount(BigInt(details.amount), details.token, ctx, primary === 'PermitSingle' ? 160 : 256);
       var pSpender = identify(message.spender, ctx);
       view.intentKey = 'intent.permit2';
       view.hero = { kind: 'amount', amount: pAmount, direction: 'allowance' };

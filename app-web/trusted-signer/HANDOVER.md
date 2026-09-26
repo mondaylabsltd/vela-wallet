@@ -48,6 +48,7 @@ bun samples/slider-test.mjs        # 19/19 真触摸拖动滑块：签名与创�
 bun samples/single-file-test.mjs   # 12/12 发布出去的单文件页：CSP 实测、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
+bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
 ```
 
 > 数字是 2026-09-27 实测的（desktop-demo 仍是 09-24 的数）。浏览器套件要用 `bun` 跑：

@@ -51,8 +51,7 @@ wiring; none of them has a recorded full run yet.
   site asked for has to actually be inside the operation being signed, or the
   page refuses.
 - **It says when an approval is unlimited.** It can't change an amount — it signs
-  the bytes that arrived or nothing — so an unlimited approval or permit (2^128 or
-  more on this page) is shown in red with that reason and can be signed as it
+  the bytes that arrived or nothing — so an unlimited approval or permit (2^200 or more, 2^152 for Permit2 — the same line as the apps) is shown in red with that reason and can be signed as it
   stands; an on-chain cap is chosen on the wallet's own approval screen, before
   the request gets here. An approval for a whole NFT collection is refused.
 - **It refuses what it cannot stand behind:** `eth_sign`, a method it does not

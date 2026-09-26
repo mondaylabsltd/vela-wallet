@@ -69,6 +69,11 @@ pub const BUILD_ALLOWED: &[&str] = &[
     // the bytes are committed at
     // `app-web/trusted-signer/dist/b/<this hash>/sign.html`.
 
+    // "Unlimited" starts on the wallet's own lines — 2^200 for a uint256
+    // amount, 2^152 for Permit2's uint160 one (`approval_guard`) — instead of
+    // the page's own 2^128, so the page and the app's sheet call the same
+    // amount unlimited.
+    "584b7102a089759f410312dfa37a8834bfcdc25033a71d6a338cf1f80e6305a5",
     // A request that would hand the account over is refused, by the same rule
     // as `self_call_guard` (spec 081): the account calling one of its own
     // owner, module, guard or fallback functions, any delegatecall, and a

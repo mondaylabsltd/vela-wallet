@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Halaman satu file di sign.getvela.app yang mendekode permintaan dan menandatanganinya dengan passkey Anda secara mandiri — apa yang diperiksanya, aplikasi mana yang memakainya, dan cara mem-build ulang atau menjalankan salinan Anda sendiri."
-source: 43a1af6ffdcd
+source: fcfb268d3492
 ---
 
 <script>
@@ -55,7 +55,7 @@ iPhone memakai sambungan yang sama; belum ada satu pun yang punya catatan uji me
   menolak.
 - **Mengatakan kalau sebuah persetujuan tanpa batas.** Halaman ini tidak bisa mengubah
   jumlah — ia menandatangani byte yang tiba atau tidak sama sekali — jadi persetujuan atau
-  permit tanpa batas (2^128 atau lebih di halaman ini) ditampilkan merah dengan alasan itu
+  permit tanpa batas (2^200 atau lebih, 2^152 untuk Permit2 — batas yang sama dengan di aplikasi) ditampilkan merah dengan alasan itu
   dan bisa ditandatangani apa adanya; batas on-chain dipilih di layar persetujuan dompet itu
   sendiri, sebelum permintaannya sampai ke sini. Persetujuan untuk seluruh koleksi NFT
   ditolak.

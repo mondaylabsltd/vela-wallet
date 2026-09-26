@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Una página de un solo archivo en sign.getvela.app que decodifica una solicitud y la firma con tu passkey por su cuenta: qué revisa, qué apps la usan y cómo recompilarla o ejecutar tu propia copia."
-source: 43a1af6ffdcd
+source: fcfb268d3492
 ---
 
 <script>
@@ -51,8 +51,7 @@ la misma conexión; ninguna tiene todavía una ejecución completa registrada.
   sitio tiene que estar realmente dentro de la operación que se firma; si no, la página
   la rechaza.
 - **Avisa cuando una aprobación es ilimitada.** No puede cambiar un monto (firma los
-  bytes que llegaron o nada), así que una aprobación o un permiso ilimitados (2^128 o
-  más en esta página) se muestran en rojo con ese motivo y se pueden firmar tal como
+  bytes que llegaron o nada), así que una aprobación o un permiso ilimitados (2^200 o más, o 2^152 para Permit2: el mismo límite que en las apps) se muestran en rojo con ese motivo y se pueden firmar tal como
   están; el tope on-chain se elige en la pantalla de aprobación de la propia wallet,
   antes de que la solicitud llegue aquí. Una aprobación para toda una colección de NFT
   se rechaza.

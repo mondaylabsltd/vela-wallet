@@ -184,8 +184,10 @@ const PERMIT2_TRANSFER_ENCODE_TYPE: &str = "PermitTransferFrom(TokenPermissions 
 /// guard caps at (`approval_guard::UNLIMITED_CAP_160`), so the sheet and the
 /// cap editor call the same number unlimited.
 const UNLIMITED_160: &str = "0x100000000000000000000000000000000000000";
-/// The same threshold for a `uint256` amount (2^255), as the interface
-/// descriptors have always used.
+/// The ERC-7730 registry's usual threshold for a `uint256` amount (2^255),
+/// kept as the descriptors write it. It is never the line the sheet draws:
+/// [`unlimited_line`] lowers it to the guard's 2^200, as it lowers every
+/// threshold a descriptor declares.
 const UNLIMITED_256: &str = "0x8000000000000000000000000000000000000000000000000000000000000000";
 
 /// USD-pegged stablecoins valued at ~$1 with no price lookup
@@ -3073,6 +3075,34 @@ fn js_slice(s: &str, start: i64, end: Option<i64>) -> String {
         .to_owned()
 }
 
+/// The line past which the sheet says "Unlimited": the descriptor's own
+/// threshold, lowered to the approval guard's. The guard's line is the one
+/// that asks for consent and offers a cap (`approval_guard::is_unbounded_amount`),
+/// so an amount it calls unlimited must never reach the screen as a
+/// seventy-digit number — the registry's usual 2^255, or 2^256-2, would leave
+/// everything from 2^200 up drawn as a figure beside the guard's warning, and
+/// a cap chosen there would not replace it (the shells swap only the field
+/// that reads "Unlimited").
+///
+/// Which of the guard's two lines applies is read off the declared threshold:
+/// one at or past 2^200 is a `uint256` sentinel (2^255, 2^256-1), one below
+/// it a `uint160` sentinel (Permit2's 2^160-1). A threshold already below the
+/// guard's line is kept — lowering is the only direction this goes.
+fn unlimited_line(declared: &str) -> String {
+    use super::approval_guard::{UNLIMITED_CAP_160, UNLIMITED_CAP_256};
+    let cap_256 = UNLIMITED_CAP_256.to_string();
+    let cap = if dec_ge(declared, &cap_256) {
+        cap_256
+    } else {
+        UNLIMITED_CAP_160.to_string()
+    };
+    if dec_ge(declared, &cap) {
+        cap
+    } else {
+        declared.to_owned()
+    }
+}
+
 fn resolve_metadata_ref(path: &str, metadata: &Value) -> Value {
     if path.is_empty() || metadata.is_null() {
         return Value::Null;
@@ -3260,18 +3290,27 @@ fn format_token_amount(
     let amount = to_bigint(raw);
 
     // Threshold for unlimited approvals — checked FIRST, before any token
-    // identity resolution, exactly as the TS does.
+    // identity resolution, exactly as the TS does. A threshold may be written
+    // out or name one of the descriptor's constants (`$.metadata.constants.max`).
     if let Some(threshold) = params.get("threshold").and_then(Value::as_str) {
-        let threshold_dec = threshold
+        let written = if threshold.starts_with("$.") {
+            match resolve_metadata_ref(threshold, metadata) {
+                Value::String(s) => s,
+                Value::Number(n) => n.to_string(),
+                _ => String::new(),
+            }
+        } else {
+            threshold.to_owned()
+        };
+        let threshold_dec = written
             .strip_prefix("0x")
+            .or_else(|| written.strip_prefix("0X"))
             .and_then(hex_to_dec)
             .or_else(|| {
-                threshold
-                    .bytes()
-                    .all(|b| b.is_ascii_digit())
-                    .then(|| dec_normalize(threshold))
+                (!written.is_empty() && written.bytes().all(|b| b.is_ascii_digit()))
+                    .then(|| dec_normalize(&written))
             });
-        if let Some(threshold_dec) = threshold_dec {
+        if let Some(threshold_dec) = threshold_dec.map(|t| unlimited_line(&t)) {
             if dec_ge(&amount, &threshold_dec) {
                 let message = params
                     .get("message")

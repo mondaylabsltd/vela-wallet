@@ -13,10 +13,11 @@ mod support;
 use serde_json::json;
 use support::DomainDriver;
 use vela_core::abi::compute_selector;
+use vela_core::app::approval_guard::{self, AmountBits, GuardAmount as U256};
 use vela_core::app::clear_signing::{
     ClearConfirm, ClearDangerClass, ClearFieldRole, ClearLocale, ClearOperation as Op, ClearProbe,
-    ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignType,
-    ClearSigning, ClearSiweBinding, ClearSurface, Event,
+    ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignResult,
+    ClearSignType, ClearSigning, ClearSiweBinding, ClearSurface, Event,
 };
 
 type Sut = DomainDriver<ClearSigning>;
@@ -516,6 +517,101 @@ fn unlimited_approve_reads_danger() {
     assert_eq!(amount.value, "Unlimited");
     let spender = &result.fields[1];
     assert_eq!(spender.role, ClearFieldRole::Spender);
+}
+
+/// An ERC-20 `approve(SPENDER, amount)` on USDC, resolved through the
+/// interface descriptor (both ERC-165 probes revert: a plain ERC-20).
+fn approve_result(amount_word: &str) -> ClearSignResult {
+    let mut sut = Sut::new();
+    let approve = format!("0x095ea7b3{}{}", pad(SPENDER), amount_word);
+    resolve_tx(&mut sut, USDC, &approve, "0x0");
+    sut.resolve(Res::DescriptorFetched {
+        path: format!("/erc7730/calldata/eip155-1/{USDC}.json"),
+        json: None,
+    });
+    for probe in [ClearProbe::SupportsErc721, ClearProbe::SupportsErc1155] {
+        sut.resolve(Res::RpcAnswer {
+            probe,
+            chain_id: 1,
+            to: USDC.to_owned(),
+            result: None,
+            rpc_error: true,
+        });
+    }
+    sut.view().result.expect("approve result")
+}
+
+/// The sheet's "Unlimited" starts where the approval guard's does (2^200 for
+/// a uint256 amount), not at the registry's 2^255: between the two, the guard
+/// warned and offered a cap while the decode drew a seventy-digit figure, and
+/// a cap chosen there never replaced it.
+#[test]
+fn unlimited_starts_at_the_guards_line_not_the_registrys() {
+    let two_254 = format!("4{}", "0".repeat(63));
+    let max_half = format!("7{}", "f".repeat(63)); // type(uint256).max >> 1
+    let two_200 = format!("{}1{}", "0".repeat(13), "0".repeat(50));
+    let below = format!("{}{}", "0".repeat(14), "f".repeat(50)); // 2^200 - 1
+
+    for (word, name) in [
+        (&two_254, "2^254"),
+        (&max_half, "2^255 - 1"),
+        (&two_200, "2^200"),
+    ] {
+        let result = approve_result(word);
+        let amount = &result.fields[0];
+        assert_eq!(amount.value, "Unlimited", "{name} reads Unlimited");
+        assert!(amount.warning, "{name} is flagged");
+        assert_eq!(result.risk, ClearRisk::Danger, "{name} is danger");
+        assert!(
+            approval_guard::is_unbounded_amount(
+                U256::from_str_radix(word, 16).unwrap(),
+                AmountBits::B256
+            ),
+            "{name}: the guard agrees"
+        );
+    }
+
+    let result = approve_result(&below);
+    let amount = &result.fields[0];
+    assert_ne!(amount.value, "Unlimited", "2^200 - 1 is a figure");
+    assert!(!amount.warning);
+    assert!(!approval_guard::is_unbounded_amount(
+        U256::from_str_radix(&below, 16).unwrap(),
+        AmountBits::B256
+    ));
+}
+
+/// A registry descriptor's threshold may name a constant, and a uint160-scale
+/// one (Permit2's 2^160-1) is lowered to the guard's uint160 line, 2^152.
+#[test]
+fn a_named_uint160_threshold_is_read_and_lowered_to_the_guards_line() {
+    let sig = "setAllowance(uint160 amount)";
+    let selector = compute_selector(sig).expect("selector");
+    let target = "0x9999999999999999999999999999999999999999";
+    let descriptor = json!({
+        "metadata": { "constants": { "usdc": USDC, "max": format!("0x{}", "f".repeat(40)) } },
+        "display": { "formats": { sig: { "intent": "Approve", "fields": [
+            { "path": "amount", "label": "Amount", "format": "tokenAmount",
+              "params": { "token": "$.metadata.constants.usdc", "threshold": "$.metadata.constants.max" } },
+        ] } } }
+    })
+    .to_string();
+    let read = |word: String| {
+        let mut sut = Sut::new();
+        resolve_tx(&mut sut, target, &format!("{selector}{word}"), "0x0");
+        sut.resolve(Res::DescriptorFetched {
+            path: format!("/erc7730/calldata/eip155-1/{target}.json"),
+            json: Some(descriptor.clone()),
+        });
+        sut.view().result.expect("result").fields[0].clone()
+    };
+
+    let at_line = read(format!("{}1{}", "0".repeat(25), "0".repeat(38))); // 2^152
+    assert_eq!(at_line.value, "Unlimited");
+    assert!(at_line.warning);
+    let below = read(format!("{}{}", "0".repeat(26), "f".repeat(38))); // 2^152 - 1
+    assert_ne!(below.value, "Unlimited");
+    assert!(!below.warning);
 }
 
 #[test]

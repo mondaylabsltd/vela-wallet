@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Eine Seite aus einer einzigen Datei unter sign.getvela.app, die eine Anfrage selbst dekodiert und mit deinem Passkey signiert – was sie prüft, welche Apps sie nutzen und wie du sie nachbaust oder eine eigene Kopie betreibst."
-source: 43a1af6ffdcd
+source: fcfb268d3492
 ---
 
 <script>
@@ -55,7 +55,7 @@ vollständigen Durchlauf.
   lehnt die Seite ab.
 - **Er sagt, wenn eine Freigabe unbegrenzt ist.** Einen Betrag kann er nicht ändern –
   er signiert die Bytes, die angekommen sind, oder gar nichts –, deshalb wird eine
-  unbegrenzte Freigabe oder ein unbegrenztes Permit (auf dieser Seite 2^128 oder mehr)
+  unbegrenzte Freigabe oder ein unbegrenztes Permit (2^200 oder mehr, 2^152 bei Permit2 – dieselbe Grenze wie in den Apps)
   rot und mit genau dieser Begründung angezeigt und kann unverändert signiert werden;
   eine On-Chain-Obergrenze wählst du auf dem eigenen Freigabebildschirm der Wallet,
   bevor die Anfrage hier ankommt. Eine Freigabe für eine ganze NFT-Sammlung wird

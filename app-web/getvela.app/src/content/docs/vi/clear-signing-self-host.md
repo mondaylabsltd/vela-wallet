@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Một trang chỉ gồm một tệp tại sign.getvela.app, tự giải mã yêu cầu và tự ký bằng passkey của bạn — nó kiểm tra những gì, ứng dụng nào dùng nó, và cách build lại hoặc chạy bản sao của riêng bạn."
-source: 43a1af6ffdcd
+source: fcfb268d3492
 ---
 
 <script>
@@ -48,7 +48,7 @@ chưa ứng dụng nào trong số đó có một lần chạy trọn vẹn đư
   phải thực sự nằm bên trong thao tác đang được ký, nếu không trang sẽ từ chối.
 - **Nó nói rõ khi một lệnh cấp quyền là không giới hạn.** Nó không thể thay đổi số lượng —
   nó ký đúng những byte đã đến hoặc không ký gì cả — nên một lệnh cấp quyền hay permit không
-  giới hạn (từ 2^128 trở lên trên trang này) được hiện màu đỏ kèm lý do đó và có thể được ký
+  giới hạn (từ 2^200 trở lên, với Permit2 là 2^152 — cùng ngưỡng với các ứng dụng) được hiện màu đỏ kèm lý do đó và có thể được ký
   nguyên trạng; hạn mức trên chuỗi được chọn trên màn hình cấp quyền của chính ví, trước khi
   yêu cầu đến được đây. Lệnh cấp quyền cho cả một bộ sưu tập NFT thì bị từ chối.
 - **Nó từ chối những gì nó không thể đứng ra bảo đảm:** `eth_sign`, một phương thức nó không

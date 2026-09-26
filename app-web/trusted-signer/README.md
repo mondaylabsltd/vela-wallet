@@ -41,6 +41,7 @@ node samples/channels-test.mjs  # 19 项：postMessage / URL 片段 + 真 WebAut
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
 node samples/takeover-test.mjs  # 18 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则
+node samples/unlimited-line-test.mjs # 11 项：「无限额」从哪里开始 —— 与 vela-core approval_guard 同一条线
 ```
 
 每样东西的来源见 [PROTOCOL.md](PROTOCOL.md) 第 9 节。
@@ -80,7 +81,7 @@ node samples/safeop-test.mjs    # 9 项：SafeOp / SafeMessage 对拍 vela-core 
 
 1. **这一页不能改签名意图。** 意图到达即定死，只有「签」和「不签」两种出路。
    因此没有费币选择器，也**没有授权额度编辑器** —— 编辑器会重写 calldata，
-   那正是本页要防的「所见非所签」。无限额的授权与 permit（本页门槛 2^128）**标红、可原样签**
+   那正是本页要防的「所见非所签」。无限额的授权与 permit（门槛与 App 同一条线：uint256 为 2^200，Permit2 的 uint160 为 2^152）**标红、可原样签**
    （2026-09-26 创始人裁决：Permit2 与批量交易依赖原样额度）；要设上限，是在请求到达这里之前、
    在钱包自己的授权界面上设。对整个 NFT 合集的授权仍然拒签。
 2. **逻辑不产生任何人话。** `resolve.js` 只输出 i18n key + 参数，措辞全在
