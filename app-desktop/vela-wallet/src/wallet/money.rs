@@ -45,6 +45,7 @@ use futures::StreamExt as _;
 use gpui::{Context, Entity, FocusHandle};
 
 use vela_core::app::Account;
+use vela_core::app::balance_dashboard::{BalanceDashboard, BalanceView, Event as BalanceEvent};
 use vela_core::app::batch_import::{
     BatchImport, BatchOperation, BatchShellResult, BatchToken, BatchView, Event as BatchEvent,
 };
@@ -56,7 +57,7 @@ use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::send::{
     Event as SendEvent, Send, SendAccountRef, SendAlertKind, SendDisplayContext,
     SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation, SendReceiptOutcome,
-    SendRecipientDraft, SendShellResult, SendView,
+    SendRecipientDraft, SendShellResult, SendStage, SendView,
 };
 use vela_core::app::sign_pref::SignPref;
 use vela_core::app::tx_tracker::{TrackStatus, TxTracker};
@@ -67,7 +68,7 @@ use crate::ctap::usb::TouchRequest;
 use crate::executor::passkey::{CredentialChoice, PinRequest, WindowHandle};
 use crate::executor::send::{self as send_executor, SendAnswer, SendContext};
 use crate::executor::trusted_signer;
-use crate::executor::{batch, storage, tracker};
+use crate::executor::{balance_dashboard, batch, storage, tracker};
 use crate::resident::{self, ResidentCore};
 use vela_core::app::network_admin::{
     Event as NetEvent, NetView, NetWizardErrorKind, NetWizardPhase, NetworkAdmin,
@@ -79,6 +80,13 @@ use super::speed_control::{self, SpeedControl, SpeedHost};
 /// How often the ceremony channel and the signing flag are polled while a
 /// machine is busy. The same cadence onboarding uses.
 const TICK_MS: u64 = 120;
+
+/// How old the holdings may be when a send opens before the open asks the
+/// dashboard for a fresh round — the web's `TOKEN_CACHE_TTL_MS`, the age at
+/// which its send stops answering from the cache the home filled. The list
+/// shows at once either way; this only decides whether a re-read runs
+/// behind it.
+const HOLDINGS_FRESH_MS: f64 = 5.0 * 60.0 * 1000.0;
 
 /// The PIN dialog a security key raised mid-signature.
 pub struct PinDialog {
@@ -99,6 +107,14 @@ fn batch_apply_event(replaces: bool, recipients: Vec<SendRecipientDraft>) -> Sen
 
 pub struct SendHost {
     send: CoreHost<Send>,
+    /// The account this journey sends from, fixed when it opened.
+    address: String,
+    /// A `FetchTokens` waiting for this account's first settled round — a
+    /// send opened before the dashboard had ever finished reading it.
+    pending_tokens: Option<u64>,
+    /// The dashboard round the picker last received (`Settled::round`). A
+    /// newer one is pushed into an open picker.
+    holdings_round: Option<u64>,
     /// A locked request's "add this network" in flight (078 W-04): the
     /// network admin's view is watched until its wizard settles.
     add_network: Option<gpui::Subscription>,
@@ -183,6 +199,9 @@ impl SendHost {
         let display_code = display.code.clone();
         let mut host = Self {
             send,
+            address: account.address.clone(),
+            pending_tokens: None,
+            holdings_round: None,
             view,
             speed: SpeedControl::new(),
             batch: None,
@@ -239,6 +258,17 @@ impl SendHost {
         .detach();
         speed_control::reset(&mut host, cx);
 
+        // The picker's list is the Assets column's (`answer_tokens`), so it
+        // moves when that column does: every round the dashboard settles —
+        // its ten-minute tick, a pull, the refresh after a send, the window
+        // coming back — reaches an open picker too.
+        let dashboard = resident::resident::<BalanceDashboard>(cx);
+        cx.observe(&dashboard, |host, dashboard, cx| {
+            let view = dashboard.read(cx).view();
+            host.on_holdings(&view, cx);
+        })
+        .detach();
+
         host.dispatch(
             SendEvent::Open {
                 account: Some(SendAccountRef {
@@ -251,6 +281,7 @@ impl SendHost {
             },
             cx,
         );
+        host.revalidate_holdings(cx);
         host
     }
 
@@ -279,7 +310,133 @@ impl SendHost {
         self.sync_stage(cx);
         self.sync_batch(cx);
         self.ensure_watcher(cx);
+        // Back on the picker from the form: a round that settled meanwhile
+        // was held back (`on_holdings`), and is due now.
+        if self.view.stage == SendStage::SelectToken && self.pending_tokens.is_none() {
+            let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+            self.on_holdings(&view, cx);
+        }
         cx.notify();
+    }
+
+    // -- the holdings ---------------------------------------------------------
+
+    /// Is the dashboard reading the account this send is from? A send is
+    /// pinned to the account it opened for; the dashboard follows whichever
+    /// is active.
+    fn same_account(&self, view: &BalanceView) -> bool {
+        view.address
+            .as_deref()
+            .is_some_and(|address| address.eq_ignore_ascii_case(&self.address))
+    }
+
+    /// `FetchTokens`, answered from the round the Assets column was drawn
+    /// from instead of a second fan-out over every chain. That fan-out kept
+    /// the picker blank for as long as the slowest chain took, on every open,
+    /// and could disagree with the column beside it.
+    ///
+    /// `false` when the dashboard is reading another account: the executor's
+    /// own fetch answers then.
+    fn answer_tokens(&mut self, id: u64, cx: &mut Context<Self>) -> bool {
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        if !self.same_account(&view) {
+            return false;
+        }
+        self.pending_tokens = Some(id);
+        self.on_holdings(&view, cx);
+        true
+    }
+
+    /// The dashboard changed. Answer a waiting `FetchTokens` once this
+    /// account has settled a round (showing what has arrived until then), or
+    /// push a newer round into an open picker.
+    fn on_holdings(&mut self, view: &BalanceView, cx: &mut Context<Self>) {
+        if !self.same_account(view) {
+            // The person switched accounts while this send waited on its
+            // first round, which will now never come: fetch it directly.
+            if let Some(id) = self.pending_tokens.take() {
+                self.fetch_tokens_directly(id, cx);
+            }
+            return;
+        }
+        let settled = balance_dashboard::settled(&self.address);
+        if let Some(id) = self.pending_tokens {
+            let result = match &settled {
+                Some(round) => {
+                    self.holdings_round = Some(round.round);
+                    send_executor::tokens_loaded(&round.tokens, &round.failed_chain_ids)
+                }
+                // Nothing could be read and nothing is known.
+                None if view.unreachable => SendShellResult::TokensLoaded {
+                    tokens: None,
+                    chains: send_executor::chain_infos(),
+                },
+                None => {
+                    // The first round is still out: the chains that have
+                    // answered, display-only, as the Assets column shows them.
+                    if !view.tokens.is_empty() {
+                        let tokens = view
+                            .tokens
+                            .iter()
+                            .map(send_executor::to_send_token)
+                            .collect();
+                        self.dispatch(SendEvent::TokensPartial { tokens }, cx);
+                    }
+                    return;
+                }
+            };
+            self.pending_tokens = None;
+            self.resolve_send(id, result, cx);
+            return;
+        }
+        // A newer round than the picker holds. Only the picker follows it: a
+        // form or a confirm card is about the token as it was picked, and a
+        // list moving under a sweep being confirmed would change what it
+        // sends. Marked received BEFORE asking, so the re-pull's own renders
+        // cannot ask again.
+        let Some(round) = settled.map(|round| round.round) else {
+            return;
+        };
+        if self.holdings_round.is_some_and(|held| held != round)
+            && self.view.stage == SendStage::SelectToken
+        {
+            self.holdings_round = Some(round);
+            self.dispatch(SendEvent::RefreshTokens, cx);
+        }
+    }
+
+    /// Holdings older than [`HOLDINGS_FRESH_MS`] are shown at once and read
+    /// again behind them; the new round replaces the list when it settles.
+    fn revalidate_holdings(&self, cx: &mut Context<Self>) {
+        let Some(round) = balance_dashboard::settled(&self.address) else {
+            // Never settled: the first round is already out.
+            return;
+        };
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        if self.same_account(&view) && crate::executor::now_ms() - round.at_ms > HOLDINGS_FRESH_MS {
+            balance_dashboard::dispatch(
+                BalanceEvent::RefreshRequested {
+                    force: false,
+                    pull: false,
+                },
+                cx,
+            );
+        }
+    }
+
+    /// The executor's own fan-out, for a send the dashboard cannot answer.
+    fn fetch_tokens_directly(&mut self, id: u64, cx: &mut Context<Self>) {
+        let operation = SendOperation::FetchTokens {
+            address: self.address.clone(),
+        };
+        if let SendAnswer::Blocking(work) = send_executor::perform(&operation, &self.ctx) {
+            cx.spawn(async move |host, cx| {
+                let result = cx.background_executor().spawn(async move { work() }).await;
+                host.update(cx, |host, cx| host.resolve_send(id, result, cx))
+                    .ok();
+            })
+            .detach();
+        }
     }
 
     // -- the batch importer ----------------------------------------------------
@@ -534,6 +691,11 @@ impl SendHost {
                     admin.dispatch(NetEvent::AddByChainIdRequested { chain_id, now_iso }, cx);
                 });
                 return;
+            }
+            SendOperation::FetchTokens { .. } => {
+                if self.answer_tokens(id, cx) {
+                    return;
+                }
             }
             SendOperation::ShowAlert { kind } => {
                 self.alert = Some(kind.clone());

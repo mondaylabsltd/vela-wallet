@@ -7,6 +7,7 @@
 //! from next door. What is here is what those did not already cover.
 
 use gpui::IntoElement as _;
+use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Div, ElementId, Hsla, InteractiveElement as _, ParentElement, SharedString,
@@ -81,22 +82,7 @@ pub fn network_row(
         .items_center()
         .gap(px(12.))
         .py(px(10.))
-        .child(
-            div()
-                .w(px(CHAIN_BADGE))
-                .h(px(CHAIN_BADGE))
-                .rounded(px(CHAIN_BADGE / 2.))
-                .bg(row.badge)
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::text_row_sub())
-                .font_weight(gpui::FontWeight::BOLD)
-                // The chain colours are brand fills, dark enough for white in
-                // both appearances — so the mode-invariant white.
-                .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
-                .child(row.code.clone()),
-        )
+        .child(network_mark(row))
         .child(
             div()
                 .flex_1()
@@ -129,6 +115,47 @@ pub fn network_row(
             qr_glyph,
             qr,
         ))
+}
+
+/// The row's chain: its logo, over the lettermark that shows while the logo
+/// loads, when it cannot, and on a drawn row that has none (issue 201's rule 1
+/// — never a blank circle).
+///
+/// A fallback, not an underlay: a logo with transparent pixels would let the
+/// letters show through it.
+fn network_mark(row: &NetworkRow) -> gpui::AnyElement {
+    let (code, badge) = (row.code.clone(), row.badge);
+    let lettermark = move || {
+        div()
+            .size(px(CHAIN_BADGE))
+            .flex_none()
+            .rounded(px(CHAIN_BADGE / 2.))
+            .bg(badge)
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_size(theme::text_row_sub())
+            .font_weight(gpui::FontWeight::BOLD)
+            // The chain colours are brand fills, dark enough for white in
+            // both appearances — so the mode-invariant white.
+            .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
+            .child(code.clone())
+            .into_any_element()
+    };
+    let Some(url) = row.logos.logo_urls.first().cloned() else {
+        return lettermark();
+    };
+    div()
+        .size(px(CHAIN_BADGE))
+        .flex_none()
+        .child(
+            gpui::img(url)
+                .size_full()
+                .rounded(px(CHAIN_BADGE / 2.))
+                .with_loading(lettermark.clone())
+                .with_fallback(lettermark),
+        )
+        .into_any_element()
 }
 
 /// A copy button's state and its click, as the page bound it: `copied` while

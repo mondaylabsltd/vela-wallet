@@ -57,9 +57,24 @@ fn write_cached_usd(address: &str, usd: f64, now_ms: f64) {
     let _ = storage::write_value(CACHE_KEY, Value::Object(map));
 }
 
-/// The last settled holdings per address (lower-cased) — what a chain that
+/// One address's last settled round.
+#[derive(Clone, Debug)]
+pub struct Settled {
+    /// Every token the round read — zero balances included (the core drops
+    /// those from the display, not from the list), and the rows carried over
+    /// for chains that did not answer.
+    pub tokens: Vec<BalanceToken>,
+    /// The chains that did not answer.
+    pub failed_chain_ids: Vec<u32>,
+    /// Which round this is: rises by one at every settle, for any address.
+    pub round: u64,
+    pub at_ms: f64,
+}
+
+/// The last settled round per address (lower-cased) — what a chain that
 /// does not answer falls back to. The web's in-memory `tokenCache`.
-static LAST_SETTLED: Mutex<Option<HashMap<String, Vec<BalanceToken>>>> = Mutex::new(None);
+static LAST_SETTLED: Mutex<Option<HashMap<String, Settled>>> = Mutex::new(None);
+static ROUND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// The previous snapshot's holdings on chains that did not answer, kept
 /// alongside the ones that did (issue #196, the web's
@@ -103,12 +118,26 @@ fn carry_over_unanswered(
 /// asked again (the web's `tokenCache`, which answers the same switch from
 /// memory).
 fn last_settled(address: &str) -> Vec<BalanceToken> {
+    settled(address)
+        .map(|round| round.tokens)
+        .unwrap_or_default()
+}
+
+/// This address's last settled round, or `None` for one not settled in this
+/// run.
+///
+/// The send picker's list (`SendHost::answer_tokens`): the very round the
+/// Assets column was drawn from, whole — zero balances included, because a
+/// locked payment request is matched against every token read. One fetch,
+/// two screens; the picker used to run a second fan-out of its own, which
+/// kept it blank for as long as the slowest chain took and could disagree
+/// with the column beside it.
+pub fn settled(address: &str) -> Option<Settled> {
     LAST_SETTLED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .as_ref()
         .and_then(|snapshots| snapshots.get(&address.to_lowercase()).cloned())
-        .unwrap_or_default()
 }
 
 /// Settle one round against the last one for this address, and remember it.
@@ -122,9 +151,19 @@ fn settle_with_carry_over(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let snapshots = guard.get_or_insert_with(HashMap::new);
-    let previous = snapshots.get(&key).map_or(&[][..], Vec::as_slice);
+    let previous = snapshots
+        .get(&key)
+        .map_or(&[][..], |round| round.tokens.as_slice());
     let tokens = carry_over_unanswered(previous, fresh, failed_chain_ids);
-    snapshots.insert(key, tokens.clone());
+    snapshots.insert(
+        key,
+        Settled {
+            tokens: tokens.clone(),
+            failed_chain_ids: failed_chain_ids.to_vec(),
+            round: ROUND.fetch_add(1, Ordering::SeqCst) + 1,
+            at_ms: crate::executor::now_ms(),
+        },
+    );
     tokens
 }
 
@@ -618,6 +657,39 @@ mod tests {
         assert_eq!(last_settled(address).len(), 1);
         assert_eq!(last_settled(&address.to_uppercase()).len(), 1);
         assert!(last_settled("0xSomebodyElse").is_empty());
+    }
+
+    /// The round the send picker answers from: every token read (zero
+    /// balances included — a locked payment request matches against them),
+    /// the chains that did not answer, and a round number that moves at every
+    /// settle, which is what tells an open picker there is a newer list.
+    #[test]
+    fn a_settled_round_is_what_the_send_picker_reads() {
+        let address = "0xPickerRoundTest";
+        assert!(settled(address).is_none(), "not settled in this run");
+
+        let mut empty = held(
+            100,
+            "USDC",
+            Some("0x2a22f9c3b484c3629090feed35f17ff8f88f76f0"),
+        );
+        empty.balance = "0".to_owned();
+        let _ = settle_with_carry_over(address, vec![held(100, "xDAI", None), empty], &[8453]);
+        let Some(first) = settled(&address.to_uppercase()) else {
+            unreachable!("just settled");
+        };
+        assert_eq!(first.tokens.len(), 2, "the zero-balance row is kept");
+        assert_eq!(first.failed_chain_ids, vec![8453]);
+
+        let _ = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[]);
+        let Some(second) = settled(address) else {
+            unreachable!("just settled");
+        };
+        assert!(
+            second.round > first.round,
+            "a newer round is a newer number"
+        );
+        assert!(second.failed_chain_ids.is_empty());
     }
 
     /// Privacy persists as the '1'/'0' string the other clients wrote.

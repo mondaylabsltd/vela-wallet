@@ -770,6 +770,10 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
             badge: tint(chain_id),
             address: SharedString::from(shorten(address)),
             address_full: SharedString::from(address.to_owned()),
+            // The chain's own logo — the one the sidebar's network filter and
+            // this network's QR centre wear. The row drew only the lettermark,
+            // so twenty-four networks read as a column of "ETH" circles.
+            logos: crate::marks::chain_logos(chain_id),
         })
         .collect();
     ReceiveList {

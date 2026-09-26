@@ -183,6 +183,9 @@ pub struct NetworkRow {
     pub address: SharedString,
     /// The whole address, for the row's copy button.
     pub address_full: SharedString,
+    /// The endpoint's logo for this chain (`marks::chain_logos`). Empty on a
+    /// drawn row: the gallery shows the lettermark, the documented fallback.
+    pub logos: crate::marks::Logos,
 }
 
 #[derive(Clone)]
@@ -852,6 +855,7 @@ fn receive_list(s: &FlowStrings) -> ReceiveList {
                 badge: (n.color)(),
                 address: ADDRESS_DISPLAY.into(),
                 address_full: crate::wallet::fixtures::ADDRESS_FULL.into(),
+                logos: crate::marks::Logos::default(),
             })
             .collect(),
     }

@@ -246,6 +246,27 @@ pub fn chain_infos() -> Vec<SendChainInfo> {
 }
 
 /// A balance row as the send machine's token (`toSendToken`).
+/// One multi-chain round as the picker's answer.
+///
+/// Nothing came back and something failed: the load failed (`catch` →
+/// `send.alertLoadTokensError`). An empty wallet on reachable chains is an
+/// empty list, not an error. The chains are read at the answer, not the
+/// fetch, so a chain just added is in the snapshot.
+///
+/// Shared by the executor's own fetch and the host's answer from the
+/// dashboard's settled round (`SendHost::answer_tokens`): one rule for both.
+pub fn tokens_loaded(tokens: &[BalanceToken], failed_chain_ids: &[u32]) -> SendShellResult {
+    let tokens = if tokens.is_empty() && !failed_chain_ids.is_empty() {
+        None
+    } else {
+        Some(tokens.iter().map(to_send_token).collect())
+    };
+    SendShellResult::TokensLoaded {
+        tokens,
+        chains: chain_infos(),
+    }
+}
+
 pub fn to_send_token(token: &BalanceToken) -> SendToken {
     SendToken {
         network: network_id(token.chain_id),
@@ -408,19 +429,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             let address = address.clone();
             SendAnswer::Blocking(Box::new(move || {
                 let (tokens, failed) = balances::fetch_all(&address);
-                // Nothing came back and something failed: the load failed
-                // (`catch` → `send.alertLoadTokensError`). An empty wallet on
-                // reachable chains is an empty list, not an error.
-                let tokens = if tokens.is_empty() && !failed.is_empty() {
-                    None
-                } else {
-                    Some(tokens.iter().map(to_send_token).collect())
-                };
-                // Read AFTER the fetch, so a chain just added is in the snapshot.
-                SendShellResult::TokensLoaded {
-                    tokens,
-                    chains: chain_infos(),
-                }
+                tokens_loaded(&tokens, &failed)
             }))
         }
 
