@@ -678,7 +678,8 @@ enum SigningLive {
                                      name: AddressText.short(detected.spender),
                                      address: detected.spender))
             }
-            if guardView.detected?.isUnbounded == true, guardView.editor?.choice == nil {
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
+            if guardView.editor?.choice == .unlimited {
                 blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
             }
             return blocks
@@ -718,14 +719,18 @@ enum SigningLive {
         func chip(_ id: String, _ label: String, _ mode: GuardEditorMode, offered: Bool) -> AllowanceChip {
             AllowanceChip(
                 id: id, label: label,
-                // **Disabled, not merely unselected.** An unlimited request
-                // has no finite figure to offer, and a chip that looks
-                // available and refuses is worse than one that is plainly out.
+                // **Disabled, not merely unselected.** A balance nobody could
+                // read, or a request of zero, has nothing to offer, and a chip
+                // that looks available and refuses is worse than one that is
+                // plainly out.
                 state: !offered ? .disabled : (editor.mode == mode ? .selected : .idle)
             )
         }
         let chips = [
-            chip("requested", a(loc, "requested"), .requested, offered: editor.requestedFinite),
+            // An unlimited request opens HERE — the site's own bytes, kept
+            // (Permit2 bundles revert when the wallet re-encodes the approve).
+            chip("requested", a(loc, "requested"), .requested,
+                 offered: editor.requestedFinite || editor.requestedUnlimited),
             chip("balance", a(loc, "balanceCap"), .balance, offered: editor.hasBalanceCap),
             chip("custom", a(loc, "custom"), .custom, offered: true),
             chip("revoke", a(loc, "revoke"), .revoke, offered: true),
@@ -737,16 +742,15 @@ enum SigningLive {
         } ?? a(loc, "unlimitedValue")
 
         var notes: [String] = []
-        if !editor.requestedFinite {
-            notes.append(a(loc, "unlimitedDisabled") + "\n" + a(loc, "choosePrompt"))
-        }
         if decimalsUnverified { notes.append(a(loc, "decimalsUnverified")) }
         if expired { notes.append(a(loc, "expired")) }
 
         return .allowance(
             label: prefix + a(loc, "spendingCap"),
             value: value,
-            valueTone: editor.choice != nil ? .neutral : .danger,
+            // Only a chosen, finite cap reads as settled; unlimited kept as
+            // asked reads as the danger it is.
+            valueTone: (editor.choice == nil || editor.choice == .unlimited) ? .danger : .neutral,
             chips: chips,
             note: notes.isEmpty ? nil : notes.joined(separator: "\n"),
             // "increase by 100" must never read as "cap at 100" — and when the
@@ -763,8 +767,10 @@ enum SigningLive {
                 placeholder: "0",
                 error: editor.error.map { error in
                     switch error {
-                    case .invalidAmount: a(loc, "invalidAmount")
-                    case .unlimitedDisabled: a(loc, "unlimitedDisabled")
+                    // A typed "cap" of 10^60 is no cap — an amount the field
+                    // cannot take. Keeping the site's unlimited ask is the
+                    // Requested chip, so "unlimited is disabled" would be false.
+                    case .invalidAmount, .unlimitedDisabled: a(loc, "invalidAmount")
                     }
                 }
             ) : nil

@@ -36,7 +36,8 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { trimBalance } from '$lib/wallet/live';
+import { exactAmount, trimBalance } from '$lib/wallet/live';
+import { fromBaseUnits } from '$lib/services/eip681';
 import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
@@ -139,19 +140,19 @@ function amountLine(field: ClearSignField, outgoing: boolean): AmountLine {
 /**
  * The allowance editor's chips.
  *
- * The never-unlimited mandate is the core's: an unbounded request offers its
- * `requested` chip DISABLED and hands back no choice, which is what keeps the
- * slider shut until a finite cap is picked. The words are the corpus's; which
- * chip is selectable is `GuardView`'s.
+ * Which chip is selectable is `GuardView`'s; the words are the corpus's. An
+ * unbounded request opens on its own `requested` chip (the core's 2026-09-26
+ * ruling: Permit2 bundles revert when the wallet re-encodes the approve), so
+ * the site's ask is what goes out unless the person picks a cap.
  */
 function allowanceChips(guard: GuardView, m: SigningMessages): AllowanceChip[] {
 	const editor = guard.editor;
 	if (!editor) return [];
 	const state = (mode: string): AllowanceChip['state'] => {
 		if (editor.mode === mode) return 'selected';
-		// An unbounded request cannot be granted as-is: its own chip is dead
-		// until the person deliberately chooses to grant it.
-		if (mode === 'requested' && !editor.requested_finite) return 'disabled';
+		// A request of 0 has no amount of its own to keep.
+		if (mode === 'requested' && !editor.requested_finite && !editor.requested_unlimited)
+			return 'disabled';
 		if (mode === 'balance' && !editor.has_balance_cap) return 'disabled';
 		return 'idle';
 	};
@@ -164,15 +165,35 @@ function allowanceChips(guard: GuardView, m: SigningMessages): AllowanceChip[] {
 	return chips;
 }
 
+/**
+ * The request will go out granting an unbounded allowance, as the site asked:
+ * the single approval kept on its Requested chip, or any batch leg left so.
+ * Allowed since 2026-09-26 — never unsaid. The batch legs have no editor on
+ * this shell yet, so for a bundle this sentence is the whole disclosure.
+ */
+function keepsUnlimited(guard: GuardView): boolean {
+	if (guard.surface === 'batch') return guard.batch?.any_uncapped ?? false;
+	return guard.editor?.choice?.type === 'unlimited';
+}
+
 function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 	if (guard.surface !== 'approval_editor' || !guard.editor) return null;
 	const editor = guard.editor;
 	const symbol = guard.meta.loading ? '…' : guard.meta.symbol;
+	// Only a chosen, finite cap reads as settled; the site's unlimited ask,
+	// kept, reads as the danger it is (and `keepsUnlimited` adds the sentence).
+	const settled = editor.choice !== null && editor.choice.type !== 'unlimited';
 	return {
 		kind: 'allowance',
 		label: fill(m.labelSpendingCap, { symbol }),
-		value: editor.display_amount_raw ?? m.valueUnlimited,
-		valueTone: editor.requested_finite ? 'neutral' : 'danger',
+		// In tokens, never base units: a 5 USDC cap drawn as "5000000" reads
+		// as five million. The send screens' exact figure, at the guard's
+		// decimals (which `decimals_unverified` flags when they are a guess).
+		value:
+			editor.display_amount_raw === null
+				? m.valueUnlimited
+				: `${exactAmount(fromBaseUnits(BigInt(editor.display_amount_raw), guard.meta.decimals))} ${symbol}`,
+		valueTone: settled ? 'neutral' : 'danger',
 		chips: allowanceChips(guard, m),
 		note: guard.decimals_unverified ? m.warnUnverifiedAmount : undefined,
 		resultingTotal:
@@ -188,12 +209,13 @@ function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 						value: editor.custom_text,
 						symbol,
 						placeholder: '0',
+						// A typed "cap" of 10^60 is no cap — an amount the field
+						// cannot take. Keeping the site's unlimited ask is the
+						// Requested chip, so "unlimited is disabled" would be false.
 						error:
-							editor.error === 'invalid_amount'
+							editor.error === 'invalid_amount' || editor.error === 'unlimited_disabled'
 								? m.invalidAmount
-								: editor.error === 'unlimited_disabled'
-									? m.unlimitedDisabled
-									: undefined
+								: undefined
 					}
 				: undefined
 	};
@@ -289,6 +311,9 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		// The guard's editor sits with the approval it caps.
 		const allowance = guardBlock(guard, m);
 		if (allowance) blocks.push(allowance);
+		if (keepsUnlimited(guard)) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		}
 
 		// Whatever the core flagged, said once, in its own words.
 		if (result.to_own_token) {
@@ -327,6 +352,11 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	if (clear.surface === 'blind_transaction' || clear.surface === 'blind_typed_data') {
 		blocks.push({ kind: 'intent', text: m.intentBlind, tone: 'danger' });
 		blocks.push({ kind: 'warning', tone: 'danger', text: fill(m.warnBlindDecode, { bytes }) });
+		// The approval guard reads the raw calldata, not the descriptor — an
+		// undecodable bundle can still be known to grant unlimited.
+		if (keepsUnlimited(guard)) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		}
 		return blocks;
 	}
 

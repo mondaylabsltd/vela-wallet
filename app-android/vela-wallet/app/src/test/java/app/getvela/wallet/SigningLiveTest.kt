@@ -178,19 +178,34 @@ class SigningLiveTest {
             kind = app.getvela.wallet.feature.signing.core.GuardApprovalKind.Erc20Approve, token_address = "0xdd", spender = "0x1111111111111111111111111111111111111111",
             amount_raw = null, is_unbounded = true, editable = true, locus = app.getvela.wallet.feature.signing.core.GuardLocus.CalldataWord(1),
         )
-        val editor = app.getvela.wallet.feature.signing.core.GuardEditorView(mode = null, requested_finite = false, has_balance_cap = false)
-        val blocked = GuardView(surface = app.getvela.wallet.feature.signing.core.GuardSurface.ApprovalEditor, detected = detected, meta = app.getvela.wallet.feature.signing.core.GuardTokenMetaView("USDC", 6, true, false), editor = editor, confirm_allowed = false)
-        val blocks = SigningLive.guardBlocks(blocked, strings)
+        // Kept as the site asked (2026-09-26): the requested chip, the
+        // `unlimited` choice, the danger said, and the consent in the opts.
+        val editor = app.getvela.wallet.feature.signing.core.GuardEditorView(
+            mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Requested,
+            choice = app.getvela.wallet.feature.signing.core.GuardChoice.Unlimited,
+            requested_finite = false, requested_unlimited = true, has_balance_cap = false,
+        )
+        val kept = GuardView(surface = app.getvela.wallet.feature.signing.core.GuardSurface.ApprovalEditor, detected = detected, meta = app.getvela.wallet.feature.signing.core.GuardTokenMetaView("USDC", 6, true, false), editor = editor, confirm_allowed = true, unlimited_consented = true)
+        val blocks = SigningLive.guardBlocks(kept, strings)
         val allowance = blocks.filterIsInstance<SigningBlock.Allowance>().single()
         assertEquals(strings.t("componentsUi.signingApprove.unlimitedValue"), allowance.value)
-        assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Disabled, allowance.chips.first { it.id == "requested" }.state)
-        assertTrue(allowance.note!!.contains(strings.t("componentsUi.signingApprove.choosePrompt")))
-        assertTrue(blocks.any { it is SigningBlock.Warning })
-        val custom = blocked.copy(editor = editor.copy(mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom, custom_text = "1", display_amount_raw = "1000000", choice = app.getvela.wallet.feature.signing.core.GuardChoice.Amount("1000000")), confirm_allowed = true)
-        val bounded = SigningLive.guardBlocks(custom, strings).filterIsInstance<SigningBlock.Allowance>().single()
+        assertEquals(SigningTone.Danger, allowance.valueTone)
+        assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Selected, allowance.chips.first { it.id == "requested" }.state)
+        assertNull("no 'unlimited is disabled' note — it is not", allowance.note)
+        assertTrue(blocks.any { it is SigningBlock.Warning && it.text == strings.t("componentsUi.signing.unlimitedWarning") })
+        val opts = SigningController.approveOpts(FeeView(), ClearSigningView(), kept)
+        assertTrue(opts.unlimited_approved)
+        assertNull("the site's own bytes", opts.params_override_json)
+        assertFalse(SigningController.approveOpts(FeeView(), ClearSigningView(), GuardView()).unlimited_approved)
+
+        val custom = kept.copy(editor = editor.copy(mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom, custom_text = "1", display_amount_raw = "1000000", choice = app.getvela.wallet.feature.signing.core.GuardChoice.Amount("1000000")), unlimited_consented = false)
+        val cappedBlocks = SigningLive.guardBlocks(custom, strings)
+        val bounded = cappedBlocks.filterIsInstance<SigningBlock.Allowance>().single()
         assertEquals("1 USDC", bounded.value)
+        assertEquals(SigningTone.Neutral, bounded.valueTone)
         assertEquals("1", bounded.custom!!.value)
         assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Selected, bounded.chips.first { it.id == "custom" }.state)
+        assertFalse("a capped approval is not unlimited", cappedBlocks.any { it is SigningBlock.Warning })
     }
 
     // -- Spec 046 US1: the balance-change block --------------------------------

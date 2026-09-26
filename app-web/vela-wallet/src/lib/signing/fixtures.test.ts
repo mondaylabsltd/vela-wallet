@@ -80,22 +80,23 @@ describe('the catalogue (data-model.md §3)', () => {
 	});
 });
 
-describe('never-unlimited (spec 022 §4)', () => {
-	it('cs5 disables the requested chip AND the slide', () => {
+describe('unlimited kept as asked, and said (spec 022 §4, 2026-09-26 ruling)', () => {
+	it('cs5 opens on the requested chip, warns in danger, and may be slid', () => {
 		const model = build('cs5');
 		const [editor] = blocks(model, 'allowance');
-		expect(editor.chips.find((c) => c.id === 'requested')?.state).toBe('disabled');
-		expect(model.confirm.enabled).toBe(false);
+		expect(editor.chips.find((c) => c.id === 'requested')?.state).toBe('selected');
+		expect(editor.valueTone).toBe('danger');
+		expect(blocks(model, 'warning').some((w) => w.tone === 'danger')).toBe(true);
+		expect(model.confirm.enabled).toBe(true);
 	});
 
-	it('choosing a finite cap re-enables the slide (cs6, cs8)', () => {
+	it('choosing a finite cap keeps the slide armed (cs6, cs8)', () => {
 		for (const state of ['cs6', 'cs8'] as const) {
 			const model = build(state);
 			expect(model.confirm.enabled, state).toBe(true);
-			// The REQUEST was still unlimited, so its chip stays disabled — the
-			// person picked one of the finite ones instead.
+			// The site's ask is still one tap back — the person picked a cap.
 			const [editor] = blocks(model, 'allowance');
-			expect(editor.chips.find((c) => c.id === 'requested')?.state, state).toBe('disabled');
+			expect(editor.chips.find((c) => c.id === 'requested')?.state, state).toBe('idle');
 		}
 	});
 

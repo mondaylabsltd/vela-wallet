@@ -42,7 +42,9 @@
 //! - **⑨/⑩**: signing/submission/records use the capped `paramsOverride`; a
 //!   batch is refused 5700 for unsupported required capabilities before the
 //!   wallet is touched, and `approval_guard::enforce_no_unlimited` is called
-//!   at the submit chokepoint for the single tx and every batch leg.
+//!   at the submit chokepoint for the single tx and every batch leg — unless
+//!   the approval surface reported the person kept an unbounded amount as
+//!   asked (`SignApproveOpts::unlimited_approved`).
 //!
 //! Wave-A kernels are composed in Rust: `approval_guard::enforce_no_unlimited`
 //! rules at the submit throat, and `fee_policy::tempo_quote_is_stale` guards
@@ -157,6 +159,13 @@ pub struct SignApproveOpts {
     pub params_override_json: Option<String>,
     /// Clear-signing intent captured at approve time, persisted on the record.
     pub intent: Option<String>,
+    /// `approval_guard`'s `unlimited_consented`, copied verbatim: the sheet
+    /// showed an unbounded approval and the person kept it as the site asked.
+    /// The ONLY waiver of the submit chokepoint's `enforce_no_unlimited`;
+    /// absent (a shell that predates it, a sheet that never mounted the
+    /// approval surface) still refuses an unbounded amount.
+    #[serde(default)]
+    pub unlimited_approved: bool,
 }
 
 /// Bundler gas-account funding facts (`FundingNeeded`), amounts as decimal
@@ -763,6 +772,8 @@ struct Inflight {
     method: String,
     /// FINAL (capped) params — invariant ⑨.
     params_json: String,
+    /// `SignApproveOpts::unlimited_approved`, captured at approve time.
+    unlimited_approved: bool,
     chain_id: u32,
     address: String,
     credential_id: String,
@@ -1639,6 +1650,7 @@ fn approve_with(
         transport_id: pending.transport_id.clone(),
         method: pending.method.clone(),
         params_json: final_params,
+        unlimited_approved: opts.unlimited_approved,
         chain_id,
         address: signer.address.clone(),
         credential_id: signer.credential_id,
@@ -1680,8 +1692,10 @@ fn approve_with(
 }
 
 /// The submit chokepoint. `enforce_no_unlimited` rules here for the single
-/// request AND every batch leg — the wallet-side terminal review of the
-/// never-unlimited mandate (`use-dapp-signing.ts:364, 413-415`).
+/// request AND every batch leg (`use-dapp-signing.ts:364, 413-415`) — waived
+/// only when the approval surface showed the unbounded amount and the person
+/// kept it (`Inflight::unlimited_approved`, 2026-09-26 ruling in
+/// `approval_guard`'s module doc).
 fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
     let Some(fl) = model.inflight.clone() else {
         return Command::done();
@@ -1712,7 +1726,9 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
         );
     }
 
-    if let Err(refusal) = enforce_no_unlimited(&fl.method, Some(&parsed)) {
+    if fl.unlimited_approved {
+        // Seen and kept — the site's bytes go out as asked.
+    } else if let Err(refusal) = enforce_no_unlimited(&fl.method, Some(&parsed)) {
         return fail_inflight(
             model,
             CODE_INTERNAL,
@@ -1720,7 +1736,7 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
             Some(refusal.amount_raw),
         );
     }
-    if fl.method == "wallet_sendCalls" {
+    if fl.method == "wallet_sendCalls" && !fl.unlimited_approved {
         // A batch must not smuggle an unbounded approval past the per-tx
         // guard — check every leg as a standalone transaction.
         let calls = parsed

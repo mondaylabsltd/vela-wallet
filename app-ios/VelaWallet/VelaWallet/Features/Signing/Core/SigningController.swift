@@ -585,6 +585,9 @@ final class SigningController {
             "fee_collector": NSNull(),
             "params_override_json": guardView.rewrittenParamsJson as Any? ?? NSNull(),
             "intent": clear.result?.intent as Any? ?? NSNull(),
+            // The guard showed an unbounded amount and it was kept as the site
+            // asked — the submit guard's only waiver, copied, never decided.
+            "unlimited_approved": guardView.unlimitedConsented,
         ]
     }
 

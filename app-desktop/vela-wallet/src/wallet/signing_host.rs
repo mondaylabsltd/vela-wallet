@@ -788,6 +788,10 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         fee_collector: None,
         params_override_json: guard.rewritten_params_json.clone(),
         intent: clear.result.as_ref().map(|result| result.intent.clone()),
+        // The guard showed an unbounded amount and it was kept as the site
+        // asked — the submit guard's only waiver, copied from the view that
+        // drew it, never decided here.
+        unlimited_approved: guard.unlimited_consented,
     }
 }
 
@@ -936,6 +940,25 @@ mod tests {
                 .as_deref(),
             Some(capped),
             "the cap the person chose was dropped on the way to the signer"
+        );
+    }
+
+    /// The other half of the same sentence: an unlimited amount kept as the
+    /// site asked reaches the submit guard as the guard's consent, and only
+    /// when the guard gave it — the core refuses it otherwise.
+    #[test]
+    fn a_kept_unlimited_approval_carries_the_guards_consent() {
+        let fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
+        let mut guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
+        assert!(!approve_opts(&fee, &clear, &guard).unlimited_approved);
+
+        guard.unlimited_consented = true;
+        let opts = approve_opts(&fee, &clear, &guard);
+        assert!(opts.unlimited_approved);
+        assert_eq!(
+            opts.params_override_json, None,
+            "kept as asked: the site's own bytes, nothing rewritten"
         );
     }
 
@@ -1114,6 +1137,7 @@ mod approve_tests {
             fee_collector: None,
             params_override_json: None,
             intent: None,
+            unlimited_approved: false,
         };
 
         let signed = opts

@@ -12,7 +12,9 @@
 
 use gpui::SharedString;
 
-use vela_core::app::approval_guard::{GuardAmountError, GuardEditorMode, GuardSurface, GuardView};
+use vela_core::app::approval_guard::{
+    GuardAmountError, GuardChoice, GuardEditorMode, GuardSurface, GuardView,
+};
 use vela_core::app::clear_signing::{
     ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearProvenance, ClearRisk,
     ClearSignField, ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface,
@@ -443,20 +445,21 @@ fn format_wei_to_eth(wei: u128) -> String {
     }
 }
 
-/// The never-unlimited spending-cap editor, and what each chip chooses.
+/// The spending-cap editor, and what each chip chooses.
 ///
 /// `approval_guard` publishes ten fields and the desktop read exactly one of
 /// them (`confirm_allowed`) until spec 032 phase 30, so an approval could only
 /// ever be REFUSED here: `enforce_no_unlimited` fails closed at the submit
 /// chokepoint and there was no way to pick a cap. Safe, and crippled.
 ///
+/// Since 2026-09-26 an unlimited request opens on its OWN chip — the site's
+/// bytes, kept (Permit2 bundles revert when the wallet re-encodes the
+/// approve) — in the danger tone, with [`guard_warnings`] saying why. The
+/// cap is one chip away: Balance, or Custom for the typed field.
+///
 /// What is deliberately NOT offered: "grant all anyway". The core has the
 /// event, and this shell does not raise it — the founder's rule, and the
 /// drawn scenarios never drew that chip either.
-///
-/// What is missing rather than declined: the custom-amount input. No desktop
-/// scenario draws the field, and a chip that opens nothing is worse than a
-/// chip that is not there.
 #[must_use]
 pub fn guard_editor(
     guard: &GuardView,
@@ -471,9 +474,8 @@ pub fn guard_editor(
     let mut modes = Vec::new();
     let mut chip = |label: SharedString, mode: GuardEditorMode, offered: bool| {
         let state = if !offered {
-            // Disabled, not absent: "Requested" greyed out is the wallet
-            // saying the amount the site asked for is the one thing it will
-            // not sign, which is a fact about this request.
+            // Disabled, not absent: a Balance nobody could read, or a
+            // Requested of zero, is a fact about this request.
             ChipState::Disabled
         } else if editor.mode == Some(mode) {
             ChipState::Selected
@@ -486,13 +488,17 @@ pub fn guard_editor(
     chip(
         s.chip_requested.clone(),
         GuardEditorMode::Requested,
-        editor.requested_finite,
+        editor.requested_finite || editor.requested_unlimited,
     );
     chip(
         s.chip_balance.clone(),
         GuardEditorMode::Balance,
         editor.has_balance_cap,
     );
+    // The way to the typed cap. An unlimited request used to OPEN on Custom,
+    // so the field was there without a chip; it now opens on Requested, and
+    // a field only reachable by never touching a chip is not reachable.
+    chip(s.chip_custom.clone(), GuardEditorMode::Custom, true);
     chip(s.chip_revoke.clone(), GuardEditorMode::Revoke, true);
 
     // The value row: the core's raw base units, formatted by the core's own
@@ -519,22 +525,14 @@ pub fn guard_editor(
         None => s.value_unlimited.clone(),
     };
 
-    // Only a chosen, finite cap reads as settled.
-    let value_tone = if editor.choice.is_some() {
-        Tone::Neutral
-    } else {
-        Tone::Danger
+    // Only a chosen, finite cap reads as settled — the site's unlimited ask,
+    // kept, reads as the danger it is.
+    let value_tone = match editor.choice {
+        Some(GuardChoice::Unlimited) | None => Tone::Danger,
+        Some(_) => Tone::Neutral,
     };
 
     let mut notes: Vec<String> = Vec::new();
-    if !editor.requested_finite {
-        // Two sentences, two LINES. The web shell settled this and says why
-        // (`AllowanceEditor.svelte`): joining them with a space produces a
-        // run-on in CJK, where a space is not a sentence break — and the
-        // English corpus string carries no full stop either, so a space reads
-        // as "…for your safety Set a finite amount…" in every locale.
-        notes.push(format!("{}\n{}", s.unlimited_disabled, s.choose_prompt));
-    }
     if guard.decimals_unverified {
         // An amount capped with decimals nobody verified is a cap at an
         // order of magnitude nobody verified.
@@ -574,15 +572,43 @@ pub fn guard_editor(
                 symbol: SharedString::from(guard.meta.symbol.clone()),
                 placeholder: SharedString::from("0"),
                 error: editor.error.map(|error| match error {
-                    GuardAmountError::InvalidAmount => s.invalid_amount.clone(),
-                    // Typing 2^256-1 by hand is still an unlimited approval,
-                    // and it is refused with the same sentence the chip is.
-                    GuardAmountError::UnlimitedDisabled => s.unlimited_disabled.clone(),
+                    // A typed "cap" of 10^60 is no cap — an amount the field
+                    // cannot take. Keeping the site's unlimited ask is the
+                    // Requested chip, so "unlimited is disabled" would be
+                    // false here.
+                    GuardAmountError::InvalidAmount | GuardAmountError::UnlimitedDisabled => {
+                        s.invalid_amount.clone()
+                    }
                 }),
             }),
         },
         modes,
     ))
+}
+
+/// The sentence an unlimited approval is never sent without.
+///
+/// The request will go out granting an unbounded allowance as the site asked
+/// — the single approval kept on its Requested chip, or any batch leg left so
+/// (a bundle draws no leg editors on this shell yet, so for a bundle this is
+/// the whole disclosure). The guard decides; this only says it.
+#[must_use]
+pub fn guard_warnings(guard: &GuardView, s: &SigningStrings) -> Vec<Block> {
+    let unlimited = match guard.surface {
+        GuardSurface::Batch => guard.batch.as_ref().is_some_and(|batch| batch.any_uncapped),
+        _ => guard
+            .editor
+            .as_ref()
+            .is_some_and(|editor| editor.choice == Some(GuardChoice::Unlimited)),
+    };
+    if unlimited {
+        vec![Block::Warning {
+            tone: Tone::Danger,
+            text: s.warn_unlimited.clone(),
+        }]
+    } else {
+        Vec::new()
+    }
 }
 
 /// What the PIPELINE is doing, under whatever the request is.
@@ -1462,6 +1488,7 @@ mod tests {
             editor: Some(editor),
             confirm_allowed: false,
             rewritten_params_json: None,
+            unlimited_consented: false,
             increase_total: None,
             decimals_unverified: false,
             expired: false,
@@ -1483,21 +1510,34 @@ mod tests {
             }),
             display_amount_raw: amount.map(str::to_owned),
             requested_finite,
+            requested_unlimited: false,
             has_balance_cap: true,
             balance_raw: Some("2000000000".to_owned()),
         }
     }
 
-    /// An unlimited request offers a cap and refuses the amount it was asked
-    /// for — the founder's rule, drawn.
+    /// An unlimited request opens on its OWN chip, in the danger tone, with
+    /// the sentence under it — kept as the site asked (2026-09-26), with a cap
+    /// one chip away.
     #[test]
-    fn an_unlimited_request_can_be_capped_but_never_granted() {
+    fn an_unlimited_request_is_kept_as_asked_and_said() {
         let s = strings();
-        let (block, modes) = guard_editor(&guard_view(editor_view(None, false, None)), &s)
+        let mut kept = guard_view(vela_core::app::approval_guard::GuardEditorView {
+            mode: Some(GuardEditorMode::Requested),
+            choice: Some(GuardChoice::Unlimited),
+            requested_unlimited: true,
+            ..editor_view(None, false, None)
+        });
+        kept.unlimited_consented = true;
+        let (block, modes) = guard_editor(&kept, &s)
             .unwrap_or_else(|| unreachable!("the editor surface drew nothing"));
 
         let Block::Allowance {
-            value, chips, note, ..
+            value,
+            value_tone,
+            chips,
+            note,
+            ..
         } = &block
         else {
             unreachable!("the editor is an allowance block")
@@ -1506,22 +1546,51 @@ mod tests {
             *value, s.value_unlimited,
             "an uncapped request reads as what it is"
         );
-        assert_eq!(
-            chips[0].1,
-            ChipState::Disabled,
-            "the requested amount is refused"
-        );
+        assert_eq!(*value_tone, Tone::Danger);
         assert_eq!(modes[0], GuardEditorMode::Requested);
+        assert_eq!(chips[0].1, ChipState::Selected, "the site's ask, kept");
+        assert!(
+            modes.contains(&GuardEditorMode::Custom),
+            "no way to the typed cap once another chip is lit"
+        );
         assert!(
             note.as_ref()
-                .is_some_and(|note| note.contains(s.unlimited_disabled.as_ref())),
-            "the sheet never says WHY the requested chip is dead"
+                .is_none_or(|note| !note.contains(s.unlimited_disabled.as_ref())),
+            "the sheet still says unlimited is disabled"
+        );
+        assert!(
+            guard_warnings(&kept, &s).iter().any(|block| matches!(
+                block,
+                Block::Warning { tone: Tone::Danger, text } if *text == s.warn_unlimited
+            )),
+            "an unlimited approval went out unsaid"
         );
         // Never offered, on this shell, at all.
         assert!(
             !modes.contains(&GuardEditorMode::Grant),
             "a `grant all anyway` chip reached a screen"
         );
+    }
+
+    /// A batch has no leg editors here — so the sentence is its whole
+    /// disclosure, and it follows the guard's effective state.
+    #[test]
+    fn a_batch_left_unlimited_is_said_too() {
+        let s = strings();
+        let mut batch = guard_view(editor_view(None, false, None));
+        batch.surface = GuardSurface::Batch;
+        batch.editor = None;
+        batch.batch = Some(vela_core::app::approval_guard::GuardBatchView {
+            legs: Vec::new(),
+            any_uncapped: true,
+            any_to_own_token: false,
+            all_settled: true,
+        });
+        assert_eq!(guard_warnings(&batch, &s).len(), 1);
+        if let Some(view) = batch.batch.as_mut() {
+            view.any_uncapped = false;
+        }
+        assert!(guard_warnings(&batch, &s).is_empty());
     }
 
     /// A chosen cap is a number, formatted by the core's own formatter.

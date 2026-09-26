@@ -5,8 +5,11 @@ import kotlinx.serialization.Serializable
 
 /*
  * The `approval_guard` machine's wire (spec 044) — an unlimited approval
- * never leaves the wallet. `chain_id`/`decimals`/`index`/`word_index`/
- * `amount_bits` are `u32`, `now_ms` `f64`.
+ * never leaves the wallet UNSEEN: since the founder's 2026-09-26 ruling it
+ * leaves as the site asked unless the person lowers it (Permit2 bundles
+ * revert when the wallet re-encodes the approve), and only with the view's
+ * `unlimited_consented` riding in the approve opts. `chain_id`/`decimals`/
+ * `index`/`word_index`/`amount_bits` are `u32`, `now_ms` `f64`.
  */
 
 @Serializable
@@ -79,6 +82,12 @@ sealed class GuardChoice {
     @Serializable
     @SerialName("grant")
     data object Grant : GuardChoice()
+
+    /** Keep the site's own UNBOUNDED amount, byte for byte — what the
+     *  "Requested" chip means on an unlimited request. */
+    @Serializable
+    @SerialName("unlimited")
+    data object Unlimited : GuardChoice()
 }
 
 @Serializable
@@ -127,6 +136,9 @@ data class GuardEditorView(
     val choice: GuardChoice? = null,
     val display_amount_raw: String? = null,
     val requested_finite: Boolean = false,
+    /** The Requested chip keeps an UNLIMITED amount as asked; the chip is
+     *  offered when either flag is true. */
+    val requested_unlimited: Boolean = false,
     val has_balance_cap: Boolean = false,
     val balance_raw: String? = null,
 )
@@ -162,6 +174,9 @@ data class GuardView(
     val editor: GuardEditorView? = null,
     val confirm_allowed: Boolean = true,
     val rewritten_params_json: String? = null,
+    /** Shown and kept as asked — copied into `SignApproveOpts.unlimited_approved`,
+     *  the submit guard's only waiver. */
+    val unlimited_consented: Boolean = false,
     val increase_total: GuardIncreaseTotalView? = null,
     val decimals_unverified: Boolean = false,
     val expired: Boolean = false,

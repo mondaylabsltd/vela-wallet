@@ -1,6 +1,6 @@
 //! Machine — the approval guard (spec `017`, inventory `### approval_guard (P1)`).
 //!
-//! The "unlimited can never leave the wallet" core: detection of every
+//! The "unlimited never leaves the wallet unseen" core: detection of every
 //! approval-granting shape straight off the raw calldata / typed data (a token
 //! drainer's #1 tool is an unbounded `approve` / `permit` / `setApprovalForAll`,
 //! and a descriptor lookup is exactly what fails on novel/hostile contracts),
@@ -9,13 +9,26 @@
 //! `init_editor` / `derive_editor` pair serves both) and the EIP-5792 per-leg
 //! gating.
 //!
+//! **An unbounded request is kept as asked unless the person lowers it**
+//! (founder ruling 2026-09-26, replacing "never unlimited"). Permit2 is built
+//! on a standing unlimited `approve(Permit2, MAX)`, and a smart account's
+//! EIP-5792 bundle spends that allowance in the SAME atomic batch: a wallet
+//! that re-encodes the approve leg to a smaller number makes the dApp's swap
+//! leg revert and takes the whole bundle down with it. So the "Requested"
+//! chip is preselected for an unbounded amount too (choice
+//! [`GuardChoice::Unlimited`] — the bytes stay the dApp's), the surface warns,
+//! a cap is one chip away, and the submit guard lets an unbounded amount
+//! through only when this machine's view said the person saw it
+//! ([`GuardView::unlimited_consented`]).
+//!
 //! ```text
 //! ApprovalDetected ─► detect (8 shapes, pure) ─► editor init
 //!        │                                        │
 //!        ├─ ReadTokenMetadata / ReadErc20Allowance / ReadErc20Balance (RPC)
 //!        ▼                                        ▼
 //!   typed-path permit ─► sign-verbatim surface   calldata ─► cap editor
-//!   (never rewritten — consent, not capping)     choice=None ⇒ confirm gated
+//!   (never rewritten — consent, not capping)     Requested preselected;
+//!                                                a cap re-encodes one word
 //! ```
 //!
 //! Faithful port of the TypeScript sources — behavior aligned line by line,
@@ -26,8 +39,10 @@
 //!   shapes, rewriteApprovalParams + assertOnlyWordChanged, enforceNoUnlimited,
 //!   parse/format token amounts
 //! - `src/components/signing/EditableApproveCard.tsx:85-107` — the
-//!   mode → choice derivation (unbounded starts with NO choice; a custom
-//!   amount ≥ cap derives `None` + an error, never a choice), `:217` (a
+//!   mode → choice derivation (a custom amount ≥ cap derives `None` + an
+//!   error, never a choice — keeping the unbounded ask is the Requested
+//!   chip's job, not the cap field's; the TS started an unbounded request
+//!   with NO choice, the 2026-09-26 ruling above preselects it), `:217` (a
 //!   boolean grant-all is never preselected), `:200-202` (unverified
 //!   decimals warning)
 //! - `src/components/signing/SigningSheet.tsx:196-228, 316-387, 527-583` —
@@ -235,6 +250,10 @@ pub enum GuardChoice {
     /// Keep a boolean `true` — explicit and deliberate, setApprovalForAll /
     /// DAI permit only.
     Grant,
+    /// Keep the dApp's own UNBOUNDED amount, byte for byte — nothing is
+    /// re-encoded. What the "Requested" chip means on an unbounded request;
+    /// never derived for a finite one (that is `Amount { requested }`).
+    Unlimited,
 }
 
 // ---------------------------------------------------------------------------
@@ -502,6 +521,8 @@ pub struct GuardTokenMetaView {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum GuardAmountError {
     InvalidAmount,
+    /// A typed cap so large it is no cap at all (≥ 2^200 / 2^152). The cap
+    /// field limits; keeping the site's unlimited ask is the Requested chip.
     UnlimitedDisabled,
 }
 
@@ -518,6 +539,12 @@ pub struct GuardEditorView {
     pub display_amount_raw: Option<String>,
     /// The "Requested" chip exists (a finite, non-zero incoming amount).
     pub requested_finite: bool,
+    /// The "Requested" chip exists and keeps an UNBOUNDED amount as the site
+    /// asked (choice [`GuardChoice::Unlimited`]). Exclusive with
+    /// `requested_finite`; the chip is offered when either is true. A shell
+    /// that reads this `true` with the chip selected says the allowance is
+    /// unlimited, in the danger tone.
+    pub requested_unlimited: bool,
     /// The one-tap finite Balance cap is offered (issue #86).
     pub has_balance_cap: bool,
     pub balance_raw: Option<String>,
@@ -587,6 +614,13 @@ pub struct GuardView {
     /// CLOSED: the untouched params still hit [`enforce_no_unlimited`] at the
     /// submit chokepoint.
     pub rewritten_params_json: Option<String>,
+    /// The request still grants an unbounded allowance after the person's
+    /// choices — and it does so because this surface showed it and the
+    /// Requested chip was left on (single approval, or any batch leg). The
+    /// shell copies it to `SignApproveOpts::unlimited_approved`; it is the
+    /// only thing that lets an unbounded amount past the submit guard, so a
+    /// request this machine never saw still cannot carry one.
+    pub unlimited_consented: bool,
     pub increase_total: Option<GuardIncreaseTotalView>,
     /// Unverified decimals must be explicitly flagged
     /// (`EditableApproveCard.tsx:200-202`; `PermitSignView.tsx:103-105`).
@@ -683,6 +717,10 @@ impl App for ApprovalGuard {
             let batch_view = build_batch_view(model, batch);
             let confirm_allowed = batch_view.all_settled;
             let rewritten_params_json = rewritten_batch_params(model, batch, &batch_view);
+            let unlimited_consented = batch_view
+                .legs
+                .iter()
+                .any(|leg| matches!(leg.choice, Some(GuardChoice::Unlimited)));
             return GuardView {
                 surface: GuardSurface::Batch,
                 detected: None,
@@ -695,6 +733,7 @@ impl App for ApprovalGuard {
                 editor: None,
                 confirm_allowed,
                 rewritten_params_json,
+                unlimited_consented,
                 increase_total: None,
                 decimals_unverified: false,
                 expired: false,
@@ -711,6 +750,7 @@ impl App for ApprovalGuard {
                 editor: None,
                 confirm_allowed: true,
                 rewritten_params_json: None,
+                unlimited_consented: false,
                 increase_total: None,
                 decimals_unverified: false,
                 expired: false,
@@ -729,7 +769,10 @@ impl App for ApprovalGuard {
 
         let confirm_allowed = !(detected.editable && choice.is_none());
 
+        let unlimited_consented = matches!(choice, Some(GuardChoice::Unlimited));
         let rewritten_params_json = match (&choice, &model.params) {
+            // Kept as asked: the site's own bytes go out, nothing to re-encode.
+            (Some(GuardChoice::Unlimited), _) => None,
             (Some(choice), Some(params)) if detected.editable => {
                 rewrite_approval_params(&model.method, params, detected, choice)
                     .ok()
@@ -758,6 +801,7 @@ impl App for ApprovalGuard {
             editor,
             confirm_allowed,
             rewritten_params_json,
+            unlimited_consented,
             decimals_unverified,
             meta,
             batch: None,
@@ -910,8 +954,16 @@ fn init_editor(detected: &GuardDetectedApproval) -> Editor {
             mode: GuardEditorMode::Requested,
             custom_text: format_token_amount(requested.mag, 18, 6, "", ".", false),
         }
+    } else if detected.is_unbounded {
+        // Kept as the site asked (module doc, 2026-09-26): re-encoding it by
+        // default is what reverted Permit2 bundles. The cap field starts
+        // blank — there is no finite number to seed it with.
+        Editor::Amount {
+            mode: GuardEditorMode::Requested,
+            custom_text: String::new(),
+        }
     } else {
-        // An unbounded request forces a deliberate choice.
+        // approve(spender, 0) — nothing requested, nothing to keep.
         Editor::Amount {
             mode: GuardEditorMode::Custom,
             custom_text: String::new(),
@@ -975,8 +1027,12 @@ fn leg_mut(model: &mut Model, index: u32) -> Option<&mut Leg> {
     model.batch.as_mut()?.legs.get_mut(index as usize)
 }
 
+/// Typing a cap IS choosing a custom cap. An unbounded request now opens on
+/// Requested, so a keystroke that left the mode there would be a number on
+/// screen the choice ignores.
 fn set_custom_text(editor: &mut Editor, text: String) -> Command<GuardEffect, Event> {
-    if let Editor::Amount { custom_text, .. } = editor {
+    if let Editor::Amount { mode, custom_text } = editor {
+        *mode = GuardEditorMode::Custom;
         *custom_text = text;
         render()
     } else {
@@ -1018,6 +1074,11 @@ fn apply_preset(
         GuardEditorMode::Requested if requested_finite => {
             *current = GuardEditorMode::Requested;
             *custom_text = format_token_amount(requested.mag, meta.decimals, 6, "", ".", false);
+        }
+        // Back to the site's unlimited ask; the cap field keeps whatever the
+        // person typed, so switching to Custom again loses nothing.
+        GuardEditorMode::Requested if detected.is_unbounded => {
+            *current = GuardEditorMode::Requested;
         }
         GuardEditorMode::Balance if has_balance_cap => {
             *current = GuardEditorMode::Balance;
@@ -1170,6 +1231,7 @@ fn derive_editor(
             }),
             display_amount_raw: None,
             requested_finite: false,
+            requested_unlimited: false,
             has_balance_cap: false,
             balance_raw: None,
         }),
@@ -1183,8 +1245,15 @@ fn derive_editor(
             let has_balance_cap = !card_reducing && balance.is_some_and(|b| !b.is_zero());
             let bits = bits_from_wire(detected.amount_bits);
 
+            let requested_unlimited = detected.is_unbounded && !detected.is_boolean_grant;
+
             let (choice, error, display) = match mode {
                 GuardEditorMode::Revoke => (Some(GuardChoice::Revoke), None, Some(U256::ZERO)),
+                // No display amount: the value row says "Unlimited", never
+                // 2^256-1 spelled out in token units.
+                GuardEditorMode::Requested if requested_unlimited => {
+                    (Some(GuardChoice::Unlimited), None, None)
+                }
                 GuardEditorMode::Requested => (
                     Some(GuardChoice::Amount {
                         amount_raw: requested.mag.to_string(),
@@ -1235,6 +1304,7 @@ fn derive_editor(
                 choice,
                 display_amount_raw: display.map(|d| d.to_string()),
                 requested_finite,
+                requested_unlimited,
                 has_balance_cap,
                 balance_raw: balance.map(|b| b.to_string()),
             })
@@ -1405,7 +1475,9 @@ fn build_batch_view(model: &Model, batch: &BatchState) -> GuardBatchView {
 
 /// Does this batch approval leg still need a deliberate decision before the
 /// bundle can be confirmed? Finite amounts are pre-accepted — editing them is
-/// optional. Port of `BatchCallsView.tsx:40-45`.
+/// optional — and so, since 2026-09-26, is an unbounded amount (its editor
+/// starts on Requested = [`GuardChoice::Unlimited`]). Only a grant-all still
+/// waits for the deliberate tap. Port of `BatchCallsView.tsx:40-45`.
 pub fn leg_needs_choice(
     approval: Option<&GuardDetectedApproval>,
     choice: Option<&GuardChoice>,
@@ -1420,7 +1492,9 @@ pub fn leg_needs_choice(
     if ap.is_unbounded {
         return !matches!(
             choice,
-            Some(GuardChoice::Amount { .. }) | Some(GuardChoice::Revoke)
+            Some(GuardChoice::Amount { .. })
+                | Some(GuardChoice::Revoke)
+                | Some(GuardChoice::Unlimited)
         );
     }
     false
@@ -1464,7 +1538,9 @@ fn rewritten_batch_params(
         .zip(view.legs.iter())
         .map(|(leg, projected)| {
             if let (Some(detected), Some(choice)) = (&leg.detected, &projected.choice) {
-                if detected.editable {
+                // Kept as asked — the leg goes out byte-identical, which is
+                // the whole point: the next leg spends against it.
+                if detected.editable && *choice != GuardChoice::Unlimited {
                     if let Some(data) = leg.call.get("data").and_then(Value::as_str) {
                         if let Ok(new_data) = rewrite_calldata(data, detected, choice) {
                             let mut call = leg.call.clone();
@@ -1896,6 +1972,20 @@ fn chosen_amount(
             }
             Ok(U256::from(1u64)) // boolean true
         }
+        // The site's own unbounded word, re-encoded to itself — the view
+        // never asks for this rewrite (it sends the original bytes), but the
+        // pure function stays total: "keep it" is an identity, and it is
+        // refused for a finite request, where it would mean nothing.
+        GuardChoice::Unlimited => {
+            if !detected.is_unbounded || detected.is_boolean_grant {
+                return Err(GuardRewriteError::InvalidChoiceAmount);
+            }
+            detected
+                .amount_raw
+                .as_deref()
+                .and_then(parse_dec_u256)
+                .ok_or(GuardRewriteError::InvalidChoiceAmount)
+        }
         GuardChoice::Amount { amount_raw } => {
             // The wire carries decimal digits only; a negative or garbled
             // amount is the TS `amountRaw < 0n` refusal.
@@ -1931,7 +2021,9 @@ pub fn rewrite_calldata(
     let new_word = if detected.kind == GuardApprovalKind::SetApprovalForAll {
         // boolean: grant → true, revoke → false. No "amount" to cap.
         match choice {
-            GuardChoice::Amount { .. } => return Err(GuardRewriteError::AmountForBooleanShape),
+            GuardChoice::Amount { .. } | GuardChoice::Unlimited => {
+                return Err(GuardRewriteError::AmountForBooleanShape)
+            }
             GuardChoice::Grant => format!("{:064x}", U256::from(1u64)),
             GuardChoice::Revoke => format!("{:064x}", U256::ZERO),
         }
@@ -1962,7 +2054,7 @@ fn rewrite_typed_data(
     };
 
     if detected.kind == GuardApprovalKind::DaiPermit {
-        if matches!(choice, GuardChoice::Amount { .. }) {
+        if matches!(choice, GuardChoice::Amount { .. } | GuardChoice::Unlimited) {
             return Err(GuardRewriteError::AmountForBooleanShape);
         }
         let allowed = matches!(choice, GuardChoice::Grant);
@@ -2031,9 +2123,11 @@ pub struct GuardUnlimitedApproval {
     pub amount_raw: String,
 }
 
-/// Errors if the FINAL request would grant an unbounded allowance. The UI
-/// caps approvals up-front; this catches anything that bypassed it (incl.
-/// shapes no descriptor decodes).
+/// Errors if the FINAL request would grant an unbounded allowance. The submit
+/// chokepoint (`sign_request::proceed_submit`) waives it only when the
+/// approval surface reported [`GuardView::unlimited_consented`]; everything
+/// else — a shell that never mounted the surface, a shape no descriptor
+/// decodes — is still refused here.
 pub fn enforce_no_unlimited(
     method: &str,
     params: Option<&Value>,

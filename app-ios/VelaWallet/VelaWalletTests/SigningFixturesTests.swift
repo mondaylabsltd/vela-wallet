@@ -105,14 +105,15 @@ struct SigningFixturesTests {
         }
     }
 
-    /// The never-unlimited mandate (spec 022 §4).
-    @Test func unlimitedApprovalCannotBeConfirmedAsRequested() {
+    /// Unlimited kept as asked, and said (spec 022 §4, 2026-09-26 ruling).
+    @Test func unlimitedApprovalIsKeptAsRequestedAndSaid() {
         let m = model(.cs5)
-        #expect(m.confirm?.enabled == false, "cs5 must not be confirmable")
+        #expect(m.confirm?.enabled == true, "cs5 must be confirmable as asked")
         guard case .allowance(_, _, _, let chips, _, _, _) = m.blocks.first(where: {
             if case .allowance = $0 { return true } else { return false }
         }) else { Issue.record("cs5 has no allowance editor"); return }
-        #expect(chips.first { $0.id == "requested" }?.state == .disabled)
+        #expect(chips.first { $0.id == "requested" }?.state == .selected)
+        #expect(m.blocks.contains { if case .warning(.danger, _) = $0 { true } else { false } })
     }
 
     @Test func choosingAFiniteCapReEnablesTheSlide() {

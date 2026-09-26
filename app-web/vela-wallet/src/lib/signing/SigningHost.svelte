@@ -342,7 +342,10 @@
 					: null,
 			fee_collector: null,
 			params_override_json: signingSheet.guard.rewritten_params_json,
-			intent: null
+			intent: null,
+			// The approval surface showed an unbounded amount and it was kept as
+			// the site asked — the submit guard's only waiver, copied, not decided.
+			unlimited_approved: signingSheet.guard.unlimited_consented
 		};
 	}
 

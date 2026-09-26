@@ -21,6 +21,14 @@ display_amount_raw: string | null,
  */
 requested_finite: boolean, 
 /**
+ * The "Requested" chip exists and keeps an UNBOUNDED amount as the site
+ * asked (choice [`GuardChoice::Unlimited`]). Exclusive with
+ * `requested_finite`; the chip is offered when either is true. A shell
+ * that reads this `true` with the chip selected says the allowance is
+ * unlimited, in the danger tone.
+ */
+requested_unlimited: boolean, 
+/**
  * The one-tap finite Balance cap is offered (issue #86).
  */
 has_balance_cap: boolean, balance_raw: string | null, };

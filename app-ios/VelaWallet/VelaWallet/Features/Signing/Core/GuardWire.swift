@@ -4,17 +4,20 @@
 //
 //  The `approval_guard` machine's view model, in Swift.
 //
-//  ## The mandate this machine exists to keep
+//  ## The rule this machine keeps
 //
-//  An unlimited approval never leaves this wallet. Not as a warning somebody
-//  can tap past — there is no "grant all anyway" chip, by the founder's own
-//  ruling — but as a gate: `confirmAllowed` stays false until the person has
-//  named a finite cap, and `rewrittenParamsJson` is what gets signed.
+//  An unlimited approval never leaves this wallet UNSEEN. Since the founder's
+//  2026-09-26 ruling it leaves as the site asked unless the person lowers it —
+//  Permit2 bundles revert when the wallet re-encodes the approve — so an
+//  unbounded request opens on its own "Requested" chip (choice `.unlimited`),
+//  the sheet says it in the danger tone, and a cap is one chip away. There is
+//  still no "grant all anyway" chip for a boolean grant-all.
 //
 //  **`rewrittenParamsJson` being `nil` is not a green light.** It means
-//  nothing was rewritten, *including when a rewrite failed*, and the untouched
-//  params then meet the core's own refusal at the submit chokepoint. Failing
-//  closed at two places is deliberate.
+//  nothing was rewritten — kept as asked, *or a rewrite failed* — and the
+//  untouched params meet the core's own refusal at the submit chokepoint
+//  unless `unlimitedConsented` rides along in the approve opts. Only this
+//  machine's view can grant that waiver.
 //
 //  Amounts are DECIMAL STRINGS everywhere, never numbers. A `Double` cannot
 //  hold 2^256 - 1, and rounding somebody's spending cap is the bug this whole
@@ -102,6 +105,9 @@ enum GuardChoiceWire: Decodable, Equatable {
     /// Keep a boolean `true` — explicit and deliberate, and only ever for
     /// `setApprovalForAll` or a DAI permit.
     case grant
+    /// Keep the site's own UNBOUNDED amount, byte for byte — what the
+    /// "Requested" chip means on an unlimited request.
+    case unlimited
 
     private enum Keys: String, CodingKey { case type, amountRaw }
 
@@ -111,6 +117,7 @@ enum GuardChoiceWire: Decodable, Equatable {
         case "amount": self = .amount(raw: try container.decode(String.self, forKey: .amountRaw))
         case "revoke": self = .revoke
         case "grant": self = .grant
+        case "unlimited": self = .unlimited
         case let other:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: container,
@@ -163,10 +170,11 @@ struct GuardEditorViewWire: Decodable, Equatable {
     let choice: GuardChoiceWire?
     /// What the value row shows, raw base units.
     let displayAmountRaw: String?
-    /// The "as requested" chip exists at all — a finite, non-zero incoming
-    /// amount. When the request is unlimited the chip is drawn **disabled**,
-    /// not merely unselected.
+    /// The "as requested" chip keeps a finite, non-zero incoming amount.
     let requestedFinite: Bool
+    /// The "as requested" chip keeps an UNLIMITED amount as the site asked
+    /// (choice `.unlimited`). The chip is offered when either flag is true.
+    let requestedUnlimited: Bool
     /// The one-tap finite balance cap is offered.
     let hasBalanceCap: Bool
     let balanceRaw: String?
@@ -218,6 +226,10 @@ struct GuardViewWire: Decodable, Equatable {
     /// The finite re-encode of the whole request, ready to submit. See the
     /// file header: `nil` is not a green light.
     let rewrittenParamsJson: String?
+    /// The request still grants an unbounded allowance because this surface
+    /// showed it and it was kept as asked. Copied verbatim into the approve
+    /// opts as `unlimited_approved` — the submit guard's only waiver.
+    let unlimitedConsented: Bool
     let increaseTotal: GuardIncreaseTotalViewWire?
     /// Unverified decimals must be flagged explicitly on screen.
     let decimalsUnverified: Bool
@@ -228,6 +240,7 @@ struct GuardViewWire: Decodable, Equatable {
         surface: .none, detected: nil,
         meta: GuardTokenMetaViewWire(symbol: "", decimals: 18, verified: false, loading: false),
         editor: nil, confirmAllowed: true, rewrittenParamsJson: nil,
+        unlimitedConsented: false,
         increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
     )
 }

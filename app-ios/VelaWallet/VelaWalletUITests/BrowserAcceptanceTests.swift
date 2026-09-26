@@ -480,7 +480,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// until a finite cap is named. That the signed calldata then carries the
     /// cap is proved hermetically (`DisplayedIsSignedTests`) — it is a fact
     /// about bytes, and a screenshot cannot show it.
-    func testAnUnlimitedApprovalIsStoppedUntilACapIsNamed() throws {
+    func testAnUnlimitedApprovalIsKeptAsAskedAndSaid() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
         openExplore(app)
@@ -496,58 +496,50 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["无限额"].exists,
                       "the requested amount must read as the unlimited grant it is")
 
+        // 2026-09-26: the site's ask is kept (Permit2 bundles revert when the
+        // wallet re-encodes the approve) — on its own chip, and SAID.
         let requested = app.buttons["请求额度"].firstMatch
         XCTAssertTrue(requested.exists, "the 'as requested' chip must be present")
-        XCTAssertFalse(requested.isEnabled,
-                       "there is no finite figure to request — the chip must be disabled, not merely unselected")
+        XCTAssertTrue(requested.isEnabled, "the site's own ask is a choice the person can keep")
+        let warning = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "无限额 —")
+        ).firstMatch
+        XCTAssertTrue(warning.exists, "an unlimited approval must never go out unsaid")
 
+        // Kept as asked, the guard agrees; the fee machine is the third gate,
+        // so the slide arms when the quote lands. It is NOT slid: this test
+        // proves the sheet lets the ask through, not that the chain takes it.
         let slide = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
         ).firstMatch
         XCTAssertTrue(slide.waitForExistence(timeout: 20))
-        XCTAssertFalse(slide.isEnabled,
-                       "the slide must stay shut until a finite cap is chosen")
-
-        // And shut means shut: dragging it all the way must do nothing.
-        // Asserting only on `isEnabled` would have been asserting on a flag,
-        // and a flag is not a refusal.
-        slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
-            .press(forDuration: 0.05,
-                   thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))
-        _ = XCTWaiter.wait(for: [expectation(description: "settle")], timeout: 6)
-        XCTAssertFalse(
-            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "已提交")).firstMatch.exists,
-            "an unlimited approval was submitted with no cap chosen"
-        )
-        XCTAssertTrue(app.staticTexts["授权上限"].exists, "the sheet must still be waiting for a cap")
-
-        // 撤销 is a finite choice — zero — and needs no typing.
-        //
-        // **Tap the HITTABLE one.** The chips live inside a `ViewThatFits`,
-        // which measures every candidate layout, so each chip appears in the
-        // accessibility tree more than once. `firstMatch` picks whichever came
-        // first — often a measured copy that is not on screen — and tapping it
-        // does nothing at all. The chip existed, reported itself enabled, and
-        // the sheet went on saying 无限额.
-        let revoke = app.buttons.matching(identifier: "撤销").allElementsBoundByIndex
-        guard let hittable = revoke.first(where: { $0.isHittable }) else {
-            XCTFail("no on-screen 撤销 chip among \(revoke.count) matches")
-            return
-        }
-        hittable.tap()
-
-        // The guard is satisfied now, but an approval is an ON-CHAIN
-        // transaction and the fee machine is the third gate. So the slide
-        // arms when the quote lands, not at the moment of the tap.
         let armed = XCTWaiter().wait(
             for: [expectation(
                 for: NSPredicate(format: "isEnabled == true"), evaluatedWith: slide
             )],
             timeout: 90
         )
-        attach(app.screenshot(), named: "device-browser-unlimited-capped")
         XCTAssertEqual(armed, .completed,
-                       "choosing a cap did not arm the slide — the guard, or the fee, never agreed")
+                       "the kept ask did not arm the slide — the guard, or the fee, never agreed")
+
+        // A cap is one chip away. 撤销 is a finite choice — zero — and needs
+        // no typing.
+        //
+        // **Tap the HITTABLE one.** The chips live inside a `ViewThatFits`,
+        // which measures every candidate layout, so each chip appears in the
+        // accessibility tree more than once. `firstMatch` picks whichever came
+        // first — often a measured copy that is not on screen — and tapping it
+        // does nothing at all.
+        let revoke = app.buttons.matching(identifier: "撤销").allElementsBoundByIndex
+        guard let hittable = revoke.first(where: { $0.isHittable }) else {
+            XCTFail("no on-screen 撤销 chip among \(revoke.count) matches")
+            return
+        }
+        hittable.tap()
+        attach(app.screenshot(), named: "device-browser-unlimited-capped")
+        XCTAssertFalse(warning.waitForExistence(timeout: 3),
+                       "a revoked approval is not unlimited — the warning must go")
+        XCTAssertTrue(slide.isEnabled, "a finite choice keeps the slide armed")
     }
 
     // MARK: - US6: a signature the page can verify

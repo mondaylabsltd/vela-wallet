@@ -3,4 +3,4 @@
 /**
  * The user's decision for one approval.
  */
-export type GuardChoice = { "type": "amount", amount_raw: string, } | { "type": "revoke" } | { "type": "grant" };
+export type GuardChoice = { "type": "amount", amount_raw: string, } | { "type": "revoke" } | { "type": "grant" } | { "type": "unlimited" };

@@ -20,6 +20,7 @@ import app.getvela.wallet.feature.signing.core.ClearSigningView
 import app.getvela.wallet.feature.signing.core.ClearSiweBinding
 import app.getvela.wallet.feature.signing.core.ClearSurface
 import app.getvela.wallet.feature.signing.core.GuardAmountError
+import app.getvela.wallet.feature.signing.core.GuardChoice
 import app.getvela.wallet.feature.signing.core.GuardEditorMode
 import app.getvela.wallet.feature.signing.core.GuardEditorView
 import app.getvela.wallet.feature.signing.core.GuardIncreaseTotalView
@@ -225,7 +226,8 @@ object SigningLive {
         GuardSurface.ApprovalEditor -> buildList {
             guard.editor?.let { editor -> add(allowanceBlock(editor, guard.meta, guard.increase_total, guard.decimals_unverified, guard.expired, s)) }
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
-            if (guard.detected?.is_unbounded == true && guard.editor?.choice == null) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
+            if (guard.editor?.choice == GuardChoice.Unlimited) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
         }
         GuardSurface.Batch -> buildList {
             guard.batch?.legs?.forEachIndexed { index, leg ->
@@ -254,7 +256,9 @@ object SigningLive {
             },
         )
         val chips = listOf(
-            chip("requested", s.a("requested"), GuardEditorMode.Requested, editor.requested_finite),
+            // An unlimited request opens HERE — the site's own bytes, kept
+            // (Permit2 bundles revert when the wallet re-encodes the approve).
+            chip("requested", s.a("requested"), GuardEditorMode.Requested, editor.requested_finite || editor.requested_unlimited),
             chip("balance", s.a("balanceCap"), GuardEditorMode.Balance, editor.has_balance_cap),
             chip("custom", s.a("custom"), GuardEditorMode.Custom, true),
             chip("revoke", s.a("revoke"), GuardEditorMode.Revoke, true),
@@ -263,14 +267,18 @@ object SigningLive {
             "${SendLive.fromBase(units.toString(), meta.decimals)} ${meta.symbol}".trim()
         } ?: s.a("unlimitedValue")
         val notes = buildList {
-            if (!editor.requested_finite) add(s.a("unlimitedDisabled") + "\n" + s.a("choosePrompt"))
             if (decimalsUnverified) add(s.a("decimalsUnverified"))
             if (expired) add(s.a("expired"))
         }
         return SigningBlock.Allowance(
             label = prefix + s.a("spendingCap"),
             value = value,
-            valueTone = if (editor.choice != null) SigningTone.Neutral else SigningTone.Danger,
+            // Only a chosen, finite cap reads as settled; unlimited kept as
+            // asked reads as the danger it is.
+            valueTone = when (editor.choice) {
+                null, GuardChoice.Unlimited -> SigningTone.Danger
+                else -> SigningTone.Neutral
+            },
             chips = chips,
             note = notes.takeIf { it.isNotEmpty() }?.joinToString("\n"),
             resultingTotal = increase?.let { total ->
@@ -280,8 +288,10 @@ object SigningLive {
                 AllowanceInput(
                     value = editor.custom_text, symbol = meta.symbol, placeholder = "0",
                     error = when (editor.error) {
-                        GuardAmountError.InvalidAmount -> s.a("invalidAmount")
-                        GuardAmountError.UnlimitedDisabled -> s.a("unlimitedDisabled")
+                        // A typed "cap" of 10^60 is no cap — an amount the field
+                        // cannot take. Keeping the site's unlimited ask is the
+                        // Requested chip, so "unlimited is disabled" would be false.
+                        GuardAmountError.InvalidAmount, GuardAmountError.UnlimitedDisabled -> s.a("invalidAmount")
                         null -> null
                     },
                 )

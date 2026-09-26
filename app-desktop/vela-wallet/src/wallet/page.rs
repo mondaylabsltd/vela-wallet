@@ -14174,6 +14174,13 @@ impl WalletPage {
                 {
                     model.blocks.push(editor);
                 }
+                // …and, when it will go out unlimited as the site asked, the
+                // sentence that says so — a batch included, which has no
+                // editor here to carry it.
+                model.blocks.extend(signing_live::guard_warnings(
+                    &host.guard_view,
+                    &self.signing,
+                ));
                 model
                     .blocks
                     .extend(signing_live::status_blocks(&host.view, &self.signing));

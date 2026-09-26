@@ -406,6 +406,9 @@ class SigningController(
             fee_collector = null,
             params_override_json = guard.rewritten_params_json,
             intent = clear.result?.intent,
+            // The guard showed an unbounded amount and it was kept as the site
+            // asked — the submit guard's only waiver, copied, never decided.
+            unlimited_approved = guard.unlimited_consented,
         )
 
         /** The first call of a request: `(to, data, value)` (the desktop's `first_call`). */

@@ -525,40 +525,46 @@ describe('the confirm gate is an AND', () => {
 	});
 });
 
-describe('the never-unlimited mandate reaches the screen', () => {
+describe('an unlimited approval is kept as asked, and said', () => {
+	// The core's opening state for approve(spender, MAX) since 2026-09-26: the
+	// Requested chip, choice `unlimited`, the site's own bytes, consent reported.
 	const unbounded: GuardView = {
 		...INITIAL_GUARD_VIEW,
 		surface: 'approval_editor',
-		confirm_allowed: false,
+		confirm_allowed: true,
+		unlimited_consented: true,
 		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
 		editor: {
-			mode: null,
+			mode: 'requested',
 			custom_text: '',
 			error: null,
-			choice: null,
+			choice: { type: 'unlimited' },
 			display_amount_raw: null,
 			requested_finite: false,
+			requested_unlimited: true,
 			has_balance_cap: true,
 			balance_raw: '1000'
 		}
 	};
 
-	it('an unbounded request disables its own chip AND the slider', () => {
+	it('opens on its own chip, in the danger tone, with the warning, and arms the slider', () => {
 		const model = buildSigningModel(inputs({ guard: unbounded }))!;
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		expect(allowance).toBeDefined();
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
 		expect(allowance.value).toBe(m.valueUnlimited);
 		expect(allowance.valueTone).toBe('danger');
-		expect(allowance.chips.find((c) => c.id === 'requested')?.state).toBe('disabled');
-		// The gate: nothing can be signed until a finite cap is chosen.
-		expect(model.confirm.enabled).toBe(false);
+		expect(allowance.chips.find((c) => c.id === 'requested')?.state).toBe('selected');
+		expect(model.blocks).toContainEqual({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		// Permit2 bundles revert when the approve is re-encoded — so the site's
+		// ask is signable as it stands.
+		expect(model.confirm.enabled).toBe(true);
 	});
 
-	it('choosing a finite cap re-arms the slider', () => {
+	it('choosing a finite cap settles the tone and drops the warning', () => {
 		const capped: GuardView = {
 			...unbounded,
-			confirm_allowed: true,
+			unlimited_consented: false,
 			editor: {
 				...unbounded.editor!,
 				mode: 'balance',
@@ -570,8 +576,34 @@ describe('the never-unlimited mandate reaches the screen', () => {
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
 		expect(allowance.chips.find((c) => c.id === 'balance')?.state).toBe('selected');
-		expect(allowance.value).toBe('1000');
+		expect(allowance.chips.find((c) => c.id === 'requested')?.state).toBe('idle');
+		// 1000 base units at 6 decimals, in tokens — never "1000".
+		expect(allowance.value).toBe('0.001 USDC');
+		expect(allowance.valueTone).toBe('neutral');
+		expect(model.blocks.some((b) => b.kind === 'warning' && b.text === m.warnUnlimited)).toBe(
+			false
+		);
 		expect(model.confirm.enabled).toBe(true);
+	});
+
+	it('a typed cap too large to be one reads as an invalid amount, not "unlimited is disabled"', () => {
+		const huge: GuardView = {
+			...unbounded,
+			confirm_allowed: false,
+			unlimited_consented: false,
+			editor: {
+				...unbounded.editor!,
+				mode: 'custom',
+				custom_text: '1' + '0'.repeat(60),
+				error: 'unlimited_disabled',
+				choice: null
+			}
+		};
+		const model = buildSigningModel(inputs({ guard: huge }))!;
+		const allowance = model.blocks.find((b) => b.kind === 'allowance');
+		if (allowance?.kind !== 'allowance') throw new Error('kind');
+		expect(allowance.custom?.error).toBe(m.invalidAmount);
+		expect(model.confirm.enabled).toBe(false);
 	});
 
 	it('a balance cap nobody could read is offered as disabled, not as a lie', () => {

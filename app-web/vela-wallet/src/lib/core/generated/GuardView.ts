@@ -19,7 +19,16 @@ confirm_allowed: boolean,
  * CLOSED: the untouched params still hit [`enforce_no_unlimited`] at the
  * submit chokepoint.
  */
-rewritten_params_json: string | null, increase_total: GuardIncreaseTotalView | null, 
+rewritten_params_json: string | null, 
+/**
+ * The request still grants an unbounded allowance after the person's
+ * choices — and it does so because this surface showed it and the
+ * Requested chip was left on (single approval, or any batch leg). The
+ * shell copies it to `SignApproveOpts::unlimited_approved`; it is the
+ * only thing that lets an unbounded amount past the submit guard, so a
+ * request this machine never saw still cannot carry one.
+ */
+unlimited_consented: boolean, increase_total: GuardIncreaseTotalView | null, 
 /**
  * Unverified decimals must be explicitly flagged
  * (`EditableApproveCard.tsx:200-202`; `PermitSignView.tsx:103-105`).

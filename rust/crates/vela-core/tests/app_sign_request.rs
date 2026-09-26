@@ -1178,9 +1178,12 @@ fn empty_batch_is_refused() {
 }
 
 // ===========================================================================
-// approval_guard composition — the never-unlimited submit chokepoint
+// approval_guard composition — the unlimited submit chokepoint: refused
+// unless the approval surface reported the person kept it as asked
 // ===========================================================================
 
+/// No consent (a shell that predates it, or a sheet that never mounted the
+/// approval surface) — an unbounded amount is still refused.
 #[test]
 fn unlimited_single_approval_is_refused_at_the_submit_throat() {
     let mut sut = boot();
@@ -1218,6 +1221,58 @@ fn unlimited_batch_leg_is_refused_per_leg() {
         (code, kind),
         (CODE_INTERNAL, SignErrorKind::UnlimitedApproval)
     );
+}
+
+/// The approval surface showed it and the person kept it (2026-09-26): the
+/// site's own bytes are signed — a Permit2 `approve(Permit2, MAX)` goes out
+/// exactly as Uniswap built it.
+#[test]
+fn consented_unlimited_approval_submits_the_sites_own_bytes() {
+    let mut sut = boot();
+    let asked = unlimited_approve_params();
+    sut.dispatch(Arrive::global("req-18b", "eth_sendTransaction", &asked).event());
+    sut.dispatch(approve(SignApproveOpts {
+        unlimited_approved: true,
+        ..SignApproveOpts::default()
+    }));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    let [Op::SignAndSubmit { params_json, .. }] = ops.as_slice() else {
+        panic!("expected a submit: {ops:?}");
+    };
+    assert_eq!(params_json, &asked, "byte-identical to the request");
+}
+
+/// The EIP-5792 bundle whose next leg spends the allowance: kept as asked,
+/// every leg goes out untouched, so the atomic batch does not revert.
+#[test]
+fn consented_unlimited_batch_leg_submits_the_bundle_untouched() {
+    let mut sut = boot();
+    let calls = format!(
+        r#"[{{"to":"{TOKEN}","data":"{}","value":"0x0"}},{{"to":"{SPENDER}","data":"0x","value":"0x1"}}]"#,
+        approve_calldata(&"f".repeat(64))
+    );
+    let asked = batch_params(&calls, None);
+    sut.dispatch(Arrive::global("req-19b", "wallet_sendCalls", &asked).event());
+    sut.dispatch(approve(SignApproveOpts {
+        unlimited_approved: true,
+        ..SignApproveOpts::default()
+    }));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    let [Op::SignAndSubmit { params_json, .. }] = ops.as_slice() else {
+        panic!("expected a submit: {ops:?}");
+    };
+    assert_eq!(params_json, &asked);
+}
+
+/// The consent field is optional on the wire — an opts object from a shell
+/// that predates it deserializes to `false`, never to a waiver.
+#[test]
+fn unlimited_consent_defaults_to_refusal_on_the_wire() {
+    let opts: SignApproveOpts = serde_json::from_str(
+        r#"{"max_fee_per_gas":null,"bundler_cost_wei":null,"gas_fee_token":null,"quoted_fee":null,"fee_collector":null,"params_override_json":null,"intent":null}"#,
+    )
+    .expect("pre-field opts still parse");
+    assert!(!opts.unlimited_approved);
 }
 
 #[test]
