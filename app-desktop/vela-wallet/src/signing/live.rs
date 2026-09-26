@@ -377,16 +377,12 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
         },
     ];
 
-    // What to send, and where. The shortfall rather than the recommendation
-    // alone: somebody who already has half of it should not be asked for all
-    // of it again. Saturating, because a balance that overtook the
-    // recommendation between the check and this frame is not a negative
-    // amount to send.
-    let shortfall = data
-        .recommended_wei
-        .parse::<u128>()
-        .unwrap_or(0)
-        .saturating_sub(data.current_balance_wei.parse::<u128>().unwrap_or(0));
+    // What to send, and where. The recommendation IS the shortfall already —
+    // `recommendedFundingWei` is the deficit plus the relay's buffer, on the
+    // web and here — so it is shown as it came. Taking the balance off it a
+    // second time asked for too little: a third of the gap, at a threshold of
+    // one and a balance of a half (078 W-05).
+    let shortfall = data.recommended_wei.parse::<u128>().unwrap_or(0);
     out.push(Block::Card {
         title: None,
         rows: vec![
@@ -400,7 +396,7 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
                 s.funding_amount_label.clone(),
                 SharedString::from(format!(
                     "{} {}",
-                    vela_core::app::fee_policy::from_base_units(shortfall, 18),
+                    format_wei_to_eth(shortfall),
                     data.native_symbol
                 )),
                 Tone::Neutral,
@@ -424,6 +420,27 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
         out.push(Block::Positive(s.funding_confirming.clone()));
     }
     out
+}
+
+/// `formatWeiToEth`: an amount to send, at the precision a person types —
+/// never the eighteen places a wei figure carries (078 W-05).
+fn format_wei_to_eth(wei: u128) -> String {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a displayed amount, as the web's Number(wei)"
+    )]
+    let eth = wei as f64 / 1e18;
+    if wei == 0 {
+        "0".to_owned()
+    } else if eth < 0.000_001 {
+        "< 0.000001".to_owned()
+    } else if eth < 0.001 {
+        format!("{eth:.6}")
+    } else if eth < 1.0 {
+        format!("{eth:.4}")
+    } else {
+        format!("{eth:.3}")
+    }
 }
 
 /// The never-unlimited spending-cap editor, and what each chip chooses.
@@ -1554,7 +1571,9 @@ mod tests {
         assert!(guard_editor(&none, &s).is_none());
     }
 
-    /// The top-up says how much is still missing, and where to send it.
+    /// The top-up says how much is still missing, and where to send it —
+    /// the figure the pre-check computed, which already nets off what the
+    /// account holds.
     #[test]
     fn the_funding_surface_asks_for_the_shortfall_not_the_whole_reserve() {
         let s = strings();
@@ -1567,9 +1586,14 @@ mod tests {
                     chain_id: 100,
                     native_symbol: "xDAI".to_owned(),
                     threshold_wei: "1000000000000000000".to_owned(),
-                    recommended_wei: "2000000000000000000".to_owned(),
-                    // Half of it is already there.
-                    current_balance_wei: "1500000000000000000".to_owned(),
+                    // Half of it is already there: the other half, plus the
+                    // relay's buffer — as the pre-check computes it.
+                    recommended_wei: crate::executor::relay::recommended_funding_wei(
+                        1_000_000_000_000_000_000,
+                        500_000_000_000_000_000,
+                    )
+                    .to_string(),
+                    current_balance_wei: "500000000000000000".to_owned(),
                 },
                 presentation: SignFundingPresentation::Topup,
                 denial_reason: Some("relayer said: sponsorship declined".to_owned()),
@@ -1588,9 +1612,15 @@ mod tests {
         assert!(rows[0].3, "an address is read character by character");
         assert_eq!(
             rows[1].1,
-            SharedString::from("0.5 xDAI"),
-            "somebody who already holds half was asked for all of it again"
+            SharedString::from("0.7500 xDAI"),
+            "the half still missing, with the buffer — not the whole of it, and not less"
         );
+        // At the web's precision, never a wei figure's eighteen places: the
+        // relay's minimum, buffered, over a near-empty account.
+        assert_eq!(format_wei_to_eth(149_999_999_999_976), "0.000150");
+        assert_eq!(format_wei_to_eth(0), "0");
+        assert_eq!(format_wei_to_eth(10), "< 0.000001");
+        assert_eq!(format_wei_to_eth(2_500_000_000_000_000_000), "2.500");
         // The relay's own words stay off the screen (SC-305).
         assert!(
             !drawn.iter().any(|block| matches!(

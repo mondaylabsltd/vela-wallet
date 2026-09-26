@@ -250,6 +250,16 @@ dapp_browser are fully wired. The gaps:
 - **W-05 P1 · sign_request `CheckBundlerFunding` / `AttemptSponsorship` are
   stubs** (`executor/sign_request.rs:215-243`): no funding pre-check, no
   sponsorship for dApp transactions.
+  *Fixed (T047):* `relay::check_funding` and `relay::attempt_sponsorship`
+  port `checkBundlerFunding` / `attemptSilentSponsorship` (built-in relay
+  only, 25 s denial memory, idempotency key, timeout = maybe-granted).
+  Verified against a local relay that forwards to the real one but answers
+  `/v1/account` short and `/v1/sponsor` as told: denied → the top-up card;
+  granted with a lagging balance → "continues automatically". The card's
+  amount subtracted the balance from a figure that already nets it off
+  (asking for too little), and printed all eighteen decimals; both fixed.
+  `VELA_FORCE_FUNDING=1` is the debug seam for `vela.forceFunding()`. The
+  web computes this state but its signing screen never draws it.
 - **W-06 P1 · Contacts search** never dispatches `query`; **per-group import
   and export** exist in the core (`ImportFile { into_group }`,
   `ContactExportScope::Group`) but the desktop leaves them `None`.

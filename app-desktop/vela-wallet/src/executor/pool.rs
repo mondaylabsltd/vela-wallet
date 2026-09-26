@@ -810,6 +810,14 @@ fn stored_custom_rpc(chain_id: u32) -> Option<String> {
     stored_array(storage::KEY_CUSTOM_NETWORKS, chain_id, "rpcURL")
 }
 
+/// `isUsingBuiltinBundler`: no user-set bundler for this chain, or one that
+/// is the built-in relay's host anyway. Only the built-in relay keeps a
+/// per-Safe gas account that can run short, so only it is pre-checked.
+pub fn uses_builtin_bundler(chain_id: u32) -> bool {
+    let builtin = crate::executor::relay::builtin_base();
+    stored_custom_bundler(chain_id).is_none_or(|url| url.contains(&builtin))
+}
+
 fn stored_custom_bundler(chain_id: u32) -> Option<String> {
     stored_array(storage::KEY_CUSTOM_NETWORKS, chain_id, "bundlerURL")
 }

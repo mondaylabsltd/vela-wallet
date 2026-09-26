@@ -749,12 +749,16 @@ fn kv_row(
         .gap(px(16.))
         .child(
             div()
+                .flex_none()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
                 .child(label.clone()),
         )
+        // The value gives way and wraps — a deposit address is 42 characters
+        // and ran off the card's edge (078 W-05).
         .child(
             div()
+                .min_w(px(0.))
                 .when(mono, |d| d.font_family("monospace"))
                 .when(!mono, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
                 .text_size(theme::text_row_sub())

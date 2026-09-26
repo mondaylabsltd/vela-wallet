@@ -80,7 +80,7 @@ screenshot checked against the web.
 - [x] T046 W-03 not a gap (the web renders no send simulation either); W-04
       AddNetwork via network_admin `AddByChainIdRequested`, the refusal on
       the token list, resolving again after the add.
-- [ ] T047 W-05 bundler funding pre-check and sponsorship for dApp requests.
+- [x] T047 W-05 bundler funding pre-check and sponsorship for dApp requests.
 - [ ] T048 W-06 contacts search + per-group import/export; W-07 signing for
       another wallet.
 - [ ] T049 W-08…W-11.

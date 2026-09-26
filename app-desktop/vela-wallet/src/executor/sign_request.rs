@@ -34,7 +34,7 @@ use serde_json::{Value, json};
 
 use vela_core::app::fee_policy::FeeCall;
 use vela_core::app::sign_request::{
-    Event, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
+    Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
 };
 use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
@@ -51,7 +51,6 @@ const TX_KEY: &str = "vela.transactionHistory";
 /// `send::SendAnswer` — the signing panel owns its machines the way the send
 /// column owns its two, so `Screen` is the arm the host takes back.
 pub enum SignAnswer {
-    Now(SignShellResult),
     Blocking(Box<dyn FnOnce() -> SignShellResult + Send>),
     /// Reports events on the way and settles once — the submit.
     Streaming(Box<dyn FnOnce(&crate::resident::Sink<Event>) -> SignShellResult + Send>),
@@ -216,31 +215,60 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
             chain_id,
             account,
             bust_cache,
-            ..
+            bundler_cost_wei,
         } => {
             let (chain_id, account, bust_cache) = (*chain_id, account.clone(), *bust_cache);
+            let cost = bundler_cost_wei.as_deref().and_then(parse_wei);
             SignAnswer::Blocking(Box::new(move || {
                 if bust_cache {
                     // A retry after somebody funded the account must not read
                     // the balance from before they funded it.
                     relay::clear_cache(chain_id, Some(&account));
                 }
-                // `None` here means "proceed to submit" — including when the
-                // check itself failed. The core's doc is explicit that a
-                // timed-out or errored pre-check is not a refusal, and the
-                // submit's own underfunded answer is the authority.
-                SignShellResult::PreCheck { funding: None }
+                // `None` means "proceed to submit" — including when the check
+                // itself could not be made: an errored pre-check is not a
+                // refusal, and the submit's own underfunded answer is the
+                // authority (078 W-05).
+                SignShellResult::PreCheck {
+                    funding: relay::check_funding(chain_id, &account, cost).map(|funding| {
+                        SignFundingNeeded {
+                            deposit_address: funding.deposit_address,
+                            safe_address: funding.safe_address,
+                            chain_id: funding.chain_id,
+                            native_symbol: funding.native_symbol,
+                            threshold_wei: funding.threshold_wei.to_string(),
+                            recommended_wei: funding.recommended_wei.to_string(),
+                            current_balance_wei: funding.current_balance.to_string(),
+                        }
+                    }),
+                }
             }))
         }
 
-        // Silent sponsorship is a relay feature the desktop does not reach
-        // yet. Answered, never left hanging.
-        SignOperation::AttemptSponsorship { .. } => SignAnswer::Now(SignShellResult::Sponsorship {
-            // Denied with no reason rather than invented: the desktop has no
-            // sponsorship path, and `Funded` would be a claim that somebody
-            // else paid.
-            outcome: vela_core::app::sign_request::SignSponsorship::Denied { reason: None },
-        }),
+        // `attemptSilentSponsorship`: the treasury, asked only now that the
+        // person has approved (078 W-05).
+        SignOperation::AttemptSponsorship { funding, force } => {
+            let force = *force;
+            let funding = relay::FundingNeeded {
+                deposit_address: funding.deposit_address.clone(),
+                safe_address: funding.safe_address.clone(),
+                chain_id: funding.chain_id,
+                native_symbol: funding.native_symbol.clone(),
+                threshold_wei: parse_wei(&funding.threshold_wei).unwrap_or(0),
+                recommended_wei: parse_wei(&funding.recommended_wei).unwrap_or(0),
+                current_balance: parse_wei(&funding.current_balance_wei).unwrap_or(0),
+            };
+            SignAnswer::Blocking(Box::new(move || {
+                use vela_core::app::sign_request::SignSponsorship;
+                SignShellResult::Sponsorship {
+                    outcome: match relay::attempt_sponsorship(&funding, force) {
+                        relay::Sponsorship::Funded => SignSponsorship::Funded,
+                        relay::Sponsorship::Confirming => SignSponsorship::Confirming,
+                        relay::Sponsorship::Denied { reason } => SignSponsorship::Denied { reason },
+                    },
+                }
+            }))
+        }
 
         SignOperation::SignAndSubmit {
             id,
@@ -702,6 +730,16 @@ fn clip(params_json: &str) -> (String, bool) {
         end -= 1;
     }
     (params_json[..end].to_owned(), true)
+}
+
+/// A wei figure off the wire — decimal, as the core writes it, or `0x` hex
+/// (the web's `BigInt(value)` takes both). `None` when it is neither.
+fn parse_wei(value: &str) -> Option<u128> {
+    let value = value.trim();
+    match value.strip_prefix("0x") {
+        Some(hex) => u128::from_str_radix(hex, 16).ok(),
+        None => value.parse().ok(),
+    }
 }
 
 #[cfg(test)]

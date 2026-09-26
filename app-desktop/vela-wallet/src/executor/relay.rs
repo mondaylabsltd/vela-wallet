@@ -49,6 +49,15 @@ pub const BUILTIN_BASE: &str = "https://vela-relay-cf.getvela.app";
 const REST_TIMEOUT: Duration = Duration::from_secs(10);
 /// `INFO_CACHE_TTL` (`bundler-service.ts:105`).
 const INFO_CACHE_TTL: Duration = Duration::from_secs(30);
+/// `NET_TIMEOUTS.bundlerSponsor` — the relay waits up to 15 s for the
+/// treasury transfer's receipt before it answers.
+const SPONSOR_TIMEOUT: Duration = Duration::from_secs(20);
+/// `MIN_BALANCE_WEI`: the threshold when no gas cost was estimated.
+const MIN_BALANCE_WEI: u128 = 100_000_000_000_000;
+/// `FUNDING_BUFFER_BPS` (150 %): the relay's own volatility buffer.
+const FUNDING_BUFFER_BPS: u128 = 15_000;
+/// `SILENT_DENY_TTL`: a denial is not asked again for this long.
+const SILENT_DENY_TTL: Duration = Duration::from_secs(25);
 /// `QUOTE_CACHE_TTL` (`bundler-service.ts:658`).
 const QUOTE_CACHE_TTL: Duration = Duration::from_secs(8);
 /// `submitUserOp`'s retry budget for a busy relay.
@@ -696,6 +705,199 @@ pub fn user_op_status(
 // The wording layer the machines leave to the shell
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The gas account: is it funded, and will the treasury fund it (078 W-05)
+// ---------------------------------------------------------------------------
+
+/// The web's `vela.forceFunding()`, as a seam: `VELA_FORCE_FUNDING=1` reads
+/// every gas account as short and every sponsorship as denied, so the
+/// funding card can be exercised without draining a real account. Debug
+/// builds only — the web's `fundingShouldForce` is always false in production.
+fn funding_forced() -> bool {
+    cfg!(debug_assertions) && std::env::var_os("VELA_FORCE_FUNDING").is_some()
+}
+
+/// `recommendedFundingWei`: lift the gas account to the threshold, plus the
+/// buffer — or, when it is already there, the buffered threshold itself.
+pub fn recommended_funding_wei(threshold: u128, current: u128) -> u128 {
+    let deficit = threshold.saturating_sub(current);
+    let base = if deficit > 0 { deficit } else { threshold };
+    base.saturating_mul(FUNDING_BUFFER_BPS) / 10_000
+}
+
+/// A gas account that cannot cover the operation (`FundingNeeded`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FundingNeeded {
+    pub deposit_address: String,
+    pub safe_address: String,
+    pub chain_id: u32,
+    pub native_symbol: String,
+    pub threshold_wei: u128,
+    pub recommended_wei: u128,
+    pub current_balance: u128,
+}
+
+/// `checkBundlerFunding`: `None` when the account covers `cost` (or the
+/// minimum), when a user-set bundler is in use, and when the relay cannot be
+/// reached — an unreadable pre-check lets the attempt proceed, and the
+/// submit's own "underfunded" answer is the authority. **Blocks.**
+pub fn check_funding(chain_id: u32, safe: &str, cost: Option<u128>) -> Option<FundingNeeded> {
+    if !pool::uses_builtin_bundler(chain_id) {
+        return None;
+    }
+    let info = account_info(chain_id, safe)?;
+    let threshold = cost.unwrap_or(MIN_BALANCE_WEI);
+    if !funding_forced() && info.spendable_balance >= threshold {
+        return None;
+    }
+    Some(FundingNeeded {
+        deposit_address: info.deposit_address,
+        safe_address: safe.to_owned(),
+        chain_id,
+        native_symbol: info.native_symbol,
+        threshold_wei: threshold,
+        recommended_wei: recommended_funding_wei(threshold, info.spendable_balance),
+        current_balance: info.spendable_balance,
+    })
+}
+
+/// What a silent sponsorship came to (`SilentSponsorship`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Sponsorship {
+    /// The gas account is usable now.
+    Funded,
+    /// Money is (probably) on its way; the balance read has not caught up.
+    Confirming,
+    Denied {
+        reason: Option<String>,
+    },
+}
+
+type Denials = HashMap<String, (Option<String>, Instant)>;
+static SILENT_DENIALS: Mutex<Option<Denials>> = Mutex::new(None);
+
+/// `attemptSilentSponsorship`: ask the treasury to fund the gas account and
+/// re-read the balance. The ONLY automatic treasury touchpoint, and it runs
+/// only when somebody is about to transact. A denial is remembered for 25 s
+/// unless `force`; a grant or a maybe-grant never is — balances move.
+/// **Blocks** for up to the sponsor timeout.
+pub fn attempt_sponsorship(funding: &FundingNeeded, force: bool) -> Sponsorship {
+    if funding_forced() {
+        return Sponsorship::Denied { reason: None };
+    }
+    let (chain_id, safe) = (funding.chain_id, funding.safe_address.as_str());
+    let key = cache_key(chain_id, safe);
+    if !force
+        && let Ok(denials) = SILENT_DENIALS.lock()
+        && let Some((reason, at)) = denials.as_ref().and_then(|map| map.get(&key))
+        && at.elapsed() < SILENT_DENY_TTL
+    {
+        return Sponsorship::Denied {
+            reason: reason.clone(),
+        };
+    }
+    let denials = |remember: Option<Option<String>>| {
+        if let Ok(mut denials) = SILENT_DENIALS.lock() {
+            let map = denials.get_or_insert_with(HashMap::new);
+            match remember {
+                Some(reason) => {
+                    map.insert(key.clone(), (reason, Instant::now()));
+                }
+                None => {
+                    map.remove(&key);
+                }
+            }
+        }
+    };
+
+    let (sponsored, reason) = request_sponsorship(chain_id, safe, funding.threshold_wei);
+    if sponsored || reason.as_deref() == Some("already_funded") {
+        // The relay waits for the transfer's receipt before answering, so the
+        // money is normally there — a lagging read is "confirming", NEVER a
+        // denial (the old flow showed a granted sponsorship as refused).
+        denials(None);
+        clear_cache(chain_id, Some(safe));
+        let covered = account_info(chain_id, safe)
+            .is_some_and(|info| info.spendable_balance >= funding.threshold_wei);
+        return if covered {
+            Sponsorship::Funded
+        } else {
+            Sponsorship::Confirming
+        };
+    }
+    if matches!(
+        reason.as_deref(),
+        Some("pending_unknown" | "already_in_progress")
+    ) {
+        // A timeout mid-transfer, or another grant in flight: money may be
+        // arriving, and a second request could pay twice.
+        denials(None);
+        return Sponsorship::Confirming;
+    }
+    denials(Some(reason.clone()));
+    Sponsorship::Denied { reason }
+}
+
+/// `POST /v1/sponsor/{chain}/{safe}` (`requestSponsorship`): whether the
+/// treasury paid, and the relay's reason when it did not. A non-2xx keeps the
+/// server's own reason when it gave one — a 503 `passkey_index_unavailable`
+/// is "try later", not a refusal. A timeout is `pending_unknown`: the
+/// transfer may have gone through unseen. **Blocks.**
+fn request_sponsorship(chain_id: u32, safe: &str, required_wei: u128) -> (bool, Option<String>) {
+    let safe = safe.to_lowercase();
+    let url = format!("{}/v1/sponsor/{chain_id}/{safe}", base_url(chain_id));
+    let required = format!("0x{required_wei:x}");
+    // A treasury transfer is not idempotent: a timeout-then-retry must not
+    // pay twice, and a relay that honours the key collapses the two.
+    let idempotency = format!("sponsor:{chain_id}:{safe}:{required}");
+    let body = json!({ "requiredWei": required });
+    let answer = proxy::with_candidates(SPONSOR_TIMEOUT, |agent| {
+        let mut response = agent
+            .post(&url)
+            .config()
+            .http_status_as_error(false)
+            .build()
+            .header("accept", "application/json")
+            .header("idempotency-key", &idempotency)
+            .send_json(&body)?;
+        let status = response.status().as_u16();
+        let text = response.body_mut().read_to_string().unwrap_or_default();
+        Ok((status, text))
+    });
+    let (status, text) = match answer {
+        Ok(answer) => answer,
+        Err(failure) if matches!(failure.error, ureq::Error::Timeout(_)) => {
+            return (false, Some("pending_unknown".to_owned()));
+        }
+        Err(_) => return (false, Some("network_error".to_owned())),
+    };
+    sponsorship_answer(status, &text)
+}
+
+/// The sponsor endpoint's answer, read: `(sponsored, reason)`.
+fn sponsorship_answer(status: u16, text: &str) -> (bool, Option<String>) {
+    let data = serde_json::from_str::<Value>(text).unwrap_or(Value::Null);
+    let reason = data
+        .get("reason")
+        .and_then(Value::as_str)
+        .filter(|reason| !reason.is_empty())
+        .map(str::to_owned);
+    if !(200..300).contains(&status) {
+        let fallback = if matches!(status, 503 | 429) {
+            "service_unavailable"
+        } else {
+            "request_failed"
+        };
+        return (false, Some(reason.unwrap_or_else(|| fallback.to_owned())));
+    }
+    (
+        data.get("sponsored")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        reason,
+    )
+}
+
 /// `parseBundlerUnderfunded`: is this the relay saying the per-Safe gas
 /// account is short? Wording-tolerant — the relay has reworded it before
 /// ("…bundler EOA" → "…bundler gas account … Deposit to:").
@@ -765,6 +967,43 @@ pub fn parse_bundler_error(error: Option<&Value>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 078 W-05, `recommendedFundingWei`: the shortfall plus half again; an
+    /// account already at the threshold is asked for the buffered threshold,
+    /// not for nothing.
+    #[test]
+    fn a_top_up_is_the_shortfall_with_the_relays_buffer() {
+        assert_eq!(recommended_funding_wei(1_000, 400), 900);
+        assert_eq!(recommended_funding_wei(1_000, 1_000), 1_500);
+        assert_eq!(recommended_funding_wei(1_000, 5_000), 1_500);
+    }
+
+    /// 078 W-05, `requestSponsorship`'s reading: a refusal keeps the relay's
+    /// own reason — a 503 `passkey_index_unavailable` is "try later", not "no"
+    /// — and a bare status says only what the status says.
+    #[test]
+    fn the_sponsor_answer_keeps_the_relays_reason() {
+        assert_eq!(
+            sponsorship_answer(200, r#"{"sponsored":true}"#),
+            (true, None)
+        );
+        assert_eq!(
+            sponsorship_answer(200, r#"{"sponsored":false,"reason":"already_funded"}"#),
+            (false, Some("already_funded".to_owned()))
+        );
+        assert_eq!(
+            sponsorship_answer(503, r#"{"reason":"passkey_index_unavailable"}"#),
+            (false, Some("passkey_index_unavailable".to_owned()))
+        );
+        assert_eq!(
+            sponsorship_answer(429, ""),
+            (false, Some("service_unavailable".to_owned()))
+        );
+        assert_eq!(
+            sponsorship_answer(400, "not json"),
+            (false, Some("request_failed".to_owned()))
+        );
+    }
 
     /// Spec 069: the speed the displayed fee was priced at is the third
     /// parameter, by name; no speed is the two-element wire; `rapid` is never

@@ -546,7 +546,6 @@ impl SigningHost {
         for effect in pending {
             let id = effect.id;
             match sign_executor::perform(&effect.operation, &self.ctx) {
-                SignAnswer::Now(result) => self.resolve_sign(id, result, cx),
                 SignAnswer::Blocking(work) => {
                     cx.spawn(async move |host, cx| {
                         let result = cx.background_executor().spawn(async move { work() }).await;
