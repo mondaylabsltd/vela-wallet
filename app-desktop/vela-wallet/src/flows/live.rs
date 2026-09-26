@@ -1436,6 +1436,11 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> S
     let s = i.s;
     let mut pick = SendPick {
         selection: None,
+        lock_notice: i
+            .send
+            .lock_error
+            .as_ref()
+            .and_then(|_| send_notice(i, false)),
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
         no_match: s.no_matching_tokens.clone(),
@@ -1592,6 +1597,43 @@ mod sweep_tests {
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::Gas);
             let lit: Vec<bool> = pick.filters.iter().map(|chip| chip.selected).collect();
             assert_eq!(lit, [false, false, true, false]);
+        });
+    }
+
+    /// 078 W-04: a locked request on a chain the wallet lacks is refused ON
+    /// the list the stage shows — with "Add this network" as its way out, and
+    /// the same button busy, taking no press, while the add is out.
+    #[test]
+    fn a_locked_request_on_a_missing_chain_offers_to_add_it() {
+        crate::executor::storage::tests::with_temp_state("send-lock-net", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let mut view = view_with(vec![token(1, "ETH", None)], Vec::new(), None);
+            view.lock_error = Some(SendLockError::Network { chain_id: 59144 });
+
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let notice = pick.lock_notice.unwrap_or_else(|| unreachable!("refused"));
+            assert_eq!(notice.action.as_ref(), Some(&s.lock_add_network));
+            assert!(notice.body.contains("59144"), "{}", notice.body);
+            assert_eq!(
+                notice_way_out(&inputs(&view, &fee, &s, &wallet), false),
+                Some(NoticeWayOut::AddNetwork { chain_id: 59144 })
+            );
+
+            view.adding_network = true;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let notice = pick.lock_notice.unwrap_or_else(|| unreachable!("refused"));
+            assert_eq!(notice.action.as_ref(), Some(&s.lock_adding_network));
+            assert_eq!(
+                notice_way_out(&inputs(&view, &fee, &s, &wallet), false),
+                None
+            );
+
+            // No refusal, no card: the ordinary list.
+            view.lock_error = None;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(pick.lock_notice.is_none());
         });
     }
 
@@ -2147,9 +2189,19 @@ fn build_notice(
             SendAddNetworkMsg::NetAddError => s.lock_net_add_error.clone(),
         });
         let way_out = match error {
-            SendLockError::Network { chain_id } => Some(NoticeWayOut::AddNetwork {
-                chain_id: *chain_id,
-            }),
+            // While an add is out the button says so and takes no press.
+            SendLockError::Network { chain_id } if !send.adding_network => {
+                Some(NoticeWayOut::AddNetwork {
+                    chain_id: *chain_id,
+                })
+            }
+            SendLockError::Network { .. } | SendLockError::Token => None,
+        };
+        let action = match error {
+            SendLockError::Network { .. } if send.adding_network => {
+                Some(s.lock_adding_network.clone())
+            }
+            SendLockError::Network { .. } => Some(s.lock_add_network.clone()),
             SendLockError::Token => None,
         };
         let notice = SendNotice {
@@ -2157,7 +2209,7 @@ fn build_notice(
             title: Some(title),
             body,
             detail,
-            action: way_out.is_some().then(|| s.lock_add_network.clone()),
+            action,
             error: true,
         };
         return Some((notice, way_out));

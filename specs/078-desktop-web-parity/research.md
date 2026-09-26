@@ -229,9 +229,24 @@ dapp_browser are fully wired. The gaps:
 - **W-03 P1 · send `SimulateCalls` is a stub** (`executor/send.rs:577`, "no
   simulation engine yet") though `executor::sim::simulate` exists and signs
   dApp requests with it: own sends show no balance-change preview.
+  *Resolved as not a gap (T046):* the web's send executor does run the
+  simulation, but no web screen reads the result (`sim_json` is never
+  rendered) — the web's own send shows no balance-change preview either. A
+  desktop preview would be a feature the reference lacks, not parity.
 - **W-04 P1 · send `AddNetwork` always errors** (`executor/send.rs:445`);
   network_admin's `AddByChainIdRequested` is never dispatched: a payment
   link on an unknown chain can never add it.
+  *Fixed (T046):* the executor dispatches `AddByChainIdRequested` and maps
+  the wizard's end to the send outcome (saved → added, unknown → not found,
+  else not compatible). Two more defects on the same path, both found live:
+  the refusal was only built for the send form, while `LockError` shows the
+  token list — the "Add this network" button was never on screen; and the
+  core's retry after adding did not mark the lock resolving, so the form
+  showed empty ("—", 0) until the token reload landed. The web never opens a
+  LOCKED send from a scan (its home scan fills the recipient), so it has no
+  such screen to compare; the desktop's is the core's refusal drawn on the
+  list, with "Checking compatibility..." while the add runs. Noted, not
+  fixed: once resolved on Linea the fee row showed "—" with the chain's mark.
 - **W-05 P1 · sign_request `CheckBundlerFunding` / `AttemptSponsorship` are
   stubs** (`executor/sign_request.rs:215-243`): no funding pre-check, no
   sponsorship for dApp transactions.

@@ -35,8 +35,8 @@ use vela_core::app::balance_dashboard::BalanceToken;
 use vela_core::app::fee_policy::FeeCall;
 use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::send::{
-    SendAddNetworkOutcome, SendChainInfo, SendOperation, SendRecipientIdentity, SendRecipientRisk,
-    SendShellResult, SendToken, SendTokenMeta, SendTxRecord,
+    SendChainInfo, SendOperation, SendRecipientIdentity, SendRecipientRisk, SendShellResult,
+    SendToken, SendTokenMeta, SendTxRecord,
 };
 use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
@@ -438,13 +438,10 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
         }
 
         // Adding a network from a locked request is the settings wizard's
-        // journey (search index → chain document → probe → save); the send
-        // flow has no such wizard on the desktop yet, so the answer is the
-        // ported `catch` — the person is told it did not work, and can add
-        // the network from Settings. Recorded, not hidden.
-        SendOperation::AddNetwork { .. } => SendAnswer::Now(SendShellResult::NetworkAdded {
-            outcome: SendAddNetworkOutcome::Error,
-        }),
+        // journey (registry → chain document → probe → save), run by the
+        // resident network admin — which only the screen can reach (078 W-04,
+        // `SendHost::perform_send`).
+        SendOperation::AddNetwork { .. } => SendAnswer::Screen,
 
         SendOperation::EstimateFee { .. } => SendAnswer::Screen,
 
@@ -877,6 +874,7 @@ mod tests {
                 kind: vela_core::app::send::SendAlertKind::InvalidAddress,
             },
             SendOperation::Close,
+            SendOperation::AddNetwork { chain_id: 146 },
         ];
         for op in &screen {
             assert!(matches!(perform(op, &ctx), SendAnswer::Screen), "{op:?}");

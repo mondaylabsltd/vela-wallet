@@ -77,8 +77,9 @@ screenshot checked against the web.
       built outside gpui's borrow (was: abort on opening a page).
 - [x] T045 W-01 receive watcher per visit; W-02 balance refresh on confirmed
       send, incoming item, deposit.
-- [ ] T046 W-03 send simulation via `executor::sim`; W-04 AddNetwork via
-      network_admin `AddByChainIdRequested`.
+- [x] T046 W-03 not a gap (the web renders no send simulation either); W-04
+      AddNetwork via network_admin `AddByChainIdRequested`, the refusal on
+      the token list, resolving again after the add.
 - [ ] T047 W-05 bundler funding pre-check and sponsorship for dApp requests.
 - [ ] T048 W-06 contacts search + per-group import/export; W-07 signing for
       another wallet.

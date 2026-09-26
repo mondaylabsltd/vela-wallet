@@ -481,6 +481,10 @@ pub struct FlowStrings {
     pub lock_token_title: SharedString,
     pub lock_token_body: SharedString,
     pub lock_add_network: SharedString,
+    /// The same button while the add is out — it checks the chain's
+    /// compatibility, and for seconds; a press that looks untaken invites a
+    /// second (078 W-04).
+    pub lock_adding_network: SharedString,
     pub lock_net_not_found: SharedString,
     pub lock_net_not_compatible: SharedString,
     pub lock_net_add_error: SharedString,
@@ -747,6 +751,7 @@ impl FlowStrings {
             lock_token_title: s("send.lock.tokenTitle"),
             lock_token_body: s("send.lock.tokenBody"),
             lock_add_network: s("send.lock.addNetwork"),
+            lock_adding_network: s("addToken.checkingCompat"),
             lock_net_not_found: s("send.lock.netNotFound"),
             lock_net_not_compatible: s("send.lock.netNotCompatible"),
             lock_net_add_error: s("send.lock.netAddError"),

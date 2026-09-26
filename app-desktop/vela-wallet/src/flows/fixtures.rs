@@ -411,6 +411,11 @@ pub struct SendPick {
     /// The sweep CTA carries a count and wears the accent; the plain one is a
     /// quiet centred link. Two looks, one slot.
     pub cta_accent: bool,
+    /// A locked payment request the wallet cannot fulfil (078 W-04): the
+    /// core's refusal and its way out — "Add network" — drawn INSTEAD of the
+    /// rows. Picking any token here would quietly drop the lock the request
+    /// set, so there is nothing on this list to choose.
+    pub lock_notice: Option<SendNotice>,
 }
 
 /// Which rows a sweep has ticked, and which are on the wrong chain.
@@ -1160,6 +1165,7 @@ fn send_pick(s: &FlowStrings) -> SendPick {
     SendPick {
         // The mock is the one-token list; the sweep is a live-only state.
         selection: None,
+        lock_notice: None,
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
         no_match: s.no_matching_tokens.clone(),

@@ -2457,8 +2457,12 @@ fn network_added(model: &mut Model, outcome: SendAddNetworkOutcome) -> Cmd {
     model.adding_network = false;
     match outcome {
         SendAddNetworkOutcome::Added => {
-            // Re-run resolution now that the chain exists (`lockRetry`).
+            // Re-run resolution now that the chain exists (`lockRetry`) —
+            // resolving again, as at open: without it the stage fell through
+            // to an EMPTY form (no token, no amount) for as long as the fresh
+            // token load took, and a failed load left it there (078 W-04).
             model.lock_error = None;
+            model.resolving_lock = true;
             boot_fetch(model)
         }
         SendAddNetworkOutcome::NotFound => {

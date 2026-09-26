@@ -1173,6 +1173,9 @@ fn locked_unsupported_chain_offers_add_network_and_retries_after_adding() {
         outcome: SendAddNetworkOutcome::Added,
     });
     assert!(matches!(ops.as_slice(), [Op::FetchTokens { .. }]));
+    // …and while that load is out the request is RESOLVING, never an empty
+    // form with nothing chosen (078 W-04).
+    assert_eq!(sut.view().stage, SendStage::LockResolving);
     let mut with_new_chain = chains();
     with_new_chain.push(SendChainInfo {
         chain_id: 999,

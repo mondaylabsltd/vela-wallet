@@ -69,6 +69,10 @@ use crate::executor::send::{self as send_executor, SendAnswer, SendContext};
 use crate::executor::trusted_signer;
 use crate::executor::{batch, storage, tracker};
 use crate::resident::{self, ResidentCore};
+use vela_core::app::network_admin::{
+    Event as NetEvent, NetView, NetWizardErrorKind, NetWizardPhase, NetworkAdmin,
+};
+use vela_core::app::send::SendAddNetworkOutcome;
 
 use super::speed_control::{self, SpeedControl, SpeedHost};
 
@@ -95,6 +99,9 @@ fn batch_apply_event(replaces: bool, recipients: Vec<SendRecipientDraft>) -> Sen
 
 pub struct SendHost {
     send: CoreHost<Send>,
+    /// A locked request's "add this network" in flight (078 W-04): the
+    /// network admin's view is watched until its wizard settles.
+    add_network: Option<gpui::Subscription>,
     pub view: SendView,
     /// The fee sessions and the speed control (spec 069): the session in
     /// force is the quote the core pre-checks against, the quote the confirm
@@ -190,6 +197,7 @@ impl SendHost {
             last_fee: None,
             alert: None,
             closed: false,
+            add_network: None,
             pin: None,
             pick: None,
             watching: false,
@@ -502,6 +510,29 @@ impl SendHost {
                 self.last_track_status = None;
                 tracker::submitted(user_op_hash.clone(), record_ids.clone(), *chain_id, cx);
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
+                return;
+            }
+            // A payment link on a chain this wallet does not have (078 W-04):
+            // the settings wizard's own journey — registry, chain document,
+            // compatibility probe, save — asked by chain id, as the web's
+            // `addCustomNetworkByChainId` asks it, and answered once the
+            // admin's wizard settles. It answered "error" unconditionally.
+            SendOperation::AddNetwork { chain_id } => {
+                let chain_id = *chain_id;
+                let admin = resident::resident::<NetworkAdmin>(cx);
+                self.add_network = Some(cx.observe(&admin, move |host, admin, cx| {
+                    if host.add_network.is_none() {
+                        return;
+                    }
+                    if let Some(outcome) = add_network_settled(&admin.read(cx).view(), chain_id) {
+                        host.add_network = None;
+                        host.resolve_send(id, SendShellResult::NetworkAdded { outcome }, cx);
+                    }
+                }));
+                let now_iso = crate::executor::now_iso();
+                admin.update(cx, |admin, cx| {
+                    admin.dispatch(NetEvent::AddByChainIdRequested { chain_id, now_iso }, cx);
+                });
                 return;
             }
             SendOperation::ShowAlert { kind } => {
@@ -909,6 +940,29 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
     }
 }
 
+/// Where the network admin's wizard has got to with `chain_id`, as the send
+/// machine words it — `None` while it is still resolving and probing. The
+/// web's `addCustomNetworkByChainId` mapping: saved is added; an unknown
+/// chain is not found; one already present counts as added only when it is a
+/// saved custom row; anything else it refused is not compatible.
+fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOutcome> {
+    let saved = view
+        .networks
+        .iter()
+        .any(|row| row.chain_id == chain_id && row.is_custom);
+    let wizard = &view.wizard;
+    if wizard.phase == NetWizardPhase::Error
+        && let Some(error) = &wizard.error
+    {
+        return Some(match error {
+            NetWizardErrorKind::NotFound { .. } => SendAddNetworkOutcome::NotFound,
+            NetWizardErrorKind::AlreadyAdded { .. } if saved => SendAddNetworkOutcome::Added,
+            _ => SendAddNetworkOutcome::NotCompatible { detail: None },
+        });
+    }
+    (wizard.phase == NetWizardPhase::Idle && saved).then_some(SendAddNetworkOutcome::Added)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1016,6 +1070,10 @@ mod tests {
                         SendShellResult::AlertAcknowledged
                     }
                     SendOperation::Close => SendShellResult::Closed,
+                    // The screen's network admin is not part of this harness.
+                    SendOperation::AddNetwork { .. } => SendShellResult::NetworkAdded {
+                        outcome: vela_core::app::send::SendAddNetworkOutcome::Error,
+                    },
                     // The estimate race: answering the timer first would make
                     // every estimate a timeout. Left pending on purpose.
                     SendOperation::StartTimer { .. } => continue,

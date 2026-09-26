@@ -385,6 +385,7 @@ pub fn render(
             actions.send_class_chips,
             actions.sweep_select_all,
             actions.send_pick_cta,
+            actions.notice_action,
         ),
         FlowBody::SendForm(model) => send_form(model, theme, icons, identicons, window, actions),
         FlowBody::ContactPick(model) => contact_pick(
@@ -1313,9 +1314,16 @@ fn send_pick(
     chip_clicks: Vec<Click>,
     select_all: Option<Click>,
     cta: Option<Click>,
+    notice_action: Option<Click>,
 ) -> Div {
     // No network pill here: the sidebar's network filter already narrows
     // these rows, and a second one beside it could disagree with the first.
+    // A locked request nobody can fulfil: the refusal and its way out, and
+    // nothing to pick (078 W-04).
+    if let Some(notice) = &model.lock_notice {
+        let _ = (per_row, chip_clicks, select_all, cta, open_form.take());
+        return column().child(notice_card(notice, theme, notice_action, None));
+    }
     let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
     let mut col = column()
         .child(flow_search(
