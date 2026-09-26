@@ -106,6 +106,8 @@ pub struct SettingsStrings {
     pub keys_provider_generic: SharedString,
     pub keys_provider_security_key: SharedString,
     pub keys_user_verified: SharedString,
+    /// The key this device signs with — the one it signed in with.
+    pub keys_signs_here: SharedString,
     pub keys_public_key: SharedString,
     pub keys_credential: SharedString,
     pub keys_transport: SharedString,
@@ -375,6 +377,7 @@ impl SettingsStrings {
             keys_provider_generic: s("onboarding.create.providerGeneric"),
             keys_provider_security_key: s("onboarding.create.providerSecurityKey"),
             keys_user_verified: s("settingsModals.keys.userVerified"),
+            keys_signs_here: s("settingsModals.keys.signsHere"),
             keys_public_key: s("settingsModals.keys.publicKey"),
             keys_credential: s("settingsModals.keys.credential"),
             keys_transport: s("settingsModals.keys.transport"),
@@ -583,6 +586,17 @@ mod tests {
             assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
             assert!(!value.is_empty(), "`{key}` resolved empty");
         }
+    }
+
+    /// The keys list's mark for the key this device signs with.
+    #[test]
+    fn the_signs_here_mark_resolves() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        let mark = s.keys_signs_here.to_string();
+        assert!(
+            !mark.is_empty() && mark != "settingsModals.keys.signsHere",
+            "{mark:?}"
+        );
     }
 
     /// The Trusted Signer page's words (spec 071), every one of them a key the

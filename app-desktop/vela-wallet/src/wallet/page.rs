@@ -8862,6 +8862,7 @@ impl WalletPage {
         // label on the line naming which page.
         let trusted_signer = trusted_signer_words(s);
         let user_verified = s.keys_user_verified.clone();
+        let signs_here = s.keys_signs_here.clone();
         let labels = (
             s.keys_public_key.clone(),
             s.keys_credential.clone(),
@@ -8976,6 +8977,7 @@ impl WalletPage {
                     }
                     let mut meta = div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .gap(px(6.))
                         .text_size(theme::text_row_sub())
@@ -8986,10 +8988,13 @@ impl WalletPage {
                             .child("·")
                             .child(div().font_family(theme::font_mono()).child(fingerprint));
                     }
+                    // The name keeps room to be read: in a long language the
+                    // pills wrap onto more lines rather than squeezing it to a
+                    // letter per line (ru, found 2026-09-26).
                     row = row.child(
                         div()
                             .flex_1()
-                            .min_w(px(0.))
+                            .min_w(px(180.))
                             .flex()
                             .flex_col()
                             .gap(px(2.))
@@ -9001,6 +9006,44 @@ impl WalletPage {
                             )
                             .child(meta),
                     );
+                    let mut badges = div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .justify_end()
+                        .gap(px(8.))
+                        .min_w(px(0.));
+                    // The key this device signs with stands out from every
+                    // other row (founder, 2026-09-26): filled, first, ticked —
+                    // the explorer's pills beside it are only outlined.
+                    if key.signs_here {
+                        badges = badges.child(
+                            div()
+                                .id("settings-key-signs-here")
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .px(px(8.))
+                                .py(px(2.))
+                                .rounded_full()
+                                .bg(theme.success_soft)
+                                // Same height as the outlined pills beside it.
+                                .border_1()
+                                .border_color(theme.success_soft)
+                                .text_size(theme::text_row_sub())
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme.success_base)
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::Check,
+                                    false,
+                                    theme.success_base,
+                                    12.,
+                                ))
+                                .child(signs_here.clone()),
+                        );
+                    }
                     // The registry explorer's pills; one nobody can vouch for is not drawn.
                     let mut pills: Vec<(gpui::SharedString, gpui::Hsla)> = Vec::new();
                     if key.user_verified == Some(true) {
@@ -9014,7 +9057,7 @@ impl WalletPage {
                         });
                     }
                     for (text, colour) in pills {
-                        row = row.child(
+                        badges = badges.child(
                             div()
                                 .flex_none()
                                 .px(px(8.))
@@ -9027,6 +9070,7 @@ impl WalletPage {
                                 .child(text),
                         );
                     }
+                    row = row.child(badges);
 
                     // What the row opens onto: the explorer's facts, the two a
                     // person pastes elsewhere copyable. Nothing to open when only
