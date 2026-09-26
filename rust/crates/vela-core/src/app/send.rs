@@ -2212,6 +2212,24 @@ fn boot_fetch(model: &mut Model) -> Cmd {
     Command::all([issue(id, SendOperation::FetchTokens { address }), render()])
 }
 
+/// Every token list the shell hands over, with each built-in chain's coin
+/// written the wallet's way (`network_admin::display_native_symbol`) — the
+/// same spelling the asset list shows, so a token's id (`network_address_symbol`)
+/// is one id whichever door the list came through.
+fn with_display_symbols(tokens: Vec<SendToken>) -> Vec<SendToken> {
+    tokens
+        .into_iter()
+        .map(|mut token| {
+            token.symbol = super::network_admin::display_native_symbol(
+                token.chain_id,
+                token.token_address.as_deref(),
+                &token.symbol,
+            );
+            token
+        })
+        .collect()
+}
+
 /// Non-zero balances, highest USD value first (`useSendController.ts:248-257`).
 fn non_zero_sorted(tokens: &[SendToken]) -> Vec<SendToken> {
     let mut list: Vec<SendToken> = tokens
@@ -2228,6 +2246,7 @@ fn non_zero_sorted(tokens: &[SendToken]) -> Vec<SendToken> {
 }
 
 fn tokens_partial(model: &mut Model, tokens: Vec<SendToken>) -> Cmd {
+    let tokens = with_display_symbols(tokens);
     // Progressive display only, and only while a load is actually running.
     if model.flights.tokens.is_none() {
         return Command::done();
@@ -2250,6 +2269,7 @@ fn tokens_partial(model: &mut Model, tokens: Vec<SendToken>) -> Cmd {
 /// left to it. A token the update no longer lists keeps the row it had: a
 /// chain that did not answer this round is not an emptied balance.
 fn holdings_updated(model: &mut Model, tokens: Vec<SendToken>) -> Cmd {
+    let tokens = with_display_symbols(tokens);
     if matches!(model.flights.tokens, Some((_, TokensPurpose::Initial))) {
         return Command::done();
     }
@@ -2298,7 +2318,7 @@ fn parse_int_prefix(s: &str) -> Option<u32> {
 }
 
 fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: TokensPurpose) -> Cmd {
-    let Some(full) = tokens else {
+    let Some(full) = tokens.map(with_display_symbols) else {
         model.loading = false;
         return match purpose {
             // `catch(() => showAlert(...))`.
@@ -2321,10 +2341,12 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
     // Multi-token hand-off via params → land in multiSelect mode.
     if let Some(joined) = model.params.preselected_multi.clone() {
         let wanted: Vec<&str> = joined.split(',').collect();
+        // Ids carry the symbol, and a hand-off may still spell a chain's coin
+        // the chain document's way ("XDAI") where the list now says "xDAI".
         let picked: Vec<SendToken> = model
             .tokens
             .iter()
-            .filter(|t| wanted.contains(&t.id().as_str()))
+            .filter(|t| wanted.iter().any(|w| w.eq_ignore_ascii_case(&t.id())))
             .cloned()
             .collect();
         if let Some(first) = picked.first().cloned() {
@@ -2346,7 +2368,7 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
         if let Some(found) = model
             .tokens
             .iter()
-            .find(|t| t.symbol == symbol && t.network == network)
+            .find(|t| t.symbol.eq_ignore_ascii_case(&symbol) && t.network == network)
             .cloned()
         {
             model.selected_token = Some(found);

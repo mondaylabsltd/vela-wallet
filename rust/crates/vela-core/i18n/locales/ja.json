@@ -6,7 +6,8 @@
     "error": "エラー",
     "somethingWrong": "問題が発生しました",
     "tryAgain": "再試行",
-    "done": "完了"
+    "done": "完了",
+    "gotIt": "OK"
   },
   "language": {
     "title": "言語",

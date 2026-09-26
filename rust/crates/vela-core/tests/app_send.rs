@@ -4946,3 +4946,34 @@ fn a_max_waiting_on_a_keyless_warm_up_asks_for_its_own_quote() {
     });
     assert_eq!(sut.view().amount, "1.5");
 }
+
+/// The list Send reads spells a chain's coin the wallet's way too, and a
+/// hand-off that still says the chain document's "XDAI" finds it.
+#[test]
+fn a_chains_own_coin_is_one_token_whichever_way_it_was_spelled() {
+    let xdai = SendToken {
+        network: "gnosis".to_owned(),
+        chain_id: 100,
+        symbol: "XDAI".to_owned(),
+        balance: "0.5".to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(1.0),
+        logo_urls: vec![],
+        spam: false,
+    };
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        preselected_symbol: Some("XDAI".to_owned()),
+        preselected_network: Some("gnosis".to_owned()),
+        ..SendOpenParams::default()
+    }));
+    sut.resolve(loaded(vec![xdai]));
+    let view = sut.view();
+    assert_eq!(view.tokens[0].symbol, "xDAI");
+    assert_eq!(
+        view.selected_token.as_ref().map(|t| t.symbol.as_str()),
+        Some("xDAI"),
+        "the hand-off landed on the form"
+    );
+}
