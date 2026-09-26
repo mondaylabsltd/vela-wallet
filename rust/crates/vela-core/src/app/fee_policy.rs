@@ -120,10 +120,6 @@ const OP_STACK_CHAIN_IDS: [u32; 8] = [10, 8_453, 11_155_420, 84_532, 1_868, 57_0
 const ARBITRUM_STATIC_GAS_ADDER: u128 = 600_000;
 const OP_STACK_STATIC_GAS_ADDER: u128 = 150_000;
 
-/// 5 gwei — the gas-price fallback when `eth_gasPrice` fails
-/// (`safe-transaction.ts:1983`).
-const FALLBACK_GAS_PRICE_WEI: u128 = 5_000_000_000;
-
 /// Arc mainnet (5042) and its testnet (5042002) enforce a 20 gwei minimum base
 /// fee (spec 060).
 const ARC_CHAIN_IDS: [u32; 2] = [5_042, 5_042_002];
@@ -138,9 +134,10 @@ const ARC_MIN_GAS_PRICE_WEI: u128 = 20_000_000_000;
 /// error to the sender and no trace on chain. The payment looks submitted and
 /// simply never happens, which is the worst failure this wallet can produce.
 ///
-/// The trigger is not exotic. [`FALLBACK_GAS_PRICE_WEI`] is 5 gwei, so any Arc
-/// quote taken after a failed `eth_gasPrice` read would land at 10 gwei once
-/// the ×2 bundler margin is applied — under the floor, every time.
+/// The trigger was not exotic: the old 5 gwei fallback for a failed
+/// `eth_gasPrice` read landed an Arc quote at 10 gwei once the ×2 bundler
+/// margin was applied — under the floor, every time. (A failed read now
+/// refuses the quote instead; the floor still holds for a real reading.)
 ///
 /// `0` for every other chain, which makes the floor a no-op there: the
 /// twelve pre-existing networks must price bit-identically to before.
@@ -203,7 +200,25 @@ pub const TEMPO_SPLIT_SAFETY_BPS: u128 = 300;
 
 /// How long a chain's gas signals and the relay's gas quote stay good, per
 /// chain, in milliseconds.
+///
+/// The relay's gas quote is ONE answer for every tier
+/// (`pimlico_getUserOperationGasPrice` returns slow, standard and fast
+/// together), so a shell holds the whole answer per chain and every tier's
+/// session reads its row from it — three speed rows, one request.
 pub const FEE_SIGNALS_CACHE_TTL_MS: u32 = 15_000;
+
+/// How long a shell may hold the relay's simulation of one exact operation
+/// (`EstimateUserOpGas`: chain, account, deployed, the calls byte for byte).
+///
+/// The tier previews (spec 069) price the SAME operation at other speeds;
+/// nothing the simulation measures depends on speed, so the in-force session
+/// and every preview share one simulation — asked once, answered to all of
+/// them at the same moment, instead of three simulations landing one after
+/// another. Held exactly as long as the gas signals — the same window, so a
+/// shell reading [`FEE_SIGNALS_CACHE_TTL_MS`] through its binding holds both
+/// right — and dropped with them when a submit starts (the account's state is
+/// about to change).
+pub const SIMULATION_CACHE_TTL_MS: u32 = FEE_SIGNALS_CACHE_TTL_MS;
 
 /// A decimal wei string as an integer, or `None` for anything that is not
 /// plain ASCII digits: "nothing was published" and "the price is zero" are
@@ -615,6 +630,17 @@ pub enum Event {
         /// `None` = native. On Tempo, `None` means the default TIP-20
         /// (`estimateTempoFee`'s `gasFeeToken ?? TEMPO_DEFAULT_FEE_TOKEN`).
         fee_token: Option<String>,
+        /// Nobody has chosen a fee coin yet, so the machine chooses one that
+        /// can pay — see [`auto_pick`]. `fee_token` is then only where the
+        /// search falls back to when no coin can. `false` = `fee_token` is
+        /// the person's own pick and is priced exactly as asked.
+        ///
+        /// The default used to be the native coin whatever the account held:
+        /// a wallet with 0 ETH and 500 USDC was quoted in ETH, refused, and
+        /// sent to the picker to fix what the machine could have seen.
+        /// `#[serde(default)]`: a shell that does not send it keeps that.
+        #[serde(default)]
+        auto_fee_token: bool,
     },
     /// A fee-asset chip tap. `None` = native.
     SelectFeeAsset { token: Option<String> },
@@ -1523,6 +1549,12 @@ pub struct Model {
     quotes: Vec<ParsedQuote>,
     /// Selected fee asset: `None` = native, else a stablecoin contract.
     fee_token: Option<String>,
+    /// The request left the coin to the machine ([`Event::QuoteRequested`]'s
+    /// `auto_fee_token`) and nobody has tapped a chip since.
+    auto_fee_token: bool,
+    /// The coin the request named — where an auto pick falls back to when no
+    /// coin can pay, so the refusal is the one the caller would have had.
+    requested_fee_token: Option<String>,
     estimate: Option<FeeEstimate>,
     stale: bool,
     attempt: u64,
@@ -1635,6 +1667,7 @@ impl App for FeePolicy {
                 tier,
                 calls,
                 fee_token,
+                auto_fee_token,
             } => {
                 model.attempt += 1;
                 model.form_chain_id = Some(chain_id);
@@ -1653,7 +1686,9 @@ impl App for FeePolicy {
                 // (`SigningSheet.tsx:247-249`) asks for `None`.
                 // No leftover estimate survives (`useSendController.ts:723`:
                 // setFeeEstimate(null)).
+                model.requested_fee_token = fee_token.clone();
                 model.fee_token = fee_token;
+                model.auto_fee_token = auto_fee_token;
                 model.estimate = None;
                 model.stale = false;
                 model.quotes.clear();
@@ -1825,17 +1860,29 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
         ) => {
             let chain_id = model.ctx.as_ref().map(|c| c.chain_id).unwrap_or(0);
             let tempo = is_tempo_chain(chain_id);
-            // Taken from the RAW reading, before the floor and the fallback
-            // that `resolve_gas_price` is allowed to apply — see
-            // [`Pending::measured_base_fee`].
+            // Taken from the RAW reading, before the floor that
+            // `resolve_gas_price` applies — see [`Pending::measured_base_fee`].
             model.pending.measured_base_fee = base_fee.as_deref().and_then(parse_units);
-            model.pending.gas = Some(resolve_gas_price(
+            let Some(gas) = resolve_gas_price(
                 chain_id,
                 eth_gas_price.as_deref(),
                 base_fee.as_deref(),
                 priority_fee.as_deref(),
                 !tempo,
-            ));
+            ) else {
+                // No measurement, no quote (founder ruling, 2026-09-26). The
+                // read used to fall to a fixed 5 gwei: during an RPC blip an
+                // Ethereum transfer (~0.06 gwei) was quoted at $23, eighty
+                // times its price, as if that were the fee. Guessing high
+                // over-charges a real person; guessing low is refused at
+                // submit; and the relay's own figure cannot stand in, because
+                // it is only accepted when it agrees with OUR measurement.
+                // The quote is unavailable — the fee row says so beside its
+                // refresh, a requote reads again, and a refresh that fails
+                // keeps the last good quote on screen.
+                return fail(model, FeeFailure::QuoteUnavailable);
+            };
+            model.pending.gas = Some(gas);
             try_advance(model)
         }
         (Phase::Gathering, FeeShellResult::BundlerQuote { quote }) => {
@@ -1873,30 +1920,18 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
     }
 }
 
-/// `getGasPrices` degradation (`safe-transaction.ts:1949-1985`): only a
-/// failed/zero `eth_gasPrice` falls to the 5-gwei default; a failed tip read
-/// just leaves `tip_measured` false.
+/// The chain's gas price as measured, or `None` when `eth_gasPrice` failed or
+/// read zero — then there is nothing to price on and the quote is refused
+/// (the TS source fell to a 5-gwei guess, `safe-transaction.ts:1981`). A
+/// failed TIP read only leaves `tip_measured` false.
 fn resolve_gas_price(
     chain_id: u32,
     eth_gas_price: Option<&str>,
     base_fee: Option<&str>,
     priority_fee: Option<&str>,
     want_tip: bool,
-) -> ChainGasPrice {
-    // The static fallback is exactly where Arc's silent-drop hazard lives: 5
-    // gwei doubled by the bundler margin is 10 gwei, under Arc's floor. So the
-    // fallback is floored too — a chain that cannot be read is still a chain
-    // whose rules apply.
-    let floor = min_gas_price_wei(chain_id);
-    let fallback = ChainGasPrice {
-        gas_price: FALLBACK_GAS_PRICE_WEI.max(floor),
-        base_fee: FALLBACK_GAS_PRICE_WEI.max(floor),
-        priority_fee: 0,
-        tip_measured: false,
-    };
-    let Some(eth) = eth_gas_price.and_then(parse_units) else {
-        return fallback;
-    };
+) -> Option<ChainGasPrice> {
+    let eth = eth_gas_price.and_then(parse_units)?;
     let base = base_fee.and_then(parse_units).unwrap_or(0);
     // A present result (even "0" on L2s) is a real measurement.
     let tip_measured = want_tip && priority_fee.is_some();
@@ -1908,11 +1943,7 @@ fn resolve_gas_price(
         priority_fee: tip,
         tip_measured: Some(tip_measured),
     });
-    if derived.gas_price > 0 {
-        derived
-    } else {
-        fallback
-    }
+    (derived.gas_price > 0).then_some(derived)
 }
 
 fn parse_quote_row(row: &FeeAssetQuote) -> ParsedQuote {
@@ -2122,6 +2153,28 @@ fn advance_generic(
     let Some(rows) = quotes else {
         return fail(model, missing_quote_failure(model.fee_token.is_some()));
     };
+    // Nobody chose the coin: choose, before the simulation, because the coin
+    // decides the fee leg being simulated. The gas is not known yet, so the
+    // coins are measured against the static model — above a plain transfer's
+    // real gas, so a coin that passes here pays for real. `price_generic`
+    // checks again on the real figure.
+    if model.auto_fee_token {
+        let out = Outflows::of_calls(&ctx.calls);
+        let provisional = static_total_gas(ctx, None);
+        if let Some(native) = find_quote(&rows, None) {
+            let fee_for = |row: &ParsedQuote| {
+                calculate_in_band_fee_amount(
+                    provisional,
+                    in_band_gas_basis,
+                    &row.pricing(),
+                    &native.pricing(),
+                )
+            };
+            if let Some(choice) = auto_pick(&rows, &out, fee_for) {
+                model.fee_token = choice;
+            }
+        }
+    }
     let selected = find_quote(&rows, model.fee_token.as_deref()).cloned();
     let native = find_quote(&rows, None).cloned();
     let (Some(selected), Some(_native)) = (selected, native) else {
@@ -2210,6 +2263,143 @@ fn measured_inner_floor(calls: &[FeeCall], gas: &[Option<String>]) -> Option<u12
     crate::user_op::inner_calls_gas_floor(&measured, calls.len())
 }
 
+/// The static gas model (`safe-transaction.ts:715-731`): what a transfer-shaped
+/// op costs when nothing simulated it. The fallback price when the relay's
+/// simulation fails, and the yardstick [`auto_pick`] measures coins against
+/// before any simulation has run.
+fn static_total_gas(ctx: &RequestCtx, inner_floor: Option<u128>) -> u128 {
+    let verification_gas = if ctx.deployed {
+        VERIFICATION_GAS_DEPLOYED
+    } else {
+        VERIFICATION_GAS_UNDEPLOYED
+    };
+    let call_gas = CALL_GAS_LIMIT.max(inner_floor.unwrap_or(0));
+    let mut total_gas = add(add(verification_gas, call_gas), PRE_VERIFICATION_GAS);
+    // L2 rollup data-fee adjustments (`safe-transaction.ts:723-731`).
+    if ARBITRUM_CHAIN_IDS.contains(&ctx.chain_id) {
+        total_gas = add(total_gas, ARBITRUM_STATIC_GAS_ADDER);
+    } else if OP_STACK_CHAIN_IDS.contains(&ctx.chain_id) {
+        total_gas = add(total_gas, OP_STACK_STATIC_GAS_ADDER);
+    }
+    total_gas
+}
+
+// ---------------------------------------------------------------------------
+// Choosing the fee coin nobody chose
+// ---------------------------------------------------------------------------
+
+/// What the priced transaction itself takes out of the account, per asset:
+/// the native value of every call, and every ERC-20 `transfer`'s amount by
+/// contract. A coin that pays the fee has to cover the fee ON TOP of this —
+/// a Max of USDC cannot also pay its own fee in USDC.
+#[derive(Debug, Default)]
+struct Outflows {
+    native: u128,
+    tokens: Vec<(String, u128)>,
+}
+
+/// `transfer(address,uint256)`.
+const ERC20_TRANSFER_SELECTOR: &str = "a9059cbb";
+
+impl Outflows {
+    fn of_calls(calls: &[FeeCall]) -> Self {
+        let mut out = Self::default();
+        for call in calls {
+            out.native = out.native.saturating_add(parse_units(&call.value).unwrap_or(0));
+            let data = call.data.trim_start_matches("0x").to_ascii_lowercase();
+            if data.len() == 8 + 64 + 64 && data.starts_with(ERC20_TRANSFER_SELECTOR) {
+                let amount = U256::from_str_radix(&data[8 + 64..], 16)
+                    .map(narrow_saturating)
+                    .unwrap_or(u128::MAX);
+                match out
+                    .tokens
+                    .iter_mut()
+                    .find(|(token, _)| token.eq_ignore_ascii_case(&call.to))
+                {
+                    Some((_, sum)) => *sum = sum.saturating_add(amount),
+                    None => out.tokens.push((call.to.clone(), amount)),
+                }
+            }
+        }
+        out
+    }
+
+    /// How much of this row's coin the transaction moves.
+    fn of(&self, row: &ParsedQuote) -> u128 {
+        if row.is_native {
+            return self.native;
+        }
+        row.fee_token
+            .as_deref()
+            .and_then(|contract| {
+                self.tokens
+                    .iter()
+                    .find(|(token, _)| token.eq_ignore_ascii_case(contract))
+            })
+            .map_or(0, |(_, amount)| *amount)
+    }
+}
+
+/// The coin the machine pays in when nobody has chosen one: `Some(choice)`
+/// (`None` inside = native), or `None` when no coin can pay — the caller's
+/// requested coin then stands and its refusal is the one that shows.
+///
+/// Only a coin that provably covers the fee plus what the transaction itself
+/// moves of it is a candidate. Among those, in order:
+///
+/// 1. one the transaction is NOT sending — the fee never comes out of the
+///    amount while something else can pay it, so a Max stays whole;
+/// 2. a stablecoin before the chain's coin — the founder's rule, a fee in
+///    dollars reads as what it costs;
+/// 3. the larger balance in USD — the coin least likely to run short on the
+///    next send too.
+///
+/// Ties keep the relay's own row order, so the answer is deterministic.
+fn auto_pick(
+    rows: &[ParsedQuote],
+    out: &Outflows,
+    fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
+) -> Option<Option<String>> {
+    let rank = |row: &ParsedQuote| {
+        (
+            out.of(row) == 0,
+            !row.is_native,
+            row.usd_balance.trim().parse::<f64>().unwrap_or(0.0),
+        )
+    };
+    let mut best: Option<&ParsedQuote> = None;
+    for row in rows.iter().filter(|row| row.is_native || row.balance > 0) {
+        let covers = fee_for(row)
+            .is_some_and(|fee| fee.saturating_add(out.of(row)) <= row.balance);
+        if !covers {
+            continue;
+        }
+        let better = best.is_none_or(|held| {
+            let (a, b) = (rank(row), rank(held));
+            (a.0, a.1) > (b.0, b.1) || ((a.0, a.1) == (b.0, b.1) && a.2 > b.2)
+        });
+        if better {
+            best = Some(row);
+        }
+    }
+    best.map(|row| if row.is_native { None } else { row.fee_token.clone() })
+}
+
+/// Whether the coin in force still pays once the real gas is known. The pick
+/// before the simulation measured the static model; the simulation can come
+/// back above it (a big batch), and then the pick is made again on the real
+/// figure — a local recompute, exactly as a chip switch is.
+fn auto_pick_holds(
+    rows: &[ParsedQuote],
+    chosen: Option<&str>,
+    out: &Outflows,
+    fee_for: &impl Fn(&ParsedQuote) -> Option<u128>,
+) -> bool {
+    find_quote(rows, chosen).is_some_and(|row| {
+        fee_for(row).is_some_and(|fee| fee.saturating_add(out.of(row)) <= row.balance)
+    })
+}
+
 /// Price once the estimating phase has both answers.
 fn try_price(model: &mut Model) -> Command<FeeEffect, Event> {
     let Phase::Estimating(plan) = &model.phase else {
@@ -2255,10 +2445,6 @@ fn advance_tempo(
     recipient: Option<String>,
 ) -> Command<FeeEffect, Event> {
     // `estimateTempoFee` (`safe-transaction.ts:451-546`).
-    let fee_token = model
-        .fee_token
-        .clone()
-        .unwrap_or_else(|| TEMPO_DEFAULT_FEE_TOKEN.to_owned());
     let has_contract_call = ctx
         .calls
         .iter()
@@ -2267,6 +2453,21 @@ fn advance_tempo(
     let reimbursement_legs: u32 = if has_contract_call { 2 } else { 1 };
     let sub_call_count = inner_call_count + reimbursement_legs;
     let static_gas = tempo_expected_gas(ctx.deployed, sub_call_count);
+    // Every Tempo fee coin is a TIP-20 stablecoin and the default one is
+    // often not held at all: nobody chose, so pay in one that is.
+    if model.auto_fee_token {
+        let out = Outflows::of_calls(&ctx.calls);
+        let fee_for = |row: &ParsedQuote| {
+            (!row.is_native).then(|| tempo_reimbursement(static_gas, gas.gas_price, row.decimals))
+        };
+        if let Some(choice) = auto_pick(&model.quotes, &out, fee_for) {
+            model.fee_token = choice;
+        }
+    }
+    let fee_token = model
+        .fee_token
+        .clone()
+        .unwrap_or_else(|| TEMPO_DEFAULT_FEE_TOKEN.to_owned());
 
     let plan = PricePlan::Tempo {
         gas_price_atto: gas.gas_price,
@@ -2360,19 +2561,7 @@ fn accept_gas_outcome(
                 if *est_calldata_len > ESTIMATION_REQUIRED_CALLDATA {
                     return fail(model, FeeFailure::EstimateFailed);
                 }
-                let verification_gas = if ctx.deployed {
-                    VERIFICATION_GAS_DEPLOYED
-                } else {
-                    VERIFICATION_GAS_UNDEPLOYED
-                };
-                let call_gas = CALL_GAS_LIMIT.max(inner_floor.unwrap_or(0));
-                let mut total_gas = add(add(verification_gas, call_gas), PRE_VERIFICATION_GAS);
-                // L2 rollup data-fee adjustments (`safe-transaction.ts:723-731`).
-                if ARBITRUM_CHAIN_IDS.contains(&ctx.chain_id) {
-                    total_gas = add(total_gas, ARBITRUM_STATIC_GAS_ADDER);
-                } else if OP_STACK_CHAIN_IDS.contains(&ctx.chain_id) {
-                    total_gas = add(total_gas, OP_STACK_STATIC_GAS_ADDER);
-                }
+                let total_gas = static_total_gas(&ctx, inner_floor);
                 price_generic(model, &ctx, plan, total_gas)
             }
         },
@@ -2421,10 +2610,28 @@ fn price_generic(
     else {
         return Command::done();
     };
-    let (Some(selected), Some(native)) = (
-        find_quote(&model.quotes, model.fee_token.as_deref()).cloned(),
-        find_quote(&model.quotes, None).cloned(),
-    ) else {
+    let Some(native) = find_quote(&model.quotes, None).cloned() else {
+        return fail(model, FeeFailure::CalculationFailed);
+    };
+    if model.auto_fee_token {
+        // The real gas is in: the coin picked on the static model must still
+        // pay. When it does not, pick again on this figure — and when nothing
+        // can, the requested coin stands and says so, as it would have.
+        let out = Outflows::of_calls(&ctx.calls);
+        let fee_for = |row: &ParsedQuote| {
+            calculate_in_band_fee_amount(
+                total_gas,
+                *in_band_gas_basis,
+                &row.pricing(),
+                &native.pricing(),
+            )
+        };
+        if !auto_pick_holds(&model.quotes, model.fee_token.as_deref(), &out, &fee_for) {
+            model.fee_token = auto_pick(&model.quotes, &out, fee_for)
+                .unwrap_or_else(|| model.requested_fee_token.clone());
+        }
+    }
+    let Some(selected) = find_quote(&model.quotes, model.fee_token.as_deref()).cloned() else {
         return fail(model, FeeFailure::CalculationFailed);
     };
     let Some(fee_amount) = calculate_in_band_fee_amount(
@@ -2494,12 +2701,33 @@ fn price_tempo(
     plan: &PricePlan,
     expected_gas: u128,
 ) -> Command<FeeEffect, Event> {
+    let mut plan = plan.clone();
+    if let (true, PricePlan::Tempo {
+        gas_price_atto,
+        fee_token,
+        ..
+    }) = (model.auto_fee_token, &mut plan)
+    {
+        // The simulation can price above the static model; the coin picked
+        // on that model must still pay, or the pick is made again here.
+        let out = Outflows::of_calls(&ctx.calls);
+        let price = *gas_price_atto;
+        let fee_for = |row: &ParsedQuote| {
+            (!row.is_native).then(|| tempo_reimbursement(expected_gas, price, row.decimals))
+        };
+        if !auto_pick_holds(&model.quotes, Some(fee_token.as_str()), &out, &fee_for) {
+            if let Some(Some(choice)) = auto_pick(&model.quotes, &out, fee_for) {
+                fee_token.clone_from(&choice);
+                model.fee_token = Some(choice);
+            }
+        }
+    }
     let PricePlan::Tempo {
         gas_price_atto,
         fee_token,
         recipient,
         ..
-    } = plan
+    } = &plan
     else {
         return Command::done();
     };
@@ -2604,6 +2832,9 @@ fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffe
         _ => false,
     };
     if same {
+        // Tapping the coin already in force is still a choice: an auto pick
+        // the person has confirmed is theirs, and a requote keeps it.
+        model.auto_fee_token = false;
         return Command::done();
     }
     let option = find_option(model, token.as_deref()).cloned();
@@ -2648,6 +2879,7 @@ fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffe
                     },
                 };
                 model.fee_token = token;
+                model.auto_fee_token = false;
                 return render();
             }
         }
@@ -2656,6 +2888,7 @@ fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffe
     // full estimate; on failure the selection reverts (`GasFeeCard.tsx:216-227`).
     let previous = model.fee_token.clone();
     model.fee_token = token;
+    model.auto_fee_token = false;
     model.attempt += 1;
     model.origin = Origin::Select { previous };
     begin_pipeline(model)

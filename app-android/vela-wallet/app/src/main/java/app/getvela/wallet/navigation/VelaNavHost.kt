@@ -60,6 +60,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -344,7 +351,12 @@ fun VelaNavHost(
     // each carry a sheet of their own.
     var identiconViewer by remember { mutableStateOf<String?>(null) }
     CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }) {
-        NavHost(navController = navController, startDestination = startDestination) {
+        NavHost(
+            navController = navController,
+            startDestination = startDestination,
+            enterTransition = { if (betweenTabs()) EnterTransition.None else fadeIn(tween(ROUTE_FADE_MS)) },
+            exitTransition = { if (betweenTabs()) ExitTransition.None else fadeOut(tween(ROUTE_FADE_MS)) },
+        ) {
             composable(VelaDestinations.WELCOME) {
                 val welcome: WelcomeViewModel = viewModel()
                 var showSignInMethods by rememberSaveable { mutableStateOf(false) }
@@ -2126,6 +2138,27 @@ fun VelaNavHost(
     ParallelSpaceHook.Badge()
     }
 }
+
+/**
+ * The tab bar's routes. 钱包 and 探索 are sections of [VelaDestinations.WALLET]
+ * and swap in place; 通讯录 and 设置 are routes of their own, and a move
+ * between any two of these must look like the in-place swap.
+ */
+private val TAB_ROUTES = setOf(VelaDestinations.WALLET, VelaDestinations.CONTACTS, VelaDestinations.SETTINGS)
+
+/** navigation-compose's own default fade, kept for every move that is not a tab. */
+private const val ROUTE_FADE_MS = 700
+
+/**
+ * A tab to a tab — pushes, swaps and pops alike — cuts instead of fading.
+ *
+ * The NavHost default is a 700 ms crossfade, which drew both screens at once
+ * for most of a second every time 通讯录 or 设置 was tapped, while 钱包 ⇄ 探索
+ * swapped in a frame: the Android tab bar felt sluggish where iOS and the
+ * desktop did not (founder-found, 2026-09-26).
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenTabs(): Boolean =
+    initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES
 
 /**
  * Move without stacking.

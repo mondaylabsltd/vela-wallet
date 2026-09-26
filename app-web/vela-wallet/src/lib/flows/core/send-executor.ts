@@ -65,6 +65,7 @@ import { clearTokenCache, fetchTokens } from '$lib/services/wallet-api';
 import type { SendChainInfo } from '$lib/core/generated/SendChainInfo';
 import type { SendShellResult } from '$lib/core/generated/SendShellResult';
 import type { SendTxRecord } from '$lib/core/generated/SendTxRecord';
+import { prewarmFees } from './fee-prewarm';
 import { wireTier } from './wire-tier';
 import {
 	fromWireAmount,
@@ -158,6 +159,14 @@ export function createSendExecutor(ports: SendShellPorts) {
 	const submitted = new Map<string, SubmitResult>();
 
 	/**
+	 * The next `FetchTokens` must really walk the chains: the send flow asked
+	 * for a fresh list (`ClearTokenCache` comes first on a refresh), or a
+	 * network was just added and the list in memory has never seen it. The
+	 * balance machine's holdings would answer both with what was already there.
+	 */
+	let walkNextFetch = false;
+
+	/**
 	 * Today's receipt convergence, detached exactly as it was: it must never block
 	 * the receipt screen, and a slow or unreachable poll leaves the payment
 	 * submitted (invariant ⑤) rather than turning it into an error.
@@ -195,6 +204,20 @@ export function createSendExecutor(ports: SendShellPorts) {
 		const operation = effect.operation;
 		switch (operation.type) {
 			case 'fetch_tokens': {
+				// The asset list's own holdings, when it has settled a round for
+				// this account: one source, so the picker opens on what is already
+				// in memory and every balance on it is the balance on the home row.
+				const walk = walkNextFetch;
+				walkNextFetch = false;
+				const held = walk ? undefined : await ports.holdings?.(operation.address);
+				if (held?.kind === 'tokens') {
+					return { type: 'tokens_loaded', tokens: held.tokens, chains: chainInfos() };
+				}
+				if (held?.kind === 'unreadable') {
+					// Two rounds in a row reached nothing — the core says it could
+					// not load the tokens (`alertLoadTokensError`).
+					return { type: 'tokens_loaded', tokens: null, chains: chainInfos() };
+				}
 				try {
 					const tokens = await fetchTokens(operation.address, {
 						onProgress: (partial) => {
@@ -215,6 +238,7 @@ export function createSendExecutor(ports: SendShellPorts) {
 
 			case 'clear_token_cache': {
 				clearTokenCache(operation.address);
+				walkNextFetch = true;
 				return { type: 'token_cache_cleared' };
 			}
 
@@ -229,7 +253,12 @@ export function createSendExecutor(ports: SendShellPorts) {
 
 			case 'add_network': {
 				const result = await addCustomNetworkByChainId(operation.chain_id);
-				if (result.ok) return { type: 'network_added', outcome: { type: 'added' } };
+				if (result.ok) {
+					// The core re-runs the boot next; the chain it just added is in no
+					// list the asset screen holds yet.
+					walkNextFetch = true;
+					return { type: 'network_added', outcome: { type: 'added' } };
+				}
 				if (result.reason === 'not-found') {
 					return { type: 'network_added', outcome: { type: 'not_found' } };
 				}
@@ -264,9 +293,19 @@ export function createSendExecutor(ports: SendShellPorts) {
 									? [operation.tx]
 									: [],
 						feeToken: operation.gas_fee_token,
+						// Nobody chose the coin: the fee machine picks one that can pay,
+						// and the estimate's `fee_asset` says which (spec 078).
+						autoFeeToken: operation.auto_fee_token,
 						publicKeyHex: operation.public_key_hex ?? undefined
 					})
 				};
+			}
+
+			case 'prewarm_fees': {
+				// Fire-and-forget: the reads run on into the fee caches while the
+				// person chooses; the core hears back at once and waits for none.
+				prewarmFees(operation.account, operation.chain_ids, ports.feeTier?.() ?? 'fast');
+				return { type: 'fees_prewarmed' };
 			}
 
 			case 'probe_treasury': {
@@ -517,6 +556,9 @@ export function createSendExecutor(ports: SendShellPorts) {
 				// The estimate is MANDATORY: a failure alerts and never advances to
 				// confirm with a fabricated preview (invariant ②).
 				return { type: 'fee_estimated', outcome: { type: 'failed', kind: 'estimate_failed' } };
+			case 'prewarm_fees':
+				// Nothing to report either way: the reads are best effort.
+				return { type: 'fees_prewarmed' };
 			case 'probe_treasury':
 				// `probeTreasury` swallows its own errors; this is the defensive tail,
 				// and "unknown" is the only honest answer — never routed as uncovered.

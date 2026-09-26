@@ -8,6 +8,8 @@ import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
 import app.getvela.wallet.feature.wallet.core.Abi
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
+import app.getvela.wallet.feature.wallet.core.HoldingsFeed
+import app.getvela.wallet.feature.wallet.core.HoldingsRound
 import app.getvela.wallet.feature.wallet.core.RpcPool
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.settings.core.NetView
@@ -16,7 +18,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.RelayRejection
 import uniffi.vela_core_uniffi.UserOpCall
@@ -69,6 +76,17 @@ class SendExecutor(
     /** Spec 071: how a send is signed — the stored default; there is no per-send picker. */
     private val signMethod: () -> String = { "auto" },
     private val trustedSigner: () -> TrustedSigner? = { null },
+    /**
+     * Spec 078: the asset list's holdings — `fetch_tokens` is answered from
+     * the round the balance machine settled, never a second walk of every
+     * chain. `null` (tests) answers from [balances] as it stands.
+     */
+    private val holdings: HoldingsFeed? = null,
+    /**
+     * Spec 078: read ahead what a quote on these chains will need, in the
+     * background, into the relay client's caches. Fire-and-forget.
+     */
+    private val prewarm: (account: String, chainIds: List<Int>) -> Unit = { _, _ -> },
 ) {
 
     /** The account store, as the send path reads it. */
@@ -97,6 +115,8 @@ class SendExecutor(
             calls: List<FeeCall>,
             gasFeeToken: String?,
             publicKeyAvailable: Boolean,
+            /** Nobody chose the coin: the fee machine pays in one that can (`estimate_fee.auto_fee_token`). */
+            autoFeeToken: Boolean,
         ): SendFeeOutcome
     }
 
@@ -119,16 +139,29 @@ class SendExecutor(
 
         /** The pending row is on disk: the feed re-reads, so the home shows it at submit (FR-006). */
         fun recordsPersisted()
+
+        /** A first round is still streaming in: what has arrived so far, display-only (`TokensPartial`). */
+        fun tokensPartial(tokens: List<SendToken>) {}
+
+        /** `fetch_tokens` is being answered from THIS settled round — later rounds follow as `HoldingsUpdated`. */
+        fun holdingsHanded(round: HoldingsRound?) {}
     }
 
     @Volatile
     private var signing: Job? = null
 
     suspend fun perform(operation: SendOperation): SendShellResult = when (operation) {
-        is SendOperation.FetchTokens -> fetchTokens()
+        is SendOperation.FetchTokens -> fetchTokens(operation.address)
+        // The asset list reads again; its new round reaches this screen as
+        // `HoldingsUpdated` (the `fetch_tokens` beside this answers from the
+        // round in hand, so the picker never blanks).
         is SendOperation.ClearTokenCache -> {
             ports.refreshBalances()
             SendShellResult.TokenCacheCleared
+        }
+        is SendOperation.PrewarmFees -> {
+            prewarm(operation.account, operation.chain_ids)
+            SendShellResult.FeesPrewarmed
         }
         is SendOperation.ResolveTokenMetadata -> SendShellResult.TokenMetadata(
             tokenMetadata(operation.chain_id, operation.address),
@@ -150,6 +183,7 @@ class SendExecutor(
                     calls = calls,
                     gasFeeToken = operation.gas_fee_token,
                     publicKeyAvailable = operation.public_key_hex != null,
+                    autoFeeToken = operation.auto_fee_token,
                 ),
             )
         }
@@ -206,27 +240,117 @@ class SendExecutor(
 
     // -- tokens -----------------------------------------------------------------
 
-    /** The holdings the balance machine already read — no second walk. */
-    private fun fetchTokens(): SendShellResult {
-        val view = balances()
-        val net = networks()
-        val chains = net.networks.map { row ->
-            SendChainInfo(chain_id = row.chain_id.toInt(), network = network(row.chain_id.toInt()), native_symbol = row.native_symbol)
+    /**
+     * The holdings the balance machine already read — no second walk, and the
+     * SAME numbers the asset list shows (spec 078). Answered from the round
+     * the dashboard settled for this account; when none has settled yet, the
+     * answer waits for it, showing what has streamed in meanwhile
+     * (`TokensPartial`) rather than answering "nothing held" for a wallet
+     * nobody has finished reading. A round older than [HOLDINGS_FRESH_MS] is
+     * shown at once and read again behind it; the new round follows as
+     * `HoldingsUpdated`.
+     */
+    private suspend fun fetchTokens(address: String): SendShellResult {
+        val feed = holdings ?: return tokensLoaded(balances())
+        val ready = feed.settled.value?.takeIf { it.address.equals(address, ignoreCase = true) }
+        var wait = if (ready != null) HoldingsWait.Settled(ready) else awaitRound(feed, address, after = null, acceptUnreachable = true)
+        // One source has one failure mode: a round in which no chain answered
+        // — a proxy blip at launch — used to become "could not load tokens"
+        // at once, and the picker stayed empty until the next ten-minute poll.
+        // Ask the dashboard to read again first (the asset list recovers with
+        // it) and answer whatever the NEXT round holds; only a second round
+        // that reached nothing is the refusal (the desktop's rule).
+        if (wait != null && reachedNothing(wait)) {
+            val met = (wait as? HoldingsWait.Settled)?.round?.atMs
+            VelaLog.event("send.tokens", "round reached nothing, reading again once", "met" to (met != null))
+            ports.refreshBalances()
+            wait = awaitRound(feed, address, after = met, acceptUnreachable = false)
         }
-        val tokens = (view.tokens + view.unpriced_tokens).map { token ->
-            SendToken(
-                network = network(token.chain_id),
-                chain_id = token.chain_id,
-                symbol = token.symbol,
-                balance = token.balance,
-                decimals = token.decimals,
-                token_address = token.token_address,
-                price_usd = token.price_usd,
-                logo_urls = emptyList(),
-                spam = token.spam,
-            )
+        return when (wait) {
+            is HoldingsWait.Settled -> {
+                // Recorded BEFORE the answer leaves, so a round settling
+                // after this one is handed over and this one is not twice.
+                ports.holdingsHanded(wait.round)
+                if (now() - wait.round.atMs > HOLDINGS_FRESH_MS) ports.refreshBalances()
+                tokensLoaded(wait.round.view)
+            }
+            HoldingsWait.Unreachable -> SendShellResult.TokensLoaded(tokens = null, chains = chains())
+            null -> {
+                // Timed out: what has arrived for this account, or the failure.
+                val view = feed.view.value.takeIf { it.address.equals(address, ignoreCase = true) && it.tokens.isNotEmpty() }
+                VelaLog.event("send.tokens", "no settled round in time", "partial" to (view?.tokens?.size ?: 0))
+                ports.holdingsHanded(null)
+                view?.let(::tokensLoaded) ?: SendShellResult.TokensLoaded(tokens = null, chains = chains())
+            }
         }
-        return SendShellResult.TokensLoaded(tokens = tokens, chains = chains)
+    }
+
+    private sealed class HoldingsWait {
+        data class Settled(val round: HoldingsRound) : HoldingsWait()
+        data object Unreachable : HoldingsWait()
+    }
+
+    /** Nothing held AND something failed, or nothing could be read at all — what [tokensLoaded] would refuse. */
+    private fun reachedNothing(wait: HoldingsWait): Boolean = when (wait) {
+        is HoldingsWait.Settled -> sendTokens(wait.round.view).isEmpty() && wait.round.view.failed_chain_ids.isNotEmpty()
+        HoldingsWait.Unreachable -> true
+    }
+
+    /**
+     * A settled round for `address` — newer than [after] when given — or the
+     * machine's "nothing could be read" (only when [acceptUnreachable]), or
+     * `null` on timeout. While the first round is out, what has streamed in
+     * shows as `TokensPartial`.
+     */
+    private suspend fun awaitRound(
+        feed: HoldingsFeed,
+        address: String,
+        after: Double?,
+        acceptUnreachable: Boolean,
+    ): HoldingsWait? = withTimeoutOrNull(HOLDINGS_WAIT_MS) {
+        coroutineScope {
+            val streaming = launch {
+                var last: List<SendToken>? = null
+                feed.view.collect { view ->
+                    if (!view.address.equals(address, ignoreCase = true) || view.tokens.isEmpty()) return@collect
+                    val tokens = sendTokens(view)
+                    if (tokens != last) {
+                        last = tokens
+                        ports.tokensPartial(tokens)
+                    }
+                }
+            }
+            try {
+                combine(feed.settled, feed.view) { round, view ->
+                    when {
+                        round != null && round.address.equals(address, ignoreCase = true) && round.atMs != after ->
+                            HoldingsWait.Settled(round)
+                        acceptUnreachable && view.address.equals(address, ignoreCase = true) && view.unreachable ->
+                            HoldingsWait.Unreachable
+                        else -> null
+                    }
+                }.filterNotNull().first()
+            } finally {
+                streaming.cancel()
+            }
+        }
+    }
+
+    /**
+     * One round as the picker's answer. Nothing came back and something
+     * failed: the load failed — an empty wallet on reachable chains is an
+     * empty list, not an error (the desktop's `tokens_loaded`).
+     */
+    private fun tokensLoaded(view: BalanceView): SendShellResult {
+        val tokens = sendTokens(view)
+        return SendShellResult.TokensLoaded(
+            tokens = if (tokens.isEmpty() && view.failed_chain_ids.isNotEmpty()) null else tokens,
+            chains = chains(),
+        )
+    }
+
+    private fun chains(): List<SendChainInfo> = networks().networks.map { row ->
+        SendChainInfo(chain_id = row.chain_id.toInt(), network = network(row.chain_id.toInt()), native_symbol = row.native_symbol)
     }
 
     private suspend fun tokenMetadata(chainId: Int, address: String): SendTokenMeta? {
@@ -306,6 +430,7 @@ class SendExecutor(
     fun neutralAnswer(operation: SendOperation): SendShellResult = when (operation) {
         is SendOperation.FetchTokens -> SendShellResult.TokensLoaded(tokens = null, chains = emptyList())
         is SendOperation.ClearTokenCache -> SendShellResult.TokenCacheCleared
+        is SendOperation.PrewarmFees -> SendShellResult.FeesPrewarmed
         is SendOperation.ResolveTokenMetadata -> SendShellResult.TokenMetadata(null)
         is SendOperation.AddNetwork -> SendShellResult.NetworkAdded(SendAddNetworkOutcome.Error)
         is SendOperation.EstimateFee -> SendShellResult.FeeEstimated(SendFeeOutcome.Failed(SendEstimateFailure.Other))
@@ -327,6 +452,38 @@ class SendExecutor(
     internal companion object {
         /** The id half the core keys tokens on; the chain id is the whole story here. */
         fun network(chainId: Int) = "chain-$chainId"
+
+        /** How long `fetch_tokens` waits for the dashboard's first round of an account. */
+        const val HOLDINGS_WAIT_MS = 30_000L
+
+        /** A settled round older than this is shown at once and read again behind (the desktop's window). */
+        const val HOLDINGS_FRESH_MS = 5.0 * 60.0 * 1000.0
+
+        /**
+         * The asset list's holdings as Send's tokens — ONE mapping for the
+         * `fetch_tokens` answer and every `HoldingsUpdated`. The dashboard's
+         * `tokens` already holds its unpriced rows (`unpriced_tokens` is a
+         * subset of them, for the detail sheet), so the two are joined by
+         * holding and a row is never listed twice. No `logo_urls`: the asset
+         * list has none either, and both draw the same mark from the chain,
+         * symbol and contract (`Marks.tokenMark`).
+         */
+        fun sendTokens(view: BalanceView): List<SendToken> =
+            (view.tokens + view.unpriced_tokens)
+                .distinctBy { "${it.chain_id}:${it.token_address?.lowercase() ?: "native"}" }
+                .map { token ->
+                    SendToken(
+                        network = network(token.chain_id),
+                        chain_id = token.chain_id,
+                        symbol = token.symbol,
+                        balance = token.balance,
+                        decimals = token.decimals,
+                        token_address = token.token_address,
+                        price_usd = token.price_usd,
+                        logo_urls = emptyList(),
+                        spam = token.spam,
+                    )
+                }
 
         /** `fee_policy::TEMPO_DEFAULT_FEE_TOKEN` — pathUSD. */
         internal const val TEMPO_DEFAULT_FEE_TOKEN = "0x20c0000000000000000000000000000000000000"

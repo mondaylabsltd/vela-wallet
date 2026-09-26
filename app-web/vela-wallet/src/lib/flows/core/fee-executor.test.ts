@@ -34,7 +34,7 @@ vi.mock('$lib/services/safe-transaction', () => ({
 	fetchRawBundlerQuote: vi.fn(),
 	fetchRawGasSignals: vi.fn(),
 	keySetOf: vi.fn(),
-	measureCallGas: seams.measureCallGas,
+	measureCallGasForQuote: seams.measureCallGas,
 	simulateUserOpGas: vi.fn()
 }));
 

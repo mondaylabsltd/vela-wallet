@@ -2,6 +2,7 @@
 	import type { TabsModel } from '../model';
 	import { navIcon, type NavIconId } from '../icons';
 	import Icon from './Icon.svelte';
+	import { preloadDestination, warmDestinations } from '../tab-preload';
 
 	interface Props {
 		tabs: TabsModel;
@@ -23,6 +24,9 @@
 		onselect
 	}: Props = $props();
 
+	// A live bar only — the gallery draws this with nowhere to go.
+	$effect(() => (onselect ? warmDestinations(selected) : undefined));
+
 	const items = $derived(
 		destinations.map((id) => ({
 			id,
@@ -38,6 +42,9 @@
 			type="button"
 			class:selected={item.selected}
 			aria-current={item.selected ? 'page' : undefined}
+			onpointerdown={() => {
+				if (onselect && !item.selected) preloadDestination(item.id);
+			}}
 			onclick={() => onselect?.(item.id)}
 		>
 			<Icon icon={navIcon(item.id, item.selected)} size="xl" />

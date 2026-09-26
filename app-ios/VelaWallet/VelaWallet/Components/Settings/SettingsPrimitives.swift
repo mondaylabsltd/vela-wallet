@@ -10,6 +10,7 @@
 
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 /// The one badge every settings screen uses. Latency, reachability, provider
 /// state and compatibility are all this object in the mocks, differing only in
@@ -339,6 +340,14 @@ struct SettingsSegmentedControl: View {
 /// finger lifts — Android's `VelaTextScaleSlider` and the web's range input.
 /// The thumb follows the finger on local state; committing per stop would
 /// re-lay the whole app out under the drag.
+///
+/// The thumb answers the finger as the desktop's does (the founder, 2026-09:
+/// 现在的桌面视觉很好): from the moment a finger lands on the track — a tap
+/// included — through the whole drag, the thumb grows and a soft ring comes
+/// up around it, and both settle back when it lifts. Under a pointer (the
+/// app on an iPad with a trackpad, or on a Mac) both grow a little and the
+/// tick a click would land on is marked. The growth is a spring with no
+/// bounce; reduced motion switches it instantly.
 struct TextScaleSlider: View {
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -347,14 +356,39 @@ struct TextScaleSlider: View {
     /// picture of a size already set — it takes no touch and plays nothing.
     var onSelect: ((Int) -> Void)?
 
-    @State private var drag = TextScaleDrag()
+    @State private var drag: TextScaleDrag
 
-    /// The web's `--icon-lg` thumb over `--space-sm` ticks, Android's 20dp / 4dp.
-    private static let thumb: CGFloat = 20
+    /// `pictured` is for rendering only: it seeds the gesture state, so an
+    /// `ImageRenderer` picture — which has no finger — can show the slider
+    /// pressed or under a pointer. The app never passes it.
+    init(model: TextScaleModel, onSelect: ((Int) -> Void)? = nil, pictured: TextScaleDrag = TextScaleDrag()) {
+        self.model = model
+        self.onSelect = onSelect
+        _drag = State(initialValue: pictured)
+    }
+
+    /// The stops sit the pressed ring's radius in from the track's ends, so
+    /// the ring is whole on either end stop. It was the thumb's radius before
+    /// the ring; the glyph gap came down from `s12` to keep the end stops
+    /// about where they were. The one number the drawing and the finger both
+    /// measure the track by.
+    static let inset: CGFloat = TextScaleLift.pressed.ring / 2
+    private static let glyphGap: CGFloat = Tokens.Space.s4
+    /// The web's `--space-sm` ticks, Android's 4dp; and the tick a click would
+    /// land on, marked under a pointer (the desktop's 6 → 8, from iOS's 4).
     private static let tick: CGFloat = Tokens.Space.s4
+    private static let tickAimed: CGFloat = 6
+    /// Lifts the thumb off the ring — the web's thumb wears `--shadow-md`, the
+    /// desktop a tighter 18% one. `Tokens.Shadow` (4–6% black) does not show
+    /// on a dot this small, so this is the desktop's.
+    private static let shadowOpacity: Double = 0.18
+    private static let shadowRadius: CGFloat = 1.5
+    /// The grow and shrink: critically damped, as the desktop's (its 30/s
+    /// spring is a 0.21 s period) — a ring that wobbles reads as a toy.
+    private static let liftSpring: Animation = .spring(response: 0.2, dampingFraction: 1)
 
     var body: some View {
-        HStack(spacing: Tokens.Space.s12) {
+        HStack(spacing: Self.glyphGap) {
             Text("A")
                 .font(.system(size: Tokens.TextSize.t13, weight: .bold))
                 .foregroundStyle(theme.fgBase)
@@ -388,28 +422,50 @@ struct TextScaleSlider: View {
     private var shown: Int { drag.shown ?? model.index }
 
     private func track(width: CGFloat, height: CGFloat) -> some View {
-        let inset = Self.thumb / 2
         let center = { (stop: Int) in
-            TextScaleTrack.center(of: stop, width: width, steps: model.steps, inset: inset)
+            TextScaleTrack.center(of: stop, width: width, steps: model.steps, inset: Self.inset)
         }
+        let lift = drag.lift
+        let aimed = drag.aimed(committed: model.index)
+        // Glides stop to stop instead of blinking between them.
+        let glide: Animation? = reduceMotion ? nil : .interactiveSpring(response: 0.18, dampingFraction: 0.82)
+        let grow: Animation? = reduceMotion ? nil : Self.liftSpring
         return ZStack {
             ForEach(0..<model.steps, id: \.self) { stop in
+                let marked = stop == aimed
+                let size = marked ? Self.tickAimed : Self.tick
                 Circle()
-                    .fill(theme.borderStrong)
-                    .frame(width: Self.tick, height: Self.tick)
+                    .fill(marked ? theme.fgSubtle : theme.borderStrong)
+                    .frame(width: size, height: size)
+                    .animation(grow, value: marked)
                     .position(x: center(stop), y: height / 2)
             }
+            // The ring comes up from under the thumb: at rest it is the
+            // thumb's size and not there.
             Circle()
                 .fill(theme.fgMuted)
-                .frame(width: Self.thumb, height: Self.thumb)
+                .frame(width: lift.ring, height: lift.ring)
+                .opacity(lift.ringOpacity)
+                .animation(grow, value: lift)
                 .position(x: center(shown), y: height / 2)
-                // Glides stop to stop instead of blinking between them.
-                .animation(reduceMotion ? nil : .interactiveSpring(response: 0.18, dampingFraction: 0.82),
-                           value: shown)
+                .animation(glide, value: shown)
+            Circle()
+                .fill(theme.fgMuted)
+                .frame(width: lift.thumb, height: lift.thumb)
+                .shadow(color: .black.opacity(Self.shadowOpacity), radius: Self.shadowRadius, y: 1)
+                .animation(grow, value: lift)
+                .position(x: center(shown), y: height / 2)
+                .animation(glide, value: shown)
         }
         .overlay {
             if onSelect != nil {
                 TextScaleTouchSurface(
+                    onPress: { down in drag.press(down) },
+                    onHover: { x in
+                        let over = x.map { stop(at: $0, width: width) }
+                        // A pointer moving inside one stop redraws nothing.
+                        if over != drag.hovered { drag.hover(over: over) }
+                    },
                     onDrag: { x in
                         drag.move(to: stop(at: x, width: width), committed: model.index)
                     },
@@ -424,7 +480,7 @@ struct TextScaleSlider: View {
     }
 
     private func stop(at x: CGFloat, width: CGFloat) -> Int {
-        TextScaleTrack.stop(at: x, width: width, steps: model.steps, inset: Self.thumb / 2)
+        TextScaleTrack.stop(at: x, width: width, steps: model.steps, inset: Self.inset)
     }
 
     private func commit() {
@@ -432,9 +488,10 @@ struct TextScaleSlider: View {
     }
 }
 
-/// Where the text-size stops sit on the track: evenly spaced between one
-/// thumb-radius in from each end, so the thumb on the last stop is still
-/// inside the track. Pure, so the arithmetic is tested without a finger.
+/// Where the text-size stops sit on the track: evenly spaced between `inset`
+/// in from each end (`TextScaleSlider.inset`, the pressed ring's radius), so
+/// the thumb and its ring on the last stop are still inside the track. Pure,
+/// so the arithmetic is tested without a finger.
 enum TextScaleTrack {
     /// The stop nearest `x` — Android's `stepAt`, on the stops as drawn.
     static func stop(at x: CGFloat, width: CGFloat, steps: Int, inset: CGFloat) -> Int {
@@ -451,12 +508,43 @@ enum TextScaleTrack {
     }
 }
 
-/// One gesture on the text-size slider: the stop under the finger, and the
-/// detent each new stop earns. Apart from the view so a test can run a finger
-/// across it.
+/// One gesture on the text-size slider: the stop under the finger, the
+/// detent each new stop earns, and how far the thumb is lifted. Apart from
+/// the view so a test can run a finger across it.
 struct TextScaleDrag {
     /// The stop under the finger while it is down; `nil` at rest.
     private(set) var shown: Int?
+    /// A finger is on the track: from the moment it lands, before the tap or
+    /// the pan has decided what the touch is, until it lifts or the page's
+    /// scroll takes it.
+    private(set) var touching = false
+    /// The stop a pointer over the track is nearest (a trackpad or a mouse);
+    /// `nil` when none is over it.
+    private(set) var hovered: Int?
+
+    /// Pressed from touch-down through the whole drag — the pan's release,
+    /// not the finger's, ends a drag, and the two arrive in either order.
+    var lift: TextScaleLift {
+        if touching || shown != nil { return .pressed }
+        return hovered == nil ? .rest : .hover
+    }
+
+    /// The tick to mark as the one a click would land on: under a pointer,
+    /// not while pressed, and not the stop the thumb already sits on.
+    func aimed(committed: Int) -> Int? {
+        guard lift == .hover, let stop = hovered, stop != committed else { return nil }
+        return stop
+    }
+
+    /// A finger landed on the track (`true`) or is gone from it (`false`).
+    mutating func press(_ down: Bool) {
+        touching = down
+    }
+
+    /// A pointer is over `stop`, or has left the track (`nil`).
+    mutating func hover(over stop: Int?) {
+        hovered = stop
+    }
 
     /// The finger is over `stop`. A stop it was not already on is a detent —
     /// one per stop, however the finger got there; wobbling inside a stop
@@ -475,6 +563,42 @@ struct TextScaleDrag {
     }
 }
 
+/// How far the text-size thumb is lifted, and what each lift draws — the
+/// desktop's three moments (`ui/step_slider.rs`) at iOS's sizes: its 16/20/22
+/// thumb over a 34/40 ring becomes 20/24/26 over 40/44 here, because the
+/// resting thumb was already the web's 20.
+enum TextScaleLift: Equatable {
+    case rest, hover, pressed
+
+    /// The thumb's diameter.
+    var thumb: CGFloat {
+        switch self {
+        case .rest: 20
+        case .hover: 24
+        case .pressed: 26
+        }
+    }
+
+    /// The ring's diameter: at rest the thumb's own, hidden under it; pressed,
+    /// the platform's touch target — the finger's own size.
+    var ring: CGFloat {
+        switch self {
+        case .rest: TextScaleLift.rest.thumb
+        case .hover: 40
+        case .pressed: Tokens.Layout.hitTarget
+        }
+    }
+
+    /// The ring's strength, as a share of `fg.muted` — the desktop's.
+    var ringOpacity: Double {
+        switch self {
+        case .rest: 0
+        case .hover: 0.10
+        case .pressed: 0.16
+        }
+    }
+}
+
 /// The slider's touch, in UIKit because SwiftUI cannot say "horizontal only".
 ///
 /// Settings is a scroll view, and the slider is a full-width row in it. A
@@ -484,7 +608,14 @@ struct TextScaleDrag {
 /// under a sideways drag. A pan that begins only when the finger moves more
 /// sideways than up or down is what Android's `detectHorizontalDragGestures`
 /// is; vertical movement is left to the page.
+///
+/// Neither the pan nor the tap says anything until it has decided — the tap
+/// not until the finger lifts — so a third recognizer reports the finger
+/// landing, for the thumb to answer it at once; and a pointer (trackpad,
+/// mouse) is reported as it moves over the track.
 private struct TextScaleTouchSurface: UIViewRepresentable {
+    var onPress: (Bool) -> Void
+    var onHover: (CGFloat?) -> Void
     var onDrag: (CGFloat) -> Void
     var onRelease: () -> Void
     var onTap: (CGFloat) -> Void
@@ -499,6 +630,13 @@ private struct TextScaleTouchSurface: UIViewRepresentable {
         view.addGestureRecognizer(pan)
         view.addGestureRecognizer(
             UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tap(_:)))
+        )
+        let press = TextScalePressRecognizer()
+        press.onPress = { [coordinator = context.coordinator] down in coordinator.surface.onPress(down) }
+        press.delegate = context.coordinator
+        view.addGestureRecognizer(press)
+        view.addGestureRecognizer(
+            UIHoverGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.hover(_:)))
         )
         return view
     }
@@ -528,11 +666,68 @@ private struct TextScaleTouchSurface: UIViewRepresentable {
             surface.onTap(recognizer.location(in: recognizer.view).x)
         }
 
+        @objc func hover(_ recognizer: UIHoverGestureRecognizer) {
+            switch recognizer.state {
+            case .began, .changed:
+                surface.onHover(recognizer.location(in: recognizer.view).x)
+            default:
+                surface.onHover(nil)
+            }
+        }
+
         func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
             guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
             let moved = pan.translation(in: pan.view)
             let sideways = moved == .zero ? pan.velocity(in: pan.view) : moved
             return abs(sideways.x) > abs(sideways.y)
         }
+
+        /// The press watcher rides along with the slider's own pan and tap, so
+        /// it hears the finger lift after a drag; the page's scroll it does
+        /// not, so the scroll taking the touch ends the press.
+        func gestureRecognizer(
+            _ recognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool {
+            guard recognizer is TextScalePressRecognizer || other is TextScalePressRecognizer else { return false }
+            return recognizer.view === other.view
+        }
     }
+}
+
+/// Reports a finger landing on the slider and leaving it, and nothing else.
+///
+/// It never recognizes, so it can take no touch from the pan, the tap or the
+/// page's scroll. It ends when the finger lifts, and when another gesture
+/// takes the touch UIKit fails it — either way `reset` is where the press
+/// ends, so there is one place it can.
+private final class TextScalePressRecognizer: UIGestureRecognizer {
+    var onPress: (Bool) -> Void = { _ in }
+    private var down = false
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard !down else { return }
+        down = true
+        onPress(true)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        state = .failed
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        state = .failed
+    }
+
+    override func reset() {
+        super.reset()
+        guard down else { return }
+        down = false
+        onPress(false)
+    }
+
+    override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
 }

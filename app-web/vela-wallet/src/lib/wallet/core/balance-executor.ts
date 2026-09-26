@@ -119,6 +119,7 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 						failed = ids;
 					}
 				});
+				stream.roundEnded?.(operation.address);
 				return {
 					type: 'fetch_settled',
 					address: operation.address,
@@ -179,6 +180,7 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 			case 'fetch_tokens':
 				// `catch { /* keep last-known tokens + total */ }` — the skeleton
 				// closes, nothing else moves (`useHomeController.ts:367-369`).
+				stream.roundEnded?.(operation.address);
 				return { type: 'fetch_errored', address: operation.address, pull: operation.pull };
 			case 'fetch_account_assets':
 				// Per-account best effort: the row keeps its cached value

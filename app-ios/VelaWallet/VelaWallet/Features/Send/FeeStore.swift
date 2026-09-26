@@ -57,18 +57,32 @@ final class FeeStore {
         let tier: String
         let calls: [[String: Any]]
         let feeToken: String?
+        /// Nobody has chosen the fee coin (spec 078): the fee machine pays in
+        /// one that can, and `feeToken` is only where it falls back to. Part
+        /// of the operation, so every preview replays it.
+        let autoFeeToken: Bool
 
         /// The operation, tier aside — `calls` compared as the JSON the core
         /// reads, which is exact.
         func sameOperation(_ other: Ask) -> Bool {
             chainId == other.chainId && account == other.account && deployed == other.deployed
                 && publicKeyAvailable == other.publicKeyAvailable && feeToken == other.feeToken
+                && autoFeeToken == other.autoFeeToken
                 && CoreJSON.string(["c": calls]) == CoreJSON.string(["c": other.calls])
         }
 
         func at(_ tier: String) -> Ask {
             Ask(chainId: chainId, account: account, deployed: deployed,
-                publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls, feeToken: feeToken)
+                publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls,
+                feeToken: feeToken, autoFeeToken: autoFeeToken)
+        }
+
+        /// The same operation in the coin the person tapped: from here on it
+        /// is theirs and is priced exactly as asked.
+        func paying(_ token: String?) -> Ask {
+            Ask(chainId: chainId, account: account, deployed: deployed,
+                publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls,
+                feeToken: token, autoFeeToken: false)
         }
 
         var event: String {
@@ -81,6 +95,7 @@ final class FeeStore {
                 "tier": tier,
                 "calls": calls,
                 "fee_token": feeToken.map { $0 as Any } ?? NSNull(),
+                "auto_fee_token": autoFeeToken,
             ])
         }
     }
@@ -206,7 +221,8 @@ final class FeeStore {
         deployed: Bool,
         publicKeyAvailable: Bool,
         calls: [[String: Any]],
-        feeToken: String?
+        feeToken: String?,
+        autoFeeToken: Bool = false
     ) async -> FeeViewWire? {
         generation += 1
         let mine = generation
@@ -233,7 +249,7 @@ final class FeeStore {
         let ask = Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "fast",
-            calls: calls, feeToken: feeToken
+            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
         )
         return await withCheckedContinuation { continuation in
             var resumed = false
@@ -255,12 +271,13 @@ final class FeeStore {
         deployed: Bool,
         publicKeyAvailable: Bool,
         calls: [[String: Any]],
-        feeToken: String?
+        feeToken: String?,
+        autoFeeToken: Bool = false
     ) {
         askInForce(Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "fast",
-            calls: calls, feeToken: feeToken
+            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
         ))
     }
 
@@ -282,13 +299,14 @@ final class FeeStore {
     /// coin. Telling the session in force alone would leave the previews
     /// pricing the old coin — and a speed tapped next would promote one,
     /// switching the payment back to a coin the person just walked away from.
+    ///
+    /// A tap is the person's choice (spec 078): asked with `auto_fee_token`
+    /// off, so the coin tapped is the coin priced — even when it is the one
+    /// the machine had picked for them, which is why an unchanged coin still
+    /// re-asks while the pick was automatic.
     func chooseFeeToken(_ token: String?) {
-        guard let ask = inForce.ask, ask.feeToken != token else { return }
-        askInForce(Ask(
-            chainId: ask.chainId, account: ask.account, deployed: ask.deployed,
-            publicKeyAvailable: ask.publicKeyAvailable, tier: speed?.tier ?? ask.tier,
-            calls: ask.calls, feeToken: token
-        ))
+        guard let ask = inForce.ask, ask.feeToken != token || ask.autoFeeToken else { return }
+        askInForce(ask.paying(token).at(speed?.tier ?? ask.tier))
     }
 
     /// A fee-asset chip tap. `nil` = the native coin.
@@ -297,11 +315,22 @@ final class FeeStore {
     /// batched into the simulated operation is a native transfer for `nil` and
     /// an ERC-20 `transfer` for a contract. Re-denominating a native quote
     /// would price a different operation than the one that gets submitted.
+    ///
+    /// The session in force recomputes locally (`select_fee_asset`, which
+    /// also ends the machine's own pick). The operation on record follows
+    /// the tap too, so the previews re-price in the coin chosen and a speed
+    /// re-asked later carries it with `auto_fee_token` off — replaying the
+    /// old automatic request would hand the choice back to the machine.
     func selectAsset(_ token: String?) {
         inForce.send(CoreJSON.string([
             "type": "select_fee_asset",
             "token": token.map { $0 as Any } ?? NSNull(),
         ]))
+        guard let ask = inForce.ask, ask.feeToken != token || ask.autoFeeToken else { return }
+        askGeneration += 1
+        inForce.ask = ask.paying(token)
+        inForce.generation = askGeneration
+        settleSpeed()
     }
 
     /// The core re-runs the request it priced (a stale quote on the confirm).

@@ -68,6 +68,12 @@ class SpeedControl(
         val tier: FeeTier,
         val calls: List<FeeCall>,
         val feeToken: String?,
+        /**
+         * Nobody chose the fee coin: the fee machine pays in one that can.
+         * Part of the operation, so every preview replays it and a promotion
+         * never swaps an auto-priced quote for a picked one (or back).
+         */
+        val autoFeeToken: Boolean = false,
     ) {
         fun sameOperation(other: QuoteAsk): Boolean = copy(tier = other.tier) == other
 
@@ -79,6 +85,7 @@ class SpeedControl(
             tier = tier,
             calls = calls,
             fee_token = feeToken,
+            auto_fee_token = autoFeeToken,
         )
     }
 
@@ -204,25 +211,38 @@ class SpeedControl(
         publicKeyAvailable: Boolean,
         calls: List<FeeCall>,
         feeToken: String?,
+        /** The send machine's word: nobody chose the coin on this form (`estimate_fee.auto_fee_token`). */
+        autoFeeToken: Boolean = false,
     ): Quoted {
         // HOW FAST is the shell's to say (spec 068): the tier the speed core
         // has in force — the stored default, a one-shot pick, a free upgrade.
-        val ask = QuoteAsk(chainId, account, publicKeyAvailable, speed.value.tier, calls, feeToken)
+        val ask = QuoteAsk(chainId, account, publicKeyAvailable, speed.value.tier, calls, feeToken, autoFeeToken)
         answering = true
         try {
-            val (_, before) = askInForce(ask) ?: return Quoted.Superseded
+            val asked = askInForce(ask) ?: return Quoted.Superseded
+            val before = asked.before
             // Woken by `commits`, NOT by `view`: a re-quote at the same price is
             // a view that `equals` the one before the request, and a StateFlow
             // never delivers that to a collector that missed the `busy` in
             // between (see `CoreHost.commits`).
+            //
+            // And only by a commit made AFTER this question was dispatched:
+            // `commits` replays its current value to a new collector, and the
+            // dispatch reaches the core through its inbox a moment later — so
+            // a view still carrying the LAST attempt's `failed` satisfied the
+            // wait at once, and a Max pressed after a failed warm-up was
+            // answered with that stale failure in milliseconds (the full
+            // balance, no fee held back) instead of with its own quote. A
+            // promoted preview is another session and already settled.
             @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
             val settled = withTimeoutOrNull(QUOTE_TIMEOUT_MS) {
                 inForce
-                    .flatMapLatest { s -> s.host.commits.map { s } }
-                    .map { s -> s.view to s.reading }
-                    .first { (view, reading) ->
-                        !reading && !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
-                    }.first
+                    .flatMapLatest { s -> s.host.commits.map { commit -> s to commit } }
+                    .first { (s, commit) ->
+                        val view = s.view
+                        (s !== asked.session || commit > asked.commitsAtDispatch) &&
+                            !s.reading && !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
+                    }.first.view
             } ?: return Quoted.TimedOut
             return Quoted.Settled(settled)
         } finally {
@@ -236,8 +256,16 @@ class SpeedControl(
      * when it lands — for a surface nobody's machine is waiting on (the
      * signing sheet).
      */
-    fun ask(chainId: Int, account: String, publicKeyAvailable: Boolean, calls: List<FeeCall>, feeToken: String?) {
-        val ask = QuoteAsk(chainId, account, publicKeyAvailable, speed.value.tier, calls, feeToken)
+    fun ask(
+        chainId: Int,
+        account: String,
+        publicKeyAvailable: Boolean,
+        calls: List<FeeCall>,
+        feeToken: String?,
+        /** Nobody has chosen the coin yet: the fee machine picks one that can pay. */
+        autoFeeToken: Boolean = false,
+    ) {
+        val ask = QuoteAsk(chainId, account, publicKeyAvailable, speed.value.tier, calls, feeToken, autoFeeToken)
         scope.launch { askInForce(ask) }
     }
 
@@ -253,8 +281,10 @@ class SpeedControl(
      */
     fun chooseFeeToken(feeToken: String?) {
         val ask = inForce.value.ask ?: return
-        if (ask.feeToken == feeToken) return
-        val next = ask.copy(feeToken = feeToken, tier = speed.value.tier)
+        // Under auto the coin asked for is only a fallback, so tapping it is
+        // still a choice — and from here on the coin is priced as picked.
+        if (ask.feeToken == feeToken && !ask.autoFeeToken) return
+        val next = ask.copy(feeToken = feeToken, autoFeeToken = false, tier = speed.value.tier)
         scope.launch { askInForce(next) }
     }
 
@@ -273,14 +303,17 @@ class SpeedControl(
         return true
     }
 
+    /** A question dispatched: to which session, the estimate it held before, and its commit count just before the dispatch. */
+    private class Asked(val session: FeeSession, val before: FeeEstimateView?, val commitsAtDispatch: Long)
+
     /**
      * Price `ask` on the session in force: the deployment read first, then the
      * question. The ask is recorded NOW, before the read, so a preview of the
      * previous operation can never be promoted over a question still out.
-     * Returns the session and the estimate it held before, or `null` when a
-     * newer ask superseded this one during the read.
+     * Returns what was asked of whom, or `null` when a newer ask superseded
+     * this one during the read.
      */
-    private suspend fun askInForce(ask: QuoteAsk): Pair<FeeSession, FeeEstimateView?>? {
+    private suspend fun askInForce(ask: QuoteAsk): Asked? {
         val (session, seq) = synchronized(sessionLock) {
             val session = inForce.value
             askSeq += 1
@@ -293,16 +326,16 @@ class SpeedControl(
         }
         reportQuotes()
         val deployed = relay.isDeployed(ask.chainId, ask.account) ?: false
-        val before = synchronized(sessionLock) {
+        val asked = synchronized(sessionLock) {
             if (seq != askSeq || inForce.value !== session) return null
             session.reading = false
             session.deployed = deployed
-            val before = session.view.fee
+            val asked = Asked(session, session.view.fee, session.host.commits.value)
             session.host.dispatch(ask.event(deployed), FeeEvent.serializer())
-            before
+            asked
         }
         speedPass()
-        return session to before
+        return asked
     }
 
     // -- the reconcile step (`fee_speed.rs`) -------------------------------------

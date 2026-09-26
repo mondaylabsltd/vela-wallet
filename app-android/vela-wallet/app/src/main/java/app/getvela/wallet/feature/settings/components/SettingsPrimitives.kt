@@ -1,5 +1,24 @@
 package app.getvela.wallet.feature.settings.components
 
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import app.getvela.wallet.feature.contacts.components.rememberReducedMotion
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.ui.layout.onSizeChanged
 import app.getvela.wallet.core.platform.rememberVelaHaptic
@@ -460,7 +479,8 @@ fun VelaSegmentedControl(
 }
 
 /**
- * A ——●—— A. The tick row plus the two glyph ends, sized to what they promise.
+ * A ——●—— A. The tick row, one thumb gliding over it, and the two glyph ends,
+ * sized to what they promise.
  *
  * Spec 048 (the founder: 调整字号大小不能滑动，只能点小圆点，没有震动; then
  * 滑动很不跟手): a real slider — dragged or tapped, snapping to its steps, one
@@ -468,16 +488,78 @@ fun VelaSegmentedControl(
  * The thumb follows the finger on local state; the scale is committed when
  * the finger lifts. Committing per step re-laid the whole page out under the
  * drag, and the gesture died after one step.
+ *
+ * 2026-09-26, the desktop's slider (`app-desktop/…/ui/step_slider.rs`) brought
+ * to the finger — the founder, having seen it: 现在的桌面视觉很好, and the other
+ * shells should learn it. **The thumb answers the finger.** From the moment a
+ * finger lands on the track — a plain tap included — until it lifts, the thumb
+ * grows and a soft ring comes up behind it, so a person whose fingertip hides
+ * the thumb can still see the control has hold of them. **It glides**: stop
+ * to stop on a critically damped spring, where it used to blink from dot to
+ * dot. A mouse or stylus over the track (a Chromebook, a tablet's pen) gets the
+ * desktop's middle state, and the stop a press would land on is marked. With
+ * the system's animations off, nothing moves — the states still switch.
+ *
+ * The ticks and the thumb are placed by one geometry, [TextScaleTrack]: the
+ * stops evenly spaced between two insets, a touch taken to the nearest stop's
+ * centre. The first version laid the dots out `SpaceBetween` but measured a
+ * touch in equal slots, so near either end a touch could land one stop off
+ * from the dot it was nearest.
  */
 @Composable
 fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, onChange: (Int) -> Unit = {}) {
     val colors = VelaTheme.colors
     val haptic = rememberVelaHaptic()
+    val reduceMotion = rememberReducedMotion()
+    // The stop under the finger while a drag is on.
     val dragging = remember { mutableStateOf<Int?>(null) }
+    // A stop just handed over, held until `index` comes back with it: in the
+    // frame between the lift and the stored size the thumb would otherwise
+    // start gliding back to the old stop.
+    val landing = remember { mutableStateOf<Int?>(null) }
+    // A finger (or a button) down on the track.
+    val held = remember { mutableStateOf(false) }
+    // A mouse or stylus over the track, and the stop it is nearest.
+    val hovered = remember { mutableStateOf(false) }
+    val aimed = remember { mutableStateOf<Int?>(null) }
     val emitted = remember { mutableStateOf(index) }
-    LaunchedEffect(index) { if (dragging.value == null) emitted.value = index }
+    val currentIndex = rememberUpdatedState(index)
+    LaunchedEffect(index) {
+        if (dragging.value == null) emitted.value = index
+        landing.value = null
+    }
+    LaunchedEffect(landing.value) {
+        // Nobody stored it (the gallery hands in no onChange): let go, and the
+        // thumb glides back to the size that is really set.
+        if (landing.value == null) return@LaunchedEffect
+        delay(TEXT_SCALE_LANDING_HOLD_MS)
+        landing.value = null
+        if (dragging.value == null) emitted.value = currentIndex.value
+    }
     val change = rememberUpdatedState(onChange)
-    val shown = dragging.value ?: index
+    val shown = dragging.value ?: landing.value ?: index
+    // Where the thumb is, in stops — a fraction while it glides.
+    val place = animateFloatAsState(
+        targetValue = shown.toFloat(),
+        animationSpec = textScaleMotion(reduceMotion),
+        label = "text-scale-place",
+    )
+    val lift by animateFloatAsState(
+        targetValue = when {
+            held.value || dragging.value != null -> TextScaleTrack.HELD
+            hovered.value -> TextScaleTrack.HOVER
+            else -> TextScaleTrack.REST
+        },
+        animationSpec = textScaleMotion(reduceMotion),
+        label = "text-scale-lift",
+    )
+    val thumb = TextScaleTrack.lift(VelaIconSize.lg.value, TextScaleThumbHover.value, TextScaleThumbHeld.value, lift).dp
+    val ring = TextScaleTrack.lift(VelaIconSize.lg.value, TextScaleRingHover.value, TextScaleRingHeld.value, lift).dp
+    val ringAlpha = TextScaleTrack.lift(0f, TEXT_SCALE_RING_ALPHA_HOVER, TEXT_SCALE_RING_ALPHA_HELD, lift)
+    // The stop a press would land on — only while nothing is pressed, and not
+    // the one the thumb already covers.
+    val marked = aimed.value?.takeIf { !held.value && dragging.value == null && it != shown }
+    val ink = colors.fixed.shadowInk
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
@@ -499,29 +581,36 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, o
             // The width is read through state, not a gesture key, so a re-layout
             // never restarts the pointerInput mid-drag.
             val widthPx = remember { mutableStateOf(0f) }
-            fun stepAt(x: Float): Int {
-                val width = widthPx.value
-                if (steps <= 1 || width <= 0f) return 0
-                val slot = width / steps
-                return (x / slot).toInt().coerceIn(0, steps - 1)
+            val insetPx = rememberUpdatedState(with(LocalDensity.current) { TextScaleInset.toPx() })
+            // The dots run from the start edge; a pointer's x is always from
+            // the left. Under a right-to-left language the two are mirrored.
+            val rtl = rememberUpdatedState(LocalLayoutDirection.current == LayoutDirection.Rtl)
+            fun stopAt(x: Float): Int {
+                val fromStart = if (rtl.value) widthPx.value - x else x
+                return TextScaleTrack.stopAt(fromStart, widthPx.value, steps, insetPx.value)
             }
-            fun settle(x: Float, commit: Boolean) {
-                val next = stepAt(x)
+            fun reach(next: Int, commit: Boolean) {
                 if (next != emitted.value) {
                     emitted.value = next
                     haptic(VelaHaptic.Detent)
                 }
                 if (commit) {
                     dragging.value = null
-                    if (next != index) change.value(next)
+                    if (next != currentIndex.value) {
+                        landing.value = next
+                        change.value(next)
+                    }
                 } else {
                     dragging.value = next
                 }
             }
             fun release() {
-                val at = dragging.value ?: return
-                val slot = if (steps <= 1) 0f else widthPx.value / steps
-                settle(at * slot + slot / 2f, commit = true)
+                reach(dragging.value ?: return, commit = true)
+            }
+            // `size` wide, centred on `at` stops along the track.
+            fun Density.placed(at: Float, size: Dp): IntOffset {
+                val centre = TextScaleTrack.centreOf(at, widthPx.value, steps, insetPx.value)
+                return IntOffset((centre - size.toPx() / 2f).roundToInt(), 0)
             }
             Box(
                 modifier = Modifier
@@ -529,35 +618,94 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, o
                     .onSizeChanged { widthPx.value = it.width.toFloat() }
                     .pointerInput(steps) {
                         detectHorizontalDragGestures(
-                            onDragStart = { position -> settle(position.x, commit = false) },
+                            onDragStart = { position -> reach(stopAt(position.x), commit = false) },
                             onDragEnd = { release() },
                             onDragCancel = { release() },
-                            onHorizontalDrag = { event, _ -> event.consume(); settle(event.position.x, commit = false) },
+                            onHorizontalDrag = { event, _ -> event.consume(); reach(stopAt(event.position.x), commit = false) },
                         )
                     }
-                    .pointerInput(steps) { detectTapGestures { position -> settle(position.x, commit = true) } },
+                    .pointerInput(steps) {
+                        detectTapGestures(
+                            // Held from the landing until the lift — or until the
+                            // drag above or the page's scroll takes the touch.
+                            // `finally`, because a text-size change re-lays the
+                            // page out and restarts this handler: a ring left
+                            // up by a cancelled press would never come down.
+                            onPress = {
+                                held.value = true
+                                try {
+                                    tryAwaitRelease()
+                                } finally {
+                                    held.value = false
+                                }
+                            },
+                            onTap = { position -> reach(stopAt(position.x), commit = true) },
+                        )
+                    }
+                    .pointerInput(steps) {
+                        // A mouse or stylus hovering. It only reads — nothing
+                        // here consumes — so the two gestures above are exactly
+                        // what they were. A finger never hovers.
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pointer = event.changes.firstOrNull() ?: continue
+                                when (event.type) {
+                                    PointerEventType.Enter, PointerEventType.Move ->
+                                        if (pointer.type != PointerType.Touch) {
+                                            hovered.value = true
+                                            aimed.value = if (pointer.pressed) null else stopAt(pointer.position.x)
+                                        }
+                                    PointerEventType.Exit -> {
+                                        hovered.value = false
+                                        aimed.value = null
+                                    }
+                                    PointerEventType.Press -> aimed.value = null
+                                }
+                            }
+                        }
+                    },
+                contentAlignment = Alignment.CenterStart,
             ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    repeat(steps) { i ->
+                repeat(steps) { i ->
+                    Box(
+                        modifier = Modifier
+                            .offset { placed(i.toFloat(), VelaIconSize.lg) }
+                            .size(VelaIconSize.lg)
+                            .semantics { contentDescription = "text-scale-$i" },
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(VelaIconSize.lg)
-                                .semantics { contentDescription = "text-scale-$i" },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(if (i == shown) VelaIconSize.lg else VelaSpacing.sm)
-                                    .clip(RoundedCornerShape(VelaRadius.full))
-                                    .background(if (i == shown) colors.fgMuted else colors.borderStrong),
-                            )
-                        }
+                                .size(if (i == marked) TextScaleTickMarked else VelaSpacing.sm)
+                                .clip(CircleShape)
+                                .background(if (i == marked) colors.fgSubtle else colors.borderStrong),
+                        )
                     }
                 }
+                // Behind the thumb, over the dots: the dots still show through.
+                // `requiredSize`, not `size`: the held ring is taller than the
+                // track, and `size` clamped it to the track's 30dp — a circle
+                // clipped into a pill (caught on the device). Required, it
+                // overflows the track evenly above and below its midline.
+                if (ringAlpha > 0.005f) {
+                    Box(
+                        modifier = Modifier
+                            .offset { placed(place.value, ring) }
+                            .requiredSize(ring)
+                            .clip(CircleShape)
+                            .background(colors.fgMuted.copy(alpha = ringAlpha)),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .offset { placed(place.value, thumb) }
+                        .requiredSize(thumb)
+                        // The web's thumb carries --shadow-md; this is lighter,
+                        // enough to lift it off the ring (the desktop's call too).
+                        .shadow(TextScaleThumbElevation, CircleShape, ambientColor = ink, spotColor = ink)
+                        .background(colors.fgMuted, CircleShape),
+                )
             }
         }
         Text(
@@ -567,6 +715,82 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, o
             fontWeight = VelaFontWeight.bold,
             fontSize = VelaTextSize.xl2,
         )
+    }
+}
+
+// The text-size slider's measures. The thumb at rest is the web's --icon-lg
+// (VelaIconSize.lg); the rest are the desktop's step_slider.rs, grown for a
+// fingertip, and have no token of their own.
+
+/** The thumb under a mouse or stylus (desktop: 20 over a 16 rest). */
+private val TextScaleThumbHover = 24.dp
+
+/** The thumb while a finger holds it — VelaIconSize.xl, 26. */
+private val TextScaleThumbHeld = VelaIconSize.xl
+
+/** The ring behind the thumb under a mouse or stylus (desktop: 34). */
+private val TextScaleRingHover = 40.dp
+
+/** The ring behind a held thumb: the hit target, so it reads as the finger's own. */
+private val TextScaleRingHeld = VelaSizing.hitTarget
+
+private const val TEXT_SCALE_RING_ALPHA_HOVER = 0.10f
+private const val TEXT_SCALE_RING_ALPHA_HELD = 0.16f
+
+/** The dot a click would land on, marked while a mouse hovers (the dots are VelaSpacing.sm). */
+private val TextScaleTickMarked = 6.dp
+
+/**
+ * The first and last stops sit this far in from the track's ends: half the
+ * held thumb, so the thumb is whole on either end stop. The held ring reaches
+ * 9dp past the track's ends — into the row's 12dp gap, short of the A glyphs —
+ * and 7dp above and below the 30dp track, inside the row's 12dp padding.
+ */
+private val TextScaleInset = 13.dp
+
+/** Lighter than the web's --shadow-md, as the desktop's is. */
+private val TextScaleThumbElevation = 2.dp
+
+/** How long a handed-over stop waits for `index` to come back with it. */
+private const val TEXT_SCALE_LANDING_HOLD_MS = 400L
+
+/**
+ * The glide and the grow: critically damped, so no overshoot. Stiffness 1000
+ * is ω ≈ 32 rad/s — the desktop's GLIDE_OMEGA — most of the way there in a
+ * tenth of a second. With the system's animations off it snaps.
+ */
+private fun <T> textScaleMotion(reduceMotion: Boolean): AnimationSpec<T> =
+    if (reduceMotion) snap() else spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 1000f)
+
+/**
+ * Where the text-size stops sit on the track: evenly spaced between one inset
+ * in from each end, the thumb and the dots on the same centres. Pure, so the
+ * arithmetic is tested without a finger — iOS's `TextScaleTrack`, the
+ * desktop's `place_of` / `stop_of`.
+ */
+internal object TextScaleTrack {
+    /** The thumb's lift: at rest, under a mouse or stylus, held. */
+    const val REST = 0f
+    const val HOVER = 1f
+    const val HELD = 2f
+
+    /** The stop nearest [x] (measured from the start edge) — before the first stop is the first, past the last the last. */
+    fun stopAt(x: Float, width: Float, steps: Int, inset: Float): Int {
+        if (steps <= 1 || width <= inset * 2) return 0
+        val pitch = (width - inset * 2) / (steps - 1)
+        return ((x - inset) / pitch).roundToInt().coerceIn(0, steps - 1)
+    }
+
+    /** The x of [place] stops along the track — a stop's index, or a fraction of one while the thumb glides. */
+    fun centreOf(place: Float, width: Float, steps: Int, inset: Float): Float {
+        if (steps <= 1 || width <= inset * 2) return width / 2
+        return inset + (width - inset * 2) * place / (steps - 1)
+    }
+
+    /** Between the rest, hover and held values of one measure, for a [lift] between [REST] and [HELD]. */
+    fun lift(rest: Float, hover: Float, held: Float, lift: Float): Float {
+        val at = lift.coerceIn(REST, HELD)
+        return if (at <= HOVER) rest + (hover - rest) * at else hover + (held - hover) * (at - HOVER)
     }
 }
 

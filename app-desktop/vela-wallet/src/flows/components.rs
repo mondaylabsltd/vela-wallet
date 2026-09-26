@@ -959,65 +959,68 @@ pub fn fee_speed_note(theme: &Theme, text: &SharedString) -> Div {
         .child(text.clone())
 }
 
-/// One option, opened: its name and its own fee on the first line, its gas
-/// bid under the fee, and what the speed buys under both.
+/// One option, opened, on TWO lines: its name and its own fee; then what the
+/// speed buys and its gas bid. It was three — the bid alone on line two, the
+/// description on line three — which left a hole under every name.
+///
+/// Selected reads in the text colour, semibold, with a text-colour tick: the
+/// accent is for moving money and submitting, not for a choice (the design
+/// rule the web's row already follows).
 pub fn fee_speed_option(
     theme: &Theme,
     icons: &mut IconCache,
     speed: &FeeSpeedModel,
     option: &FeeSpeedOption,
 ) -> Div {
-    let mut body = div().flex().flex_col().gap(px(2.)).flex_1().min_w(px(0.));
-    body = body.child(
-        div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .child(
-                div()
-                    .flex_1()
-                    .text_size(theme::text_row_sub())
-                    .text_color(if option.selected {
-                        theme.accent
-                    } else {
-                        theme.fg_base
-                    })
-                    .child(option.label.clone()),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
-                    .child(option.value.clone()),
-            ),
-    );
-    if speed.gas_price_line {
-        // Named, because an unnamed "3,244 wei" under a fee reads as a second
-        // charge; held open empty while the set is measuring, so the option
-        // does not lose a line and regain it.
-        body = body.child(
+    let first = div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .child(
             div()
-                .flex()
-                .justify_end()
-                .gap(px(6.))
-                .min_h(px(14.))
-                .text_size(theme::text_label())
-                .text_color(theme.fg_subtle)
-                .children(option.gas_price.as_ref().map(|gas| {
-                    div()
-                        .flex()
-                        .gap(px(6.))
-                        .child(speed.gas_price_label.clone())
-                        .child(div().font_family(theme::font_mono()).child(gas.clone()))
-                })),
+                .flex_1()
+                .min_w(px(0.))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .when(option.selected, |label| {
+                    label.font_weight(gpui::FontWeight::SEMIBOLD)
+                })
+                .child(option.label.clone()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(option.value.clone()),
         );
-    }
-    body = body.child(
+    // Named, because an unnamed "3,244 wei" under a fee reads as a second
+    // charge; held open empty while the set is measuring, so the row does not
+    // lose its width and regain it. The UI face throughout — a monospace bid
+    // beside proportional text read as a different kind of thing.
+    let bid = speed.gas_price_line.then(|| {
         div()
-            .text_size(theme::text_label())
-            .text_color(theme.fg_subtle)
-            .child(option.detail.clone()),
-    );
+            .flex_none()
+            .flex()
+            .gap(px(6.))
+            .min_h(px(14.))
+            .children(option.gas_price.as_ref().map(|gas| {
+                div()
+                    .flex()
+                    .gap(px(6.))
+                    .child(speed.gas_price_label.clone())
+                    .child(gas.clone())
+            }))
+    });
+    let second = div()
+        .flex()
+        .items_start()
+        .gap(px(8.))
+        .text_size(theme::text_label())
+        .text_color(theme.fg_subtle)
+        // The description wraps under itself; the bid is never the one cut.
+        .child(div().flex_1().min_w(px(0.)).child(option.detail.clone()))
+        .children(bid);
     div()
         .flex()
         .items_start()
@@ -1026,12 +1029,21 @@ pub fn fee_speed_option(
         .py(px(8.))
         .rounded(px(10.))
         .when(option.selected, |row| row.bg(theme.bg_sunken))
-        .child(body)
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .flex_1()
+                .min_w(px(0.))
+                .child(first)
+                .child(second),
+        )
         .child(
             div().w(px(14.)).pt(px(2.)).children(
                 option
                     .selected
-                    .then(|| icon_img(icons, Icon::Check, false, theme.accent, 14.)),
+                    .then(|| icon_img(icons, Icon::Check, false, theme.fg_base, 14.)),
             ),
         )
 }

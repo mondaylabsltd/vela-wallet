@@ -102,6 +102,7 @@ fn request_in(chain_id: u32, calls: Vec<FeeCall>, fee_token: Option<&str>) -> Ev
         tier: FeeTier::Fast,
         calls,
         fee_token: fee_token.map(str::to_owned),
+        auto_fee_token: false,
     }
 }
 
@@ -2001,23 +2002,51 @@ fn missing_bundler_quote_falls_back_locally() {
     assert_eq!(fee.network_fee_per_gas, "2000000000");
 }
 
-/// Only a failed `eth_gasPrice` read degrades to the 5-gwei default
-/// (`safe-transaction.ts:1981`).
+/// A failed `eth_gasPrice` read is no quote at all (founder ruling,
+/// 2026-09-26). It used to fall to a fixed 5 gwei — during an RPC blip an
+/// Ethereum transfer at ~0.06 gwei was quoted eighty times its price.
 #[test]
-fn failed_gas_price_read_uses_five_gwei_default() {
-    let mut sut = Sut::new();
-    sut.dispatch(request(CHAIN, vec![]));
+fn a_failed_gas_price_read_refuses_the_quote_rather_than_guessing() {
+    for eth_gas_price in [None, Some("0".to_owned())] {
+        let mut sut = Sut::new();
+        sut.dispatch(request(CHAIN, vec![]));
+        let ops = sut.resolve(Res::GasPrice {
+            eth_gas_price,
+            base_fee: None,
+            priority_fee: None,
+        });
+        assert!(
+            !ops.iter().any(|op| matches!(op, Op::EstimateUserOpGas { .. })),
+            "nothing is simulated on a guess: {ops:?}"
+        );
+        // The other gathering answers land on a run that already refused.
+        sut.resolve(bundler_ok());
+        sut.resolve(quotes_ok());
+        let view = sut.view();
+        assert_eq!(view.failed, Some(FeeFailure::QuoteUnavailable));
+        assert!(view.fee.is_none());
+        assert!(!view.confirm_fee_ready);
+    }
+}
+
+/// …and a refresh that meets the same failure keeps the last good quote on
+/// screen rather than blanking it (the refresh's own `catch {}`).
+#[test]
+fn a_refresh_whose_gas_read_fails_keeps_the_last_good_quote() {
+    let mut sut = quoted_native(vec![]);
+    sut.resolve(Res::TtlElapsed);
+    sut.dispatch(Event::Requote);
     sut.resolve(Res::GasPrice {
         eth_gas_price: None,
         base_fee: None,
         priority_fee: None,
     });
-    sut.resolve(Res::BundlerQuote { quote: None });
-    sut.resolve(quotes_ok());
-    sut.resolve(estimated());
-    let fee = sut.view().fee.expect("defaulted quote");
-    // 5 gwei × 2.0 (fast) = 10 gwei.
-    assert_eq!(fee.network_fee_per_gas, "10000000000");
+    let view = sut.view();
+    assert_eq!(view.failed, None);
+    assert_eq!(
+        view.fee.expect("the last good quote").total_wei,
+        NATIVE_FEE_WEI.to_string()
+    );
 }
 
 /// G05 — a bundler quote more than 3× the client's own on-chain gas
@@ -2109,6 +2138,7 @@ fn undeployed_without_public_key_never_estimates() {
         tier: FeeTier::Fast,
         calls: vec![],
         fee_token: None,
+        auto_fee_token: false,
     });
     assert!(ops.is_empty(), "no RPC is ever issued");
     let view = sut.view();
@@ -2125,6 +2155,7 @@ fn undeployed_without_public_key_never_estimates() {
         tier: FeeTier::Fast,
         calls: vec![],
         fee_token: None,
+        auto_fee_token: false,
     });
     assert_eq!(ops.len(), 3);
 
@@ -2141,6 +2172,7 @@ fn undeployed_without_public_key_never_estimates() {
         tier: FeeTier::Fast,
         calls: vec![],
         fee_token: None,
+        auto_fee_token: false,
     });
     assert_eq!(
         ops.len(),
@@ -2604,6 +2636,7 @@ fn tempo_undeployed_contract_call_keeps_the_static_model() {
         tier: FeeTier::Fast,
         calls: vec![call],
         fee_token: None,
+        auto_fee_token: false,
     });
     sut.resolve(Res::GasPrice {
         eth_gas_price: Some(TEMPO_BASE_FEE_ATTO.to_string()),
@@ -3136,6 +3169,7 @@ fn request_undeployed(calls: Vec<FeeCall>) -> Event {
         tier: FeeTier::Fast,
         calls,
         fee_token: None,
+        auto_fee_token: false,
     }
 }
 
@@ -3475,4 +3509,274 @@ mod fee_signal_cache {
         assert!(!bundler_quote_cacheable(""));
         assert!(!bundler_quote_cacheable("0x77359400"));
     }
+}
+
+// ===========================================================================
+// The coin nobody chose (auto_fee_token)
+// ===========================================================================
+
+const USDT: &str = "0x5555555555555555555555555555555555555555";
+
+fn usdt_row(balance: &str, usd: &str) -> FeeAssetQuote {
+    FeeAssetQuote {
+        recipient: USDC_RECIPIENT.to_owned(),
+        asset: FeeAssetKind::Erc20,
+        fee_token: Some(USDT.to_owned()),
+        balance: balance.to_owned(),
+        decimals: 6,
+        symbol: "USDT".to_owned(),
+        usd_balance: usd.to_owned(),
+        usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
+    }
+}
+
+fn auto_request(chain_id: u32, calls: Vec<FeeCall>) -> Event {
+    Event::QuoteRequested {
+        chain_id,
+        account: ACCOUNT.to_owned(),
+        deployed: true,
+        public_key_available: true,
+        tier: FeeTier::Fast,
+        calls,
+        fee_token: None,
+        auto_fee_token: true,
+    }
+}
+
+fn usdc_transfer(units: u128) -> FeeCall {
+    FeeCall {
+        to: USDC.to_owned(),
+        value: "0".to_owned(),
+        data: encode_erc20_transfer(NATIVE_RECIPIENT, units).expect("encodes"),
+    }
+}
+
+/// Gather with `rows`, then answer the simulation with `gas`. Returns the
+/// simulated calls so a test can see which fee leg was priced.
+fn settle_with(sut: &mut Sut, rows: Vec<FeeAssetQuote>, gas: Res) -> Vec<FeeCall> {
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let ops = sut.resolve(Res::InBandQuotes { quotes: Some(rows) });
+    let calls = match ops.as_slice() {
+        [Op::EstimateUserOpGas { calls, .. }, ..] => calls.clone(),
+        other => panic!("one simulation: {other:?}"),
+    };
+    // Answer the simulation (and a measurement, if one was asked).
+    let mut ops = sut.resolve(gas);
+    while let Some(Op::MeasureInnerCalls { .. }) = ops.first() {
+        ops = sut.resolve(Res::InnerCallsMeasured { gas: vec![] });
+    }
+    calls
+}
+
+fn fee_leg_token(calls: &[FeeCall]) -> Option<String> {
+    let leg = calls.last().expect("a fee leg");
+    (leg.value == "0" && leg.data.starts_with("0xa9059cbb")).then(|| leg.to.to_lowercase())
+}
+
+#[test]
+fn nobody_chose_a_coin_so_a_wallet_without_eth_pays_in_the_stablecoin_it_holds() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![]));
+    let simulated = settle_with(
+        &mut sut,
+        vec![native_row("0"), usdc_row("5000000")],
+        estimated(),
+    );
+    assert_eq!(
+        fee_leg_token(&simulated).as_deref(),
+        Some(USDC),
+        "the op priced carries the USDC leg it will be submitted with"
+    );
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(USDC));
+    let fee = view.fee.expect("quoted");
+    assert_eq!(
+        fee.fee_asset,
+        FeeAssetView::Erc20 {
+            token: USDC.to_owned(),
+            decimals: 6,
+            amount: USDC_FEE_UNITS.to_string(),
+            symbol: Some("USDC".to_owned()),
+        }
+    );
+    assert!(view.confirm_fee_ready, "the default works — nothing to fix");
+}
+
+#[test]
+fn a_stablecoin_pays_before_the_chains_coin_when_both_can() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![]));
+    settle_with(
+        &mut sut,
+        vec![native_row("1000000000000000000"), usdc_row("5000000")],
+        estimated(),
+    );
+    assert_eq!(sut.view().fee_token.as_deref(), Some(USDC));
+}
+
+/// Sending 1 USDC of 5: USDC could pay, but the fee would then come out of
+/// the very coin being sent. The chain's coin pays instead.
+#[test]
+fn the_fee_never_comes_out_of_the_coin_being_sent_while_another_can_pay() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![usdc_transfer(1_000_000)]));
+    settle_with(
+        &mut sut,
+        vec![native_row("1000000000000000000"), usdc_row("5000000")],
+        estimated(),
+    );
+    let view = sut.view();
+    assert_eq!(view.fee_token, None, "ETH pays: {view:?}");
+    assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
+}
+
+/// …and a Max of that coin — the whole balance — leaves nothing to pay its
+/// own fee with, so the coin is not a candidate at all.
+#[test]
+fn a_coin_whose_whole_balance_is_being_sent_cannot_also_pay_the_fee() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![usdc_transfer(5_000_000)]));
+    settle_with(
+        &mut sut,
+        vec![
+            native_row("1000000000000000000"),
+            usdc_row("5000000"),
+            usdt_row("50000000", "50.00"),
+        ],
+        estimated(),
+    );
+    assert_eq!(sut.view().fee_token.as_deref(), Some(USDT));
+}
+
+#[test]
+fn among_stablecoins_the_larger_balance_pays() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![]));
+    settle_with(
+        &mut sut,
+        vec![
+            native_row("1000000000000000000"),
+            usdc_row("5000000"),
+            usdt_row("50000000", "50.00"),
+        ],
+        estimated(),
+    );
+    assert_eq!(sut.view().fee_token.as_deref(), Some(USDT));
+}
+
+#[test]
+fn when_no_coin_can_pay_the_requested_coin_stands_and_says_so() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![]));
+    settle_with(
+        &mut sut,
+        vec![native_row("0"), usdc_row("1000000")],
+        estimated(),
+    );
+    let view = sut.view();
+    assert_eq!(view.fee_token, None);
+    assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
+    assert!(!view.confirm_fee_ready, "the native shortfall is what shows");
+}
+
+#[test]
+fn a_coin_the_person_picked_is_priced_as_picked() {
+    let mut sut = Sut::new();
+    // auto off, native named: priced native even though USDC could pay.
+    sut.dispatch(request(CHAIN, vec![]));
+    settle_with(
+        &mut sut,
+        vec![native_row("0"), usdc_row("5000000")],
+        estimated(),
+    );
+    let view = sut.view();
+    assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
+    assert!(!view.confirm_fee_ready);
+}
+
+#[test]
+fn a_chip_tap_ends_the_auto_pick_and_a_requote_keeps_it() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![]));
+    settle_with(
+        &mut sut,
+        vec![native_row("1000000000000000000"), usdc_row("5000000")],
+        estimated(),
+    );
+    assert_eq!(sut.view().fee_token.as_deref(), Some(USDC));
+    sut.dispatch(Event::SelectFeeAsset { token: None });
+    assert_eq!(sut.view().fee_token, None, "the tap is local");
+    // The TTL timer from the first quote is still outstanding; drop it.
+    sut.resolve(Res::TtlElapsed);
+    sut.dispatch(Event::Requote);
+    settle_with(
+        &mut sut,
+        vec![native_row("1000000000000000000"), usdc_row("5000000")],
+        estimated(),
+    );
+    assert_eq!(
+        sut.view().fee.expect("requoted").fee_asset,
+        FeeAssetView::Native,
+        "the person's coin, not the machine's"
+    );
+}
+
+/// The pick is made on the static model (600k gas here) before anything is
+/// simulated; a simulation that comes back ABOVE it (750k) can leave the
+/// picked coin short. It is picked again on the real figure.
+#[test]
+fn a_pick_the_real_gas_outgrows_is_made_again() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![]));
+    // 3.5 USDC: covers 600k gas (≈3.36 USDC), not 750k (≈4.20 USDC).
+    let simulated = settle_with(
+        &mut sut,
+        vec![native_row("1000000000000000000"), usdc_row("3500000")],
+        Res::UserOpGas {
+            outcome: FeeGasOutcome::Estimated {
+                verification_gas_limit: "400000".to_owned(), // ×1.5 = 600k
+                call_gas_limit: "50000".to_owned(),         // → 100k floor
+                pre_verification_gas: "40000".to_owned(),   // +10k = 50k
+            },
+        },
+    );
+    assert_eq!(fee_leg_token(&simulated).as_deref(), Some(USDC), "picked first");
+    let view = sut.view();
+    assert_eq!(view.fee_token, None, "…and moved to ETH on the real gas");
+    assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
+    assert!(view.confirm_fee_ready);
+}
+
+#[test]
+fn tempo_pays_in_a_held_stablecoin_when_the_default_is_not_held() {
+    let other = "0x20c0000000000000000000000000000000000001";
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(TEMPO_CHAIN, vec![]));
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some(TEMPO_BASE_FEE_ATTO.to_string()),
+        base_fee: None,
+        priority_fee: None,
+    });
+    sut.resolve(Res::FeeRecipient {
+        recipient: Some(COLLECTOR.to_owned()),
+    });
+    sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![
+            pathusd_row("0"),
+            FeeAssetQuote {
+                fee_token: Some(other.to_owned()),
+                symbol: "othUSD".to_owned(),
+                ..pathusd_row("5000000")
+            },
+        ]),
+    });
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(other));
+    match view.fee.expect("tempo quote").fee_asset {
+        FeeAssetView::Erc20 { token, .. } => assert_eq!(token, other),
+        FeeAssetView::Native => panic!("Tempo has no native gas"),
+    }
+    assert!(view.confirm_fee_ready);
 }

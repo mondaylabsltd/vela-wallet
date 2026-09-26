@@ -40,6 +40,27 @@ enum WalletFlowGeometry {
     /// notice banner) rather than leading a row of its own.
     static let inlineMark: CGFloat = 26
 
+    /// The send form's figure, on the hero ladder the web (`AmountInput`) and
+    /// the desktop (`theme::amount_hero_rung`) draw: 46 / 38 / 31 — the same
+    /// three rungs the Welcome headline steps down, so the 38 and the 31 ARE
+    /// its two. Chosen by DRAWN length (`AmountRung`), so an 18-decimal figure
+    /// steps down instead of running off the column.
+    static let amountHero: CGFloat = 46
+    static let amountHeroCompact: CGFloat = WelcomeGeometry.heroSize
+    static let amountHeroTight: CGFloat = WelcomeGeometry.heroSizeLong
+    /// The last drawn length each rung takes (figure + prefix + half the
+    /// quieter suffix): up to 8 on the hero rung, up to 11 on the compact one.
+    static let amountHeroMaxDrawn: Double = 8
+    static let amountCompactMaxDrawn: Double = 11
+    /// The line the figure sits on — the HERO rung's on every rung, so the
+    /// block is one height whatever is typed and the recipient, the fee row
+    /// and Continue never jump under a finger reaching for them.
+    static let amountHeroLine: CGFloat = amountHero * Tokens.Leading.tight
+    /// Room after the last digit for the caret, so it is never the thing that
+    /// overflows; taken off the unit's gap so the figure and its unit sit the
+    /// same distance apart typed or drawn.
+    static let amountCaretSlack: CGFloat = Tokens.Space.s4
+
     /// The scanner's viewfinder, as a fraction of the screen, and the length
     /// of each corner bracket arm.
     static let scanFrameFraction: CGFloat = 0.68

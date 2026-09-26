@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.FeeTierPrefView
 import app.getvela.wallet.feature.settings.core.SignPrefView
@@ -895,7 +896,7 @@ object SettingsLive {
                     id = "${token.chain_id}:${token.token_address ?: token.symbol}",
                     mark = mark(token.chain_id),
                     name = token.symbol,
-                    status = "${name(token.chain_id)} · ${if (view.hidden) MASK else WalletLive.trimAmount(token.balance)}",
+                    status = "${name(token.chain_id)} · ${if (view.hidden) MASK else tokenAmountText(token.balance)}",
                 )
             },
         )

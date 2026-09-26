@@ -21,6 +21,7 @@ use vela_core::app::fee_policy::{to_base_units, FeeAssetView, FeeEstimateView, F
 use vela_core::app::money::{DenominatedAmount, TokenPrice};
 use vela_core::app::send::{
     build_multi_token_calls, build_split_calls, duplicate_recipient_rows, is_valid_address,
+    max_figure,
     recipients_are_valid, split_row_issues, sum_split_base_units, Event, ReentryLock, Send,
     SendAccountRef, SendAddNetworkOutcome, SendAlertKind, SendAmountWarning, SendChainInfo,
     SendDisplayContext, SendEstimateFailure, SendFeeOutcome, SendHapticKind, SendHoldReason,
@@ -272,7 +273,15 @@ fn boot(tokens: Vec<SendToken>) -> Sut {
         }]
     );
     let ops = sut.resolve(loaded(tokens));
-    assert!(ops.is_empty(), "plain load routes nowhere: {ops:?}");
+    // A plain load routes nowhere — it only reads ahead the fees of the
+    // chains held, for the quote a pick will start, answered at once.
+    assert!(
+        ops.iter().all(|op| matches!(op, Op::PrewarmFees { .. })),
+        "plain load routes nowhere: {ops:?}"
+    );
+    for _ in &ops {
+        assert!(sut.resolve(Res::FeesPrewarmed).is_empty());
+    }
     sut
 }
 
@@ -301,12 +310,13 @@ fn settle_warm_quote(sut: &mut Sut) {
         matches!(
             ops.as_slice(),
             [Op::EstimateFee {
-                tx: None,
+                tx: Some(_),
                 batch: None,
+                auto_fee_token: true,
                 ..
             }]
         ),
-        "a picked token warms a transfer-sized quote: {ops:?}"
+        "a picked token warms the transfer Max fills, coin left to the fee machine: {ops:?}"
     );
     let ops = sut.resolve(Res::FeeEstimated {
         outcome: SendFeeOutcome::Failed {
@@ -1506,12 +1516,15 @@ fn max_native_is_string_exact_against_the_reserve() {
     let ops = sut.dispatch(Event::TapMax);
     assert!(ops.is_empty(), "no estimate needed: {ops:?}");
     let view = sut.view();
-    // ⑨: to_base_units(result) + reserve == balance, exactly.
-    let filled = to_base_units(&view.amount, 18).expect("max parses");
+    // ⑨: to_base_units(result) + reserve == balance, exactly — for the amount
+    // every gate and the signed call read…
+    let filled = to_base_units(&view.token_amount, 18).expect("max parses");
     assert_eq!(
         filled + reserve,
         to_base_units("1.234567891234567891", 18).expect("balance parses")
     );
+    // …while the field shows it on the balance line's ladder (4 places ≥ 1).
+    assert_eq!(view.amount, "1.2246");
     assert_eq!(view.amount_fiat_code, None, "Max always fills token units");
     assert_eq!(
         view.amount_warning, None,
@@ -1749,34 +1762,51 @@ fn max_without_a_quote_estimates_on_demand_and_falls_back_to_full_balance() {
     assert_eq!(sut.view().amount, "2");
 }
 
-/// 078 M-02: a token's Max quotes `transfer(payee, whole balance)` — the call
-/// Continue will quote again — and keeps that quote as the form's fee.
+/// 078 M-02, now at the token pick: the warm-up quotes `transfer(account,
+/// whole balance)` — the call Max fills — so a Max pressed while it is in
+/// flight WAITS for that answer instead of racing it with a second estimate,
+/// and keeps it as the form's fee.
 #[test]
-fn max_without_a_quote_estimates_the_token_transfer_it_fills() {
+fn max_while_the_warm_quote_is_in_flight_waits_for_it() {
     let mut sut = boot(vec![usdc("5")]);
     sut.dispatch(Event::SelectToken {
         token_id: usdc("5").id(),
     });
-    sut.resolve(credential(Some(PK)));
-    set_recipient(&mut sut, RECIPIENT);
-    let ops = sut.dispatch(Event::TapMax);
+    let ops = sut.resolve(credential(Some(PK)));
     let call = ops
         .iter()
         .find_map(|op| match op {
             Op::EstimateFee { tx: Some(call), .. } => Some(call.clone()),
             _ => None,
         })
-        .unwrap_or_else(|| panic!("an estimate of the transfer: {ops:?}"));
+        .unwrap_or_else(|| panic!("a warm quote of the transfer: {ops:?}"));
     assert_eq!(call.to.to_lowercase(), USDC.to_lowercase());
     assert_eq!(call.value, "0");
-    // transfer(RECIPIENT, 5_000_000)
+    // transfer(ACCOUNT, 5_000_000) — no payee yet, the account itself.
     assert!(call.data.starts_with("0xa9059cbb"), "{}", call.data);
-    assert!(call.data.contains(&RECIPIENT[2..]), "{}", call.data);
+    assert!(call.data.contains(&ACCOUNT[2..]), "{}", call.data);
     assert!(
         call.data.ends_with(&format!("{:064x}", 5_000_000u128)),
         "{}",
         call.data
     );
+
+    // The warm quote stays outstanding while the payee is typed.
+    let ops = sut.dispatch(Event::SetRecipient {
+        recipient: RECIPIENT.to_owned(),
+    });
+    if ops.iter().any(|op| matches!(op, Op::ResolveIdentity { .. })) {
+        sut.resolve_matching(
+            |op| matches!(op, Op::ResolveIdentity { .. }),
+            Res::IdentityResolved { identity: None },
+        );
+    }
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::EstimateFee { .. })),
+        "no second estimate while the first is on its way: {ops:?}"
+    );
+    assert_eq!(sut.view().amount, "", "blank until it answers");
 
     sut.resolve_matching(
         |op| matches!(op, Op::EstimateFee { .. }),
@@ -1792,6 +1822,33 @@ fn max_without_a_quote_estimates_the_token_transfer_it_fills() {
         view.fee.is_some(),
         "the quote Max used is the fee on screen"
     );
+}
+
+/// With nothing on its way, Max asks for the transfer it fills — the payee
+/// typed so far — and fills from that answer.
+#[test]
+fn max_with_nothing_in_flight_estimates_the_token_transfer_it_fills() {
+    let mut sut = boot(vec![usdc("5")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    let ops = sut.dispatch(Event::TapMax);
+    let call = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::EstimateFee { tx: Some(call), .. } => Some(call.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("an estimate of the transfer: {ops:?}"));
+    assert!(call.data.contains(&RECIPIENT[2..]), "{}", call.data);
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        Res::FeeEstimated {
+            outcome: SendFeeOutcome::Ok {
+                estimate: usdc_fee(1, 1_000_000),
+            },
+        },
+    );
+    assert_eq!(sut.view().amount, "3.5");
 }
 
 /// 078 M-03: after the person picks another fee coin, the quote in hand is
@@ -1829,19 +1886,29 @@ fn max_after_a_fee_coin_switch_does_not_reserve_the_old_coins_fee() {
     });
     assert_eq!(sut.view().amount, "2");
 
-    // Picking native back: a USDC quote no longer counts either.
-    sut.dispatch(Event::ChooseFeeToken { token: None });
-    let ops = sut.dispatch(Event::TapMax);
+    // Picking native back while Max is in force: a USDC quote no longer
+    // counts, and the Max asks again in the chain's coin at once — the switch
+    // itself, not a second press, is what moved what Max holds back.
+    let ops = sut.dispatch(Event::ChooseFeeToken { token: None });
     assert!(
         ops.iter().any(|op| matches!(
             op,
             Op::EstimateFee {
                 gas_fee_token: None,
+                auto_fee_token: false,
                 ..
             }
         )),
         "asks again in the chain's coin: {ops:?}"
     );
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(ops.is_empty(), "a press meanwhile waits for that answer: {ops:?}");
+    sut.resolve(Res::FeeEstimated {
+        outcome: SendFeeOutcome::Ok {
+            estimate: native_fee(1, 500_000_000_000_000_000),
+        },
+    });
+    assert_eq!(sut.view().amount, "1.5", "2 less the native fee");
 }
 
 // ===========================================================================
@@ -3118,7 +3185,7 @@ fn estimate_timeout_stays_put_and_a_late_quote_still_lands_ported_verbatim() {
     // The warm quote (Phase 10) is refused, so the pre-check's estimate below
     // is the only `EstimateFee` left for the late answer to land on.
     sut.resolve_where(
-        |op| matches!(op, Op::EstimateFee { tx: None, .. }),
+        |op| matches!(op, Op::EstimateFee { .. }),
         Res::FeeEstimated {
             outcome: SendFeeOutcome::Failed {
                 kind: SendEstimateFailure::QuoteUnavailable,
@@ -4198,10 +4265,12 @@ fn the_estimate_op_carries_the_chosen_fee_token_and_the_real_call_shape() {
             batch: None,
             gas_fee_token,
             public_key_hex,
+            auto_fee_token,
         } => {
             assert_eq!(*chain_id, 1);
             assert_eq!(account, ACCOUNT);
             assert_eq!(gas_fee_token.as_deref(), Some(USDC));
+            assert!(!auto_fee_token, "a picked coin is priced as picked");
             assert_eq!(public_key_hex.as_deref(), Some(PK));
             // ⑨-cousin: the REAL erc20 transfer calldata, not a padded model.
             assert_eq!(call.to, USDC);
@@ -4621,5 +4690,290 @@ fn the_relayer_sheet_says_whether_the_operator_owns_this_network() {
     assert!(
         status.operator_served,
         "chain 1 ships with Vela, so its relayer is the operator's to refill"
+    );
+}
+
+// ===========================================================================
+// Max as a mode, the fee machine's coin, the asset list's holdings
+// ===========================================================================
+
+/// The figure Max writes is the balance line's: 6 places under 1, 4 under
+/// 1000, 2 above, half up — never the 18-digit remainder of a fee to the wei.
+#[test]
+fn a_max_reads_on_the_balance_lines_ladder() {
+    for (exact, shown) in [
+        ("0.043790209243313861", "0.04379"),
+        ("0.0439686", "0.043969"),
+        ("1.22456789123456789", "1.2246"),
+        ("1234.567", "1234.57"),
+        ("2", "2"),
+        ("0", "0"),
+        ("0.9999996", "1"),
+        ("999.99996", "1000"),
+        ("0.0000001234", "0.00000012"),
+        ("5.000000", "5"),
+    ] {
+        assert_eq!(max_figure(exact), shown, "{exact}");
+    }
+}
+
+/// Max is a mode, not a figure written once: when the quote it reserved
+/// against is replaced by the fee machine's pick in another coin, the reserve
+/// goes and the whole balance is sendable.
+#[test]
+fn a_max_follows_the_fee_machines_pick() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 500_000_000_000_000_000),
+    });
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().amount, "1.5");
+    // Nobody chose a coin; the requote comes back in USDC.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    let view = sut.view();
+    assert_eq!(view.amount, "2", "USDC pays, so all the ETH goes");
+    assert_eq!(view.token_amount, "2");
+    assert_eq!(
+        view.gas_fee_token.as_deref(),
+        Some(USDC),
+        "the view names the coin the quote is in"
+    );
+}
+
+/// The fee coin the submit signs in is the one the quote named — with the
+/// choice left to the fee machine, `gas_fee_token` alone would say "none" and
+/// a native leg would carry a USDC amount.
+#[test]
+fn the_submit_pays_in_the_coin_the_quote_named() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    to_confirm_native(&mut sut, "1", usdc_fee(1, 1_000_000));
+    let submit = slide_to_submit(&mut sut);
+    let Op::SubmitUserOp {
+        gas_fee_token,
+        quoted_fee: Some(quoted),
+        ..
+    } = &submit
+    else {
+        panic!("in-band submit expected: {submit:?}");
+    };
+    assert_eq!(gas_fee_token.as_deref(), Some(USDC));
+    assert_eq!(quoted.amount, "1000000");
+}
+
+#[test]
+fn a_typed_figure_ends_the_max() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 10_000_000_000_000_001),
+    });
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().token_amount, "1.989999999999999999");
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    let view = sut.view();
+    assert_eq!(view.amount, "1");
+    assert_eq!(view.token_amount, "1", "what was typed, not the Max behind it");
+}
+
+#[test]
+fn the_swap_keeps_a_max_exact() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 10_000_000_000_000_001),
+    });
+    sut.dispatch(Event::TapMax);
+    sut.dispatch(Event::ToggleFiatInput);
+    let view = sut.view();
+    assert_eq!(view.amount_fiat_code.as_deref(), Some("USD"));
+    assert_eq!(view.amount, "3980.00");
+    assert_eq!(view.token_amount, "1.989999999999999999", "still the Max");
+    sut.dispatch(Event::ToggleFiatInput);
+    let view = sut.view();
+    assert_eq!(view.amount, "1.99");
+    assert_eq!(view.token_amount, "1.989999999999999999");
+}
+
+/// The asset list refreshed while the form is open: the balance beside the
+/// token, and a Max that depends on it, follow.
+#[test]
+fn the_asset_lists_holdings_move_the_form() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 500_000_000_000_000_000),
+    });
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().amount, "1.5");
+    sut.dispatch(Event::HoldingsUpdated {
+        tokens: vec![eth("3")],
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.selected_token.as_ref().map(|t| t.balance.as_str()),
+        Some("3")
+    );
+    assert_eq!(view.amount, "2.5");
+    assert_eq!(view.tokens.len(), 1);
+}
+
+/// A token the update no longer lists keeps its row — a chain that did not
+/// answer this round is not an emptied balance.
+#[test]
+fn a_token_missing_from_an_update_keeps_its_balance() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::HoldingsUpdated {
+        tokens: vec![usdc("6")],
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.selected_token.as_ref().map(|t| t.balance.as_str()),
+        Some("2")
+    );
+}
+
+/// The first load owns the list — its answer is what a hand-off is matched
+/// against — so an update that races it is left to it.
+#[test]
+fn an_update_during_the_first_load_waits_for_it() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams::default()));
+    let ops = sut.dispatch(Event::HoldingsUpdated {
+        tokens: vec![eth("9")],
+    });
+    assert!(ops.is_empty(), "{ops:?}");
+    assert!(sut.view().tokens.is_empty());
+    sut.resolve(loaded(vec![eth("2")]));
+    assert_eq!(sut.view().tokens[0].balance, "2");
+}
+
+/// On the confirm page the list may move, the confirmed token may not: a Max
+/// refilled there would change the signed amount after it was read.
+#[test]
+fn a_confirm_page_is_not_moved_by_the_asset_list() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 42_000_000_000_000));
+    sut.dispatch(Event::HoldingsUpdated {
+        tokens: vec![eth("3")],
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.selected_token.as_ref().map(|t| t.balance.as_str()),
+        Some("2")
+    );
+    assert_eq!(view.tokens[0].balance, "3", "the picker's list follows");
+    assert_eq!(view.token_amount, "1");
+}
+
+/// The picker reads ahead the fees of the chains the person holds value on —
+/// highest first, spam never, at most four — so the quote a pick starts finds
+/// its relay and chain reads already done.
+#[test]
+fn the_picker_reads_ahead_the_fees_of_the_chains_held() {
+    let on = |chain_id: u32, usd: f64, spam: bool| SendToken {
+        network: format!("net{chain_id}"),
+        chain_id,
+        symbol: format!("T{chain_id}"),
+        balance: "1".to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(usd),
+        logo_urls: vec![],
+        spam,
+    };
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams::default()));
+    let ops = sut.resolve(loaded(vec![
+        on(10, 5.0, false),
+        on(56, 9_999.0, true),
+        on(1, 100.0, false),
+        on(137, 50.0, false),
+        on(8453, 20.0, false),
+        on(42161, 1.0, false),
+    ]));
+    assert_eq!(
+        ops,
+        vec![Op::PrewarmFees {
+            account: ACCOUNT.to_owned(),
+            chain_ids: vec![1, 137, 8453, 10],
+        }]
+    );
+}
+
+/// A hand-off that lands on the form warms its own chain's quote; there is no
+/// picker to read ahead for.
+#[test]
+fn a_hand_off_to_the_form_reads_nothing_ahead() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        preselected_symbol: Some("ETH".to_owned()),
+        preselected_network: Some("ethereum".to_owned()),
+        ..SendOpenParams::default()
+    }));
+    let ops = sut.resolve(loaded(vec![eth("2")]));
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::PrewarmFees { .. })),
+        "{ops:?}"
+    );
+}
+
+/// A Max pressed while the warm-up's credential read is out waits for the
+/// quote that read would start. When the read finds no key, no warm quote
+/// comes — the Max asks for its own instead of waiting forever on a blank field.
+#[test]
+fn a_max_waiting_on_a_keyless_warm_up_asks_for_its_own_quote() {
+    let mut sut = boot(vec![eth("2")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: eth("2").id(),
+    });
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(ops.is_empty(), "waits on the warm-up: {ops:?}");
+    let ops = sut.resolve(credential(None));
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::EstimateFee { .. })),
+        "Max's own estimate: {ops:?}"
+    );
+    sut.resolve(Res::FeeEstimated {
+        outcome: SendFeeOutcome::Ok {
+            estimate: native_fee(1, 500_000_000_000_000_000),
+        },
+    });
+    assert_eq!(sut.view().amount, "1.5");
+}
+
+/// The list Send reads spells a chain's coin the wallet's way too, and a
+/// hand-off that still says the chain document's "XDAI" finds it.
+#[test]
+fn a_chains_own_coin_is_one_token_whichever_way_it_was_spelled() {
+    let xdai = SendToken {
+        network: "gnosis".to_owned(),
+        chain_id: 100,
+        symbol: "XDAI".to_owned(),
+        balance: "0.5".to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(1.0),
+        logo_urls: vec![],
+        spam: false,
+    };
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        preselected_symbol: Some("XDAI".to_owned()),
+        preselected_network: Some("gnosis".to_owned()),
+        ..SendOpenParams::default()
+    }));
+    sut.resolve(loaded(vec![xdai]));
+    let view = sut.view();
+    assert_eq!(view.tokens[0].symbol, "xDAI");
+    assert_eq!(
+        view.selected_token.as_ref().map(|t| t.symbol.as_str()),
+        Some("xDAI"),
+        "the hand-off landed on the form"
     );
 }

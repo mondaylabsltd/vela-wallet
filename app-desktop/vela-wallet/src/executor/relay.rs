@@ -23,6 +23,7 @@
 //! TTLs — the quote cache is what makes a fee-coin chip switch free. A
 //! transient failure is never cached.
 
+use crate::executor::single_flight::SingleFlight;
 use std::collections::HashMap;
 use std::io::Read as _;
 use std::sync::Mutex;
@@ -403,6 +404,13 @@ pub fn in_band_quotes(chain_id: u32, safe: &str) -> Option<Vec<FeeAssetQuote>> {
     {
         return Some(quotes.clone());
     }
+    // Every speed's session asks for these rows at the same instant: one
+    // request answers them all (`single_flight`).
+    static IN_FLIGHT: SingleFlight<String, Option<Vec<FeeAssetQuote>>> = SingleFlight::new();
+    IN_FLIGHT.run(key.clone(), || read_in_band_quotes(chain_id, safe, key))
+}
+
+fn read_in_band_quotes(chain_id: u32, safe: &str, key: String) -> Option<Vec<FeeAssetQuote>> {
     let body = pool::bundler_call(
         chain_id,
         "vela_getInBandGasQuote",
@@ -456,20 +464,47 @@ fn decimal_of_hex(value: Option<&Value>) -> Option<String> {
 /// One tier of `pimlico_getUserOperationGasPrice`, UNJUDGED (`fetchRawBundlerQuote`):
 /// a zero quote is handed over as zero, because refusing it is the core's rule.
 pub fn raw_bundler_quote(chain_id: u32, tier: FeeTier) -> Option<FeeBundlerQuote> {
+    raw_bundler_quotes(chain_id)?
+        .into_iter()
+        .find_map(|(key, quote)| (key == tier_key(tier)).then_some(quote))
+}
+
+/// Every tier of `pimlico_getUserOperationGasPrice` from ONE call, keyed by
+/// the relay's tier name — the answer names slow, standard and fast together,
+/// so the three speed rows never need three requests. `None` when the relay
+/// did not answer; a tier row it did not publish is simply absent.
+pub fn raw_bundler_quotes(chain_id: u32) -> Option<Vec<(&'static str, FeeBundlerQuote)>> {
     let body = pool::bundler_call(chain_id, "pimlico_getUserOperationGasPrice", json!([])).ok()?;
     if body.get("error").is_some() {
         return None;
     }
-    let row = body.get("result")?.get(tier_key(tier))?;
-    Some(FeeBundlerQuote {
-        max_fee_per_gas: decimal_of_hex(row.get("maxFeePerGas"))?,
-        // The tip this tier is actually signed with — the half of the quote
-        // that buys priority, and what the core turns into the per-tier gas
-        // price on screen (issue 684). Absent on a generic bundler.
-        max_priority_fee_per_gas: decimal_of_hex(row.get("maxPriorityFeePerGas")),
-        network_fee_per_gas: decimal_of_hex(row.get("networkFeePerGas")),
-        relayer_fee_per_gas: decimal_of_hex(row.get("relayerFeePerGas")),
-    })
+    let result = body.get("result")?;
+    Some(
+        [FeeTier::Slow, FeeTier::Standard, FeeTier::Fast, FeeTier::Rapid]
+            .into_iter()
+            .filter_map(|tier| {
+                let row = result.get(tier_key(tier))?;
+                Some((
+                    tier_key(tier),
+                    FeeBundlerQuote {
+                        max_fee_per_gas: decimal_of_hex(row.get("maxFeePerGas"))?,
+                        // The tip this tier is actually signed with — the half
+                        // of the quote that buys priority, and what the core
+                        // turns into the per-tier gas price on screen (issue
+                        // 684). Absent on a generic bundler.
+                        max_priority_fee_per_gas: decimal_of_hex(row.get("maxPriorityFeePerGas")),
+                        network_fee_per_gas: decimal_of_hex(row.get("networkFeePerGas")),
+                        relayer_fee_per_gas: decimal_of_hex(row.get("relayerFeePerGas")),
+                    },
+                ))
+            })
+            .collect(),
+    )
+}
+
+/// The relay's name for a tier, as `raw_bundler_quotes` keys its rows.
+pub fn tier_name(tier: FeeTier) -> &'static str {
+    tier_key(tier)
 }
 
 /// `eth_estimateUserOperationGas` — the relay's raw limits, or its words.

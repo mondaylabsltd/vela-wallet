@@ -387,10 +387,14 @@ pub fn hero_amount_field(
         } else {
             SharedString::from(value.to_owned())
         });
+    // As wide as the column and no wider: in the form's centred column a row
+    // is otherwise sized to its content, so a long figure spilled past BOTH
+    // edges — the unit with it — and `min_w(0)` never got to shrink it.
     div()
         .id(id)
         .track_focus(focus)
         .cursor_text()
+        .w_full()
         .h(theme::line_amount_hero())
         .flex()
         .items_center()

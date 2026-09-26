@@ -20,18 +20,24 @@
 //  with the pool's best RPC URL riding `X-Rpc-Url` so the relay reads the
 //  chain through the endpoint this wallet picked.
 //
-//  ## Two caches, and what clears them
+//  ## The caches, and what clears them
 //
 //  In-band quotes for 8 s — a confirm screen re-quotes on every fee-token tap
 //  and the relay would rather not be asked four times a second — and account
 //  info for 30 s. `clearCaches()` is what `network_admin`'s
 //  `clear_bundler_cache` has meant on the other clients and now means here; it
-//  was a truthful no-op on this client until this file existed.
+//  was a truthful no-op on this client until this file existed. The fee's own
+//  inputs — gas signals, the relay's gas price, the simulation — are held for
+//  the core's fee-signals window and dropped by `invalidateFeeSignals`. A
+//  deployed account is remembered for good (a Safe cannot be un-deployed); an
+//  undeployed one is asked every time, since the next send deploys it.
 //
 //  The caches are plain dictionaries and need no lock: this class is
-//  `@MainActor`, so two readers cannot interleave. Two callers CAN both miss
-//  and both fetch, which is what Android's lock also allows — it guards the
-//  map, never the round trip — and both write the same answer.
+//  `@MainActor`, so two readers cannot interleave. **And two readers cannot
+//  both miss and both fetch** (spec 078): every fee read is single-flight
+//  (`SingleFlight`), because the speed control prices one operation in three
+//  sessions at the same instant, and three cold misses were three round trips
+//  whose answers landed one row at a time.
 //
 
 import Foundation
@@ -160,15 +166,42 @@ final class RelayClient {
     // stops a read that was in flight when somebody asked for a fresh one
     // from landing its older answer in the cache.
     private static let feeSignalsTTLMs = Double(feeSignalsCacheTtlMs())
+    /// The relay's simulation of one exact operation — chain, account,
+    /// deployment and the calls byte for byte — for the same window (the
+    /// core's `SIMULATION_CACHE_TTL_MS`, which IS `FEE_SIGNALS_CACHE_TTL_MS`,
+    /// so the one binding serves both). Nothing it measures depends on speed:
+    /// the session in force and every tier preview ask the identical question.
+    private static let simulationTTLMs = feeSignalsTTLMs
     private var gasSignalsCache: [String: (signals: GasSignals, at: Double)] = [:]
     private var bundlerQuoteCache: [String: (quote: [String: Any], at: Double)] = [:]
+    private var simulationCache: [String: (answer: String, at: Double)] = [:]
     private var feeSignalsEpoch: [Int: Int] = [:]
+    /// Accounts known to be deployed, `chain:address`. Permanent: a Safe
+    /// cannot be un-deployed, and asking again is a round trip on every quote.
+    private var deployedAccounts: Set<String> = []
+
+    /// One flight per question (see `SingleFlight`). Keys carry the chain's
+    /// fee-signals epoch where a fresh reading was asked for, so a flight
+    /// that started before the refresh never answers a caller after it.
+    private let gasSignalsFlights = SingleFlight<String, GasSignals>()
+    private let bundlerPriceFlights = SingleFlight<String, [String: Any]?>()
+    private let inBandFlights = SingleFlight<String, [[String: Any]]?>()
+    private let deploymentFlights = SingleFlight<String, Bool?>()
+    private let infoFlights = SingleFlight<String, AccountInfo?>()
+    private let simulationFlights = SingleFlight<String, String>()
+
+    /// How many relay gas-price reads actually went out — the test seam for
+    /// "three tiers, one request".
+    var bundlerPriceReads: Int { bundlerPriceFlights.started }
 
     /// Forget this chain's held readings, so the next quote run measures again.
+    /// The simulation goes with them: a submit is about to change the
+    /// account's state, and a refresh means "look again" for all of it.
     func invalidateFeeSignals(chainId: Int) {
         feeSignalsEpoch[chainId, default: 0] += 1
         gasSignalsCache = gasSignalsCache.filter { !$0.key.hasPrefix("\(chainId):") }
         bundlerQuoteCache = bundlerQuoteCache.filter { !$0.key.hasPrefix("\(chainId):") }
+        simulationCache = simulationCache.filter { !$0.key.hasPrefix("\(chainId):") }
     }
 
     init(
@@ -231,6 +264,10 @@ final class RelayClient {
     func accountInfo(chainId: Int, safe: String) async -> AccountInfo? {
         let key = "\(chainId):\(safe.lowercased())"
         if let cached = infoCache[key], now() - cached.at < Self.infoTTLMs { return cached.info }
+        return await infoFlights.run(key) { await self.readAccountInfo(chainId: chainId, safe: safe, key: key) }
+    }
+
+    private func readAccountInfo(chainId: Int, safe: String, key: String) async -> AccountInfo? {
         guard case .ok(let data) = await restGet(
             chainId: chainId, path: "/v1/account/\(chainId)/\(safe.lowercased())"
         ) else { return nil }
@@ -275,6 +312,10 @@ final class RelayClient {
     func inBandQuotes(chainId: Int, safe: String) async -> [[String: Any]]? {
         let key = "\(chainId):\(safe.lowercased())"
         if let cached = quoteCache[key], now() - cached.at < Self.quoteTTLMs { return cached.quotes }
+        return await inBandFlights.run(key) { await self.readInBandQuotes(chainId: chainId, safe: safe, key: key) }
+    }
+
+    private func readInBandQuotes(chainId: Int, safe: String, key: String) async -> [[String: Any]]? {
         guard let result = await bundlerValue(
             chainId: chainId,
             method: "vela_getInBandGasQuote",
@@ -335,32 +376,76 @@ final class RelayClient {
     }
 
     /// `pimlico_getUserOperationGasPrice`, one tier.
+    ///
+    /// The relay answers slow, standard AND fast in one response, so it is
+    /// asked ONCE per chain and window and every tier is served from that
+    /// answer: the speed control's three sessions used to ask it three times
+    /// at the same instant, and their rows settled one after another. Each
+    /// tier's row is held under the core's own rule (`bundlerQuoteCacheable`),
+    /// so a degenerate row is never kept while its siblings are.
     func bundlerQuote(chainId: Int, tier: String) async -> [String: Any]? {
         let key = "\(chainId):\(tier)"
         if let held = bundlerQuoteCache[key], now() - held.at < Self.feeSignalsTTLMs {
             return held.quote
         }
         let epoch = feeSignalsEpoch[chainId, default: 0]
+        let rows = await bundlerPriceFlights.run("\(chainId):\(epoch)") {
+            await self.readBundlerPrices(chainId: chainId, epoch: epoch)
+        }
+        return rows?[tier] as? [String: Any]
+    }
+
+    /// Every tier the relay priced, parsed and — where the core says a row is
+    /// a real measurement — held. `nil` when the relay did not answer.
+    private func readBundlerPrices(chainId: Int, epoch: Int) async -> [String: Any]? {
         guard let result = await bundlerValue(
             chainId: chainId, method: "pimlico_getUserOperationGasPrice", params: []
-        ) as? [String: Any],
-            let row = result[tier] as? [String: Any],
-            let maxFee = Self.decimalOfHex(row["maxFeePerGas"])
-        else { return nil }
-        let quote: [String: Any] = [
-            "max_fee_per_gas": maxFee,
-            // The tip this tier is signed with — what the core turns into the
-            // gas bid on screen (issue 684). Absent on a generic bundler.
-            "max_priority_fee_per_gas": Self.decimalOfHex(row["maxPriorityFeePerGas"]).map { $0 as Any } ?? NSNull(),
-            "network_fee_per_gas": Self.decimalOfHex(row["networkFeePerGas"]).map { $0 as Any } ?? NSNull(),
-            "relayer_fee_per_gas": Self.decimalOfHex(row["relayerFeePerGas"]).map { $0 as Any } ?? NSNull(),
-        ]
-        // Never a zero cap, which the core rejects as degenerate: "the relay
-        // did not answer" is not a measurement worth holding.
-        if bundlerQuoteCacheable(maxFeePerGas: maxFee), feeSignalsEpoch[chainId, default: 0] == epoch {
-            bundlerQuoteCache[key] = (quote, now())
+        ) as? [String: Any] else { return nil }
+        var rows: [String: Any] = [:]
+        for (tier, raw) in result {
+            guard let row = raw as? [String: Any], let maxFee = Self.decimalOfHex(row["maxFeePerGas"])
+            else { continue }
+            let quote: [String: Any] = [
+                "max_fee_per_gas": maxFee,
+                // The tip this tier is signed with — what the core turns into
+                // the gas bid on screen (issue 684). Absent on a generic bundler.
+                "max_priority_fee_per_gas": Self.decimalOfHex(row["maxPriorityFeePerGas"]).map { $0 as Any } ?? NSNull(),
+                "network_fee_per_gas": Self.decimalOfHex(row["networkFeePerGas"]).map { $0 as Any } ?? NSNull(),
+                "relayer_fee_per_gas": Self.decimalOfHex(row["relayerFeePerGas"]).map { $0 as Any } ?? NSNull(),
+            ]
+            rows[tier] = quote
+            // Never a zero cap, which the core rejects as degenerate: "the
+            // relay did not answer" is not a measurement worth holding.
+            if bundlerQuoteCacheable(maxFeePerGas: maxFee), feeSignalsEpoch[chainId, default: 0] == epoch {
+                bundlerQuoteCache["\(chainId):\(tier)"] = (quote, now())
+            }
         }
-        return quote
+        return rows
+    }
+
+    /// The relay's simulation of one exact operation, shared and held.
+    ///
+    /// `key` names the operation (the fee executor builds it from the account,
+    /// the deployment and the calls byte for byte); `run` asks the relay and
+    /// answers the fee machine's result JSON. Concurrent askers of the same
+    /// operation get the one answer at the same moment; an answer `cacheable`
+    /// approves is held for the fee-signals window and dropped with the
+    /// signals (`invalidateFeeSignals`) — at every submit, among others.
+    func sharedSimulation(
+        chainId: Int, key: String, cacheable: (String) -> Bool, run: () async -> String
+    ) async -> String {
+        let slot = "\(chainId):\(key)"
+        if let held = simulationCache[slot], now() - held.at < Self.simulationTTLMs {
+            return held.answer
+        }
+        let epoch = feeSignalsEpoch[chainId, default: 0]
+        return await simulationFlights.run("\(epoch):\(slot)") {
+            let answer = await run()
+            if cacheable(answer), feeSignalsEpoch[chainId, default: 0] == epoch {
+                simulationCache[slot] = (answer, now())
+            }
+            return answer
+        }
     }
 
     /// `eth_estimateUserOperationGas` for a draft's relay JSON.
@@ -521,6 +606,12 @@ final class RelayClient {
             return held.signals
         }
         let epoch = feeSignalsEpoch[chainId, default: 0]
+        return await gasSignalsFlights.run("\(key):\(epoch)") {
+            await self.readGasSignals(chainId: chainId, wantTip: wantTip, key: key, epoch: epoch)
+        }
+    }
+
+    private func readGasSignals(chainId: Int, wantTip: Bool, key: String, epoch: Int) async -> GasSignals {
         let gasPrice = await chainCall(chainId: chainId, method: "eth_gasPrice", params: [])
         let block = await chainCall(
             chainId: chainId, method: "eth_getBlockByNumber", params: ["latest", false]
@@ -578,11 +669,22 @@ final class RelayClient {
     }
 
     /// `eth_getCode` != `0x`; `nil` when the chain could not be asked.
+    ///
+    /// A `true` is remembered for good — a Safe cannot be un-deployed, and
+    /// this read sat in front of every quote (0.8–1.0 s measured). A `false`
+    /// or a `nil` is never held: the next send deploys the account, and an
+    /// unreachable chain is not an answer.
     func isDeployed(chainId: Int, address: String) async -> Bool? {
-        guard let code = await chainCall(
-            chainId: chainId, method: "eth_getCode", params: [address, "latest"]
-        ) as? String, code.hasPrefix("0x") else { return nil }
-        return code.count > 2
+        let key = "\(chainId):\(address.lowercased())"
+        if deployedAccounts.contains(key) { return true }
+        return await deploymentFlights.run(key) {
+            guard let code = await self.chainCall(
+                chainId: chainId, method: "eth_getCode", params: [address, "latest"]
+            ) as? String, code.hasPrefix("0x") else { return nil }
+            let deployed = code.count > 2
+            if deployed { self.deployedAccounts.insert(key) }
+            return deployed
+        }
     }
 
     /// The recipient-risk answer's `is_contract` — NOT `isDeployed`, which asks

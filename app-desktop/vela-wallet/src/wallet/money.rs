@@ -115,6 +115,10 @@ pub struct SendHost {
     /// The dashboard round the picker last received (`Settled::round`). A
     /// newer one is pushed into an open picker.
     holdings_round: Option<u64>,
+    /// A waiting `FetchTokens` met a round that reached nothing, and asked the
+    /// dashboard to read again: `Some(round)` is the round it met (`None`
+    /// inside when there was none). The NEXT round answers, whatever it holds.
+    holdings_retry: Option<Option<u64>>,
     /// A locked request's "add this network" in flight (078 W-04): the
     /// network admin's view is watched until its wizard settles.
     add_network: Option<gpui::Subscription>,
@@ -202,6 +206,7 @@ impl SendHost {
             address: account.address.clone(),
             pending_tokens: None,
             holdings_round: None,
+            holdings_retry: None,
             view,
             speed: SpeedControl::new(),
             batch: None,
@@ -361,6 +366,36 @@ impl SendHost {
         }
         let settled = balance_dashboard::settled(&self.address);
         if let Some(id) = self.pending_tokens {
+            // One source has one failure mode: a round in which no chain
+            // answered — a proxy blip at launch — used to become "could not
+            // load tokens" here at once, and the picker stayed empty until
+            // the next ten-minute poll. Ask the dashboard to read again first
+            // (the Assets column recovers with it) and answer whatever that
+            // next round holds; only a second empty round is the refusal.
+            let reached_nothing = match &settled {
+                Some(round) => round.tokens.is_empty() && !round.failed_chain_ids.is_empty(),
+                None => view.unreachable,
+            };
+            if reached_nothing {
+                let met = settled.as_ref().map(|round| round.round);
+                match self.holdings_retry {
+                    None => {
+                        self.holdings_retry = Some(met);
+                        balance_dashboard::dispatch(
+                            BalanceEvent::RefreshRequested {
+                                force: true,
+                                pull: false,
+                            },
+                            cx,
+                        );
+                        return;
+                    }
+                    // Still the round that reached nothing: the re-read is out.
+                    Some(asked) if asked == met => return,
+                    Some(_) => {}
+                }
+            }
+            self.holdings_retry = None;
             let result = match &settled {
                 Some(round) => {
                     self.holdings_round = Some(round.round);
@@ -389,19 +424,22 @@ impl SendHost {
             self.resolve_send(id, result, cx);
             return;
         }
-        // A newer round than the picker holds. Only the picker follows it: a
-        // form or a confirm card is about the token as it was picked, and a
-        // list moving under a sweep being confirmed would change what it
-        // sends. Marked received BEFORE asking, so the re-pull's own renders
-        // cannot ask again.
-        let Some(round) = settled.map(|round| round.round) else {
+        // A newer round than the screen holds: hand it over. What follows it
+        // is the core's to say (`holdings_updated`) — the picker always, the
+        // form's balance and its Max too, a confirm page never, since that is
+        // about the token as it was confirmed. Marked received BEFORE the
+        // dispatch, so its own renders cannot hand it over again.
+        let Some(round) = settled else {
             return;
         };
-        if self.holdings_round.is_some_and(|held| held != round)
-            && self.view.stage == SendStage::SelectToken
-        {
-            self.holdings_round = Some(round);
-            self.dispatch(SendEvent::RefreshTokens, cx);
+        if self.holdings_round.is_some_and(|held| held != round.round) {
+            self.holdings_round = Some(round.round);
+            let tokens = round
+                .tokens
+                .iter()
+                .map(send_executor::to_send_token)
+                .collect();
+            self.dispatch(SendEvent::HoldingsUpdated { tokens }, cx);
         }
     }
 
@@ -639,6 +677,7 @@ impl SendHost {
                 batch,
                 gas_fee_token,
                 public_key_hex,
+                auto_fee_token,
             } => {
                 // A batch takes precedence only when it HAS legs; an empty
                 // one would otherwise silence the single call beside it.
@@ -653,6 +692,7 @@ impl SendHost {
                     account.clone(),
                     calls,
                     gas_fee_token.clone(),
+                    *auto_fee_token,
                     public_key_hex.is_some(),
                     cx,
                 );
@@ -757,6 +797,7 @@ impl SendHost {
         account: String,
         calls: Vec<FeeCall>,
         fee_token: Option<String>,
+        auto_fee_token: bool,
         public_key_available: bool,
         cx: &mut Context<Self>,
     ) {
@@ -773,6 +814,7 @@ impl SendHost {
             public_key_available,
             calls,
             fee_token,
+            auto_fee_token,
             cx,
         );
     }
@@ -1198,6 +1240,7 @@ mod tests {
                         batch,
                         gas_fee_token,
                         public_key_hex,
+                        auto_fee_token,
                     } => {
                         let calls = match (batch, tx) {
                             (Some(batch), _) if !batch.is_empty() => batch.clone(),
@@ -1214,6 +1257,7 @@ mod tests {
                             tier: FeeTier::Fast,
                             calls,
                             fee_token: gas_fee_token.clone(),
+                            auto_fee_token: *auto_fee_token,
                         });
                         self.pump_fee(fee_pending);
                         let view = self.fee.view();
@@ -1660,6 +1704,8 @@ mod tests {
                         alerts.borrow_mut().push(kind.clone());
                         SendShellResult::AlertAcknowledged
                     }
+                    // The picker's read-ahead is fire-and-forget.
+                    SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
                     other => unreachable!("unexpected on this path: {other:?}"),
                 };
                 pending.extend(host.resolve(effect.id, result));

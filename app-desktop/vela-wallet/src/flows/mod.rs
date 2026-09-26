@@ -412,6 +412,10 @@ pub struct FlowStrings {
     pub tx_close_background: SharedString,
     pub tx_hash: SharedString,
     pub done: SharedString,
+    /// An alert's acknowledgement ("知道了" / "Got it"). The send alert used to
+    /// borrow the receipt's "Done", which is the end of a payment, not "I read
+    /// this".
+    pub got_it: SharedString,
 
     // Send · live (spec 032). The receipt's other three states, the two error
     // wordings the core chooses between, and the recipient trust line.
@@ -704,6 +708,7 @@ impl FlowStrings {
             tx_close_background: s("send.txCloseBackground"),
             tx_hash: s("componentsTx.receipt.txHash"),
             done: s("componentsTx.receipt.done"),
+            got_it: s("common.gotIt"),
 
             tx_confirmed_title: raw("send.txConfirmedTitle"),
             tx_submitting: s("send.txSubmitting"),

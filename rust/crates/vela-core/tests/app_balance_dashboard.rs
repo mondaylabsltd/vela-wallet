@@ -1507,3 +1507,32 @@ fn a_pegged_price_still_flows_through_the_normal_ladder() {
     let picked = choose_native_price(None, None, Some(peg)).unwrap();
     assert_eq!(picked.price, 1.0);
 }
+
+/// One coin, one spelling: a built-in chain's own coin takes the registry's
+/// symbol whatever the chain document said ("XDAI" → "xDAI"); a contract
+/// token, and a native row whose symbol is another word, are left as read.
+#[test]
+fn a_chains_own_coin_is_written_the_wallets_way() {
+    const ADDR: &str = "0xabc";
+    let mut usdc = token(100, "USDC", "5", Some(1.0));
+    usdc.token_address = Some("0xddafbb505ad214d7b80b1f830fccc89b60fb7a83".to_owned());
+    let sut = booted(
+        ADDR,
+        None,
+        settled(
+            ADDR,
+            vec![
+                token(100, "XDAI", "0.5", Some(1.0)),
+                usdc,
+                token(999_999, "ABC", "1", Some(1.0)),
+            ],
+            vec![],
+            vec![],
+        ),
+    );
+    let symbols: Vec<String> = sut.view().tokens.iter().map(|t| t.symbol.clone()).collect();
+    assert!(symbols.contains(&"xDAI".to_owned()), "{symbols:?}");
+    assert!(symbols.contains(&"USDC".to_owned()), "{symbols:?}");
+    assert!(symbols.contains(&"ABC".to_owned()), "{symbols:?}");
+    assert!(!symbols.contains(&"XDAI".to_owned()), "{symbols:?}");
+}

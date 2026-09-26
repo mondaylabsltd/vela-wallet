@@ -242,15 +242,23 @@ class WalletLiveTest {
         assertEquals(SectionMode.Empty, settled.assetsSection.mode)
     }
 
-    /** Amounts are truncated, never rounded: a rounded-up balance is money nobody has. */
+    /**
+     * Spec 078: a row is written on the ONE token-amount rule every shell and
+     * every Send screen uses — the core's ladder, half up (6 places under 1,
+     * 4 under 1000, 2 above) — so the balance here and the balance beside the
+     * token on Send are the same number. It used to be cut at six places here
+     * while other shells rounded.
+     */
     @Test
-    fun `a long balance is cut, not rounded up`() {
+    fun `a long balance is written on the one token-amount ladder`() {
         val view = BalanceView(
             display_total_usd = 1.0,
-            tokens = listOf(token("POL", "0.1234569999", price = 1.0)),
+            tokens = listOf(token("POL", "0.1234569999", price = 1.0), token("XDAI", "12.3456789", price = 1.0)),
         )
 
-        assertEquals("0.123456 POL", home(view).assetRows[0].balance)
+        val rows = home(view).assetRows.associate { it.ticker to it.balance }
+        assertEquals("0.123457 POL", rows["POL"])
+        assertEquals("12.3457 XDAI", rows["XDAI"])
     }
 
     /** Hidden hides the figure and nothing else. */

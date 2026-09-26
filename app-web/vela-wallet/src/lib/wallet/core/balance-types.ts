@@ -39,6 +39,13 @@ export const BALANCE_PRIVACY_KEY = 'vela.balanceHidden';
 export interface BalanceStreamSink {
 	/** One `onProgress` snapshot: the accumulated, USD-sorted tokens so far. */
 	chainAssetsArrived(address: string, tokens: BalanceToken[]): void;
+	/**
+	 * A `FetchTokens` round for `address` has ended — settled OR errored. Said
+	 * just before its answer goes back to the core, so a listener that wants
+	 * the view the answer produces reads it on a later task. An errored round
+	 * may change nothing on the view, which is why this is not read off it.
+	 */
+	roundEnded?(address: string): void;
 }
 
 export type BalanceSessionOptions = SessionOptions<BalanceView> & {

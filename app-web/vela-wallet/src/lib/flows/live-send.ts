@@ -28,7 +28,13 @@ import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { amountToInput } from '$lib/services/locale-format';
 import { fromBaseUnits } from '$lib/services/eip681';
-import { exactAmount, moneyText, trimBalance, unitAdornment } from '$lib/wallet/live';
+import {
+	exactAmount,
+	moneyText,
+	tokenAmountText,
+	trimBalance,
+	unitAdornment
+} from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
 import {
@@ -217,7 +223,8 @@ function tokenRow(token: SendToken, currency: CurrencyView): AssetRowModel {
 		logoUrls: art.logoUrls,
 		badgeLogoUrl: art.badgeLogoUrl,
 		badgeHidden: art.badgeHidden,
-		balance: trimBalance(token.balance),
+		// The asset list's own call (`liveAssetRow`), so the two lists agree.
+		balance: tokenAmountText(token.balance),
 		fiat:
 			token.price_usd === null
 				? { kind: 'no-price', text: '—' }
@@ -417,8 +424,18 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 	// with a search box and no rows explains itself to nobody; a filter that
 	// hid everything is a different sentence, and the core's own token list is
 	// what tells the two apart.
+	//
+	// And a list the wallet could not READ is not an empty wallet: after two
+	// rounds that reached nothing (the retry-once rule) the core raises
+	// `load_tokens_failed`, and the picker — the one screen on at that moment
+	// — says so instead of "no tokens with balance", which is a claim about
+	// money the wallet never saw.
 	const empty =
-		send.tokens.length === 0 ? m['send.noTokensWithBalance'] : m['send.noMatchingTokens'];
+		send.tokens.length === 0
+			? inputs.alert?.type === 'load_tokens_failed'
+				? m['send.alertLoadTokensError']
+				: m['send.noTokensWithBalance']
+			: m['send.noMatchingTokens'];
 	if (!inputs.sweepPicking) {
 		return {
 			...model,
@@ -527,7 +544,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		fiat: inFiat
 			? token === null
 				? ''
-				: `≈ ${trimBalance(send.token_amount || '0')} ${token.symbol}`
+				: `≈ ${tokenAmountText(send.token_amount || '0')} ${token.symbol}`
 			: usd === null
 				? ''
 				: `≈ ${moneyText(usd, currency)}`,
@@ -568,8 +585,8 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 			sweepRows: picked.map((row) => ({
 				mark: mark(row),
 				symbol: row.symbol,
-				balanceLabel: fill(m['send.balanceLabel'], { amount: trimBalance(row.balance) }),
-				amount: trimBalance(sweepAmount(send, row))
+				balanceLabel: fill(m['send.balanceLabel'], { amount: tokenAmountText(row.balance) }),
+				amount: tokenAmountText(sweepAmount(send, row))
 			})),
 			amount: undefined,
 			addRecipient: undefined,
@@ -606,8 +623,11 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 			? {
 					mark: mark(token),
 					symbol: token.symbol,
+					// "Ethereum · Balance 0.043968": the balance through the SAME
+					// call the asset list's row makes for this token, so the figure
+					// here and the figure on the home row are one figure.
 					detail: `${chainName(token.chain_id)} · ${fill(m['send.balanceLabel'], {
-						amount: trimBalance(token.balance)
+						amount: tokenAmountText(token.balance)
 					})}`,
 					// `Max` fills the SINGLE amount. In a split there is no single
 					// amount — the button wrote a field nobody could see and changed
@@ -683,14 +703,14 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					value:
 						send.confirm_amount === ''
 							? '—'
-							: `${exactAmount(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
+							: `${tokenAmountText(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
 					detail: splitUsd === null ? undefined : `≈ ${moneyText(splitUsd, currency)}`,
 					over: send.split_over_balance,
 					remaining:
 						send.split_remaining == null
 							? undefined
 							: fill(m['send.splitRemaining'], {
-									amount: `${trimBalance(send.split_remaining)} ${token?.symbol ?? ''}`.trim()
+									amount: `${tokenAmountText(send.split_remaining)} ${token?.symbol ?? ''}`.trim()
 								})
 				}
 			: undefined,
@@ -792,7 +812,11 @@ function sameFeeWords(send: SendView, m: WalletFlowMessages): string | undefined
 	const issue = send.same_asset_fee_issue;
 	if (issue == null) return undefined;
 	const decimals = send.selected_token?.decimals ?? 18;
-	const human = (base: string) => exactAmount(fromBaseUnits(BigInt(base), decimals));
+	// The asset list's figures (spec 078), not 18-digit remainders: "you have"
+	// is then the balance on the token card above, digit for digit. The most
+	// that can be sent is rounded DOWN — typed back, it has to fit.
+	const human = (base: string, rounding?: 'down') =>
+		tokenAmountText(fromBaseUnits(BigInt(base), decimals), rounding);
 	const body = fill(m['send.sameFeeTokenBody'], {
 		amount: human(issue.transfer_amount),
 		fee: human(issue.fee_amount),
@@ -801,7 +825,7 @@ function sameFeeWords(send: SendView, m: WalletFlowMessages): string | undefined
 		balance: human(issue.balance)
 	});
 	const most = fill(m['send.sameFeeTokenMax'], {
-		amount: human(issue.max_transfer_amount),
+		amount: human(issue.max_transfer_amount, 'down'),
 		symbol: issue.symbol
 	});
 	return `${body} ${most}`;
@@ -1004,7 +1028,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			const amount = sweepAmount(send, row);
 			const rowUsd = row.price_usd === null ? null : (parseFloat(amount) || 0) * row.price_usd;
 			if (rowUsd !== null) totalUsd += rowUsd;
-			const value = `${trimBalance(amount)} ${row.symbol}`;
+			const value = `${tokenAmountText(amount)} ${row.symbol}`;
 			return {
 				lead: mark(row),
 				label: row.symbol,
@@ -1039,7 +1063,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			// A name never stands in for the address on the page that signs.
 			detail: draft.name ? shortenAddress(draft.address) : undefined,
 			mono: !draft.name,
-			value: `${exactAmount(draft.amount)} ${symbol}`.trim(),
+			value: `${tokenAmountText(draft.amount)} ${symbol}`.trim(),
 			// The form's repeat warning, said again on the page that signs
 			// (issue 203): two lines paying one payee are hardest to spot
 			// exactly where the avatars are identical and the sum looks right.
@@ -1052,7 +1076,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		return {
 			...model,
 			mark: heroMark,
-			amount: `${exactAmount(send.confirm_amount)} ${symbol}`.trim(),
+			amount: `${tokenAmountText(send.confirm_amount)} ${symbol}`.trim(),
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
@@ -1064,7 +1088,9 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	return {
 		...model,
 		mark: heroMark,
-		amount: `${send.confirm_amount} ${token?.symbol ?? ''}`.trim(),
+		// The exact amount is what is signed; what is READ is the asset list's
+		// figure for it — never an 18-digit remainder of a fee to the wei.
+		amount: `${tokenAmountText(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
 		facts,
 		breakdown: undefined,
@@ -1118,7 +1144,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			...parts,
 			stage: 'confirmed',
 			title: fill(m['send.txConfirmedTitle'], {
-				amount: send.receipt?.amount ?? send.confirm_amount,
+				amount: tokenAmountText(send.receipt?.amount ?? send.confirm_amount),
 				symbol: token?.symbol ?? ''
 			}),
 			// A split names its count here and its people below; "To " with
@@ -1213,14 +1239,14 @@ function receiptParts(
 					identiconSvg: identicon(transfer.to),
 					address: transfer.to,
 					label: transfer.to_name ?? shortenAddress(transfer.to),
-					value: `${transfer.amount} ${transfer.symbol}`.trim()
+					value: `${tokenAmountText(transfer.amount)} ${transfer.symbol}`.trim()
 				}))
 			: send.split_mode
 				? send.recipients.map((draft) => ({
 						identiconSvg: draft.address ? identicon(draft.address) : undefined,
 						address: draft.address || undefined,
 						label: draft.name ?? shortenAddress(draft.address),
-						value: `${draft.amount} ${symbol}`.trim()
+						value: `${tokenAmountText(draft.amount)} ${symbol}`.trim()
 					}))
 				: [];
 	if (rows.length === 0) return { breakdownTitle: undefined, breakdown: undefined };

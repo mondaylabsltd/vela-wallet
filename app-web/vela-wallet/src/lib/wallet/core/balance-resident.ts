@@ -78,6 +78,64 @@ let currentUnpricedKey = '[]';
 let currentSwitcherBalances = new Map<string, number>();
 let currentSwitcherKey = '[]';
 
+/**
+ * Whether the ACTIVE account has settled at least one fetch round.
+ *
+ * The view carries no such flag (`bootstrapped` is model-private), and a
+ * streamed first round is a partial list — the chains still out are missing,
+ * not empty. What does mark a settle is `last_refreshed_at_ms`, which the core
+ * writes on every `FetchSettled` for the current address and on nothing else.
+ * It survives an account switch, so the value held at the switch is the
+ * baseline: the account has settled once that value moves.
+ */
+let settleWatch: { address: string | null; baseline: number | null; settled: boolean } = {
+	address: null,
+	baseline: null,
+	settled: false
+};
+
+function trackSettle(view: BalanceView): void {
+	if (view.address !== settleWatch.address) {
+		settleWatch = { address: view.address, baseline: view.last_refreshed_at_ms, settled: false };
+		// Nobody waiting on the old account's round is waiting on anything now.
+		for (const waiter of [...roundWaiters]) {
+			if (view.address === null || waiter.address.toLowerCase() !== view.address.toLowerCase()) {
+				waiter.done();
+			}
+		}
+		return;
+	}
+	if (view.address !== null && view.last_refreshed_at_ms !== settleWatch.baseline) {
+		settleWatch.settled = true;
+	}
+}
+
+/**
+ * Who is waiting for the next round to end (see {@link rereadHoldings}). Each
+ * waiter is keyed by the address it asked about.
+ */
+const roundWaiters = new Set<{ address: string; done: () => void }>();
+
+/**
+ * A round for `address` ended. Waiters are woken on a LATER task: the loop
+ * applies the round's answer and commits the view right after the executor
+ * returns, so by then the view is the one the round produced.
+ */
+function roundEnded(address: string): void {
+	setTimeout(() => {
+		for (const waiter of [...roundWaiters]) {
+			if (waiter.address.toLowerCase() === address.toLowerCase()) waiter.done();
+		}
+	}, 0);
+}
+
+/**
+ * The longest a re-read is waited on. A round is capped per chain at 18 s
+ * (`wallet-api.ts`); past this, whatever the view holds answers, so Send can
+ * never wait on a round that is not coming.
+ */
+const REREAD_CAP_MS = 30_000;
+
 const listeners = new Set<(view: BalanceView) => void>();
 let session: ReturnType<typeof createBalanceSession> | null = null;
 
@@ -108,6 +166,7 @@ export function ensureBalanceDashboard() {
 				if (key === currentKey) return;
 				currentKey = key;
 				project(view);
+				trackSettle(view);
 				listeners.forEach((listener) => listener(view));
 			},
 			onError: (error) => console.error('[balance-dashboard] core fault:', error),
@@ -116,7 +175,8 @@ export function ensureBalanceDashboard() {
 				// `onProgress`, i.e. from a microtask between two effect resolutions —
 				// never from inside a `core.dispatch()`, so the core is never re-entered.
 				chainAssetsArrived: (address, tokens) =>
-					session?.dispatch({ type: 'chain_assets_arrived', address, tokens })
+					session?.dispatch({ type: 'chain_assets_arrived', address, tokens }),
+				roundEnded
 			}
 		});
 		// `AppFocused` with no account yet is a whole no-op in the core — it exists
@@ -141,6 +201,40 @@ export function dispatchBalance(event: BalanceEvent): void {
 /** The latest committed view. Synchronous — that is the whole point. */
 export function balanceView(): BalanceView {
 	return current;
+}
+
+/**
+ * `address` is the active account AND it has settled a fetch round — the
+ * moment its holdings stop being "whatever has arrived so far".
+ */
+export function balanceSettledFor(address: string): boolean {
+	return (
+		settleWatch.settled &&
+		settleWatch.address !== null &&
+		settleWatch.address.toLowerCase() === address.toLowerCase()
+	);
+}
+
+/**
+ * ONE forced re-read for `address`, resolved when the next round for it has
+ * ended (settled or errored), when the account changes, or at the cap. Send's
+ * retry-once rule (`send-holdings.ts`): a round that reached nothing is read
+ * again before anyone is told the tokens could not be loaded.
+ */
+export function rereadHoldings(address: string): Promise<void> {
+	return new Promise<void>((resolve) => {
+		const waiter = {
+			address,
+			done: () => {
+				clearTimeout(cap);
+				roundWaiters.delete(waiter);
+				resolve();
+			}
+		};
+		const cap = setTimeout(() => waiter.done(), REREAD_CAP_MS);
+		roundWaiters.add(waiter);
+		ensureBalanceDashboard().dispatch({ type: 'refresh_requested', force: true, pull: false });
+	});
 }
 
 /** Holdings in the `APIToken` shape, reference-stable while unchanged. */

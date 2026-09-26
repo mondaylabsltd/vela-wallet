@@ -82,9 +82,13 @@ impl Machine for FeePolicy {
                 Answer::Blocking(Box::new(move || {
                     // A multi-key wallet's initCode derives from ALL founding
                     // keys; the stored account is the one source of them.
-                    let keys = stored_key_hexes(&account);
+                    // One simulation per exact operation for every speed's
+                    // session (`fee_signals::simulation`).
                     FeeShellResult::UserOpGas {
-                        outcome: user_op::simulate_gas(chain_id, &account, deployed, &calls, &keys),
+                        outcome: fee_signals::simulation(chain_id, &account, deployed, &calls, || {
+                            let keys = stored_key_hexes(&account);
+                            user_op::simulate_gas(chain_id, &account, deployed, &calls, &keys)
+                        }),
                     }
                 }))
             }
