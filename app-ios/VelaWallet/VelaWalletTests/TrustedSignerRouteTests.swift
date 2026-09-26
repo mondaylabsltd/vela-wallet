@@ -9,8 +9,7 @@
 //
 //  - a session of several requests on one page visit — create, then that
 //    key's member proof, then `bye` — spoken to the way the page speaks to it;
-//  - the create and sign-in choosers listing four routes, and the signing
-//    sheet five;
+//  - the create and sign-in choosers listing four routes;
 //  - `signer_origin` round-tripping through the account record and taking the
 //    ceremony back to the page the key lives behind;
 //  - the onboarding executor reporting the core's verdict as the machine
@@ -347,19 +346,6 @@ struct TrustedSignerChooserTests {
         #expect(KeyMethod(rawValue: "trusted_signer") == .trustedSigner)
     }
 
-    /// The signing sheet's "Sign with" has an `auto`, so it lists FIVE — and
-    /// the Trusted Signer is the only one with a line under it, because the
-    /// other four say where a key is and this one says what it does.
-    @Test func theSigningSheetListsFiveWithTheTrustedSignersLine() throws {
-        let offered = try #require(SignPrefViewWire.initial).offered
-        #expect(offered == ["auto", "platform", "hybrid", "security_key", "trusted_signer"])
-        let titles = offered.compactMap { SigningLive.signMethodTitle($0, loc: loc) }
-        #expect(titles.count == 5)
-        #expect(titles.last == "可信签名器")
-        #expect(SigningLive.signMethodDetail("trusted_signer", loc: loc) != nil)
-        #expect(offered.dropLast().allSatisfy { SigningLive.signMethodDetail($0, loc: loc) == nil })
-    }
-
     /// Settings has no pairing-service row at all: the channel went on
     /// 2026-09-23 and its address went with it. A row left behind would be a
     /// setting for something the wallet no longer opens.
@@ -448,7 +434,8 @@ struct SignerOriginTests {
     }
 
     /// The spine opens the page the KEY lives behind, not the one Settings
-    /// names — for a send nobody asked about "Sign with" at all.
+    /// names — for a record written before the sign-in key existed, whose
+    /// signatures go where they always went.
     @Test func theSpineOpensThePageTheKeyLivesBehind() async throws {
         let fixture = TrustedSignerFixture()
         let accounts = ScriptedAccounts()
@@ -467,8 +454,6 @@ struct SignerOriginTests {
         }
         let relay = RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
         let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { signer })
-        // "Automatic" — nobody chose the Trusted Signer, the KEY did.
-        spine.signMethod = { "auto" }
         spine.trustedSigner = page
 
         _ = try await spine.signMessage(

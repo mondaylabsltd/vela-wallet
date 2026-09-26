@@ -44,8 +44,6 @@ enum SettingsOverlay: Equatable, Identifiable {
     /// The default transaction speed (spec 069): three speeds, each with what
     /// it buys.
     case feeSpeed
-    /// The default "Sign with" (spec 071): every method the core offers.
-    case signWith
     /// The Trusted Signer page (spec 071): an address, saved or refused.
     case signerPage
     /// A custom network's bin, asked before it happens (spec 072 FR-010): the
@@ -560,8 +558,7 @@ struct SettingsScreenModel {
     var currencySheet: SelectSheetModel
     /// Spec 069: the default transaction speed's sheet.
     var feeSpeedSheet = SelectSheetModel(title: "", rows: [])
-    /// Spec 071: the default "Sign with" and the Trusted Signer page.
-    var signWithSheet = SelectSheetModel(title: "", rows: [])
+    /// Spec 071: the Trusted Signer page.
     var signerPage: SignerPageModel?
     var numberSheet: SelectSheetModel
     var dateSheet: SelectSheetModel

@@ -216,23 +216,4 @@ struct SigningModel {
     var dappIconUrls: [String] = []
     /// The chain's logo; the dot shows until it lands, and when there is none.
     var networkLogoUrl: String?
-    /// "Sign with · Automatic ›" — where the passkey that signs this is. Live only.
-    var signWith: SignWithModel?
-}
-
-/// The per-request choice of WHERE the signing passkey is; opens in place.
-struct SignWithModel: Equatable {
-    struct Option: Equatable, Identifiable {
-        let id: String
-        let title: String
-        let selected: Bool
-        /// A line under the title — the Trusted Signer's "what you see is what
-        /// you sign".
-        var detail: String? = nil
-    }
-
-    let label: String
-    let value: String
-    let open: Bool
-    let options: [Option]
 }

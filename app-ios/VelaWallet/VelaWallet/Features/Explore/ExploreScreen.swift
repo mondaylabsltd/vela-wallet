@@ -31,7 +31,6 @@ struct ExploreScreen: View {
     /// what each means; the sheet only reports the tap.
     var onAllowanceChip: (String) -> Void = { _ in }
     var onAllowanceAmount: (String) -> Void = { _ in }
-    var onSignWith: (String?) -> Void = { _ in }
     /// Issue #262: the fee row's tap and a coin picked from its list.
     var onFee: () -> Void = {}
     var onFeePick: (String) -> Void = { _ in }
@@ -303,7 +302,6 @@ struct ExploreScreen: View {
                     onConfirm: onSigningConfirm,
                     onAllowanceChip: onAllowanceChip,
                     onAllowanceAmount: onAllowanceAmount,
-                    onSignWith: onSignWith,
                     onFee: onFee,
                     onFeePick: onFeePick,
                     onSpeed: onSpeed

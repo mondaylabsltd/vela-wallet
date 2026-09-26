@@ -500,7 +500,6 @@ struct SettingsScreen: View {
         case "language": overlay = .language
         case "currency": overlay = .currency
         case SettingsFixtures.feeSpeedRow: overlay = .feeSpeed
-        case SettingsFixtures.signWithRow: overlay = .signWith
         case SettingsFixtures.signerPageRow: if model.signerPage != nil { overlay = .signerPage }
         case "number-format": overlay = .numberFormat
         case "date-format": overlay = .dateFormat

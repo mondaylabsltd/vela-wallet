@@ -37,16 +37,6 @@ enum NetOverrideFieldWire: String {
     case rpc, explorer
 }
 
-/// `fee_tier_pref`'s view (spec 069): the tier every send STARTS at — always a
-/// real one, the factory `fast` when nothing was chosen.
-struct FeeTierPrefViewWire: Decodable, Equatable {
-    let tier: String
-    /// `false` ⇒ the factory default is showing, not a choice.
-    let committed: Bool
-    /// The tiers Settings may offer, fastest first — never the dead `rapid`.
-    let offered: [String]
-}
-
 @MainActor
 @Observable
 final class SettingsStore {
@@ -67,10 +57,10 @@ final class SettingsStore {
     /// Settings shows it and every send starts at it.
     private(set) var feeTier: FeeTierPrefViewWire?
 
-    /// How this device signs by default, and which Trusted Signer page it opens
-    /// (spec 071) — app-wide like the speed: every signing sheet starts at it.
-    /// Seeded with the machine's own first view, so a sheet raised before the
-    /// stored values land still lists what the core offers.
+    /// Which Trusted Signer page this device opens (spec 071) — app-wide like
+    /// the speed: a signature routed there opens it wherever it started.
+    /// Seeded with the machine's own first view, so a signature asked for
+    /// before the stored value lands opens the official page.
     private(set) var signPref: SignPrefViewWire?
 
     /// `true` once the core has read all four stores. Mutations sent before it
@@ -151,17 +141,11 @@ final class SettingsStore {
         feeTierCore.dispatch(CoreJSON.string(["type": "user_chose", "tier": tier]))
     }
 
-    /// Boot the signing-preferences machine. App-wide and idempotent: the
-    /// first signing sheet starts at what it read, whether or not anybody has
-    /// opened Settings.
+    /// Boot the Trusted Signer page's machine. App-wide and idempotent: the
+    /// first signature routed there opens what it read, whether or not
+    /// anybody has opened Settings.
     func openSignPref() {
         signPrefCore.boot(CoreJSON.string(["type": "refresh"]))
-    }
-
-    /// Settings' "Sign with" — the default, and only from there: a sheet's own
-    /// pick is one request's and never comes here.
-    func chooseSignMethod(_ method: String) {
-        signPrefCore.dispatch(CoreJSON.string(["type": "method_chosen", "method": method]))
     }
 
     /// The Trusted Signer page, as typed. The core validates, and stores
@@ -189,7 +173,7 @@ final class SettingsStore {
     func open() {
         openNetworks()
         openCurrency()
-        // The page's two signing rows read what is stored, however Settings
+        // The Trusted Signer page row reads what is stored, however Settings
         // was reached (spec 071).
         openSignPref()
     }

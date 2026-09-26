@@ -12,8 +12,10 @@
 //  ## The door
 //
 //  `VELA_PARALLEL_SPACE=1` enters and persists; `=0` leaves; unset follows what
-//  is persisted. `VELA_PARALLEL_SIGNER=n` picks which of the fixture keys
-//  signs, as the web's `vela.parallel.signWith(n)` does.
+//  is persisted. `VELA_PARALLEL_SIGNER=n` picks which fixture key (0-based) the
+//  space signs in with, and so which one signs every request after — entering
+//  is the space's sign-in, and its record names the key the way a real sign-in
+//  does (`signed_in_with`, founder 2026-09-26).
 //
 //  ## The account is UPSERTED, and that is not a detail
 //
@@ -102,6 +104,7 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
         // account list failed to deserialize, so the app opened on Welcome with
         // the record sitting on disk. The failure is silent by design: a list
         // the core cannot read is refused rather than half-adopted.
+        let signedInWith = fixtures.first { $0.index == preferredSigner } ?? first
         let record: [String: Any] = [
             "id": first.credentialIdHex,
             "name": first.name,
@@ -116,6 +119,7 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
                     "transports": "internal",
                 ]
             },
+            "signed_in_with": ["credential_id": signedInWith.credentialIdHex, "method": "platform"],
         ]
         await accounts.saveAccount(record)
         let list = await accounts.loadAccounts()
