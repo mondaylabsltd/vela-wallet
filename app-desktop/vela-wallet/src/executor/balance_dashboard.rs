@@ -27,7 +27,7 @@ use vela_core::app::balance_dashboard::{
     BalanceToken, Event,
 };
 
-use crate::executor::{balances, storage};
+use crate::executor::{balances, pool, storage};
 use crate::resident::{self, Answer, Machine};
 use crate::session;
 
@@ -190,16 +190,22 @@ impl Machine for BalanceDashboard {
                     // A chain that did not answer keeps what the last round
                     // knew it held; it is still reported as failed below.
                     let tokens = settle_with_carry_over(&address, tokens, &failed);
+                    let limited = pool::rate_limited_chains();
+                    let rate_limited_chain_ids = failed
+                        .iter()
+                        .copied()
+                        .filter(|chain| limited.contains(chain))
+                        .collect();
                     BalanceShellResult::FetchSettled {
                         address,
                         pull,
                         tokens,
                         failed_chain_ids: failed,
-                        // The pool's rate-limit classification is a separate
-                        // question this cut does not yet ask it. Empty is the
-                        // honest answer, and it degrades to "failed" rather
-                        // than inventing a transient.
-                        rate_limited_chain_ids: Vec::new(),
+                        // Of the chains that failed, the ones the pool saw
+                        // only rate limits on: "still loading", not "broken"
+                        // — nobody is sent to swap RPCs over a busy provider
+                        // (the web's `getRateLimitedChains`, 078 W-08).
+                        rate_limited_chain_ids,
                         now_ms: crate::executor::now_ms(),
                     }
                 }))

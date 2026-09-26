@@ -279,9 +279,19 @@ dapp_browser are fully wired. The gaps:
   — 666 · Key 2 after switching, 大表哥 after switching back.
 - **W-08 P2 · Rate-limited chains reported as broken** —
   `rate_limited_chain_ids` always empty (`executor/balance_dashboard.rs`).
+  *Fixed (T049):* the pool thread answers its core's `rate_limited_chains`;
+  a failed chain the pool saw only 429s on is "still updating", not broken.
+  Live, with Zora's only RPC a local 429 stub: the grey "Some balances are
+  still updating" and "Zora · Rate-limited · retrying automatically".
 - **W-09 P2 · Feed polls every 30 s** (web 10 s while visible).
+  *Fixed (T049):* a 10 s `LiveTick` while the wallet section shows in a window
+  that is shown and not minimized (asked of the system each beat); a 30 s
+  `FocusTick` otherwise. Logged live: 10 s shown, 30 s minimized or on
+  Settings, 10 s again on restore.
 - **W-10 P2 · manage_tokens** resident keeps the last Add Token state across
   visits (web starts a session per open); no native-network tab.
+  *Fixed (T049):* opening Add Token drops the ERC-20 session (the native tab
+  came with F-07). Live: "0x1234" and its error no longer greet the reopen.
 - **W-11 P2 · Explore**: `explore_sites` group rename/delete/hide/member
   removal never dispatched; site menu Share / Add to favourites / Open in
   new tab `None`; favourites "Edit" inert; fixture tabs and host shown until

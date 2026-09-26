@@ -5222,6 +5222,10 @@ impl WalletPage {
                 resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
                     resident.dispatch(NetEvent::WizardReset, cx);
                 });
+                // And a fresh ERC-20 session: the web creates one per open and
+                // disposes it on close, so the last visit's address, its error
+                // and its found card do not greet the next (078 W-10).
+                resident::forget::<ManageTokens>(cx);
             }
         }
         if entry == FlowEntry::Send && self.identity.is_some() {
@@ -16310,6 +16314,12 @@ impl Render for WalletPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.watch_field_blurs(window, cx);
         self.watch_money(cx);
+        // The 10 s Activity poll runs while the Activity can be seen: the
+        // wallet section, in a window on screen (078 W-09).
+        crate::executor::activity_feed::set_visible(
+            self.identity.is_some() && self.section == Section::Wallet,
+            crate::onboarding::native_window_handle(window),
+        );
         let theme = Theme::of(self.theme_mode());
         // A survived panic (spec 038): the failure sheet, "Something went
         // wrong", with the report behind the disclosure.

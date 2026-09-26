@@ -119,7 +119,7 @@ fn to_record(row: &Value) -> Option<FeedTxRecord> {
 /// run found nothing, which is a true statement, and it is not a reason to
 /// show an error over a feed that is otherwise correct.
 fn sync_received(address: &str) -> u32 {
-    // One scan at a time. Ticks are 30 s apart and a twelve-chain discovery on
+    // One scan at a time. Ticks are 10 s apart and a twelve-chain discovery on
     // a bad network can outlive that; two of them overlapping would read the
     // same store, both find the same receipt missing, and both write it —
     // which is two rows and two celebrations for one payment. A scan that
@@ -326,14 +326,47 @@ static TICKING: AtomicBool = AtomicBool::new(false);
 ///
 /// Its words: "`FocusTick`/`LiveTick` cadence (focus + 30s auto-refresh, 10s
 /// while the Activity tab is visible) stays in the shell: which tab is visible
-/// is render-domain state the core never sees." A desktop window has one
-/// screen, always mounted, and no tab that comes and goes — so it takes the
-/// slower of the two and takes it always.
-///
-/// Thirty seconds is also the honest ceiling for what a tick costs here: each
-/// one is a receipt discovery across every chain the person holds on, not a
-/// local read.
-const TICK: Duration = Duration::from_secs(30);
+/// is render-domain state the core never sees." The web's home runs the 10 s
+/// `LiveTick` while its tab is visible (078 W-09); here that is the wallet
+/// section showing ([`set_visible`]) in a window that is on screen — shown
+/// and not minimized, asked of the system at each beat, since a minimized
+/// window is not re-rendered and could not say so itself. Otherwise every
+/// third beat — the 30 s auto-refresh. A scan that outlives a beat is not
+/// doubled: `sync_received` runs one at a time.
+const TICK: Duration = Duration::from_secs(10);
+/// Beats between two auto-refreshes while the Activity is out of sight (30 s).
+const HIDDEN_EVERY: u32 = 3;
+
+/// The wallet section — the Activity — is what the window is showing.
+static VISIBLE: AtomicBool = AtomicBool::new(false);
+/// The wallet window's native handle, for asking whether it is on screen.
+static WINDOW: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// What the page says, each frame: whether the Activity is the section
+/// showing, and which native window it is in (0 where there is none to ask).
+pub fn set_visible(visible: bool, window: isize) {
+    VISIBLE.store(visible, Ordering::Relaxed);
+    WINDOW.store(window, Ordering::Relaxed);
+}
+
+/// The Activity can be seen right now — the web's
+/// `document.visibilityState === 'visible'`.
+fn activity_on_screen() -> bool {
+    VISIBLE.load(Ordering::Relaxed) && window_on_screen(WINDOW.load(Ordering::Relaxed))
+}
+
+/// Shown and not minimized. Where the system cannot be asked, shown.
+fn window_on_screen(window: isize) -> bool {
+    #[cfg(windows)]
+    if window != 0 {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{IsIconic, IsWindowVisible};
+        let hwnd = window as windows_sys::Win32::Foundation::HWND;
+        // SAFETY: two read-only queries on a handle; a stale one answers 0.
+        return unsafe { IsWindowVisible(hwnd) != 0 && IsIconic(hwnd) == 0 };
+    }
+    let _ = window;
+    true
+}
 
 /// Boot the feed and keep it re-reading for the life of the process.
 ///
@@ -353,13 +386,22 @@ pub fn start_ticks(cx: &mut App) {
         return;
     }
     cx.spawn(async move |cx| {
+        let mut beat: u32 = 0;
         loop {
             cx.background_executor().timer(TICK).await;
+            beat = beat.wrapping_add(1);
+            let event = if activity_on_screen() {
+                Event::LiveTick
+            } else if beat.is_multiple_of(HIDDEN_EVERY) {
+                Event::FocusTick
+            } else {
+                continue;
+            };
             // Re-fetched each tick, for the reason the tracker's loop states:
             // a sign-out drops every resident, and the next sign-in's feed is
             // the one that must get the ticks.
             let feed = cx.update(|cx| resident::resident::<ActivityFeed>(cx));
-            feed.update(cx, |resident, cx| resident.dispatch(Event::FocusTick, cx));
+            feed.update(cx, |resident, cx| resident.dispatch(event, cx));
         }
     })
     .detach();
