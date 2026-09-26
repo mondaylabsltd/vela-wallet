@@ -13,7 +13,6 @@
 
 import { isPackagedApp } from '$lib/extension/page-url';
 import type { FailureKind } from '../generated/FailureKind';
-import type { KeyMethod } from '../generated/KeyMethod';
 
 /** The native relying party, shared by the extension. See `relyingPartyId`. */
 const RELYING_PARTY_NATIVE = 'getvela.app';
@@ -288,22 +287,6 @@ export function hasPasskeyOverride(): boolean {
 	return override !== null;
 }
 
-/**
- * Where a pinned ceremony points the browser: the WebAuthn L3 `hints` value for
- * the route the account signed in over (founder, 2026-09-26 — the route is the
- * core's answer, read in `$lib/signing/sign-challenge.ts`). Without a hint the
- * browser looks wherever it would on its own and, finding a credential on this
- * machine, goes straight to Touch ID — wrong for somebody who signed in with
- * their phone or the security key in their hand. The transports that make the
- * route reachable come with the route: a credential registered as `internal`
- * is never offered over a QR code unless the request also says `hybrid`.
- */
-const ROUTE_HINT: Record<Exclude<KeyMethod, 'trusted_signer'>, string> = {
-	platform: 'client-device',
-	hybrid: 'hybrid',
-	security_key: 'security-key'
-};
-
 /** Abort the pending ceremony, if any (the core's `cancel_passkey_sign`). */
 export function cancelSign(): void {
 	pendingSign?.abort();
@@ -376,9 +359,7 @@ export async function sign(
 	 * end for somebody holding a phone and no key (device-found 2026-08-26).
 	 * Browsers route on the same field.
 	 */
-	transports = '',
-	/** The route the account signed in over; none for a ceremony that is not a signature. */
-	route?: Exclude<KeyMethod, 'trusted_signer'>
+	transports = ''
 ): Promise<Assertion> {
 	if (override) return override.sign(challengeHex, [credentialId]);
 	assertSupported();
@@ -396,7 +377,6 @@ export async function sign(
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
-				...(route ? { hints: [ROUTE_HINT[route]] } : {}),
 				allowCredentials: [
 					{
 						type: 'public-key',

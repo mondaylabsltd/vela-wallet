@@ -55,7 +55,11 @@ export async function signChallenge(
 			`this key lives behind ${route.signer_origin ?? 'a Trusted Signer page'}, which only the Vela app can open`
 		);
 	}
-	return sign(toHex(challenge), route.credential_id, route.transports, route.method);
+	// The one credential, over the transports the core names — where it was
+	// chosen to be and where the sign-in found it — and no WebAuthn hint: the
+	// web's sign-in applies none, and a signature must never be stricter than
+	// the ceremony that proved the key answers.
+	return sign(toHex(challenge), route.credential_id, route.transports);
 }
 
 /**

@@ -2,7 +2,9 @@
  * Where a signature goes (founder, 2026-09-26): the key the account signed in
  * with, over the route it signed in over — never a choice made per signature.
  * The account record says which, the real core reads it (`signInRoute`), and
- * this asserts what the browser is then actually asked.
+ * this asserts what the browser is then actually asked: that one credential,
+ * over the transports the core names, and never a WebAuthn hint — the web's
+ * sign-in applies none, so a signature must not be stricter than it.
  *
  * A record written before it named its sign-in key must sign exactly as it
  * always did: every founding key allowed with its own transports, no hint, the
@@ -117,7 +119,7 @@ describe('an account that names its sign-in key', () => {
 		saveAccount(wallet({ credential_id: 'bb02', method: 'security_key' }));
 		const { asked: request } = await attempt();
 		expect(asked).toHaveLength(1);
-		expect(request?.hints).toEqual(['security-key']);
+		expect('hints' in (request ?? {})).toBe(false);
 		// Not keys[0], and not every key for the browser to choose between.
 		expect(pinned(request)).toEqual([{ id: 'bb02', transports: ['usb', 'nfc', 'ble'] }]);
 	});
@@ -125,8 +127,20 @@ describe('an account that names its sign-in key', () => {
 	it('reaches a passkey registered on this device over a phone when that is how it signed in', async () => {
 		saveAccount(wallet({ credential_id: 'aa01', method: 'hybrid' }));
 		const { asked: request } = await attempt();
-		expect(request?.hints).toEqual(['hybrid']);
+		expect('hints' in (request ?? {})).toBe(false);
 		expect(pinned(request)).toEqual([{ id: 'aa01', transports: ['hybrid', 'internal'] }]);
+	});
+
+	it('"This device" answered by a phone or a key: the route names both, with no hint', async () => {
+		saveAccount(
+			wallet({ credential_id: 'aa01', method: 'platform', transports: 'usb,nfc,ble,hybrid' })
+		);
+		const { asked: request } = await attempt();
+		expect(asked).toHaveLength(1);
+		expect('hints' in (request ?? {})).toBe(false);
+		expect(pinned(request)).toEqual([
+			{ id: 'aa01', transports: ['internal', 'usb', 'nfc', 'ble', 'hybrid'] }
+		]);
 	});
 
 	it('refuses a key behind a Trusted Signer page — the web has none — without a ceremony', async () => {
