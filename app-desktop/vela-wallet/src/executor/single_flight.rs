@@ -130,10 +130,17 @@ mod tests {
                     })
                 })
                 .collect();
-            handles.into_iter().map(|h| h.join().expect("joins")).collect()
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("joins"))
+                .collect()
         });
         assert_eq!(answers, vec![42, 42, 42]);
-        assert_eq!(reads.load(Ordering::SeqCst), 1, "one request for three askers");
+        assert_eq!(
+            reads.load(Ordering::SeqCst),
+            1,
+            "one request for three askers"
+        );
     }
 
     #[test]

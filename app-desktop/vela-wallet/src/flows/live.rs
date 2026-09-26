@@ -2620,7 +2620,11 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             fill(
                 &s.split_remaining,
                 "amount",
-                format!("{} {symbol}", crate::wallet::live::token_amount_text_down(left)).trim(),
+                format!(
+                    "{} {symbol}",
+                    crate::wallet::live::token_amount_text_down(left)
+                )
+                .trim(),
             )
             .into()
         }),
@@ -3401,7 +3405,10 @@ pub fn batch_total(
             Some(left) => fill(
                 &s.split_remaining,
                 "amount",
-                &format!("{} {symbol}", crate::wallet::live::token_amount_text_down(left)),
+                &format!(
+                    "{} {symbol}",
+                    crate::wallet::live::token_amount_text_down(left)
+                ),
             ),
             None => fill(
                 &s.balance_label,
