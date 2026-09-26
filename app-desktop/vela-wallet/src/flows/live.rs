@@ -770,6 +770,7 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
             badge: tint(chain_id),
             address: SharedString::from(shorten(address)),
             address_full: SharedString::from(address.to_owned()),
+            logo: crate::marks::chain_logo_url(chain_id),
         })
         .collect();
     ReceiveList {
@@ -1489,6 +1490,7 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> S
         notice: chain.map(|chain_id| {
             let name = crate::executor::custom_tokens::network_name(chain_id);
             (
+                chain_id,
                 crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
                 SharedString::from(crate::settings::model::lettermark(&name)),
                 SharedString::from(crate::wallet::fill(
@@ -1687,7 +1689,7 @@ mod sweep_tests {
                 .unwrap_or_else(|| unreachable!("sweeping"));
             assert_eq!(selection.selected, vec![true, true, false]);
             assert_eq!(selection.dimmed, vec![false, false, true]);
-            let (_, letter, text) = selection
+            let (_, _, letter, text) = selection
                 .notice
                 .clone()
                 .unwrap_or_else(|| unreachable!("a chain is pinned"));

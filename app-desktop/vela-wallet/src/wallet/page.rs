@@ -5113,6 +5113,26 @@ impl WalletPage {
         body: Div,
         cx: &mut Context<Self>,
     ) -> Div {
+        self.panel_scaffold_foot(theme, title, lead, underline, body, None, cx)
+    }
+
+    /// [`panel_scaffold_with`], with a foot pinned under the scrolling body —
+    /// the web's `.pinned` (078 F-09): on the page's colour, a hairline above
+    /// it where the list ends, padded as the body is.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the scaffold and its one extra slot"
+    )]
+    fn panel_scaffold_foot(
+        &mut self,
+        theme: &Theme,
+        title: SharedString,
+        lead: Option<gpui::AnyElement>,
+        underline: bool,
+        body: Div,
+        foot: Option<Div>,
+        cx: &mut Context<Self>,
+    ) -> Div {
         // The web's `ThirdPanel` (`wallet/ui/ThirdPanel.svelte`): header
         // 16/24 with a gap of 8 — its top here is the caption strip's
         // clearance, which the browser does not have — a 36px close with a
@@ -5215,15 +5235,25 @@ impl WalletPage {
                     self.panel_scroll_subject = subject;
                     self.panel_scroll.set_offset(gpui::point(px(0.), px(0.)));
                 }
+                // With a foot, the body takes its own height and shrinks
+                // (then scrolls) only when it must, so the foot sits under
+                // the content and pins to the bottom once the list overflows
+                // — CSS `sticky`, as the web's `.pinned` is (078 F-09).
+                let with_foot = foot.is_some();
+                // Content-sized, both levels shrinkable flex items: a
+                // `size_full` scroll view has no height to take from a parent
+                // that is itself sized by content, and collapsed to nothing.
                 div()
                     .relative()
-                    .flex_1()
+                    .when(with_foot, |el| el.flex_initial().flex().flex_col())
+                    .when(!with_foot, |el| el.flex_1())
                     .min_h(px(0.))
                     .child(
                         div()
                             .id("panel-body")
                             .track_scroll(&self.panel_scroll)
-                            .size_full()
+                            .when(with_foot, |el| el.w_full().flex_initial().min_h(px(0.)))
+                            .when(!with_foot, |el| el.size_full())
                             .overflow_y_scroll()
                             .px(px(24.))
                             .pb(px(24.))
@@ -5231,6 +5261,16 @@ impl WalletPage {
                     )
                     .children(crate::ui::vertical_scrollbar(theme, &self.panel_scroll))
             })
+            .children(foot.map(|foot| {
+                div()
+                    .flex_none()
+                    .px(px(24.))
+                    .pt(px(4.))
+                    .bg(theme.bg_base)
+                    .border_t_1()
+                    .border_color(theme.divider)
+                    .child(foot)
+            }))
     }
 
     /// The flow column: spec 015's panel scaffold plus the back chevron the
@@ -5241,13 +5281,14 @@ impl WalletPage {
         title: SharedString,
         back: Option<SharedString>,
         body: Div,
+        foot: Option<Div>,
         cx: &mut Context<Self>,
     ) -> Div {
         // The root of a flow has nowhere to step back TO — closing the column
         // and stepping back one level are different gestures, and only the
         // close button should offer the first.
         let Some(_label) = back else {
-            return self.panel_scaffold_with(theme, title, None, true, body, cx);
+            return self.panel_scaffold_foot(theme, title, None, true, body, foot, cx);
         };
         let chevron = div()
             .id("flow-back")
@@ -5269,12 +5310,13 @@ impl WalletPage {
             .on_click(cx.listener(|this, _, _, cx| {
                 this.flow_back(cx);
             }));
-        self.panel_scaffold_with(
+        self.panel_scaffold_foot(
             theme,
             title,
             Some(chevron.into_any_element()),
             true,
             body,
+            foot,
             cx,
         )
     }
@@ -14879,7 +14921,7 @@ impl WalletPage {
                         self.tick_receipt(cx);
                     }
                     actions.copy = Some(self.flow_copy_action(cx));
-                    let rendered = panels::render(
+                    let (rendered, foot) = panels::render_parts(
                         &body,
                         theme,
                         &mut self.icons,
@@ -14891,7 +14933,15 @@ impl WalletPage {
                     // level deep: closing the whole column is not the same
                     // gesture as stepping back one.
                     let back = (self.flows.len() > 1).then(|| self.flow_strings.back.clone());
-                    columns.child(self.flow_scaffold(theme, title, back, rendered, cx))
+                    // The web body's 1.4 under everything the panel does not
+                    // set itself (078 F-11): gpui's ~1.6 default made every
+                    // flow screen taller than the web's, row by row.
+                    let rendered =
+                        rendered.line_height(gpui::relative(crate::wallet::components::LINE_BODY));
+                    let foot = foot.map(|foot| {
+                        foot.line_height(gpui::relative(crate::wallet::components::LINE_BODY))
+                    });
+                    columns.child(self.flow_scaffold(theme, title, back, rendered, foot, cx))
                 }
             },
         };

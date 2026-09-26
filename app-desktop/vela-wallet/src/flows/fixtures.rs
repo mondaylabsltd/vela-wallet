@@ -183,6 +183,9 @@ pub struct NetworkRow {
     pub address: SharedString,
     /// The whole address, for the row's copy button.
     pub address_full: SharedString,
+    /// The chain's logo, over the lettered badge (078 F-11). `None` in the
+    /// mocks, and for a chain the index has no logo for.
+    pub logo: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -429,7 +432,9 @@ pub struct SendSelection {
     pub select_all: SharedString,
     /// "Gnosis selected — a multi-token send stays on one network…", with the
     /// chain's own mark beside it. `None` until the first pick names a chain.
-    pub notice: Option<(u32, SharedString, SharedString)>,
+    /// `(chain_id, tint, letter, text)` — the chain's logo is drawn, the
+    /// tinted letter is what shows while it loads or when it has none.
+    pub notice: Option<(u32, u32, SharedString, SharedString)>,
 }
 
 #[derive(Clone)]
@@ -852,6 +857,7 @@ fn receive_list(s: &FlowStrings) -> ReceiveList {
                 badge: (n.color)(),
                 address: ADDRESS_DISPLAY.into(),
                 address_full: crate::wallet::fixtures::ADDRESS_FULL.into(),
+                logo: None,
             })
             .collect(),
     }
