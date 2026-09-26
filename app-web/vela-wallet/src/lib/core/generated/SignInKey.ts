@@ -20,6 +20,15 @@ export type SignInKey = { credential_id: string,
  */
 method: KeyMethod, 
 /**
+ * Where the key actually answered from: the sign-in assertion's
+ * attachment (`internal`, or `usb,nfc,ble,hybrid` for "not this
+ * device"), or the transports the key reported when it was made. A
+ * system sheet may answer a choice from somewhere else — "This device"
+ * picked, a phone scanned — so the route names both, and a later
+ * signature can reach the key wherever the sign-in found it.
+ */
+transports?: string, 
+/**
  * With `method = trusted_signer`, the page the ceremony ran on (spec 075).
  */
 signer_origin?: string | null, };

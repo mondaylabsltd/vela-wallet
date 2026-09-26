@@ -226,6 +226,14 @@ pub struct SignInKey {
     /// the key reported at registration: a synced passkey minted on a phone
     /// (`internal`) is reached from a desktop by scanning a code.
     pub method: KeyMethod,
+    /// Where the key actually answered from: the sign-in assertion's
+    /// attachment (`internal`, or `usb,nfc,ble,hybrid` for "not this
+    /// device"), or the transports the key reported when it was made. A
+    /// system sheet may answer a choice from somewhere else — "This device"
+    /// picked, a phone scanned — so the route names both, and a later
+    /// signature can reach the key wherever the sign-in found it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub transports: String,
     /// With `method = trusted_signer`, the page the ceremony ran on (spec 075).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signer_origin: Option<String>,
@@ -258,11 +266,13 @@ impl Account {
         } else {
             String::new()
         };
+        let transports = match crate::wallet_keys::transports_of_method(method) {
+            Some(routed) => crate::wallet_keys::joined_transports(routed, &key.transports),
+            None => String::new(),
+        };
         Some(crate::wallet_keys::SignRoute {
             credential_id: key.credential_id.clone(),
-            transports: crate::wallet_keys::transports_of_method(method)
-                .unwrap_or_default()
-                .to_owned(),
+            transports,
             method: method.to_owned(),
             signer_origin,
         })
@@ -822,6 +832,7 @@ mod tests {
         Some(SignInKey {
             credential_id: credential_id.to_owned(),
             method,
+            transports: String::new(),
             signer_origin: None,
         })
     }
@@ -845,12 +856,35 @@ mod tests {
         );
     }
 
+    /// "This device" was picked, and the system sheet was answered by a phone
+    /// or a key on the desk (a cross-platform attachment). The route names the
+    /// choice AND where the key was found, so the next signature is not aimed
+    /// only at an authenticator that does not hold it.
+    #[test]
+    fn the_route_also_names_where_the_sign_in_found_the_key() {
+        let mut account = two_keys(signed_in("first", KeyMethod::Platform));
+        if let Some(key) = account.signed_in_with.as_mut() {
+            key.transports = "usb,nfc,ble,hybrid".to_owned();
+        }
+        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        assert_eq!(route.method, "platform");
+        assert_eq!(route.transports, "internal,usb,nfc,ble,hybrid");
+
+        // Found where it was chosen: nothing added, nothing repeated.
+        if let Some(key) = account.signed_in_with.as_mut() {
+            key.transports = "internal".to_owned();
+        }
+        let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+        assert_eq!(route.transports, "internal");
+    }
+
     #[test]
     fn a_trusted_signer_sign_in_signs_on_its_page() {
         let mut account = two_keys(None);
         account.signed_in_with = Some(SignInKey {
             credential_id: "first".to_owned(),
             method: KeyMethod::TrustedSigner,
+            transports: String::new(),
             signer_origin: Some("https://sign.getvela.app".to_owned()),
         });
         let route = account.sign_in_route().unwrap_or_else(|| unreachable!());

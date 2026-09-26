@@ -510,6 +510,19 @@ pub fn transports_of_method(method: &str) -> Option<&'static str> {
     }
 }
 
+/// Both transport lists, the first's order kept, each value once — a route
+/// that names where a key was chosen to be AND where it was found.
+#[must_use]
+pub fn joined_transports(first: &str, second: &str) -> String {
+    let mut joined: Vec<&str> = Vec::new();
+    for value in first.split(',').chain(second.split(',')).map(str::trim) {
+        if !value.is_empty() && !joined.contains(&value) {
+            joined.push(value);
+        }
+    }
+    joined.join(",")
+}
+
 /// The JSON door: `null` for `auto`, an unknown method, or a wallet with no
 /// usable credential.
 #[must_use]

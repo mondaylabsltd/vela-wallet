@@ -188,12 +188,13 @@ impl SendHost {
     ) -> Self {
         let channel = CeremonyChannel::new();
         let mut ctx = SendContext::new(&account, channel.ceremony(window_handle));
-        // The send has no "Sign with" of its own: it signs the way Settings
-        // says every signature starts (spec 071), read once as it opens.
+        // The send signs with the key the account signed in with (founder,
+        // 2026-09-26); the Trusted Signer's page, when that is where it
+        // signs, as Settings names it as the send opens.
         let (trusted_signer, changed) = trusted_signer::Channel::new();
         ctx.trusted_signer = trusted_signer;
         let preference = resident::resident::<SignPref>(cx).read(cx).view();
-        ctx.sign_with(&preference.method, &preference.signer_url);
+        ctx.follow_sign_in(&preference.signer_url);
         let send = CoreHost::<Send>::new();
         let view = send.view();
         let display_code = display.code.clone();
@@ -1305,6 +1306,7 @@ mod tests {
                     signer_origin: None,
                 })
                 .collect(),
+            signed_in_with: None,
         };
         storage::save_account(&account).unwrap_or_else(|e| unreachable!("{e}"));
         storage::save_active_index(0).unwrap_or_else(|e| unreachable!("{e}"));
@@ -1909,6 +1911,7 @@ mod tests {
                 public_key_hex: "04aa".to_owned(),
                 created_at_iso: String::new(),
                 keys: Vec::new(),
+                signed_in_with: None,
             };
             let _ = storage::save_account(&account);
             account.id = "cred1".to_owned();
