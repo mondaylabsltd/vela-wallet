@@ -93,7 +93,12 @@
 						</span>
 						<span class="pills">
 							{#each row.pills as pill (pill.text)}
-								<span class="pill" data-tone={pill.tone}>{pill.text}</span>
+								<span class="pill" data-tone={pill.tone}
+									>{#if pill.tone === 'signs_here'}<Icon
+											icon={UTILITY_ICONS.check}
+											size="xs"
+										/>{/if}{pill.text}</span
+								>
 							{/each}
 						</span>
 					{/snippet}
@@ -228,12 +233,18 @@
 		color: var(--color-fg-muted);
 	}
 
+	/*
+		The name keeps room of its own. With none, long pills (ru: "Вход
+		выполнен", "Подтверждение при использовании", "Привязан к устройству")
+		squeezed it to nothing and laid over the holder line — the pills wrap
+		first, and the holder · fingerprint line may wrap under the name.
+	*/
 	.who {
 		display: flex;
 		flex: 1;
 		flex-direction: column;
 		gap: var(--space-xs);
-		min-width: 0;
+		min-width: 9em;
 	}
 
 	.name {
@@ -275,9 +286,10 @@
 		cursor: pointer;
 	}
 
+	/* Shrinks to its widest pill and wraps, end-aligned, before the name gives way. */
 	.pills {
 		display: flex;
-		flex: none;
+		flex: 0 1 auto;
 		flex-wrap: wrap;
 		justify-content: flex-end;
 		gap: var(--space-sm);
@@ -308,11 +320,27 @@
 
 	/* The explorer's pills: a hairline capsule, tinted by what it vouches for. */
 	.pill {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-xs);
 		padding: var(--space-xs) var(--space-md);
 		border: var(--border-hairline) solid currentColor;
 		border-radius: var(--radius-full);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		white-space: nowrap;
+	}
+
+	/*
+		The key this device signs with (founder, 2026-09-26: it must stand out).
+		The one FILLED pill, first in the row; the hairline stays, invisible, so
+		it is exactly as tall as the outlined ones beside it. Success, not accent
+		— accent is for money and for submitting.
+	*/
+	.pill[data-tone='signs_here'] {
+		border-color: transparent;
+		background: var(--color-success-soft);
+		color: var(--color-success-base);
+		font-weight: var(--weight-medium);
 	}
 
 	.pill[data-tone='verified'] {

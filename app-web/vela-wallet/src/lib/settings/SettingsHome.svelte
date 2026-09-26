@@ -156,7 +156,6 @@
 		'date-format': 'date-format',
 		'time-format': 'time-format',
 		'fee-speed': 'fee-speed',
-		'sign-with': 'sign-with',
 		feedback: 'feedback'
 	};
 
@@ -236,8 +235,6 @@
 				return model.timeSheet.title;
 			case 'fee-speed':
 				return model.feeSpeedSheet.title;
-			case 'sign-with':
-				return model.signWithSheet.title;
 			case 'clear-caches':
 				return model.clearCachesSheet.title;
 			// The row being cleared or removed names it: "localhost:8814",
@@ -274,8 +271,6 @@
 				return model.timeSheet.subtitle;
 			case 'fee-speed':
 				return model.feeSpeedSheet.subtitle;
-			case 'sign-with':
-				return model.signWithSheet.subtitle;
 			case 'feedback':
 				return model.feedback.subtitle;
 			default:
@@ -511,16 +506,6 @@
 						sheet={model.feeSpeedSheet}
 						onselect={(id) => {
 							onprefevent?.({ kind: 'fee-speed', id });
-							close();
-						}}
-					/>
-				{:else if overlay === 'sign-with'}
-					<!-- Spec 071: the DEFAULT "Sign with", stored. A signing sheet's
-					     own pick signs that one request and never comes through here. -->
-					<SelectSheetBody
-						sheet={model.signWithSheet}
-						onselect={(id) => {
-							onprefevent?.({ kind: 'sign-with', id });
 							close();
 						}}
 					/>

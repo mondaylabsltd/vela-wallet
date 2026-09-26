@@ -820,6 +820,8 @@ object I18nKeys {
         const val KEYS_TRANSPORT = "settingsModals.keys.transport"
         const val KEYS_ATTESTATION = "settingsModals.keys.attestation"
         const val KEYS_USER_VERIFIED = "settingsModals.keys.userVerified"
+        /** The key this device signs with (2026-09-26) — 当前登录 / "Signed in". */
+        const val KEYS_SIGNS_HERE = "settingsModals.keys.signsHere"
         const val KEYS_COPY = "componentsUi.signing.copyValue"
         const val KEYS_COPIED = "receive.copied"
         const val BACKUP_EXPLAIN = "settingsModals.backup.explain"

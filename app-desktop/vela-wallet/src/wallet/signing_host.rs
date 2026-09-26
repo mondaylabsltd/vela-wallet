@@ -37,7 +37,7 @@ use vela_core::app::clear_signing::{
 use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
-use vela_core::app::sign_pref::{self, SignPref};
+use vela_core::app::sign_pref::SignPref;
 use vela_core::app::sign_request::{
     Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation, SignQuotedFee, SignRequest,
     SignShellResult, SignView,
@@ -106,11 +106,6 @@ pub struct SigningHost {
     pub responded: bool,
     /// Answers for a site, drained by the page.
     answers: Vec<TransportAnswer>,
-    /// "Sign with": this request's choice, and whether its list is open. It
-    /// starts at the default Settings keeps (`sign_pref`) and never writes
-    /// back to it — a choice here is about this one request.
-    pub sign_method: String,
-    pub sign_with_open: bool,
     /// The fee coin list, open in the sheet (the web's `feeOpen`).
     pub fee_open: bool,
     sign: CoreHost<SignRequest>,
@@ -164,25 +159,6 @@ pub struct SigningHost {
 }
 
 impl SigningHost {
-    /// `None` toggles the list; an id picks a method and closes it. Only a
-    /// name this build offers is taken (`sign_pref::parse_method`); the Clear
-    /// Signer is routed to the page Settings names right now.
-    pub fn sign_with(&mut self, id: Option<&str>, cx: &mut Context<Self>) {
-        let Some(id) = id else {
-            self.sign_with_open = !self.sign_with_open;
-            return;
-        };
-        if let Some(method) = sign_pref::parse_method(id) {
-            let page = crate::resident::resident::<SignPref>(cx)
-                .read(cx)
-                .view()
-                .signer_url;
-            self.ctx.choose_method(method, &page);
-            method.clone_into(&mut self.sign_method);
-        }
-        self.sign_with_open = false;
-    }
-
     /// The Trusted Signer's waiting sheet and its last word (spec 071).
     pub fn trusted_signer(&self) -> Arc<trusted_signer::Channel> {
         Arc::clone(&self.ctx.trusted_signer)
@@ -223,8 +199,6 @@ impl SigningHost {
             request_id: request.id.clone(),
             responded: false,
             answers: Vec::new(),
-            sign_method: "auto".to_owned(),
-            sign_with_open: false,
             fee_open: false,
             origin: request.origin.clone(),
             chain_id: request.chain_id,
@@ -250,13 +224,14 @@ impl SigningHost {
         })
         .detach();
         speed_control::reset(&mut host, cx);
-        // Every request starts at the default "Sign with" (spec 071). Read
-        // once: the sheet's own picker is the person's say from here on.
-        let method = crate::resident::resident::<SignPref>(cx)
+        // Where this request signs is the account's sign-in route (founder,
+        // 2026-09-26); the Trusted Signer's page, when it is one, as Settings
+        // names it right now.
+        let page = crate::resident::resident::<SignPref>(cx)
             .read(cx)
             .view()
-            .method;
-        host.sign_with(Some(&method), cx);
+            .signer_url;
+        host.ctx.follow_sign_in(&page);
         // The Trusted Signer's channel speaks up whenever a ceremony waits,
         // ends, or wants the page opened. The stream ends with the host.
         cx.spawn(async move |host, cx| {

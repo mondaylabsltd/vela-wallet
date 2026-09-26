@@ -324,16 +324,6 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					value: m.feeSpeed.fast,
 					trailing: 'chevron'
 				},
-				// Spec 071, beside the speed: the other thing every signature
-				// starts at. The fixture draws the factory default and the
-				// official page.
-				{
-					id: 'sign-with',
-					icon: 'pencil',
-					title: m.signing.title,
-					value: m.signing.methods.auto,
-					trailing: 'chevron'
-				},
 				{
 					id: 'storage',
 					icon: 'hard-drive',
@@ -768,26 +758,6 @@ function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
 	};
 }
 
-/**
- * The default "Sign with" (spec 071): the four this shell offers, in the
- * core's order, named as the signing sheet names them. The core's fifth, the
- * Trusted Signer, is not one of them — the web wallet has none. The subtitle is load-bearing, as the
- * speed sheet's is: this is where every signature STARTS, and a single one
- * can still be signed another way.
- */
-function signWithSheet(m: SettingsMessages): SelectSheetModel {
-	return {
-		title: m.signing.title,
-		subtitle: m.signing.subtitle,
-		rows: [
-			{ id: 'auto', label: m.signing.methods.auto, selected: true },
-			{ id: 'platform', label: m.signing.methods.platform },
-			{ id: 'hybrid', label: m.signing.methods.hybrid },
-			{ id: 'security_key', label: m.signing.methods.security_key }
-		]
-	};
-}
-
 function currencySheet(m: SettingsMessages): SelectSheetModel {
 	return {
 		title: m.currency.title,
@@ -1134,7 +1104,6 @@ export function buildMobileState(
 		languageSheet: languageSheet(m, 'zh'),
 		currencySheet: currencySheet(m),
 		feeSpeedSheet: feeSpeedSheet(m),
-		signWithSheet: signWithSheet(m),
 		numberSheet: formatSheet(
 			m,
 			m.localization.numberTitle,
@@ -1195,8 +1164,6 @@ export function buildDesktopState(
 		// Spec 068, in the phone's own order: the 高级 section puts 交易速度
 		// between 服务端点 and 存储, and this list mirrors that list.
 		{ id: 'fee-speed', icon: 'clock', label: m.advanced.feeSpeedTitle },
-		// Spec 071, beside the speed as on the phone.
-		{ id: 'signing', icon: 'pencil', label: m.signing.title },
 		{ id: 'storage', icon: 'hard-drive', label: m.storage.title },
 		// Spec 081 FR-016. The wide layout had no way in at all — the report was
 		// reachable only from `/gallery`, which no person who owns this wallet
@@ -1294,18 +1261,6 @@ export function buildDesktopState(
 					value: m.feeSpeed.fast
 				}
 			]
-		},
-		signing: {
-			title: m.signing.title,
-			description: m.signing.subtitle,
-			rows: [
-				{
-					id: 'sign-with',
-					label: m.signing.title,
-					kind: 'dropdown',
-					value: m.signing.methods.auto
-				}
-			],
 		},
 		networks: {
 			title: m.advanced.networksTitle,

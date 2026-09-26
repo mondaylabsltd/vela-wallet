@@ -189,11 +189,8 @@ enum SettingsFixtures {
                     SettingsRowModel(id: feeSpeedRow, title: loc.t("settings.advanced.feeSpeedTitle"),
                                      icon: .clock, subtitle: loc.t("settings.advanced.feeSpeedSubtitle"),
                                      value: loc.t("send.gasTier.fast")),
-                    // Spec 071: how this device signs by default, and which
-                    // Trusted Signer page it opens — beside the speed, as every
-                    // client places them.
-                    SettingsRowModel(id: signWithRow, title: loc.t("settings.signing.title"),
-                                     icon: .lock, value: loc.t("common.automatic")),
+                    // Spec 071: which Trusted Signer page this device opens —
+                    // beside the speed, as every client places it.
                     SettingsRowModel(id: signerPageRow, title: loc.t("settings.signing.pageTitle"),
                                      icon: .link2, value: loc.t("settings.signing.pageOfficial")),
                     SettingsRowModel(id: "storage", title: loc.t(k.storageTitle),
@@ -537,27 +534,8 @@ enum SettingsFixtures {
         )
     }
 
-    /// The Settings row ids of the signing preferences (spec 071, 075).
-    static let signWithRow = "sign-with"
+    /// The Settings row id of the Trusted Signer page (spec 071, 075).
     static let signerPageRow = "signer-page"
-
-    /// The default "Sign with" sheet: every value the core offers, in its
-    /// order and in the signing sheet's own words — the Trusted Signer with the
-    /// line on what it does.
-    static func signWithSheet(_ loc: Loc, offered: [String], selected: String) -> SelectSheetModel {
-        SelectSheetModel(
-            title: loc.t("settings.signing.title"),
-            rows: offered.compactMap { id in
-                SigningLive.signMethodTitle(id, loc: loc).map { title in
-                    SelectRowModel(
-                        id: id, label: title, selected: id == selected,
-                        detail: SigningLive.signMethodDetail(id, loc: loc)
-                    )
-                }
-            },
-            subtitle: loc.t("settings.signing.subtitle")
-        )
-    }
 
     private static func currencySheet(_ loc: Loc) -> SelectSheetModel {
         let k = I18nKeys.SettingsUi.self
@@ -805,11 +783,6 @@ enum SettingsFixtures {
             languageSheet: languageSheet(loc, current: "zh"),
             currencySheet: currencySheet(loc),
             feeSpeedSheet: feeSpeedSheet(loc, selected: "fast"),
-            // The machine's own first view: what it offers before anything
-            // was read — never a list kept here.
-            signWithSheet: signWithSheet(
-                loc, offered: SignPrefViewWire.initial?.offered ?? [], selected: "auto"
-            ),
             numberSheet: formatSheet(loc, title: loc.t(k.numberTitle),
                                      subtitle: loc.t(k.numberSubtitle), samples: numberSamples,
                                      notes: [4: loc.t(k.noteIndian)]),

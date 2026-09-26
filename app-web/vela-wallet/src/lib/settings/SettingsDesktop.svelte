@@ -126,8 +126,6 @@
 				return { title: model.localization.title, description: model.localization.description };
 			case 'fee-speed':
 				return { title: model.feeSpeed.title, description: model.feeSpeed.description };
-			case 'signing':
-				return { title: model.signing.title, description: model.signing.description };
 			case 'networks':
 				return { title: model.networks.title, description: model.networks.subtitle };
 			case 'rpc-providers':
@@ -318,25 +316,6 @@
 							ontoggle={() => toggleDropdown(row.id)}
 							onselect={(id) => {
 								onprefevent?.({ kind: 'fee-speed', id });
-								openDropdown = undefined;
-							}}
-						/>
-					</FormRow>
-				{/each}
-			{:else if page === 'signing'}
-				<!-- Spec 071. The default "Sign with" is the desktop's usual
-				     dropdown row; the Trusted Signer's page under it is the phone
-				     sheet's own body, so both layouts say the same about it. -->
-				{#each model.signing.rows as row (row.id)}
-					<FormRow label={row.label}>
-						<Dropdown
-							value={row.value ?? ''}
-							label={row.label}
-							open={openDropdown === row.id}
-							rows={row.options}
-							ontoggle={() => toggleDropdown(row.id)}
-							onselect={(id) => {
-								onprefevent?.({ kind: 'sign-with', id });
 								openDropdown = undefined;
 							}}
 						/>

@@ -2,6 +2,7 @@ package app.getvela.wallet
 
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.settings.KeyPillTone
 import app.getvela.wallet.feature.settings.SettingsFixtures
 import app.getvela.wallet.feature.settings.SettingsLive
 import app.getvela.wallet.feature.settings.SettingsScreenState
@@ -183,12 +184,59 @@ class RegistryBackupTest {
         for ((wire, source) in listOf("registry" to WalletKeys.Source.Registry, "device" to WalletKeys.Source.Device, "not_registered" to WalletKeys.Source.NotRegistered)) {
             val script = ArrayDeque(listOf(ask, done(wire)))
             val seen = ArrayList<String>()
-            val result = WalletKeys(ethCall = { _, _, _ -> null }, step = { _, _, answers -> seen += answers; script.removeFirst() })
-                .read("0xsafe", listOf(WalletKeys.DeviceKey("04ab", "A", "")))
+            val result = WalletKeys(ethCall = { _, _, _ -> null }, step = { _, _, answers, _ -> seen += answers; script.removeFirst() })
+                .read("0xsafe", listOf(WalletKeys.DeviceKey("04ab", "A", "")), "")
             assertEquals(source, result.source)
             assertEquals(KeyMethod.SecurityKey, result.rows.single().key.method)
             assertNull(result.rows.single().synced)
             assertEquals("failed", JSONArray(seen.last()).getJSONObject(0).getString("outcome"))
         }
+    }
+
+    /**
+     * Founder, 2026-09-26: the key this device signs with stands out. It wears
+     * the one FILLED pill, first in the row, labelled from the corpus; every
+     * other row keeps only the registry's outlined facts.
+     */
+    @Test
+    fun `the keys block - the key this device signs with wears the filled pill, first`() {
+        val rows = listOf(key("First"), key("Second").copy(signsHere = true), key("Third", synced = false))
+        val block = SettingsLive.withWalletKeys(model, WalletKeys.Result(WalletKeys.Source.Registry, rows), null, strings).keys!!
+        assertEquals(
+            listOf(listOf("Cloud-synced"), listOf("Signed in", "Cloud-synced"), listOf("Device-bound")),
+            block.rows.map { row -> row.pills.map { it.text } },
+        )
+        assertEquals(KeyPillTone.SignsHere, block.rows[1].pills.first().tone)
+        assertTrue(
+            "only the signing row is marked",
+            block.rows.filterIndexed { index, _ -> index != 1 }.all { row -> row.pills.none { it.tone == KeyPillTone.SignsHere } },
+        )
+    }
+
+    /** Every step of the walk — the fallback too — is asked with the account's sign-in credential. */
+    @Test
+    fun `the keys walk - carries the sign-in credential on every step, and each key's credential`() = runBlocking<Unit> {
+        val ask = JSONObject().put("type", "ask").put("requests", JSONArray().put(JSONObject().put("type", "eth_call").put("id", "groups@100").put("chain_id", 100).put("to", "0xreg").put("data", "0xd"))).toString()
+        val credentials = ArrayList<String>()
+        val devices = ArrayList<String>()
+        // Asks forever: the walk gives up after its rounds and falls back to the device alone.
+        WalletKeys(ethCall = { _, _, _ -> null }, step = { _, device, _, credential -> credentials += credential; devices += device; ask })
+            .read("0xsafe", listOf(WalletKeys.DeviceKey("04ab", "A", "", credentialId = "c2")), "c2")
+        assertTrue(credentials.size > 1)
+        assertTrue("every call: $credentials", credentials.all { it == "c2" })
+        assertEquals("c2", JSONArray(devices.first()).getJSONObject(0).getString("credential_id"))
+    }
+
+    /** Through the real core: the row whose public key the sign-in credential names, and no other. */
+    @Test
+    fun `the keys walk - the core marks the sign-in key's row, and none for a record without one`() = runBlocking<Unit> {
+        val device = listOf(
+            WalletKeys.DeviceKey("04" + "11".repeat(64), "One", "internal", credentialId = "c1"),
+            WalletKeys.DeviceKey("04" + "22".repeat(64), "Two", "internal", credentialId = "c2"),
+        )
+        // No address: the device's own memory, and nobody to ask.
+        val walk = WalletKeys(ethCall = { _, _, _ -> null })
+        assertEquals(listOf(false, true), walk.read("", device, "c2").rows.map { it.signsHere })
+        assertEquals(listOf(false, false), walk.read("", device, "").rows.map { it.signsHere })
     }
 }

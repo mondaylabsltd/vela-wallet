@@ -51,14 +51,13 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				return { type: 'passkey_support', supported: Passkey.passkeySupported() };
 
 			case 'register_passkey': {
-				// `operation.method` selects the ceremony. On the web the browser's
-				// own passkey sheet already offers this device / a nearby device /
-				// a security key, and asking twice would be worse than not asking:
-				// the picker the person sees is the browser's, not ours. The choice
-				// still travels to the core so the key row can be labelled by it.
+				// `operation.method` selects the ceremony: the person was asked
+				// where the key should live, so it is minted there (founder,
+				// 2026-09-26) — not wherever the browser's own sheet looks first.
 				const registration = await Passkey.register(
 					operation.name,
-					operation.exclude_credential_ids
+					operation.exclude_credential_ids,
+					operation.method
 				);
 				return {
 					type: 'passkey_registered',
@@ -75,11 +74,13 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 
 			case 'sign_proof': {
 				// The purpose only selects which challenge label the core minted;
-				// the shell signs whatever it is handed.
+				// the shell signs whatever it is handed, with the key just minted
+				// or found, over the method it was minted or found with.
 				const assertion = await Passkey.sign(
 					challengeFor(operation.purpose),
 					operation.credential_id,
-					operation.transports
+					operation.transports,
+					operation.method
 				);
 				return { type: 'proof_signed', assertion: toAssertion(assertion), now_iso: nowIso() };
 			}
@@ -119,7 +120,8 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				const assertion = await Passkey.sign(
 					stripHex(challenge.challenge),
 					operation.credential_id,
-					operation.transports
+					operation.transports,
+					operation.method
 				);
 				const { buildMemberProof } = await import('./wasm-client');
 				return {
@@ -136,7 +138,7 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				return { type: 'legacy_name', name: await Registry.legacyName(operation.credential_id) };
 
 			case 'authenticate_passkey': {
-				const assertion = await Passkey.authenticate();
+				const assertion = await Passkey.authenticate(operation.method);
 				return {
 					type: 'passkey_authenticated',
 					assertion: toAssertion(assertion),

@@ -21,6 +21,8 @@ use wasm_bindgen::prelude::*;
 mod bridge;
 mod onboarding;
 mod settings;
+/// Where an account's signatures go: its sign-in key.
+mod signing;
 /// Only the REGISTRY's relying party: the web wallet offers no Trusted Signer
 /// (owner, 2026-09-23), but it can publish a unit whose keys were minted on
 /// one.
@@ -617,10 +619,17 @@ pub fn registry_resolve_unit_step(unit_id: u32, source: &str, answers_json: &str
 /// (spec 062). `device_keys_json` is the account record's `keys` array (or a
 /// one-element array built from the legacy scalars); the answer is `ask` with
 /// `eth_call`s to perform, or `done` with the rows and where they came from.
+/// `sign_in_credential` is the account's sign-in route credential
+/// (`signInRoute`), empty for none: its row is marked `signs_here`.
 #[wasm_bindgen(js_name = walletKeysStep)]
 #[must_use]
-pub fn wallet_keys_step(address: &str, device_keys_json: &str, answers_json: &str) -> String {
-    vela_core::wallet_keys::step_json(address, device_keys_json, answers_json)
+pub fn wallet_keys_step(
+    address: &str,
+    device_keys_json: &str,
+    answers_json: &str,
+    sign_in_credential: &str,
+) -> String {
+    vela_core::wallet_keys::step_json(address, device_keys_json, answers_json, sign_in_credential)
 }
 
 /// **Backing the founding record up to Ethereum — the next step of the walk**

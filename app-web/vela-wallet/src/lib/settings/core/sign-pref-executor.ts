@@ -6,15 +6,14 @@
  * preference, persist a preference) against the same store, so there is one
  * way a committed preference reaches disk in this shell.
  *
- * Both keys live under the `vela.` prefix and **survive sign-out**: how a
- * person signs, and which Trusted Signer page they trust, belong to them and
- * the device rather than to one account. Neither is listed in
- * `device-storage.ts` — a preference is not a cache.
+ * The key lives under the `vela.` prefix and **survives sign-out**: which
+ * Trusted Signer page a person trusts belongs to them and the device rather
+ * than to one account. It is not listed in `device-storage.ts` — a preference
+ * is not a cache.
  *
- * The stored values are handed back RAW. Whether a string is a method this
- * build offers, or a page it would open, is the core's to judge on the way
- * in — a value this build does not understand reads as "never chose" rather
- * than being coerced here.
+ * The stored value is handed back RAW. Whether a string is a page this build
+ * would open is the core's to judge on the way in — a value this build does
+ * not understand reads as "never chose" rather than being coerced here.
  *
  * Failure contract (shared effect loop): nothing rejects.
  */
@@ -25,8 +24,6 @@ import type { SignPrefShellResult } from '$lib/core/generated/SignPrefShellResul
 
 export type SignPrefEffect = { id: number; operation: SignPrefOperation };
 
-/** The default "Sign with". */
-export const SIGN_METHOD_KEY = 'vela.signMethod';
 /** The Trusted Signer page a person chose; absent = the official one. */
 export const TRUSTED_SIGNER_URL_KEY = 'vela.trustedSignerUrl';
 
@@ -35,16 +32,8 @@ export async function executeSignPrefOperation(
 ): Promise<SignPrefShellResult> {
 	const operation = effect.operation;
 	switch (operation.type) {
-		case 'read_stored': {
-			const [method, signerUrl] = await Promise.all([
-				getItem(SIGN_METHOD_KEY),
-				getItem(TRUSTED_SIGNER_URL_KEY)
-			]);
-			return { type: 'stored', method: method ?? null, signer_url: signerUrl ?? null };
-		}
-		case 'write_method':
-			await setItem(SIGN_METHOD_KEY, operation.method);
-			return { type: 'written' };
+		case 'read_stored':
+			return { type: 'stored', signer_url: (await getItem(TRUSTED_SIGNER_URL_KEY)) ?? null };
 		case 'write_signer_url':
 			if (operation.url === null) await removeItem(TRUSTED_SIGNER_URL_KEY);
 			else await setItem(TRUSTED_SIGNER_URL_KEY, operation.url);
@@ -60,11 +49,9 @@ export function signPrefOperationFailure(effect: SignPrefEffect): SignPrefShellR
 	const operation = effect.operation;
 	switch (operation.type) {
 		case 'read_stored':
-			// An unreadable preference means "the person never chose": `auto` and
-			// the official page — exactly how this wallet signed before the
-			// preference existed. It must never read as a page nobody picked.
-			return { type: 'stored', method: null, signer_url: null };
-		case 'write_method':
+			// An unreadable preference means "the person never chose": the
+			// official page. It must never read as a page nobody picked.
+			return { type: 'stored', signer_url: null };
 		case 'write_signer_url':
 			// Best effort, as every preference write is. What is on screen stays;
 			// the next launch reads the old value.

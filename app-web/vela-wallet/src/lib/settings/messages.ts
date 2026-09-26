@@ -88,20 +88,11 @@ export interface SettingsMessages {
 		slowHint: string;
 	};
 	/**
-	 * Spec 071: the default "Sign with" and the Trusted Signer's page, beside
-	 * the speed. The method names are the signing sheet's own (the create
-	 * flow's for where a passkey is, `common.automatic`, the Trusted Signer's
-	 * title) — one set of words, so Settings and the sheet cannot call the
-	 * same choice two different things.
+	 * Spec 071: the Trusted Signer — its title, which names a key that lives
+	 * behind its page, and its page.
 	 */
 	signing: {
-		title: string;
-		subtitle: string;
 		methods: {
-			auto: string;
-			platform: string;
-			hybrid: string;
-			security_key: string;
 			trusted_signer: string;
 		};
 		/** The Trusted Signer's one line, under its name. */
@@ -377,6 +368,8 @@ export interface SettingsMessages {
 		transport: string;
 		attestation: string;
 		userVerified: string;
+		/** The key this device signs with — the one it signed in with. */
+		signsHere: string;
 		copy: string;
 		copied: string;
 	};
@@ -483,11 +476,6 @@ export const SETTINGS_KEYS = [
 	'send.gasTierHintFast',
 	'send.gasTierHintStandard',
 	'send.gasTierHintSlow',
-	'settings.signing.title',
-	'settings.signing.subtitle',
-	'onboarding.create.methodPlatformTitle',
-	'onboarding.create.methodHybridTitle',
-	'onboarding.create.methodSecurityKeyTitle',
 	'componentsUi.signing.trustedSignerTitle',
 	'componentsUi.signing.trustedSignerBody',
 	'settings.signing.pageTitle',
@@ -520,6 +508,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.keys.transport',
 	'settingsModals.keys.attestation',
 	'settingsModals.keys.userVerified',
+	'settingsModals.keys.signsHere',
 	'settingsModals.backup.explain',
 	'componentsUi.signing.copyValue',
 	'receive.copied',

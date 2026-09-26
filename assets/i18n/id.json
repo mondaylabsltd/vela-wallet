@@ -1652,7 +1652,8 @@
    "credential": "Kredensial",
    "transport": "Transport",
    "attestation": "Atestasi",
-   "userVerified": "Perlu verifikasi saat digunakan"
+   "userVerified": "Perlu verifikasi saat digunakan",
+   "signsHere": "Sedang masuk"
   }
  },
  "contacts": {

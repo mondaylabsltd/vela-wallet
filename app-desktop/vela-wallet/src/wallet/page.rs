@@ -8690,8 +8690,8 @@ impl WalletPage {
             return;
         }
         // `VELA_SIGN_PROBE=1` (debug builds): raise the wallet's own signing column
-        // once, with its "Sign with" list open, so the column can be LOOKED at —
-        // there is no way to click this app from a shell. A zero-value call to
+        // once, so the column can be LOOKED at — there is no way to click this
+        // app from a shell. A zero-value call to
         // itself on Gnosis; nothing is signed unless somebody slides.
         #[cfg(all(debug_assertions, not(target_os = "linux")))]
         if std::env::var("VELA_SIGN_PROBE").as_deref() == Ok("1") {
@@ -8704,9 +8704,6 @@ impl WalletPage {
                 },
                 cx,
             );
-            if let Some(host) = self.signing_host.clone() {
-                host.update(cx, |host, cx| host.sign_with(None, cx));
-            }
         }
         self.backup_for = Some(account.address.clone());
         self.backup_check = None;
@@ -8735,13 +8732,21 @@ impl WalletPage {
                 .collect()
         };
         let keys_address = account.address.clone();
+        let sign_in_credential = account
+            .sign_in_route()
+            .map(|route| route.credential_id)
+            .unwrap_or_default();
         cx.spawn(async move |page, cx| {
             let asked = keys_address.clone();
             let answer = cx
                 .background_executor()
-                .spawn(
-                    async move { crate::executor::registry::wallet_keys(&keys_address, &device) },
-                )
+                .spawn(async move {
+                    crate::executor::registry::wallet_keys(
+                        &keys_address,
+                        &device,
+                        &sign_in_credential,
+                    )
+                })
                 .await;
             page.update(cx, |page, cx| {
                 if page.backup_for.as_deref() == Some(asked.as_str()) {
@@ -8931,6 +8936,7 @@ impl WalletPage {
         // label on the line naming which page.
         let trusted_signer = trusted_signer_words(s);
         let user_verified = s.keys_user_verified.clone();
+        let signs_here = s.keys_signs_here.clone();
         let labels = (
             s.keys_public_key.clone(),
             s.keys_credential.clone(),
@@ -9045,6 +9051,7 @@ impl WalletPage {
                     }
                     let mut meta = div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .gap(px(6.))
                         .text_size(theme::text_row_sub())
@@ -9055,10 +9062,13 @@ impl WalletPage {
                             .child("·")
                             .child(div().font_family(theme::font_mono()).child(fingerprint));
                     }
+                    // The name keeps room to be read: in a long language the
+                    // pills wrap onto more lines rather than squeezing it to a
+                    // letter per line (ru, found 2026-09-26).
                     row = row.child(
                         div()
                             .flex_1()
-                            .min_w(px(0.))
+                            .min_w(px(180.))
                             .flex()
                             .flex_col()
                             .gap(px(2.))
@@ -9070,6 +9080,44 @@ impl WalletPage {
                             )
                             .child(meta),
                     );
+                    let mut badges = div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .justify_end()
+                        .gap(px(8.))
+                        .min_w(px(0.));
+                    // The key this device signs with stands out from every
+                    // other row (founder, 2026-09-26): filled, first, ticked —
+                    // the explorer's pills beside it are only outlined.
+                    if key.signs_here {
+                        badges = badges.child(
+                            div()
+                                .id("settings-key-signs-here")
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .px(px(8.))
+                                .py(px(2.))
+                                .rounded_full()
+                                .bg(theme.success_soft)
+                                // Same height as the outlined pills beside it.
+                                .border_1()
+                                .border_color(theme.success_soft)
+                                .text_size(theme::text_row_sub())
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme.success_base)
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::Check,
+                                    false,
+                                    theme.success_base,
+                                    12.,
+                                ))
+                                .child(signs_here.clone()),
+                        );
+                    }
                     // The registry explorer's pills; one nobody can vouch for is not drawn.
                     let mut pills: Vec<(gpui::SharedString, gpui::Hsla)> = Vec::new();
                     if key.user_verified == Some(true) {
@@ -9083,7 +9131,7 @@ impl WalletPage {
                         });
                     }
                     for (text, colour) in pills {
-                        row = row.child(
+                        badges = badges.child(
                             div()
                                 .flex_none()
                                 .px(px(8.))
@@ -9096,6 +9144,7 @@ impl WalletPage {
                                 .child(text),
                         );
                     }
+                    row = row.child(badges);
 
                     // What the row opens onto: the explorer's facts, the two a
                     // person pastes elsewhere copyable. Nothing to open when only
@@ -10433,57 +10482,13 @@ impl WalletPage {
         .with_priority(1)
     }
 
-    /// How this device signs by default (spec 071): the five ways in the
-    /// core's order, the stored one ticked — choosing commits and persists at
-    /// once (`sign_pref`) — and the Trusted Signer's page under them. Every
-    /// signing sheet STARTS at the choice; none writes back to it.
+    /// The Trusted Signer's page (spec 071) — where a wallet created or
+    /// signed into through the Trusted Signer signs. How a signature is
+    /// routed is not a setting: the account signs with the key it signed in
+    /// with (founder, 2026-09-26).
     fn settings_signing(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
         let view = resident::resident::<SignPref>(cx).read(cx).view();
-        let s = &self.settings;
-        // The core's ways, in its order, the stored one ticked — and the one
-        // that is not a place a passkey is says what it is.
-        let rows: Vec<DetailRow> = view
-            .offered
-            .iter()
-            .map(|method| {
-                let name = s
-                    .sign_with_options
-                    .iter()
-                    .find(|(id, _)| id == method)
-                    .map_or_else(
-                        || SharedString::from(method.clone()),
-                        |(_, title)| title.clone(),
-                    );
-                let line = (method == vela_core::trusted_signer::METHOD)
-                    .then(|| s.trusted_signer_body.clone());
-                (name, line, *method == view.method)
-            })
-            .collect();
-        let value = rows
-            .iter()
-            .find(|(_, _, selected)| *selected)
-            .or(rows.first())
-            .map(|(name, _, _)| name.clone())
-            .unwrap_or_default();
-        let offered = view.offered.clone();
-        let chooser = cx.entity();
-        let menu = (self.settings_open_dropdown == Some("sign-with")).then(|| {
-            dropdown_menu_details(theme, &mut self.icons, &rows, 440., move |index, _, cx| {
-                if let Some(method) = offered.get(index).cloned() {
-                    resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                        pref.dispatch(SignPrefEvent::MethodChosen { method }, cx);
-                    });
-                }
-                chooser.update(cx, |this, cx| {
-                    this.settings_open_dropdown = None;
-                    cx.notify();
-                });
-            })
-        });
-        let label = self.settings.nav_signing.clone();
-        let control = self.settings_dropdown_control("sign-with", theme, value, menu, cx);
-        let list = form_row(theme, label, control);
 
         // The page. Its badge is where it is — "Official", or the host a
         // person chose — and the field holds what they are typing until Save
@@ -10632,7 +10637,6 @@ impl WalletPage {
             .flex_col()
             .gap(px(32.))
             .max_w(px(560.))
-            .child(list)
             .child(section.child(actions))
     }
 
@@ -14633,7 +14637,6 @@ impl WalletPage {
                 model.signer_name.clone(),
                 &model.signer_seed,
             ))
-            .children(self.sign_with_row(theme, cx))
             .children((!model.confirm_label.is_empty()).then(|| {
                 signing_components::slide_to_confirm(
                     theme,
@@ -14671,132 +14674,6 @@ impl WalletPage {
             );
         }
         column
-    }
-
-    /// "Sign with · Automatic ⌄" — WHERE the passkey that signs this request
-    /// is (founder, 2026-09-19: creating and signing in let a person choose;
-    /// signing took the first key's stored route), or the Trusted Signer's page
-    /// (spec 071). Per request — the host lives for one, and starts at the
-    /// default Settings keeps. Which key the choice pins is the core's
-    /// (`sign_route`). Opens in place: a dialog over the signing column is a
-    /// modal under a modal.
-    #[cfg(not(target_os = "linux"))]
-    fn sign_with_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
-        let (method, open) = {
-            let host = self.signing_host.as_ref()?.read(cx);
-            (host.sign_method.clone(), host.sign_with_open)
-        };
-        let options = self.signing.sign_with_options.clone();
-        let value = options
-            .iter()
-            .find(|(id, _)| *id == method)
-            .map_or_else(|| options[0].1.clone(), |(_, title)| title.clone());
-        fn pick(
-            id: Option<&'static str>,
-            cx: &mut Context<WalletPage>,
-        ) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static {
-            cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
-                if let Some(host) = page.signing_host.clone() {
-                    host.update(cx, |host, cx| {
-                        host.sign_with(id, cx);
-                        cx.notify();
-                    });
-                }
-                cx.notify();
-            })
-        }
-        let mut block = div().flex().flex_col().gap(px(8.)).child(
-            div()
-                .id("signing-sign-with")
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .cursor_pointer()
-                .on_click(pick(None, cx))
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(self.signing.sign_with.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_base)
-                        .child(value),
-                )
-                .child(icon_img(
-                    &mut self.icons,
-                    if open {
-                        Icon::ChevronUp
-                    } else {
-                        Icon::ChevronDown
-                    },
-                    false,
-                    theme.fg_muted,
-                    14.,
-                )),
-        );
-        if open {
-            let mut list = div()
-                .flex()
-                .flex_col()
-                .p(px(4.))
-                .rounded(px(12.))
-                .bg(theme.bg_sunken);
-            for (index, (id, title)) in options.into_iter().enumerate() {
-                let selected = id == method;
-                let mut words = div().flex_1().flex().flex_col().gap(px(2.)).child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(if selected {
-                            theme.fg_base
-                        } else {
-                            theme.fg_muted
-                        })
-                        .child(title),
-                );
-                // The one choice that is not a place a passkey is says what
-                // it is — the create flow's lines only describe making a key.
-                if id == vela_core::trusted_signer::METHOD {
-                    words = words.child(
-                        div()
-                            .text_size(theme::text_label())
-                            .text_color(theme.fg_subtle)
-                            .child(self.signing.trusted_signer_body.clone()),
-                    );
-                }
-                let mut option = div()
-                    .id(("signing-sign-with-option", index))
-                    .flex()
-                    .items_center()
-                    .px(px(16.))
-                    .py(px(10.))
-                    .rounded(px(8.))
-                    .cursor_pointer()
-                    .hover(|el| el.bg(theme.bg_raised))
-                    .on_click(pick(Some(id), cx))
-                    .child(words);
-                if selected {
-                    option = option.child(icon_img(
-                        &mut self.icons,
-                        Icon::Check,
-                        false,
-                        theme.accent,
-                        14.,
-                    ));
-                }
-                list = list.child(option);
-            }
-            block = block.child(list);
-        }
-        Some(block)
-    }
-
-    #[cfg(target_os = "linux")]
-    fn sign_with_row(&mut self, _theme: &Theme, _cx: &mut Context<Self>) -> Option<Div> {
-        None
     }
 
     /// The fee row's tap, and one listener per fee coin in the relay's order
@@ -17099,19 +16976,10 @@ fn page_host(url: &str) -> String {
         .to_owned()
 }
 
-/// The Trusted Signer's caption, taken out of the list the "Sign with" sheet and
-/// the Settings page both draw from.
-///
-/// Not a key of its own: the corpus's paths are pinned, and one way of signing
-/// named twice is the drift spec 075 was raised over. The core always offers
-/// the route (`wallet_keys::SIGN_METHODS`), which
-/// `settings::tests::the_sign_with_words_resolve` pins, so the search finds it.
+/// The Trusted Signer's caption: the title its Settings page wears, so one
+/// route is never named two ways — the drift spec 075 was raised over.
 fn trusted_signer_words(s: &SettingsStrings) -> SharedString {
-    s.sign_with_options
-        .iter()
-        .find(|(method, _)| *method == vela_core::trusted_signer::METHOD)
-        .map(|(_, words)| words.clone())
-        .unwrap_or_default()
+    s.nav_signing.clone()
 }
 
 /// Who is holding a key, for the line under its name in the keys list.
@@ -17185,8 +17053,8 @@ mod tests {
     /// cannot reach. The row is built here from the account record's own keys,
     /// so the whole chain is walked: a `DeviceKey` carrying the origin the
     /// record stored, through the core's row builder, to the two lines a person
-    /// reads. And the caption is the "Sign with" sheet's own words, so the keys
-    /// list and the picker never name one route two ways.
+    /// reads. And the caption is the Trusted Signer page's own title, so the
+    /// keys list and Settings never name one route two ways.
     #[test]
     fn a_key_behind_a_page_is_captioned_as_the_trusted_signer() {
         let loc = Loc::from_env();
@@ -17199,16 +17067,7 @@ mod tests {
         let trusted_signer = super::trusted_signer_words(&s);
         assert!(
             !trusted_signer.is_empty(),
-            "the Trusted Signer's caption went missing from the sheet's list"
-        );
-        assert_eq!(
-            Some(trusted_signer.clone()),
-            SigningStrings::resolve(&loc)
-                .sign_with_options
-                .iter()
-                .find(|(method, _)| *method == vela_core::trusted_signer::METHOD)
-                .map(|(_, words)| words.clone()),
-            "the keys list and the sheet disagree about what this route is called"
+            "the Trusted Signer's caption went missing"
         );
 
         // As `ensure_backup_check` builds them: one key behind a page, one on
@@ -17230,7 +17089,7 @@ mod tests {
                 signer_origin: None,
             },
         ];
-        let rows = match vela_core::wallet_keys::step("", &device, &[]) {
+        let rows = match vela_core::wallet_keys::step("", &device, &[], "") {
             vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
             vela_core::wallet_keys::KeysStep::Ask { .. } => {
                 unreachable!("asked with no address, so nobody can be asked")

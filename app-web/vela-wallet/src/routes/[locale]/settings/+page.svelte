@@ -58,8 +58,6 @@
 		withLiveFeeSpeedDesktop,
 		withLiveNetworks,
 		withLiveNetworksDesktop,
-		withLiveSigning,
-		withLiveSigningDesktop,
 		withLiveStorage
 	} from '$lib/settings/live';
 	import { listGrants, revokeAll, revokeGrant } from '$lib/dapp/connections';
@@ -386,12 +384,8 @@
 					feeTierPreference.choose(event.id);
 				}
 				return;
-			// Spec 071: how every signature starts, and the Trusted Signer's page.
-			// The core refuses a method it does not offer and an address it would
-			// not open (saying why in its view); nothing is judged here.
-			case 'sign-with':
-				signPreference.chooseMethod(event.id);
-				return;
+			// Spec 071: the Trusted Signer's page. The core refuses an address it
+			// would not open (saying why in its view); nothing is judged here.
 			case 'signer-page':
 				signPreference.submitSignerUrl(event.text);
 				return;
@@ -517,7 +511,6 @@
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
 		model = withLiveFeeSpeed(model, feeTierPreference.view);
-		model = withLiveSigning(model, signPreference.view);
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale);
@@ -569,7 +562,6 @@
 		// The desktop page reuses the phone sheet's rows — one list of tiers,
 		// one set of words, whichever layout is showing.
 		model = withLiveFeeSpeedDesktop(model, feeTierPreference.view, liveHome.feeSpeedSheet);
-		model = withLiveSigningDesktop(model, signPreference.view, liveHome.signWithSheet);
 		model = {
 			...model,
 			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }

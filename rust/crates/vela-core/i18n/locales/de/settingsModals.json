@@ -109,7 +109,8 @@
       "credential": "Anmeldedaten",
       "transport": "Transport",
       "attestation": "Attestierung",
-      "userVerified": "Bestätigung bei Nutzung"
+      "userVerified": "Bestätigung bei Nutzung",
+      "signsHere": "Angemeldet"
     }
   }
 }

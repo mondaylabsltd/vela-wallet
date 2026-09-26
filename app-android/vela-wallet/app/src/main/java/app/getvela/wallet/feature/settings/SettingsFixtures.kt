@@ -235,14 +235,7 @@ object SettingsFixtures {
                     subtitle = s.t(I18nKeys.SettingsUi.FEE_SPEED_SUBTITLE),
                     value = s.t(I18nKeys.Flows.GAS_TIER_FAST),
                 ),
-                // Spec 071: how signatures start, next to how sends are priced.
-                SettingsRowModel(
-                    id = SIGN_WITH_ROW,
-                    title = s.t("settings.signing.title"),
-                    icon = SettingsIcon.Zap,
-                    subtitle = s.t("settings.signing.subtitle"),
-                    value = s.t("common.automatic"),
-                ),
+                // Spec 071: which Trusted Signer page opens, next to how sends are priced.
                 SettingsRowModel(
                     id = SIGNER_PAGE_ROW,
                     title = s.t("settings.signing.pageTitle"),
@@ -688,8 +681,7 @@ object SettingsFixtures {
     /** The Settings row id of the default speed (spec 069). */
     const val FEE_SPEED_ROW = "fee-speed"
 
-    /** The Settings rows of the default "Sign with" and the Trusted Signer page (spec 071). */
-    const val SIGN_WITH_ROW = "sign-with"
+    /** The Settings row of the Trusted Signer page (spec 071). */
     const val SIGNER_PAGE_ROW = "signer-page"
 
 

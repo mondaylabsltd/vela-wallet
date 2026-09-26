@@ -335,8 +335,8 @@ class AppContainer(private val app: Application) {
     var trustedSignerTab: TrustedSignerTab? = null
 
     /**
-     * Spec 071: the fourth "Sign with" — one channel per process, one ceremony
-     * at a time. The page is `sign_pref`'s; the words are the corpus'.
+     * Spec 071: the Trusted Signer — one channel per process, one ceremony at a
+     * time. The page is `sign_pref`'s; the words are the corpus'.
      */
     val trustedSigner: TrustedSignerChannel by lazy {
         TrustedSignerChannel(
@@ -413,7 +413,6 @@ class AppContainer(private val app: Application) {
             },
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
-            signMethod = { settings.signPref.value.method },
             trustedSigner = { trustedSigner },
             // Spec 078: one source for the picker and the asset list.
             holdings = wallet.holdings,
@@ -565,9 +564,21 @@ class AppContainer(private val app: Application) {
                 name = if (index == 0) walletName else "",
                 transports = "",
                 signerOrigin = pages[key.publicKeyHex.removePrefix("0x").lowercase()].orEmpty(),
+                credentialId = key.credentialId,
             )
         }
     }
+
+    /**
+     * The credential this account signs with — its sign-in route's (the core's
+     * `signInRoute` over the stored record) — or empty for a record from before
+     * the sign-in key. The keys walk marks that key's row (2026-09-26).
+     */
+    suspend fun signInCredentialOf(address: String): String =
+        StoreAccountPort(AccountStore(app)).accountJson(address)
+            ?.let { runCatching { uniffi.vela_core_uniffi.signInRoute(it) }.getOrNull() }
+            ?.let { runCatching { JSONObject(it).optString("credential_id") }.getOrNull() }
+            .orEmpty()
 
     /** The active account's FIRST founding key — the one the registry files its groups under. */
     suspend fun foundingKeyOf(address: String): String? =
@@ -604,7 +615,6 @@ class AppContainer(private val app: Application) {
                 wallet = SignAccountRef(address = address, credential_id = credential),
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
-                defaultMethod = { settings.signPref.value.method },
                 trustedSigner = { trustedSigner },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
@@ -727,7 +737,7 @@ class AppContainer(private val app: Application) {
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             settings.ethereumDataBase().collect { base -> Marks.base = base }
         }
-        // Spec 071: how this device signs by default — read before any sheet can open.
+        // Spec 071: the Trusted Signer page — read before any signature can need it.
         settings.refreshSignPref()
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {

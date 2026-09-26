@@ -4,7 +4,7 @@
  * the list must be rewritten once in the current spelling.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadAccounts, normaliseAccount, STORAGE_KEYS } from './storage';
+import { loadAccounts, normaliseAccount, saveAccount, STORAGE_KEYS } from './storage';
 
 class MemoryStorage implements Storage {
 	#map = new Map<string, string>();
@@ -89,6 +89,31 @@ describe('loadAccounts', () => {
 		storage.setItem(STORAGE_KEYS.accounts, JSON.stringify([null, 'x', { id: 'only-id' }, CURRENT]));
 		expect(loadAccounts()).toEqual([CURRENT]);
 	});
+
+	/**
+	 * Founder, 2026-09-26: every signature reuses the key the account signed in
+	 * with, and the record is the only place that is written down. A save that
+	 * lost it would quietly hand the choice of key back to the browser.
+	 */
+	it('keeps the key the account signed in with through a save and a load', () => {
+		const signedIn = {
+			...CURRENT,
+			keys: [
+				...CURRENT.keys,
+				{ credential_id: 'cred-4', public_key_hex: '04aa', name: 'YubiKey', transports: 'usb,nfc' }
+			],
+			signed_in_with: { credential_id: 'cred-4', method: 'security_key' as const }
+		};
+		saveAccount(signedIn);
+		expect(loadAccounts()).toEqual([signedIn]);
+		// Signing in again with another key re-saves the held record by id.
+		const again = {
+			...signedIn,
+			signed_in_with: { credential_id: 'cred-3', method: 'hybrid' as const }
+		};
+		saveAccount(again);
+		expect(loadAccounts()).toEqual([again]);
+	});
 });
 
 describe('normaliseAccount', () => {
@@ -123,6 +148,15 @@ describe('normaliseAccount', () => {
 		// A key that lives nowhere special carries no field at all.
 		expect('signer_origin' in (normaliseAccount(EXPO_WITH_KEYS)?.keys[0] ?? {})).toBe(false);
 	});
+	it('carries the sign-in key through a rewrite', () => {
+		const signedInWith = { credential_id: 'cred-2', method: 'hybrid' as const };
+		const out = normaliseAccount({ ...EXPO_WITHOUT_KEYS, signed_in_with: signedInWith });
+		expect(out?.signed_in_with).toEqual(signedInWith);
+		expect(out?.keys).toEqual([]);
+		// A record that never named one carries no field at all.
+		expect('signed_in_with' in (normaliseAccount(EXPO_WITHOUT_KEYS) ?? {})).toBe(false);
+	});
+
 	it('ignores unknown fields on an old record', () => {
 		const out = normaliseAccount({ ...EXPO_WITHOUT_KEYS, extra: 1 });
 		expect(out?.created_at_iso).toBe('2026-08-01T00:00:00.000Z');

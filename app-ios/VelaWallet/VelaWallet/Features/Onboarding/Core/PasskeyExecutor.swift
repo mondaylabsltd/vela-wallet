@@ -241,112 +241,93 @@ final class PasskeyExecutor: NSObject {
         )
     }
 
-    /// An assertion. `credentialIdHex` pins it to one credential; `nil` is the
-    /// "who are you?" ceremony sign-in starts with.
-    /// - Parameter transports: WHERE the credential lives, as its authenticator
-    ///   reported at registration (`hybrid,internal`, `usb,nfc`, …), or empty
-    ///   when unknown.
-    ///
-    ///   iOS routes through its own sheet rather than off this field, so it is
-    ///   not the emergency here that it is on Android — where an entry with no
-    ///   transports made Credential Manager guess REMOVABLE SECURITY KEY for a
-    ///   passkey living on another phone (device-found 2026-08-26). It still
-    ///   sharpens the sheet: a credential known to live on a phone has no
-    ///   business offering a security-key row, and one on a security key should
-    ///   say which cable.
-    /// The reported cables, or every supported one when nothing was reported.
-    private static func securityKeyTransports(
-        _ hints: Set<String>
-    ) -> [ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport] {
-        let mapped: [ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport] =
-            hints.compactMap { hint in
-                switch hint {
-                case "usb": return .usb
-                case "nfc": return .nfc
-                case "ble": return .bluetooth
-                default: return nil
-                }
-            }
-        return mapped.isEmpty
-            ? ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported
-            : mapped
+    /// Which way an assertion goes. **The METHOD decides; transports are only
+    /// the allow-list's hint** — the rule Android keeps (2026-09-26), so the two
+    /// phones send the same route down the same path.
+    enum AssertionPath: Equatable {
+        /// OUR caBLE initiator — the scan method.
+        case hybrid
+        /// The app-owned CCID path to a security key.
+        case securityKey
+        /// The system sheet: the platform request, and the security-key
+        /// request beside it unless the key is known to live on a phone.
+        case system(offersSecurityKey: Bool)
     }
 
+    private static let removableTransports: Set<String> = ["usb", "nfc", "ble"]
+
+    /// The route's transports as tokens, in the order given.
+    private static func tokens(_ transports: String) -> [String] {
+        transports.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Does the credential live ONLY on something the person has to present —
+    /// a USB stick, an NFC card — and nowhere a vault can be consulted?
+    ///
+    /// A list that also names `internal` or `hybrid` does not: a sign-in route
+    /// names the method's own transports AND where the sign-in found the key,
+    /// so "This device" answered by a key on the desk reads
+    /// `internal,usb,nfc,ble,hybrid`. The system sheet reaches that key with
+    /// every hint and offers the security key itself (NFC included); the
+    /// app-owned USB path could only ask for it to be plugged in.
+    static func onlyPresented(_ transports: String) -> Bool {
+        let hints = Set(tokens(transports))
+        return !hints.isDisjoint(with: removableTransports) && hints.isDisjoint(with: ["internal", "hybrid"])
+    }
+
+    /// Whether the system sheet offers the security-key request beside the
+    /// platform one. Only a key known NOT to be removable goes without it — an
+    /// unknown set still offers both, which is what a mixed founding set needs.
+    private static func offersSecurityKey(_ transports: String) -> Bool {
+        let hints = Set(tokens(transports))
+        return hints.isEmpty || !hints.isDisjoint(with: removableTransports)
+    }
+
+    static func assertionPath(transports: String, method: KeyMethod) -> AssertionPath {
+        // THE METHOD OUTRANKS THE TRANSPORT HINTS. A caBLE credential is
+        // cross-platform, so its recovery proof arrives carrying the WIDE hint
+        // set ("usb,nfc,ble,hybrid") — with the removable branch first, a person
+        // who had just signed in by scanning a QR was told to plug in a USB
+        // security key they never owned (device-found 2026-08-28). The scan
+        // method reaches the credential on the OTHER phone over OUR caBLE.
+        if method == .hybrid { return .hybrid }
+        // A person who chose the hardware key, or a credential that is only
+        // ever presented, takes the app-owned CCID path, never the system's
+        // security-key provider (founder direction 2026-08-27); when no card is
+        // present it prompts to plug one in.
+        if method == .securityKey || onlyPresented(transports) { return .securityKey }
+        return .system(offersSecurityKey: offersSecurityKey(transports))
+    }
+
+    /// An assertion. `credentialIdHex` pins it to one credential; `nil` is the
+    /// "who are you?" ceremony sign-in starts with.
+    /// - Parameter transports: WHERE the credential lives — the route's list,
+    ///   or what its authenticator reported at registration (`hybrid,internal`,
+    ///   `usb,nfc`, …), or empty when unknown. It is the allow-list's hint; the
+    ///   method picks the path (`assertionPath`).
     func assert(
         challenge: Data,
         credentialIdHex: String?,
         transports: String = "",
         method: KeyMethod = .platform
     ) async throws -> Assertion {
-        let hints = Set(
-            transports.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        )
-        // THE METHOD OUTRANKS THE TRANSPORT HINTS, and the order of these two
-        // branches is load-bearing. A caBLE credential is cross-platform, so
-        // its recovery proof arrives carrying the WIDE hint set
-        // ("usb,nfc,ble,hybrid") — with the removable branch first, a person
-        // who had just signed in by scanning a QR was told to plug in a USB
-        // security key they never owned (device-found 2026-08-28). The scan
-        // method reaches the credential on the OTHER phone over OUR caBLE — a
-        // sign-in (no credential id) offers whatever it holds, a proof
-        // (recovery's second signature) pins the same credential the first
-        // used.
-        if method == .hybrid, let hybrid {
-            return try await hybrid.assert(challenge: challenge, credentialIdHex: credentialIdHex)
-        }
-        // A credential that lives on a removable key — OR a sign-in the person
-        // explicitly asked to do on a security key — takes the app-owned CCID
-        // path, ALWAYS, never the system's security-key provider. The
-        // `method == .securityKey` case is the "who are you?" sign-in where the
-        // person chose the hardware key on the welcome screen; the `removable`
-        // case is the create flow's member proof over a usb-transport
-        // credential. Both are our implementation's job; when no card is
-        // present it prompts to plug one in (founder direction 2026-08-27).
-        let removable = !hints.isDisjoint(with: ["usb", "nfc", "ble"])
-        if removable || method == .securityKey, let smartCard {
-            return try await smartCard.assert(challenge: challenge, credentialIdHex: credentialIdHex)
-        }
-
-        // Only when it is known NOT to be a removable key — an unknown set
-        // still offers both, which is what a mixed founding set needs.
-        let platformOnly = !hints.isEmpty && hints.isDisjoint(with: ["usb", "nfc", "ble"])
-        let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
-            relyingPartyIdentifier: relyingPartyId
-        )
-        let request = provider.createCredentialAssertionRequest(challenge: challenge)
-        request.userVerificationPreference = .required
-        if let credentialIdHex {
-            request.allowedCredentials = [
-                ASAuthorizationPlatformPublicKeyCredentialDescriptor(
-                    credentialID: try fromHex(s: credentialIdHex)
-                )
-            ]
-        }
-
-        // The security-key provider is offered ALONGSIDE the platform one on
-        // every assertion, not instead of it. A wallet whose founding set mixes
-        // a phone passkey and a hardware key has to be able to sign with
-        // whichever is at hand, and the person picks in the system sheet.
-        var requests: [ASAuthorizationRequest] = [request]
-        if !platformOnly {
-            let securityKeyProvider = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
-                relyingPartyIdentifier: relyingPartyId
-            )
-            let securityKeyRequest = securityKeyProvider.createCredentialAssertionRequest(
-                challenge: challenge
-            )
-            securityKeyRequest.userVerificationPreference = .required
-            if let credentialIdHex {
-                securityKeyRequest.allowedCredentials = [
-                    ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor(
-                        credentialID: try fromHex(s: credentialIdHex),
-                        transports: Self.securityKeyTransports(hints)
-                    )
-                ]
+        switch Self.assertionPath(transports: transports, method: method) {
+        case .hybrid:
+            if let hybrid {
+                return try await hybrid.assert(challenge: challenge, credentialIdHex: credentialIdHex)
             }
-            requests.append(securityKeyRequest)
+        case .securityKey:
+            if let smartCard {
+                return try await smartCard.assert(challenge: challenge, credentialIdHex: credentialIdHex)
+            }
+        case .system:
+            break
         }
-
+        let requests = try systemRequests(
+            challenge: challenge, credentialIdHex: credentialIdHex, transports: transports
+        )
         let authorization = try await perform(requests)
 
         guard let credential = authorization.credential
@@ -370,6 +351,68 @@ final class PasskeyExecutor: NSObject {
                 ? "cross-platform"
                 : "platform"
         )
+    }
+
+    /// The system sheet's requests, pinned to `credentialIdHex` when there is
+    /// one: the platform request (this phone, or a nearby one over the system's
+    /// own hybrid), and the security-key request ALONGSIDE it — not instead of
+    /// it — naming every removable cable the route lists. A wallet whose
+    /// founding set mixes a phone passkey and a hardware key has to be able to
+    /// sign with whichever is at hand, and the person picks in the sheet.
+    func systemRequests(
+        challenge: Data, credentialIdHex: String?, transports: String
+    ) throws -> [ASAuthorizationRequest] {
+        let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
+            relyingPartyIdentifier: relyingPartyId
+        )
+        let request = provider.createCredentialAssertionRequest(challenge: challenge)
+        request.userVerificationPreference = .required
+        if let credentialIdHex {
+            request.allowedCredentials = [
+                ASAuthorizationPlatformPublicKeyCredentialDescriptor(
+                    credentialID: try fromHex(s: credentialIdHex)
+                )
+            ]
+        }
+        var requests: [ASAuthorizationRequest] = [request]
+        guard Self.offersSecurityKey(transports) else { return requests }
+        let securityKeyProvider = ASAuthorizationSecurityKeyPublicKeyCredentialProvider(
+            relyingPartyIdentifier: relyingPartyId
+        )
+        let securityKeyRequest = securityKeyProvider.createCredentialAssertionRequest(
+            challenge: challenge
+        )
+        securityKeyRequest.userVerificationPreference = .required
+        if let credentialIdHex {
+            securityKeyRequest.allowedCredentials = [
+                ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor(
+                    credentialID: try fromHex(s: credentialIdHex),
+                    transports: Self.securityKeyTransports(transports)
+                )
+            ]
+        }
+        requests.append(securityKeyRequest)
+        return requests
+    }
+
+    /// The cables a security-key entry names: the route's, in its order, or
+    /// every supported one when it names none. A credential known to live on a
+    /// security key should say which cable.
+    private static func securityKeyTransports(
+        _ transports: String
+    ) -> [ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport] {
+        let mapped: [ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport] =
+            tokens(transports).compactMap { hint in
+                switch hint {
+                case "usb": return .usb
+                case "nfc": return .nfc
+                case "ble": return .bluetooth
+                default: return nil
+                }
+            }
+        return mapped.isEmpty
+            ? ASAuthorizationSecurityKeyPublicKeyCredentialDescriptor.Transport.allSupported
+            : mapped
     }
 
     static func random(_ count: Int) -> Data {

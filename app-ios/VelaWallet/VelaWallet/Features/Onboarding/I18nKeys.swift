@@ -354,6 +354,7 @@ enum I18nKeys {
         static let keysTransport = "settingsModals.keys.transport"
         static let keysAttestation = "settingsModals.keys.attestation"
         static let keysUserVerified = "settingsModals.keys.userVerified"
+        static let keysSignsHere = "settingsModals.keys.signsHere"
         static let keysCopy = "componentsUi.signing.copyValue"
         static let keysCopied = "receive.copied"
         static let backupExplain = "settingsModals.backup.explain"

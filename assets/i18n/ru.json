@@ -1658,7 +1658,8 @@
    "credential": "Учётные данные",
    "transport": "Транспорт",
    "attestation": "Аттестация",
-   "userVerified": "Подтверждение при использовании"
+   "userVerified": "Подтверждение при использовании",
+   "signsHere": "Вход выполнен"
   }
  },
  "contacts": {

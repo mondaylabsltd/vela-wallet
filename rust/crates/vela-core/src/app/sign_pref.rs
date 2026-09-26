@@ -1,25 +1,25 @@
-//! Machine — how this device signs by default (spec `071-clear-signer`).
+//! Machine — which Trusted Signer page this device opens (spec
+//! `071-clear-signer`).
 //!
 //! ```text
-//! refresh ─► LoadingStored ─► commit {method, signer url}
-//! method_chosen ─► persist + commit at once
+//! refresh ─► LoadingStored ─► commit {signer url}
 //! url_submitted ─┬─ an https / loopback page ─► persist + commit
 //!                └─ anything else ─► refused, nothing stored, the old page stands
 //! url_reset ─► remove + back to the official page
 //! ```
 //!
-//! Two preferences that belong together: the "Sign with" a signing sheet
-//! starts at (`auto`, a place a passkey is, or the Trusted Signer), and which
-//! Trusted Signer page the wallet opens. Shaped on [`super::fee_tier_pref`],
-//! this codebase's committed-preference machine, for the same reasons: the
-//! shell owns the keys (`vela.signMethod` and `vela.trustedSignerUrl`, under the
-//! `vela.` prefix that survives sign-out — how a person signs belongs to them
-//! and the device, not to one account) and the words; the core decides what
-//! may be stored and what shows when nothing can be.
+//! Shaped on [`super::fee_tier_pref`], this codebase's committed-preference
+//! machine, for the same reasons: the shell owns the key
+//! (`vela.trustedSignerUrl`, under the `vela.` prefix that survives sign-out)
+//! and the words; the core decides what may be stored and what shows when
+//! nothing can be.
 //!
-//! **A per-request choice never comes here.** The signing sheet's "Sign with"
-//! row changes one request; the next starts at this default again. Only
-//! Settings dispatches [`Event::MethodChosen`].
+//! **How a signature is routed is not a preference.** This machine once also
+//! kept a default "Sign with" that every signing sheet started at, with a
+//! per-request picker beside it. Founder, 2026-09-26: the person says where
+//! their passkey is when they create or sign in, and never again — the account
+//! records it ([`super::SignInKey`]) and every signature reuses it. A stored
+//! `vela.signMethod` from before is ignored.
 
 use crux_core::capability::Operation;
 use crux_core::macros::effect;
@@ -30,20 +30,6 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::trusted_signer::{self, SignerUrlError};
-use crate::wallet_keys::SIGN_METHODS;
-
-/// The factory default: do what the wallet always did.
-pub const FACTORY_METHOD: &str = "auto";
-
-/// A stored method name, or `None` when it is not one this build offers —
-/// which reads as "never chose" rather than being rewritten, so a newer
-/// build's value survives a trip through an older one.
-pub fn parse_method(raw: &str) -> Option<&'static str> {
-    SIGN_METHODS
-        .iter()
-        .copied()
-        .find(|method| *method == raw.trim())
-}
 
 // ---------------------------------------------------------------------------
 // Protocol
@@ -53,10 +39,8 @@ pub fn parse_method(raw: &str) -> Option<&'static str> {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignPrefOperation"))]
 pub enum SignPrefOperation {
-    /// Read `vela.signMethod` and `vela.trustedSignerUrl`, raw.
+    /// Read `vela.trustedSignerUrl`, raw.
     ReadStored,
-    /// Persist the default method (best effort).
-    WriteMethod { method: String },
     /// Persist the signer page; `None` removes the key — the official page.
     WriteSignerUrl { url: Option<String> },
 }
@@ -65,10 +49,7 @@ pub enum SignPrefOperation {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignPrefShellResult"))]
 pub enum SignPrefShellResult {
-    Stored {
-        method: Option<String>,
-        signer_url: Option<String>,
-    },
+    Stored { signer_url: Option<String> },
     Written,
 }
 
@@ -88,9 +69,6 @@ pub enum SignPrefEffect {
 pub enum Event {
     /// Mount / focus — re-read. Coalesced while a read is in flight.
     Refresh,
-    /// Settings: the default "Sign with". A name this build does not offer is
-    /// ignored.
-    MethodChosen { method: String },
     /// Settings: the Trusted Signer page, as typed.
     SignerUrlSubmitted { text: String },
     /// Settings: back to the official page.
@@ -115,7 +93,6 @@ enum Phase {
 
 #[derive(Default)]
 pub struct Model {
-    method: Option<&'static str>,
     /// A page the person chose, normalised. `None` ⇒ the official one.
     signer_url: Option<String>,
     /// Why the last submitted address was refused, until the next submit or
@@ -128,12 +105,6 @@ pub struct Model {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SignPrefView {
-    /// The "Sign with" every signing sheet starts at. Always an offered name.
-    pub method: String,
-    /// `false` ⇒ `method` is the factory default, not a choice.
-    pub method_committed: bool,
-    /// Every "Sign with" value, in the order a picker lists them.
-    pub offered: Vec<String>,
     /// The Trusted Signer page the wallet opens. Always usable.
     pub signer_url: String,
     /// `true` ⇒ the official page (nothing chosen, or the choice was reset).
@@ -166,20 +137,6 @@ impl App for SignPref {
                 model.phase = Phase::LoadingStored;
                 shell(model, SignPrefOperation::ReadStored)
             }
-            Event::MethodChosen { method } => {
-                let Some(method) = parse_method(&method) else {
-                    return Command::done();
-                };
-                model.attempt += 1;
-                model.phase = Phase::Idle;
-                model.method = Some(method);
-                shell(
-                    model,
-                    SignPrefOperation::WriteMethod {
-                        method: method.to_owned(),
-                    },
-                )
-            }
             Event::SignerUrlSubmitted { text } => match trusted_signer::signer_url(&text) {
                 Ok(url) => {
                     model.attempt += 1;
@@ -210,9 +167,8 @@ impl App for SignPref {
                     return Command::done();
                 }
                 match (model.phase, result) {
-                    (Phase::LoadingStored, SignPrefShellResult::Stored { method, signer_url }) => {
+                    (Phase::LoadingStored, SignPrefShellResult::Stored { signer_url }) => {
                         model.phase = Phase::Idle;
-                        model.method = method.as_deref().and_then(parse_method);
                         // Validated again: a key someone else wrote (or an
                         // older rule accepted) must not open a page this build
                         // would refuse to store.
@@ -241,9 +197,6 @@ impl App for SignPref {
             .to_owned()
         };
         SignPrefView {
-            method: model.method.unwrap_or(FACTORY_METHOD).to_owned(),
-            method_committed: model.method.is_some(),
-            offered: SIGN_METHODS.iter().map(|m| (*m).to_owned()).collect(),
             signer_uses_wallet_passkeys: trusted_signer::uses_wallet_passkeys(&signer_url),
             signer_url_is_default: model.signer_url.is_none(),
             signer_url,

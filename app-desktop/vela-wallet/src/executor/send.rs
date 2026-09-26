@@ -40,7 +40,7 @@ use vela_core::app::send::{
 };
 use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
-use vela_core::wallet_keys::DeviceKey;
+use vela_core::wallet_keys::{DeviceKey, SignRoute};
 
 use crate::executor::passkey::{self, Ceremony};
 use crate::executor::trusted_signer::{self, Ask};
@@ -67,89 +67,87 @@ pub struct SendContext {
     /// The founding keys, in order; the assertion's own credential picks the
     /// verifier among them.
     pub keys: Vec<WalletKey>,
-    /// Which ceremony to run — derived from the first key's transports.
+    /// Which ceremony to run: the route the account signed in over.
     pub key_method: KeyMethod,
     /// The credential the ceremony is pinned to, or `None` for the
-    /// discoverable "any key on this device" ask.
+    /// discoverable "any key on this device" ask (a record from before the
+    /// sign-in key whose first key is a security key).
     pub pinned_credential: Option<String>,
     pub ceremony: Ceremony,
     /// Raised by the sign closure the instant the prompt opens; the host
     /// polls it and dispatches `SigningStarted` once.
     pub signing_started: Arc<AtomicBool>,
-    /// Every founding key's credential id and stored transports — what the
-    /// core's `sign_route` reads to pin the key of a chosen kind.
-    pub device_keys: Vec<DeviceKey>,
+    /// Spec 075: the Trusted Signer page this account signs on — empty for
+    /// the page Settings names — or `None` when a passkey signs here.
+    pub signer_page: Option<String>,
+    /// The one key that page may sign with: the sign-in key. `None` for a
+    /// record from before it, whose every founding key may answer there.
+    pub page_key: Option<String>,
     /// The account's name: the Trusted Signer's page points the person at a
     /// passkey with it.
     pub account_name: Option<String>,
     /// The Trusted Signer (spec 071): whether this send goes to it, and its
-    /// waiting sheet. The host swaps in the channel it listens to; the one
-    /// made here routes nothing.
+    /// waiting sheet. The host swaps in the channel it listens to and then
+    /// hands it the page ([`Self::follow_sign_in`]); the one made here routes
+    /// nothing.
     pub trusted_signer: Arc<trusted_signer::Channel>,
 }
 
-/// Where a "Sign with" actually goes — the core's `sign_route`, in this
-/// shell's vocabulary.
+/// Where a signature goes — the core's route, in this shell's vocabulary.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Route {
     /// A ceremony this machine runs, pinned to one credential.
     Passkey(String, KeyMethod),
-    /// Spec 075: the Trusted Signer, at this page.
+    /// Spec 075: the Trusted Signer, at this page — empty for the page
+    /// Settings names.
     TrustedSigner(String),
 }
 
-/// Which key a "Sign with" pins, and how it is reached. `None` means "do what
-/// you always did": `auto` over a wallet whose keys are ordinary, a method
-/// this build does not know, a wallet with no usable credential.
-///
-/// **The route decides, not the name that was pressed.** `sign_route` answers
-/// `trusted_signer` for choices that are not it — `auto` follows a key minted
-/// behind a page, and a platform choice for a key only a self-hosted page can
-/// reach is sent there rather than to a sheet that cannot see it — and the
-/// page is then the KEY's own `signer_origin`, not the one in Settings. A
-/// wallet created on somebody's own deployment signs there and nowhere else
-/// (contract §1.2).
-#[must_use]
-pub fn sign_route_of(device: &[DeviceKey], method: &str, settings_page: &str) -> Option<Route> {
-    let route = vela_core::wallet_keys::sign_route(device, method)?;
+/// The core's answer as this shell routes it; `None` for a method this build
+/// does not know.
+fn route_of(route: SignRoute) -> Option<Route> {
     Some(match route.method.as_str() {
         "platform" => Route::Passkey(route.credential_id, KeyMethod::Platform),
         "hybrid" => Route::Passkey(route.credential_id, KeyMethod::Hybrid),
         "security_key" => Route::Passkey(route.credential_id, KeyMethod::SecurityKey),
-        vela_core::trusted_signer::METHOD => {
-            Route::TrustedSigner(if route.signer_origin.is_empty() {
-                settings_page.to_owned()
-            } else {
-                route.signer_origin
-            })
-        }
+        vela_core::trusted_signer::METHOD => Route::TrustedSigner(route.signer_origin),
         _ => return None,
     })
 }
 
+/// The page the Trusted Signer channel is pointed at: the account's own, or
+/// the page Settings names when its route names none.
+pub fn page_to_follow(signer_page: Option<&str>, settings_page: &str) -> Option<String> {
+    signer_page.map(|page| {
+        if page.is_empty() {
+            settings_page.to_owned()
+        } else {
+            page.to_owned()
+        }
+    })
+}
+
 impl SendContext {
-    /// From the stored account. The method routes on what the first key
-    /// recorded when it was minted: a phone signs over caBLE, a platform key
-    /// through the vault, everything else is a security key on the desk —
-    /// asked discoverably, so a multi-key wallet's OTHER keys on the same
-    /// device can answer too.
+    /// From the stored account (founder, 2026-09-26): the key it was created
+    /// or signed in with, over the route that reached it — chosen there and
+    /// never asked again. A record from before that was kept signs as it
+    /// always did: the route its first key recorded when it was minted, or
+    /// the page that key lives behind.
     pub fn new(account: &Account, ceremony: Ceremony) -> Self {
         let keys = user_op::key_set_of(account);
-        let transports = account
-            .keys
-            .first()
-            .map(|key| key.transports.as_str())
-            .unwrap_or_default();
-        let key_method = if transports.contains("hybrid") {
-            KeyMethod::Hybrid
-        } else if transports.contains("internal") {
-            KeyMethod::Platform
-        } else {
-            KeyMethod::SecurityKey
-        };
-        let pinned_credential = match key_method {
-            KeyMethod::SecurityKey => None,
-            _ => keys.first().map(|key| key.credential_id.clone()),
+        let (legacy_method, legacy_pinned) = first_key_route(account, &keys);
+        let sign_in = account.sign_in_route();
+        let page_key = sign_in
+            .as_ref()
+            .filter(|route| route.method == vela_core::trusted_signer::METHOD)
+            .map(|route| route.credential_id.clone());
+        let route = sign_in
+            .or_else(|| vela_core::wallet_keys::sign_route(&device_keys_of(account), "auto"))
+            .and_then(route_of);
+        let (key_method, pinned_credential, signer_page) = match route {
+            Some(Route::Passkey(credential, method)) => (method, Some(credential), None),
+            Some(Route::TrustedSigner(page)) => (legacy_method, legacy_pinned, Some(page)),
+            None => (legacy_method, legacy_pinned, None),
         };
         Self {
             keys,
@@ -157,41 +155,62 @@ impl SendContext {
             pinned_credential,
             ceremony,
             signing_started: Arc::new(AtomicBool::new(false)),
-            device_keys: account
-                .keys
-                .iter()
-                .map(|key| DeviceKey {
-                    credential_id: key.credential_id.clone(),
-                    public_key_hex: key.public_key_hex.clone(),
-                    name: key.name.clone(),
-                    transports: key.transports.clone(),
-                    // Spec 075: the page this key lives behind, untouched —
-                    // dropping it here would make `sign_route` forget where
-                    // the key is and offer a route that cannot reach it.
-                    signer_origin: key.signer_origin.clone(),
-                })
-                .collect(),
+            signer_page,
+            page_key,
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
             trusted_signer: trusted_signer::Channel::new().0,
         }
     }
 
-    /// The default "Sign with" from Settings (spec 071 — "every signature you
-    /// start in Vela begins here"). The send has no picker of its own, so the
-    /// default IS its choice: a place a passkey is re-pins the key the core
-    /// picks for it, the Trusted Signer routes the send to `page`, and `auto`
-    /// keeps the route derived from the first key.
-    pub fn sign_with(&mut self, method: &str, page: &str) {
-        match sign_route_of(&self.device_keys, method, page) {
-            Some(Route::Passkey(credential, key_method)) => {
-                self.pinned_credential = Some(credential);
-                self.key_method = key_method;
-                self.trusted_signer.choose(None);
-            }
-            Some(Route::TrustedSigner(page)) => self.trusted_signer.choose(Some(page)),
-            None => self.trusted_signer.choose(None),
-        }
+    /// Point the Trusted Signer channel at this account's page when it signs
+    /// on one. The host calls it once it has swapped in the channel it listens
+    /// to; `settings_page` stands in for a route that names no page.
+    pub fn follow_sign_in(&self, settings_page: &str) {
+        self.trusted_signer
+            .choose(page_to_follow(self.signer_page.as_deref(), settings_page));
     }
+}
+
+/// How a record from before the sign-in key signs: on what its first key
+/// recorded when it was minted — a phone signs over caBLE, a platform key
+/// through the vault, everything else is a security key on the desk, asked
+/// discoverably so a multi-key wallet's OTHER keys on the same device can
+/// answer too.
+fn first_key_route(account: &Account, keys: &[WalletKey]) -> (KeyMethod, Option<String>) {
+    let transports = account
+        .keys
+        .first()
+        .map(|key| key.transports.as_str())
+        .unwrap_or_default();
+    let method = if transports.contains("hybrid") {
+        KeyMethod::Hybrid
+    } else if transports.contains("internal") {
+        KeyMethod::Platform
+    } else {
+        KeyMethod::SecurityKey
+    };
+    let pinned = match method {
+        KeyMethod::SecurityKey => None,
+        _ => keys.first().map(|key| key.credential_id.clone()),
+    };
+    (method, pinned)
+}
+
+/// The founding keys as the core's `sign_route` reads them. Spec 075: each
+/// with the page it lives behind, untouched — dropping it would make the
+/// route forget where the key is.
+fn device_keys_of(account: &Account) -> Vec<DeviceKey> {
+    account
+        .keys
+        .iter()
+        .map(|key| DeviceKey {
+            credential_id: key.credential_id.clone(),
+            public_key_hex: key.public_key_hex.clone(),
+            name: key.name.clone(),
+            transports: key.transports.clone(),
+            signer_origin: key.signer_origin.clone(),
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -565,6 +584,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                         ask: &ask,
                         page,
                         channel: &ctx.trusted_signer,
+                        only: ctx.page_key.as_deref(),
                     },
                     None => Signer::Passkey(&mut sign),
                 };
@@ -644,7 +664,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vela_core::app::AccountKey;
+    use vela_core::app::{AccountKey, SignInKey};
 
     fn account(transports: &str, keys: usize) -> Account {
         Account {
@@ -662,17 +682,83 @@ mod tests {
                     signer_origin: None,
                 })
                 .collect(),
+            signed_in_with: None,
         }
+    }
+
+    fn signed_in(mut account: Account, credential: &str, method: KeyMethod) -> Account {
+        account.signed_in_with = Some(SignInKey {
+            credential_id: credential.to_owned(),
+            method,
+            transports: String::new(),
+            signer_origin: None,
+        });
+        account
     }
 
     fn ceremony() -> Ceremony {
         crate::ceremony::CeremonyChannel::new().ceremony(0)
     }
 
-    /// The method the first key was minted with decides the ceremony, and a
-    /// security key is asked discoverably so any founding key on it can answer.
+    const SETTINGS_PAGE: &str = "https://sign.getvela.app/";
+
+    /// Founder, 2026-09-26: the key the account signed in with signs, over the
+    /// route it took — not the first key, not where a key was registered, and
+    /// never a choice made at signing time.
     #[test]
-    fn the_context_routes_on_the_first_key_s_transports() {
+    fn the_account_signs_with_its_sign_in_key() {
+        let ctx = SendContext::new(
+            &signed_in(account("internal", 3), "cred2", KeyMethod::SecurityKey),
+            ceremony(),
+        );
+        assert_eq!(ctx.key_method, KeyMethod::SecurityKey);
+        assert_eq!(
+            ctx.pinned_credential.as_deref(),
+            Some("cred2"),
+            "pinned, even on a security key: only this key signs"
+        );
+        assert_eq!(ctx.keys.len(), 3, "every key still verifies");
+        ctx.follow_sign_in(SETTINGS_PAGE);
+        assert_eq!(ctx.trusted_signer.chosen(), None);
+
+        // A synced passkey registered as `internal`, reached here by a scan.
+        let ctx = SendContext::new(
+            &signed_in(account("internal", 1), "cred0", KeyMethod::Hybrid),
+            ceremony(),
+        );
+        assert_eq!(ctx.key_method, KeyMethod::Hybrid);
+        assert_eq!(ctx.pinned_credential.as_deref(), Some("cred0"));
+    }
+
+    /// Signed in through the Trusted Signer: every signature goes to that
+    /// page, and to the page Settings names when the sign-in named none.
+    #[test]
+    fn a_trusted_signer_sign_in_signs_on_its_page() {
+        let mut through_page = signed_in(account("internal", 1), "cred0", KeyMethod::TrustedSigner);
+        let ctx = SendContext::new(&through_page, ceremony());
+        ctx.follow_sign_in("http://localhost:8140/");
+        assert_eq!(
+            ctx.trusted_signer.chosen().as_deref(),
+            Some("http://localhost:8140/")
+        );
+
+        if let Some(key) = through_page.signed_in_with.as_mut() {
+            key.signer_origin = Some("https://sign.example.test".to_owned());
+        }
+        let ctx = SendContext::new(&through_page, ceremony());
+        ctx.follow_sign_in(SETTINGS_PAGE);
+        assert_eq!(
+            ctx.trusted_signer.chosen().as_deref(),
+            Some("https://sign.example.test")
+        );
+        assert_eq!(ctx.account_name.as_deref(), Some("Wallet"));
+    }
+
+    /// A record from before the sign-in key, or one naming a key the wallet
+    /// does not hold, signs exactly as it did: on the first key's transports,
+    /// a security key asked discoverably so any founding key on it can answer.
+    #[test]
+    fn a_record_without_a_sign_in_key_routes_on_its_first_key() {
         let usb = SendContext::new(&account("usb", 2), ceremony());
         assert_eq!(usb.key_method, KeyMethod::SecurityKey);
         assert_eq!(usb.pinned_credential, None);
@@ -685,6 +771,15 @@ mod tests {
         let vault = SendContext::new(&account("internal", 3), ceremony());
         assert_eq!(vault.key_method, KeyMethod::Platform);
         assert_eq!(vault.pinned_credential.as_deref(), Some("cred0"));
+        vault.follow_sign_in(SETTINGS_PAGE);
+        assert_eq!(vault.trusted_signer.chosen(), None);
+
+        let stranger = SendContext::new(
+            &signed_in(account("internal", 2), "not-ours", KeyMethod::SecurityKey),
+            ceremony(),
+        );
+        assert_eq!(stranger.key_method, KeyMethod::Platform);
+        assert_eq!(stranger.pinned_credential.as_deref(), Some("cred0"));
 
         // A legacy record: one projected key, a security key.
         let legacy = SendContext::new(&account("", 0), ceremony());
@@ -692,128 +787,17 @@ mod tests {
         assert_eq!(legacy.key_method, KeyMethod::SecurityKey);
     }
 
-    /// The default "Sign with" is the send's own (spec 071): a place a
-    /// passkey is re-pins the key of that kind, the Trusted Signer routes the
-    /// send to the page Settings names, and `auto` changes nothing.
+    /// Spec 075, for a record without a sign-in key: a first key minted behind
+    /// somebody's page is reachable nowhere else, so it still signs there.
     #[test]
-    fn the_default_sign_with_routes_the_send() {
-        let mut ctx = SendContext::new(&account("internal", 2), ceremony());
-        ctx.sign_with("auto", "https://sign.getvela.app/");
-        assert_eq!(ctx.key_method, KeyMethod::Platform);
-        assert_eq!(ctx.pinned_credential.as_deref(), Some("cred0"));
-        assert_eq!(ctx.trusted_signer.chosen(), None);
-
-        ctx.sign_with("security_key", "https://sign.getvela.app/");
-        assert_eq!(ctx.key_method, KeyMethod::SecurityKey);
-        assert_eq!(ctx.trusted_signer.chosen(), None);
-
-        ctx.sign_with("trusted_signer", "http://localhost:8140/");
-        assert_eq!(
-            ctx.trusted_signer.chosen().as_deref(),
-            Some("http://localhost:8140/")
-        );
-        assert_eq!(ctx.account_name.as_deref(), Some("Wallet"));
-    }
-
-    /// Spec 075: **where a signature goes is the key's business, not the
-    /// name that was pressed.**
-    ///
-    /// All five choices over a wallet whose only key was minted on somebody
-    /// else's signer page: `auto` follows the key there; the Trusted Signer by
-    /// name does too; and a place a passkey is — a platform sheet, a phone, a
-    /// key on the desk — is ALSO sent there, because a key behind a
-    /// self-hosted page is reachable nowhere else, the way a security key's
-    /// key is only in that key. Refusing at the sheet instead would be
-    /// discovering it at the worst possible moment.
-    #[test]
-    fn a_key_behind_a_page_routes_there_whatever_was_pressed() {
-        let mut hosted = account("internal", 1);
+    fn a_first_key_behind_a_page_still_signs_there() {
+        let mut hosted = account("internal", 2);
         hosted.keys[0].signer_origin = Some("https://sign.example.test".to_owned());
-        let mut ctx = SendContext::new(&hosted, ceremony());
-        for chosen in [
-            "auto",
-            "trusted_signer",
-            "platform",
-            "hybrid",
-            "security_key",
-        ] {
-            ctx.sign_with(chosen, "https://sign.getvela.app/");
-            assert_eq!(
-                ctx.trusted_signer.chosen().as_deref(),
-                Some("https://sign.example.test"),
-                "`{chosen}` did not follow the key to its page"
-            );
-        }
-    }
-
-    /// A wallet with a second key an ordinary sheet CAN reach is the other
-    /// half of the same rule: asked for a platform passkey it pins that key
-    /// rather than dragging the whole request onto a page. `auto` still
-    /// follows the pinned key — the first one — to where it lives.
-    #[test]
-    fn a_reachable_sibling_takes_the_named_route() {
-        let mut mixed = account("internal", 2);
-        mixed.keys[0].signer_origin = Some("https://sign.example.test".to_owned());
-        let mut ctx = SendContext::new(&mixed, ceremony());
-
-        ctx.sign_with("auto", "https://sign.getvela.app/");
+        let ctx = SendContext::new(&hosted, ceremony());
+        ctx.follow_sign_in(SETTINGS_PAGE);
         assert_eq!(
             ctx.trusted_signer.chosen().as_deref(),
             Some("https://sign.example.test")
-        );
-
-        ctx.sign_with("platform", "https://sign.getvela.app/");
-        assert_eq!(ctx.trusted_signer.chosen(), None);
-        assert_eq!(ctx.pinned_credential.as_deref(), Some("cred1"));
-        assert_eq!(ctx.key_method, KeyMethod::Platform);
-    }
-
-    /// A key behind the wallet's OWN page is a different case: `*.getvela.app`
-    /// passkeys are the app's passkeys, so a platform sheet can still reach
-    /// one and a person who asks for it gets it. `auto` still goes to the
-    /// page — that is where the key was found.
-    #[test]
-    fn a_key_behind_the_official_page_can_still_be_reached_another_way() {
-        let mut official = account("internal", 2);
-        official.keys[0].signer_origin = Some("https://sign.getvela.app".to_owned());
-        let mut ctx = SendContext::new(&official, ceremony());
-
-        ctx.sign_with("auto", "https://sign.getvela.app/");
-        assert_eq!(
-            ctx.trusted_signer.chosen().as_deref(),
-            Some("https://sign.getvela.app")
-        );
-
-        ctx.sign_with("security_key", "https://sign.getvela.app/");
-        assert_eq!(ctx.trusted_signer.chosen(), None, "the key is reachable");
-        assert_eq!(ctx.key_method, KeyMethod::SecurityKey);
-    }
-
-    /// And a wallet with no page anywhere in it behaves exactly as it did
-    /// before 075: `auto` changes nothing, the Trusted Signer by name goes to
-    /// the page Settings holds.
-    #[test]
-    fn an_ordinary_wallet_is_unchanged_and_the_trusted_signer_uses_settings() {
-        let device: Vec<DeviceKey> = SendContext::new(&account("internal", 2), ceremony())
-            .device_keys
-            .clone();
-        assert_eq!(
-            sign_route_of(&device, "auto", "https://sign.getvela.app/"),
-            None
-        );
-        assert_eq!(
-            sign_route_of(&device, "trusted_signer", "http://localhost:8140/"),
-            Some(Route::TrustedSigner("http://localhost:8140/".to_owned()))
-        );
-        assert_eq!(
-            sign_route_of(&device, "platform", "https://sign.getvela.app/"),
-            Some(Route::Passkey("cred0".to_owned(), KeyMethod::Platform))
-        );
-        // A name this build does not know leaves the stored route in force
-        // rather than guessing at one.
-        assert_eq!(
-            sign_route_of(&device, "smoke_signals", "https://sign.getvela.app/"),
-            None
         );
     }
 

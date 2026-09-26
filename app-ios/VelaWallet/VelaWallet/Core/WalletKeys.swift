@@ -29,6 +29,9 @@ final class WalletKeys {
 
     /// One key as the account record holds it, in founding order.
     struct DeviceKey: Equatable {
+        /// What the core matches the account's sign-in key against, to mark the
+        /// row it signs with (`signs_here`).
+        var credentialId = ""
         let publicKeyHex: String
         let name: String
         let transports: String
@@ -59,6 +62,9 @@ final class WalletKeys {
         /// absent on the wire then). The row's method already says `trustedSigner`
         /// in that case — this says WHICH page.
         var signerOrigin = ""
+        /// The key this device signs with — the account's sign-in key
+        /// (founder, 2026-09-26). The core marks at most one row.
+        var signsHere = false
     }
 
     struct Result: Equatable {
@@ -70,12 +76,14 @@ final class WalletKeys {
     private static let maxRounds = 24
 
     private let ethCall: (_ chainId: Int, _ to: String, _ data: String) async -> String?
-    private let step: (_ address: String, _ deviceKeysJson: String, _ answersJson: String) -> String
+    private let step: (
+        _ address: String, _ deviceKeysJson: String, _ answersJson: String, _ signInCredential: String
+    ) -> String
 
     init(
         ethCall: @escaping (Int, String, String) async -> String?,
-        step: @escaping (String, String, String) -> String = {
-            walletKeysStep(address: $0, deviceKeysJson: $1, answersJson: $2)
+        step: @escaping (String, String, String, String) -> String = {
+            walletKeysStep(address: $0, deviceKeysJson: $1, answersJson: $2, signInCredential: $3)
         }
     ) {
         self.ethCall = ethCall
@@ -96,6 +104,7 @@ final class WalletKeys {
         let pages = await signerOrigins(of: address, in: accounts)
         return await accounts.keys(of: address).enumerated().map { index, key in
             DeviceKey(
+                credentialId: key.credentialId,
                 publicKeyHex: key.publicKeyHex,
                 name: index == 0 ? walletName : "",
                 transports: "",
@@ -121,10 +130,24 @@ final class WalletKeys {
         }
     }
 
-    func read(address: String, device: [DeviceKey]) async -> Result {
+    /// The credential the account signs with (`signInRoute`) — the row the
+    /// core marks. Empty for a record that names none: it signs as it always
+    /// did, with no single key, and no row is marked.
+    static func signInCredential(
+        of address: String, in accounts: UserOpSpine.AccountPort
+    ) async -> String {
+        guard let record = await accounts.accountJson(of: address),
+              let route = signInRoute(accountJson: record),
+              let wire = try? CoreJSON.decoder.decode(SignRouteWire.self, from: Data(route.utf8))
+        else { return "" }
+        return wire.credentialId
+    }
+
+    func read(address: String, device: [DeviceKey], signInCredential: String) async -> Result {
         let empty = Result(source: .device, rows: [])
         let deviceJson = Self.json(device.map {
             [
+                "credential_id": $0.credentialId,
                 "public_key_hex": $0.publicKeyHex, "name": $0.name, "transports": $0.transports,
                 // Spec 075: the core reads the empty string as "behind no page",
                 // so it goes out on every key rather than only on some.
@@ -133,7 +156,8 @@ final class WalletKeys {
         })
         var answers: [[String: Any]] = []
         for _ in 0..<Self.maxRounds {
-            guard let next = Self.object(step(address, deviceJson, Self.json(answers))) else { return empty }
+            guard let next = Self.object(step(address, deviceJson, Self.json(answers), signInCredential))
+            else { return empty }
             guard next["type"] as? String == "ask" else { return Self.parse(next) }
             let requests = next["requests"] as? [[String: Any]] ?? []
             let round = await withTaskGroup(of: [String: Any].self) { group in
@@ -148,7 +172,7 @@ final class WalletKeys {
         }
         // Never settled: what the device alone says, asked with no address so
         // that it can ask nobody.
-        return Self.object(step("", deviceJson, "[]")).map(Self.parse) ?? empty
+        return Self.object(step("", deviceJson, "[]", signInCredential)).map(Self.parse) ?? empty
     }
 
     private func perform(_ request: [String: Any]) async -> [String: Any] {
@@ -190,7 +214,8 @@ final class WalletKeys {
                 attestationHex: text("attestation_hex"),
                 userVerified: (key["user_verified"] as? NSNumber)?.boolValue,
                 // Absent on the wire for every row but a Trusted Signer's.
-                signerOrigin: text("signer_origin")
+                signerOrigin: text("signer_origin"),
+                signsHere: (key["signs_here"] as? NSNumber)?.boolValue ?? false
             )
         }
         return Result(source: source, rows: rows)
