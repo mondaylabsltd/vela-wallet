@@ -296,6 +296,14 @@ dapp_browser are fully wired. The gaps:
   removal never dispatched; site menu Share / Add to favourites / Open in
   new tab `None`; favourites "Edit" inert; fixture tabs and host shown until
   the first live tab exists.
+  *Fixed (T049):* favourites "Edit" and each group's "⋯" open "Manage groups"
+  (the web's `GroupManageSheet`): every group, an eye to hide/show, a trash
+  for the person's own, "New group". The start page honours the hidden
+  flags; a hidden Favorites keeps its heading so Edit can bring it back.
+  Checked live: create, hide, delete, Recent hidden and shown, Favorites
+  hidden and shown. Group rename and member removal stay unreached — the
+  web draws no control for either. The site menu items were done in E-03;
+  the fixture tabs are T054's visual work.
 - **W-12 · Linux** has no in-app browser and no signing host at all (by
   design since spec 032; out of scope here). **Windows** had one that could
   not be seen or opened — fixed in `f4334ffd`.

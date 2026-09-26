@@ -83,7 +83,7 @@ screenshot checked against the web.
 - [x] T047 W-05 bundler funding pre-check and sponsorship for dApp requests.
 - [x] T048 W-06 contacts search + per-group import/export; W-07 signing for
       another wallet.
-- [ ] T049 W-08…W-11.
+- [x] T049 W-08…W-11.
 
 ## Phase 4 — P2 visuals, surface by surface (screenshot each)
 - [ ] T050 Wallet home H-08…H-12.

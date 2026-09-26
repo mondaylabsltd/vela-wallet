@@ -296,6 +296,15 @@ struct ExploreForm {
     text: String,
 }
 
+/// The Explore groups, as the manage sheet lists them (078 W-11).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExploreGroupRow {
+    Favorites,
+    Recent,
+    /// A person's own group, by its place in the core's list.
+    Custom(usize),
+}
+
 /// The frame the viewfinder is showing, and the discipline that keeps its
 /// texture from leaking.
 ///
@@ -614,6 +623,8 @@ pub struct WalletPage {
     /// One dialog for both, as the contacts one is for its two questions —
     /// they ask the same thing and differ only in which event takes the
     /// answer.
+    /// The Explore "Manage groups" sheet is open (078 W-11).
+    explore_groups: bool,
     explore_form: Option<ExploreForm>,
     explore_form_focus: gpui::FocusHandle,
     /// The cap field's focus, kept on the page so typing survives a redraw.
@@ -1104,6 +1115,7 @@ impl WalletPage {
             copied: None,
             copied_press: 0,
             menu_origin: None,
+            explore_groups: false,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
             browser_title: None,
@@ -1387,6 +1399,236 @@ impl WalletPage {
             )
             .into_any_element(),
         )
+    }
+
+    /// "Manage groups" — the web's `GroupManageSheet` (E3), reached from the
+    /// Favorites heading's Edit and a group's ⋯ (078 W-11). Every group, the
+    /// two system ones first: an eye to hide or show it, and — for the
+    /// person's own groups only — a trash to delete it. The system groups have
+    /// no trash rather than a refused one ("hideable, never deletable"). A
+    /// deleted group's sites stay favourited; the core says so.
+    fn explore_groups_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.explore_groups {
+            return None;
+        }
+        let view = resident::resident::<ExploreSites>(cx).read(cx).view();
+        let e = &self.explore;
+        let (favorites, recent, system_group, new_group_label, manage_groups, site_count) = (
+            e.favorites.clone(),
+            e.recent.clone(),
+            e.system_group.clone(),
+            e.new_group.clone(),
+            e.manage_groups.clone(),
+            e.site_count.clone(),
+        );
+        let count = |n: usize| SharedString::from(site_count.replace("{{n}}", &n.to_string()));
+        let mut rows: Vec<(ExploreGroupRow, SharedString, SharedString, bool)> = vec![
+            (
+                ExploreGroupRow::Favorites,
+                favorites,
+                count(view.favorites.len()),
+                view.favorites_hidden,
+            ),
+            (
+                ExploreGroupRow::Recent,
+                recent,
+                system_group,
+                view.recent_hidden,
+            ),
+        ];
+        for (i, group) in view.groups.iter().enumerate() {
+            rows.push((
+                ExploreGroupRow::Custom(i),
+                SharedString::from(group.name.clone()),
+                count(group.sites.len()),
+                group.hidden,
+            ));
+        }
+
+        let mut list = div().flex().flex_col();
+        for (index, (row, title, meta, hidden)) in rows.into_iter().enumerate() {
+            let toggle = div()
+                .id(("explore-group-toggle", index))
+                .cursor_pointer()
+                .child(icon_img(
+                    &mut self.icons,
+                    if hidden { Icon::EyeOff } else { Icon::Eye },
+                    false,
+                    theme.fg_muted,
+                    18.,
+                ))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.set_explore_group_hidden(row, !hidden, cx);
+                }));
+            let mut line = div()
+                .flex()
+                .items_center()
+                .gap(px(16.))
+                .py(px(20.))
+                .border_b_1()
+                .border_color(theme.border_card)
+                .child(icon_img(
+                    &mut self.icons,
+                    Icon::GripVertical,
+                    false,
+                    theme.fg_subtle,
+                    18.,
+                ))
+                // Hidden reads as hidden: the words dim, so the eye is a
+                // confirmation rather than the only clue.
+                .child(
+                    div()
+                        .when(hidden, |d| d.opacity(0.4))
+                        .text_size(theme::text_body())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.fg_base)
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .when(hidden, |d| d.opacity(0.4))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(meta),
+                )
+                .child(toggle);
+            if let ExploreGroupRow::Custom(i) = row {
+                line = line.child(
+                    div()
+                        .id(("explore-group-delete", index))
+                        .cursor_pointer()
+                        .child(icon_img(
+                            &mut self.icons,
+                            Icon::Trash2,
+                            false,
+                            theme.fg_muted,
+                            18.,
+                        ))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.delete_explore_group(i, cx);
+                        })),
+                );
+            }
+            list = list.child(line);
+        }
+
+        let new_group = div()
+            .id("explore-groups-new")
+            .flex()
+            .items_center()
+            .gap(px(16.))
+            .py(px(20.))
+            .cursor_pointer()
+            .child(
+                div()
+                    .size(px(40.))
+                    .rounded_full()
+                    .bg(theme.bg_sunken)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::Plus,
+                        false,
+                        theme.fg_subtle,
+                        18.,
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_subtle)
+                    .child(new_group_label),
+            )
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.explore_groups = false;
+                this.explore_form = Some(ExploreForm {
+                    ask: ExploreAsk::NewGroup { then_add: None },
+                    text: String::new(),
+                });
+                window.focus(&this.explore_form_focus, cx);
+                cx.notify();
+            }));
+
+        let body = div()
+            .flex()
+            .flex_col()
+            .pb(px(8.))
+            .child(list)
+            .child(new_group);
+        Some(
+            crate::ui::dialog::dialog(
+                "explore-groups",
+                theme,
+                window,
+                manage_groups,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("explore-groups"),
+                Self::closer(cx, |this, _| this.explore_groups = false),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// Hide or show one group — a system one by its kind, the person's own by
+    /// the core's id, read at the moment of the tap.
+    fn set_explore_group_hidden(
+        &mut self,
+        row: ExploreGroupRow,
+        hidden: bool,
+        cx: &mut Context<Self>,
+    ) {
+        use vela_core::app::explore_sites::{Event as SitesEvent, ExploreSystemGroup};
+        let resident = resident::resident::<ExploreSites>(cx);
+        let event = match row {
+            ExploreGroupRow::Favorites => SitesEvent::SystemGroupHiddenSet {
+                group: ExploreSystemGroup::Favorites,
+                hidden,
+            },
+            ExploreGroupRow::Recent => SitesEvent::SystemGroupHiddenSet {
+                group: ExploreSystemGroup::Recent,
+                hidden,
+            },
+            ExploreGroupRow::Custom(i) => {
+                let Some(id) = resident.read(cx).view().groups.get(i).map(|g| g.id.clone()) else {
+                    return;
+                };
+                SitesEvent::GroupHiddenSet { id, hidden }
+            }
+        };
+        resident.update(cx, |resident, cx| resident.dispatch(event, cx));
+        cx.notify();
+    }
+
+    /// Delete one of the person's own groups. Its sites stay favourited.
+    fn delete_explore_group(&mut self, index: usize, cx: &mut Context<Self>) {
+        let resident = resident::resident::<ExploreSites>(cx);
+        let Some(id) = resident
+            .read(cx)
+            .view()
+            .groups
+            .get(index)
+            .map(|g| g.id.clone())
+        else {
+            return;
+        };
+        resident.update(cx, |resident, cx| {
+            resident.dispatch(
+                vela_core::app::explore_sites::Event::GroupDeleted { id },
+                cx,
+            );
+        });
+        cx.notify();
     }
 
     /// A dialog form's one answer (the web's `GroupForm`): the primary button
@@ -2975,6 +3217,8 @@ impl WalletPage {
             self.export_scope = None;
         } else if self.explore_form.is_some() {
             self.explore_form = None;
+        } else if self.explore_groups {
+            self.explore_groups = false;
         } else if self.contact_qr.is_some() {
             self.close_contact_qr();
         } else if self.contact_form.is_some() {
@@ -13064,12 +13308,29 @@ impl WalletPage {
                 })
                 .collect()
         };
-        column = column.child(section_header(
+        // The heading's Edit opens "Manage groups" (078 W-11) — live only; the
+        // drawn page has no machine behind it. A HIDDEN Favorites keeps this
+        // heading and loses its tiles: the sheet that brings it back is
+        // reached from here, and hiding the one way back would strand it.
+        let (title_half, edit_half) = section_header_parts(
             theme,
             &mut self.icons,
             self.explore.favorites.clone(),
             self.explore.edit.clone(),
-        ));
+        );
+        let edit_half = if live_grid {
+            edit_half
+                .id("explore-favorites-edit")
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.explore_groups = true;
+                    cx.notify();
+                }))
+                .into_any_element()
+        } else {
+            edit_half.into_any_element()
+        };
+        column = column.child(section_header_row().child(title_half).child(edit_half));
 
         let mut grid = div().flex().flex_wrap().gap(px(12.)).py(px(12.));
         for (i, site) in favorites.iter().enumerate() {
@@ -13123,7 +13384,9 @@ impl WalletPage {
                 })),
             );
         }
-        column = column.child(grid);
+        if !(live_grid && explore_view.favorites_hidden) {
+            column = column.child(grid);
+        }
 
         // Recent is the core's; everything below it is still drawn, because
         // nothing in `vela-core` owns favourites or custom groups yet. The
@@ -13131,7 +13394,9 @@ impl WalletPage {
         // shown beside it — two "Recent" headings, one of them invented, is
         // the fixture leaking that phases 22, 26 and 27 each had to close.
         let history = resident::resident::<BrowserHistory>(cx).read(cx).view();
-        let live_recent = explore_live::recent_group(&history.entries, &self.explore);
+        // A hidden Recent draws nothing (078 W-11); it comes back from the sheet.
+        let live_recent = explore_live::recent_group(&history.entries, &self.explore)
+            .filter(|_| !(live_grid && explore_view.recent_hidden));
         // …and so are the person's own groups. The drawn ones (交易 / 预测市场)
         // are mock CONTENT, not chrome: they go the moment there is a real
         // book to show, exactly as the drawn Recent does.
@@ -13167,6 +13432,17 @@ impl WalletPage {
                         resident::resident::<BrowserHistory>(cx).update(cx, |resident, cx| {
                             resident.dispatch(vela_core::app::browser_history::Event::ClearAll, cx);
                         });
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            } else if live_grid && matches!(group.action, GroupAction::Menu) {
+                // A live group's ⋯ is "Manage groups" (078 W-11), as the web's
+                // header action is. A drawn group's stays inert.
+                action_half
+                    .id(("explore-group-menu", group_index))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.explore_groups = true;
                         cx.notify();
                     }))
                     .into_any_element()
@@ -16418,6 +16694,7 @@ impl Render for WalletPage {
         let pick = self.pick_dialog(&theme, window, cx);
         let export_format = self.export_format_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
+        let explore_groups = self.explore_groups_dialog(&theme, window, cx);
         let contact_qr = self.contact_qr_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
         let mut root = div()
@@ -16472,6 +16749,9 @@ impl Render for WalletPage {
         }
         if let Some(explore_form) = explore_form {
             root = root.child(explore_form);
+        }
+        if let Some(explore_groups) = explore_groups {
+            root = root.child(explore_groups);
         }
         if let Some(group_form) = group_form {
             root = root.child(group_form);
