@@ -13,6 +13,7 @@
 
 import { isPackagedApp } from '$lib/extension/page-url';
 import type { FailureKind } from '../generated/FailureKind';
+import type { KeyMethod } from '../generated/KeyMethod';
 
 /** The native relying party, shared by the extension. See `relyingPartyId`. */
 const RELYING_PARTY_NATIVE = 'getvela.app';
@@ -106,12 +107,45 @@ export function encodeUserHandle(name: string): string {
 	return `${name}\0${crypto.randomUUID()}`;
 }
 
-/** `navigator.credentials.create()`. */
+/**
+ * Where a ceremony goes, for the method the person chose — "This device",
+ * "Phone or tablet", "Security key" (founder, 2026-09-26: the create and
+ * sign-in screens ask, so the ceremony must go there, not wherever the
+ * browser's own sheet would look first). ONE mapping for every ceremony:
+ * WebAuthn L3 `hints`, and for minting a key the authenticator attachment.
+ * The Trusted Signer is not a place a passkey is (and the web offers none), so
+ * it — like no method at all — adds nothing.
+ */
+export function methodRouting(method: KeyMethod | null | undefined): {
+	hints?: string[];
+	attachment?: AuthenticatorAttachment;
+} {
+	switch (method) {
+		case 'platform':
+			return { hints: ['client-device'], attachment: 'platform' };
+		case 'hybrid':
+			return { hints: ['hybrid'], attachment: 'cross-platform' };
+		case 'security_key':
+			return { hints: ['security-key'], attachment: 'cross-platform' };
+		default:
+			return {};
+	}
+}
+
+/** The `hints` a get() carries for `method`; nothing for none. */
+function hintsFor(method: KeyMethod | null | undefined): { hints?: string[] } {
+	const { hints } = methodRouting(method);
+	return hints ? { hints } : {};
+}
+
+/** `navigator.credentials.create()`, on the authenticator `method` names. */
 export async function register(
 	name: string,
-	excludeCredentialIds: string[]
+	excludeCredentialIds: string[],
+	method?: KeyMethod
 ): Promise<Registration> {
 	assertSupported();
+	const { attachment } = methodRouting(method);
 	try {
 		const credential = (await navigator.credentials.create({
 			publicKey: {
@@ -142,7 +176,9 @@ export async function register(
 				// the person's provider. Restricting the list makes an RSA-only
 				// authenticator fail up front with a standard NotSupportedError.
 				pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+				...hintsFor(method),
 				authenticatorSelection: {
+					...(attachment ? { authenticatorAttachment: attachment } : {}),
 					residentKey: 'required',
 					// WebAuthn L2 §5.4.4: set iff residentKey is 'required'. A
 					// client that honours only the L1 boolean would otherwise
@@ -236,8 +272,11 @@ function watchForDeadSelector(controller: AbortController): () => void {
 	return () => clearInterval(timer);
 }
 
-/** `navigator.credentials.get()` with no credential hint — "who are you?". */
-export async function authenticate(): Promise<Assertion> {
+/**
+ * `navigator.credentials.get()` with no credential named — "who are you?" —
+ * looking where `method` says.
+ */
+export async function authenticate(method?: KeyMethod): Promise<Assertion> {
 	assertSupported();
 	const controller = new AbortController();
 	const stopWatching = watchForDeadSelector(controller);
@@ -246,7 +285,8 @@ export async function authenticate(): Promise<Assertion> {
 			publicKey: {
 				challenge: crypto.getRandomValues(new Uint8Array(32)),
 				rpId: relyingPartyId(),
-				userVerification: 'required'
+				userVerification: 'required',
+				...hintsFor(method)
 			},
 			signal: controller.signal
 		})) as PublicKeyCredential | null;
@@ -359,7 +399,9 @@ export async function sign(
 	 * end for somebody holding a phone and no key (device-found 2026-08-26).
 	 * Browsers route on the same field.
 	 */
-	transports = ''
+	transports = '',
+	/** Where to look first: the method the key was minted, found or signed in over. */
+	method?: KeyMethod
 ): Promise<Assertion> {
 	if (override) return override.sign(challengeHex, [credentialId]);
 	assertSupported();
@@ -377,6 +419,7 @@ export async function sign(
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
+				...hintsFor(method),
 				allowCredentials: [
 					{
 						type: 'public-key',
