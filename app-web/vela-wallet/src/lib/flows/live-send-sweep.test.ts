@@ -271,6 +271,7 @@ describe('SD3c — the sweep confirm', () => {
 			})
 		);
 		expect(confirm.amount).toBe(m['componentsTx.receipt.assetsCount'].replace('{{n}}', '2'));
+		expect(confirm.amountUnit).toBeUndefined();
 		// 1 ETH at $3,000 + 100 USDC at $1 — the total of the SPECS, not of the
 		// balances (1.5 ETH would have been $4,600).
 		expect(confirm.subline).toContain('$3,100.00');

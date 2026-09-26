@@ -1039,6 +1039,8 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			...model,
 			mark: heroMark,
 			amount: fill(m['componentsTx.receipt.assetsCount'], { n: picked.length }),
+			// A count, not a figure: no coin of its own (and never the drawn one's).
+			amountUnit: undefined,
 			subline: fill(m['send.confirmTotalLine'], {
 				fiat: moneyText(totalUsd, currency),
 				network: chainName(sweepChain)
@@ -1077,6 +1079,8 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			...model,
 			mark: heroMark,
 			amount: `${tokenAmountText(send.confirm_amount)} ${symbol}`.trim(),
+			// A split's total keeps its one-string style (078 round 2).
+			amountUnit: undefined,
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
@@ -1089,8 +1093,10 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		...model,
 		mark: heroMark,
 		// The exact amount is what is signed; what is READ is the asset list's
-		// figure for it — never an 18-digit remainder of a fee to the wei.
-		amount: `${tokenAmountText(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
+		// figure for it — never an 18-digit remainder of a fee to the wei. The
+		// coin is its own quieter piece, as on the form's hero (078 round 2).
+		amount: tokenAmountText(send.confirm_amount),
+		amountUnit: token?.symbol || undefined,
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
 		facts,
 		breakdown: undefined,

@@ -188,7 +188,7 @@ fun ContactsScreen(
                     // had the identical condition and 058 fixed both). An empty
                     // book still draws its own invitation instead — grouping
                     // nobody is not a thing to offer.
-                    if (model.empty == null) {
+                    if (model.empty == null && !model.pending) {
                         item {
                             SectionHeader(
                                 title = model.groupsSectionTitle,

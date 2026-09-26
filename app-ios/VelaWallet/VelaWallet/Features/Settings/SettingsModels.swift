@@ -44,8 +44,6 @@ enum SettingsOverlay: Equatable, Identifiable {
     /// The default transaction speed (spec 069): three speeds, each with what
     /// it buys.
     case feeSpeed
-    /// The default "Sign with" (spec 071): every method the core offers.
-    case signWith
     /// The Trusted Signer page (spec 071): an address, saved or refused.
     case signerPage
     /// A custom network's bin, asked before it happens (spec 072 FR-010): the
@@ -483,7 +481,11 @@ struct WalletKeysModel {
     let copiedLabel: String
 }
 
-enum KeyPillTone { case verified, synced, local }
+enum KeyPillTone {
+    /// The key this device signs with — filled, where the others are outlined.
+    case signsHere
+    case verified, synced, local
+}
 
 struct KeyPillModel: Equatable {
     let text: String
@@ -505,7 +507,8 @@ struct WalletKeyRowModel: Identifiable {
     let holder: String
     /// `197d…647b` — what tells two unnamed keys apart.
     let fingerprint: String
-    /// "Verify to use", "Cloud-synced" / "Device-bound" — the registry explorer's pills.
+    /// "Signed in" first on the key this device signs with, then "Verify to
+    /// use", "Cloud-synced" / "Device-bound" — the registry explorer's pills.
     let pills: [KeyPillModel]
     /// What the row opens onto: the explorer's facts. Empty = nothing to open.
     let details: [KeyDetailModel]
@@ -560,8 +563,7 @@ struct SettingsScreenModel {
     var currencySheet: SelectSheetModel
     /// Spec 069: the default transaction speed's sheet.
     var feeSpeedSheet = SelectSheetModel(title: "", rows: [])
-    /// Spec 071: the default "Sign with" and the Trusted Signer page.
-    var signWithSheet = SelectSheetModel(title: "", rows: [])
+    /// Spec 071: the Trusted Signer page.
     var signerPage: SignerPageModel?
     var numberSheet: SelectSheetModel
     var dateSheet: SelectSheetModel
@@ -571,7 +573,9 @@ struct SettingsScreenModel {
     /// the person is told where they are looking rather than sent away with a
     /// phone that was not erased (FR-017).
     var eraseSheet: ConfirmSheetModel
-    let feedback: FeedbackModel
+    /// `var` since 2026-09-26: the live builder replaces the fixture preview
+    /// with this device's own lines (`SettingsLive.withFeedback`).
+    var feedback: FeedbackModel
     let rpcBanner: RpcBannerModel?
     /// `var` since 058: the hero's status line opens these, and what they show
     /// is this device's chains rather than the drawing's two.

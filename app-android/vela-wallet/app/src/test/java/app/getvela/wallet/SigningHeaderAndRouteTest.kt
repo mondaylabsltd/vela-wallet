@@ -16,10 +16,8 @@ import app.getvela.wallet.feature.signing.core.SignMethodKind
 import app.getvela.wallet.feature.signing.core.SignRequestView
 import app.getvela.wallet.feature.signing.core.SignSurface
 import app.getvela.wallet.feature.signing.core.SignView
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -27,9 +25,8 @@ import java.io.File
 /**
  * Founder review 2026-09-19, on the native sheets: the wallet's own request
  * wears the wallet's mark and name, a site gets its own icon with its initial
- * as the fallback, the chip carries the chain's logo — and a person can say
- * WHERE their passkey is, which also decides which key the ceremony is pinned
- * to (the core's rule, run here for real).
+ * as the fallback, the chip carries the chain's logo. Where the passkey is was
+ * said at sign-in (founder, 2026-09-26): the sheet asks nothing about it.
  */
 class SigningHeaderAndRouteTest {
     private val strings: VelaStrings = run {
@@ -47,8 +44,8 @@ class SigningHeaderAndRouteTest {
         clear, GuardView(), FeeView(confirm_fee_ready = true), ctx,
     )
 
-    private fun ctx(method: String = "auto", open: Boolean = false) =
-        SigningLive.Context(strings, "Ethereum", Color.Red, "ETH", "Mine", "0x88cCA0EeDbF2C4426110bbFc998F048689266894", chainId = 1, signMethod = method, signWithOpen = open)
+    private fun ctx() =
+        SigningLive.Context(strings, "Ethereum", Color.Red, "ETH", "Mine", "0x88cCA0EeDbF2C4426110bbFc998F048689266894", chainId = 1)
 
     @Test
     fun `the wallet's own request is not a site`() {
@@ -68,36 +65,22 @@ class SigningHeaderAndRouteTest {
         assertTrue(SigningLive.siteIconUrls("https://").isEmpty())
     }
 
+    /**
+     * Founder, 2026-09-26: 「这个账户只能用当前登录的钥匙签名」. The sheet names the
+     * signer and nothing else about the key — no "Sign with", no methods.
+     */
     @Test
-    fun `sign with - the create flow's words, the choice marked, auto by default`() {
-        val auto = model("https://app.uniswap.org", "tab-1", ctx()).signWith!!
-        assertEquals("Sign with" to "Automatic", auto.label to auto.value)
-        assertEquals(listOf("Automatic", "This device", "Phone or tablet", "USB security key", "Trusted Signer"), auto.options.map { it.title })
-        assertEquals(listOf("auto"), auto.options.filter { it.selected }.map { it.id })
-        assertFalse(auto.open)
-        // Spec 071: the fourth way says what it promises; the other three need no line.
-        assertEquals(
-            listOf(null, null, null, null, "Check and sign on a separate page — what you see is what you sign."),
-            auto.options.map { it.line },
-        )
-
-        val key = model("https://app.uniswap.org", "tab-1", ctx("security_key", open = true)).signWith!!
-        assertEquals("USB security key", key.value)
-        assertTrue(key.open)
-
-        val clear = model("https://app.uniswap.org", "tab-1", ctx("trusted_signer")).signWith!!
-        assertEquals("Trusted Signer", clear.value)
-    }
-
-    @Test
-    fun `the core pins the key of the chosen kind, and auto routes nothing`() {
-        val keys = """[{"credential_id":"apple","transports":"hybrid,internal"},{"credential_id":"yubikey","transports":"nfc,usb"}]"""
-        assertNull(uniffi.vela_core_uniffi.signRoute(keys, "auto"))
-        val route = JSONObject(uniffi.vela_core_uniffi.signRoute(keys, "security_key")!!)
-        // The YubiKey, not the first key: a security key cannot answer for a credential it does not hold.
-        assertEquals("yubikey", route.getString("credential_id"))
-        assertEquals("usb,nfc,ble", route.getString("transports"))
-        assertEquals("security_key", route.getString("method"))
+    fun `the sheet asks nothing about where the passkey is`() {
+        val sheet = model("https://app.uniswap.org", "tab-1", ctx()).toString()
+        listOf(
+            "componentsUi.signing.signWith",
+            "common.automatic",
+            "onboarding.create.methodPlatformTitle",
+            "onboarding.create.methodHybridTitle",
+            "onboarding.create.methodSecurityKeyTitle",
+        ).forEach { key ->
+            assertFalse("the sheet says \"${strings.t(key)}\" ($key)", sheet.contains(strings.t(key)))
+        }
     }
 
     @Test

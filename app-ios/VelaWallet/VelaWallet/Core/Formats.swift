@@ -244,7 +244,7 @@ enum Formats {
         let maxFrac = max(0, maximumFractionDigits)
         let minFrac = min(max(0, minimumFractionDigits), maxFrac)
         let sign = value < 0 ? "-" : ""
-        var fixed = String(format: "%.\(maxFrac)f", abs(value))
+        var fixed = halfUp(abs(value), places: maxFrac)
         if maxFrac > minFrac, fixed.contains(".") {
             while fixed.hasSuffix("0"),
                   fixed.split(separator: ".").last?.count ?? 0 > minFrac {
@@ -253,6 +253,40 @@ enum Formats {
             if fixed.hasSuffix(".") { fixed.removeLast() }
         }
         return sign + decimal(fixed, key)
+    }
+
+    /// `magnitude` to `places` decimals, rounded to NEAREST with an exact tie
+    /// going up — the web's `toFixed` and Android's `HALF_UP`, so one total
+    /// reads the same cent on every phone (round 2, 2026-09-26).
+    ///
+    /// printf already rounds the double's exact binary value to nearest, which
+    /// is what `toFixed` does too (1.005 is 1.00499… in binary, so "1.00" on
+    /// both); it differs only on an EXACT tie, which it breaks to even
+    /// (0.125 → "0.12") where `toFixed` takes the larger ("0.13"). A tie is a
+    /// dyadic value whose expansion stops at `places + 1` with a 5, and the
+    /// wide rendering says so exactly.
+    static func halfUp(_ magnitude: Double, places: Int) -> String {
+        let fixed = String(format: "%.\(places)f", magnitude)
+        let wide = String(format: "%.\(places + 30)f", magnitude)
+        guard let dot = wide.firstIndex(of: ".") else { return fixed }
+        let cut = wide.index(dot, offsetBy: places + 1)
+        let tail = wide[cut...]
+        guard tail.first == "5", tail.dropFirst().allSatisfy({ $0 == "0" }) else { return fixed }
+        // The exact tie: the kept digits, plus one in the last place.
+        var digits = Array(wide[..<cut])
+        if digits.last == "." { digits.removeLast() }
+        var index = digits.count - 1
+        while index >= 0 {
+            if digits[index] == "." { index -= 1; continue }
+            if digits[index] == "9" {
+                digits[index] = "0"
+                index -= 1
+            } else {
+                digits[index] = Character(String(digits[index].wholeNumberValue! + 1))
+                return String(digits)
+            }
+        }
+        return "1" + String(digits)
     }
 
     /// Compact form for large magnitudes: 1234567.89 → "1.23M".

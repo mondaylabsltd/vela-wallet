@@ -20,25 +20,14 @@
 		onfeepick?: (id: string) => void;
 		onspeed?: () => void;
 		onspeedpick?: (id: string) => void;
-		onsignwith?: (id: string | null) => void;
 	}
 
-	let { model, onconfirm, onchip, onfee, onfeepick, onspeed, onspeedpick, onsignwith }: Props =
-		$props();
+	let { model, onconfirm, onchip, onfee, onfeepick, onspeed, onspeedpick }: Props = $props();
 </script>
 
 <div class="panel">
 	<SigningHeader dapp={model.dapp} network={model.network} />
-	<SigningBody
-		{model}
-		{onconfirm}
-		{onchip}
-		{onfee}
-		{onfeepick}
-		{onspeed}
-		{onspeedpick}
-		{onsignwith}
-	/>
+	<SigningBody {model} {onconfirm} {onchip} {onfee} {onfeepick} {onspeed} {onspeedpick} />
 </div>
 
 <style>

@@ -37,7 +37,7 @@
   "appearance": {
    "themeLight": "Hell",
    "themeDark": "Dunkel",
-   "themeAuto": "System folgen",
+   "themeAuto": "System",
    "avatarInitials": "Initialen",
    "avatarIdenticon": "Identicon",
    "themeTitle": "Design",
@@ -1652,7 +1652,8 @@
    "credential": "Anmeldedaten",
    "transport": "Transport",
    "attestation": "Attestierung",
-   "userVerified": "Bestätigung bei Nutzung"
+   "userVerified": "Bestätigung bei Nutzung",
+   "signsHere": "Angemeldet"
   }
  },
  "contacts": {

@@ -86,8 +86,7 @@ class SigningController(
     private val numberPreset: () -> String = { "comma_dot" },
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
-    /** Spec 071: the "Sign with" this sheet starts at (Settings' default), and the Trusted Signer. */
-    defaultMethod: () -> String = { "auto" },
+    /** Spec 071: the Trusted Signer, for an account that signed in through it. */
     trustedSigner: () -> TrustedSigner? = { null },
 ) {
     /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
@@ -138,7 +137,7 @@ class SigningController(
     val sim: StateFlow<SimOutcome?> = _sim
 
     private val signExecutor = SignExecutor(
-        spine = UserOpSpine(relay, accounts, signer, measureCall, signMethod = { signMethod.value }, trustedSigner = trustedSigner),
+        spine = UserOpSpine(relay, accounts, signer, measureCall, trustedSigner = trustedSigner),
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
@@ -214,26 +213,6 @@ class SigningController(
 
     private val _request = MutableStateFlow<IncomingRequest?>(null)
     val request: StateFlow<IncomingRequest?> = _request
-
-    /**
-     * "Sign with": WHERE the passkey that signs this request is — or the Clear
-     * Signer (spec 071). This controller lives for one request, so the choice
-     * cannot outlive the question it was made for; it starts at Settings'
-     * default. `auto` is the wallet's stored route, untouched.
-     */
-    val signMethod = MutableStateFlow(defaultMethod())
-    val signWithOpen = MutableStateFlow(false)
-
-
-    /** `null` toggles the list; an id picks a method and closes it. */
-    fun signWith(id: String?) {
-        if (id == null) {
-            signWithOpen.value = !signWithOpen.value
-            return
-        }
-        if (id in SIGN_METHODS) signMethod.value = id
-        signWithOpen.value = false
-    }
 
     /**
      * The fee row's coin list (the web's `feeOpen`, ef49b6b1). Which coins pay,
@@ -387,12 +366,6 @@ class SigningController(
     fun guardGrant() = guardHost.dispatch(GuardEvent.GrantDeliberatelyChosen, GuardEvent.serializer())
 
     companion object {
-        /**
-         * `wallet_keys::SIGN_METHODS` — every value the picker may set. Pinned
-         * to the core's own list (`SignPrefView.offered`) by a JVM test.
-         */
-        val SIGN_METHODS = listOf("auto", "platform", "hybrid", "security_key", "trusted_signer")
-
         /** What the confirm slides into: the fee as quoted, the guard's rewrite, the intent (the desktop's `approve_opts`). */
         fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,

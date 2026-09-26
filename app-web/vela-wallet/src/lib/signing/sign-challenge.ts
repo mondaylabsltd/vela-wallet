@@ -1,35 +1,29 @@
 /**
- * The one place a challenge gets signed: by a passkey, or — when this
- * request's "Sign with" is the Trusted Signer — on the Trusted Signer's page
- * (spec 071).
+ * The one place a challenge gets signed, by the passkey the account signs with.
  *
  * Every signing path (the dApp sheet's transactions and messages, the
  * wallet's own send, the key backup) used to call `signWithAny` with the
  * digest it computed. They call this instead and continue exactly as before:
- * whichever way it was signed, what comes back is an `Assertion` over THAT
- * digest, by one of the account's keys. For the Trusted Signer the core built
- * the page's request and judged its answer; nothing here decides either.
+ * what comes back is an `Assertion` over THAT digest, by one of the account's
+ * keys.
+ *
+ * WHICH key, and over which route, is not asked here (founder, 2026-09-26): a
+ * person says where their passkey is when they create the wallet or sign in,
+ * and every later signature reuses that answer. The account record names it
+ * and the core reads it (`signInRoute`); nothing here chooses.
  */
 
-import { toHex, type TrustedSignerKey } from '$lib/core/kernels';
-import {
-	cancelSign,
-	getSignMethod,
-	signWithAny,
-	type Assertion,
-	type SignMethod
-} from '$lib/onboarding/core/passkey';
+import { signInRoute, toHex, type SignInRoute, type TrustedSignerKey } from '$lib/core/kernels';
+import { cancelSign, sign, signWithAny, type Assertion } from '$lib/onboarding/core/passkey';
 import { loadAccounts } from '$lib/onboarding/core/storage';
-import { signPreference } from '$lib/settings/core/sign-pref.svelte';
-import type { AccountKey } from '$lib/onboarding/generated/AccountKey';
-import { signRoute, type DeviceKey } from './sign-route';
+import type { Account } from '$lib/onboarding/generated/Account';
 
 export interface ChallengeSigner {
 	/** The Safe the signature is for. */
 	account: string;
 	/** Its founding keys: the Trusted Signer's answer must be by one of them. */
 	keys: TrustedSignerKey[];
-	/** The passkey ceremony's allow-list, exactly as each path built it before. */
+	/** The allow-list for a record that names no sign-in key, as each path built it before. */
 	credentials: { id: string; transports?: string }[];
 	/**
 	 * What was asked: a dApp's own method, params and origin; the wallet's own
@@ -39,58 +33,72 @@ export interface ChallengeSigner {
 }
 
 /**
- * Sign `challenge` the way this request's "Sign with" says.
- *
- * It used to take the ASSEMBLED operation the digest covers, for the clear
- * signer to show on its own page. Spec 075 cut the Trusted Signer, and with it
- * the only reader: what is signed here is the challenge, and nothing else.
+ * Sign `challenge` with the key the account signed in with, over the route it
+ * signed in over — or, for a record written before it named that key, the way
+ * it always did.
  */
 export async function signChallenge(
 	challenge: Uint8Array,
 	signer: ChallengeSigner
 ): Promise<Assertion> {
-	// The open sheet's pick — which started at Settings' default — or, with no
-	// sheet (the wallet's own send), Settings' default itself: the person's,
-	// read from the store, not the factory's.
-	await signPreference.settled();
-	const method = getSignMethod() ?? (signPreference.view.method as SignMethod);
 	const account = loadAccounts().find(
 		(record) => record.address.toLowerCase() === signer.account.toLowerCase()
 	);
-	// Spec 075: WHERE the key lives has the last word. A key minted or found
-	// through a Trusted Signer page can only be signed THERE — and the web wallet
-	// has no Trusted Signer (owner, 2026-09-23), so it says so instead of asking
-	// a platform sheet for a key no authenticator on this device holds.
-	const route = signRoute(deviceKeysOf(account, signer), method);
-	if (route?.method === 'trusted_signer') {
+	const route = account ? signInRoute(account) : null;
+	if (account === undefined || route === null) return signAsBefore(challenge, signer, account);
+	// Spec 075: a key behind a Trusted Signer page can only be signed THERE —
+	// and the web wallet has no Trusted Signer (owner, 2026-09-23), so it says
+	// so instead of asking a platform sheet for a key no authenticator on this
+	// device holds.
+	if (route.method === 'trusted_signer') {
 		throw new Error(
-			`this key lives behind ${route.signerOrigin}, which only the Vela app can open`
+			`this key lives behind ${route.signer_origin ?? 'a Trusted Signer page'}, which only the Vela app can open`
 		);
 	}
-	return signWithAny(toHex(challenge), signer.credentials, method);
+	// The one credential, over the transports the core names — where it was
+	// chosen to be and where the sign-in found it. The chosen method's hint
+	// only when that is the same place: a key the sign-in found somewhere else
+	// must not be steered away from it, and a signature is never stricter than
+	// the ceremony that proved the key answers.
+	return sign(
+		toHex(challenge),
+		route.credential_id,
+		route.transports,
+		foundWhereChosen(account, route) ? route.method : undefined
+	);
 }
 
 /**
- * The account's keys as the route reads them — credential, transports and the
- * page a key lives behind. A record with no `keys` array is the legacy
- * single-key shape, and its one credential is the request's own allow-list.
+ * Whether the sign-in found the key where the person chose it to be: the route
+ * names nothing beyond what the choice alone would. "What the choice alone
+ * would" is the core's answer for the same record without where the key was
+ * found — the rule stays the core's, not a copy of it here.
  */
-function deviceKeysOf(
-	account: { keys?: AccountKey[] } | undefined,
-	signer: ChallengeSigner
-): DeviceKey[] {
-	const keys = account?.keys ?? [];
-	if (keys.length > 0) {
-		return keys.map((key) => ({
-			credential_id: key.credential_id,
-			transports: key.transports,
-			signer_origin: key.signer_origin
-		}));
+function foundWhereChosen(account: Account, route: SignInRoute): boolean {
+	const key = account.signed_in_with;
+	if (!key?.transports) return true;
+	const chosen = signInRoute({ ...account, signed_in_with: { ...key, transports: '' } });
+	return chosen?.transports === route.transports;
+}
+
+/**
+ * A record with no sign-in key: every founding credential allowed, each with
+ * the transports it registered with, and the browser left to pick — unless the
+ * first key lives behind a Trusted Signer page, which only that page can reach
+ * (the core's `sign_route` for `auto`).
+ */
+async function signAsBefore(
+	challenge: Uint8Array,
+	signer: ChallengeSigner,
+	account: Account | undefined
+): Promise<Assertion> {
+	const pinned = account?.keys.find((key) => key.credential_id !== '');
+	if (pinned?.signer_origin) {
+		throw new Error(
+			`this key lives behind ${pinned.signer_origin}, which only the Vela app can open`
+		);
 	}
-	return signer.credentials.map((credential) => ({
-		credential_id: credential.id,
-		transports: credential.transports ?? ''
-	}));
+	return signWithAny(toHex(challenge), signer.credentials);
 }
 
 /** Abort whatever is signing. */

@@ -21,9 +21,8 @@ use vela_core::app::fee_policy::{to_base_units, FeeAssetView, FeeEstimateView, F
 use vela_core::app::money::{DenominatedAmount, TokenPrice};
 use vela_core::app::send::{
     build_multi_token_calls, build_split_calls, duplicate_recipient_rows, is_valid_address,
-    max_figure,
-    recipients_are_valid, split_row_issues, sum_split_base_units, Event, ReentryLock, Send,
-    SendAccountRef, SendAddNetworkOutcome, SendAlertKind, SendAmountWarning, SendChainInfo,
+    max_figure, recipients_are_valid, split_row_issues, sum_split_base_units, Event, ReentryLock,
+    Send, SendAccountRef, SendAddNetworkOutcome, SendAlertKind, SendAmountWarning, SendChainInfo,
     SendDisplayContext, SendEstimateFailure, SendFeeOutcome, SendHapticKind, SendHoldReason,
     SendLockError, SendOpenParams, SendOperation as Op, SendReceiptKind, SendReceiptOutcome,
     SendReceiptStatus, SendRecipientDraft, SendRowFieldState, SendScan, SendShellResult as Res,
@@ -1795,7 +1794,10 @@ fn max_while_the_warm_quote_is_in_flight_waits_for_it() {
     let ops = sut.dispatch(Event::SetRecipient {
         recipient: RECIPIENT.to_owned(),
     });
-    if ops.iter().any(|op| matches!(op, Op::ResolveIdentity { .. })) {
+    if ops
+        .iter()
+        .any(|op| matches!(op, Op::ResolveIdentity { .. }))
+    {
         sut.resolve_matching(
             |op| matches!(op, Op::ResolveIdentity { .. }),
             Res::IdentityResolved { identity: None },
@@ -1902,7 +1904,10 @@ fn max_after_a_fee_coin_switch_does_not_reserve_the_old_coins_fee() {
         "asks again in the chain's coin: {ops:?}"
     );
     let ops = sut.dispatch(Event::TapMax);
-    assert!(ops.is_empty(), "a press meanwhile waits for that answer: {ops:?}");
+    assert!(
+        ops.is_empty(),
+        "a press meanwhile waits for that answer: {ops:?}"
+    );
     sut.resolve(Res::FeeEstimated {
         outcome: SendFeeOutcome::Ok {
             estimate: native_fee(1, 500_000_000_000_000_000),
@@ -4777,7 +4782,10 @@ fn a_typed_figure_ends_the_max() {
     });
     let view = sut.view();
     assert_eq!(view.amount, "1");
-    assert_eq!(view.token_amount, "1", "what was typed, not the Max behind it");
+    assert_eq!(
+        view.token_amount, "1",
+        "what was typed, not the Max behind it"
+    );
 }
 
 #[test]

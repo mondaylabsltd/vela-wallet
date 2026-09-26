@@ -24,7 +24,6 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
 import app.getvela.wallet.feature.signing.components.TrustedSignerWaiting
-import app.getvela.wallet.feature.signing.components.SignWithRow
 import app.getvela.wallet.feature.signing.components.SigningAmount
 import app.getvela.wallet.feature.signing.components.SigningBalances
 import app.getvela.wallet.feature.signing.components.SigningCard
@@ -63,7 +62,6 @@ fun SigningSheet(
     /** A batch leg's own chips and field — the leg index travels with them. */
     onLegChip: (Int, String) -> Unit = { _, _ -> },
     onLegCustomAmount: (Int, String) -> Unit = { _, _ -> },
-    onSignWith: (String?) -> Unit = {},
     onFee: () -> Unit = {},
     onFeePick: (String) -> Unit = {},
     /** Spec 069: the speed control under the fee. */
@@ -86,7 +84,6 @@ fun SigningSheet(
             onCustomAmount = onCustomAmount,
             onLegChip = onLegChip,
             onLegCustomAmount = onLegCustomAmount,
-            onSignWith = onSignWith,
             onFee = onFee,
             onFeePick = onFeePick,
             onToggleSpeed = onToggleSpeed,
@@ -107,8 +104,6 @@ fun SigningSheetContent(
     onCustomAmount: (String) -> Unit = {},
     onLegChip: (Int, String) -> Unit = { _, _ -> },
     onLegCustomAmount: (Int, String) -> Unit = { _, _ -> },
-    /** `null` toggles the list; an id picks a method and closes it. */
-    onSignWith: (String?) -> Unit = {},
     /** Issue #262: the fee row's tap and its coin list's pick. */
     onFee: () -> Unit = {},
     onFeePick: (String) -> Unit = {},
@@ -200,7 +195,6 @@ fun SigningSheetContent(
             )
         }
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
-        model.signWith?.let { SignWithRow(it, onSignWith) }
         model.trustedSignerNotice?.let { SigningWarning(SigningTone.Caution, it) }
         val waiting = model.trustedSignerWait
         // Three states, in order of precedence: waiting on the Trusted Signer's

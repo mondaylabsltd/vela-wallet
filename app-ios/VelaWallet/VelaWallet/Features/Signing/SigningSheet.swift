@@ -25,8 +25,6 @@ struct SigningSheet: View {
     /// One batch leg's chip / field — the leg index travels with them.
     var onAllowanceLegChip: (Int, String) -> Void = { _, _ in }
     var onAllowanceLegAmount: (Int, String) -> Void = { _, _ in }
-    /// `nil` toggles the "Sign with" list; an id picks a method.
-    var onSignWith: (String?) -> Void = { _ in }
     /// Issue #262: the fee row's tap (retry, or open / close the coin list)
     /// and a coin picked from that list.
     var onFee: () -> Void = {}
@@ -62,9 +60,6 @@ struct SigningSheet: View {
                 }
                 SigningSignerRow(label: model.signer.label, name: model.signer.name,
                                  seed: model.signer.seed)
-                if let signWith = model.signWith {
-                    SignWithRow(model: signWith, onSelect: onSignWith)
-                }
                 // Spec 081: a refused request offers no confirm control at
                 // all. It is not disabled — it is absent, because the wallet
                 // never offered it.

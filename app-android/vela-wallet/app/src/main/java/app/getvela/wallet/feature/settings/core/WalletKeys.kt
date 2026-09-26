@@ -21,8 +21,8 @@ import org.json.JSONObject
 class WalletKeys(
     /** The RAW `result` hex, or `null` when that chain did not answer. */
     private val ethCall: suspend (chainId: Int, to: String, data: String) -> String?,
-    private val step: (address: String, deviceKeysJson: String, answersJson: String) -> String =
-        { address, device, answers -> uniffi.vela_core_uniffi.walletKeysStep(address, device, answers) },
+    private val step: (address: String, deviceKeysJson: String, answersJson: String, signInCredential: String) -> String =
+        { address, device, answers, signInCredential -> uniffi.vela_core_uniffi.walletKeysStep(address, device, answers, signInCredential) },
 ) {
     enum class Source {
         /** The registry answered: every field is filled. */
@@ -48,6 +48,8 @@ class WalletKeys(
         val name: String,
         val transports: String,
         val signerOrigin: String = "",
+        /** How the core finds the sign-in key's row: by this credential, then by its public key. */
+        val credentialId: String = "",
     )
 
     data class Row(
@@ -64,15 +66,23 @@ class WalletKeys(
         val attestationHex: String = "",
         /** The authenticator verified the person at registration; `null` = nobody can vouch. */
         val userVerified: Boolean? = null,
+        /** The key this device signs with — the account's sign-in key (2026-09-26). At most one row. */
+        val signsHere: Boolean = false,
     )
 
     data class Result(val source: Source, val rows: List<Row>)
 
-    suspend fun read(address: String, device: List<DeviceKey>): Result {
+    /**
+     * [signInCredential]: the credential of the account's sign-in route
+     * (`signInRoute(record).credential_id`), empty for a record without one —
+     * its row comes back marked `signs_here`.
+     */
+    suspend fun read(address: String, device: List<DeviceKey>, signInCredential: String): Result {
         val deviceJson = JSONArray().apply {
             device.forEach {
                 put(
                     JSONObject()
+                        .put("credential_id", it.credentialId)
                         .put("public_key_hex", it.publicKeyHex)
                         .put("name", it.name)
                         .put("transports", it.transports)
@@ -82,7 +92,7 @@ class WalletKeys(
         }.toString()
         val answers = JSONArray()
         repeat(MAX_ROUNDS) {
-            val next = runCatching { JSONObject(step(address, deviceJson, answers.toString())) }.getOrNull() ?: return Result(Source.Device, emptyList())
+            val next = runCatching { JSONObject(step(address, deviceJson, answers.toString(), signInCredential)) }.getOrNull() ?: return Result(Source.Device, emptyList())
             if (next.optString("type") != "ask") return parse(next)
             val requests = next.optJSONArray("requests") ?: return Result(Source.Device, emptyList())
             coroutineScope {
@@ -103,7 +113,7 @@ class WalletKeys(
             }.forEach(answers::put)
         }
         // Never settled: what the device alone says, asked with no address so it can ask nobody.
-        return runCatching { parse(JSONObject(step("", deviceJson, "[]"))) }.getOrDefault(Result(Source.Device, emptyList()))
+        return runCatching { parse(JSONObject(step("", deviceJson, "[]", signInCredential))) }.getOrDefault(Result(Source.Device, emptyList()))
     }
 
     private fun parse(done: JSONObject): Result {
@@ -133,6 +143,7 @@ class WalletKeys(
                 signerOrigin = key.optString("signer_origin"),
                 attestationHex = key.optString("attestation_hex"),
                 userVerified = if (key.isNull("user_verified")) null else key.optBoolean("user_verified"),
+                signsHere = key.optBoolean("signs_here"),
             )
         }
         return Result(source, rows)

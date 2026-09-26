@@ -18,19 +18,18 @@
 	 * and never by what they cost: the control's own label is "Speed", so an
 	 * option called "Economy" would be answering a question nobody asked. What
 	 * each speed buys is the line under it, which is what stops the slow tier
-	 * reading as a defect. It sits under BOTH the name and the fee rather than
-	 * squeezed beside them: on the narrowest phone the figures take most of
-	 * the row, and a sentence folded into what is left would run three or four
-	 * lines per option — three ragged options is not a comparison.
+	 * reading as a defect. It is line 2, under the name; the gas bid shares
+	 * that line, under the fee (078 round 2 — two lines, not three with a hole
+	 * under every name). When the two cannot share it, the reason wraps under
+	 * itself and the bid, a figure, is never cut.
 	 *
-	 * Beside each name — quietly, under the fee — is the effective gas price
+	 * Under each fee, quietly, is the effective gas price
 	 * that tier buys (issue 684). That is a number, and it is deliberately NOT
 	 * the name: `fee_policy` clamps every tier to the $0.01 floor on any chain
 	 * whose real cost is under a cent, so on seven networks the owner found
 	 * three identical fees and read the picker as broken. The tiers do differ —
 	 * each signs a different tip — and this is the row where that shows. It
-	 * stays subordinate: smaller, muted, under the money, on its own line so
-	 * it never squeezes the fee or reflows the description — and it carries
+	 * stays subordinate: caption-sized, muted, under the money — and it carries
 	 * its name ("Gas Bid"), because an unnamed number under a fee reads as a
 	 * second charge.
 	 *
@@ -58,6 +57,17 @@
 	}
 
 	let { speed, ontoggle, onselect }: Props = $props();
+
+	/**
+	 * Each option's last drawn gas-bid width, by tier. While a tier
+	 * re-measures its bid is blank, and a blank slot is narrower than a figure
+	 * — the description beside it would take the room and re-wrap, and the
+	 * option would change height twice: the picker jumping on every tap and
+	 * refresh. Held at the width it last had, line 2 keeps its shape until the
+	 * new figure lands. (The first figure a mounted control ever draws has no
+	 * width to hold; the label's width is reserved for it instead.)
+	 */
+	let gasWidths = $state<Record<string, number>>({});
 </script>
 
 <section class="speed">
@@ -103,36 +113,49 @@
 					>
 						<span class="name">{option.label}</span>
 						<span class="values">
-							<span class="amounts">
-								<span class="value">{option.value}</span>
-								{#if option.valueFiat}
-									<span class="value">{option.valueFiat}</span>
-								{/if}
-							</span>
+							<span class="value">{option.value}</span>
+							{#if option.valueFiat}
+								<span class="value">{option.valueFiat}</span>
+							{/if}
 						</span>
 						<span class="tick" aria-hidden="true">
 							{#if option.selected}
 								<Icon icon={UTILITY_ICONS.check} size="sm" />
 							{/if}
 						</span>
-						{#if speed.gasPriceLine}
-							<!-- Named, and drawn: under the fee in the same numeric
-							     face, a bare "3,244 wei" reads as a second amount being
-							     charged. Held open EMPTY while the set is measuring, so
-							     the option does not lose a line and regain it. -->
-							<span class="gas">
-								{#if option.gasPrice !== undefined}
-									<span class="gas-label">{speed.gasPriceLabel}</span>
-									<span class="gas-value">{option.gasPrice}</span>
-								{:else}
-									<!-- In the figure's own face, so the empty line is
-									     exactly as tall as a full one. -->
-									<span class="gas-value">&nbsp;</span>
+						<!-- Line 2 (078 round 2): what the speed buys on the left, the gas
+						     bid on the right — under the name and under the fee, where
+						     each belongs. It used to be two lines of its own, the bid
+						     right-aligned over an empty left half and the description
+						     under that: a hole under every name. -->
+						{#if option.detail !== undefined || speed.gasPriceLine}
+							<span class="sub">
+								<span class="detail">{option.detail ?? ''}</span>
+								{#if speed.gasPriceLine}
+									<!-- Named, and drawn: a bare "3,244 wei" reads as a second
+									     amount being charged. Held open EMPTY while the set is
+									     measuring, so the option keeps its shape. -->
+									<span
+										class="gas"
+										bind:offsetWidth={gasWidths[option.id]}
+										style:min-width={option.gasPrice === undefined &&
+										gasWidths[option.id] !== undefined
+											? `${gasWidths[option.id]}px`
+											: undefined}
+									>
+										{#if option.gasPrice !== undefined}
+											<span class="gas-label">{speed.gasPriceLabel}</span>
+											<span class="gas-value">{option.gasPrice}</span>
+										{:else}
+											<!-- Saying nothing, but holding the room: the label's
+											     width, unseen, and a line exactly as tall as a
+											     figure's. -->
+											<span class="gas-reserve" aria-hidden="true">{speed.gasPriceLabel}</span>
+											<span class="gas-value">&nbsp;</span>
+										{/if}
+									</span>
 								{/if}
 							</span>
-						{/if}
-						{#if option.detail !== undefined}
-							<span class="detail">{option.detail}</span>
 						{/if}
 					</button>
 				</li>
@@ -222,14 +245,17 @@
 		overflow: hidden;
 	}
 
-	/* Wraps for ONE reason: the description below. `column-gap` and `row-gap`
-	   are set apart rather than shorthand `gap`, because the space between a
-	   name and the fee beside it and the space between a name and its own
-	   description are not the same measurement. */
+	/* Two lines (078 round 2): [name …… fee] ✓ over [description …… gas bid].
+	   A grid, so each line-2 piece sits under the line-1 piece it belongs to
+	   — the reason under the name, the bid under the money — and the tick
+	   keeps a column of its own, top-aligned with line 1. */
 	.option {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto var(--space-lg);
+		grid-template-areas:
+			'name values tick'
+			'sub sub .';
+		align-items: baseline;
 		column-gap: var(--space-md);
 		row-gap: var(--space-xs);
 		width: 100%;
@@ -243,91 +269,32 @@
 		cursor: pointer;
 	}
 
+	/* The speed in force is TEXT colour and weight, never accent — accent is
+	   for moving money and submitting (design language), and a speed is
+	   neither. The tick below carries the same colour. */
 	.option.selected .name {
 		color: var(--color-fg-base);
 		font-weight: var(--weight-semibold);
 	}
 
+	/* The money never wraps and the name, a short word, elides instead: three
+	   rows being COMPARED must be one height each, their figures ending on one
+	   right edge ("Стандартно" once took two lines on the narrowest phone
+	   while its neighbours took one). */
 	.name {
-		flex: 1 1 auto;
+		grid-area: name;
 		min-width: 0;
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
 	}
 
-	/* The full width of the option, under the name AND the fee, so it still
-	   reads on the narrowest phone instead of being folded into whatever the
-	   figures left over. It wraps rather than elides — a truncated reason is
-	   worse than no reason — and stays quiet: the fee and the name are what is
-	   being compared. */
-	.detail {
-		flex-basis: 100%;
-		font-size: calc(var(--text-xs) * var(--text-scale, 1));
-		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
-	}
-
-	/* The OPPOSITE give-way order to the fee row's, on purpose. That row shows
-	   one fee and its label is the only thing naming it, so the money drops to
-	   a second line and the label keeps its own. Here there are three rows being
-	   COMPARED, and a row that wraps while its neighbours do not makes the list
-	   ragged exactly where somebody is reading down it — which is what happened
-	   on the narrowest phone in a long-word locale ("Стандартно" took two lines,
-	   the other two one). So the money never wraps and the name, a short word,
-	   elides instead: three rows of one height, and the figures ending on one
-	   right edge.
-
-	   The money ONLY, again, since issue 685 — the gas price moved out to a
-	   line of its own below (`.gas`). Inside this column its width became
-	   this column's width, and a range is wider than the money: in the 272
-	   CSS pixels an option really gets on the narrowest phone, "Стандартно" plus
-	   `0.02013 ~ 0.04023 gwei` no longer fit on one line, and because the
-	   option wraps its items before it shrinks any of them, the money dropped
-	   under the name on that row alone — the ragged list this rule exists to
-	   prevent. */
 	.values {
-		flex: 0 0 auto;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-	}
-
-	.amounts {
+		grid-area: values;
 		display: flex;
 		flex-wrap: nowrap;
 		justify-content: flex-end;
 		column-gap: var(--space-sm);
-	}
-
-	/* Under the money, not beside it. On the narrowest phone the figures
-	   already fill the right half of the row, and a fourth thing on that line
-	   would either wrap the money (the exact raggedness the rule above exists
-	   to prevent) or squeeze the name. Its own line costs one short row of
-	   height and nothing else — in particular the description below is
-	   untouched.
-
-	   The FULL width of the option since issue 685, not the money's column:
-	   a range may reach under the name, so it never takes the name's room on
-	   the line above. It still ends on the money's right edge — the inset is
-	   the tick's width and the gap before it — so it reads as the fee's own
-	   footnote rather than the tick's. */
-	.gas {
-		flex-basis: 100%;
-		display: flex;
-		justify-content: flex-end;
-		column-gap: var(--space-xs);
-		padding-inline-end: calc(var(--space-lg) + var(--space-md));
-		box-sizing: border-box;
-		white-space: nowrap;
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-xs) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
-	}
-
-	.gas-value {
-		font-family: var(--font-numeric);
-		font-variant-numeric: tabular-nums;
 	}
 
 	.value {
@@ -339,12 +306,61 @@
 	}
 
 	/* Reserved whether or not the tick is drawn, so choosing a row does not
-	   shuffle the figures beside it. */
+	   shuffle the figures beside it. Centred on line 1, whatever line 2 does. */
 	.tick {
+		grid-area: tick;
+		align-self: center;
 		display: flex;
-		flex: 0 0 auto;
-		width: var(--space-lg);
 		color: var(--color-fg-base);
+	}
+
+	/* The reason and the bid, both caption-sized and quiet: the fee and the
+	   name are what is being compared. The bid never gives way — it is a
+	   figure — so when the two cannot share the line, the reason wraps under
+	   itself, in its own column; it is never cut, since a truncated reason is
+	   worse than none.
+
+	   One floor under that: the reason keeps a column of at least six of its
+	   own characters. Only the widest range the formatter can write, under the
+	   longest label, at the narrowest phone, leaves less — and a column one
+	   word wide stacks the sentence into a tower. There, and only there, the
+	   bid drops under the reason, still whole and on the fee's right edge. */
+	.sub {
+		grid-area: sub;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: var(--space-md);
+		row-gap: var(--space-xs);
+		min-width: 0;
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
+	}
+
+	.detail {
+		flex: 1 1 6em;
+		min-width: 0;
+	}
+
+	/* The UI face with tabular DIGITS for the figure — not a monospace face for
+	   the whole string: "Gas Bid" is a word, and only the number has columns. */
+	.gas {
+		flex: 0 0 auto;
+		display: flex;
+		column-gap: var(--space-xs);
+		margin-inline-start: auto;
+		white-space: nowrap;
+		font-family: var(--font-ui);
+	}
+
+	.gas-value {
+		font-family: var(--font-numeric);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.gas-reserve {
+		visibility: hidden;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

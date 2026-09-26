@@ -12,6 +12,8 @@
  */
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
+import type { Account } from '$lib/core/generated/Account';
+import type { KeyMethod } from '$lib/core/generated/KeyMethod';
 
 export {
 	PROXY_CREATION_CODE,
@@ -609,6 +611,33 @@ export function attestSafeMessageHash(
 }
 
 // ---------------------------------------------------------------------------
+// Where a signature goes
+// ---------------------------------------------------------------------------
+
+/**
+ * Where an account's signatures go (founder, 2026-09-26): the key it was
+ * created or last signed in with here, over the route the person chose for it
+ * then — `vela_core::app::Account::sign_in_route`. `transports` is what makes
+ * that route reachable; `signer_origin` is present only for a key behind a
+ * Trusted Signer page.
+ */
+export interface SignInRoute {
+	credential_id: string;
+	transports: string;
+	method: KeyMethod;
+	signer_origin?: string;
+}
+
+/**
+ * The stored account's sign-in route, or `null` for a record written before
+ * the account named its sign-in key — that one signs as it always did.
+ */
+export function signInRoute(account: Account): SignInRoute | null {
+	const route = wasm.signInRoute(JSON.stringify(account));
+	return route === undefined ? null : (JSON.parse(route) as SignInRoute);
+}
+
+// ---------------------------------------------------------------------------
 // The Trusted Signer (spec 071) — what its page receives, and the verdict on
 // what it answers. The web builds and judges nothing itself.
 // ---------------------------------------------------------------------------
@@ -664,11 +693,6 @@ export type TrustedSignerVerdict =
 			};
 	  }
 	| { refused: { code: string; detail: string } };
-
-/** Whether a page at `url` can use this wallet's passkeys (they are `getvela.app` keys). */
-export function trustedSignerUsesWalletPasskeys(url: string): boolean {
-	return wasm.trustedSignerUsesWalletPasskeys(url);
-}
 
 /**
  * The relying party a key minted behind `signerOrigin` belongs to, `null` for

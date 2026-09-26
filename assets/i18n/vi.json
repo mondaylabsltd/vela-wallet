@@ -37,7 +37,7 @@
   "appearance": {
    "themeLight": "Sáng",
    "themeDark": "Tối",
-   "themeAuto": "Theo hệ thống",
+   "themeAuto": "Hệ thống",
    "avatarInitials": "Chữ cái đầu",
    "avatarIdenticon": "Identicon",
    "themeTitle": "Chủ đề",
@@ -1652,7 +1652,8 @@
    "credential": "Thông tin xác thực",
    "transport": "Phương thức truyền",
    "attestation": "Chứng thực",
-   "userVerified": "Cần xác minh khi dùng"
+   "userVerified": "Cần xác minh khi dùng",
+   "signsHere": "Đang đăng nhập"
   }
  },
  "contacts": {

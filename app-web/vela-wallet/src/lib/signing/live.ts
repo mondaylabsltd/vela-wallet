@@ -43,7 +43,6 @@ import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
-import type { SignMethod } from '$lib/onboarding/core/passkey';
 import type { SigningMessages } from './messages';
 import type {
 	AllowanceChip,
@@ -724,54 +723,5 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			enabled
 		},
 		panelTitle: m.panelTitle
-	};
-}
-
-/**
- * "Sign with" on the sheet (spec 071): every method the `sign_pref` core
- * offers, in its order, named as the create flow and Settings name them; the
- * Trusted Signer with its one line. The request starts at Settings' default
- * and shows this request's own pick once there is one — the pick never goes
- * back to the preference (contract §6). A name this build has no words for
- * is not drawn, and is never in force: the default falls back to `auto`.
- */
-export function signWithModel(input: {
-	offered: readonly string[];
-	defaultMethod: string;
-	picked: string | null;
-	open: boolean;
-	m: SigningMessages;
-}): { method: SignMethod; row: NonNullable<SigningModel['signWith']> } {
-	const { m } = input;
-	// Partial on purpose: the core offers `trusted_signer` to every shell, and
-	// this one has no words for it because it has no Trusted Signer at all
-	// (owner, 2026-09-23). A name with no title here is simply not drawn —
-	// which is the same rule an older build's unknown name already met.
-	const titles: Partial<Record<SignMethod, string>> = {
-		auto: m.signWithAuto,
-		platform: m.signWithPlatform,
-		hybrid: m.signWithHybrid,
-		security_key: m.signWithSecurityKey
-	};
-	const offered = input.offered.filter((id): id is SignMethod => id in titles);
-	const inForce = (id: string | null): id is SignMethod =>
-		id !== null && offered.includes(id as SignMethod);
-	const method: SignMethod = inForce(input.picked)
-		? input.picked
-		: inForce(input.defaultMethod)
-			? input.defaultMethod
-			: 'auto';
-	return {
-		method,
-		row: {
-			label: m.signWithLabel,
-			value: titles[method] ?? m.signWithAuto,
-			open: input.open,
-			options: offered.map((id) => ({
-				id,
-				title: titles[id] ?? '',
-				selected: id === method
-			}))
-		}
 	};
 }

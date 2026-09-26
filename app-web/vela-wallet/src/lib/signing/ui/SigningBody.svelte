@@ -2,7 +2,6 @@
 	import BlockList from './BlockList.svelte';
 	import FeeRow from './FeeRow.svelte';
 	import SignerRow from './SignerRow.svelte';
-	import SignWithRow from './SignWithRow.svelte';
 	import SlideToConfirm from './SlideToConfirm.svelte';
 	import TechDetails from './TechDetails.svelte';
 	import type { SigningModel } from '../model';
@@ -24,8 +23,6 @@
 		/** Spec 069: fold / unfold the speed control, and a one-shot pick. */
 		onspeed?: () => void;
 		onspeedpick?: (id: string) => void;
-		/** `null` toggles the list; an id picks a method and closes it. */
-		onsignwith?: (id: string | null) => void;
 		/** Spec 081: the way out of a refused request. */
 		onclose?: () => void;
 	}
@@ -39,8 +36,7 @@
 		onfee,
 		onfeepick,
 		onspeed,
-		onspeedpick,
-		onsignwith
+		onspeedpick
 	}: Props = $props();
 
 	// cs29 ships the disclosure open; anything after that is the person's call.
@@ -63,9 +59,6 @@
 		identiconSvg={model.signer.identiconSvg}
 		address={model.signer.address}
 	/>
-	{#if model.signWith}
-		<SignWithRow signWith={model.signWith} onselect={onsignwith} />
-	{/if}
 	<!--
 		Spec 081: a refused request shows no fee and no slider. Leaving a dead
 		"Slide to confirm · Enable module" under the refusal reads as an option

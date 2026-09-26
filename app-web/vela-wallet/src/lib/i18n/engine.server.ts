@@ -370,14 +370,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			slowHint: k('send.gasTierHintSlow')
 		},
 		signing: {
-			title: k('settings.signing.title'),
-			subtitle: k('settings.signing.subtitle'),
-			// The signing sheet's own names, so the two surfaces cannot drift.
 			methods: {
-				auto: k('common.automatic'),
-				platform: k('onboarding.create.methodPlatformTitle'),
-				hybrid: k('onboarding.create.methodHybridTitle'),
-				security_key: k('onboarding.create.methodSecurityKeyTitle'),
 				trusted_signer: k('componentsUi.signing.trustedSignerTitle')
 			},
 			trustedSignerBody: k('componentsUi.signing.trustedSignerBody'),
@@ -612,6 +605,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			transport: k('settingsModals.keys.transport'),
 			attestation: k('settingsModals.keys.attestation'),
 			userVerified: k('settingsModals.keys.userVerified'),
+			signsHere: k('settingsModals.keys.signsHere'),
 			copy: k('componentsUi.signing.copyValue'),
 			copied: k('receive.copied')
 		},
@@ -919,12 +913,6 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		backupRegisteredAs: k('settingsModals.backup.registeredAs'),
 		backupAddress: k('contacts.addressLabel'),
 		backupPublicKeys: k('settingsModals.backup.publicKeys'),
-		signWithLabel: k('componentsUi.signing.signWith'),
-		signWithAuto: k('common.automatic'),
-		// Titles only: the create flow's descriptions say "create it on…".
-		signWithPlatform: k('onboarding.create.methodPlatformTitle'),
-		signWithHybrid: k('onboarding.create.methodHybridTitle'),
-		signWithSecurityKey: k('onboarding.create.methodSecurityKeyTitle'),
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.
 		receipt: {

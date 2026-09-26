@@ -34,7 +34,6 @@ struct ExploreScreen: View {
     /// One batch leg's chip / field — the leg index travels with them.
     var onAllowanceLegChip: (Int, String) -> Void = { _, _ in }
     var onAllowanceLegAmount: (Int, String) -> Void = { _, _ in }
-    var onSignWith: (String?) -> Void = { _ in }
     /// Issue #262: the fee row's tap and a coin picked from its list.
     var onFee: () -> Void = {}
     var onFeePick: (String) -> Void = { _ in }
@@ -308,7 +307,6 @@ struct ExploreScreen: View {
                     onAllowanceAmount: onAllowanceAmount,
                     onAllowanceLegChip: onAllowanceLegChip,
                     onAllowanceLegAmount: onAllowanceLegAmount,
-                    onSignWith: onSignWith,
                     onFee: onFee,
                     onFeePick: onFeePick,
                     onSpeed: onSpeed

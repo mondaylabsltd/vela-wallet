@@ -46,9 +46,6 @@ enum class SettingsOverlay {
     /** The default transaction speed (spec 069): three speeds, each with what it buys. */
     FeeSpeed,
 
-    /** Spec 071: the default "Sign with" — the three places a passkey is, and the Trusted Signer. */
-    SignWith,
-
     /** Spec 071: which Trusted Signer page the wallet opens. */
     SignerPage,
 
@@ -503,7 +500,8 @@ data class WalletKeysModel(
     val copiedLabel: String,
 )
 
-enum class KeyPillTone { Verified, Synced, Local }
+/** [SignsHere] is the one filled pill — the key this device signs with; the rest are outlined. */
+enum class KeyPillTone { SignsHere, Verified, Synced, Local }
 
 data class KeyPillModel(val text: String, val tone: KeyPillTone)
 
@@ -560,8 +558,7 @@ data class SettingsScreenModel(
     val currencySheet: SelectSheetModel,
     /** Spec 069: the default transaction speed's sheet. */
     val feeSpeedSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
-    /** Spec 071: the default "Sign with" sheet, and the Trusted Signer page's. */
-    val signWithSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
+    /** Spec 071: the Trusted Signer page's sheet. */
     val signerPage: SignerPageModel = SignerPageModel(),
     val numberSheet: SelectSheetModel,
     val dateSheet: SelectSheetModel,

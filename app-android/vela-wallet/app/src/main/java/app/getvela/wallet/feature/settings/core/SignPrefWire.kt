@@ -9,18 +9,12 @@ import kotlinx.serialization.Serializable
  * template. The web mirrors are
  * `app-web/vela-wallet/src/lib/core/generated/SignPref*.ts`.
  *
- * How this device signs by default: the "Sign with" every signing sheet
- * starts at, and which Trusted Signer page it opens. A pick on a signing sheet
- * is one request's and never comes here.
+ * Which Trusted Signer page this device opens. How a signature is routed is
+ * the account's own sign-in key, never a preference.
  */
 
 @Serializable
 data class SignPrefView(
-    /** Always an offered name — `auto` when nothing was chosen. */
-    val method: String = "auto",
-    val method_committed: Boolean = false,
-    /** Every "Sign with" value, in the order a picker lists them. */
-    val offered: List<String> = listOf("auto", "platform", "hybrid", "security_key", "trusted_signer"),
     /** The page the Trusted Signer opens — always usable. */
     val signer_url: String = "https://sign.getvela.app/",
     val signer_url_is_default: Boolean = true,
@@ -36,11 +30,6 @@ sealed class SignPrefEvent {
     @SerialName("refresh")
     data object Refresh : SignPrefEvent()
 
-    /** Settings only. */
-    @Serializable
-    @SerialName("method_chosen")
-    data class MethodChosen(val method: String) : SignPrefEvent()
-
     @Serializable
     @SerialName("signer_url_submitted")
     data class SignerUrlSubmitted(val text: String) : SignPrefEvent()
@@ -52,14 +41,10 @@ sealed class SignPrefEvent {
 
 @Serializable
 sealed class SignPrefOperation {
-    /** Read `vela.signMethod` and `vela.trustedSignerUrl`, raw. */
+    /** Read `vela.trustedSignerUrl`, raw. */
     @Serializable
     @SerialName("read_stored")
     data object ReadStored : SignPrefOperation()
-
-    @Serializable
-    @SerialName("write_method")
-    data class WriteMethod(val method: String) : SignPrefOperation()
 
     /** `null` removes the key: the official page. */
     @Serializable
@@ -72,10 +57,7 @@ sealed class SignPrefOperation {
 sealed class SignPrefShellResult {
     @Serializable
     @SerialName("stored")
-    data class Stored(
-        val method: String? = null,
-        val signer_url: String? = null,
-    ) : SignPrefShellResult()
+    data class Stored(val signer_url: String? = null) : SignPrefShellResult()
 
     @Serializable
     @SerialName("written")

@@ -20,9 +20,10 @@ import app.getvela.wallet.feature.onboarding.core.PasskeyExecutor
 interface UserOpSigner {
     /**
      * @param challenge the 32-byte SafeOp hash.
-     * @param credentialIdHex the pinned credential — the wallet's first key —
-     *   or `null` for a discoverable ceremony.
-     * @param transports the pinned key's stored transports (`"internal"`,
+     * @param credentialIdHex the pinned credential — the key the account signed
+     *   in with (the first key for a record from before that) — or `null` for a
+     *   discoverable ceremony.
+     * @param transports the transports its route carries (`"internal"`,
      *   `"hybrid,internal"`, `"usb,nfc"`…), load-bearing for routing.
      */
     suspend fun sign(
@@ -49,7 +50,7 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
 }
 
 /**
- * The fourth "Sign with" (spec 071): a separate page decodes the request from
+ * The Trusted Signer (spec 071): a separate page decodes the request from
  * the operation's own bytes, derives the digest itself and runs the ceremony.
  *
  * [requestJson] is the core's `trustedSignerRequest`, [digest] the challenge the

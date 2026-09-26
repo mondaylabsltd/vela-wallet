@@ -37,7 +37,7 @@
   "appearance": {
    "themeLight": "ライト",
    "themeDark": "ダーク",
-   "themeAuto": "システムに合わせる",
+   "themeAuto": "自動",
    "avatarInitials": "イニシャル",
    "avatarIdenticon": "識別アイコン",
    "themeTitle": "テーマ",
@@ -1652,7 +1652,8 @@
    "credential": "クレデンシャル",
    "transport": "トランスポート",
    "attestation": "アテステーション",
-   "userVerified": "使用時に本人確認"
+   "userVerified": "使用時に本人確認",
+   "signsHere": "ログイン中"
   }
  },
  "contacts": {

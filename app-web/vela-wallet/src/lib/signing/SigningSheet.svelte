@@ -23,7 +23,6 @@
 		onfeepick?: (id: string) => void;
 		onspeed?: () => void;
 		onspeedpick?: (id: string) => void;
-		onsignwith?: (id: string | null) => void;
 	}
 
 	let {
@@ -35,8 +34,7 @@
 		onfee,
 		onfeepick,
 		onspeed,
-		onspeedpick,
-		onsignwith
+		onspeedpick
 	}: Props = $props();
 </script>
 
@@ -61,7 +59,6 @@
 			{onfeepick}
 			{onspeed}
 			{onspeedpick}
-			{onsignwith}
 		/>
 	</div>
 </div>

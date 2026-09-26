@@ -949,6 +949,35 @@ fn a_two_key_wallet_publishes_both_members_and_the_multi_address() {
     }
 }
 
+/// Creating is this device's first sign-in (founder, 2026-09-26): the wallet
+/// signs with its FIRST key, over the route the person chose for it — never
+/// asked again at signing time, whatever keys joined after it.
+#[test]
+fn the_wallet_signs_with_its_first_key_over_the_route_it_was_made_on() {
+    let mut sut = two_keys("Ann");
+    sut.dispatch(Event::FinishKeys);
+    sut.resolve(ShellResult::PendingUploadSaved);
+    sut.resolve(ShellResult::RegistryPublished);
+    let requested = sut.resolve(ShellResult::PendingUploadRemoved);
+    match requested.iter().find(|op| is_save_account(op)) {
+        Some(ShellOperation::SaveAccount { account }) => {
+            assert_eq!(
+                account.signed_in_with,
+                Some(vela_core::app::SignInKey {
+                    credential_id: CRED.to_owned(),
+                    method: KeyMethod::Platform,
+                    // What the fixture authenticator reported when it made
+                    // the key.
+                    transports: "hybrid,internal".to_owned(),
+                    signer_origin: None,
+                }),
+                "key 1 was made on this device; the security key joined after"
+            );
+        }
+        other => panic!("expected the account save, got {other:?}"),
+    }
+}
+
 /// Cancelling an ADDED key's ceremony keeps the existing drafts — the minted
 /// passkeys are real; only StartOver abandons them.
 #[test]

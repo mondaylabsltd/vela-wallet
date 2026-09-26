@@ -2,18 +2,6 @@
 
 export type SignPrefView = { 
 /**
- * The "Sign with" every signing sheet starts at. Always an offered name.
- */
-method: string, 
-/**
- * `false` ⇒ `method` is the factory default, not a choice.
- */
-method_committed: boolean, 
-/**
- * Every "Sign with" value, in the order a picker lists them.
- */
-offered: Array<string>, 
-/**
  * The Trusted Signer page the wallet opens. Always usable.
  */
 signer_url: string, 

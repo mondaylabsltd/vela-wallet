@@ -506,6 +506,9 @@ enum SettingsLive {
                 holder: holder,
                 fingerprint: body.count >= 8 ? "\(body.prefix(4))…\(body.suffix(4))".lowercased() : "",
                 pills: [
+                    // The key this device signs with stands out, first
+                    // (founder, 2026-09-26). The core marks at most one row.
+                    row.signsHere ? KeyPillModel(text: loc.t(k.keysSignsHere), tone: .signsHere) : nil,
                     row.userVerified == true ? KeyPillModel(text: loc.t(k.keysUserVerified), tone: .verified) : nil,
                     row.synced.map { KeyPillModel(text: loc.t($0 ? k.keysSynced : k.keysNotSynced), tone: $0 ? .synced : .local) },
                 ].compactMap { $0 },
@@ -665,34 +668,25 @@ enum SettingsLive {
         return copy
     }
 
-    /// How this device signs (spec 071): the two rows' values, the "Sign with"
-    /// sheet's tick and the Trusted Signer page's sheet — every verdict in them
-    /// the `sign_pref` core's, so a row cannot say one thing while a signing
-    /// sheet starts at another.
+    /// Which Trusted Signer page this device opens (spec 071): the row's value
+    /// and the page's sheet — every verdict in them the `sign_pref` core's, so
+    /// the row cannot name one page while a signature opens another.
     static func withSignPref(
         _ view: SignPrefViewWire,
         on model: SettingsScreenModel,
         loc: Loc
     ) -> SettingsScreenModel {
         var copy = model
-        let sheet = SettingsFixtures.signWithSheet(loc, offered: view.offered, selected: view.method)
         copy.sections = model.sections.map { section in
             var updated = section
             updated.rows = section.rows.map { row in
+                guard row.id == SettingsFixtures.signerPageRow else { return row }
                 var changed = row
-                switch row.id {
-                case SettingsFixtures.signWithRow:
-                    changed.value = sheet.rows.first(where: \.selected)?.label ?? row.value
-                case SettingsFixtures.signerPageRow:
-                    changed.value = signerPageValue(view, loc: loc)
-                default:
-                    return row
-                }
+                changed.value = signerPageValue(view, loc: loc)
                 return changed
             }
             return updated
         }
-        copy.signWithSheet = sheet
         let error: String? = switch view.signerUrlError {
         case "invalid": loc.t("settings.signing.pageInvalid")
         case "insecure": loc.t("settings.signing.pageInsecure")
@@ -1343,6 +1337,62 @@ enum SettingsLive {
     /// `commit` is `unknown` unless the archive passed one (see `Info.plist`),
     /// and the caller substitutes the build number in that case — the page
     /// never prints a hash that is not this build's.
+    /// What this device may say about itself in a bug report — the web's
+    /// `DeviceFacts`, minus what iOS has no honest source for.
+    struct FeedbackFacts {
+        let version: String
+        let commit: String
+        /// "iOS 26.2".
+        let platform: String
+        /// The UI language tag in use.
+        let language: String
+        /// Display NAMES of networks whose whole RPC pool failed. Never URLs.
+        let unreachable: [String]
+    }
+
+    /// The feedback sheet's "what will be sent" block, from THIS device
+    /// (founder, 2026-09-26): the fixture's `v1.0.0 (6ab8f) · iOS 26.0 · zh`
+    /// was shown under a consent note promising it IS what leaves the phone.
+    ///
+    /// The lines are the web's (`environmentLines`), label and value each,
+    /// every one redacted of addresses and URLs. The failures line is left
+    /// OUT: its source on the web is the net counters (`*:final_failure`),
+    /// which this client does not keep, and a "none" there would be a claim,
+    /// not a reading.
+    static func withFeedback(_ facts: FeedbackFacts, on model: SettingsScreenModel, loc: Loc) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        var live = model
+        let unreachable = facts.unreachable.isEmpty
+            ? loc.t(k.bugPreviewNone)
+            : facts.unreachable.joined(separator: ", ")
+        live.feedback = FeedbackModel(
+            title: model.feedback.title,
+            subtitle: model.feedback.subtitle,
+            placeholder: model.feedback.placeholder,
+            addSteps: model.feedback.addSteps,
+            previewToggle: model.feedback.previewToggle,
+            previewLines: [
+                "\(loc.t(k.bugPreviewVersion)): v\(facts.version) (\(facts.commit))",
+                "\(loc.t(k.bugPreviewPlatform)): \(facts.platform)",
+                "\(loc.t(k.bugPreviewLanguage)): \(facts.language)",
+                "\(loc.t(k.bugPreviewRpc)): \(unreachable)",
+            ].map(redact),
+            consent: model.feedback.consent,
+            send: model.feedback.send,
+            githubLink: model.feedback.githubLink
+        )
+        return live
+    }
+
+    /// The web's `redact`: an address or a URL in a report line is replaced,
+    /// visibly, rather than dropped — somebody can name a network after its
+    /// own RPC URL, and a URL may carry an API key in its path.
+    static func redact(_ line: String) -> String {
+        line
+            .replacingOccurrences(of: "0x[0-9a-fA-F]{40}\\b", with: "[address]", options: .regularExpression)
+            .replacingOccurrences(of: "\\b[a-zA-Z][a-zA-Z0-9+.-]*://\\S+", with: "[url]", options: .regularExpression)
+    }
+
     static func withAbout(
         version: String,
         commit: String,
@@ -1374,12 +1424,16 @@ enum SettingsLive {
             links: model.about.links,
             footer: model.about.footer
         )
-        // The home row's subtitle names the same version.
+        // The home row names the same version, in the slot the design gives
+        // it — the trailing value — and nowhere else. It used to write the
+        // REAL version into `subtitle` while `value` kept the fixture's
+        // "1.0.0", so one row showed two versions (founder, 2026-09-26).
         for index in live.sections.indices {
             for row in live.sections[index].rows.indices
             where live.sections[index].rows[row].id == "about" {
-                live.sections[index].rows[row].subtitle =
+                live.sections[index].rows[row].value =
                     loc.t(k.aboutSubtitle, vars: ["version": version])
+                live.sections[index].rows[row].subtitle = nil
             }
         }
         return live

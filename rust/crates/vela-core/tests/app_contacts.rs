@@ -2273,3 +2273,30 @@ fn saving_a_recognised_history_row_keeps_the_persons_word_on_top() {
     assert_eq!(row.source, ContactSource::Manual, "naming a row saves it");
     assert_eq!(row.tx_count, 1, "and it keeps its history");
 }
+
+/// Opening the account that is already open is not a switch: the book stays
+/// loaded — no unloaded frame for a screen to flash — and only the history
+/// is read again behind it. A real switch still wipes and re-reads.
+#[test]
+fn reopening_the_open_account_keeps_the_book_and_refreshes_its_history() {
+    let mut sut = booted(
+        vec![manual(A, Some("Alice"), false, 1_000.0)],
+        vec![],
+        vec![],
+        vec![],
+    );
+    assert!(sut.view().loaded);
+    let ops = sut.dispatch(Event::AccountSwitched {
+        my_address: Some(ME.to_uppercase().replace("0X", "0x")),
+    });
+    assert_eq!(ops, vec![Op::LoadSendHistory], "the same account, any case");
+    assert!(sut.view().loaded, "never an unloaded frame");
+    assert_eq!(sut.view().contacts.len(), 1);
+
+    let ops = sut.dispatch(Event::AccountSwitched {
+        my_address: Some(B.to_owned()),
+    });
+    assert_eq!(ops, vec![Op::ReadStore, Op::LoadSendHistory]);
+    assert!(!sut.view().loaded, "another account starts from nothing");
+    assert!(sut.view().contacts.is_empty());
+}

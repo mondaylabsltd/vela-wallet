@@ -2016,7 +2016,8 @@ fn a_failed_gas_price_read_refuses_the_quote_rather_than_guessing() {
             priority_fee: None,
         });
         assert!(
-            !ops.iter().any(|op| matches!(op, Op::EstimateUserOpGas { .. })),
+            !ops.iter()
+                .any(|op| matches!(op, Op::EstimateUserOpGas { .. })),
             "nothing is simulated on a guess: {ops:?}"
         );
         // The other gathering answers land on a run that already refused.
@@ -3678,7 +3679,10 @@ fn when_no_coin_can_pay_the_requested_coin_stands_and_says_so() {
     let view = sut.view();
     assert_eq!(view.fee_token, None);
     assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
-    assert!(!view.confirm_fee_ready, "the native shortfall is what shows");
+    assert!(
+        !view.confirm_fee_ready,
+        "the native shortfall is what shows"
+    );
 }
 
 #[test]
@@ -3737,12 +3741,16 @@ fn a_pick_the_real_gas_outgrows_is_made_again() {
         Res::UserOpGas {
             outcome: FeeGasOutcome::Estimated {
                 verification_gas_limit: "400000".to_owned(), // ×1.5 = 600k
-                call_gas_limit: "50000".to_owned(),         // → 100k floor
-                pre_verification_gas: "40000".to_owned(),   // +10k = 50k
+                call_gas_limit: "50000".to_owned(),          // → 100k floor
+                pre_verification_gas: "40000".to_owned(),    // +10k = 50k
             },
         },
     );
-    assert_eq!(fee_leg_token(&simulated).as_deref(), Some(USDC), "picked first");
+    assert_eq!(
+        fee_leg_token(&simulated).as_deref(),
+        Some(USDC),
+        "picked first"
+    );
     let view = sut.view();
     assert_eq!(view.fee_token, None, "…and moved to ETH on the real gas");
     assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);

@@ -4193,6 +4193,27 @@ export function sha256(data) {
 }
 
 /**
+ * The route an account's signatures take, as JSON
+ * (`{credential_id, transports, method, signer_origin?}`), or `null` for a
+ * record written before the account named its sign-in key — that one signs as
+ * it always did. `account_json` is the stored account record. See
+ * `vela_core::app::Account::sign_in_route`.
+ * @param {string} account_json
+ * @returns {string | undefined}
+ */
+export function signInRoute(account_json) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.signInRoute(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * What a site's message request asks the account to sign, before the
  * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
  * @param {string} method
@@ -4541,14 +4562,17 @@ export function verifiedNameStep(chain_id, registry, address, name, answers_json
  * (spec 062). `device_keys_json` is the account record's `keys` array (or a
  * one-element array built from the legacy scalars); the answer is `ask` with
  * `eth_call`s to perform, or `done` with the rows and where they came from.
+ * `sign_in_credential` is the account's sign-in route credential
+ * (`signInRoute`), empty for none: its row is marked `signs_here`.
  * @param {string} address
  * @param {string} device_keys_json
  * @param {string} answers_json
+ * @param {string} sign_in_credential
  * @returns {string}
  */
-export function walletKeysStep(address, device_keys_json, answers_json) {
-    let deferred4_0;
-    let deferred4_1;
+export function walletKeysStep(address, device_keys_json, answers_json, sign_in_credential) {
+    let deferred5_0;
+    let deferred5_1;
     try {
         const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -4556,12 +4580,14 @@ export function walletKeysStep(address, device_keys_json, answers_json) {
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.walletKeysStep(ptr0, len0, ptr1, len1, ptr2, len2);
-        deferred4_0 = ret[0];
-        deferred4_1 = ret[1];
+        const ptr3 = passStringToWasm0(sign_in_credential, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.walletKeysStep(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
 

@@ -33,18 +33,10 @@ enum SigningLive {
         var sim: TrustSimViewWire?
         /// Where the simulation has got to. Three states, three sentences.
         var simulation: SigningController.Simulation = .pending
-        /// The person's "Sign with" choice for THIS request, and whether its list is open.
-        var signMethod = "auto"
-        var signWithOpen = false
         /// Whether the fee row's coin list is open (issue #262).
         var feeOpen = false
-        /// Every "Sign with" the core offers, in its order (`SignPrefView.offered`).
-        var signMethods = ["auto"]
         /// How the Trusted Signer last ended for this request without signing.
         var trustedSignerNotice: TrustedSignerNotice?
-        /// The parallel space is active: its built-in key signs every request,
-        /// so no passkey sheet will follow the slide (Debug builds only).
-        var parallelSpace = false
     }
 
     /// The fee list's id for the chain's own coin (the web's `'native'`).
@@ -75,57 +67,6 @@ enum SigningLive {
         let port = URL(string: origin)?.port.map { ":\($0)" } ?? ""
         let base = "https://\(host)\(port)"
         return ["\(base)/apple-touch-icon.png", "\(base)/favicon.ico"]
-    }
-
-    /// The "Sign with" row: the create flow's own words for where a passkey
-    /// is, and the Trusted Signer with its one line — for every value the core
-    /// offers, in its order. A name this build has no words for is not drawn.
-    static func signWith(context: Context) -> SignWithModel {
-        let loc = context.loc
-        #if DEBUG
-        // The parallel space signs with its built-in key the moment the slide
-        // lands — there is no passkey sheet to wait for, and none of the
-        // choices below would be used. Say so, rather than leave the slide
-        // looking as if it did nothing (owner, 2026-09-22, on an iPhone).
-        // A developer marker, like the "PARALLEL SPACE" banner: not corpus.
-        if context.parallelSpace {
-            return SignWithModel(
-                label: loc.t("componentsUi.signing.signWith"),
-                value: "平行空间内置钥匙",
-                open: false,
-                options: []
-            )
-        }
-        #endif
-        let options = context.signMethods.compactMap { id -> SignWithModel.Option? in
-            guard let title = signMethodTitle(id, loc: loc) else { return nil }
-            return .init(id: id, title: title, selected: id == context.signMethod,
-                         detail: signMethodDetail(id, loc: loc))
-        }
-        return SignWithModel(
-            label: loc.t("componentsUi.signing.signWith"),
-            value: options.first(where: \.selected)?.title ?? loc.t("common.automatic"),
-            open: context.signWithOpen,
-            options: options
-        )
-    }
-
-    /// One "Sign with" value in words — the signing sheet's and Settings'.
-    static func signMethodTitle(_ id: String, loc: Loc) -> String? {
-        switch id {
-        case "auto": loc.t("common.automatic")
-        case "platform": loc.t("onboarding.create.methodPlatformTitle")
-        case "hybrid": loc.t("onboarding.create.methodHybridTitle")
-        case "security_key": loc.t("onboarding.create.methodSecurityKeyTitle")
-        case UserOpSpine.trustedSignerMethod: loc.t("componentsUi.signing.trustedSignerTitle")
-        default: nil
-        }
-    }
-
-    /// The line under a value: only the Trusted Signer needs one — the other
-    /// four say where a key is, and this one says what it does instead.
-    static func signMethodDetail(_ id: String, loc: Loc) -> String? {
-        id == UserOpSpine.trustedSignerMethod ? loc.t("componentsUi.signing.trustedSignerBody") : nil
     }
 
     /// The Trusted Signer's ending, when it left the request unsigned. Closed is
@@ -273,7 +214,6 @@ enum SigningLive {
         model.dappOwn = own
         model.dappIconUrls = own ? [] : siteIconUrls(origin: request.origin)
         model.networkLogoUrl = Marks.chainLogoURL(request.chainId)
-        model.signWith = signWith(context: context)
         if !isOffChain(clear) {
             model.feeSpeed = speed.map {
                 SendLive.speedModel($0, view: nil, display: context.display, loc: loc)

@@ -261,6 +261,32 @@ class WalletLiveTest {
         assertEquals("12.3457 XDAI", rows["XDAI"])
     }
 
+    /**
+     * Spec 078 round 2: every fiat figure rounds HALF UP to two places — the
+     * hero, the rows. Both used to cut (the rows through the `BigDecimal(double)`
+     * constructor, which printed 12.34 as 12.33), so the founder's home read
+     * CN¥63.23 over rows that added up to 63.21.
+     */
+    @Test
+    fun `the hero and the rows round money half up, never cut`() {
+        val view = BalanceView(
+            display_total_usd = 12.346,
+            tokens = listOf(
+                token("POL", "1", price = 12.346),
+                token("XDAI", "1", price = 12.34, chainId = 100),
+                token("ETH", "1", price = 0.004, chainId = 1),
+            ),
+        )
+        val home = home(view)
+        // Cut, both read 12.34.
+        assertEquals("35", home.balance.decimals)
+        val fiat = home.assetRows.associate { it.ticker to it.fiat }
+        assertEquals(AssetFiatModel.Value("$12.35"), fiat["POL"])
+        // 12.34 is 12.3399… in binary: rounded, never cut to 12.33.
+        assertEquals(AssetFiatModel.Value("$12.34"), fiat["XDAI"])
+        assertEquals(AssetFiatModel.Value("$0.00"), fiat["ETH"])
+    }
+
     /** Hidden hides the figure and nothing else. */
     @Test
     fun `hidden keeps the holdings, drops the number`() {

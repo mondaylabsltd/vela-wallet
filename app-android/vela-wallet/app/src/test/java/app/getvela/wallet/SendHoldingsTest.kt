@@ -120,7 +120,8 @@ class SendHoldingsTest {
         send.open(account = me, display = usd)
         // One chain has streamed in: shown, display-only.
         feed.view.value = BalanceView(address = ME, tokens = listOf(token("XDAI", 100, "0.7")))
-        send.awaitView("the chain that answered, shown while the round is out") { v -> v.tokens.map { it.symbol } == listOf("XDAI") }
+        // (The core spells Gnosis's coin the registry's way, xDAI.)
+        send.awaitView("the chain that answered, shown while the round is out") { v -> v.tokens.map { it.symbol.uppercase() } == listOf("XDAI") }
         delay(200)
         assertTrue("still loading its answer, never an empty list", send.send.value.stage == SendStage.SelectToken)
         feed.settle(BalanceView(address = ME, tokens = listOf(token("XDAI", 100, "0.7"), token("POL", 137, "19.19"))), at = 1_000.0)

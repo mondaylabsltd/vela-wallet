@@ -709,8 +709,13 @@ struct SendConfirmModel {
     /// carried art — the one screen where "which coin is this?" must be
     /// answerable at a glance. `nil` on a sweep: several coins, no one mark.
     var mark: TokenMarkModel?
-    /// "120 USDT" / "3 assets".
+    /// "120" beside `amountUnit`; a split's "120 USDT" / a sweep's "3 assets"
+    /// whole, with no unit.
     let amount: String
+    /// A single send's coin, drawn as its own smaller muted piece on the
+    /// figure's baseline (round 2: the Send form's hero, on the page that
+    /// signs). `nil` = `amount` is the whole headline.
+    var amountUnit: String? = nil
     /// "≈ $120.00" / "Total ≈ $200.90 · Ethereum".
     let subline: String
     let facts: [FactRowModel]
@@ -878,6 +883,10 @@ enum WalletFlowSheet: Identifiable {
 struct FlowAlertModel {
     let title: String
     let message: String
+    /// The one button: `common.gotIt` ("知道了" / "Got it"). The alert only
+    /// informs, so its button acknowledges. It was the hard-coded English "OK"
+    /// on every language until round 2 (2026-09-26).
+    let dismiss: String
 }
 
 /// One state: the screen, and the sheet over it.

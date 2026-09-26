@@ -1964,7 +1964,11 @@ pub fn token_amount_text_down(value: &str) -> String {
     if int_digits.is_empty() && cut.trim_end_matches('0').is_empty() {
         return token_amount_text(exact);
     }
-    let int_part = if int_digits.is_empty() { "0" } else { int_digits };
+    let int_part = if int_digits.is_empty() {
+        "0"
+    } else {
+        int_digits
+    };
     let frac = cut.trim_end_matches('0');
     with_decimal_mark(if frac.is_empty() {
         int_part.to_owned()

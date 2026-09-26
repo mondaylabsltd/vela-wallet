@@ -48,10 +48,15 @@
 		</button>
 	{/each}
 
-	<button type="button" class="rail-row new" onclick={onnew}>
-		<Icon icon={UTILITY_ICONS['folder-plus']} size="base" />
-		<span class="label">{rail.newGroup}</span>
-	</button>
+	<!-- Not before the book is read: a group made then would be made against a
+	     book the screen has not shown (and it flashed in, then moved down as
+	     the groups arrived above it). -->
+	{#if !rail.pending}
+		<button type="button" class="rail-row new" onclick={onnew}>
+			<Icon icon={UTILITY_ICONS['folder-plus']} size="base" />
+			<span class="label">{rail.newGroup}</span>
+		</button>
+	{/if}
 </nav>
 
 <style>

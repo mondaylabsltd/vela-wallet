@@ -92,11 +92,6 @@ struct SettingsSheet: View {
                         sheet: model.feeSpeedSheet,
                         onPick: { id in onPick?(.feeSpeed, id) }
                     )
-                case .signWith:
-                    SelectSheetBody(
-                        sheet: model.signWithSheet,
-                        onPick: { id in onPick?(.signWith, id) }
-                    )
                 case .signerPage:
                     if let page = model.signerPage {
                         SignerPageSheetBody(

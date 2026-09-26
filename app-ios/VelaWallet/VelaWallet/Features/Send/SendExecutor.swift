@@ -646,6 +646,15 @@ final class SendExecutor {
 struct SendAccountPort: UserOpSpine.AccountPort {
     let accounts: AccountStore
 
+    /// The record as stored, `signed_in_with` and all — never a projection of
+    /// it, so the core reads the same account the sign-in wrote.
+    func accountJson(of address: String) async -> String? {
+        guard let record = await record(for: address),
+              let data = try? JSONSerialization.data(withJSONObject: record)
+        else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     func keyRoutesJson(of address: String) async -> String {
         guard let record = await record(for: address) else { return "[]" }
         let routes = (record["keys"] as? [[String: Any]] ?? []).map { key -> [String: String] in
@@ -685,7 +694,8 @@ struct SendAccountPort: UserOpSpine.AccountPort {
         return [WalletKeyRecord(credentialId: id, publicKeyHex: hex)]
     }
 
-    /// The pinned key's stored transports and method.
+    /// The pinned key's stored transports and method — how a record that names
+    /// no sign-in key has always signed.
     ///
     /// The METHOD outranks the transport hints, which is why it is derived from
     /// them rather than defaulted: a caBLE credential carries the wide hint set,
@@ -698,9 +708,13 @@ struct SendAccountPort: UserOpSpine.AccountPort {
         let hints = Set(transports.split(separator: ",").map {
             $0.trimmingCharacters(in: .whitespaces)
         })
+        // `ble` with `usb` and `nfc`: whatever reports one is a key to present,
+        // and the method is what sends a ceremony down the security-key path
+        // (`PasskeyExecutor.assertionPath`) — so a record from before the
+        // sign-in key keeps the path it always took.
         let method: KeyMethod
         if hints.contains("hybrid") && !hints.contains("internal") { method = .hybrid }
-        else if hints.contains("usb") || hints.contains("nfc") { method = .securityKey }
+        else if !hints.isDisjoint(with: ["usb", "nfc", "ble"]) { method = .securityKey }
         else { method = .platform }
         return (transports, method)
     }

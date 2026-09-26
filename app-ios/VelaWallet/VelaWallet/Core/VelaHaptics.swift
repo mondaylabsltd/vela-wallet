@@ -9,16 +9,17 @@
 //  phones and a device pass can be scripted against the same vocabulary.
 //
 //  - `press`    a button under the finger (the founder's rule: press =
-//               deformation + haptic)
+//               deformation + haptic), and a tab that switches the
+//               destination (founder, 2026-09-26)
 //  - `detent`   a step crossed: a slider stop, a picker snapping, the signing
 //               slider's threshold
 //  - `select`   a selection that TAKES EFFECT: a switch, a filter, a network /
 //               fee-token / account pick, a favourite, a copy
 //  - `success` / `reject`  an outcome the core decided
 //
-//  **Never** for scrolling, a row tap that navigates, a tab switch, Back, a
-//  sheet opening or closing, typing, animation, or a value the app changed by
-//  itself. One per gesture.
+//  **Never** for scrolling, a row tap that navigates, re-tapping the tab in
+//  force, Back, a sheet opening or closing, typing, animation, or a value the
+//  app changed by itself. One per gesture.
 //
 //  Before 058 iOS had four ungoverned call sites and no vocabulary; the policy
 //  existed only in the Kotlin file's own doc comment, which is why 057 recorded

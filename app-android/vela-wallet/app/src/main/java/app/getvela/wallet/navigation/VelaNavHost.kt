@@ -462,6 +462,13 @@ fun VelaNavHost(
                 }
                 LaunchedEffect(session.address) {
                     if (session.address.isEmpty()) return@LaunchedEffect
+                    // Read the book as the wallet opens, not when 通讯录 is
+                    // first tapped: that tap used to meet an unloaded book and
+                    // draw title + search before the list popped in — the flash
+                    // iOS never had, because its store is read at sign-in. The
+                    // screen's own open is then the same account again, which
+                    // the core keeps as it is (only the history is re-read).
+                    application.container.contacts.open(session.address)
                     // ORDER MATTERS. The pool asks the network machine which
                     // endpoints a chain has, so a fetch dispatched before that
                     // machine has read storage finds no chains at all and settles
@@ -629,8 +636,6 @@ fun VelaNavHost(
                     val signSpeed by controller.speed.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
-                    val signMethod by controller.signMethod.collectAsStateWithLifecycle()
-                    val signWithOpen by controller.signWithOpen.collectAsStateWithLifecycle()
                     val feeOpen by controller.feeOpen.collectAsStateWithLifecycle()
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
@@ -643,8 +648,6 @@ fun VelaNavHost(
                         money = WalletLive.Money.of(currency),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
                         chainId = signChain,
-                        signMethod = signMethod,
-                        signWithOpen = signWithOpen,
                         feeOpen = feeOpen,
                         trustedSignerWaiting = trustedSignerWaiting,
                         trustedSignerNotice = trustedSignerNotice,
@@ -664,7 +667,6 @@ fun VelaNavHost(
                                 onCustomAmount = { controller.guardCustomAmount(it) },
                                 onLegChip = { leg, id -> app.getvela.wallet.feature.signing.SigningLive.chipMode(id)?.let { controller.guardLegPreset(leg, it) } },
                                 onLegCustomAmount = { leg, text -> controller.guardLegCustomAmount(leg, text) },
-                                onSignWith = { controller.signWith(it) },
                                 onFee = { controller.feeTapped() },
                                 onFeePick = { id -> controller.pickFee(id.takeUnless { it == app.getvela.wallet.feature.signing.SigningLive.NATIVE_FEE_ID }) },
                                 onToggleSpeed = { controller.toggleSpeed() },
@@ -1658,7 +1660,7 @@ fun VelaNavHost(
                 val networks by settings.networks.collectAsStateWithLifecycle()
                 // Spec 069: the default transaction speed.
                 val feeTier by settings.feeTier.collectAsStateWithLifecycle()
-                // Spec 071: the default "Sign with" and the Trusted Signer page.
+                // Spec 071: the Trusted Signer page.
                 val signPref by settings.signPref.collectAsStateWithLifecycle()
                 // Spec 047 US1: the rows read the device — preferences, the pool,
                 // the session, the store's own keys, the relay's treasury.
@@ -1719,7 +1721,7 @@ fun VelaNavHost(
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
                     val device = application.container.deviceKeysOf(address, session.activeName)
-                    walletKeys = application.container.walletKeys.read(address, device)
+                    walletKeys = application.container.walletKeys.read(address, device, application.container.signInCredentialOf(address))
                 }
                 val liveModel = run {
                     var m = SettingsLive.withWizard(
@@ -1922,7 +1924,6 @@ fun VelaNavHost(
                             val prefsStore = application.container.preferences
                             when (sheet) {
                                 SettingsOverlay.Currency -> settings.chooseCurrency(id)
-                                SettingsOverlay.SignWith -> settings.chooseSignMethod(id)
                                 SettingsOverlay.FeeSpeed ->
                                     app.getvela.wallet.feature.send.core.FeeTier.entries
                                         .firstOrNull { it.name.equals(id, ignoreCase = true) && it != app.getvela.wallet.feature.send.core.FeeTier.Rapid }
@@ -2275,7 +2276,7 @@ private fun SendAlertDialog(kind: SendAlertKind, strings: VelaStrings, onDismiss
         onDismissRequest = onDismiss,
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text(strings.t(I18nKeys.Flows.DONE))
+                androidx.compose.material3.Text(strings.t(I18nKeys.Common.GOT_IT))
             }
         },
         title = { androidx.compose.material3.Text(title) },

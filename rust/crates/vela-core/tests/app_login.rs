@@ -10,7 +10,7 @@ mod support;
 use support::{Driver, NOW};
 use vela_core::app::login::{Event, Login};
 use vela_core::app::shell::{CompletionMode, ProofPurpose, ShellOperation, ShellResult};
-use vela_core::app::{Assertion, FailureKind, KeyMethod, PromptKind};
+use vela_core::app::{Assertion, FailureKind, KeyMethod, PromptKind, SignInKey};
 
 const CRED: &str = "credential-1";
 
@@ -40,6 +40,16 @@ fn authenticated() -> Sut {
         now_iso: NOW.to_owned(),
     });
     sut
+}
+
+/// A wallet this device holds opens after its record is re-saved to name the
+/// key that just signed in (founder, 2026-09-26). Walks that local write — no
+/// server is involved — and returns what follows it.
+fn past_the_resave(sut: &mut Sut, next: Vec<ShellOperation>) -> Vec<ShellOperation> {
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { .. }] => sut.resolve(ShellResult::AccountSaved),
+        _ => next,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +155,7 @@ fn a_locally_known_credential_opens_the_wallet_without_the_index() {
     ];
 
     let next = sut.resolve(ShellResult::AccountsLoaded { accounts });
+    let next = past_the_resave(&mut sut, next);
 
     match next.as_slice() {
         [ShellOperation::CompleteOnboarding {
@@ -692,6 +703,7 @@ fn a_sibling_credential_matches_the_local_multikey_account() {
     let next = sut.resolve(ShellResult::AccountsLoaded {
         accounts: vec![account],
     });
+    let next = past_the_resave(&mut sut, next);
     match next.as_slice() {
         [ShellOperation::CompleteOnboarding {
             mode: CompletionMode::SetWallet { active_index, .. },
@@ -931,6 +943,7 @@ fn an_expo_era_record_still_opens_the_wallet() {
     let mut sut = authenticated();
     let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
     let next = sut.resolve(expo_spelling(vec![stored.clone()], false));
+    let next = past_the_resave(&mut sut, next);
     match next.as_slice() {
         [ShellOperation::CompleteOnboarding {
             mode:
@@ -960,6 +973,7 @@ fn an_expo_era_record_without_keys_still_opens_the_wallet() {
     let mut sut = authenticated();
     let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
     let next = sut.resolve(expo_spelling(vec![stored.clone()], true));
+    let next = past_the_resave(&mut sut, next);
     match next.as_slice() {
         [ShellOperation::CompleteOnboarding {
             mode:
@@ -1093,4 +1107,200 @@ fn an_unheld_wallet_is_still_saved_and_added() {
         )),
         "a genuinely new wallet is still ADDED; got {next:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The key this device signs with (founder, 2026-09-26)
+// ---------------------------------------------------------------------------
+
+/// Signed in with `method`, holding `stored`, and past the account load.
+fn signed_in_holding(
+    credential: &str,
+    method: KeyMethod,
+    stored: Vec<vela_core::app::Account>,
+) -> (Sut, Vec<ShellOperation>) {
+    let mut sut = mounted();
+    sut.dispatch(Event::SignIn { method });
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    sut.resolve(ShellResult::PasskeyAuthenticated {
+        assertion: support::assertion(credential),
+        now_iso: NOW.to_owned(),
+    });
+    let next = sut.resolve(ShellResult::AccountsLoaded { accounts: stored });
+    (sut, next)
+}
+
+/// The key as the sign-in records it. The fixture assertions report a
+/// `platform` attachment, so the key was found on this device.
+fn named(credential: &str, method: KeyMethod) -> Option<SignInKey> {
+    Some(SignInKey {
+        credential_id: credential.to_owned(),
+        method,
+        transports: "internal".to_owned(),
+        signer_origin: None,
+    })
+}
+
+/// The sign-in says which key and which route; the record keeps both, and the
+/// wallet opens holding them — no per-signature choice is left to make.
+#[test]
+fn the_sign_in_names_the_key_this_device_signs_with() {
+    let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
+    let (mut sut, next) = signed_in_holding(CRED, KeyMethod::Hybrid, vec![stored.clone()]);
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(account.id, stored.id, "the held record, updated in place");
+            assert_eq!(account.signed_in_with, named(CRED, KeyMethod::Hybrid));
+        }
+        other => panic!("expected the record re-saved first, got {other:?}"),
+    }
+    match sut.resolve(ShellResult::AccountSaved).as_slice() {
+        [ShellOperation::CompleteOnboarding {
+            mode: CompletionMode::SetWallet { accounts, .. },
+        }] => assert_eq!(accounts[0].signed_in_with, named(CRED, KeyMethod::Hybrid)),
+        other => panic!("expected the wallet to open, got {other:?}"),
+    }
+}
+
+/// The same key over the same route again: nothing to write.
+#[test]
+fn signing_in_the_same_way_again_writes_nothing() {
+    let stored = vela_core::app::Account {
+        signed_in_with: named(CRED, KeyMethod::Platform),
+        ..support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222")
+    };
+    let (_, next) = signed_in_holding(CRED, KeyMethod::Platform, vec![stored]);
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::CompleteOnboarding {
+                mode: CompletionMode::SetWallet { .. }
+            }]
+        ),
+        "expected an immediate sign-in; got {next:?}"
+    );
+}
+
+/// There is no switching at signing time: signing in with ANOTHER key of the
+/// wallet is how a person changes the one it signs with.
+#[test]
+fn signing_in_with_another_key_changes_the_one_it_signs_with() {
+    let stored = vela_core::app::Account {
+        keys: vec![
+            vela_core::app::AccountKey {
+                credential_id: CRED.to_owned(),
+                public_key_hex: support::expected_public_key_hex(),
+                name: "Ann".to_owned(),
+                transports: "internal".to_owned(),
+                signer_origin: None,
+            },
+            vela_core::app::AccountKey {
+                credential_id: CRED2.to_owned(),
+                public_key_hex: support::second_public_key_hex(),
+                name: "Backup".to_owned(),
+                transports: "usb,nfc".to_owned(),
+                signer_origin: None,
+            },
+        ],
+        signed_in_with: named(CRED, KeyMethod::Platform),
+        ..support::account(CRED, "Ann", &multi_address())
+    };
+    let (_, next) = signed_in_holding(CRED2, KeyMethod::SecurityKey, vec![stored]);
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(account.signed_in_with, named(CRED2, KeyMethod::SecurityKey));
+            let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+            assert_eq!(route.credential_id, CRED2, "the second key signs now");
+        }
+        other => panic!("expected the record re-saved, got {other:?}"),
+    }
+}
+
+/// The sign-in succeeded; a failed write of the record must not undo it.
+#[test]
+fn a_failed_resave_still_opens_the_wallet() {
+    let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
+    let (mut sut, _) = signed_in_holding(CRED, KeyMethod::Platform, vec![stored]);
+    let next = sut.resolve(ShellResult::StorageFailed {
+        message: "disk full".to_owned(),
+    });
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::CompleteOnboarding {
+                mode: CompletionMode::SetWallet { .. }
+            }]
+        ),
+        "expected the wallet to open anyway; got {next:?}"
+    );
+}
+
+/// A wallet new to this device is saved naming its sign-in key, page included
+/// when the ceremony ran behind one.
+#[test]
+fn a_recovered_wallet_is_saved_naming_its_sign_in_key() {
+    let mut sut = mounted();
+    sut.dispatch(Event::SignIn {
+        method: KeyMethod::TrustedSigner,
+    });
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    let mut assertion = support::assertion(CRED);
+    assertion.signer_origin = Some("https://sign.getvela.app".to_owned());
+    sut.resolve(ShellResult::PasskeyAuthenticated {
+        assertion,
+        now_iso: NOW.to_owned(),
+    });
+    sut.resolve(ShellResult::AccountsLoaded { accounts: vec![] });
+    let next = sut.resolve(ShellResult::RegistryKeyStatus {
+        registered: true,
+        unit_ids: vec![],
+    });
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => assert_eq!(
+            account.signed_in_with,
+            Some(SignInKey {
+                credential_id: CRED.to_owned(),
+                method: KeyMethod::TrustedSigner,
+                transports: "internal".to_owned(),
+                signer_origin: Some("https://sign.getvela.app".to_owned()),
+            })
+        ),
+        other => panic!("expected the recovered save, got {other:?}"),
+    }
+}
+
+/// "This device" picked, a phone or a key on the desk answered: the record
+/// keeps the choice and where the key was actually found.
+#[test]
+fn the_sign_in_records_where_the_key_answered_from() {
+    let mut sut = mounted();
+    sut.dispatch(Event::SignIn {
+        method: KeyMethod::Platform,
+    });
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    let mut assertion = support::assertion(CRED);
+    assertion.authenticator_attachment = "cross-platform".to_owned();
+    sut.resolve(ShellResult::PasskeyAuthenticated {
+        assertion,
+        now_iso: NOW.to_owned(),
+    });
+    let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
+    match sut
+        .resolve(ShellResult::AccountsLoaded {
+            accounts: vec![stored],
+        })
+        .as_slice()
+    {
+        [ShellOperation::SaveAccount { account }] => {
+            let key = account
+                .signed_in_with
+                .clone()
+                .unwrap_or_else(|| unreachable!());
+            assert_eq!(key.method, KeyMethod::Platform);
+            assert_eq!(key.transports, "usb,nfc,ble,hybrid");
+            let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+            assert_eq!(route.transports, "internal,usb,nfc,ble,hybrid");
+        }
+        other => panic!("expected the record re-saved, got {other:?}"),
+    }
 }

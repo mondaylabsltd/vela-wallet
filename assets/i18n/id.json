@@ -37,7 +37,7 @@
   "appearance": {
    "themeLight": "Terang",
    "themeDark": "Gelap",
-   "themeAuto": "Ikuti Sistem",
+   "themeAuto": "Sistem",
    "avatarInitials": "Inisial",
    "avatarIdenticon": "Identicon",
    "themeTitle": "Tema",
@@ -1652,7 +1652,8 @@
    "credential": "Kredensial",
    "transport": "Transport",
    "attestation": "Atestasi",
-   "userVerified": "Perlu verifikasi saat digunakan"
+   "userVerified": "Perlu verifikasi saat digunakan",
+   "signsHere": "Sedang masuk"
   }
  },
  "contacts": {

@@ -37,7 +37,7 @@
   "appearance": {
    "themeLight": "라이트",
    "themeDark": "다크",
-   "themeAuto": "시스템 설정 따르기",
+   "themeAuto": "자동",
    "avatarInitials": "이니셜",
    "avatarIdenticon": "아이덴티콘",
    "themeTitle": "테마",
@@ -1652,7 +1652,8 @@
    "credential": "자격 증명",
    "transport": "전송 방식",
    "attestation": "증명",
-   "userVerified": "사용 시 인증 필요"
+   "userVerified": "사용 시 인증 필요",
+   "signsHere": "로그인 중"
   }
  },
  "contacts": {

@@ -163,7 +163,8 @@ enum ContactsLive {
         if view.importFailure != nil {
             return FlowAlertModel(
                 title: loc.t("contacts.importFailTitle"),
-                message: loc.t("contacts.importFailBody")
+                message: loc.t("contacts.importFailBody"),
+                dismiss: loc.t("common.gotIt")
             )
         }
         guard let report = view.lastImport else { return nil }
@@ -177,7 +178,9 @@ enum ContactsLive {
                 "invalid": String(report.invalid),
             ])
         }
-        return FlowAlertModel(title: loc.t("contacts.importDoneTitle"), message: message)
+        return FlowAlertModel(
+            title: loc.t("contacts.importDoneTitle"), message: message, dismiss: loc.t("common.gotIt")
+        )
     }
 
     /// One contact's page.

@@ -52,6 +52,16 @@ object VelaSizing {
     val doneCheck: Dp = 34.dp
     val scanFabSize: Dp = 56.dp
 
+    /**
+     * The mobile tab bar (spec 078 round 2): icons only — the labels
+     * truncated in es/pt/de/it ("Configuración", "Einstellungen") — so the
+     * glyph is larger than the old icon-over-label pair's, centred in a bar
+     * this tall (without the system inset). The labels live on as each tab's
+     * accessible name.
+     */
+    val tabIcon: Dp = 28.dp
+    val tabBar: Dp = 56.dp
+
     // sizing.control.* comes from the design-system brief (not present in the DTCG
     // export — do not add to the drift test until the export grows it).
     val controlSm: Dp = 36.dp

@@ -27,8 +27,8 @@ import VelaCore
 /// A wallet with one real P-256 key, and what a Trusted Signer page answers for
 /// a digest when that key signs it.
 struct TrustedSignerFixture {
-    let key = P256.Signing.PrivateKey()
-    let credential = Data([0x11, 0x22, 0x33, 0x44])
+    var key = P256.Signing.PrivateKey()
+    var credential = Data([0x11, 0x22, 0x33, 0x44])
     let signerUrl = "https://sign.getvela.app/"
     let origin = "https://sign.getvela.app"
     let account = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
@@ -37,6 +37,22 @@ struct TrustedSignerFixture {
 
     var keys: [WalletKeyRecord] {
         [WalletKeyRecord(credentialId: credentialHex, publicKeyHex: Self.hex(key.publicKey.x963Representation))]
+    }
+
+    /// This wallet's stored record (`app::Account`), signed in with its key
+    /// over `method`.
+    func recordJson(signedInWith method: String) -> String {
+        let publicKeyHex = Self.hex(key.publicKey.x963Representation)
+        let record: [String: Any] = [
+            "id": credentialHex, "name": "Mine", "address": account,
+            "public_key_hex": publicKeyHex, "created_at_iso": "2026-09-26T00:00:00.000Z",
+            "keys": [[
+                "credential_id": credentialHex, "public_key_hex": publicKeyHex,
+                "name": "Mine", "transports": "internal",
+            ]],
+            "signed_in_with": ["credential_id": credentialHex, "method": method],
+        ]
+        return String(decoding: try! JSONSerialization.data(withJSONObject: record), as: UTF8.self)
     }
 
     /// `{credentialId, signature (r‖s), authenticatorData, clientDataJSON}`
@@ -388,11 +404,13 @@ struct TrustedSignerSpineTests {
     ) -> UserOpSpine {
         let accounts = ScriptedAccounts()
         accounts.keyList = fixture.keys
+        // The account signed in on the Trusted Signer, so every signature
+        // goes back there.
+        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
         let spine = UserOpSpine(
             relay: RelayClient(port: port, now: { 0 }, retryDelayMs: 0),
             accounts: accounts, signer: { signer }
         )
-        spine.signMethod = { UserOpSpine.trustedSignerMethod }
         spine.trustedSigner = clear
         return spine
     }
@@ -499,7 +517,7 @@ struct TrustedSignerSpineTests {
     }
 }
 
-// MARK: - The preferences and the picker
+// MARK: - The Trusted Signer page preference
 
 @MainActor
 struct SignPrefTests {
@@ -521,19 +539,13 @@ struct SignPrefTests {
         return try CoreJSON.decode(SignPrefViewWire.self, from: CoreJSON.object(core.view()))
     }
 
-    @Test func theDefaultsPersistUnderTheirKeysAndReadBack() throws {
+    @Test func thePagePersistsUnderItsKeyAndReadsBack() throws {
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         let executor = SignPrefExecutor(store: store)
         let core = SignPrefCore()
 
         var view = try run(core, executor, ["type": "refresh"])
-        #expect(view.method == "auto" && !view.methodCommitted)
-        #expect(view.offered == ["auto", "platform", "hybrid", "security_key", "trusted_signer"])
         #expect(view.signerUrlIsDefault && view.signerUsesWalletPasskeys)
-
-        view = try run(core, executor, ["type": "method_chosen", "method": "trusted_signer"])
-        #expect(view.method == "trusted_signer")
-        #expect(store.readString(VelaStore.Key.signMethod) == "trusted_signer")
 
         // Refused: nothing stored, the old page stands, and the sheet says why.
         view = try run(core, executor, ["type": "signer_url_submitted", "text": "http://192.168.1.4/"])
@@ -545,9 +557,8 @@ struct SignPrefTests {
         #expect(!view.signerUsesWalletPasskeys, "a page off getvela.app cannot use the wallet's passkeys")
         let stored = try #require(store.readString(VelaStore.Key.trustedSignerUrl))
 
-        // A second launch reads both back.
+        // A second launch reads it back.
         let again = try run(SignPrefCore(), SignPrefExecutor(store: store), ["type": "refresh"])
-        #expect(again.method == "trusted_signer" && again.methodCommitted)
         #expect(again.signerUrl == stored)
 
         view = try run(core, executor, ["type": "signer_url_reset"])
@@ -555,30 +566,28 @@ struct SignPrefTests {
         #expect(store.readString(VelaStore.Key.trustedSignerUrl) == nil)
     }
 
-    /// Settings: the two rows say what is in force, and the page sheet carries
-    /// the core's verdicts — never a rule of its own.
-    @Test func settingsShowsTheMethodThePageAndWhyAPageCannotSign() throws {
+    /// Settings: the page row says which page is in force, and the page sheet
+    /// carries the core's verdicts — never a rule of its own. There is no
+    /// "Sign with" row: how a signature is routed is chosen at sign-in, never
+    /// here (founder, 2026-09-26).
+    @Test func settingsShowsThePageAndWhyAPageCannotSign() throws {
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         let executor = SignPrefExecutor(store: store)
         let core = SignPrefCore()
-        _ = try run(core, executor, ["type": "refresh"])
         let base = SettingsFixtures.build(.st1, loc: loc)
 
         let official = SettingsLive.withSignPref(try run(core, executor, ["type": "refresh"]), on: base, loc: loc)
         let rows = official.sections.flatMap(\.rows)
-        #expect(rows.first { $0.id == SettingsFixtures.signWithRow }?.value == "Automatic")
         #expect(rows.first { $0.id == SettingsFixtures.signerPageRow }?.value == "Official")
+        #expect(!rows.contains { $0.title == "Sign with" }, "a default \"Sign with\" is back in Settings")
         #expect(official.signerPage?.reset == nil)
         #expect(official.signerPage?.foreign == nil)
-        #expect(official.signWithSheet.rows.map(\.id) == ["auto", "platform", "hybrid", "security_key", "trusted_signer"])
 
-        _ = try run(core, executor, ["type": "method_chosen", "method": "trusted_signer"])
         let own = SettingsLive.withSignPref(
             try run(core, executor, ["type": "signer_url_submitted", "text": "http://localhost:8141/"]),
             on: base, loc: loc
         )
         let ownRows = own.sections.flatMap(\.rows)
-        #expect(ownRows.first { $0.id == SettingsFixtures.signWithRow }?.value == "Trusted Signer")
         #expect(ownRows.first { $0.id == SettingsFixtures.signerPageRow }?.value == "localhost")
         #expect(own.signerPage?.reset == "Use the official page")
         #expect(own.signerPage?.foreign?.hasPrefix("Your passkeys belong to getvela.app") == true)
@@ -587,58 +596,6 @@ struct SignPrefTests {
             try run(core, executor, ["type": "signer_url_submitted", "text": "not a page"]), on: base, loc: loc
         )
         #expect(refused.signerPage?.error == "That is not a web address.")
-    }
-
-    /// The signing sheet's "Sign with": five options in the core's order and
-    /// the create flow's words, the Trusted Signer with its line — and each
-    /// request starts at the stored default, not at the last pick.
-    @Test func thePickerOffersFiveAndEachRequestStartsAtTheDefault() throws {
-        let initial = try #require(SignPrefViewWire.initial)
-        let suite = "vela.tests.signpref.\(UUID().uuidString)"
-        let store = VelaStore(defaults: UserDefaults(suiteName: suite)!)
-        let port = ScriptedRelayPort()
-        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let accounts = ScriptedAccounts()
-        var stored = "trusted_signer"
-        let controller = SigningController(
-            wallet: (address: TrustedSignerFixture().account, credentialId: "cred-1"),
-            relay: relay, accounts: accounts,
-            spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
-            store: store, pool: RpcPool(store: store, accounts: AccountStore()),
-            preferredSignMethod: { stored },
-            offeredSignMethods: { initial.offered },
-            ports: SigningController.Ports(knownChains: { [100] })
-        )
-        let incoming = SigningController.Incoming(
-            id: "req-1", method: "personal_sign", paramsJson: #"["0x68656c6c6f"]"#,
-            origin: "https://x.test", transportId: "tab-1", chainId: 100
-        )
-        controller.open(incoming)
-        #expect(controller.signMethod == "trusted_signer")
-
-        var context = SigningLive.Context(
-            loc: loc, chainName: "Gnosis", chainDot: .green, nativeSymbol: "xDAI",
-            walletName: "Mine", walletAddress: TrustedSignerFixture().account
-        )
-        context.signMethods = controller.offeredSignMethods()
-        context.signMethod = controller.signMethod
-        let picker = SigningLive.signWith(context: context)
-        #expect(picker.options.map(\.title)
-                == ["Automatic", "This device", "Phone or tablet", "USB security key", "Trusted Signer"])
-        #expect(picker.value == "Trusted Signer")
-        #expect(picker.options.last?.detail == "Check and sign on a separate page — what you see is what you sign.")
-        #expect(picker.options.dropLast().allSatisfy { $0.detail == nil })
-
-        // A pick is this request's; a name the core does not offer is not one.
-        controller.signWith("platform")
-        #expect(controller.signMethod == "platform")
-        controller.signWith("somewhere_else")
-        #expect(controller.signMethod == "platform")
-
-        // The next request starts at the default again.
-        stored = "hybrid"
-        controller.open(incoming)
-        #expect(controller.signMethod == "hybrid")
     }
 }
 

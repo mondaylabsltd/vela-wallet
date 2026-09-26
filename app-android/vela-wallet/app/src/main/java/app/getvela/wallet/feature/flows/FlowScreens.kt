@@ -1540,14 +1540,44 @@ fun SendConfirmBody(
                 TokenIcon(mark = mark)
                 Spacer(modifier = Modifier.height(VelaSpacing.md))
             }
-            Text(
-                text = model.amount,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.bold,
-                fontSize = VelaTextSize.xl4,
-                lineHeight = VelaLeading.amountHero * VelaTextSize.xl4,
-            )
+            val unit = model.amountUnit
+            if (unit.isNullOrEmpty()) {
+                Text(
+                    text = model.amount,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.bold,
+                    fontSize = VelaTextSize.xl4,
+                    lineHeight = VelaLeading.amountHero * VelaTextSize.xl4,
+                )
+            } else {
+                // The figure and its unit as two pieces on one baseline (spec
+                // 078 round 2): the unit at the hero's proportion (26/46 of the
+                // figure), medium and muted, set off by the hero's gap — so
+                // "0.45767 xDAI" reads as the number first, as it did on the form.
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = model.amount,
+                        color = colors.fgBase,
+                        fontFamily = VelaFontFamily,
+                        fontWeight = VelaFontWeight.bold,
+                        fontSize = VelaTextSize.xl4,
+                        lineHeight = VelaLeading.amountHero * VelaTextSize.xl4,
+                        maxLines = 1,
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                    Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                    Text(
+                        text = unit,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontWeight = VelaFontWeight.medium,
+                        fontSize = VelaTextSize.xl4 * (26f / 46f),
+                        maxLines = 1,
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                }
+            }
             Text(
                 text = model.subline,
                 color = colors.fgSubtle,

@@ -37,7 +37,7 @@
   "appearance": {
    "themeLight": "Claro",
    "themeDark": "Oscuro",
-   "themeAuto": "Seguir al sistema",
+   "themeAuto": "Sistema",
    "avatarInitials": "Iniciales",
    "avatarIdenticon": "Identicón",
    "themeTitle": "Tema",
@@ -1655,7 +1655,8 @@
    "credential": "Credencial",
    "transport": "Transporte",
    "attestation": "Atestación",
-   "userVerified": "Verificación al usarla"
+   "userVerified": "Verificación al usarla",
+   "signsHere": "Conectada"
   }
  },
  "contacts": {

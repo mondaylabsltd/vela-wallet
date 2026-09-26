@@ -121,8 +121,9 @@ class SendLiveTest {
 
         // The person's own currency, at the committed rate only.
         val eur = ctx(CurrencyView(code = "EUR", rate = 2.0, committed = true))
-        // ×2 on 0.0546 USD, written with the preset's own two places.
-        assertEquals("0.000091 BNB · ≈€0.10", SendLive.form(drawn.model, view, FeeView(), eur).fee.value)
+        // ×2 on 0.0546 USD = 0.1092, written with the preset's own two places,
+        // rounded half up like every money figure (spec 078 round 2).
+        assertEquals("0.000091 BNB · ≈€0.11", SendLive.form(drawn.model, view, FeeView(), eur).fee.value)
     }
 
     /**
@@ -157,7 +158,10 @@ class SendLiveTest {
 
         val sd3 = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
         val confirming = SendView(stage = SendStage.Confirm, selected_token = eth, recipient = recipient, confirm_amount = exact, token_amount = exact, fee = fee())
-        assertEquals("0.04379 ETH", SendLive.confirm(sd3.model, confirming, ctx()).amount)
+        val headline = SendLive.confirm(sd3.model, confirming, ctx())
+        assertEquals("0.04379", headline.amount)
+        // The unit is its own piece beside the figure (spec 078 round 2).
+        assertEquals("ETH", headline.amountUnit)
     }
 
     /**
@@ -228,7 +232,8 @@ class SendLiveTest {
         val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
         val view = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true)
         val live = SendLive.confirm(drawn.model, view, ctx(CurrencyView(code = "GBP", rate = 0.78, committed = true)))
-        assertEquals("0.001 XDAI", live.amount)
+        assertEquals("0.001", live.amount)
+        assertEquals("XDAI", live.amountUnit)
         assertTrue(live.subline.startsWith("≈ £"))
         assertTrue(live.facts.any { it.value.contains("0x7687") })
         assertTrue(live.facts.any { it.value.contains("0.0021") })
@@ -895,7 +900,8 @@ class SendLiveTest {
 
             val confirmDrawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
             val confirm = SendLive.confirm(confirmDrawn.model, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true), ctx())
-            assertEquals("0,001 XDAI", confirm.amount)
+            assertEquals("0,001", confirm.amount)
+            assertEquals("XDAI", confirm.amountUnit)
         } finally {
             Formats.current = saved
         }

@@ -36,43 +36,53 @@
 	);
 </script>
 
+<!--
+	Icons only (078 round 2, founder): 钱包 / 通讯录 / 设置 fit, but
+	"Configuración", "Einstellungen" and "Impostazioni" were cut to "Configur…"
+	under a 97-pixel tab. The glyph carries the tab now, larger, and the word
+	is still the tab's NAME — the accessible one, with the selected state — so
+	a screen reader still says "Settings, current page".
+-->
 <nav class="tabbar">
 	{#each items as item (item.id)}
 		<button
 			type="button"
 			class:selected={item.selected}
+			aria-label={item.label}
 			aria-current={item.selected ? 'page' : undefined}
+			title={item.label}
 			onpointerdown={() => {
 				if (onselect && !item.selected) preloadDestination(item.id);
 			}}
 			onclick={() => onselect?.(item.id)}
 		>
-			<Icon icon={navIcon(item.id, item.selected)} size="xl" />
-			<span>{item.label}</span>
+			<Icon icon={navIcon(item.id, item.selected)} size="tab" />
 		</button>
 	{/each}
 </nav>
 
 <style>
+	/* 56 without the safe area; an installed app on a phone with a home
+	   indicator gets that inset added under the glyphs, never taken from them. */
 	.tabbar {
 		display: flex;
 		align-items: stretch;
-		height: var(--layout-dockBarHeight);
+		box-sizing: content-box;
+		height: var(--layout-tabBarHeight);
+		padding-bottom: env(safe-area-inset-bottom, 0);
 		background: var(--color-bg-base);
 		border-top: var(--border-hairline) solid var(--color-border-base);
 	}
 
+	/* Equal, full-height targets: the whole quarter (or third) of the bar is
+	   the tab, as it was, and the glyph sits at its centre. */
 	button {
 		flex: 1;
 		display: flex;
-		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: var(--space-sm);
 		border: none;
 		background: none;
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
 		cursor: pointer;
 	}

@@ -188,6 +188,14 @@ data class ContactsHomeModel(
     val indexLetters: List<String>,
     val tabs: TabsModel,
     val empty: ContactsEmptyModel? = null,
+    /**
+     * The book has not been read yet: the screen draws its chrome (title,
+     * search) and nothing else. Drawn as a populated list meanwhile, the
+     * 分组 / 新建分组 head showed for a beat and vanished when an empty book
+     * became the empty state — iOS renders nothing before `loaded` and never
+     * flashed (founder, 2026-09-26).
+     */
+    val pending: Boolean = false,
     val detail: ContactDetailModel? = null,
     val groupDetail: GroupDetailModel? = null,
     val menu: ActionMenuModel? = null,

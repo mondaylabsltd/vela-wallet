@@ -480,25 +480,30 @@ pub fn raw_bundler_quotes(chain_id: u32) -> Option<Vec<(&'static str, FeeBundler
     }
     let result = body.get("result")?;
     Some(
-        [FeeTier::Slow, FeeTier::Standard, FeeTier::Fast, FeeTier::Rapid]
-            .into_iter()
-            .filter_map(|tier| {
-                let row = result.get(tier_key(tier))?;
-                Some((
-                    tier_key(tier),
-                    FeeBundlerQuote {
-                        max_fee_per_gas: decimal_of_hex(row.get("maxFeePerGas"))?,
-                        // The tip this tier is actually signed with — the half
-                        // of the quote that buys priority, and what the core
-                        // turns into the per-tier gas price on screen (issue
-                        // 684). Absent on a generic bundler.
-                        max_priority_fee_per_gas: decimal_of_hex(row.get("maxPriorityFeePerGas")),
-                        network_fee_per_gas: decimal_of_hex(row.get("networkFeePerGas")),
-                        relayer_fee_per_gas: decimal_of_hex(row.get("relayerFeePerGas")),
-                    },
-                ))
-            })
-            .collect(),
+        [
+            FeeTier::Slow,
+            FeeTier::Standard,
+            FeeTier::Fast,
+            FeeTier::Rapid,
+        ]
+        .into_iter()
+        .filter_map(|tier| {
+            let row = result.get(tier_key(tier))?;
+            Some((
+                tier_key(tier),
+                FeeBundlerQuote {
+                    max_fee_per_gas: decimal_of_hex(row.get("maxFeePerGas"))?,
+                    // The tip this tier is actually signed with — the half
+                    // of the quote that buys priority, and what the core
+                    // turns into the per-tier gas price on screen (issue
+                    // 684). Absent on a generic bundler.
+                    max_priority_fee_per_gas: decimal_of_hex(row.get("maxPriorityFeePerGas")),
+                    network_fee_per_gas: decimal_of_hex(row.get("networkFeePerGas")),
+                    relayer_fee_per_gas: decimal_of_hex(row.get("relayerFeePerGas")),
+                },
+            ))
+        })
+        .collect(),
     )
 }
 

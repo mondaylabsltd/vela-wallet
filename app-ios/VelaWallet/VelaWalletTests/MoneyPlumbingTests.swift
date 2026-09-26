@@ -56,7 +56,11 @@ final class ScriptedAccounts: UserOpSpine.AccountPort {
     /// ("nothing known", so the ceremony routes as it always did).
     var routesJson: String?
     var accountName: String?
+    /// The stored record `signInRoute` reads — `nil` is no record, which signs
+    /// as a record written before the sign-in key did.
+    var recordJson: String?
 
+    func accountJson(of address: String) async -> String? { recordJson }
     func keys(of address: String) async -> [WalletKeyRecord] { keyList }
     func routing(of address: String) async -> (transports: String, method: KeyMethod) {
         ("internal", .platform)

@@ -222,7 +222,6 @@ fun SettingsRoute(
                 "language" -> overlay = SettingsOverlay.Language
                 "currency" -> overlay = SettingsOverlay.Currency
                 SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
-                SettingsFixtures.SIGN_WITH_ROW -> overlay = SettingsOverlay.SignWith
                 SettingsFixtures.SIGNER_PAGE_ROW -> overlay = SettingsOverlay.SignerPage
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
@@ -1223,9 +1222,6 @@ private fun SettingsSheet(
                 }
                 SettingsOverlay.FeeSpeed -> SelectSheetBody(model.feeSpeedSheet) {
                     onSheetSelect(SettingsOverlay.FeeSpeed, it)
-                }
-                SettingsOverlay.SignWith -> SelectSheetBody(model.signWithSheet) {
-                    onSheetSelect(SettingsOverlay.SignWith, it)
                 }
                 SettingsOverlay.SignerPage -> SignerPageSheetBody(
                     model.signerPage,

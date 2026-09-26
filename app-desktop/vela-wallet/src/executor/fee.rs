@@ -85,10 +85,16 @@ impl Machine for FeePolicy {
                     // One simulation per exact operation for every speed's
                     // session (`fee_signals::simulation`).
                     FeeShellResult::UserOpGas {
-                        outcome: fee_signals::simulation(chain_id, &account, deployed, &calls, || {
-                            let keys = stored_key_hexes(&account);
-                            user_op::simulate_gas(chain_id, &account, deployed, &calls, &keys)
-                        }),
+                        outcome: fee_signals::simulation(
+                            chain_id,
+                            &account,
+                            deployed,
+                            &calls,
+                            || {
+                                let keys = stored_key_hexes(&account);
+                                user_op::simulate_gas(chain_id, &account, deployed, &calls, &keys)
+                            },
+                        ),
                     }
                 }))
             }

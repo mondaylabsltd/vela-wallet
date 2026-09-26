@@ -53,9 +53,6 @@ object SigningLive {
         val origin: String? = null,
         /** The request's chain, for its logo. */
         val chainId: Int = 0,
-        /** The person's "Sign with" choice for THIS request, and whether its list is open. */
-        val signMethod: String = "auto",
-        val signWithOpen: Boolean = false,
         /** Whether the fee row's coin list is open (issue #262). */
         val feeOpen: Boolean = false,
         /** Spec 071: the Trusted Signer's page is open for this request. */
@@ -76,29 +73,6 @@ object SigningLive {
         if (!origin.startsWith("https://")) return emptyList()
         val base = "https://" + origin.removePrefix("https://").substringBefore('/')
         return if (base.length <= "https://".length) emptyList() else listOf("$base/apple-touch-icon.png", "$base/favicon.ico")
-    }
-
-    /**
-     * The "Sign with" row: the create flow's own words for where a passkey is,
-     * and the Trusted Signer (spec 071) — a separate page that checks and signs.
-     */
-    fun signWith(ctx: Context): SignWithModel {
-        val s = ctx.strings
-        val titles = linkedMapOf(
-            "auto" to s.t("common.automatic"),
-            "platform" to s.t("onboarding.create.methodPlatformTitle"),
-            "hybrid" to s.t("onboarding.create.methodHybridTitle"),
-            "security_key" to s.t("onboarding.create.methodSecurityKeyTitle"),
-            "trusted_signer" to s.s("trustedSignerTitle"),
-        )
-        return SignWithModel(
-            label = s.t("componentsUi.signing.signWith"),
-            value = titles[ctx.signMethod] ?: titles.getValue("auto"),
-            open = ctx.signWithOpen,
-            options = titles.map { (id, title) ->
-                SignWithOption(id, title, id == ctx.signMethod, line = if (id == "trusted_signer") s.s("trustedSignerBody") else null)
-            },
-        )
     }
 
     /** Spec 071: the waiting card, while the Trusted Signer's page is open. */
@@ -228,7 +202,6 @@ object SigningLive {
             networkName = ctx.chainName,
             networkDot = ctx.chainDot,
             networkLogoUrl = app.getvela.wallet.core.marks.Marks.chainLogoUrl(ctx.chainId),
-            signWith = signWith(ctx),
             trustedSignerWait = trustedSignerWait(ctx),
             trustedSignerNotice = ctx.trustedSignerNotice,
             blocks = blocks,

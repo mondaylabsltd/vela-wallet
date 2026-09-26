@@ -858,6 +858,7 @@ fn an_expo_era_record_restores_the_session() {
             transports: String::new(),
             signer_origin: None,
         }],
+        signed_in_with: None,
     };
     let json = serde_json::to_string(&Res::AccountsLoaded {
         accounts: vec![stored.clone()],

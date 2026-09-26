@@ -36,25 +36,30 @@ struct SettingsRow: View {
                         .foregroundStyle(row.tone == .standard ? theme.fgMuted : tint)
                         .frame(width: LucideIconSize.action)
                 }
-                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(row.title)
-                        .typeRole(Typography.fieldLabel)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(tint)
-                        .lineLimit(1)
-                    if let subtitle = row.subtitle {
-                        Text(subtitle)
+                // The value beside the title while both fit; under it when
+                // they do not — at the largest text size in ja the About row
+                // cut both, and its value is the app's version, the one thing
+                // that row is for (2026-09-26).
+                TitleAndValue {
+                    VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                        Text(row.title)
+                            .typeRole(Typography.fieldLabel)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(tint)
+                            .lineLimit(1)
+                        if let subtitle = row.subtitle {
+                            Text(subtitle)
+                                .typeRole(Typography.flowCaption)
+                                .foregroundStyle(theme.fgSubtle)
+                                .lineLimit(1)
+                        }
+                    }
+                    if let value = row.value {
+                        Text(value)
                             .typeRole(Typography.flowCaption)
-                            .foregroundStyle(theme.fgSubtle)
+                            .foregroundStyle(theme.fgMuted)
                             .lineLimit(1)
                     }
-                }
-                Spacer(minLength: Tokens.Space.s8)
-                if let value = row.value {
-                    Text(value)
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(theme.fgMuted)
-                        .lineLimit(1)
                 }
                 switch row.trailing {
                 case .chevron:
@@ -72,6 +77,62 @@ struct SettingsRow: View {
             .contentShape(Rectangle())
             .onTapGesture { onTap(row.id) }
             if divider { SettingsDivider() }
+        }
+    }
+}
+
+/// A settings row's title block and its trailing value: side by side, the
+/// value at the trailing edge, while both fit on one line at their natural
+/// widths; otherwise the value takes a line of its own under the title, where
+/// it has the row's whole width. One layout rather than `ViewThatFits`, which
+/// would put both arrangements in the accessibility tree.
+struct TitleAndValue: Layout {
+    var gap: CGFloat = Tokens.Space.s8
+    var rowGap: CGFloat = Tokens.Space.s2
+
+    private func frames(width: CGFloat?, subviews: Subviews) -> (size: CGSize, title: CGRect, value: CGRect?) {
+        guard let title = subviews.first else { return (.zero, .zero, nil) }
+        let titleIdeal = title.sizeThatFits(.unspecified)
+        guard subviews.count > 1 else {
+            let size = title.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            return (CGSize(width: width ?? size.width, height: size.height), CGRect(origin: .zero, size: size), nil)
+        }
+        let valueIdeal = subviews[1].sizeThatFits(.unspecified)
+        let available = width ?? (titleIdeal.width + gap + valueIdeal.width)
+        if titleIdeal.width + gap + valueIdeal.width <= available {
+            let height = max(titleIdeal.height, valueIdeal.height)
+            return (
+                CGSize(width: available, height: height),
+                CGRect(x: 0, y: (height - titleIdeal.height) / 2, width: titleIdeal.width, height: titleIdeal.height),
+                CGRect(x: available - valueIdeal.width, y: (height - valueIdeal.height) / 2,
+                       width: valueIdeal.width, height: valueIdeal.height)
+            )
+        }
+        let titleSize = title.sizeThatFits(ProposedViewSize(width: available, height: nil))
+        let valueSize = subviews[1].sizeThatFits(ProposedViewSize(width: available, height: nil))
+        let top = titleSize.height + rowGap
+        return (
+            CGSize(width: available, height: top + valueSize.height),
+            CGRect(x: 0, y: 0, width: min(titleSize.width, available), height: titleSize.height),
+            CGRect(x: 0, y: top, width: min(valueSize.width, available), height: valueSize.height)
+        )
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        frames(width: proposal.width, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let laid = frames(width: bounds.width, subviews: subviews)
+        subviews.first?.place(
+            at: CGPoint(x: bounds.minX + laid.title.minX, y: bounds.minY + laid.title.minY),
+            proposal: ProposedViewSize(laid.title.size)
+        )
+        if let value = laid.value, subviews.count > 1 {
+            subviews[1].place(
+                at: CGPoint(x: bounds.minX + value.minX, y: bounds.minY + value.minY),
+                proposal: ProposedViewSize(value.size)
+            )
         }
     }
 }

@@ -70,14 +70,11 @@ pub struct SignContext {
     pub keys: Vec<WalletKey>,
     pub key_method: KeyMethod,
     pub pinned_credential: Option<String>,
-    /// Every founding key's credential id and stored transports — what the
-    /// core's `sign_route` reads to pin the key of the chosen kind.
-    pub device_keys: Vec<vela_core::wallet_keys::DeviceKey>,
-    /// The person's "Sign with" choice for THIS request (founder, 2026-09-19):
-    /// the credential to pin and the method to route by. `None` = the stored
-    /// route above, untouched. Shared, because the context is cloned into the
-    /// executor when the request opens and the choice is made afterwards.
-    pub route_override: Arc<std::sync::Mutex<Option<(String, KeyMethod)>>>,
+    /// Spec 075: the Trusted Signer page this account signs on, and the one
+    /// key it may sign with there, as
+    /// [`crate::executor::send::SendContext::signer_page`] and `page_key`.
+    pub signer_page: Option<String>,
+    pub page_key: Option<String>,
     pub ceremony: Ceremony,
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
@@ -89,46 +86,27 @@ pub struct SignContext {
     /// The account's name, for the Trusted Signer's page.
     pub account_name: Option<String>,
     /// The Trusted Signer (spec 071): whether THIS request goes to it, and its
-    /// waiting sheet. Shared like `route_override`, and for the same reason.
+    /// waiting sheet. Shared, because the context is cloned into the executor
+    /// when the request opens and the host points it at the page afterwards.
     pub trusted_signer: Arc<trusted_signer::Channel>,
 }
 
 impl SignContext {
     /// The credential this request's ceremony is pinned to, and its method:
-    /// the person's choice when they made one, the stored route otherwise.
+    /// the account's sign-in route, fixed when the request opened.
     #[must_use]
     pub fn route(&self) -> (Option<String>, KeyMethod) {
-        let chosen = self
-            .route_override
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
-        match chosen {
-            Some((credential, method)) => (Some(credential), method),
-            None => (self.pinned_credential.clone(), self.key_method),
-        }
+        (self.pinned_credential.clone(), self.key_method)
     }
 
-    /// "Sign with": `auto` clears the choice; a place a passkey is asks the
-    /// core which key that pins (`wallet_keys::sign_route`); the Trusted Signer
-    /// routes the request to `page`. An answer of "none" — an unknown method,
-    /// a wallet with no usable credential — leaves the stored route in force
-    /// rather than guessing.
-    pub fn choose_method(&self, method: &str, page: &str) {
-        use crate::executor::send::Route;
-        let route = crate::executor::send::sign_route_of(&self.device_keys, method, page);
-        let (pinned, page) = match route {
-            Some(Route::Passkey(credential, key_method)) => (Some((credential, key_method)), None),
-            // Spec 075: the page the KEY lives behind when it has one, and the
-            // person's page from Settings when it does not.
-            Some(Route::TrustedSigner(page)) => (None, Some(page)),
-            None => (None, None),
-        };
-        *self
-            .route_override
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = pinned;
-        self.trusted_signer.choose(page);
+    /// Point the Trusted Signer channel at this account's page when it signs
+    /// on one — see [`crate::executor::send::SendContext::follow_sign_in`].
+    pub fn follow_sign_in(&self, settings_page: &str) {
+        self.trusted_signer
+            .choose(crate::executor::send::page_to_follow(
+                self.signer_page.as_deref(),
+                settings_page,
+            ));
     }
 
     /// This request as the Trusted Signer's page is told it (contract §1): a
@@ -158,8 +136,8 @@ impl SignContext {
             keys: send.keys,
             key_method: send.key_method,
             pinned_credential: send.pinned_credential,
-            device_keys: send.device_keys,
-            route_override: Arc::new(std::sync::Mutex::new(None)),
+            signer_page: send.signer_page,
+            page_key: send.page_key,
             ceremony: send.ceremony,
             signing_started: send.signing_started,
             site: None,
@@ -347,6 +325,7 @@ fn sign_and_submit(
             ask: &ask,
             page,
             channel: &ctx.trusted_signer,
+            only: ctx.page_key.as_deref(),
         },
         None => Signer::Passkey(&mut sign),
     };
@@ -404,6 +383,7 @@ fn sign_message(
             ask: &ask,
             page,
             channel: &ctx.trusted_signer,
+            only: ctx.page_key.as_deref(),
         },
         None => Signer::Passkey(&mut sign),
     };
@@ -768,6 +748,13 @@ mod tests {
     }
 
     fn context(site: Option<&str>) -> SignContext {
+        context_signed_in(site, None)
+    }
+
+    fn context_signed_in(
+        site: Option<&str>,
+        signed_in_with: Option<vela_core::app::SignInKey>,
+    ) -> SignContext {
         let account = Account {
             id: "cred0".to_owned(),
             name: "savings".to_owned(),
@@ -781,6 +768,7 @@ mod tests {
                 transports: "internal".to_owned(),
                 signer_origin: None,
             }],
+            signed_in_with,
         };
         let mut ctx = SignContext::new(
             &account,
@@ -790,26 +778,45 @@ mod tests {
         ctx
     }
 
-    /// "Sign with" on the sheet (spec 071): the Trusted Signer routes THIS
-    /// request to the page and pins no key; a place a passkey is does the
-    /// opposite; `auto` clears both.
+    /// A site's request signs exactly as the wallet's own send does: with the
+    /// key the account signed in with, over its route (founder, 2026-09-26) —
+    /// the sheet offers no other.
     #[test]
-    fn the_sheets_choice_routes_this_request() {
-        let ctx = context(Some("https://app.uniswap.org"));
-        ctx.choose_method("trusted_signer", "https://sign.getvela.app/");
+    fn a_request_signs_with_the_sign_in_key() {
+        let ctx = context_signed_in(
+            Some("https://app.uniswap.org"),
+            Some(vela_core::app::SignInKey {
+                credential_id: "cred0".to_owned(),
+                method: KeyMethod::Hybrid,
+                transports: String::new(),
+                signer_origin: None,
+            }),
+        );
+        assert_eq!(ctx.route(), (Some("cred0".to_owned()), KeyMethod::Hybrid));
+        ctx.follow_sign_in("https://sign.getvela.app/");
+        assert_eq!(ctx.trusted_signer.chosen(), None);
+
+        let through_page = context_signed_in(
+            None,
+            Some(vela_core::app::SignInKey {
+                credential_id: "cred0".to_owned(),
+                method: KeyMethod::TrustedSigner,
+                transports: String::new(),
+                signer_origin: None,
+            }),
+        );
+        through_page.follow_sign_in("https://sign.getvela.app/");
         assert_eq!(
-            ctx.trusted_signer.chosen().as_deref(),
+            through_page.trusted_signer.chosen().as_deref(),
             Some("https://sign.getvela.app/")
         );
-        assert_eq!(ctx.route(), (Some("cred0".to_owned()), KeyMethod::Platform));
 
-        ctx.choose_method("hybrid", "https://sign.getvela.app/");
-        assert_eq!(ctx.trusted_signer.chosen(), None);
-        assert_eq!(ctx.route().1, KeyMethod::Hybrid);
-
-        ctx.choose_method("auto", "https://sign.getvela.app/");
-        assert_eq!(ctx.trusted_signer.chosen(), None);
-        assert_eq!(ctx.route().1, KeyMethod::Platform);
+        // A record from before the sign-in key: the first key, as always.
+        let legacy = context(None);
+        assert_eq!(
+            legacy.route(),
+            (Some("cred0".to_owned()), KeyMethod::Platform)
+        );
     }
 
     /// A site's request reaches the page as the site's — its method, its

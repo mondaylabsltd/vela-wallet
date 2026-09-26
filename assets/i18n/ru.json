@@ -37,7 +37,7 @@
   "appearance": {
    "themeLight": "Светлая",
    "themeDark": "Тёмная",
-   "themeAuto": "Как в системе",
+   "themeAuto": "Авто",
    "avatarInitials": "Инициалы",
    "avatarIdenticon": "Идентикон",
    "themeTitle": "Тема",
@@ -1658,7 +1658,8 @@
    "credential": "Учётные данные",
    "transport": "Транспорт",
    "attestation": "Аттестация",
-   "userVerified": "Подтверждение при использовании"
+   "userVerified": "Подтверждение при использовании",
+   "signsHere": "Вход выполнен"
   }
  },
  "contacts": {

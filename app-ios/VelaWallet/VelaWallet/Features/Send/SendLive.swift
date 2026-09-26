@@ -833,7 +833,11 @@ enum SendLive {
         // split's total stays exact — it is the sum of the rows beneath it.
         var amount = view.splitMode
             ? "\(trim(view.confirmAmount)) \(symbol)"
-            : "\(WalletLive.tokenAmountText(view.confirmAmount)) \(symbol)"
+            : WalletLive.tokenAmountText(view.confirmAmount)
+        // A single send's coin is its own piece, drawn smaller and muted on
+        // the figure's baseline (round 2) — a split's total and a sweep's
+        // count keep one string.
+        var amountUnit: String? = view.splitMode || symbol.isEmpty ? nil : symbol
         var subline = view.confirmAmountIssue.map { issue in
             loc.t("send.warnCannotConvert", vars: ["code": issue.code, "symbol": issue.symbol])
         } ?? fiatLine(view, token: token, display: display)
@@ -845,6 +849,7 @@ enum SendLive {
             let sweep = sweepBreakdown(view, display: display)
             breakdown = sweep.rows
             amount = loc.t("componentsTx.receipt.assetsCount", vars: ["n": String(sweep.rows.count)])
+            amountUnit = nil
             subline = loc.t("send.confirmTotalLine", vars: [
                 "fiat": money(sweep.totalUsd, display: display),
                 "network": view.multiChainId
@@ -882,6 +887,7 @@ enum SendLive {
             // re-derived it would put a number on the signing page nothing
             // else in the flow had agreed to.
             amount: amount,
+            amountUnit: amountUnit,
             subline: subline,
             facts: facts,
             breakdown: breakdown,

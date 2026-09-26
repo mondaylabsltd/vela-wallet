@@ -168,7 +168,13 @@ pub fn simulation(
         deployed,
         calls: calls
             .iter()
-            .map(|call| (call.to.to_lowercase(), call.value.clone(), call.data.to_lowercase()))
+            .map(|call| {
+                (
+                    call.to.to_lowercase(),
+                    call.value.clone(),
+                    call.data.to_lowercase(),
+                )
+            })
             .collect(),
     };
     if let Some(outcome) = fresh_for(&SIMULATIONS, &key, SIMULATION_TTL) {
