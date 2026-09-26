@@ -81,7 +81,7 @@ screenshot checked against the web.
       AddNetwork via network_admin `AddByChainIdRequested`, the refusal on
       the token list, resolving again after the add.
 - [x] T047 W-05 bundler funding pre-check and sponsorship for dApp requests.
-- [ ] T048 W-06 contacts search + per-group import/export; W-07 signing for
+- [x] T048 W-06 contacts search + per-group import/export; W-07 signing for
       another wallet.
 - [ ] T049 W-08…W-11.
 

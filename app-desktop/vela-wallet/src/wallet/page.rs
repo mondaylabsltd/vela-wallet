@@ -13682,6 +13682,21 @@ impl WalletPage {
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
             let fee = host.fee_view();
+            // WHO signs, as the core has it — the account the site was shown
+            // (078 W-07). The mock's own wallet stood here, so every sheet
+            // named "大表哥" whichever wallet was about to sign.
+            if let Some(address) = host
+                .view
+                .request
+                .as_ref()
+                .and_then(|request| request.signer_address.clone())
+            {
+                model.signer_name = money::account_by_address(&address).map_or_else(
+                    || crate::wallet::live::shorten_address(&address).into(),
+                    |account| account.name.into(),
+                );
+                model.signer_seed = address.into();
+            }
             // The gas account cannot pay: the sheet SWAPS to the top-up and
             // shows nothing else. Not stacked, not appended — the core calls
             // this surface "the in-sheet funding swap (BUG-1: never a stacked

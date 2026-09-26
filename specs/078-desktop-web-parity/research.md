@@ -263,9 +263,20 @@ dapp_browser are fully wired. The gaps:
 - **W-06 P1 · Contacts search** never dispatches `query`; **per-group import
   and export** exist in the core (`ImportFile { into_group }`,
   `ContactExportScope::Group`) but the desktop leaves them `None`.
+  *Resolved (T048):* search was built under X-05/C-02 — the web's rule (name,
+  resolved name or address; All view only; "No matches for …") — and per-group
+  import/export under C-07; `query` is web UI state, not a core event. Checked
+  live: "ca" → Carol, "5555" → dave, "zzz" → the empty state.
 - **W-07 P1 · Signing for another of the person's wallets**: the desktop
   mirrors only the active account into `sign_request`; `SwitchActiveAccount`
   never tells the session.
+  *Resolved (T048):* the desktop opens each request AS the granted account
+  (spec 070, pinned by construction) and grants follow the active account, so
+  the one-account mirror signs with the same account the web's switch would
+  pick. Run live against a local page, it found the real defect: the sheet's
+  "Signing account" row was the design mock's wallet, so every request read
+  "大表哥" whichever wallet signed. It now shows the core's `signer_address`
+  — 666 · Key 2 after switching, 大表哥 after switching back.
 - **W-08 P2 · Rate-limited chains reported as broken** —
   `rate_limited_chain_ids` always empty (`executor/balance_dashboard.rs`).
 - **W-09 P2 · Feed polls every 30 s** (web 10 s while visible).
