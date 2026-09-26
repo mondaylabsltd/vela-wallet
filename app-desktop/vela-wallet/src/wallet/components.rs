@@ -5,8 +5,8 @@
 use gpui::AnimationExt as _;
 use gpui::{
     Div, ElementId, ImageSource, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled, StyledImage as _, canvas, div,
-    fill as quad_fill, img, prelude::FluentBuilder as _, px,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, StyledImage as _, TextRun,
+    Window, canvas, div, fill as quad_fill, img, prelude::FluentBuilder as _, px,
 };
 
 use crate::icons::{Icon, IconCache};
@@ -913,6 +913,78 @@ pub fn asset_row(
         )
 }
 
+/// Marks a line may not open with — the CJK closing punctuation 禁则 names,
+/// and their Latin kin. gpui's wrapper breaks between any two CJK glyphs,
+/// so it will happily start a line with 「。」.
+const NO_LINE_START: &str = "。，、；：？！）」』》〉】〕…%.,;:!?)]}";
+
+/// The narrowest width, at most `max`, that still wraps `text` (the UI face
+/// at `size`) into as many lines as `max` does — the web's
+/// `text-wrap: balance`. A centred caption wrapped at its full width leaves a
+/// stub under a long line (「……也可以从文件导入 / 现有通讯录。」); balanced, the
+/// lines come out near-even. A width whose break opens a line with a closing
+/// mark (「粘贴 / 。也可以」) does not count — the browser's line breaker never
+/// makes that break, so the web never shows it. `max` when the text fits on
+/// one line.
+pub fn balanced_wrap_width(
+    window: &Window,
+    text: &SharedString,
+    size: Pixels,
+    max: Pixels,
+) -> Pixels {
+    let run = TextRun {
+        len: text.len(),
+        font: gpui::font(theme::font_ui()),
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    // Lines at `width`, or `None` when a break there strands a closing mark.
+    let lines = |width: Pixels| -> Option<usize> {
+        let shaped = window
+            .text_system()
+            .shape_text(
+                text.clone(),
+                size,
+                std::slice::from_ref(&run),
+                Some(width),
+                None,
+            )
+            .ok()?;
+        let mut count = 0;
+        for line in &shaped {
+            for boundary in line.wrap_boundaries() {
+                // A boundary names the first glyph of the new line.
+                let at =
+                    line.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index;
+                let opens = line.text.get(at..).and_then(|rest| rest.chars().next());
+                if opens.is_some_and(|c| NO_LINE_START.contains(c)) {
+                    return None;
+                }
+            }
+            count += line.wrap_boundaries().len() + 1;
+        }
+        Some(count)
+    };
+    let Some(target) = lines(max).filter(|&n| n > 1) else {
+        return max;
+    };
+    // `hi` always holds the text in `target` lines with no stranded mark.
+    let (mut lo, mut hi) = (max / target as f32, max);
+    for _ in 0..12 {
+        let mid = (lo + hi) / 2.;
+        if lines(mid) == Some(target) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    // A pixel of slack: the box the layout hands the text rounds, and a
+    // hair narrower than the measured width wraps one line more.
+    (hi.ceil() + px(1.)).min(max)
+}
+
 /// Empty state: sunken circle + outline icon, title, caption.
 pub fn empty_state(
     theme: &Theme,
@@ -920,6 +992,19 @@ pub fn empty_state(
     icon: Icon,
     title: SharedString,
     caption: SharedString,
+) -> Div {
+    empty_state_wrapped(theme, icons, icon, title, caption, None)
+}
+
+/// [`empty_state`] with the caption wrapped at `caption_w` — a
+/// [`balanced_wrap_width`] — instead of at whatever its parent allows.
+pub fn empty_state_wrapped(
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+    title: SharedString,
+    caption: SharedString,
+    caption_w: Option<Pixels>,
 ) -> Div {
     div()
         .flex()
@@ -947,6 +1032,7 @@ pub fn empty_state(
         )
         .child(
             div()
+                .when_some(caption_w, |el, w| el.w(w))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
                 .child(caption),

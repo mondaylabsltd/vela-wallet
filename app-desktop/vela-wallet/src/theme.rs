@@ -396,6 +396,10 @@ pub const CONTACTS_SEARCH_W: f32 = 280.;
 /// Dropdown/context menu card width and row height (M1/M2).
 pub const CONTACTS_MENU_W: f32 = 220.;
 pub const CONTACTS_MENU_ROW_H: f32 = 44.;
+/// The empty book's group (icon, title, caption, the CTA pair), DC3. The
+/// page centres it on the workspace only while the column beside the rail
+/// still holds it this wide.
+pub const CONTACTS_EMPTY_W: f32 = 360.;
 /// Contacts page header band (title + search + 添加联系人 + ⋯), DC1: the
 /// hairline under it sits at y = 92 in the mock.
 pub const CONTACTS_HEADER_H: f32 = 92.;

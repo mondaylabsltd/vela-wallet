@@ -451,11 +451,34 @@
 		flex-direction: column;
 	}
 
+	/* The empty book, centred on the WORKSPACE, not on the column the rail
+	   leaves: the rail has no fill and no rule, so the eye measures from the
+	   sidebar's edge, and the column's own centre read half a rail too far
+	   right. The end padding mirrors rail + gap; a narrow window takes it
+	   back first, so the group never runs into the rail. Vertically 2:3
+	   above the middle — the optical centre, as the receipt (issue 199). */
 	.center {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		justify-content: center;
+		padding-inline-end: clamp(
+			0%,
+			100% - var(--layout-maxContentWidth) / 2,
+			var(--layout-contactsRailW) + var(--space-3xl)
+		);
+	}
+
+	.center::before,
+	.center::after {
+		content: '';
+	}
+
+	.center::before {
+		flex: 2 1 0;
+	}
+
+	.center::after {
+		flex: 3 1 0;
 	}
 
 	.group-head {

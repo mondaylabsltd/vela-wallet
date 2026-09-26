@@ -10,16 +10,18 @@
 use crate::contacts::model::ContactRowModel;
 use gpui::{
     Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, div, px,
+    StatefulInteractiveElement as _, Styled, Window, div, px,
 };
 
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{
-    self, CONTACTS_BUTTON_H, CONTACTS_MENU_ROW_H, CONTACTS_MENU_W, CONTACTS_RAIL_LABEL_H,
-    CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme,
+    self, CONTACTS_BUTTON_H, CONTACTS_EMPTY_W, CONTACTS_MENU_ROW_H, CONTACTS_MENU_W,
+    CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme,
 };
-use crate::wallet::components::{empty_state, icon_img, identicon_avatar};
+use crate::wallet::components::{
+    balanced_wrap_width, empty_state_wrapped, icon_img, identicon_avatar,
+};
 
 use super::fixtures::MenuModel;
 
@@ -610,14 +612,14 @@ pub fn search_field(
 
 /// Spec-015 `empty_state` (icon tile + title + caption) extended with the CTA
 /// pair the contacts mocks add: accent 添加联系人 + outline 从文件导入,
-/// inline on desktop (DC3).
+/// inline on desktop (DC3). The caption wraps balanced, as the web's.
 pub fn empty_state_cta(
+    window: &Window,
     theme: &Theme,
     icons: &mut IconCache,
     title: SharedString,
     caption: SharedString,
-    primary: SharedString,
-    secondary: SharedString,
+    (primary, secondary): (SharedString, SharedString),
     actions: Option<(MenuAction, MenuAction)>,
 ) -> Div {
     let (on_primary, on_secondary) = match actions {
@@ -632,9 +634,22 @@ pub fn empty_state_cta(
     if let Some(action) = on_secondary {
         import = import.on_click(move |event, window, cx| action(event, window, cx));
     }
-    let artwork = empty_state(theme, icons, Icon::UsersRound, title, caption);
+    let caption_w = balanced_wrap_width(
+        window,
+        &caption,
+        theme::text_row_sub(),
+        px(CONTACTS_EMPTY_W),
+    );
+    let artwork = empty_state_wrapped(
+        theme,
+        icons,
+        Icon::UsersRound,
+        title,
+        caption,
+        Some(caption_w),
+    );
     div()
-        .w(px(360.))
+        .w(px(CONTACTS_EMPTY_W))
         .flex()
         .flex_col()
         .items_center()

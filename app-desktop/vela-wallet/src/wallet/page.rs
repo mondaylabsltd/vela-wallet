@@ -73,10 +73,11 @@ use crate::signing::fixtures as signing_fixtures;
 use crate::signing::live as signing_live;
 use crate::signing::trusted_signer as signing_trusted_signer;
 use crate::theme::{
-    self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_HEADER_H, CONTACTS_HERO_AVATAR,
-    CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W, GALLERY_BAR_H,
-    SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W, THIRD_PANEL_W,
-    Theme, ThemeMode, WALLET_CONTENT_MAX_W, WALLET_PAD_TOP, WALLET_PAD_X, WALLET_ROW_MEASURE,
+    self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_EMPTY_W, CONTACTS_HEADER_H,
+    CONTACTS_HERO_AVATAR, CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W,
+    GALLERY_BAR_H, SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W,
+    THIRD_PANEL_W, Theme, ThemeMode, WALLET_CONTENT_MAX_W, WALLET_PAD_TOP, WALLET_PAD_X,
+    WALLET_ROW_MEASURE,
 };
 use crate::wallet::browser_host::{BROWSER_TAB, BrowserHost};
 use crate::wallet::live as wallet_live;
@@ -4731,7 +4732,12 @@ impl WalletPage {
 
     /// DC3: the centred empty state with both CTAs — add opens the form,
     /// import the file picker, as the web's `empty-primary` / `-secondary`.
-    fn contacts_empty_view(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+    fn contacts_empty_view(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let actions = self.identity.is_some().then(|| {
             (
                 Box::new(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
@@ -4746,21 +4752,42 @@ impl WalletPage {
         let caption = self.contacts.empty_hint.clone();
         let primary = self.contacts.add_contact.clone();
         let secondary = self.contacts.import_file.clone();
+        // Centred on the WORKSPACE, not on the column the rail leaves: the
+        // rail has no fill and no rule, so the eye measures from the
+        // sidebar's edge, and the column's own centre read half a rail
+        // (120) too far right. The trailing spacer mirrors rail + gap; a
+        // narrow window shrinks it first (the group keeps its width), so the
+        // group never runs into the rail. Vertically 2:3 above the middle —
+        // the optical centre, as the receipt (issue 199). The web's `.center`.
         div()
             .flex_1()
             .min_w(px(0.))
             .flex()
-            .items_center()
-            .justify_center()
-            .child(empty_state_cta(
-                theme,
-                &mut self.icons,
-                title,
-                caption,
-                primary,
-                secondary,
-                actions,
-            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(CONTACTS_EMPTY_W))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .child(div().flex_1().flex_grow(2.))
+                    .child(empty_state_cta(
+                        window,
+                        theme,
+                        &mut self.icons,
+                        title,
+                        caption,
+                        (primary, secondary),
+                        actions,
+                    ))
+                    .child(div().flex_1().flex_grow(3.)),
+            )
+            .child(
+                div()
+                    .w(px(CONTACTS_RAIL_W + WALLET_PAD_X))
+                    .min_w(px(0.))
+                    .flex_shrink(1.),
+            )
     }
 
     fn contacts_content(
@@ -4775,7 +4802,8 @@ impl WalletPage {
         // Empty first, as the web orders it: a group opened on a book with
         // nobody in it has nobody to list.
         let body: gpui::AnyElement = if self.contacts_book_empty(cx) {
-            self.contacts_empty_view(theme, cx).into_any_element()
+            self.contacts_empty_view(theme, window, cx)
+                .into_any_element()
         } else if let Some(group) = self.group {
             self.contacts_group_view(theme, group, cx)
                 .into_any_element()
@@ -7499,7 +7527,7 @@ impl WalletPage {
     /// The contacts component board (data-model.md §Component boards). Every
     /// new component and its variants, plus the identicon board over the 8+1
     /// canon seeds and the placeholder.
-    fn contacts_components_tab(&mut self, theme: &Theme) -> Stateful<Div> {
+    fn contacts_components_tab(&mut self, theme: &Theme, window: &Window) -> Stateful<Div> {
         let s_all = self.contacts.all_contacts.clone();
         let s_groups = self.contacts.section_groups.clone();
         let s_new_group = self.contacts.group_new.clone();
@@ -7639,12 +7667,12 @@ impl WalletPage {
             .flex()
             .gap(px(16.))
             .child(empty_state_cta(
+                window,
                 theme,
                 &mut self.icons,
                 s_empty,
                 s_empty_hint,
-                s_add_contact,
-                s_import,
+                (s_add_contact, s_import),
                 None,
             ))
             .child(empty_state(
@@ -16657,9 +16685,9 @@ impl Render for WalletPage {
             let bar = self.gallery_bar(&theme, caption, cx);
             let content: gpui::AnyElement = match self.tab {
                 GalleryTab::Components => self.components_tab(&theme).into_any_element(),
-                GalleryTab::ContactsComponents => {
-                    self.contacts_components_tab(&theme).into_any_element()
-                }
+                GalleryTab::ContactsComponents => self
+                    .contacts_components_tab(&theme, window)
+                    .into_any_element(),
                 GalleryTab::Identicons => self.identicons_tab(&theme).into_any_element(),
                 // The bar already cleared the caption row for the page.
                 _ => self
