@@ -506,6 +506,9 @@ enum SettingsLive {
                 holder: holder,
                 fingerprint: body.count >= 8 ? "\(body.prefix(4))…\(body.suffix(4))".lowercased() : "",
                 pills: [
+                    // The key this device signs with stands out, first
+                    // (founder, 2026-09-26). The core marks at most one row.
+                    row.signsHere ? KeyPillModel(text: loc.t(k.keysSignsHere), tone: .signsHere) : nil,
                     row.userVerified == true ? KeyPillModel(text: loc.t(k.keysUserVerified), tone: .verified) : nil,
                     row.synced.map { KeyPillModel(text: loc.t($0 ? k.keysSynced : k.keysNotSynced), tone: $0 ? .synced : .local) },
                 ].compactMap { $0 },

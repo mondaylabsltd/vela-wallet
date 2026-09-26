@@ -481,7 +481,11 @@ struct WalletKeysModel {
     let copiedLabel: String
 }
 
-enum KeyPillTone { case verified, synced, local }
+enum KeyPillTone {
+    /// The key this device signs with — filled, where the others are outlined.
+    case signsHere
+    case verified, synced, local
+}
 
 struct KeyPillModel: Equatable {
     let text: String
@@ -503,7 +507,8 @@ struct WalletKeyRowModel: Identifiable {
     let holder: String
     /// `197d…647b` — what tells two unnamed keys apart.
     let fingerprint: String
-    /// "Verify to use", "Cloud-synced" / "Device-bound" — the registry explorer's pills.
+    /// "Signed in" first on the key this device signs with, then "Verify to
+    /// use", "Cloud-synced" / "Device-bound" — the registry explorer's pills.
     let pills: [KeyPillModel]
     /// What the row opens onto: the explorer's facts. Empty = nothing to open.
     let details: [KeyDetailModel]
