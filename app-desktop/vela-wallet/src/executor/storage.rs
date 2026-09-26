@@ -775,6 +775,7 @@ pub(crate) mod tests {
             record.signed_in_with = Some(vela_core::app::SignInKey {
                 credential_id: "cred1".to_owned(),
                 method: vela_core::app::KeyMethod::SecurityKey,
+                transports: String::new(),
                 signer_origin: None,
             });
             if save_account(&record).is_err() {

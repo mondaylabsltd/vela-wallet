@@ -1130,10 +1130,13 @@ fn signed_in_holding(
     (sut, next)
 }
 
+/// The key as the sign-in records it. The fixture assertions report a
+/// `platform` attachment, so the key was found on this device.
 fn named(credential: &str, method: KeyMethod) -> Option<SignInKey> {
     Some(SignInKey {
         credential_id: credential.to_owned(),
         method,
+        transports: "internal".to_owned(),
         signer_origin: None,
     })
 }
@@ -1258,9 +1261,46 @@ fn a_recovered_wallet_is_saved_naming_its_sign_in_key() {
             Some(SignInKey {
                 credential_id: CRED.to_owned(),
                 method: KeyMethod::TrustedSigner,
+                transports: "internal".to_owned(),
                 signer_origin: Some("https://sign.getvela.app".to_owned()),
             })
         ),
         other => panic!("expected the recovered save, got {other:?}"),
+    }
+}
+
+/// "This device" picked, a phone or a key on the desk answered: the record
+/// keeps the choice and where the key was actually found.
+#[test]
+fn the_sign_in_records_where_the_key_answered_from() {
+    let mut sut = mounted();
+    sut.dispatch(Event::SignIn {
+        method: KeyMethod::Platform,
+    });
+    sut.resolve(ShellResult::PasskeySupport { supported: true });
+    let mut assertion = support::assertion(CRED);
+    assertion.authenticator_attachment = "cross-platform".to_owned();
+    sut.resolve(ShellResult::PasskeyAuthenticated {
+        assertion,
+        now_iso: NOW.to_owned(),
+    });
+    let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
+    match sut
+        .resolve(ShellResult::AccountsLoaded {
+            accounts: vec![stored],
+        })
+        .as_slice()
+    {
+        [ShellOperation::SaveAccount { account }] => {
+            let key = account
+                .signed_in_with
+                .clone()
+                .unwrap_or_else(|| unreachable!());
+            assert_eq!(key.method, KeyMethod::Platform);
+            assert_eq!(key.transports, "usb,nfc,ble,hybrid");
+            let route = account.sign_in_route().unwrap_or_else(|| unreachable!());
+            assert_eq!(route.transports, "internal,usb,nfc,ble,hybrid");
+        }
+        other => panic!("expected the record re-saved, got {other:?}"),
     }
 }

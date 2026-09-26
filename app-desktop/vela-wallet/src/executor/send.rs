@@ -638,6 +638,7 @@ mod tests {
         account.signed_in_with = Some(SignInKey {
             credential_id: credential.to_owned(),
             method,
+            transports: String::new(),
             signer_origin: None,
         });
         account

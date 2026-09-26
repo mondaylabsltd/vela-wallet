@@ -783,6 +783,7 @@ mod tests {
             Some(vela_core::app::SignInKey {
                 credential_id: "cred0".to_owned(),
                 method: KeyMethod::Hybrid,
+                transports: String::new(),
                 signer_origin: None,
             }),
         );
@@ -795,6 +796,7 @@ mod tests {
             Some(vela_core::app::SignInKey {
                 credential_id: "cred0".to_owned(),
                 method: KeyMethod::TrustedSigner,
+                transports: String::new(),
                 signer_origin: None,
             }),
         );

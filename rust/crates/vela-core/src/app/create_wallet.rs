@@ -330,6 +330,7 @@ impl Prepared {
             signed_in_with: Some(SignInKey {
                 credential_id: first.credential_id.clone(),
                 method: first.method,
+                transports: first.transports.clone(),
                 signer_origin: first.signer_origin.clone(),
             }),
         }
