@@ -184,6 +184,40 @@ class SendHoldingsTest {
         assertEquals(1, refreshes.get())
     }
 
+    /**
+     * Spec 078 round 3, over the real send core: a `/pay` request arriving
+     * while Send is open replaces the form at once — the locked request, its
+     * payee — and a later open of Send finds nothing parked to re-apply over a
+     * recipient typed afterwards.
+     */
+    @Test
+    fun `a payment request arriving while send is open opens now and never re-applies`() = runBlocking<Unit> {
+        val feed = Feed()
+        feed.settle(BalanceView(address = ME, tokens = listOf(token("XDAI", 100, "0.7"))), at = System.currentTimeMillis().toDouble())
+        val send = controller(feed)
+        send.open(account = me, display = usd)
+        val listed = send.awaitView("the picker") { it.tokens.isNotEmpty() }
+        send.selectToken(app.getvela.wallet.feature.send.SendLive.tokenId(listed.tokens.single()))
+        send.awaitView("the form") { it.stage == SendStage.EnterDetails }
+        send.setRecipient("0x1111111111111111111111111111111111111111")
+        send.awaitView("typed") { it.recipient.startsWith("0x1111") }
+
+        val parked = MutableStateFlow<app.getvela.wallet.feature.send.core.SendOpenParams?>(null)
+        val handOff = app.getvela.wallet.feature.send.core.PaymentHandOff(parked, MutableStateFlow(null))
+        val link = app.getvela.wallet.feature.send.core.SendOpenParams(
+            prefilled_recipient = PAYEE, prefilled_chain_id = "100", prefilled_amount_base = "1000000000000000", locked = true,
+        )
+        handOff.request(link, sendOpen = true, openNow = { p -> send.open(account = me, display = usd, params = p) }, enterSend = { error("already open") })
+        val locked = send.awaitView("the request replaced the form") { it.locked && it.recipient.equals(PAYEE, ignoreCase = true) }
+        assertTrue(locked.amount_locked)
+
+        // Later: the person closes it and opens Send again — nothing re-applies.
+        assertEquals(null, handOff.takeRequest())
+        send.open(account = me, display = usd, params = handOff.takeRequest() ?: app.getvela.wallet.feature.send.core.SendOpenParams())
+        val fresh = send.awaitView("a plain send") { !it.locked && it.stage == SendStage.SelectToken }
+        assertEquals("", fresh.recipient)
+    }
+
     @Test
     fun `an open picker reads ahead the fees of the chains the person holds`() = runBlocking<Unit> {
         val feed = Feed()
@@ -200,5 +234,6 @@ class SendHoldingsTest {
     private companion object {
         const val ME = "0x576a2cc9e6adc0c95989fa6aa104290aa940c73f"
         const val OTHER = "0x88cca0eedbf2c4426110bbfc998f048689266894"
+        const val PAYEE = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
     }
 }

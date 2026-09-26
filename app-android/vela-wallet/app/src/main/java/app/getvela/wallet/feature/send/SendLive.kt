@@ -664,7 +664,10 @@ object SendLive {
         val (text, mark) = feeText(estimate, view, fee, ctx)
         val s = ctx.strings
         return fallback.copy(
-            mark = mark ?: fallback.mark,
+            // No figure yet, no coin: an empty neutral mark. The fixture's
+            // "ETH" stood in while Gnosis was measuring (design review, 078
+            // round 3) — a coin the fee may never be paid in.
+            mark = mark ?: fallback.mark.copy(ticker = "", logoUrls = emptyList(), badgeLogoUrl = null),
             // A figure in hand stays on screen while a re-quote is out (spec
             // 028); only a figure of ANOTHER speed gives way to "measuring".
             value = when {

@@ -294,6 +294,12 @@ class MainActivity : ComponentActivity() {
         receiptRequested()?.let { container.pendingReceipt.value = it }
         intent?.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
+        // Spec 078 round 3: a stand-in report endpoint for the device pass, so
+        // checking 发送 never files a real issue — debug builds only (and the
+        // debug network config lets cleartext reach 127.0.0.1 alone).
+        if (BuildConfig.DEBUG) intent?.getStringExtra("vela.bugReportEndpoint")?.let { app.getvela.wallet.core.diagnostics.BugReport.endpointOverride = it }
+        if (BuildConfig.DEBUG) app.getvela.wallet.core.diagnostics.BugReport.forceDocumentPicker = intent?.getBooleanExtra("vela.forceDocumentPicker", false) == true
+        if (BuildConfig.DEBUG) app.getvela.wallet.core.diagnostics.BugReport.debugPrepareDelayMs = intent?.getLongExtra("vela.screenshotDelayMs", 0L) ?: 0L
         // Spec 047 US4: a forced crash for the device pass — debug builds only.
         if (BuildConfig.DEBUG && intent?.getBooleanExtra("vela.testPanic", false) == true) {
             android.os.Handler(mainLooper).postDelayed({ throw IllegalStateException("vela.testPanic") }, 2_000)

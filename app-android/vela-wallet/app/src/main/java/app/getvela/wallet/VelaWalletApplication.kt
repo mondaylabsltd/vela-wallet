@@ -65,6 +65,7 @@ import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
+import app.getvela.wallet.feature.send.core.PaymentHandOff
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
@@ -105,6 +106,13 @@ class AppContainer(private val app: Application) {
      * it, so the core's `scan_resolved` decides what it means.
      */
     val pendingScan = MutableStateFlow<String?>(null)
+
+    /**
+     * Spec 078 round 3: a payment request from outside Send (a `/pay` link, a
+     * code scanned in 探索) reaches Send once — now, if Send is open; parked
+     * for the open otherwise.
+     */
+    val paymentHandOff = PaymentHandOff(pendingSendParams, pendingScan)
     /** Spec 048: the home's status line opens the matching rescue sheet on the settings page. */
     val pendingSettingsOverlay = MutableStateFlow<SettingsOverlay?>(null)
     /** Spec 048: the add-token 原生币 tab opens the settings' add-network page. */

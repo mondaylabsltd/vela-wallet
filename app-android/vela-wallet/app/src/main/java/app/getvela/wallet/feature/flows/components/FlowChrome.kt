@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows.components
 
+import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -130,10 +131,10 @@ fun FlowScaffold(
                 }
             }
             Spacer(modifier = Modifier.height(VelaSpacing.md))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            // The title is never cut (design review, 078 round 3: "Token
+            // auswä…" at the largest size): beside the network pill when both
+            // fit whole, otherwise the pill takes the line under it.
+            val title: @Composable () -> Unit = {
                 Text(
                     text = header.title,
                     color = colors.fgBase,
@@ -141,48 +142,56 @@ fun FlowScaffold(
                     fontWeight = VelaFontWeight.bold,
                     fontSize = VelaTextSize.xl4,
                     lineHeight = VelaLeading.hero * VelaTextSize.xl4,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
                 )
-                header.pill?.let { pill ->
-                    Spacer(modifier = Modifier.width(VelaSpacing.lg))
-                    Row(
-                        modifier = Modifier
-                            .background(colors.bgRaised, CircleShape)
-                            .clickable(onClick = onPill)
-                            .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.sm),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        pill.dots.forEachIndexed { index, dot ->
-                            Box(
-                                modifier = Modifier
-                                    // Overlapped, not spaced: the cluster stands
-                                    // for "several networks", and three separate
-                                    // dots read as three separate controls.
-                                    .offset(x = -VelaSpacing.sm * index)
-                                    .size(WalletMetrics.pillDotSize)
-                                    .background(colors.bgRaised, CircleShape)
-                                    .padding(VelaBorder.emphasis)
-                                    .background(dot, CircleShape),
+            }
+            val pill = header.pill
+            if (pill == null) {
+                title()
+            } else {
+                VelaLabelBesideValue(
+                    modifier = Modifier.fillMaxWidth(),
+                    gap = VelaSpacing.lg,
+                    rowGap = VelaSpacing.md,
+                    stackedValue = Alignment.Start,
+                    label = title,
+                    value = {
+                        Row(
+                            modifier = Modifier
+                                .background(colors.bgRaised, CircleShape)
+                                .clickable(onClick = onPill)
+                                .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            pill.dots.forEachIndexed { index, dot ->
+                                Box(
+                                    modifier = Modifier
+                                        // Overlapped, not spaced: the cluster stands
+                                        // for "several networks", and three separate
+                                        // dots read as three separate controls.
+                                        .offset(x = -VelaSpacing.sm * index)
+                                        .size(WalletMetrics.pillDotSize)
+                                        .background(colors.bgRaised, CircleShape)
+                                        .padding(VelaBorder.emphasis)
+                                        .background(dot, CircleShape),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                            Text(
+                                text = pill.label,
+                                color = colors.fgBase,
+                                fontFamily = VelaFontFamily,
+                                fontWeight = VelaFontWeight.semibold,
+                                fontSize = VelaTextSize.base,
+                            )
+                            Icon(
+                                imageVector = VelaIcons.ChevronDown,
+                                contentDescription = null,
+                                tint = colors.fgMuted,
+                                modifier = Modifier.size(VelaIconSize.sm),
                             )
                         }
-                        Spacer(modifier = Modifier.width(VelaSpacing.sm))
-                        Text(
-                            text = pill.label,
-                            color = colors.fgBase,
-                            fontFamily = VelaFontFamily,
-                            fontWeight = VelaFontWeight.semibold,
-                            fontSize = VelaTextSize.base,
-                        )
-                        Icon(
-                            imageVector = VelaIcons.ChevronDown,
-                            contentDescription = null,
-                            tint = colors.fgMuted,
-                            modifier = Modifier.size(VelaIconSize.sm),
-                        )
-                    }
-                }
+                    },
+                )
             }
             Spacer(modifier = Modifier.height(VelaSpacing.xl))
             content()

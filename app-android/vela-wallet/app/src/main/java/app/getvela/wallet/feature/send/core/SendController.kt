@@ -358,8 +358,19 @@ class SendController(
 
     // -- intents ---------------------------------------------------------------------
 
+    private val _opens = MutableStateFlow(0L)
+
+    /**
+     * How many attempts have begun. A screen keyed on it resets what it keeps
+     * of its own (an open fee sheet) whenever the machine is re-opened — also
+     * when a payment request re-opens a Send that was already on screen
+     * ([PaymentHandOff]), which no navigation change announces.
+     */
+    val opens: StateFlow<Long> = _opens
+
     /** 发送 tapped: one attempt begins. */
     fun open(account: SendAccountRef?, display: SendDisplayContext, params: SendOpenParams = SendOpenParams()) {
+        _opens.value += 1
         _closed.value = false
         _alert.value = null
         // A new attempt holds no round yet: its own `fetch_tokens` picks one.

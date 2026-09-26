@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.diagnostics.BugReport
 import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.FeeTierPrefView
@@ -677,16 +678,34 @@ object SettingsLive {
         },
     )
 
-    /** Feedback: the preview lines are the device's (version, platform, language, failed chains, recent failures). */
-    fun withFeedback(model: SettingsScreenModel, version: String, commit: String, platform: String, language: String, failedChains: List<String>, failures: List<String>, strings: VelaStrings): SettingsScreenModel = model.copy(
+    /** The corpus labels the report's environment lines wear — the preview's and the payload's alike. */
+    fun feedbackLabels(strings: VelaStrings): BugReport.EnvironmentLabels = BugReport.EnvironmentLabels(
+        version = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_VERSION),
+        platform = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_PLATFORM),
+        language = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_LANGUAGE),
+        rpc = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_RPC),
+        failures = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_FAILURES),
+        none = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_NONE),
+    )
+
+    /**
+     * Feedback: the preview lines are the device's — built by the same
+     * function the payload's `environment` is ([BugReport.environmentLines]),
+     * so "only what you see is sent" is literal, redaction included.
+     */
+    fun withFeedback(model: SettingsScreenModel, facts: BugReport.DeviceFacts, strings: VelaStrings): SettingsScreenModel = model.copy(
+        feedback = model.feedback.copy(previewLines = BugReport.environmentLines(feedbackLabels(strings), facts)),
+    )
+
+    /** Where the last 发送 stands: in flight, filed, or handed to the form. */
+    fun withFeedbackStatus(model: SettingsScreenModel, sending: Boolean, outcome: BugReport.Outcome?): SettingsScreenModel = model.copy(
         feedback = model.feedback.copy(
-            previewLines = listOf(
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_VERSION)}: v$version ($commit)",
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_PLATFORM)}: $platform",
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_LANGUAGE)}: $language",
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_RPC)}: ${failedChains.ifEmpty { listOf(strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_NONE)) }.joinToString(", ")}",
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_FAILURES)}: ${failures.ifEmpty { listOf(strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_NONE)) }.joinToString("; ")}",
-            ),
+            status = when {
+                sending -> FeedbackStatus.Sending
+                outcome is BugReport.Outcome.Filed -> FeedbackStatus.Filed(outcome.number, outcome.url, outcome.deduped, outcome.screenshotsDropped)
+                outcome is BugReport.Outcome.Fallback -> FeedbackStatus.Fallback(outcome.fallbackUrl)
+                else -> FeedbackStatus.Idle
+            },
         ),
     )
 

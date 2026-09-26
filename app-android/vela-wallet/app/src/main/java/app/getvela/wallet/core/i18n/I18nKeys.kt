@@ -966,6 +966,27 @@ object I18nKeys {
         const val BUG_CONSENT = "componentsUi.bugReport.consent"
         const val BUG_SEND = "componentsUi.bugReport.send"
         const val BUG_GITHUB = "componentsUi.bugReport.openGithubForm"
+        // Spec 078 round 3: the report is actually sent, and says how it ended.
+        const val BUG_STEPS_PLACEHOLDER = "componentsUi.bugReport.stepsPlaceholder"
+        const val BUG_SENDING = "componentsUi.bugReport.sending"
+        const val BUG_SUCCESS_TITLE = "componentsUi.bugReport.successTitle"
+        const val BUG_SUCCESS_NEW = "componentsUi.bugReport.successBodyNew"
+        const val BUG_SUCCESS_DEDUPED = "componentsUi.bugReport.successBodyDeduped"
+        const val BUG_VIEW_ISSUE = "componentsUi.bugReport.viewIssue"
+        const val BUG_FALLBACK_TITLE = "componentsUi.bugReport.fallbackTitle"
+        const val BUG_FALLBACK_BODY = "componentsUi.bugReport.fallbackBody"
+        const val BUG_OPEN_GITHUB = "componentsUi.bugReport.openGithub"
+        const val BUG_DONE = "componentsUi.bugReport.done"
+        // Screenshots (the founder's ask, 2026-09-26): public on the issue, at most five.
+        const val BUG_SCREENSHOTS_LABEL = "componentsUi.bugReport.screenshotsLabel"
+        const val BUG_ADD_SCREENSHOTS = "componentsUi.bugReport.addScreenshots"
+        const val BUG_SCREENSHOTS_HINT = "componentsUi.bugReport.screenshotsHint"
+        const val BUG_SCREENSHOTS_PUBLIC = "componentsUi.bugReport.screenshotsPublic"
+        const val BUG_REMOVE_SCREENSHOT = "componentsUi.bugReport.removeScreenshot"
+        const val BUG_SCREENSHOTS_LIMIT = "componentsUi.bugReport.screenshotsLimit"
+        const val BUG_SCREENSHOT_UNSUPPORTED = "componentsUi.bugReport.screenshotUnsupported"
+        const val BUG_SCREENSHOTS_DROPPED = "componentsUi.bugReport.screenshotsDropped"
+        const val BUG_FALLBACK_SCREENSHOTS = "componentsUi.bugReport.fallbackScreenshots"
 
         // Rescue (SR1–SR5).
         const val RPC_UNAVAILABLE_MULTIPLE = "assets.rpcUnavailableMultiple"

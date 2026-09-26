@@ -1,5 +1,64 @@
 package app.getvela.wallet.feature.settings
 
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.Dp
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.layout.wrapContentHeight
+import kotlinx.coroutines.launch
+import app.getvela.wallet.feature.settings.components.FeedbackLineIcon
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.material3.LocalTextStyle
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import app.getvela.wallet.feature.settings.components.ScreenshotTileView
+import app.getvela.wallet.feature.settings.components.FeedbackScreenshotsSection
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
+import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.diagnostics.ScreenshotTray
+import app.getvela.wallet.core.diagnostics.ScreenshotPrep
+import app.getvela.wallet.core.diagnostics.BugReport
+import app.getvela.wallet.core.designsystem.components.VelaStatusBadge
+import app.getvela.wallet.core.designsystem.components.BadgeVariant
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.collectAsState
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.net.Uri
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import app.getvela.wallet.core.designsystem.tokens.VelaRadius
+import app.getvela.wallet.core.designsystem.tokens.VelaBorder
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -148,7 +207,9 @@ data class SettingsActions(
     val onClearCaches: () -> Unit = {},
     val onErase: () -> Unit = {},
     /** Spec 048: what the person typed goes into the report. */
-    val onFeedbackSend: (String) -> Unit = {},
+    val onFeedbackSend: (what: String, steps: String, screenshots: List<ByteArray>) -> Unit = { _, _, _ -> },
+    /** Spec 078 round 3: the sheet closed — the next open starts a fresh report. */
+    val onFeedbackClosed: () -> Unit = {},
     /** Spec 048: the network detail's RPC / explorer overrides, and the add-network sheet's custom RPC + 重新检查. */
     val onOverrideEdited: (chainId: Long, field: String, value: String) -> Unit = { _, _, _ -> },
     val onOverrideCommitted: (chainId: Long) -> Unit = {},
@@ -295,6 +356,7 @@ fun SettingsRoute(
         onRecheckNetwork = actions.onRecheckNetwork,
         onProviderTest = actions.onProviderTest,
         onFeedbackGithub = actions.onFeedbackGithub,
+        onFeedbackClosed = actions.onFeedbackClosed,
         onOpenLink = actions.onOpenLink,
         onRelayerRetry = actions.onRelayerRetry,
         onBalanceRetry = actions.onBalanceRetry,
@@ -353,8 +415,9 @@ fun SettingsScreen(
     onCustomRpc: (String) -> Unit = {},
     onRecheckNetwork: () -> Unit = {},
     onProviderTest: (String) -> Unit = {},
-    onFeedbackSend: (String) -> Unit = {},
+    onFeedbackSend: (String, String, List<ByteArray>) -> Unit = { _, _, _ -> },
     onFeedbackGithub: () -> Unit = {},
+    onFeedbackClosed: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
@@ -486,6 +549,7 @@ fun SettingsScreen(
                 onErase = onErase,
                 onFeedbackSend = onFeedbackSend,
                 onFeedbackGithub = onFeedbackGithub,
+                onFeedbackClosed = onFeedbackClosed,
                 onOpenLink = onOpenLink,
                 onRelayerRetry = onRelayerRetry,
                 onBalanceRetry = onBalanceRetry,
@@ -1166,8 +1230,9 @@ private fun SettingsSheet(
     onConfirmResetEndpoints: () -> Unit = {},
     onClearCaches: () -> Unit = {},
     onErase: () -> Unit = {},
-    onFeedbackSend: (String) -> Unit = {},
+    onFeedbackSend: (String, String, List<ByteArray>) -> Unit = { _, _, _ -> },
     onFeedbackGithub: () -> Unit = {},
+    onFeedbackClosed: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
@@ -1181,19 +1246,33 @@ private fun SettingsSheet(
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // The sheet is its own window, and a window's root provides its OWN
+    // density — the app's text size (VelaTheme's fontScale) stopped at the
+    // sheet's edge, so every settings sheet stayed at the standard size
+    // (found checking the report sheet at the largest size, spec 078 round 3).
+    val appDensity = LocalDensity.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = colors.bgBase,
     ) {
-        // The ✕ lives in the host, not in each body: every sheet opens with a
-        // SheetTitle, so one overlay anchored top-end lands on the title line
-        // for all of them — and none of them can forget it. The drag handle
-        // alone is not an affordance a first-time reader recognises.
-        // The cap is what makes the scroll below mean anything: a wrap-height
-        // column has no overflow to scroll, so verticalScroll alone silently
-        // did nothing and the sheet still ended at Português.
-        val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
+      // The ✕ is the host's, handed to every body's SheetTitle, which puts it
+      // in its own column beside the title: every sheet opens with one, so
+      // none can forget it. It used to float over the scrolling content —
+      // over the fifth screenshot's ✕ (a remove tap closed the sheet), over
+      // a scrolled field, over the subtitle (design review, 078 round 3).
+      // The drag handle alone is not an affordance a first-time reader knows.
+      // The cap is what makes the scroll below mean anything: a wrap-height
+      // column has no overflow to scroll, so verticalScroll alone silently
+      // did nothing and the sheet still ended at Português.
+      val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
+      val sheetScroll = rememberScrollState()
+      CompositionLocalProvider(
+          LocalDensity provides appDensity,
+          LocalSheetScroll provides sheetScroll,
+          LocalSheetClose provides SheetClose(model.closeLabel, onDismiss),
+          LocalSheetBodyMax provides maxSheetHeight - VelaSpacing.xl3,
+      ) {
         Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)) {
         Column(
             modifier = Modifier
@@ -1203,7 +1282,7 @@ private fun SettingsSheet(
                 // below the fold — plus the contribute footer — were
                 // unreachable. Every sheet here can outgrow the screen once a
                 // translation runs long, so the scroll belongs to the host.
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(sheetScroll)
                 .padding(horizontal = VelaSizing.screenPaddingX)
                 .padding(bottom = VelaSpacing.xl3),
         ) {
@@ -1261,60 +1340,90 @@ private fun SettingsSheet(
                     onConfirm = onErase,
                     onCancel = onDismiss,
                 )
-                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub)
+                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub, onOpen = onOpenLink, onDone = onDismiss, onClosed = onFeedbackClosed)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onRpcFixPrimary, onRpcFixField)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail, onBalanceRetry)
                 SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
                 SettingsOverlay.None -> Unit
             }
         }
-
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = VelaSizing.screenPaddingX),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(VelaSpacing.xl4)
-                        .clip(CircleShape)
-                        .background(colors.bgRaised),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = VelaIcons.Close,
-                        contentDescription = model.closeLabel,
-                        tint = colors.fgMuted,
-                        modifier = Modifier.size(VelaIconSize.md),
-                    )
-                }
-            }
         }
+      }
     }
+}
+
+/** The settings sheet host's ✕: what it says to TalkBack and what it does. */
+private class SheetClose(val label: String, val onClose: () -> Unit)
+
+/** Provided by the settings sheet host; a body drawn elsewhere (the account switcher) gets none. */
+private val LocalSheetClose = staticCompositionLocalOf<SheetClose?> { null }
+
+/** The host's scroll, for a body that must move it without an animation (the report's fallback). */
+private val LocalSheetScroll = staticCompositionLocalOf<ScrollState?> { null }
+
+/** The tallest a body can be before the sheet scrolls — for a state that centres itself (the filed report). */
+private val LocalSheetBodyMax = staticCompositionLocalOf<Dp?> { null }
+
+/**
+ * The ✕ itself: a plain glyph (no filled disc — design language principle 7)
+ * in a 48dp target, in its own column so nothing is ever under it.
+ */
+@Composable
+private fun SheetCloseButton(close: SheetClose) {
+    Box(
+        modifier = Modifier
+            // The glyph's right edge on the screen margin, like the back chevron's.
+            .offset(x = VelaSpacing.md)
+            .size(VelaSizing.sheetClose)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = close.onClose)
+            .semantics { contentDescription = close.label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(imageVector = VelaIcons.Close, contentDescription = null, tint = VelaTheme.colors.fgMuted, modifier = Modifier.size(VelaIconSize.lg))
+    }
+}
+
+/** A title-less state (the filed report): the ✕ alone, on its own line at the top end. */
+@Composable
+private fun SheetCloseRow() {
+    val close = LocalSheetClose.current ?: return
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { SheetCloseButton(close) }
 }
 
 @Composable
 private fun SheetTitle(title: String, subtitle: String? = null) {
     val colors = VelaTheme.colors
-    Text(
-        text = title,
-        color = colors.fgBase,
-        fontFamily = VelaFontFamily,
-        fontWeight = VelaFontWeight.bold,
-        fontSize = VelaTextSize.xl2,
-    )
+    val close = LocalSheetClose.current
+    // Only the TITLE shares its line with the ✕ (it wraps beside it, never
+    // under it); the subtitle runs the full width below.
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Text(
+            text = title,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.bold,
+            fontSize = VelaTextSize.xl2,
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = if (close != null) VelaSizing.sheetClose else 0.dp)
+                .wrapContentHeight(Alignment.CenterVertically),
+        )
+        if (close != null) {
+            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+            SheetCloseButton(close)
+        }
+    }
     if (subtitle != null) {
         Text(
             text = subtitle,
             color = colors.fgSubtle,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
-            modifier = Modifier.padding(top = VelaSpacing.sm, bottom = VelaSpacing.lg),
+            modifier = Modifier.padding(top = VelaSpacing.xs),
         )
-    } else {
-        Spacer(modifier = Modifier.height(VelaSpacing.lg))
     }
+    Spacer(modifier = Modifier.height(VelaSpacing.lg))
 }
 
 @Composable
@@ -1521,54 +1630,500 @@ internal fun AccountsSheetBody(
     VelaSecondaryButton(sheet.secondary, onClick = onSecondary, modifier = Modifier.fillMaxWidth())
 }
 
+/**
+ * ST15 — the in-app report (spec 078 round 3; the web's `FeedbackBody`, with
+ * screenshots since the founder's ask of 2026-09-26).
+ *
+ * 发送 POSTs to getvela.app ([app.getvela.wallet.core.diagnostics.BugReport]);
+ * the preview is the payload's `environment`, line for line, and the
+ * screenshots go as the tiles show them — each re-encoded first, which is
+ * what strips EXIF. Two endings, drawn here rather than in a second sheet:
+ * filed says which issue it became and offers to open it; refused / offline /
+ * timed out offers the prefilled GitHub form — the ONLY remaining road, never
+ * replaced by an apology — and keeps 发送 below it, because "try again" is a
+ * real answer to a 429 or a dropped connection.
+ *
+ * The button is dimmed only while nothing is typed (the endpoint refuses an
+ * empty report); while it is sending it turns a spinner at full emphasis.
+ * Screenshots never block it.
+ */
 @Composable
-private fun FeedbackSheetBody(model: FeedbackModel, onSend: (String) -> Unit = {}, onGithub: () -> Unit = {}) {
+private fun FeedbackSheetBody(
+    model: FeedbackModel,
+    onSend: (what: String, steps: String, screenshots: List<ByteArray>) -> Unit = { _, _, _ -> },
+    onGithub: () -> Unit = {},
+    onOpen: (String) -> Unit = {},
+    onDone: () -> Unit = {},
+    onClosed: () -> Unit = {},
+) {
     val colors = VelaTheme.colors
+    val haptic = rememberVelaHaptic()
+    val closed by rememberUpdatedState(onClosed)
+    DisposableEffect(Unit) { onDispose { closed() } }
+    // The tray first — before any early return — so a fallback keeps the tiles.
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val thumbnailPx = with(LocalDensity.current) { VelaSizing.screenshotTile.roundToPx() * 2 }
+    val tray = remember {
+        ScreenshotTray<Uri, ScreenshotPrep.Prepared>(scope) { uri ->
+            withContext(Dispatchers.Default) {
+                // A debug walk can hold the placeholder on screen ([BugReport.debugPrepareDelayMs]).
+                if (BugReport.debugPrepareDelayMs > 0) delay(BugReport.debugPrepareDelayMs)
+                ScreenshotPrep.prepare(context.contentResolver, uri, thumbnailPx)
+            }
+        }
+    }
+    val tiles by tray.tiles.collectAsState()
+    val notice by tray.notice.collectAsState()
+    val room = (BugReport.MAX_SCREENSHOTS - tiles.size).coerceAtLeast(0)
+    // The system photo picker — no permission; without it (no GMS, old Play
+    // services) the contract falls back to the document picker, which does
+    // not honour a maximum: the tray takes the first that fit and says so.
+    // The multiple contract needs at least two, so one slot left is a single pick.
+    val pickMany = rememberLauncherForActivityResult(
+        remember(room.coerceAtLeast(2)) { ActivityResultContracts.PickMultipleVisualMedia(room.coerceAtLeast(2)) },
+    ) { uris -> tray.add(uris) }
+    val pickOne = rememberLauncherForActivityResult(remember { ActivityResultContracts.PickVisualMedia() }) { uri ->
+        uri?.let { tray.add(listOf(it)) }
+    }
+    // The no-GMS road, forced for a debug walk ([BugReport.forceDocumentPicker]).
+    val pickDocuments = rememberLauncherForActivityResult(remember { ActivityResultContracts.OpenMultipleDocuments() }) { uris ->
+        tray.add(uris)
+    }
+    val pick = {
+        val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        runCatching {
+            when {
+                room == 0 -> Unit
+                BugReport.forceDocumentPicker -> pickDocuments.launch(arrayOf("image/*"))
+                room >= 2 -> pickMany.launch(request)
+                else -> pickOne.launch(request)
+            }
+        }
+            .onFailure { VelaLog.event("feedback", "picker unavailable", "error" to it.javaClass.simpleName) }
+        Unit
+    }
+
+    val status = model.status
+    // The form's height, kept for the filed state: the sheet does not collapse
+    // under the person's thumb, and the success block sits at its optical centre.
+    var formHeightPx by remember { mutableIntStateOf(0) }
+    if (status is FeedbackStatus.Filed) {
+        LaunchedEffect(status) { haptic(VelaHaptic.Success) }
+        FeedbackFiled(model, status, heightPx = formHeightPx, onOpen = onOpen, onDone = onDone)
+        return
+    }
+    Column(modifier = Modifier.fillMaxWidth().onSizeChanged { formHeightPx = it.height }) {
     SheetTitle(model.title, model.subtitle)
+    val sending = status is FeedbackStatus.Sending
     // Spec 048: the box is typed into; what is typed goes into the report.
-    var feedbackText by rememberSaveable { mutableStateOf("") }
-    VelaUrlField(label = "", value = feedbackText, placeholder = model.placeholder, onValueChange = { feedbackText = it }, keyboard = KeyboardType.Text)
-    Text(
-        text = model.addSteps,
-        color = colors.infoBase,
-        fontFamily = VelaFontFamily,
-        fontSize = VelaTextSize.base,
-        modifier = Modifier.padding(vertical = VelaSpacing.lg),
+    var what by rememberSaveable { mutableStateOf("") }
+    var steps by rememberSaveable { mutableStateOf("") }
+    var stepsOpen by rememberSaveable { mutableStateOf(false) }
+    var previewOpen by rememberSaveable { mutableStateOf(true) }
+    // 发送 pressed while a tile is still being prepared: waiting for it.
+    var awaitingTiles by remember { mutableStateOf(false) }
+    // v3 B9: while the report is sending nothing in the form may change.
+    val inert = sending || awaitingTiles
+    FeedbackField(value = what, placeholder = model.placeholder, minLines = 4, enabled = !inert, onValueChange = { what = it })
+    if (stepsOpen) {
+        Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        FeedbackField(value = steps, placeholder = model.stepsPlaceholder, minLines = 3, enabled = !inert, onValueChange = { steps = it })
+        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    } else {
+        // The form marks steps required; this is the box behind the promise.
+        Text(
+            text = model.addSteps,
+            color = colors.infoBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier
+                .clickable(enabled = !inert, role = Role.Button) { stepsOpen = true }
+                .padding(vertical = VelaSpacing.lg),
+        )
+    }
+    FeedbackScreenshotsSection(
+        model = model,
+        tiles = tiles.map { ScreenshotTileView(it.id, it.ready?.thumbnail, it.ready != null) },
+        notice = notice,
+        onAdd = pick,
+        onRemove = { id -> haptic(VelaHaptic.Press); tray.remove(id) },
+        enabled = !inert,
     )
+    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    FeedbackPreview(model, open = previewOpen, onToggle = { previewOpen = !previewOpen })
+    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    // The promise, quiet and next to the thing it is about (v2 A4: no tinted
+    // box — blue on blue failed contrast).
+    Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
+        FeedbackLineIcon(VelaIcons.Info, colors.infoBase, VelaTextSize.sm * 1.2f, Modifier.padding(top = 1.dp))
+        Text(
+            text = model.consent,
+            color = colors.fgMuted,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+            lineHeight = VelaTextSize.sm * 1.4f,
+        )
+    }
+    Spacer(modifier = Modifier.height(VelaSpacing.lg))
+    // 发送 while a tile is still being prepared waits for it, busy all the
+    // while — an image the person saw added is never silently left out.
+    val busy = sending || awaitingTiles
+    val send: () -> Unit = {
+        if (!busy) {
+            awaitingTiles = true
+            scope.launch {
+                val shots = tray.settled()
+                awaitingTiles = false
+                onSend(what, steps, shots.map { it.jpeg })
+            }
+        }
+    }
+    // The fallback, once shown, STAYS through a retry: 重试 turns its own
+    // spinner in place. It used to vanish while sending (the form's 发送
+    // came back) and reappear on the next refusal, so the buttons jumped
+    // under a thumb — a tap right after a refusal could land on 打开 GitHub
+    // 表单 instead (device pass, 078 round 3).
+    val fallbackNow = (status as? FeedbackStatus.Fallback)?.url
+    var lastFallback by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(fallbackNow) { if (fallbackNow != null) lastFallback = fallbackNow }
+    val fallbackUrl = fallbackNow ?: lastFallback?.takeIf { sending }
+    if (fallbackUrl != null) {
+        // Not an error message: the other road, with the person's typing
+        // already in the URL — amber, because nothing has been lost except the
+        // images, which a URL cannot carry, and the block says so.
+        // v3 B6: never stranded below the fold — the block and its button are
+        // brought into view, and TalkBack is moved to (and reads) its title.
+        // INSTANTLY, and once (when it first appears): nothing may move while
+        // a thumb is on its way to 重试.
+        val intoView = remember { BringIntoViewRequester() }
+        val titleFocus = remember { FocusRequester() }
+        val sheetScroll = LocalSheetScroll.current
+        var revealed by remember { mutableStateOf(false) }
+        LaunchedEffect(revealed) {
+            if (!revealed) return@LaunchedEffect
+            if (sheetScroll == null) intoView.bringIntoView()
+            withFrameNanos { } // then focus — the title is already on screen, so no second scroll
+            runCatching { titleFocus.requestFocus() }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .bringIntoViewRequester(intoView)
+                // In the very layout pass that first places the block — the
+                // scroll's end already includes it — jump there, so it is
+                // drawn in place one frame later, not two or three.
+                .onGloballyPositioned {
+                    if (!revealed) {
+                        revealed = true
+                        sheetScroll?.let { scroll -> scroll.dispatchRawDelta((scroll.maxValue - scroll.value).toFloat()) }
+                    }
+                },
+        ) {
+            FeedbackFallbackBlock(model, withScreenshots = tiles.isNotEmpty(), titleFocus = titleFocus)
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+            VelaPrimaryButton(model.openGithub, onClick = { onOpen(fallbackUrl) }, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(VelaSpacing.md))
+            VelaSecondaryButton(
+                text = if (busy) model.sending else model.tryAgain,
+                onClick = send,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = what.isNotBlank(),
+                loading = busy,
+                busyLabel = true,
+            )
+        }
+        // The block already offers the form: no second "Prefer GitHub?" road.
+    } else {
+        VelaPrimaryButton(
+            text = if (busy) model.sending else model.send,
+            onClick = send,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = what.isNotBlank(),
+            loading = busy,
+            busyLabel = true,
+        )
+        FeedbackLink(model.githubLink, onClick = onGithub)
+    }
+    }
+}
+
+/**
+ * "What will be sent" — a disclosure, open by default: plain rows, each line
+ * split at its first ": " into a muted label and its value, wrapped lines
+ * indented under the value (v2 A4; no sunken box, no monospace).
+ */
+@Composable
+private fun FeedbackPreview(model: FeedbackModel, open: Boolean, onToggle: () -> Unit) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = Modifier
+            .clickable(role = Role.Button, onClick = onToggle)
+            .padding(vertical = VelaSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+    ) {
+        Text(text = model.previewToggle, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+        FeedbackLineIcon(VelaIcons.ChevronDown, colors.fgMuted, VelaTextSize.sm, Modifier.rotate(if (open) 180f else 0f))
+    }
+    if (open) {
+        Spacer(modifier = Modifier.height(VelaSpacing.sm))
+        // Each line is split at its first ": " into a label column and a value
+        // column — no colon on screen (v3 B2: zh never shows a half-width ": "
+        // after Chinese). The PAYLOAD keeps "label: value".
+        val rows = model.previewLines.map { line ->
+            val cut = line.indexOf(": ")
+            if (cut > 0) line.substring(0, cut) to line.substring(cut + 2) else "" to line
+        }
+        PreviewTable(
+            rows = rows,
+            gap = VelaSpacing.md,
+            rowGap = VelaSpacing.xs,
+            label = { text ->
+                Text(text = text, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, lineHeight = VelaTextSize.sm * 1.4f)
+            },
+            value = { text ->
+                Text(text = text, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, lineHeight = VelaTextSize.sm * 1.4f)
+            },
+        )
+    }
+}
+
+/**
+ * Two columns: every label as wide as the widest (at most 45% of the row), every
+ * value in the rest, wrapped lines staying under their value.
+ */
+@Composable
+private fun PreviewTable(
+    rows: List<Pair<String, String>>,
+    gap: androidx.compose.ui.unit.Dp,
+    rowGap: androidx.compose.ui.unit.Dp,
+    label: @Composable (String) -> Unit,
+    value: @Composable (String) -> Unit,
+) {
+    androidx.compose.ui.layout.Layout(
+        modifier = Modifier.fillMaxWidth(),
+        content = {
+            rows.forEach { (l, _) -> Box { label(l) } }
+            rows.forEach { (_, v) -> Box { value(v) } }
+        },
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val gapPx = gap.roundToPx()
+        val rowGapPx = rowGap.roundToPx()
+        val labels = measurables.take(rows.size)
+        val values = measurables.drop(rows.size)
+        val column = labels.maxOfOrNull { it.maxIntrinsicWidth(androidx.compose.ui.unit.Constraints.Infinity) }?.coerceAtMost((width * 0.45f).toInt()) ?: 0
+        val labelPlaced = labels.map { it.measure(androidx.compose.ui.unit.Constraints(maxWidth = column)) }
+        val valuePlaced = values.map { it.measure(androidx.compose.ui.unit.Constraints(maxWidth = (width - column - gapPx).coerceAtLeast(0))) }
+        val heights = rows.indices.map { maxOf(labelPlaced[it].height, valuePlaced[it].height) }
+        val total = heights.sum() + rowGapPx * (rows.size - 1).coerceAtLeast(0)
+        layout(width, total) {
+            var y = 0
+            rows.indices.forEach { i ->
+                labelPlaced[i].placeRelative(0, y)
+                valuePlaced[i].placeRelative(column + gapPx, y)
+                y += heights[i] + rowGapPx
+            }
+        }
+    }
+}
+
+/** v2 A2: title, body and the screenshots line — three parts, never one glued string. */
+@Composable
+private fun FeedbackFallbackBlock(model: FeedbackModel, withScreenshots: Boolean, titleFocus: FocusRequester? = null) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(VelaRadius.lg))
+            .background(colors.warningSoft)
+            .padding(VelaSpacing.lg),
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        FeedbackLineIcon(VelaIcons.TriangleAlert, colors.warningBase, VelaTextSize.base * 1.2f, Modifier.padding(top = 2.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+            // Calm (design review): the amber is the block's and its icon's;
+            // the words are ordinary text.
+            Text(
+                text = model.fallbackTitle,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                fontWeight = VelaFontWeight.semibold,
+                modifier = Modifier
+                    .then(if (titleFocus != null) Modifier.focusRequester(titleFocus) else Modifier)
+                    .semantics { liveRegion = LiveRegionMode.Assertive; heading() }
+                    .focusable(),
+            )
+            Text(
+                text = model.fallbackBody,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                lineHeight = VelaTextSize.base * 1.4f,
+            )
+            if (withScreenshots) {
+                Spacer(modifier = Modifier.height(VelaSpacing.xs))
+                Text(
+                    text = model.fallbackScreenshots,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * 1.4f,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Filed (v2 A7): the success disc (soft fill, a faint success ring so it holds
+ * on a light page), the title, which issue it became (or joined) — balanced,
+ * at most ~300dp wide — a warning if the images could not be stored, then the
+ * buttons. No accent unless screenshots were dropped: then 在 GitHub 查看 is
+ * primary, because the issue page is where they get added. The block sits at
+ * the sheet's optical centre (2:3), in the height the form had.
+ */
+@Composable
+private fun FeedbackFiled(model: FeedbackModel, status: FeedbackStatus.Filed, heightPx: Int, onOpen: (String) -> Unit, onDone: () -> Unit) {
+    val colors = VelaTheme.colors
+    // The form's height, but never more than the sheet shows without
+    // scrolling: a long form at the largest size put the "centre" below the
+    // fold and the block rode high (design review, 078 round 3).
+    val formHeight = with(LocalDensity.current) { heightPx.toDp() }
+    val height = LocalSheetBodyMax.current?.let { minOf(formHeight, it) } ?: formHeight
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.bgSunken)
-            .padding(VelaSpacing.lg),
-        verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
+            // A floor, not a fixed height: at the largest size the block may
+            // outgrow it, and then it simply scrolls.
+            .then(if (heightPx > 0) Modifier.heightIn(min = height) else Modifier.padding(bottom = VelaSpacing.xl3)),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        SheetCloseRow()
+        if (heightPx > 0) Spacer(modifier = Modifier.weight(2f))
+        VelaStatusBadge(
+            BadgeVariant.Success,
+            modifier = Modifier.border(1.5.dp, colors.successBase.copy(alpha = 0.4f), CircleShape),
+        )
+        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+        // v3 B7: announced, and TalkBack's focus moved onto it.
+        val titleFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { titleFocus.requestFocus() } }
         Text(
-            text = model.previewToggle,
+            text = model.successTitle,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.xl,
+            fontWeight = VelaFontWeight.semibold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .focusRequester(titleFocus)
+                .semantics { liveRegion = LiveRegionMode.Polite; heading() }
+                .focusable(),
+        )
+        Spacer(modifier = Modifier.height(VelaSpacing.sm))
+        Text(
+            text = (if (status.deduped) model.successBodyDeduped else model.successBodyNew).replace("{{number}}", status.number.toString()),
             color = colors.fgMuted,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
+            lineHeight = VelaTextSize.base * 1.4f,
+            textAlign = TextAlign.Center,
+            style = LocalTextStyle.current.copy(lineBreak = LineBreak.Heading),
+            modifier = Modifier.widthIn(max = 300.dp),
         )
-        model.previewLines.forEach { line ->
+        if (status.screenshotsDropped > 0) {
+            // Centred like the lines above it, no icon: the warning colour says enough.
+            Spacer(modifier = Modifier.height(VelaSpacing.md))
             Text(
-                text = line,
-                color = colors.fgSubtle,
-                fontFamily = VelaMonoFontFamily,
-                fontSize = VelaTextSize.sm,
+                text = model.screenshotsDropped,
+                color = colors.warningBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                lineHeight = VelaTextSize.base * 1.4f,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 300.dp),
             )
         }
+        Spacer(modifier = Modifier.height(VelaSpacing.xl2))
+        // v3 B3: a hierarchy — 在 GitHub 查看 outlined (primary when the images
+        // were dropped: the issue page is where they get added), 完成 plain text.
+        val dropped = status.screenshotsDropped > 0
+        if (status.url.isNotEmpty()) {
+            if (dropped) {
+                VelaPrimaryButton(model.viewIssue, onClick = { onOpen(status.url) }, modifier = Modifier.fillMaxWidth())
+            } else {
+                VelaSecondaryButton(model.viewIssue, onClick = { onOpen(status.url) }, modifier = Modifier.fillMaxWidth())
+            }
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+        }
+        Text(
+            text = model.done,
+            color = colors.fgBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.lg,
+            fontWeight = VelaFontWeight.medium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = VelaSizing.controlLg)
+                .clip(RoundedCornerShape(VelaRadius.full))
+                .clickable(role = Role.Button, onClick = onDone)
+                .wrapContentHeight(Alignment.CenterVertically)
+                .padding(vertical = VelaSpacing.md),
+        )
+        if (heightPx > 0) Spacer(modifier = Modifier.weight(3f))
     }
-    Spacer(modifier = Modifier.height(VelaSpacing.xl))
-    VelaCallout(CalloutModel(CalloutTone.Info, model.consent))
-    Spacer(modifier = Modifier.height(VelaSpacing.xl))
-    VelaPrimaryButton(model.send, onClick = { onSend(feedbackText) }, modifier = Modifier.fillMaxWidth())
+}
+
+/** A link line under the report: centred, info-blue, a real button to TalkBack. */
+@Composable
+private fun FeedbackLink(text: String, onClick: () -> Unit) {
     Text(
-        text = model.githubLink,
-        color = colors.infoBase,
+        text = text,
+        color = VelaTheme.colors.infoBase,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onGithub).padding(top = VelaSpacing.lg),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = VelaSpacing.sm)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = VelaSpacing.md),
     )
+}
+
+/**
+ * The report's text box: the person's own words, in the UI face (not the
+ * mono of an endpoint field), several lines tall, the placeholder whole.
+ */
+@Composable
+private fun FeedbackField(value: String, placeholder: String, minLines: Int, enabled: Boolean = true, onValueChange: (String) -> Unit) {
+    val colors = VelaTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(VelaRadius.lg))
+            .background(colors.bgSunken)
+            .border(VelaBorder.hairline, colors.borderBase, RoundedCornerShape(VelaRadius.lg))
+            .padding(VelaSpacing.lg),
+    ) {
+        // On the app's text style (its tracking and leading), like every other Text here.
+        val style = LocalTextStyle.current.merge(TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base))
+        if (value.isEmpty()) Text(text = placeholder, style = style.copy(color = colors.fgSubtle))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            minLines = minLines,
+            textStyle = style,
+            cursorBrush = SolidColor(colors.accentBase),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = placeholder },
+        )
+    }
 }
 
 /**

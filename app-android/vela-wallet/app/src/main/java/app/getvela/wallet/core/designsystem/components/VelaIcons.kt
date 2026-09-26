@@ -220,6 +220,19 @@ object VelaIcons {
         strokeIcon("VelaClose", "M18 6 6 18", "m6 6 12 12")
     }
 
+    /** Lucide `image-plus`: the report's add-screenshots target (spec 078 round 3). */
+    val ImagePlus: ImageVector by lazy {
+        strokeIcon(
+            "VelaImagePlus",
+            "M16 5h6",
+            "M19 2v6",
+            "M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5",
+            "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21",
+            // circle cx=9 cy=9 r=2
+            "M7 9a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
+        )
+    }
+
     val Copy: ImageVector by lazy {
         strokeIcon(
             "VelaCopy",

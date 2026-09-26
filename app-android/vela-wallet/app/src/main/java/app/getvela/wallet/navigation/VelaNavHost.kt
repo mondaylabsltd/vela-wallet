@@ -1,5 +1,6 @@
 package app.getvela.wallet.navigation
 
+import app.getvela.wallet.core.diagnostics.BugReport
 import app.getvela.wallet.core.diagnostics.BugReportUrl
 import app.getvela.wallet.core.diagnostics.CrashSheet
 import app.getvela.wallet.feature.settings.SettingsPage
@@ -532,6 +533,18 @@ fun VelaNavHost(
                 LaunchedEffect(online) {
                     if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
                 }
+                // Who the send is for and the money it shows — one definition for
+                // the open below and for a payment request that re-opens a Send
+                // already on screen.
+                fun sendAccount() = SendAccountRef(id = session.address, address = session.address, name = session.activeName)
+                fun sendDisplay(): SendDisplayContext {
+                    val money = WalletLive.Money.of(currency)
+                    return SendDisplayContext(
+                        code = money.code,
+                        rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
+                        fiat_decimals = 2,
+                    )
+                }
                 val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
                 LaunchedEffect(payLink) {
                     val uri = payLink ?: return@LaunchedEffect
@@ -548,14 +561,25 @@ fun VelaNavHost(
                         return@LaunchedEffect
                     }
                     VelaLog.event("paylink", "validated", "chain" to request.chain_id, "amount" to request.amount)
-                    application.container.pendingSendParams.value = SendOpenParams(
+                    val params = SendOpenParams(
                         prefilled_recipient = request.recipient,
                         prefilled_chain_id = request.chain_id.toString(),
                         prefilled_token_address = request.token_address,
                         prefilled_amount_base = request.amount_base,
                         locked = true,
                     )
-                    flows.enter(WalletFlowEntry.Send)
+                    // Spec 078 round 3: a Send already on screen opens the request
+                    // NOW — the locked request replaces the form, as it would from
+                    // a closed Send — and nothing is parked to re-apply later over
+                    // a recipient the person typed.
+                    val sendOpenNow = flows.top in SEND_STATES
+                    VelaLog.event("paylink", if (sendOpenNow) "opened on the send on screen" else "opening send")
+                    application.container.paymentHandOff.request(
+                        params = params,
+                        sendOpen = sendOpenNow,
+                        openNow = { p -> application.container.send.open(account = sendAccount(), display = sendDisplay(), params = p) },
+                        enterSend = { flows.enter(WalletFlowEntry.Send) },
+                    )
                     application.container.pendingPayLink.compareAndSet(uri, null)
                 }
                 var captureShare by remember { mutableStateOf<ShareCardModel?>(null) }
@@ -703,6 +727,10 @@ fun VelaNavHost(
                 val sendAlert by send.alert.collectAsStateWithLifecycle()
                 val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
                 var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
+                // Any open — also a payment request re-opening the Send on screen —
+                // starts without a fee sheet over it.
+                val sendOpens by send.opens.collectAsStateWithLifecycle()
+                LaunchedEffect(sendOpens) { feeSheetOpen = false }
                 val sweepPicking by send.sweepPicking.collectAsStateWithLifecycle()
                 val mainActivity = LocalContext.current.let { ctx ->
                     generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.firstOrNull { it is MainActivity } as? MainActivity
@@ -713,17 +741,13 @@ fun VelaNavHost(
                 LaunchedEffect(sendOpen, session.address) {
                     if (sendOpen && session.address.isNotEmpty()) {
                         feeSheetOpen = false
-                        val money = WalletLive.Money.of(currency)
-                        // Spec 047 D8: a validated /pay link opens the send locked, once.
-                        val linkParams = application.container.pendingSendParams.value?.also { application.container.pendingSendParams.value = null }
+                        // Spec 047 D8: a validated /pay link opens the send locked —
+                        // taken atomically, so it is applied once (spec 078 round 3).
+                        val linkParams = application.container.paymentHandOff.takeRequest()
                         send.open(
                             params = linkParams ?: SendOpenParams(),
-                            account = SendAccountRef(id = session.address, address = session.address, name = session.activeName),
-                            display = SendDisplayContext(
-                                code = money.code,
-                                rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
-                                fiat_decimals = 2,
-                            ),
+                            account = sendAccount(),
+                            display = sendDisplay(),
                         )
                         // Spec 048: a group's 群发转账 arrives as split rows to seed right
                         // after the machine opens (the web seeds the same way).
@@ -738,10 +762,7 @@ fun VelaNavHost(
                         // Spec 070: a payment code scanned in 探索 arrives already read.
                         if (flows.top == FlowState.S1) {
                             send.openScanner()
-                            application.container.pendingScan.value?.let { text ->
-                                application.container.pendingScan.value = null
-                                send.scanned(text)
-                            }
+                            application.container.paymentHandOff.takeScan()?.let { text -> send.scanned(text) }
                         }
                     }
                 }
@@ -1229,9 +1250,15 @@ fun VelaNavHost(
                                                 is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> onUrl(scanned.url)
                                                 is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Payment -> {
                                                     onClose()
-                                                    application.container.pendingScan.value = scanned.text
                                                     section = VelaTab.Wallet
-                                                    flows.push(FlowStep.Scan)
+                                                    // Spec 078 round 3: a Send already open reads it
+                                                    // now; otherwise it opens on the scanner with it.
+                                                    application.container.paymentHandOff.scan(
+                                                        text = scanned.text,
+                                                        sendOpen = flows.top in SEND_STATES,
+                                                        scanNow = { text -> application.container.send.scanned(text) },
+                                                        enterScanner = { flows.push(FlowStep.Scan) },
+                                                    )
                                                 }
                                                 app.getvela.wallet.feature.browser.ExploreLive.Scanned.WalletConnect ->
                                                     refusal = strings.t("explore.walletConnectUnsupported")
@@ -1680,6 +1707,9 @@ fun VelaNavHost(
                 var storageTick by remember { mutableStateOf(0) }
                 var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
                 var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
+                // Spec 078 round 3: the report in flight, and how the last one ended.
+                var feedbackSending by remember { mutableStateOf(false) }
+                var feedbackOutcome by remember { mutableStateOf<BugReport.Outcome?>(null) }
                 // The RPC fix the home asked for (the web's `openRpcFix`): which chain,
                 // the URL being typed until it is saved, and whether a save went out
                 // from the sheet (its probe then decides "restored").
@@ -1723,6 +1753,16 @@ fun VelaNavHost(
                     val device = application.container.deviceKeysOf(address, session.activeName)
                     walletKeys = application.container.walletKeys.read(address, device, application.container.signInCredentialOf(address))
                 }
+                // What this device may say about itself in a report — five named
+                // fields, never an address, a balance or an endpoint URL.
+                val feedbackFacts = BugReport.DeviceFacts(
+                    version = BuildConfig.VERSION_NAME,
+                    commit = BuildConfig.GIT_COMMIT,
+                    platform = "Android ${android.os.Build.VERSION.RELEASE}",
+                    language = i18nState.language,
+                    unreachable = poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() },
+                    failures = VelaLog.recentFailures(),
+                )
                 val liveModel = run {
                     var m = SettingsLive.withWizard(
                         SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
@@ -1739,10 +1779,8 @@ fun VelaNavHost(
                     m = SettingsLive.withConnections(m, connectedSites.sites, strings)
                     m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings)
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
-                    m = SettingsLive.withFeedback(
-                        m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, "Android ${android.os.Build.VERSION.RELEASE}", i18nState.language,
-                        poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
-                    )
+                    m = SettingsLive.withFeedback(m, feedbackFacts, strings)
+                    m = SettingsLive.withFeedbackStatus(m, feedbackSending, feedbackOutcome)
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
                     m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, balanceView.switcher, currency, strings)
@@ -1853,19 +1891,27 @@ fun VelaNavHost(
                                 }
                             }
                         },
-                        onFeedbackSend = { text ->
-                            // Spec 048: what was typed leads the report; the device lines follow.
-                            // Spec 081 FR-016: each in its OWN field — `what` and
-                            // `environment` — because `&body=` is dropped by GitHub
-                            // for an issue form, which is how this button spent its
-                            // whole life opening a blank page.
-                            val url = BugReportUrl.build(
-                                what = text.trim(),
-                                environment = liveModel.feedback.previewLines.joinToString("\n"),
-                            )
-                            VelaLog.event("feedback", "send", "typed" to text.length)
-                            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                        onFeedbackSend = { what, steps, screenshots ->
+                            // Spec 078 round 3: the report is POSTed (getvela.app), the
+                            // screenshots with it; any refusal hands back the prefilled
+                            // GitHub form, which the sheet offers.
+                            if (!feedbackSending && what.isNotBlank()) {
+                                feedbackSending = true
+                                feedbackOutcome = null
+                                val labels = SettingsLive.feedbackLabels(strings)
+                                val facts = feedbackFacts
+                                VelaLog.event("feedback", "send", "typed" to what.length, "screenshots" to screenshots.size)
+                                scope.launch {
+                                    val outcome = withContext(Dispatchers.Default) {
+                                        BugReport.send(BugReport.build(what, steps, BugReport.AREA_OTHER, labels, facts, screenshots))
+                                    }
+                                    VelaLog.event("feedback", "outcome", "filed" to (outcome is BugReport.Outcome.Filed))
+                                    feedbackOutcome = outcome
+                                    feedbackSending = false
+                                }
+                            }
                         },
+                        onFeedbackClosed = { if (!feedbackSending) feedbackOutcome = null },
                         onOverrideEdited = { chainId, field, value ->
                             settings.editOverride(chainId, if (field == "explorer") NetOverrideField.Explorer else NetOverrideField.Rpc, value)
                         },
