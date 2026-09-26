@@ -75,7 +75,7 @@ screenshot checked against the web.
 ## Phase 3b — core wiring (W, research.md)
 - [x] T044 W-12 Windows Explore: page visible (HWND swap chain, 8 MB stack) and
       built outside gpui's borrow (was: abort on opening a page).
-- [ ] T045 W-01 receive watcher per visit; W-02 balance refresh on confirmed
+- [x] T045 W-01 receive watcher per visit; W-02 balance refresh on confirmed
       send, incoming item, deposit.
 - [ ] T046 W-03 send simulation via `executor::sim`; W-04 AddNetwork via
       network_admin `AddByChainIdRequested`.

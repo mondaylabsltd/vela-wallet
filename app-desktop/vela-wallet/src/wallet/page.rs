@@ -697,6 +697,8 @@ pub struct WalletPage {
     /// the steps box is open, whether the preview is, the send in flight and
     /// how the last one ended.
     feedback: FeedbackDraft,
+    /// What moves the balance, watched (078 W-01 / W-02).
+    money_watch: MoneyWatch,
     signer_page_focus: Option<gpui::FocusHandle>,
     /// Spec 075: the tunnel, the same way — typed until Save, and the core
     /// says whether it is one (https/wss only, loopback allowed).
@@ -1134,6 +1136,7 @@ impl WalletPage {
             endpoint_focuses: Vec::new(),
             signer_page_draft: None,
             feedback: FeedbackDraft::new(cx),
+            money_watch: MoneyWatch::default(),
             signer_page_focus: None,
             tunnel_focus: None,
             settings_probed_network: None,
@@ -5116,6 +5119,81 @@ impl WalletPage {
             }
             cx.notify();
         })) as panels::Click);
+    }
+
+    /// Keep the balance following money that moves (078 W-01, W-02): attach
+    /// to the feed and the tracker once per resident, and run a deposit
+    /// watcher exactly while a receive screen is up. Cheap per frame — it
+    /// compares entity ids and a flag.
+    fn watch_money(&mut self, cx: &mut Context<Self>) {
+        if self.identity.is_none() {
+            return;
+        }
+        let feed = resident::resident::<ActivityFeed>(cx);
+        let tracker = resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
+        if self.money_watch.feed != Some(feed.entity_id())
+            || self.money_watch.tracker != Some(tracker.entity_id())
+        {
+            self.money_watch.feed = Some(feed.entity_id());
+            self.money_watch.tracker = Some(tracker.entity_id());
+            self.money_watch.new_item = feed.read(cx).view().new_item_id;
+            self.money_watch.confirmed = confirmed_sends(&tracker.read(cx).view());
+            self.money_watch.subscriptions = vec![
+                // A transfer the scan just found moved the balances too: the
+                // core celebrates only a genuinely new incoming record, never
+                // the first pass, so this fires once per arrival.
+                cx.observe(&feed, |this, feed, cx| {
+                    let id = feed.read(cx).view().new_item_id;
+                    if id.is_some() && id != this.money_watch.new_item {
+                        crate::executor::balance_dashboard::refresh(cx);
+                    }
+                    this.money_watch.new_item = id;
+                }),
+                // Money left: a send whose receipt just landed.
+                cx.observe(&tracker, |this, tracker, cx| {
+                    let now = confirmed_sends(&tracker.read(cx).view());
+                    if now
+                        .iter()
+                        .any(|hash| !this.money_watch.confirmed.contains(hash))
+                    {
+                        crate::executor::balance_dashboard::refresh(cx);
+                    }
+                    this.money_watch.confirmed = now;
+                }),
+            ];
+        }
+
+        // W-01: the watcher lives exactly as long as a receive screen shows —
+        // the core's session is single-shot (five minutes, then done), so a
+        // resident started once at the first visit watched nothing after it.
+        // Each visit is a fresh one; leaving forgets it, and its polling stops
+        // with it.
+        let receiving = self.panel == PanelId::Flow
+            && matches!(
+                self.flows.last(),
+                Some(FlowPanel::Dr1 | FlowPanel::Dr2 | FlowPanel::Dr3)
+            );
+        match (receiving, self.money_watch.receiving.is_some()) {
+            (true, false) => {
+                resident::forget::<ReceiveWatch>(cx);
+                let watch = resident::resident::<ReceiveWatch>(cx);
+                self.money_watch.deposits = 0;
+                self.money_watch.receiving = Some(cx.observe(&watch, |this, watch, cx| {
+                    let landed = watch.read(cx).view().deposits.len();
+                    if landed > this.money_watch.deposits {
+                        // The web's `onDeposit`: the balances and the feed.
+                        crate::executor::balance_dashboard::refresh(cx);
+                        crate::executor::activity_feed::focus_tick(cx);
+                    }
+                    this.money_watch.deposits = landed;
+                }));
+            }
+            (false, true) => {
+                self.money_watch.receiving = None;
+                resident::forget::<ReceiveWatch>(cx);
+            }
+            _ => {}
+        }
     }
 
     /// Open a flow from the wallet home (spec 021 SC-002).
@@ -16216,6 +16294,7 @@ impl WalletPage {
 impl Render for WalletPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.watch_field_blurs(window, cx);
+        self.watch_money(cx);
         let theme = Theme::of(self.theme_mode());
         // A survived panic (spec 038): the failure sheet, "Something went
         // wrong", with the report behind the disclosure.
@@ -16499,6 +16578,17 @@ enum ScanNotice {
 /// The contacts route's copies (078 X-06): the toast's key, and the QR
 /// dialog's pill's; the web holds both 1.5 s.
 const CONTACTS_TOAST: &str = "contacts-toast";
+/// The sends the tracker holds as confirmed, by their op hash.
+fn confirmed_sends(
+    view: &vela_core::app::tx_tracker::TrackView,
+) -> std::collections::HashSet<String> {
+    view.entries
+        .iter()
+        .filter(|entry| entry.status == vela_core::app::tx_tracker::TrackStatus::Confirmed)
+        .map(|entry| entry.user_op_hash.clone())
+        .collect()
+}
+
 /// The site menu's copy, said in the address bar (078 E-03).
 const EXPLORE_COPY: &str = "explore-copy";
 /// The technical details' address copy (078 G-05).
@@ -16936,6 +17026,30 @@ fn is_evm_address(value: &str) -> bool {
         .strip_prefix("0x")
         .or_else(|| value.strip_prefix("0X"))
         .is_some_and(|body| body.len() == 40 && body.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// The machines whose news moves money on screen, observed (078 W-01, W-02)
+/// — the web's `confirmed: () => balance.refresh(true)` on the tracker, its
+/// feed's refresh on a genuinely new incoming record, and the deposit
+/// watcher's `onDeposit`. The executors that notice these things run without
+/// the app, so the page listens to the machines' views instead.
+#[derive(Default)]
+struct MoneyWatch {
+    /// The feed and tracker entities the subscriptions below are about: a
+    /// resident rebuilt (a switch, a cleared store) is a new entity, and is
+    /// observed again.
+    feed: Option<gpui::EntityId>,
+    tracker: Option<gpui::EntityId>,
+    /// The feed's celebrated record, as last seen.
+    new_item: Option<String>,
+    /// Sends already seen confirmed — seeded on attach, so a restored list of
+    /// old confirmations is not news.
+    confirmed: std::collections::HashSet<String>,
+    subscriptions: Vec<gpui::Subscription>,
+    /// A receive screen is up and its watcher is running (W-01).
+    receiving: Option<gpui::Subscription>,
+    /// Deposits the running watcher has reported.
+    deposits: usize,
 }
 
 /// The Feedback page's state — the web's `FeedbackBody` locals and the
