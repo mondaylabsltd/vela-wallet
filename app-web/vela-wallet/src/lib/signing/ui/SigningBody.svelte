@@ -16,8 +16,9 @@
 	interface Props {
 		model: SigningModel;
 		onconfirm?: () => void;
-		onchip?: (id: string) => void;
-		oncustom?: (text: string) => void;
+		/** `leg`: the batch leg whose card was tapped; absent = the single approval. */
+		onchip?: (id: string, leg?: number) => void;
+		oncustom?: (text: string, leg?: number) => void;
 		onfee?: () => void;
 		onfeepick?: (id: string) => void;
 		/** Spec 069: fold / unfold the speed control, and a one-shot pick. */

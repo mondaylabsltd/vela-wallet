@@ -542,7 +542,75 @@ pub fn guard_editor(
         return None;
     }
     let editor = guard.editor.as_ref()?;
+    Some(allowance_editor(
+        editor,
+        &guard.meta,
+        guard.decimals_unverified,
+        guard.expired,
+        guard.increase_total.as_ref(),
+        s,
+    ))
+}
 
+/// One batch leg's cap editor, as [`guard_leg_editors`] hands it out: the card,
+/// what each of its chips chooses, the spender row under it, and the leg the
+/// page dispatches `LegPresetSelected` / `LegCustomAmountChanged` for.
+pub struct LegEditor {
+    pub leg: u32,
+    pub block: Block,
+    pub modes: Vec<GuardEditorMode>,
+    pub spender: Option<Block>,
+    pub custom_text: String,
+}
+
+/// A batch's own cap editors — one per leg the core mounts an editor for (an
+/// unbounded or grant-all approval), the phones' layout: "#n" on the card, the
+/// leg's spender under it. Before this the desktop drew none, so a Permit2
+/// bundle's unlimited leg was said in red and could not be capped.
+#[must_use]
+pub fn guard_leg_editors(guard: &GuardView, s: &SigningStrings) -> Vec<LegEditor> {
+    let Some(batch) = guard
+        .batch
+        .as_ref()
+        .filter(|_| guard.surface == GuardSurface::Batch)
+    else {
+        return Vec::new();
+    };
+    batch
+        .legs
+        .iter()
+        .enumerate()
+        .filter_map(|(index, leg)| {
+            let editor = leg.editor.as_ref().filter(|_| leg.needs_editor)?;
+            let (mut block, modes) = allowance_editor(editor, &leg.meta, false, false, None, s);
+            if let Block::Allowance { label, .. } = &mut block {
+                *label = SharedString::from(format!("#{} {label}", index + 1));
+            }
+            let spender = leg.approval.as_ref().map(|approval| Block::Party {
+                label: s.label_spender.clone(),
+                name: SharedString::from(crate::wallet::live::shorten_address(&approval.spender)),
+                address: Some(SharedString::from(approval.spender.clone())),
+                badge: None,
+            });
+            Some(LegEditor {
+                leg: u32::try_from(index).unwrap_or(u32::MAX),
+                block,
+                modes,
+                spender,
+                custom_text: editor.custom_text.clone(),
+            })
+        })
+        .collect()
+}
+
+fn allowance_editor(
+    editor: &vela_core::app::approval_guard::GuardEditorView,
+    meta: &vela_core::app::approval_guard::GuardTokenMetaView,
+    decimals_unverified: bool,
+    expired: bool,
+    increase_total: Option<&vela_core::app::approval_guard::GuardIncreaseTotalView>,
+    s: &SigningStrings,
+) -> (Block, Vec<GuardEditorMode>) {
     let mut chips = Vec::new();
     let mut modes = Vec::new();
     let mut chip = |label: SharedString, mode: GuardEditorMode, offered: bool| {
@@ -590,13 +658,13 @@ pub fn guard_editor(
             "{} {}",
             vela_core::app::approval_guard::format_token_amount(
                 units,
-                guard.meta.decimals,
+                meta.decimals,
                 4,
                 ",",
                 ".",
                 false,
             ),
-            guard.meta.symbol
+            meta.symbol
         )),
         // Nothing parses as an amount here only when the request IS unlimited
         // — which is exactly what the row must say.
@@ -611,19 +679,19 @@ pub fn guard_editor(
     };
 
     let mut notes: Vec<String> = Vec::new();
-    if guard.decimals_unverified {
+    if decimals_unverified {
         // An amount capped with decimals nobody verified is a cap at an
         // order of magnitude nobody verified.
         notes.push(s.decimals_unverified.to_string());
     }
-    if guard.expired {
+    if expired {
         notes.push(s.warn_expired.to_string());
     }
 
     // "increase by 100" must never read as "cap at 100" — the core computes
     // the resulting total, including the case where the on-chain read failed
     // and only the increment is known.
-    let resulting_total = guard.increase_total.as_ref().map(|total| {
+    let resulting_total = increase_total.map(|total| {
         let text = match total.total.as_deref() {
             Some(sum) => SharedString::from(sum.to_owned()),
             None => SharedString::from(crate::signing::fill(
@@ -634,7 +702,7 @@ pub fn guard_editor(
         (s.label_resulting_total.clone(), text)
     });
 
-    Some((
+    (
         Block::Allowance {
             label: s.label_spending_cap.clone(),
             value,
@@ -647,7 +715,7 @@ pub fn guard_editor(
             // shows up on screen as though it had been taken.
             custom: (editor.mode == Some(GuardEditorMode::Custom)).then(|| AllowanceInput {
                 value: SharedString::from(editor.custom_text.clone()),
-                symbol: SharedString::from(guard.meta.symbol.clone()),
+                symbol: SharedString::from(meta.symbol.clone()),
                 placeholder: SharedString::from("0"),
                 error: editor.error.map(|error| match error {
                     // A typed "cap" of 10^60 is no cap — an amount the field
@@ -661,15 +729,15 @@ pub fn guard_editor(
             }),
         },
         modes,
-    ))
+    )
 }
 
 /// The sentence an unlimited approval is never sent without.
 ///
 /// The request will go out granting an unbounded allowance as the site asked
 /// — the single approval kept on its Requested chip, or any batch leg left so
-/// (a bundle draws no leg editors on this shell yet, so for a bundle this is
-/// the whole disclosure). The guard decides; this only says it.
+/// (each leg's own card is [`guard_leg_editors`]; this is the sentence under
+/// them). The guard decides; this only says it.
 #[must_use]
 pub fn guard_warnings(guard: &GuardView, s: &SigningStrings) -> Vec<Block> {
     let unlimited = match guard.surface {
@@ -1721,8 +1789,69 @@ mod tests {
         assert_eq!(shown.fields[0].value, "1,240 USDC");
     }
 
-    /// A batch has no leg editors here — so the sentence is its whole
-    /// disclosure, and it follows the guard's effective state.
+    /// A batch's unbounded leg gets its own cap card — "#n", its own chips,
+    /// its spender under it, and the leg the page dispatches for. A leg the
+    /// core mounts no editor for (a transfer, a finite approve) gets none.
+    #[test]
+    fn a_batch_leg_gets_its_own_cap_editor() {
+        let s = strings();
+        let detected = vela_core::app::approval_guard::detect_calldata_approval(
+            Some("0xdd"),
+            Some(&format!(
+                "0x095ea7b3{}{}",
+                format!("{:0>64}", "1111111111111111111111111111111111111111"),
+                "f".repeat(64)
+            )),
+        );
+        let editor = vela_core::app::approval_guard::GuardEditorView {
+            mode: Some(GuardEditorMode::Requested),
+            choice: Some(GuardChoice::Unlimited),
+            requested_unlimited: true,
+            ..editor_view(None, false, None)
+        };
+        let leg = |needs_editor: bool| vela_core::app::approval_guard::GuardLegView {
+            to: "0xdd".to_owned(),
+            approval: needs_editor.then(|| detected.clone()).flatten(),
+            meta: guard_view(editor.clone()).meta,
+            editor: needs_editor.then(|| editor.clone()),
+            choice: None,
+            needs_editor,
+            needs_choice: false,
+            grants_broad: needs_editor,
+        };
+        let mut batch = guard_view(editor.clone());
+        batch.surface = GuardSurface::Batch;
+        batch.editor = None;
+        batch.batch = Some(vela_core::app::approval_guard::GuardBatchView {
+            legs: vec![leg(false), leg(true)],
+            any_uncapped: true,
+            any_to_own_token: false,
+            all_settled: true,
+        });
+
+        let legs = guard_leg_editors(&batch, &s);
+        assert_eq!(legs.len(), 1, "only the leg the core mounts an editor for");
+        let only = &legs[0];
+        assert_eq!(only.leg, 1);
+        assert!(only.modes.contains(&GuardEditorMode::Custom));
+        let Block::Allowance { label, chips, .. } = &only.block else {
+            unreachable!("a leg editor is an allowance card")
+        };
+        assert!(label.starts_with("#2 "), "{label}");
+        assert_eq!(chips[0].1, ChipState::Selected, "kept as asked by default");
+        assert!(matches!(
+            &only.spender,
+            Some(Block::Party { address: Some(address), .. })
+                if address.as_ref() == "0x1111111111111111111111111111111111111111"
+        ));
+        assert!(
+            guard_editor(&batch, &s).is_none(),
+            "the single editor stays off a batch"
+        );
+    }
+
+    /// The sentence under a batch's cards follows the guard's effective
+    /// state.
     #[test]
     fn a_batch_left_unlimited_is_said_too() {
         let s = strings();

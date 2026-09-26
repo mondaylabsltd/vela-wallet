@@ -699,6 +699,60 @@ describe('a capped unlimited approval reads the cap, not the request', () => {
 		expect(cappedApproval(APPROVE, batch).result!.fields[0].value).toBe('250 USDC');
 	});
 
+	it("a batch draws each unbounded leg's own cap card, tagged with its leg, and its spender", () => {
+		const leg = guard(editor);
+		const batch: GuardView = {
+			...INITIAL_GUARD_VIEW,
+			surface: 'batch',
+			confirm_allowed: true,
+			batch: {
+				legs: [
+					{
+						to: '0xdd',
+						approval: null,
+						meta: leg.meta,
+						editor: null,
+						choice: null,
+						needs_editor: false,
+						needs_choice: false,
+						grants_broad: false
+					},
+					{
+						to: '0xdd',
+						approval: leg.detected,
+						meta: leg.meta,
+						editor: {
+							...editor,
+							mode: 'requested',
+							choice: { type: 'unlimited' },
+							display_amount_raw: null
+						},
+						choice: { type: 'unlimited' },
+						needs_editor: true,
+						needs_choice: false,
+						grants_broad: true
+					}
+				],
+				any_uncapped: true,
+				any_to_own_token: false,
+				all_settled: true
+			}
+		};
+		const model = buildSigningModel(inputs({ guard: batch }))!;
+		const cards = model.blocks.filter((b) => b.kind === 'allowance');
+		expect(cards).toHaveLength(1);
+		const [card] = cards;
+		if (card.kind !== 'allowance') throw new Error('kind');
+		expect(card.leg).toBe(1);
+		expect(card.label.startsWith('#2 ')).toBe(true);
+		expect(card.value).toBe(m.valueUnlimited);
+		expect(card.chips.find((c) => c.id === 'requested')?.state).toBe('selected');
+		expect(
+			model.blocks.some((b) => b.kind === 'party' && b.address === leg.detected!.spender)
+		).toBe(true);
+		expect(model.blocks).toContainEqual({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+	});
+
 	it('increaseAllowance offers no revoke chip', () => {
 		const model = buildSigningModel(
 			inputs({ guard: guard({ ...editor, revoke_offered: false }) })

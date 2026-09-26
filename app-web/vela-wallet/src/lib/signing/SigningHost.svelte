@@ -356,9 +356,15 @@
 	}
 
 	/** The chip ids the drawn editor emits, in the guard's vocabulary. */
-	function guardChip(id: string): void {
+	function guardChip(id: string, leg?: number): void {
 		if (id === 'requested' || id === 'balance' || id === 'custom' || id === 'revoke') {
-			signingSheet.dispatchGuard({ type: 'preset_selected', mode: id });
+			// A batch leg's card talks to its OWN leg: the core ignores the
+			// single approval's `preset_selected` on a batch.
+			signingSheet.dispatchGuard(
+				leg === undefined
+					? { type: 'preset_selected', mode: id }
+					: { type: 'leg_preset_selected', index: leg, mode: id }
+			);
 		}
 	}
 
@@ -369,8 +375,12 @@
 	 * by the shell, as payment_request's amount is), so nothing here decides
 	 * whether what was typed is a number — it only carries it.
 	 */
-	function guardCustom(text: string): void {
-		signingSheet.dispatchGuard({ type: 'custom_amount_changed', text });
+	function guardCustom(text: string, leg?: number): void {
+		signingSheet.dispatchGuard(
+			leg === undefined
+				? { type: 'custom_amount_changed', text }
+				: { type: 'leg_custom_amount_changed', index: leg, text }
+		);
 	}
 </script>
 

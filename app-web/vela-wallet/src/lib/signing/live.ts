@@ -22,6 +22,7 @@ import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
+import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import {
@@ -145,9 +146,7 @@ function amountLine(field: ClearSignField, outgoing: boolean): AmountLine {
  * ruling: Permit2 bundles revert when the wallet re-encodes the approve), so
  * the site's ask is what goes out unless the person picks a cap.
  */
-function allowanceChips(guard: GuardView, m: SigningMessages): AllowanceChip[] {
-	const editor = guard.editor;
-	if (!editor) return [];
+function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceChip[] {
 	const state = (mode: string): AllowanceChip['state'] => {
 		if (editor.mode === mode) return 'selected';
 		// A request of 0 has no amount of its own to keep.
@@ -170,8 +169,8 @@ function allowanceChips(guard: GuardView, m: SigningMessages): AllowanceChip[] {
 /**
  * The request will go out granting an unbounded allowance, as the site asked:
  * the single approval kept on its Requested chip, or any batch leg left so.
- * Allowed since 2026-09-26 — never unsaid. The batch legs have no editor on
- * this shell yet, so for a bundle this sentence is the whole disclosure.
+ * Allowed since 2026-09-26 — never unsaid; each leg's own card is drawn by
+ * `legBlocks`, and this is the sentence under them.
  */
 function keepsUnlimited(guard: GuardView): boolean {
 	if (guard.surface === 'batch') return guard.batch?.any_uncapped ?? false;
@@ -180,13 +179,55 @@ function keepsUnlimited(guard: GuardView): boolean {
 
 function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 	if (guard.surface !== 'approval_editor' || !guard.editor) return null;
-	const editor = guard.editor;
-	const symbol = guard.meta.loading ? '…' : guard.meta.symbol;
+	return allowanceBlock(guard.editor, guard.meta, m, {
+		decimalsUnverified: guard.decimals_unverified,
+		increaseTotal: guard.increase_total
+	});
+}
+
+/**
+ * A batch's own cap editors — one card per leg the core mounts an editor for
+ * (an unbounded or grant-all approval), each with its leg's spender under it,
+ * the phones' layout. Before this the web drew none: a Permit2 bundle's
+ * unlimited leg could be seen in red but not capped.
+ */
+function legBlocks(guard: GuardView, m: SigningMessages): Block[] {
+	if (guard.surface !== 'batch' || !guard.batch) return [];
+	return guard.batch.legs.flatMap((leg, index) => {
+		if (!leg.needs_editor || !leg.editor) return [];
+		const card = allowanceBlock(leg.editor, leg.meta, m, { leg: index });
+		if (card.kind !== 'allowance') return [];
+		const blocks: Block[] = [{ ...card, label: `#${index + 1} ${card.label}` }];
+		if (leg.approval) {
+			blocks.push({
+				kind: 'party',
+				label: m.labelSpender,
+				name: shortenAddress(leg.approval.spender),
+				address: leg.approval.spender
+			});
+		}
+		return blocks;
+	});
+}
+
+function allowanceBlock(
+	editor: GuardEditorView,
+	meta: GuardView['meta'],
+	m: SigningMessages,
+	extra: {
+		decimalsUnverified?: boolean;
+		increaseTotal?: GuardView['increase_total'];
+		leg?: number;
+	}
+): Block {
+	const symbol = meta.loading ? '…' : meta.symbol;
 	// Only a chosen, finite cap reads as settled; the site's unlimited ask,
 	// kept, reads as the danger it is (and `keepsUnlimited` adds the sentence).
 	const settled = editor.choice !== null && editor.choice.type !== 'unlimited';
+	const total = extra.increaseTotal ?? null;
 	return {
 		kind: 'allowance',
+		leg: extra.leg,
 		label: fill(m.labelSpendingCap, { symbol }),
 		// In tokens, never base units: a 5 USDC cap drawn as "5000000" reads
 		// as five million. The send screens' exact figure, at the guard's
@@ -194,14 +235,14 @@ function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 		value:
 			editor.display_amount_raw === null
 				? m.valueUnlimited
-				: `${exactAmount(fromBaseUnits(BigInt(editor.display_amount_raw), guard.meta.decimals))} ${symbol}`,
+				: `${exactAmount(fromBaseUnits(BigInt(editor.display_amount_raw), meta.decimals))} ${symbol}`,
 		valueTone: settled ? 'neutral' : 'danger',
-		chips: allowanceChips(guard, m),
-		note: guard.decimals_unverified ? m.warnUnverifiedAmount : undefined,
+		chips: allowanceChips(editor, m),
+		note: extra.decimalsUnverified ? m.warnUnverifiedAmount : undefined,
 		resultingTotal:
-			guard.increase_total === null || guard.increase_total.total === null
+			total === null || total.total === null
 				? undefined
-				: { label: m.labelResultingTotal, value: guard.increase_total.total },
+				: { label: m.labelResultingTotal, value: total.total },
 		// The field appears only on the chip that needs one, and it carries the
 		// CORE's text: a keystroke the machine rejected must not sit on screen
 		// as though it had been taken.
@@ -313,6 +354,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		// The guard's editor sits with the approval it caps.
 		const allowance = guardBlock(guard, m);
 		if (allowance) blocks.push(allowance);
+		blocks.push(...legBlocks(guard, m));
 		if (keepsUnlimited(guard)) {
 			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
 		}
@@ -360,6 +402,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		// grant unlimited.
 		const allowance = guardBlock(guard, m);
 		if (allowance) blocks.push(allowance);
+		blocks.push(...legBlocks(guard, m));
 		if (keepsUnlimited(guard)) {
 			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
 		}
