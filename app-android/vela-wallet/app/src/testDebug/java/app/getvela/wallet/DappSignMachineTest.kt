@@ -54,12 +54,14 @@ class DappSignMachineTest {
     @After
     fun stop() = scope.cancel()
 
-    private fun seedAccount() {
+    /** [signedInWith]: the key the account signed in with (2026-09-26); `null` = a record from before. */
+    private fun seedAccount(signedInWith: JSONObject? = null) {
         val keyset = fixtureAccounts()
         val keys = JSONArray()
         keyset.forEach { keys.put(JSONObject().put("credential_id", it.credentialIdHex).put("public_key_hex", it.publicKeyHex).put("name", it.name).put("transports", "internal")) }
         val account = JSONObject().put("id", keyset.first().credentialIdHex).put("name", "Parallel space").put("address", safe)
             .put("public_key_hex", keyset.first().publicKeyHex).put("created_at_iso", "2026-09-12T00:00:00Z").put("keys", keys)
+        if (signedInWith != null) account.put("signed_in_with", signedInWith)
         store.values["vela.accounts"] = JSONArray().put(account).toString()
         store.values["vela.activeAccountIndex"] = "0"
     }
@@ -102,10 +104,14 @@ class DappSignMachineTest {
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
     }
 
+    /** Where each ceremony went: the pinned credential, its transports, its method. */
+    private val routes = java.util.concurrent.CopyOnWriteArrayList<Triple<String?, String, KeyMethod>>()
+
     private val fixtureSigner = object : UserOpSigner {
         override suspend fun sign(challenge: ByteArray, credentialIdHex: String?, transports: String, method: KeyMethod): Assertion {
             signs += 1
             events += "sign"
+            routes += Triple(credentialIdHex, transports, method)
             val signed = fixtureAssert(challenge, listOfNotNull(credentialIdHex), 0u)
             return Assertion(signed.credentialIdHex, signed.signatureDerHex, signed.authenticatorDataHex, signed.clientDataJsonHex, null, "platform")
         }
@@ -176,6 +182,8 @@ class DappSignMachineTest {
         val answer = answers.first { it.first == "tab-1/r1" }.second
         assertEquals("the page gets the TRANSACTION hash once the receipt landed", "0xtx", answer.getString("result"))
         assertEquals("signed exactly once", 1, signs)
+        // A record from before the sign-in key: the first key, over its stored route.
+        assertEquals(listOf(Triple(fixtureAccounts().first().credentialIdHex, "internal", KeyMethod.Platform)), routes)
         assertTrue("the record precedes the response: $events", events.indexOf("persisted:with-hash") in 0 until events.indexOf("respond"))
         assertTrue("the tracker was handed a persisted row: $events", events.contains("track:persisted"))
         val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
@@ -186,6 +194,26 @@ class DappSignMachineTest {
         assertEquals("0xtx", JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0).getString("txHash"))
         assertEquals(origin, row.getString("dappOrigin"))
         assertTrue(row.getString("to").equals(founder, ignoreCase = true))
+        withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    /**
+     * Founder, 2026-09-26: a page's transaction signs with the key the account
+     * signed in with, over the route that reached it — here its SECOND key,
+     * on a security key. The sheet offers no other.
+     */
+    @Test
+    fun `a page's transaction signs with the key the account signed in with, over its route`() = runBlocking<Unit> {
+        val second = fixtureAccounts()[1].credentialIdHex
+        seedAccount(signedInWith = JSONObject().put("credential_id", second).put("method", "security_key")); scriptRelay()
+        val c = controller()
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        assertEquals("0xtx", answers.first { it.first == "tab-1/r1" }.second.getString("result"))
+        assertEquals(listOf(Triple<String?, String, KeyMethod>(second, "usb,nfc,ble", KeyMethod.SecurityKey)), routes)
         withTimeout(10_000) { c.closed.first { it } }
     }
 

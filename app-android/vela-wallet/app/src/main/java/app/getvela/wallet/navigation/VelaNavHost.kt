@@ -617,8 +617,6 @@ fun VelaNavHost(
                     val signSpeed by controller.speed.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
-                    val signMethod by controller.signMethod.collectAsStateWithLifecycle()
-                    val signWithOpen by controller.signWithOpen.collectAsStateWithLifecycle()
                     val feeOpen by controller.feeOpen.collectAsStateWithLifecycle()
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
@@ -631,8 +629,6 @@ fun VelaNavHost(
                         money = WalletLive.Money.of(currency),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
                         chainId = signChain,
-                        signMethod = signMethod,
-                        signWithOpen = signWithOpen,
                         feeOpen = feeOpen,
                         trustedSignerWaiting = trustedSignerWaiting,
                         trustedSignerNotice = trustedSignerNotice,
@@ -657,7 +653,6 @@ fun VelaNavHost(
                                     }
                                 },
                                 onCustomAmount = { controller.guardCustomAmount(it) },
-                                onSignWith = { controller.signWith(it) },
                                 onFee = { controller.feeTapped() },
                                 onFeePick = { id -> controller.pickFee(id.takeUnless { it == app.getvela.wallet.feature.signing.SigningLive.NATIVE_FEE_ID }) },
                                 onToggleSpeed = { controller.toggleSpeed() },
@@ -1651,7 +1646,7 @@ fun VelaNavHost(
                 val networks by settings.networks.collectAsStateWithLifecycle()
                 // Spec 069: the default transaction speed.
                 val feeTier by settings.feeTier.collectAsStateWithLifecycle()
-                // Spec 071: the default "Sign with" and the Trusted Signer page.
+                // Spec 071: the Trusted Signer page.
                 val signPref by settings.signPref.collectAsStateWithLifecycle()
                 // Spec 047 US1: the rows read the device — preferences, the pool,
                 // the session, the store's own keys, the relay's treasury.
@@ -1915,7 +1910,6 @@ fun VelaNavHost(
                             val prefsStore = application.container.preferences
                             when (sheet) {
                                 SettingsOverlay.Currency -> settings.chooseCurrency(id)
-                                SettingsOverlay.SignWith -> settings.chooseSignMethod(id)
                                 SettingsOverlay.FeeSpeed ->
                                     app.getvela.wallet.feature.send.core.FeeTier.entries
                                         .firstOrNull { it.name.equals(id, ignoreCase = true) && it != app.getvela.wallet.feature.send.core.FeeTier.Rapid }

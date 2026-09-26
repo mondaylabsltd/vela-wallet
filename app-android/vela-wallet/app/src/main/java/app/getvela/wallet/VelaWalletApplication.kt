@@ -335,8 +335,8 @@ class AppContainer(private val app: Application) {
     var trustedSignerTab: TrustedSignerTab? = null
 
     /**
-     * Spec 071: the fourth "Sign with" — one channel per process, one ceremony
-     * at a time. The page is `sign_pref`'s; the words are the corpus'.
+     * Spec 071: the Trusted Signer — one channel per process, one ceremony at a
+     * time. The page is `sign_pref`'s; the words are the corpus'.
      */
     val trustedSigner: TrustedSignerChannel by lazy {
         TrustedSignerChannel(
@@ -411,7 +411,6 @@ class AppContainer(private val app: Application) {
             },
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
-            signMethod = { settings.signPref.value.method },
             trustedSigner = { trustedSigner },
         ).also { controller ->
             // Spec 069: the stored default speed, read now and followed after —
@@ -600,7 +599,6 @@ class AppContainer(private val app: Application) {
                 wallet = SignAccountRef(address = address, credential_id = credential),
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
-                defaultMethod = { settings.signPref.value.method },
                 trustedSigner = { trustedSigner },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
@@ -723,7 +721,7 @@ class AppContainer(private val app: Application) {
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             settings.ethereumDataBase().collect { base -> Marks.base = base }
         }
-        // Spec 071: how this device signs by default — read before any sheet can open.
+        // Spec 071: the Trusted Signer page — read before any signature can need it.
         settings.refreshSignPref()
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {

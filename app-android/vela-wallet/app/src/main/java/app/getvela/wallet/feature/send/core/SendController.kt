@@ -60,8 +60,7 @@ class SendController(
     /** Spec 069: the stored default speed, and the resolved number preset its gas bids are written in. */
     private val preferredTier: () -> FeeTier = { FeeTier.Fast },
     private val numberPreset: () -> String = { "comma_dot" },
-    /** Spec 071: the stored default "Sign with" — a send has no picker of its own — and the Trusted Signer. */
-    signMethod: () -> String = { "auto" },
+    /** Spec 071: the Trusted Signer, for an account that signed in through it. */
     trustedSigner: () -> TrustedSigner? = { null },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
@@ -151,7 +150,6 @@ class SendController(
             ): SendFeeOutcome = requestQuote(chainId, account, calls, gasFeeToken, publicKeyAvailable)
         },
         ports = ports,        identity = identity,
-        signMethod = signMethod,
         trustedSigner = trustedSigner,
     )
 
@@ -584,6 +582,10 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
         }
         return out.toString()
     }
+
+    /** The record as the core wrote it, `signed_in_with` and all — never rebuilt field by field. */
+    override suspend fun accountJson(address: String): String? =
+        record { it.optString("address").equals(address, ignoreCase = true) }?.toString()
 
     /**
      * `load_account_credential { account_id }`: the id the send was opened
