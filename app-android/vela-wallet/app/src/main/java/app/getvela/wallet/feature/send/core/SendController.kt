@@ -10,6 +10,8 @@ import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
+import app.getvela.wallet.feature.wallet.core.HoldingsFeed
+import app.getvela.wallet.feature.wallet.core.HoldingsRound
 import app.getvela.wallet.feature.wallet.core.RpcPool
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import kotlinx.coroutines.CoroutineScope
@@ -63,6 +65,12 @@ class SendController(
     /** Spec 071: the stored default "Sign with" — a send has no picker of its own — and the Trusted Signer. */
     signMethod: () -> String = { "auto" },
     trustedSigner: () -> TrustedSigner? = { null },
+    /**
+     * Spec 078: the asset list's holdings — the picker is answered from the
+     * balance machine's settled round and follows every later one. `null`
+     * (tests) answers from [balances] as it stands and follows nothing.
+     */
+    private val holdings: HoldingsFeed? = null,
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -131,6 +139,47 @@ class SendController(
         override fun recordsPersisted() {
             feedChangedPort()
         }
+
+        override fun tokensPartial(tokens: List<SendToken>) {
+            dispatch(SendEvent.TokensPartial(tokens))
+        }
+
+        override fun holdingsHanded(round: HoldingsRound?) {
+            handedRound = round?.atMs
+            holdingsLoaded = true
+        }
+    }
+
+    // -- the asset list's holdings (spec 078) -----------------------------------------
+
+    /** The round this attempt's `fetch_tokens` was answered from (`null` = none, follow the first). */
+    @Volatile
+    private var handedRound: Double? = null
+
+    /** This attempt's picker has had its answer; only then do later rounds follow. */
+    @Volatile
+    private var holdingsLoaded = false
+
+    /** Whose send this is — a round for another account is not this screen's. */
+    @Volatile
+    private var sendAccount: String? = null
+
+    /**
+     * A round the dashboard settled after the one the picker was answered
+     * from: handed to the core as `HoldingsUpdated`, mapped exactly as the
+     * answer was. What follows — the picker always, the form's balance and a
+     * Max on it, never a confirm page — is the core's to say. Without this a
+     * refresh started from Send (or a poll, or a landed transfer) reached the
+     * home screen only, and this screen kept the old balance.
+     */
+    private fun followHoldings(round: HoldingsRound?) {
+        round ?: return
+        val account = sendAccount ?: return
+        if (!holdingsLoaded || _closed.value || !round.address.equals(account, ignoreCase = true)) return
+        if (handedRound == round.atMs) return
+        handedRound = round.atMs
+        VelaLog.event("send.tokens", "holdings updated", "tokens" to round.view.tokens.size)
+        dispatch(SendEvent.HoldingsUpdated(SendExecutor.sendTokens(round.view)))
     }
 
     private val sendExecutor = SendExecutor(
@@ -148,11 +197,23 @@ class SendController(
                 calls: List<FeeCall>,
                 gasFeeToken: String?,
                 publicKeyAvailable: Boolean,
-            ): SendFeeOutcome = requestQuote(chainId, account, calls, gasFeeToken, publicKeyAvailable)
+                autoFeeToken: Boolean,
+            ): SendFeeOutcome = requestQuote(chainId, account, calls, gasFeeToken, publicKeyAvailable, autoFeeToken)
         },
-        ports = ports,        identity = identity,
+        ports = ports,
+        identity = identity,
         signMethod = signMethod,
         trustedSigner = trustedSigner,
+        holdings = holdings,
+        // The picker is open: the chains the person holds value on are read
+        // ahead — at the speed in force — so the quote a pick starts finds its
+        // reads done and has only its simulation left.
+        prewarm = { account, chainIds ->
+            scope.launch {
+                runCatching { relay.prewarmFees(account, chainIds, speedControl.speed.value.tier) }
+                    .onFailure { VelaLog.failure("send.prewarm", "read-ahead failed", it) }
+            }
+        },
     )
 
     private val sendHost = CoreHost(
@@ -222,6 +283,7 @@ class SendController(
     init {
         sendHost.start()
         speedControl.start()
+        holdings?.let { feed -> scope.launch { feed.settled.collect(::followHoldings) } }
         // The send leaving its form ends any free-upgrade question.
         scope.launch {
             sendHost.view.collect { view -> speedControl.stage(view.stage == SendStage.EnterDetails) }
@@ -272,7 +334,8 @@ class SendController(
         calls: List<FeeCall>,
         gasFeeToken: String?,
         publicKeyAvailable: Boolean,
-    ): SendFeeOutcome = when (val quoted = speedControl.quote(chainId, account, publicKeyAvailable, calls, gasFeeToken)) {
+        autoFeeToken: Boolean,
+    ): SendFeeOutcome = when (val quoted = speedControl.quote(chainId, account, publicKeyAvailable, calls, gasFeeToken, autoFeeToken)) {
         SpeedControl.Quoted.Superseded -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
         SpeedControl.Quoted.TimedOut -> SendFeeOutcome.Failed(SendEstimateFailure.Timeout)
         is SpeedControl.Quoted.Settled -> {
@@ -301,6 +364,10 @@ class SendController(
     fun open(account: SendAccountRef?, display: SendDisplayContext, params: SendOpenParams = SendOpenParams()) {
         _closed.value = false
         _alert.value = null
+        // A new attempt holds no round yet: its own `fetch_tokens` picks one.
+        sendAccount = account?.address
+        holdingsLoaded = false
+        handedRound = null
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         speedControl.reset()

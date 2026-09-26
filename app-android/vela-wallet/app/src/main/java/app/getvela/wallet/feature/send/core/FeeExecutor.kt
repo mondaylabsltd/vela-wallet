@@ -68,7 +68,12 @@ class FeeExecutor(
             relay.accountInfo(operation.chain_id, operation.account)?.feeRecipient(),
         )
 
-        is FeeOperation.EstimateUserOpGas -> FeeShellResult.UserOpGas(estimate(operation))
+        // The speed in force and every preview ask this identical simulation
+        // at the same moment: one relay call answers them all, and a repeat
+        // inside the fee-signal window is answered from memory.
+        is FeeOperation.EstimateUserOpGas -> FeeShellResult.UserOpGas(
+            relay.simulation(operation.chain_id, operation.account, operation.deployed, operation.calls) { estimate(operation) },
+        )
 
         is FeeOperation.MeasureInnerCalls -> FeeShellResult.InnerCallsMeasured(
             // Each call on its own, from the Safe. What an unmeasured call means

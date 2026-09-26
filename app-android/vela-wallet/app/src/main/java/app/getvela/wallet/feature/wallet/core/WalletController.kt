@@ -124,6 +124,9 @@ class WalletController(
         mainnetPrices = ChainlinkPrices(pool)::prices,
     )
 
+    /** The last `FetchSettled` the executor answered: whose, and its `now_ms`. */
+    private val lastSettle = java.util.concurrent.atomic.AtomicReference<Pair<String, Double>?>(null)
+
     private val balanceHost = CoreHost(
         bridge = BalanceDashboardCore().asBridge(),
         scope = scope,
@@ -132,8 +135,13 @@ class WalletController(
         perform = JsonShell.perform(
             BalanceOperation.serializer(),
             BalanceShellResult.serializer(),
-            executor::perform,
-        ),
+        ) { operation ->
+            executor.perform(operation).also { result ->
+                // Which round is about to settle, and its stamp: the view says
+                // it settled once it carries this stamp for this account.
+                if (result is BalanceShellResult.FetchSettled) lastSettle.set(result.address to result.now_ms)
+            }
+        },
         escapedFailure = JsonShell.escapedFailure(
             BalanceOperation.serializer(),
             BalanceShellResult.serializer(),
@@ -534,6 +542,42 @@ class WalletController(
     /** What the home screen renders. */
     val balances: StateFlow<BalanceView> = balanceHost.view
 
+    private val _holdingsRound = MutableStateFlow<HoldingsRound?>(null)
+
+    /**
+     * The last balance round the dashboard SETTLED, with the view it settled
+     * into — `null` until one has. Settled means the machine took the round:
+     * its view carries that round's stamp (`last_refreshed_at_ms`) for that
+     * account. The stamp alone cannot say so — it survives an account switch,
+     * so "a read finished" would be true of an account nobody has read yet.
+     *
+     * The asset list and Send read the SAME holdings through this (spec 078):
+     * Send answers its picker from a settled round and follows every later one.
+     */
+    val holdingsRound: StateFlow<HoldingsRound?> = _holdingsRound
+
+    /** The asset list's holdings, as Send reads them. */
+    val holdings: HoldingsFeed = object : HoldingsFeed {
+        override val view: StateFlow<BalanceView> = balanceHost.view
+        override val settled: StateFlow<HoldingsRound?> = _holdingsRound
+    }
+
+    init {
+        // Every commit, not every distinct view (`CoreHost.commits`).
+        scope.launch {
+            balanceHost.commits.collect {
+                val view = balanceHost.view.value
+                val (address, stamp) = lastSettle.get() ?: return@collect
+                if (view.address.equals(address, ignoreCase = true) &&
+                    view.last_refreshed_at_ms == stamp &&
+                    _holdingsRound.value?.let { it.atMs == stamp && it.address.equals(address, ignoreCase = true) } != true
+                ) {
+                    _holdingsRound.value = HoldingsRound(address = address, atMs = stamp, view = view)
+                }
+            }
+        }
+    }
+
     /**
      * Spec 047 D8: the `/pay` grammar is the core's — `LinkOpened` on the
      * request machine, the answer read from `pay` / `pay_valid`. `null` = not a
@@ -688,3 +732,15 @@ class WalletController(
     }
 }
 
+/** One balance round the dashboard settled: whose, when (`last_refreshed_at_ms`), and the view it settled into. */
+data class HoldingsRound(val address: String, val atMs: Double, val view: BalanceView)
+
+/**
+ * The asset list's holdings, as another screen reads them — one source, the
+ * balance machine: [view] live (a first round still streaming in), [settled]
+ * the last round it took.
+ */
+interface HoldingsFeed {
+    val view: StateFlow<BalanceView>
+    val settled: StateFlow<HoldingsRound?>
+}

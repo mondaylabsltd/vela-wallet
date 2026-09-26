@@ -8,7 +8,11 @@ import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.TrustReceiptLog
 import java.math.BigInteger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -19,6 +23,7 @@ import uniffi.vela_core_uniffi.entryPointAddress
 import uniffi.vela_core_uniffi.feeSignalsCacheTtlMs
 import uniffi.vela_core_uniffi.functionSelector
 import uniffi.vela_core_uniffi.gasSignalsCacheable
+import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
 
 /**
  * The relay (bundler) and the chain, as the send path talks to them —
@@ -35,7 +40,14 @@ import uniffi.vela_core_uniffi.gasSignalsCacheable
  * Two caches, both the web's: the in-band quotes for 8 s (a confirm screen
  * re-quotes on every fee-token tap and the relay would rather not be asked
  * four times a second), and the account info for 30 s. `clearCaches` is what
- * the settings machine's `clear_bundler_cache` means on this client.
+ * the settings machine's `clear_bundler_cache` means on this client. Beside
+ * them the fee's own inputs (below), a deployed Safe (for good — code does not
+ * go away), and the relay's simulation of one exact operation.
+ *
+ * Every read a fee quote makes is SINGLE-FLIGHT ([SingleFlight]): the session
+ * for the speed in force and the previews of the other speeds ask the same
+ * reads at the same instant, and they now share one request and settle
+ * together instead of one after another (founder, 2026-09-26).
  */
 class RelayClient(
     private val port: RelayPort,
@@ -91,6 +103,12 @@ class RelayClient(
         synchronized(infoCache) {
             infoCache[key]?.let { (info, at) -> if (now() - at < INFO_TTL_MS) return info }
         }
+        return infoFlights.run(key) { readAccountInfo(chainId, safe, key) }
+    }
+
+    private val infoFlights = SingleFlight<String, AccountInfo?>()
+
+    private suspend fun readAccountInfo(chainId: Int, safe: String, key: String): AccountInfo? {
         val data = (restGet(chainId, "/v1/account/$chainId/${safe.lowercase()}") as? RestAnswer.Ok)?.json
             ?: return null
         val info = AccountInfo(
@@ -131,6 +149,12 @@ class RelayClient(
         synchronized(quoteCache) {
             quoteCache[key]?.let { (quotes, at) -> if (now() - at < QUOTE_TTL_MS) return quotes }
         }
+        return quoteFlights.run(key) { readInBandQuotes(chainId, safe, key) }
+    }
+
+    private val quoteFlights = SingleFlight<String, List<FeeAssetQuote>?>()
+
+    private suspend fun readInBandQuotes(chainId: Int, safe: String, key: String): List<FeeAssetQuote>? {
         val body = bundlerCall(chainId, "vela_getInBandGasQuote", listOf(JSONObject().put("safeAddress", safe)))
             ?: return null
         if (body.has("error")) return null
@@ -176,7 +200,12 @@ class RelayClient(
         )
     }
 
-    /** `pimlico_getUserOperationGasPrice`, one tier. */
+    /**
+     * `pimlico_getUserOperationGasPrice`, one tier. The relay answers EVERY
+     * tier in one response, so the whole response is read once per chain —
+     * for everybody asking at that moment — and each tier's row is held on
+     * its own: the speed in force and the two previews price off one call.
+     */
     suspend fun bundlerQuote(chainId: Int, tier: FeeTier): FeeBundlerQuote? {
         val key = "$chainId:${tierKey(tier)}"
         synchronized(feeSignalCache) {
@@ -184,29 +213,47 @@ class RelayClient(
                 if (quote is FeeBundlerQuote && now() - (at as Long) < feeSignalsTtlMs) return quote
             }
         }
+        // The epoch is part of the flight's key: a refresh asked while a read
+        // is out starts a NEW read rather than joining the older one.
         val epoch = feeSignalEpoch(chainId)
-        val quote = readBundlerQuote(chainId, tier)
-        // Never a missing quote, nor a zero cap the core rejects as
-        // degenerate: "the relay did not answer" is not a measurement. The
-        // rule is the core's (`fee_policy::bundler_quote_cacheable`).
-        if (quote != null && bundlerQuoteCacheable(quote.max_fee_per_gas) && feeSignalEpoch(chainId) == epoch) {
-            synchronized(feeSignalCache) { feeSignalCache[key] = quote to now() }
+        val rows = bundlerFlights.run(chainId to epoch) {
+            val read = readBundlerQuotes(chainId)
+            // Never a missing quote, nor a zero cap the core rejects as
+            // degenerate: "the relay did not answer" is not a measurement. The
+            // rule is the core's (`fee_policy::bundler_quote_cacheable`), row by row.
+            if (read != null && feeSignalEpoch(chainId) == epoch) {
+                synchronized(feeSignalCache) {
+                    val at = now()
+                    for ((name, quote) in read) {
+                        if (bundlerQuoteCacheable(quote.max_fee_per_gas)) feeSignalCache["$chainId:$name"] = quote to at
+                    }
+                }
+            }
+            read
         }
-        return quote
+        return rows?.get(tierKey(tier))
     }
 
-    private suspend fun readBundlerQuote(chainId: Int, tier: FeeTier): FeeBundlerQuote? {
+    private val bundlerFlights = SingleFlight<Pair<Int, Long>, Map<String, FeeBundlerQuote>?>()
+
+    /** Every tier row of one `pimlico_getUserOperationGasPrice` answer, by the relay's tier name. */
+    private suspend fun readBundlerQuotes(chainId: Int): Map<String, FeeBundlerQuote>? {
         val body = bundlerCall(chainId, "pimlico_getUserOperationGasPrice", emptyList()) ?: return null
         if (body.has("error")) return null
-        val row = body.optJSONObject("result")?.optJSONObject(tierKey(tier)) ?: return null
-        return FeeBundlerQuote(
-            max_fee_per_gas = decimalOfHex(row.opt("maxFeePerGas")) ?: return null,
-            // The tip this tier is signed with — what the core turns into the
-            // gas bid on screen (issue 684). Absent on a generic bundler.
-            max_priority_fee_per_gas = decimalOfHex(row.opt("maxPriorityFeePerGas")),
-            network_fee_per_gas = decimalOfHex(row.opt("networkFeePerGas")),
-            relayer_fee_per_gas = decimalOfHex(row.opt("relayerFeePerGas")),
-        )
+        val result = body.optJSONObject("result") ?: return null
+        val rows = LinkedHashMap<String, FeeBundlerQuote>()
+        for (name in result.keys()) {
+            val row = result.optJSONObject(name) ?: continue
+            rows[name] = FeeBundlerQuote(
+                max_fee_per_gas = decimalOfHex(row.opt("maxFeePerGas")) ?: continue,
+                // The tip this tier is signed with — what the core turns into the
+                // gas bid on screen (issue 684). Absent on a generic bundler.
+                max_priority_fee_per_gas = decimalOfHex(row.opt("maxPriorityFeePerGas")),
+                network_fee_per_gas = decimalOfHex(row.opt("networkFeePerGas")),
+                relayer_fee_per_gas = decimalOfHex(row.opt("relayerFeePerGas")),
+            )
+        }
+        return rows
     }
 
     // -- the fee's inputs, held still (issue 212; Android's since spec 069) --
@@ -231,6 +278,77 @@ class RelayClient(
             feeSignalEpochs[chainId] = (feeSignalEpochs[chainId] ?: 0L) + 1
             feeSignalCache.keys.removeAll { it.startsWith("$chainId:") }
         }
+        synchronized(simulations) { simulations.keys.removeAll { it.chainId == chainId } }
+    }
+
+    // -- the relay's simulation of one exact operation --------------------------
+
+    /** One exact operation: the chain, the account, whether it is deployed, and every call byte for byte. */
+    data class SimulationKey(val chainId: Int, val account: String, val deployed: Boolean, val calls: List<FeeCall>)
+
+    private val simulations = HashMap<SimulationKey, Pair<FeeGasOutcome, Long>>()
+    private val simulationFlights = SingleFlight<Pair<SimulationKey, Long>, FeeGasOutcome>()
+
+    /**
+     * The relay's simulation of one exact operation, held for the core's
+     * fee-signal window (`fee_policy::SIMULATION_CACHE_TTL_MS` is that same
+     * window) and read ONCE for every session asking at the same moment.
+     * Nothing the simulation measures depends on the speed, so the speed in
+     * force and both previews price one operation off one simulation, settled
+     * together. Only a real estimate is held — a refusal or a missing context
+     * is asked again next time — and it goes with the chain's fee signals
+     * ([invalidateFeeSignals]: the refresh control, every submit).
+     */
+    suspend fun simulation(
+        chainId: Int,
+        account: String,
+        deployed: Boolean,
+        calls: List<FeeCall>,
+        simulate: suspend () -> FeeGasOutcome,
+    ): FeeGasOutcome {
+        val key = SimulationKey(
+            chainId = chainId,
+            account = account.lowercase(),
+            deployed = deployed,
+            calls = calls.map { FeeCall(to = it.to.lowercase(), value = it.value, data = it.data.lowercase()) },
+        )
+        synchronized(simulations) {
+            simulations[key]?.let { (outcome, at) -> if (now() - at < feeSignalsTtlMs) return outcome }
+        }
+        val epoch = feeSignalEpoch(chainId)
+        return simulationFlights.run(key to epoch) {
+            val outcome = simulate()
+            if (outcome is FeeGasOutcome.Estimated && feeSignalEpoch(chainId) == epoch) {
+                synchronized(simulations) { simulations[key] = outcome to now() }
+            }
+            outcome
+        }
+    }
+
+    // -- read ahead (spec 078: the picker is open) -------------------------------
+
+    /**
+     * Every read a first quote on these chains makes before its simulation,
+     * all at once, each through the cache (and the single flight) the fee
+     * session reads: the deployment, the gas signals, the relay's gas quote
+     * (one call answers every tier) — on Tempo the fee recipient instead —
+     * and the in-band rows. Measured on the live relay those are 3–5 s of a
+     * first quote; read while the person is choosing a token, the quote the
+     * pick starts is left with its simulation. Errors are nobody's business
+     * here: the quote reads for itself.
+     */
+    suspend fun prewarmFees(account: String, chainIds: List<Int>, tier: FeeTier) {
+        val started = now()
+        supervisorScope {
+            for (chainId in chainIds) {
+                val tempo = isChainWithoutNativeCoin(chainId.toUInt())
+                launch { runCatching { isDeployed(chainId, account) } }
+                launch { runCatching { gasSignals(chainId, wantTip = !tempo) } }
+                launch { runCatching { if (tempo) accountInfo(chainId, account) else bundlerQuote(chainId, tier) } }
+                launch { runCatching { inBandQuotes(chainId, account) } }
+            }
+        }
+        VelaLog.event("relay.prewarm", "warm", "chains" to chainIds.joinToString(","), "ms" to (now() - started))
     }
 
     sealed class EstimateAnswer {
@@ -385,14 +503,22 @@ class RelayClient(
             }
         }
         val epoch = feeSignalEpoch(chainId)
-        val gasPrice = chainCall(chainId, "eth_gasPrice", emptyList())?.let { decimalOfHex(it.opt("result")) }
-        val block = chainCall(chainId, "eth_getBlockByNumber", listOf("latest", false))?.optJSONObject("result")
-        val baseFee = block?.let { decimalOfHex(it.opt("baseFeePerGas")) }
-        val tip = if (wantTip) {
-            chainCall(chainId, "eth_maxPriorityFeePerGas", emptyList())?.let { decimalOfHex(it.opt("result")) }
-        } else {
-            null
+        return gasFlights.run(Triple(chainId, wantTip, epoch)) { readGasSignals(chainId, wantTip, key, epoch) }
+    }
+
+    private val gasFlights = SingleFlight<Triple<Int, Boolean, Long>, GasSignals>()
+
+    private suspend fun readGasSignals(chainId: Int, wantTip: Boolean, key: String, epoch: Long): GasSignals = coroutineScope {
+        // Three independent reads, side by side: one round trip, not three.
+        val gasPriceRead = async { chainCall(chainId, "eth_gasPrice", emptyList())?.let { decimalOfHex(it.opt("result")) } }
+        val blockRead = async { chainCall(chainId, "eth_getBlockByNumber", listOf("latest", false))?.optJSONObject("result") }
+        val tipRead = async {
+            if (wantTip) chainCall(chainId, "eth_maxPriorityFeePerGas", emptyList())?.let { decimalOfHex(it.opt("result")) } else null
         }
+        val gasPrice = gasPriceRead.await()
+        val block = blockRead.await()
+        val baseFee = block?.let { decimalOfHex(it.opt("baseFeePerGas")) }
+        val tip = tipRead.await()
         val signals = GasSignals(gasPrice, baseFee, tip)
         // A block that ANSWERED without `baseFeePerGas` is a real pre-London
         // reading; a block that did not answer is a failed leg. What may be
@@ -401,7 +527,7 @@ class RelayClient(
         if (complete && feeSignalEpoch(chainId) == epoch) {
             synchronized(feeSignalCache) { feeSignalCache[key] = signals to now() }
         }
-        return signals
+        signals
     }
 
     /** `EntryPoint.getNonce(sender, 0)` as a hex QUANTITY; `null` when unreadable. */
@@ -413,11 +539,27 @@ class RelayClient(
         return "0x" + BigInteger(hex.removePrefix("0x"), 16).toString(16)
     }
 
-    /** `eth_getCode` != `0x`; `null` when the chain could not be asked. */
+    /**
+     * `eth_getCode` != `0x`; `null` when the chain could not be asked. A Safe
+     * seen deployed stays deployed — code does not go away — so that answer is
+     * held for good; "not deployed" and "unknown" never are (the first send
+     * deploys it).
+     */
     suspend fun isDeployed(chainId: Int, address: String): Boolean? {
+        val key = "$chainId:${address.lowercase()}"
+        synchronized(deployedSafes) { if (key in deployedSafes) return true }
+        return deployFlights.run(key) { readDeployed(chainId, address, key) }
+    }
+
+    private val deployedSafes = HashSet<String>()
+    private val deployFlights = SingleFlight<String, Boolean?>()
+
+    private suspend fun readDeployed(chainId: Int, address: String, key: String): Boolean? {
         val body = chainCall(chainId, "eth_getCode", listOf(address, "latest")) ?: return null
         val code = body.optString("result").takeIf { it.startsWith("0x") } ?: return null
-        return code.length > 2
+        val deployed = code.length > 2
+        if (deployed) synchronized(deployedSafes) { deployedSafes.add(key) }
+        return deployed
     }
 
     /**

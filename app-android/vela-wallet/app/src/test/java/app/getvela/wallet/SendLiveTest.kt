@@ -126,6 +126,41 @@ class SendLiveTest {
     }
 
     /**
+     * Spec 078: the balance beside the token on the form is the asset list's
+     * row, digit for digit — the one token-amount rule, called on the same
+     * holding — and a Max's exact figure (balance less a fee to the wei) is
+     * never printed whole on the confirm page or the receipt.
+     */
+    @Test
+    fun `the token card and the confirm write the asset list's figure, never eighteen digits`() {
+        val exact = "0.043790209243313861"
+        val eth = xdai.copy(symbol = "ETH", balance = "0.0439686")
+        val home = WalletLive.home(
+            app.getvela.wallet.feature.wallet.WalletFixtures.buildMobileState(app.getvela.wallet.feature.wallet.WalletScreenState.H1, strings),
+            app.getvela.wallet.feature.wallet.core.BalanceView(
+                display_total_usd = 1.0,
+                tokens = listOf(app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "ETH", name = "ETH", balance = eth.balance, decimals = 18, price_usd = 1.0)),
+            ),
+            app.getvela.wallet.feature.wallet.core.FeedView(),
+            CurrencyView(code = "USD"),
+            strings,
+            mapOf(100 to "Gnosis"),
+        )
+        val row = home.assetRows.single().balance
+        assertEquals("0.043969 ETH", row)
+
+        val form = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val onForm = SendView(stage = SendStage.EnterDetails, selected_token = eth, tokens = listOf(eth), amount = "0.04379", token_amount = exact)
+        val card = SendLive.form(form.model, onForm, FeeView(), ctx()).token!!.detail
+        assertTrue(card, card.endsWith(" 0.043969"))
+        assertEquals(row.substringBefore(" "), card.substringAfterLast(" "))
+
+        val sd3 = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val confirming = SendView(stage = SendStage.Confirm, selected_token = eth, recipient = recipient, confirm_amount = exact, token_amount = exact, fee = fee())
+        assertEquals("0.04379 ETH", SendLive.confirm(sd3.model, confirming, ctx()).amount)
+    }
+
+    /**
      * The founder's ruling of 2026-09-17: the confirm page named the coin in
      * words while every row beneath it carried art.
      */

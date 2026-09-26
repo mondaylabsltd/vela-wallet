@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.send
 
+import app.getvela.wallet.core.format.TokenRounding
+import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.feature.flows.FeeSpeedModel
 import app.getvela.wallet.feature.flows.FeeSpeedOptionModel
@@ -410,7 +412,11 @@ object SendLive {
                 SendTokenCardModel(
                     mark = WalletLive.mark(it.chain_id.toInt(), it.symbol, it.token_address, it.logo_urls),
                     symbol = it.symbol,
-                    detail = "$chain · ${s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to trim(it.balance)))}",
+                    // Spec 078: the balance EXACTLY as the asset list's row
+                    // prints it — the one token-amount rule, called the same
+                    // way on the same holding (Send's tokens are the asset
+                    // list's) — so two screens never show two numbers for one.
+                    detail = "$chain · ${s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to tokenAmountText(it.balance)))}",
                     max = s.t(I18nKeys.Flows.MAX),
                 )
             },
@@ -487,7 +493,9 @@ object SendLive {
         val (prefix, suffix) = unitAdornment(view.amount_fiat_code, symbol)
         return AmountFieldModel(
             value = view.amount.ifEmpty { "0" },
-            fiat = if (view.amount_fiat_code != null) "${Formats.current.plain(view.token_amount)} $symbol" else fiatLine,
+            // The token figure under a typed fiat one is a conversion — up to
+            // 18 places — so it is written on the one token-amount ladder.
+            fiat = if (view.amount_fiat_code != null) "${tokenAmountText(view.token_amount.ifEmpty { "0" })} $symbol".trim() else fiatLine,
             // The unit being TYPED: the figure's own currency, or the token.
             denomLabel = view.amount_fiat_code ?: symbol,
             raw = view.amount,
@@ -593,11 +601,15 @@ object SendLive {
             // The core hands base-unit decimal strings ("the shell formats");
             // device-found: the first cut printed 5000000000000000000 XDAI.
             val decimals = view.selected_token?.decimals ?: 18
-            fun human(base: String) = fromBase(base, decimals)
+            // The asset list's figures (spec 078), not 18-digit remainders:
+            // "you have" is the balance on the token card above, digit for
+            // digit. The most that can be sent is rounded DOWN — typed back,
+            // it has to fit.
+            fun human(base: String, rounding: TokenRounding = TokenRounding.HalfUp) = tokenAmountText(humanOfBase(base, decimals), rounding)
             return s.t(
                 I18nKeys.Flows.SAME_FEE_BODY,
                 mapOf("amount" to human(issue.transfer_amount), "fee" to human(issue.fee_amount), "total" to human(issue.total), "symbol" to issue.symbol, "balance" to human(issue.balance)),
-            ) + " " + s.t(I18nKeys.Flows.SAME_FEE_MAX, mapOf("amount" to human(issue.max_transfer_amount), "symbol" to issue.symbol))
+            ) + " " + s.t(I18nKeys.Flows.SAME_FEE_MAX, mapOf("amount" to human(issue.max_transfer_amount, TokenRounding.Down), "symbol" to issue.symbol))
         }
         // A split has its own live verdict, `split_over_balance`. It does not
         // take `amount_warning`: that one judges the single form's figure,
@@ -842,8 +854,9 @@ object SendLive {
             FeeTokenRowModel(
                 mark = WalletLive.mark((fee.fee?.chain_id ?: 0).toInt(), option.symbol, option.contract),
                 symbol = option.symbol,
-                balanceLabel = ctx.strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to trim(fromBase(option.balance, option.decimals)))),
-                fee = option.amount?.let { "~${trim(fromBase(it, option.decimals))} ${option.symbol}" } ?: "—",
+                balanceLabel = ctx.strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to tokenAmountText(humanOfBase(option.balance, option.decimals)))),
+                // A fee reads as the fee row writes it — rounded UP.
+                fee = option.amount?.let { "~${feeFromBase(it, option.decimals)} ${option.symbol}" } ?: "—",
                 selected = option.selected,
                 // Issue 211: the core refuses to select a coin that cannot pay;
                 // a row that looks like the others and silently does nothing is
@@ -892,7 +905,7 @@ object SendLive {
         return fallback.copy(
             // A sweep moves several coins; one mark would name the wrong one.
             mark = if (view.multi_select_mode) null else token?.let { WalletLive.mark(it.chain_id, it.symbol, it.token_address, it.logo_urls) },
-            amount = "${Formats.current.plain(view.confirm_amount)} $symbol",
+            amount = "${sentFigure(view.confirm_amount, view)} $symbol".trim(),
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
             // The core's own verdict, resolved on this page only (single recipient).
             recipientTag = if (!split && view.recipient_risk?.first_time == true) s.t(I18nKeys.Flows.FIRST_TIME_SEND) else null,
@@ -1029,13 +1042,13 @@ object SendLive {
                 stage = ReceiptStage.Confirmed,
                 // A split's title carries the core's SUM (`confirm_amount`), not
                 // the single-send scalar the receipt view keeps for one person.
-                title = s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to Formats.current.plain(if (receipt.transfers.size > 1 && view.confirm_amount.isNotEmpty()) view.confirm_amount else receipt.amount), "symbol" to symbol)),
+                title = s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to sentFigure(if (receipt.transfers.size > 1 && view.confirm_amount.isNotEmpty()) view.confirm_amount else receipt.amount, view), "symbol" to symbol)),
                 // A split's parts on the receipt as on the confirm (spec 038
                 // #D2): the count, then every person with their amount.
                 captions = if (receipt.transfers.size > 1) {
                     listOf(
                         "${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to receipt.transfers.size.toString()))} · $chain",
-                    ) + receipt.transfers.map { part -> "${part.to_name ?: shortAddress(part.to)} · ${part.amount} ${part.symbol}".trim() }
+                    ) + receipt.transfers.map { part -> "${part.to_name ?: shortAddress(part.to)} · ${sentFigure(part.amount, view)} ${part.symbol}".trim() }
                 } else {
                     listOf(
                         "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to (receipt.transfers.firstOrNull()?.to_name ?: shortAddress(view.recipient))))} · $chain",
@@ -1137,10 +1150,27 @@ object SendLive {
         return Formats.current.plain(shown.stripTrailingZeros().toPlainString())
     }
 
-    private fun trim(human: String): String {
-        val parsed = human.toBigDecimalOrNull() ?: return human
-        return Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())
-    }
+    /**
+     * A balance on a Send screen: the one token-amount rule the asset list's
+     * rows use, so a figure here and the same holding's row on the home can
+     * never disagree (spec 078).
+     */
+    private fun trim(human: String): String = tokenAmountText(human)
+
+    /** A base-unit decimal string as a plain human decimal (`.` mark) — input to [tokenAmountText]. */
+    private fun humanOfBase(units: String, decimals: Int): String =
+        units.toBigDecimalOrNull()?.movePointLeft(decimals)?.stripTrailingZeros()?.toPlainString() ?: units
+
+    /**
+     * A token figure on the confirm page or the receipt. Never the raw exact
+     * string — a Max is the balance less a fee to the wei, eighteen places the
+     * hero cannot hold — so it is written on the one token-amount ladder.
+     * A split's shares are the exception: they are figures a person TYPED,
+     * what leaves the account digit for digit, and the total above them must
+     * be their sum (the web's `exactAmount`).
+     */
+    private fun sentFigure(amount: String, view: SendView): String =
+        if (view.split_mode) exact(amount) else tokenAmountText(amount)
 
     private fun amount(human: String): Double = human.toDoubleOrNull() ?: 0.0
 
