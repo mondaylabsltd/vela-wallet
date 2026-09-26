@@ -39,7 +39,7 @@ struct EraseDeviceTests {
         store.writeString("vela.chain.https://app.uniswap.org", "100")
         store.writeString("recipient_id:0xabc", #"{"name":"alice"}"#)
         store.writeString("vela.receiveWarned.0x1", "1")
-        store.writeString(VelaStore.Key.signMethod, "trusted_signer")
+        store.writeString(VelaStore.Key.trustedSignerUrl, "https://my.signer/")
         store.writeString(VelaStore.Key.feeTier, "slow")
         store.writeString("vela.balanceHidden", "true")
         store.writeString("vela.some-key-added-next-year", "x")
@@ -58,7 +58,7 @@ struct EraseDeviceTests {
         #expect(survivors.isEmpty, "survived: \(survivors)")
         for key in [
             "vela.perm.https://app.uniswap.org", "vela.chain.https://app.uniswap.org",
-            "recipient_id:0xabc", "vela.receiveWarned.0x1", VelaStore.Key.signMethod,
+            "recipient_id:0xabc", "vela.receiveWarned.0x1", VelaStore.Key.trustedSignerUrl,
             VelaStore.Key.feeTier, "vela.balanceHidden", "vela.some-key-added-next-year",
             VelaStore.Key.accounts, VelaStore.Key.activeIndex, VelaStore.Key.theme,
         ] {

@@ -12475,6 +12475,21 @@ public func sha256(data: Data) -> Data  {
 })
 }
 /**
+ * Where an account's signatures go (founder, 2026-09-26): the key it was
+ * created or signed in with, over the route that reached it — `None` for a
+ * record written before that existed, which signs as it always did.
+ * `account_json` is the stored account record. See
+ * `vela_core::app::Account::sign_in_route`.
+ */
+public func signInRoute(accountJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_in_route(
+        FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
+/**
  * What a site's message request asks the account to sign, before the
  * Safe's `SafeMessage` wrap: EIP-191 for `personal_sign` / `eth_sign`, the
  * EIP-712 digest for typed data, picked where each method carries it.
@@ -13601,6 +13616,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_in_route() != 18541) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_message_hash() != 8880) {

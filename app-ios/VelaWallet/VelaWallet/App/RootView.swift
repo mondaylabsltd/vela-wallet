@@ -317,10 +317,6 @@ struct RootView: View {
         // survives a settings write (data-model §5).
         let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
         _settings = State(initialValue: settingsStore)
-        // How a signature is made where no signing sheet asks (Send): the
-        // stored "Sign with" — and the Trusted Signer, on the page Settings
-        // names (spec 071).
-        spine.signMethod = { [settingsStore] in settingsStore.signPref?.method ?? "auto" }
         // ONE Trusted Signer for the whole app (spec 075). It is a passkey
         // route now, not only a way to sign: onboarding's ceremonies and the
         // money path's signatures go through the same object, which is what
@@ -1187,8 +1183,9 @@ struct RootView: View {
                         // …and so is the default speed (spec 069): the send
                         // form's folded control shows it from the first open.
                         settings.openFeeTier()
-                        // …and how this device signs (spec 071): every signing
-                        // sheet, and Send, start at it.
+                        // …and which Trusted Signer page this device opens
+                        // (spec 071): an account that signs there opens it
+                        // from Send or a page's sheet, Settings unvisited.
                         settings.openSignPref()
                         // So is the NETWORK list, and for a sharper reason: the
                         // send machine resolves every holding against it, so a
@@ -1247,7 +1244,6 @@ struct RootView: View {
                         // 无限额, and the slide stayed shut.
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-                        onSignWith: { id in signing?.signWith(id) },
                         onFee: { signing?.feeTapped() },
                         onFeePick: { id in signing?.pickFee(id) },
                         onSpeed: { id in signing?.speed(id) },
@@ -1489,10 +1485,6 @@ struct RootView: View {
             pool: pool,
             preferredTier: { [settings] in settings.feeTier?.tier ?? "fast" },
             numberPreset: { Formats.resolve(Formats.current.number).rawValue },
-            // Every request starts at the stored "Sign with" (spec 071); the
-            // sheet's own pick is that request's alone.
-            preferredSignMethod: { [settings] in settings.signPref?.method ?? "auto" },
-            offeredSignMethods: { [settings] in settings.signPref?.offered ?? ["auto"] },
             ports: SigningController.Ports(
                 respond: respond,
                 trackSubmitted: { [tracker, notifier] hash, ids, chain in
@@ -1521,12 +1513,6 @@ struct RootView: View {
                 }
             )
         )
-        // The spine is shared with Send; it reads THIS request's "Sign with"
-        // choice, and goes back to the stored default the moment the
-        // controller is dropped.
-        userOpSpine.signMethod = { [weak controller, settings] in
-            controller?.signMethod ?? settings.signPref?.method ?? "auto"
-        }
         signing = controller
         controller.open(incoming)
     }
@@ -2413,12 +2399,8 @@ struct RootView: View {
             // asking got. The judgment is the CORE's; this only carries it.
             sim: trust.trust?.sim,
             simulation: live.simulation,
-            signMethod: live.signMethod,
-            signWithOpen: live.signWithOpen,
             feeOpen: live.feeOpen,
-            signMethods: live.offeredSignMethods(),
-            trustedSignerNotice: live.trustedSignerNotice,
-            parallelSpace: parallelSpace
+            trustedSignerNotice: live.trustedSignerNotice
         )
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
@@ -2943,7 +2925,6 @@ struct RootView: View {
                     onConfirm: { signing.approve() },
                     onAllowanceChip: { chip in signing.guardPreset(chip) },
                     onAllowanceAmount: { text in signing.guardCustomAmount(text) },
-                    onSignWith: { id in signing.signWith(id) },
                     onFee: { signing.feeTapped() },
                     onFeePick: { id in signing.pickFee(id) },
                     onSpeed: { id in signing.speed(id) }
@@ -3264,10 +3245,6 @@ struct RootView: View {
             // The core validates and persists; a pick here is the ONE place
             // the stored default changes (the send screen's is one-shot).
             if ["fast", "standard", "slow"].contains(id) { settings.chooseFeeTier(id) }
-        case .signWith:
-            // The same rule for "Sign with" (spec 071); a name the core does
-            // not offer is ignored by the core.
-            settings.chooseSignMethod(id)
         case .language:
             // `system` is the drawn id; `auto` is what every client STORES.
             let tag = id == "system" ? "auto" : id

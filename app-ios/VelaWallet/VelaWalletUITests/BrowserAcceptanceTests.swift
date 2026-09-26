@@ -43,12 +43,17 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// The space rather than the founder's own wallet because everything after
     /// phase 1 signs something, and a device suite that needs a finger on every
     /// run is a suite nobody runs.
-    private func launchBrowsing() -> XCUIApplication {
+    ///
+    /// `signer` is the fixture key (0-based) the space signs in with, and so
+    /// the one every signature goes to. Declared on every launch: the space
+    /// persists it, and a test must not inherit the last one's.
+    private func launchBrowsing(signer: Int = 0) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_THEME"] = "dark"
         app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
         app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SIGNER"] = String(signer)
         app.launchEnvironment["VELA_URL"] = LocalDappServer.url
         app.launchArguments += ["-AppleLanguages", "(zh)"]
         app.launch()
@@ -104,6 +109,13 @@ final class BrowserAcceptanceTests: XCTestCase {
     private func waitForVerdict(
         _ app: XCUIApplication, containing fragment: String, timeout: TimeInterval = 30
     ) -> Bool {
+        verdictLine(app, containing: fragment, timeout: timeout) != nil
+    }
+
+    /// The verdict line itself, once one contains `fragment`.
+    private func verdictLine(
+        _ app: XCUIApplication, containing fragment: String, timeout: TimeInterval = 30
+    ) -> String? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             let lines = app.webViews.staticTexts.matching(
@@ -116,11 +128,11 @@ final class BrowserAcceptanceTests: XCTestCase {
                 note.name = "verdict"
                 note.lifetime = .keepAlways
                 add(note)
-                return true
+                return hit.label
             }
             _ = XCTWaiter.wait(for: [expectation(description: "poll")], timeout: 1.0)
         }
-        return false
+        return nil
     }
 
     // MARK: - US1: a real page, with the wallet inside it
@@ -579,11 +591,9 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(slide.waitForExistence(timeout: 20))
         // No network fee to wait for: an off-chain signature costs nothing.
         XCTAssertTrue(slide.isEnabled, "a message signature must not wait for a fee quote")
-        // The parallel space signs with its built-in key: no passkey sheet
-        // follows the slide, and the sheet says so instead of offering
-        // choices it would not use (owner, 2026-09-22).
-        XCTAssertTrue(app.staticTexts["平行空间内置钥匙"].exists,
-                      "the sheet does not say the parallel space's key will sign")
+        // The account signs with the key it signed in with: the sheet offers
+        // no "Sign with" (founder, 2026-09-26).
+        XCTAssertFalse(app.staticTexts["签名方式"].exists, "the signing sheet offers a \"Sign with\" again")
         slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
             .press(forDuration: 0.05,
                    thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))
@@ -595,5 +605,50 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict verify valid 0x1626ba7e", timeout: 90),
                       "the Safe did not accept its own signature — the EIP-1271 envelope, the message hash, or the read proxy is wrong")
         attach(app.screenshot(), named: "device-browser-verified")
+    }
+
+    /// Founder, 2026-09-26: every signature goes to the key the account signed
+    /// in with. The space signs in with its SECOND key here, so the envelope
+    /// names that key's own signer (`0xe1aa…06f9`) — never the shared one the
+    /// first key signs through — and the Safe still says yes on chain.
+    func testASignatureGoesToTheKeyTheSpaceSignedInWith() throws {
+        let secondKeySigner = "e1aab886172db04820df32803e9cf62411d706f9"
+        let firstKeySigner = "94a4f6affbd8975951142c3999aeab7ecee555c2"
+
+        let app = launchBrowsing(signer: 1)
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        openExplore(app)
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+        connect(app)
+
+        app.webViews.buttons["Sign"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Hello, Vela"].waitForExistence(timeout: 30),
+                      "the sheet did not show the message it was asked to sign")
+        XCTAssertFalse(app.staticTexts["签名方式"].exists, "the signing sheet offers a \"Sign with\" again")
+        attach(app.screenshot(), named: "device-signed-in-key-sheet")
+        let slide = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
+        ).firstMatch
+        XCTAssertTrue(slide.waitForExistence(timeout: 20))
+        slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
+            .press(forDuration: 0.05,
+                   thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))
+
+        let signed = try XCTUnwrap(verdictLine(app, containing: "#verdict personal_sign ok", timeout: 90),
+                                   "the page never got a signature").lowercased()
+        XCTAssertTrue(signed.contains(secondKeySigner),
+                      "the envelope does not name the second key's signer: \(signed)")
+        XCTAssertFalse(signed.contains(firstKeySigner), "the first key signed, not the sign-in key")
+
+        app.webViews.buttons["Verify sign"].firstMatch.tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict verify valid 0x1626ba7e", timeout: 90),
+                      "the Safe did not accept its second key's signature")
+        attach(app.screenshot(), named: "device-signed-in-key-verified")
+        app.terminate()
+
+        // Back on the first key, so no suite that does not declare one inherits this.
+        let reset = launchBrowsing()
+        XCTAssertTrue(reset.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        reset.terminate()
     }
 }

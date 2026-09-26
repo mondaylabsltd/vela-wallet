@@ -25,9 +25,19 @@
 //  operation the relay must reject is a prompt wasted — and on this platform it
 //  is also a Face ID sheet somebody has to dismiss for nothing.
 //
+//  ## Every signature goes where the account signed in (founder, 2026-09-26)
+//
+//  A person says where their passkey is when they create the wallet or sign
+//  in, and never again. The stored record names that key and route
+//  (`signed_in_with`), and the core reads it (`signInRoute`): every ceremony
+//  below is pinned to THAT credential over THAT route. There is no choice at
+//  signing time; a key that stops answering is replaced by signing out and
+//  signing in with another. A record written before the field existed signs
+//  as it always did.
+//
 //  ## The Trusted Signer is a ceremony, not a second path (spec 071)
 //
-//  When the person chose it, the SAME digest the passkey would have signed
+//  When the account signs there, the SAME digest the passkey would have signed
 //  goes to a separate page with the request it covers — the core builds what
 //  the page receives (`trustedSignerRequest`) and verifies what comes back —
 //  and an accepted answer continues exactly where an assertion does:
@@ -105,8 +115,12 @@ final class UserOpSpine {
         /// the whole set, so a signature packed against a subset verifies
         /// against a different account.
         func keys(of address: String) async -> [WalletKeyRecord]
+        /// The stored account record, whole, as JSON — what the core's
+        /// `signInRoute` reads the account's signing key and route from.
+        /// `nil` when no record holds `address`.
+        func accountJson(of address: String) async -> String?
         /// The pinned key's stored transports and method, for the ceremony's
-        /// routing.
+        /// routing of a record that names no sign-in key.
         func routing(of address: String) async -> (transports: String, method: KeyMethod)
         /// Every founding key's credential id and stored transports, as JSON for
         /// the core's `signRoute` — `[{credential_id, transports}]`.
@@ -125,8 +139,8 @@ final class UserOpSpine {
         let origin: String
     }
 
-    /// The Trusted Signer's "Sign with" name — not a place a passkey is, so
-    /// `signRoute` never routes it; the ceremony branches here instead.
+    /// The Trusted Signer's route name — not a place a passkey is, so a route
+    /// naming it opens a page instead of a passkey sheet.
     static let trustedSignerMethod = "trusted_signer"
 
     enum Failure: Equatable {
@@ -220,14 +234,14 @@ final class UserOpSpine {
         signingStarted()
         let signed = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
-            buildRequest: { accountName in
+            buildRequest: { accountName, offered in
                 // A message carries no calls and no operation: the page reads
                 // the site's own params.
                 guard let asked else { return nil }
                 return try trustedSignerRequest(
                     input: Self.trustedSignerInput(
                         asked: asked, chainId: chainId, account: account,
-                        accountName: accountName, keys: keys, calls: []
+                        accountName: accountName, keys: offered, calls: []
                     ),
                     draft: nil
                 )
@@ -372,13 +386,13 @@ final class UserOpSpine {
         let assembled = draft
         let answer = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
-            buildRequest: { accountName in
+            buildRequest: { accountName, offered in
                 // The ASSEMBLED operation — the one the digest covers — and
                 // the calls before its fee leg, which the core appends last.
                 try trustedSignerRequest(
                     input: Self.trustedSignerInput(
                         asked: asked, chainId: chainId, account: account,
-                        accountName: accountName, keys: keys, calls: calls
+                        accountName: accountName, keys: offered, calls: calls
                     ),
                     draft: assembled
                 )
@@ -439,47 +453,49 @@ final class UserOpSpine {
 
     // MARK: - The one ceremony
 
-    /// The person's "Sign with" choice for the request in hand: a signing
-    /// sheet's pick, or the stored default where no sheet asks (Send). WHICH
-    /// key that pins, and how it is reached, is the core's.
-    var signMethod: () -> String = { "auto" }
-
     /// The Trusted Signer (spec 071). `nil` where there is no screen to open a
-    /// page on — choosing it there is refused before anything is signed.
+    /// page on — a route to it there is refused before anything is signed.
     var trustedSigner: TrustedSignerPort?
 
-    /// One signature over `challenge`: the passkey the person chose, or the
+    /// One signature over `challenge`: the account's own passkey, or the
     /// Trusted Signer's answer, which the core has already verified over this
-    /// very digest by one of `keys`. `buildRequest` makes what the page
-    /// receives, given the account's name, and runs only when it is asked.
+    /// very digest by a key the page was offered. `buildRequest` makes what
+    /// the page receives, given the account's name and the keys it is
+    /// offered, and runs only when it is asked.
     private func ceremony(
         account: String,
         pinned: WalletKeyRecord,
         keys: [WalletKeyRecord],
         challenge: Data,
-        buildRequest: (_ accountName: String?) throws -> String?
+        buildRequest: (_ accountName: String?, _ offered: [WalletKeyRecord]) throws -> String?
     ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
-        // The route is the CORE's, for `auto` as much as for a name the
-        // person picked (spec 075): a key minted behind a signer page is
-        // reachable nowhere else, so `auto` answers `trusted_signer` for it and
-        // says which page. The person's own pick reaches the same place.
+        // The route is the CORE's: the key the account signed in with, over
+        // the route that reached it — a Trusted Signer sign-in included.
         let route = await route(account: account)
-        guard signMethod() == Self.trustedSignerMethod || route?.method == Self.trustedSignerMethod else {
-            let assertion = try await assert(account: account, pinned: pinned, route: route, challenge: challenge)
+        guard let route, route.wire.method == Self.trustedSignerMethod else {
+            let assertion = try await assert(account: account, pinned: pinned, route: route?.wire, challenge: challenge)
             return (Self.webAuthn(assertion), assertion.credentialIdHex)
         }
         guard let trustedSigner else {
             throw other("The Trusted Signer cannot be opened here.")
         }
+        // An account signed in through the page signs there with that key
+        // alone: the page is offered it and no other, and an answer by any
+        // other founding key is refused like any mismatch — the rule a passkey
+        // ceremony pinned to it keeps. A record from before the sign-in key
+        // offers every founding key, as it did.
+        let offered = route.signedIn
+            ? keys.filter { $0.credentialId.caseInsensitiveCompare(route.wire.credentialId) == .orderedSame }
+            : keys
         let accountName = await accounts.name(of: account)
-        guard let request = try? buildRequest(accountName) else {
+        guard let request = try? buildRequest(accountName, offered) else {
             throw other("The Trusted Signer's request could not be built.")
         }
         let ending = await trustedSigner.sign(
-            requestJson: request, digest: challenge, keys: keys,
+            requestJson: request, digest: challenge, keys: offered,
             // Empty means the page from Settings; a key behind somebody's own
             // page names it, and that is the one that opens.
-            signerOrigin: route?.signerOrigin
+            signerOrigin: route.wire.signerOrigin
         )
         switch ending {
         case .outcome(.accepted(let credentialIdHex, let assertion)):
@@ -521,18 +537,30 @@ final class UserOpSpine {
         )
     }
 
-    /// `wallet_keys::sign_route` for the "Sign with" in force: the credential
-    /// a ceremony is pinned to, how it is reached, and — for a Trusted Signer
-    /// key — the page it lives behind. `nil` is "do what you always did".
-    ///
-    /// Asked for `auto` too since spec 075: a key created or found through
-    /// the Trusted Signer routes itself back there, which is the whole of
-    /// "a key that lives behind a page signs through it".
-    private func route(account: String) async -> SignRouteWire? {
-        guard let json = signRoute(
-            deviceKeysJson: await accounts.keyRoutesJson(of: account), method: signMethod()
-        ) else { return nil }
-        return try? CoreJSON.decoder.decode(SignRouteWire.self, from: Data(json.utf8))
+    /// Where this account's signatures go: the credential a ceremony is pinned
+    /// to, how it is reached, and — for the Trusted Signer — the page.
+    /// `signedIn` says the route is the account's sign-in key, the one key it
+    /// may sign with.
+    private struct Route {
+        let wire: SignRouteWire
+        let signedIn: Bool
+    }
+
+    /// The account's sign-in key first (`signInRoute`, founder 2026-09-26).
+    /// A record written before that existed names none and signs exactly as
+    /// it did: `auto`, which answers nothing — `nil`, the pinned key's stored
+    /// route — except for a key created or found through the Trusted Signer,
+    /// which routes itself back to its page (spec 075).
+    private func route(account: String) async -> Route? {
+        if let json = await accounts.accountJson(of: account).flatMap({ signInRoute(accountJson: $0) }) {
+            return Self.decodeRoute(json).map { Route(wire: $0, signedIn: true) }
+        }
+        let json = signRoute(deviceKeysJson: await accounts.keyRoutesJson(of: account), method: "auto")
+        return json.flatMap(Self.decodeRoute).map { Route(wire: $0, signedIn: false) }
+    }
+
+    private static func decodeRoute(_ json: String) -> SignRouteWire? {
+        try? CoreJSON.decoder.decode(SignRouteWire.self, from: Data(json.utf8))
     }
 
     private func assert(

@@ -43,11 +43,14 @@ import VelaCore
 /// be tested without a browser.
 protocol TrustedSignerPort: AnyObject {
     /// Opens the page for `requestJson` (`trustedSignerRequest`'s) and waits for
-    /// an answer the core verified over `digest` by one of `keys`.
+    /// an answer the core verified over `digest` by one of `keys` — the keys the
+    /// page was offered, which for an account signed in there is its sign-in
+    /// key alone.
     ///
-    /// `signerOrigin` is the page the KEY lives behind (spec 075,
-    /// `signRoute`): a key minted on somebody's own signer page is reachable
-    /// nowhere else. Empty or `nil` opens the page from Settings.
+    /// `signerOrigin` is the page the route names: the one the account signed
+    /// in on, or the one a key lives behind (spec 075) — a key minted on
+    /// somebody's own signer page is reachable nowhere else. Empty or `nil`
+    /// opens the page from Settings.
     func sign(
         requestJson: String, digest: Data, keys: [WalletKeyRecord], signerOrigin: String?
     ) async -> TrustedSignerChannel.Ending

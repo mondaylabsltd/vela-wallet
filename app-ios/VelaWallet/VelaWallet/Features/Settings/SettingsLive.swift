@@ -665,34 +665,25 @@ enum SettingsLive {
         return copy
     }
 
-    /// How this device signs (spec 071): the two rows' values, the "Sign with"
-    /// sheet's tick and the Trusted Signer page's sheet — every verdict in them
-    /// the `sign_pref` core's, so a row cannot say one thing while a signing
-    /// sheet starts at another.
+    /// Which Trusted Signer page this device opens (spec 071): the row's value
+    /// and the page's sheet — every verdict in them the `sign_pref` core's, so
+    /// the row cannot name one page while a signature opens another.
     static func withSignPref(
         _ view: SignPrefViewWire,
         on model: SettingsScreenModel,
         loc: Loc
     ) -> SettingsScreenModel {
         var copy = model
-        let sheet = SettingsFixtures.signWithSheet(loc, offered: view.offered, selected: view.method)
         copy.sections = model.sections.map { section in
             var updated = section
             updated.rows = section.rows.map { row in
+                guard row.id == SettingsFixtures.signerPageRow else { return row }
                 var changed = row
-                switch row.id {
-                case SettingsFixtures.signWithRow:
-                    changed.value = sheet.rows.first(where: \.selected)?.label ?? row.value
-                case SettingsFixtures.signerPageRow:
-                    changed.value = signerPageValue(view, loc: loc)
-                default:
-                    return row
-                }
+                changed.value = signerPageValue(view, loc: loc)
                 return changed
             }
             return updated
         }
-        copy.signWithSheet = sheet
         let error: String? = switch view.signerUrlError {
         case "invalid": loc.t("settings.signing.pageInvalid")
         case "insecure": loc.t("settings.signing.pageInsecure")
