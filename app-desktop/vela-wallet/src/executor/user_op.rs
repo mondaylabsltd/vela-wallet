@@ -112,12 +112,15 @@ pub type SignFn<'a> = &'a mut dyn FnMut(&[u8]) -> Result<Assertion, PasskeyFailu
 pub enum Signer<'a> {
     /// A passkey, over the digest alone.
     Passkey(SignFn<'a>),
-    /// The Trusted Signer: the request as the page is told it, the page, and
-    /// the screen's channel to its waiting sheet.
+    /// The Trusted Signer: the request as the page is told it, the page, the
+    /// screen's channel to its waiting sheet, and the one key the page may
+    /// sign with — the account's sign-in key (founder, 2026-09-26). `None`
+    /// for a record from before it, whose every founding key may answer.
     TrustedSigner {
         ask: &'a Ask,
         page: &'a str,
         channel: &'a Channel,
+        only: Option<&'a str>,
     },
 }
 
@@ -135,9 +138,25 @@ impl Signer<'_> {
     ) -> Result<Assertion, SubmitFailure> {
         match self {
             Self::Passkey(sign) => sign(digest),
-            Self::TrustedSigner { ask, page, channel } => {
-                let request = ask.request(chain_id, safe, keys, operation);
-                trusted_signer::sign(&request, page, digest, keys, channel)
+            Self::TrustedSigner {
+                ask,
+                page,
+                channel,
+                only,
+            } => {
+                // The page is offered that key alone, and no other key's
+                // answer is taken — the same rule a passkey ceremony pinned
+                // to it keeps.
+                let allowed: Vec<WalletKey> = match only {
+                    Some(credential) => keys
+                        .iter()
+                        .filter(|key| key.credential_id.eq_ignore_ascii_case(credential))
+                        .cloned()
+                        .collect(),
+                    None => keys.to_vec(),
+                };
+                let request = ask.request(chain_id, safe, &allowed, operation);
+                trusted_signer::sign(&request, page, digest, &allowed, channel)
             }
         }
         .map_err(|failure| match failure.kind {
@@ -1090,6 +1109,7 @@ mod tests {
                 ask: &ask,
                 page: "https://sign.getvela.app/",
                 channel: &channel,
+                only: None,
             };
             signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
         };
@@ -1115,6 +1135,7 @@ mod tests {
                 ask: &ask,
                 page: "https://sign.getvela.app/",
                 channel: &channel,
+                only: None,
             };
             signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
         };
@@ -1124,6 +1145,64 @@ mod tests {
             channel.ended(),
             Some(crate::executor::trusted_signer::Refusal::Closed)
         );
+    }
+
+    /// Founder, 2026-09-26: an account signed in through the Trusted Signer
+    /// signs there with its sign-in key alone. The page is offered only that
+    /// key, and an answer by another of the wallet's keys — one the page could
+    /// reach — is refused rather than taken.
+    #[test]
+    fn the_trusted_signer_takes_only_the_sign_in_key() {
+        use crate::executor::trusted_signer::tests::{
+            answers_once, page_result, signing_key, wallet_key,
+        };
+        const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let (first, second) = ([0x99_u8], [0x11_u8, 0x22, 0x33]);
+        let keys = vec![
+            wallet_key(&signing_key(9), &first),
+            wallet_key(&signing_key(7), &second),
+        ];
+        let original = [0x42_u8; 32];
+        let challenge =
+            compute_safe_message_hash(&original, 100, SAFE).unwrap_or_else(|e| unreachable!("{e}"));
+        let ask = Ask {
+            method: "personal_sign".to_owned(),
+            params: serde_json::json!(["0x68656c6c6f", SAFE]),
+            origin: "https://app.example".to_owned(),
+            account_name: None,
+        };
+        let through_page = |answer: serde_json::Value| {
+            let (channel, _changed) = Channel::new();
+            let answering = answers_once(&channel, move || answer);
+            let signed = sign_message(
+                100,
+                SAFE,
+                &original,
+                &keys,
+                Signer::TrustedSigner {
+                    ask: &ask,
+                    page: "https://sign.getvela.app/",
+                    channel: &channel,
+                    only: Some(&keys[1].credential_id),
+                },
+            );
+            let _ = answering.join();
+            (signed, channel.ended())
+        };
+
+        // Refused as any unusable answer is: the request stays open, and the
+        // sheet says the answer was not this wallet's for this request.
+        let (other_key, ended) = through_page(page_result(&signing_key(9), &first, &challenge));
+        assert_eq!(other_key.err(), Some(SubmitFailure::PasskeyCancelled));
+        assert_eq!(
+            ended,
+            Some(crate::executor::trusted_signer::Refusal::Mismatch),
+            "another founding key's answer was taken"
+        );
+
+        let (sign_in_key, ended) = through_page(page_result(&signing_key(7), &second, &challenge));
+        assert!(sign_in_key.is_ok(), "{sign_in_key:?}");
+        assert_eq!(ended, None);
     }
 
     /// A message through the Trusted Signer (spec 071): the page is told the
@@ -1165,6 +1244,7 @@ mod tests {
                 ask: &ask,
                 page: "https://sign.getvela.app/",
                 channel: &channel,
+                only: None,
             },
         );
         let _ = answering.join();

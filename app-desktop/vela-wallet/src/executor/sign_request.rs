@@ -70,9 +70,11 @@ pub struct SignContext {
     pub keys: Vec<WalletKey>,
     pub key_method: KeyMethod,
     pub pinned_credential: Option<String>,
-    /// Spec 075: the Trusted Signer page this account signs on, as
-    /// [`crate::executor::send::SendContext::signer_page`].
+    /// Spec 075: the Trusted Signer page this account signs on, and the one
+    /// key it may sign with there, as
+    /// [`crate::executor::send::SendContext::signer_page`] and `page_key`.
     pub signer_page: Option<String>,
+    pub page_key: Option<String>,
     pub ceremony: Ceremony,
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
@@ -135,6 +137,7 @@ impl SignContext {
             key_method: send.key_method,
             pinned_credential: send.pinned_credential,
             signer_page: send.signer_page,
+            page_key: send.page_key,
             ceremony: send.ceremony,
             signing_started: send.signing_started,
             site: None,
@@ -322,6 +325,7 @@ fn sign_and_submit(
             ask: &ask,
             page,
             channel: &ctx.trusted_signer,
+            only: ctx.page_key.as_deref(),
         },
         None => Signer::Passkey(&mut sign),
     };
@@ -379,6 +383,7 @@ fn sign_message(
             ask: &ask,
             page,
             channel: &ctx.trusted_signer,
+            only: ctx.page_key.as_deref(),
         },
         None => Signer::Passkey(&mut sign),
     };

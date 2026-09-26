@@ -80,6 +80,9 @@ pub struct SendContext {
     /// Spec 075: the Trusted Signer page this account signs on — empty for
     /// the page Settings names — or `None` when a passkey signs here.
     pub signer_page: Option<String>,
+    /// The one key that page may sign with: the sign-in key. `None` for a
+    /// record from before it, whose every founding key may answer there.
+    pub page_key: Option<String>,
     /// The account's name: the Trusted Signer's page points the person at a
     /// passkey with it.
     pub account_name: Option<String>,
@@ -133,8 +136,12 @@ impl SendContext {
     pub fn new(account: &Account, ceremony: Ceremony) -> Self {
         let keys = user_op::key_set_of(account);
         let (legacy_method, legacy_pinned) = first_key_route(account, &keys);
-        let route = account
-            .sign_in_route()
+        let sign_in = account.sign_in_route();
+        let page_key = sign_in
+            .as_ref()
+            .filter(|route| route.method == vela_core::trusted_signer::METHOD)
+            .map(|route| route.credential_id.clone());
+        let route = sign_in
             .or_else(|| vela_core::wallet_keys::sign_route(&device_keys_of(account), "auto"))
             .and_then(route_of);
         let (key_method, pinned_credential, signer_page) = match route {
@@ -149,6 +156,7 @@ impl SendContext {
             ceremony,
             signing_started: Arc::new(AtomicBool::new(false)),
             signer_page,
+            page_key,
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
             trusted_signer: trusted_signer::Channel::new().0,
         }
@@ -533,6 +541,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                         ask: &ask,
                         page,
                         channel: &ctx.trusted_signer,
+                        only: ctx.page_key.as_deref(),
                     },
                     None => Signer::Passkey(&mut sign),
                 };

@@ -527,6 +527,7 @@ fn the_page_signs_a_message_as_the_wallet_hashes_it() {
                     ask: &ask,
                     page: &rig.page,
                     channel: &rig.channel,
+                    only: None,
                 },
             )
         });
