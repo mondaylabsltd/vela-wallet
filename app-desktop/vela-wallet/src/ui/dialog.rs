@@ -84,7 +84,7 @@ pub fn dialog(
     subtitle: Option<SharedString>,
     close_icon: impl gpui::IntoElement,
     body: impl gpui::IntoElement,
-    scroll: &gpui::ScrollHandle,
+    scroll: &crate::ui::SmoothScroll,
     close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
     let has_subtitle = subtitle.is_some();
@@ -147,15 +147,10 @@ pub fn dialog(
     let content = div()
         .relative()
         .w_full()
-        .child(
-            div()
-                .id((id, 2u64))
-                .track_scroll(scroll)
-                .w_full()
-                .max_h(body_max)
-                .overflow_y_scroll()
-                .child(body),
-        )
+        .child(scroll.attach(
+            div().id((id, 2u64)).w_full().max_h(body_max).child(body),
+            window,
+        ))
         .children(crate::ui::vertical_scrollbar(theme, scroll));
 
     scrim(id, theme)

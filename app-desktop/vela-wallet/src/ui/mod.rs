@@ -9,6 +9,7 @@ mod logo;
 mod name_field;
 mod rail;
 mod scrollbar;
+mod smooth_scroll;
 mod spinner;
 mod status_badge;
 
@@ -25,5 +26,6 @@ pub use name_field::{
 };
 pub use rail::{RailSlot, onboarding_rail};
 pub use scrollbar::vertical_scrollbar;
+pub use smooth_scroll::SmoothScroll;
 pub use spinner::spinner;
 pub use status_badge::status_badge;
