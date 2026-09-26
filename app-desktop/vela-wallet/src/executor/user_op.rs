@@ -1023,6 +1023,7 @@ mod tests {
             client_data_json_hex: signed.client_data_json_hex,
             user_id_hex: None,
             authenticator_attachment: "platform".to_owned(),
+            signer_origin: None,
         };
         let sig = envelope(&assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
         // 12-byte window, then r = the SECOND key's own proxy, not the shared signer.

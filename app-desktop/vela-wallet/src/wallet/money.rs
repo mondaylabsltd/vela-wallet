@@ -1129,6 +1129,14 @@ fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOu
 mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
+    // The sync driver's own: the host hands its fee sessions to
+    // `speed_control` (069), so nothing above imports these any more.
+    #[cfg(feature = "dev-fixtures")]
+    use crate::executor::chain;
+    #[cfg(feature = "dev-fixtures")]
+    use crate::resident::{Answer, Machine};
+    #[cfg(feature = "dev-fixtures")]
+    use vela_core::app::fee_policy::FeeOperation;
 
     /// Issue #265: an import ADDS to the recipients already on the form, and
     /// replaces them only when the person chose "Replace them instead".
@@ -1294,6 +1302,7 @@ mod tests {
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.to_owned(),
                     transports: String::new(),
+                    signer_origin: None,
                 })
                 .collect(),
         };
