@@ -936,6 +936,8 @@ object SettingsLive {
                 },
                 fingerprint = if (body.length >= 8) "${body.take(4)}…${body.takeLast(4)}".lowercase() else "",
                 pills = listOfNotNull(
+                    // First: the key this device signs with (founder, 2026-09-26).
+                    if (row.signsHere) KeyPillModel(strings.t(k.KEYS_SIGNS_HERE), KeyPillTone.SignsHere) else null,
                     if (row.userVerified == true) KeyPillModel(strings.t(k.KEYS_USER_VERIFIED), KeyPillTone.Verified) else null,
                     row.synced?.let { KeyPillModel(strings.t(if (it) k.KEYS_SYNCED else k.KEYS_NOT_SYNCED), if (it) KeyPillTone.Synced else KeyPillTone.Local) },
                 ),

@@ -1707,7 +1707,7 @@ fun VelaNavHost(
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
                     val device = application.container.deviceKeysOf(address, session.activeName)
-                    walletKeys = application.container.walletKeys.read(address, device)
+                    walletKeys = application.container.walletKeys.read(address, device, application.container.signInCredentialOf(address))
                 }
                 val liveModel = run {
                     var m = SettingsLive.withWizard(

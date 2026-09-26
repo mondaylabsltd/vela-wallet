@@ -560,9 +560,21 @@ class AppContainer(private val app: Application) {
                 name = if (index == 0) walletName else "",
                 transports = "",
                 signerOrigin = pages[key.publicKeyHex.removePrefix("0x").lowercase()].orEmpty(),
+                credentialId = key.credentialId,
             )
         }
     }
+
+    /**
+     * The credential this account signs with — its sign-in route's (the core's
+     * `signInRoute` over the stored record) — or empty for a record from before
+     * the sign-in key. The keys walk marks that key's row (2026-09-26).
+     */
+    suspend fun signInCredentialOf(address: String): String =
+        StoreAccountPort(AccountStore(app)).accountJson(address)
+            ?.let { runCatching { uniffi.vela_core_uniffi.signInRoute(it) }.getOrNull() }
+            ?.let { runCatching { JSONObject(it).optString("credential_id") }.getOrNull() }
+            .orEmpty()
 
     /** The active account's FIRST founding key — the one the registry files its groups under. */
     suspend fun foundingKeyOf(address: String): String? =
