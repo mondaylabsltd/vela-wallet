@@ -161,6 +161,31 @@ describe('FeeRow', () => {
 
 	// A fee row with no live session behind it (the gallery) must not offer a
 	// control that does nothing.
+	// 078 round 2: the refresh control is the card's own height — same top and
+	// bottom edges — at every text size, including a fee dropped to two lines
+	// at the largest one, where it used to float mid-card.
+	it('makes the refresh control exactly the card’s height, at every text size', async () => {
+		for (const scale of ['0.82', '1', '1.35']) {
+			for (const width of ['360px', '220px']) {
+				const { screen, refresh } = await drawn(width, FEE, () => {});
+				screen.container.style.setProperty('--text-scale', scale);
+				await tick();
+				const card = (refresh.parentElement as HTMLElement).getBoundingClientRect();
+				const box = refresh.getBoundingClientRect();
+				const label = `${scale} @ ${width}`;
+				expect(Math.abs(box.top - card.top), label).toBeLessThanOrEqual(0.5);
+				expect(Math.abs(box.bottom - card.bottom), label).toBeLessThanOrEqual(0.5);
+				// …with the glyph still at its vertical centre.
+				const glyph = (refresh.querySelector('svg') as SVGElement).getBoundingClientRect();
+				expect(
+					Math.abs((glyph.top + glyph.bottom) / 2 - (card.top + card.bottom) / 2),
+					label
+				).toBeLessThanOrEqual(1);
+				screen.unmount();
+			}
+		}
+	});
+
 	it('has no live refresh when nothing is listening', async () => {
 		const { refresh } = await drawn('300px');
 		expect(refresh.disabled).toBe(true);

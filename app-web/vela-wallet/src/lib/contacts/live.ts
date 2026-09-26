@@ -301,7 +301,12 @@ export function buildContactsLive(
 		ui.screen === 'empty' ||
 		(ui.screen === 'list' && view.loaded && view.contacts.length === 0)
 	) {
-		return { ...base, screen: 'empty', empty: emptyModel(m) };
+		return {
+			...base,
+			screen: 'empty',
+			empty: emptyModel(m),
+			search: { placeholder: m.searchPlaceholder, query: ui.query === '' ? undefined : ui.query }
+		};
 	}
 
 	if (ui.screen === 'detail' && ui.selectedAddress !== undefined) {
@@ -324,6 +329,7 @@ export function buildContactsLive(
 
 	const sections = letterSections(view, identicon, ui.query);
 	const list: ContactsListModel = {
+		pending: !view.loaded,
 		search: { placeholder: m.searchPlaceholder, query: ui.query === '' ? undefined : ui.query },
 		groupsTitle: m.sectionGroups,
 		groupsAction: m.groupNew,
@@ -382,11 +388,13 @@ export function buildContactsDesktopLive(
 		addLabel: m.addContact,
 		menuLabel: m.manage,
 		rail: {
+			// Chrome only until the book is read (see `GroupRailModel.pending`).
+			pending: !view.loaded,
 			allLabel: m.allContacts,
-			allCount: String(view.contacts.length),
+			allCount: view.loaded ? String(view.contacts.length) : '',
 			allSelected: selectedGroup === undefined,
 			groupsTitle: m.sectionGroups,
-			groups: view.groups.map((g) => toGroupModel(g, view, m, identicon)),
+			groups: view.loaded ? view.groups.map((g) => toGroupModel(g, view, m, identicon)) : [],
 			selectedGroup: selectedGroup?.name,
 			newGroup: m.groupNew
 		},

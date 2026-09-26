@@ -230,6 +230,16 @@ const WEB_ADDITIONS = [
 	['size-desktopTab', '32px', 'spec 022: one desktop tab inside it'],
 	['size-desktopToolbar', '56px', 'spec 022: desktop browser toolbar, measured 56 in DE3'],
 	['size-desktopControl', '32px', 'spec 022: its icon buttons and address field'],
+	[
+		'icon-tab',
+		'28px',
+		'078 round 2 (founder, 2026-09-26): the phone tab bar is icons only — the labels truncated in es/pt/de/it — so its glyph steps up from icon-xl (26) to 28, the size all four shells draw'
+	],
+	[
+		'layout-tabBarHeight',
+		'56px',
+		'078 round 2: the icon-only phone tab bar, without the safe area — the bar lost its label line, so it is no longer the 86 dock the export names'
+	],
 	['layout-desktopTabW', '200px', 'spec 022: one desktop tab’s width, measured in DE3'],
 	['layout-contactsRailW', '216px', 'spec 018 research D9: desktop group-rail width (DC1)'],
 	['layout-contactsMenuW', '216px', 'spec 018 research D9: dropdown/context menu width (M1/M2)'],

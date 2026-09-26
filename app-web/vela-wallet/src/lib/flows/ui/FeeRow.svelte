@@ -164,10 +164,16 @@
 	}
 
 	/* Quiet on purpose: a fee that is fine is the normal case, and a loud
-	   refresh button next to a good number invites a tap nobody needs. */
+	   refresh button next to a good number invites a tap nobody needs.
+
+	   Exactly the card's height (078 round 2): the same top and bottom edges
+	   at every text size, so a two-line fee at the largest size does not leave
+	   a small target floating in the middle of a tall card. The glyph stays
+	   centred inside it. */
 	.refresh {
 		display: flex;
 		align-items: center;
+		align-self: stretch;
 		flex: 0 0 auto;
 		padding: var(--space-lg);
 		padding-inline-start: 0;

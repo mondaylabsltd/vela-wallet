@@ -68,16 +68,17 @@
 					}
 				]}
 			/>
-			{#if list !== undefined}
+			{@const search = list?.search ?? model.search}
+			{#if search !== undefined}
 				<SearchHeader
-					search={list.search}
+					{search}
 					clearLabel={model.backLabel}
 					onquery={(value) => onuievent?.({ kind: 'query', value })}
 				/>
 			{/if}
 		{/if}
 
-		{#if model.screen === 'list' && model.list !== undefined}
+		{#if model.screen === 'list' && model.list !== undefined && !model.list.pending}
 			{@const list = model.list}
 			{#if list.groups.length > 0 || live}
 				<!-- Live books show the section head even before the first group

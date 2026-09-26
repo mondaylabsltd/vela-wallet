@@ -523,7 +523,23 @@ describe('one figure for one balance (spec 078)', () => {
 			confirmModel(),
 			inputs({ selected_token: RICH_ETH, confirm_amount: MAXED, recipient: '0x' + 'ab'.repeat(20) })
 		);
-		expect(confirm.amount).toBe('0.04379 ETH');
+		expect(confirm.amount).toBe('0.04379');
+		expect(confirm.amountUnit).toBe('ETH');
+		// A split's total keeps its one string, and never inherits the drawn coin.
+		const split = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				selected_token: RICH_ETH,
+				split_mode: true,
+				confirm_amount: '0.3',
+				recipients: [
+					{ id: 'a', address: '0x' + 'ab'.repeat(20), amount: '0.1', name: null },
+					{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.2', name: null }
+				]
+			})
+		);
+		expect(split.amount).toBe('0.3 ETH');
+		expect(split.amountUnit).toBeUndefined();
 		const receipt = liveSendReceipt(
 			receiptModel(),
 			inputs({
@@ -559,7 +575,8 @@ describe('the confirm screen', () => {
 				fee: QUOTE
 			})
 		);
-		expect(model.amount).toBe('0.5 ETH');
+		expect(model.amount).toBe('0.5');
+		expect(model.amountUnit).toBe('ETH');
 		expect(model.subline).toBe('≈ $1,500.00');
 		const byLabel = new Map(model.facts.map((f) => [f.label, f.value]));
 		expect(byLabel.get(m['send.fromLabel'])).toBe('My Wallet');
