@@ -1651,7 +1651,8 @@
    "credential": "Kimlik bilgisi",
    "transport": "Aktarım",
    "attestation": "Doğrulama beyanı",
-   "userVerified": "Kullanırken doğrulama gerekir"
+   "userVerified": "Kullanırken doğrulama gerekir",
+   "signsHere": "Oturum açık"
   }
  },
  "contacts": {
