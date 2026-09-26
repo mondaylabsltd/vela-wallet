@@ -238,8 +238,7 @@ describe('walletKeysModel', () => {
 				m
 			);
 			const row = model.rows[0];
-			// The signing sheet's own words for the route, so Settings and the
-			// "Sign with" chooser cannot name the same thing twice.
+			// The Trusted Signer's own title, so Settings cannot name it twice.
 			expect(row.holder).toBe('Trusted Signer');
 			expect(row.holder).toBe(m.signing.methods.trusted_signer);
 			// …and it is the LAST word: the catalog knows this AAGUID, and its
