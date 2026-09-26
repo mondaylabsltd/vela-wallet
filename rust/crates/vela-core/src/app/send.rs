@@ -1363,6 +1363,10 @@ pub struct Model {
     estimating_gas: bool,
     fee_busy: bool,
     gas_fee_token: Option<String>,
+    /// The person picked the fee coin (078 M-03). Until then `None` is "the
+    /// fee machine's choice" and a quote in any coin is its answer; after a
+    /// pick, `None` is native, said on purpose.
+    fee_coin_chosen: bool,
     treasury_bootstrap: Option<SendTreasuryStatus>,
     lock: ReentryLock,
     /// The ported `sendCancelledRef` intent: every pre-sign hop checks it.
@@ -1793,6 +1797,7 @@ impl App for Send {
             Event::EditAmount => edit_amount(model),
             Event::ChooseFeeToken { token } => {
                 model.gas_fee_token = token;
+                model.fee_coin_chosen = true;
                 // On the form the fee coin is part of what the quote is about.
                 Command::all([schedule_form_estimate(model), render()])
             }
@@ -2847,13 +2852,19 @@ fn tap_max(model: &mut Model) -> Cmd {
     // meanwhile rather than re-labelling whatever was typed before.
     model.amount = DenominatedAmount::token("");
 
-    if let Some(fee) = selected_fee(model).cloned() {
+    // Only a quote for the fee coin chosen NOW (078 M-03): after a switch the
+    // quote in hand priced the other coin, and its reserve is a figure about
+    // an asset this send no longer pays in.
+    if let Some(fee) = max_quote(model).cloned() {
         apply_max_with_fee(model, &token, &fee);
         return render();
     }
 
-    // No usable quote yet → estimate on demand (rough shape), exactly like
-    // `handleMaxAmount`'s `await estimateTransactionFee(...)`.
+    // No usable quote yet → estimate on demand, like `handleMaxAmount`'s
+    // `await estimateTransactionFee(...)` — but of the transfer Max is about
+    // to fill (078 M-02), not a placeholder call: the placeholder's gas was
+    // not this transfer's, so Continue's re-quote could land above the reserve
+    // and send the person back to the amount.
     let needs_estimate =
         model.account.is_some() && (token.is_native() || token.token_address.is_some());
     if !needs_estimate {
@@ -2867,6 +2878,7 @@ fn tap_max(model: &mut Model) -> Cmd {
             return render();
         }
     };
+    let tx = max_estimate_call(model, &token, &account);
     let id = next(model);
     model.pipeline = Pipeline::MaxEstimate { id };
     Command::all([
@@ -2875,7 +2887,7 @@ fn tap_max(model: &mut Model) -> Cmd {
             SendOperation::EstimateFee {
                 chain_id: token.chain_id,
                 account,
-                tx: None,
+                tx,
                 batch: None,
                 gas_fee_token: model.gas_fee_token.clone(),
                 public_key_hex: model.public_key_hex.clone(),
@@ -2973,6 +2985,54 @@ fn form_estimate_fire(model: &mut Model) -> Cmd {
             public_key_hex: model.public_key_hex.clone(),
         },
     )
+}
+
+/// The transfer `Max` is about to fill, as the call to quote (078 M-02): the
+/// payee typed so far — or the account itself, a transfer's gas does not
+/// depend on who receives it — and the whole balance for a token. For the
+/// chain's coin the value is ONE wei: the call takes the value-bearing path a
+/// real transfer takes, without asking a simulation to move the whole balance
+/// the fee must also come out of. `None` when the call cannot be encoded; the
+/// executor then quotes its rough shape, as before.
+fn max_estimate_call(model: &Model, token: &SendToken, account: &str) -> Option<FeeCall> {
+    let payee = if is_valid_address(&model.recipient) {
+        model.recipient.trim()
+    } else {
+        account
+    };
+    match token.token_address.as_deref() {
+        None => Some(FeeCall {
+            to: payee.to_owned(),
+            value: "1".to_owned(),
+            data: "0x".to_owned(),
+        }),
+        Some(addr) => {
+            let units = to_base_units(&full_balance(token), token.decimals)?;
+            Some(FeeCall {
+                to: addr.to_owned(),
+                value: "0".to_owned(),
+                data: encode_erc20_transfer(payee, units)?,
+            })
+        }
+    }
+}
+
+/// Whether a quote priced the fee coin chosen NOW (078 M-03): a picked token,
+/// that token; a picked native, the chain's coin. Nothing picked yet, the
+/// fee machine's own choice — whatever coin its quote is in.
+fn quote_is_for_fee_coin(model: &Model, fee: &FeeEstimate) -> bool {
+    match (&model.gas_fee_token, &fee.fee_asset) {
+        (Some(chosen), FeeAsset::Erc20 { token, .. }) => chosen.eq_ignore_ascii_case(token),
+        (Some(_), FeeAsset::Native) => false,
+        (None, FeeAsset::Native) => true,
+        (None, FeeAsset::Erc20 { .. }) => !model.fee_coin_chosen,
+    }
+}
+
+/// The quote `Max` and its sentence may reserve against: on this chain, AND
+/// for this fee coin.
+fn max_quote(model: &Model) -> Option<&FeeEstimate> {
+    selected_fee(model).filter(|fee| quote_is_for_fee_coin(model, fee))
 }
 
 fn full_balance(token: &SendToken) -> String {
@@ -3423,7 +3483,7 @@ fn chain_native_symbol(model: &Model, chain_id: u32) -> Option<String> {
 /// exactly when `Max` resolves to `"0"` — never on a balance that could still
 /// pay, and never absent on one that could not.
 fn fee_over_balance(model: &Model, token: &SendToken) -> Option<SendAmountWarning> {
-    let fee = selected_fee(model)?;
+    let fee = max_quote(model)?;
     let reserve = max_fee_reserve(token, fee)?;
     // A quote of nothing (sponsored, or not yet priced) reserves nothing: an
     // empty balance is then a balance, not a fee that ate it.
@@ -4536,6 +4596,10 @@ fn accept_fee(model: &mut Model, id: u64, outcome: SendFeeOutcome) -> Cmd {
                 SendFeeOutcome::Ok { estimate } => match parse_fee_view(&estimate) {
                     Some(fee) => {
                         apply_max_with_fee(model, &token, &fee);
+                        // The quote Max reserved against is the one the fee
+                        // row shows: two different figures for one fee is
+                        // how a screen stops adding up.
+                        model.fee_estimate = Some(fee);
                         render()
                     }
                     None => {

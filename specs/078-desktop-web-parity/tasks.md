@@ -69,7 +69,7 @@ screenshot checked against the web.
 - [x] T040 C-02…C-08 contacts features.
 - [x] T041 S-02…S-05 settings features.
 - [x] T042 E-01, E-03 explore features; G-05 technical details.
-- [ ] T043 M-02, M-03 core Max estimates the real transfer; a fee-coin switch
+- [x] T043 M-02, M-03 core Max estimates the real transfer; a fee-coin switch
       re-quotes before Max uses it; M-04 decimal mark.
 
 ## Phase 3b — core wiring (W, research.md)

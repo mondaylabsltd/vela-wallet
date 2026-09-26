@@ -1743,7 +1743,7 @@ pub fn split_amount_edited(
 ) -> Vec<SendRecipientDraft> {
     let mut next = rows.to_vec();
     if let Some(row) = next.get_mut(index) {
-        if let Some(clean) = amount_edited(&amount, &row.amount) {
+        if let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount)) {
             row.amount = clean;
         }
     }
@@ -1766,12 +1766,36 @@ pub fn split_address_edited(
     next
 }
 
+/// The core's figure as the field shows it (078 M-04) — the web's
+/// `amountToInput`: the core stores and echoes a dot, a decimal-comma person
+/// reads a comma. Max's "0,00075" and the typing both, so the field never
+/// switches marks under the person's hands.
+#[must_use]
+pub fn amount_to_input(canonical: &str) -> String {
+    amount_to_input_with(canonical, crate::executor::format_prefs::current().number)
+}
+
+#[must_use]
+pub fn amount_to_input_with(
+    canonical: &str,
+    preset: vela_core::l10n::number::NumberPreset,
+) -> String {
+    let decimal = preset.separators().decimal;
+    if decimal == "." {
+        canonical.to_owned()
+    } else {
+        canonical.replacen('.', decimal, 1)
+    }
+}
+
 /// An amount field's edit as the core reads it (spec 073;
 /// `vela_core::l10n::amount_text` says why): a decimal-comma keyboard's
 /// "4,5" is 4.5 — raw, the send machine read 4 in fiat mode, and a custom
-/// allowance's parser dropped the comma and allowed 45. `previous` is the
-/// field's text before the edit; `None` is an edit with no reading as one
-/// figure, and the field keeps what it had.
+/// allowance's parser dropped the comma and allowed 45. `next` is the field's
+/// text after the edit and `previous` what it showed before — both in the
+/// person's mark (078 M-04); the answer is the core's dot-decimal figure.
+/// `None` is an edit with no reading as one figure, and the field keeps what
+/// it had.
 #[must_use]
 pub fn amount_edited(next: &str, previous: &str) -> Option<String> {
     use vela_core::l10n::amount_text;
@@ -3487,6 +3511,39 @@ pub fn send_panel(view: &SendView, fee_picker_open: bool) -> crate::flows::FlowP
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 078 M-04: the field speaks the person's decimal mark; the core's dot
+    /// is only its storage.
+    #[test]
+    fn the_amount_field_shows_the_persons_decimal_mark() {
+        use vela_core::l10n::number::NumberPreset;
+        assert_eq!(
+            amount_to_input_with("0.00075", NumberPreset::CommaDot),
+            "0.00075"
+        );
+        assert_eq!(
+            amount_to_input_with("0.00075", NumberPreset::Indian),
+            "0.00075"
+        );
+        assert_eq!(
+            amount_to_input_with("0.00075", NumberPreset::DotComma),
+            "0,00075"
+        );
+        assert_eq!(
+            amount_to_input_with("12.5", NumberPreset::SpaceComma),
+            "12,5"
+        );
+        assert_eq!(amount_to_input_with("12", NumberPreset::DotComma), "12");
+        assert_eq!(amount_to_input_with("", NumberPreset::DotComma), "");
+        // …and what is typed over it reads back as the core's figure.
+        let clean = vela_core::l10n::amount_text::clean(
+            "0,000756",
+            NumberPreset::DotComma,
+            vela_core::l10n::amount_text::Entry::Unknown,
+            Some("0,00075"),
+        );
+        assert_eq!(clean.as_deref(), Some("0.000756"));
+    }
     use crate::core_host::CoreHost;
     use vela_core::app::balance_dashboard::{BalanceDashboard, Event as BalanceEvent};
 

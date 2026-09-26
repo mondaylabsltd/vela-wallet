@@ -5323,7 +5323,9 @@ impl WalletPage {
             token_ids: flows_live::send_token_ids(&view),
             contact_addresses,
             fee_contracts: flows_live::fee_token_contracts(&fee),
-            amount: view.amount.clone(),
+            // Shown in the person's decimal mark (078 M-04); edits are read
+            // against what was shown and handed on dot-decimal.
+            amount: flows_live::amount_to_input(&view.amount),
             recipient: view.recipient.clone(),
             amount_focus: self.send_amount_focus.clone(),
             recipient_focus: self.send_recipient_focus.clone(),
@@ -6223,7 +6225,7 @@ impl WalletPage {
                             focus: focus.clone(),
                             value: rows
                                 .get(index)
-                                .map(|r| r.amount.clone())
+                                .map(|r| flows_live::amount_to_input(&r.amount))
                                 .unwrap_or_default(),
                             placeholder: SharedString::from("0"),
                             on_change: Box::new({

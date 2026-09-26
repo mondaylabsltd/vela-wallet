@@ -1721,17 +1721,22 @@ fn max_without_a_quote_estimates_on_demand_and_falls_back_to_full_balance() {
     let mut sut = boot(vec![eth("2")]);
     select_eth(&mut sut);
     let ops = sut.dispatch(Event::TapMax);
-    assert!(
-        matches!(
-            ops.as_slice(),
-            [Op::EstimateFee {
-                tx: None,
-                batch: None,
-                ..
-            }]
-        ),
-        "rough on-demand estimate: {ops:?}"
-    );
+    // 078 M-02: the transfer Max is about to fill, not a placeholder — no
+    // payee typed yet, so the account itself; one wei of the chain's coin,
+    // the value-bearing path without asking to move the whole balance.
+    match ops.as_slice() {
+        [Op::EstimateFee {
+            tx: Some(call),
+            batch: None,
+            account,
+            ..
+        }] => {
+            assert_eq!(&call.to, account, "no payee yet: the account itself");
+            assert_eq!(call.value, "1");
+            assert_eq!(call.data, "0x");
+        }
+        other => panic!("the transfer's own estimate: {other:?}"),
+    }
     // Estimation failed — full balance; the pre-check still warns later.
     sut.resolve(Res::FeeEstimated {
         outcome: SendFeeOutcome::Failed {
@@ -1739,6 +1744,101 @@ fn max_without_a_quote_estimates_on_demand_and_falls_back_to_full_balance() {
         },
     });
     assert_eq!(sut.view().amount, "2");
+}
+
+/// 078 M-02: a token's Max quotes `transfer(payee, whole balance)` — the call
+/// Continue will quote again — and keeps that quote as the form's fee.
+#[test]
+fn max_without_a_quote_estimates_the_token_transfer_it_fills() {
+    let mut sut = boot(vec![usdc("5")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    set_recipient(&mut sut, RECIPIENT);
+    let ops = sut.dispatch(Event::TapMax);
+    let call = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::EstimateFee { tx: Some(call), .. } => Some(call.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("an estimate of the transfer: {ops:?}"));
+    assert_eq!(call.to.to_lowercase(), USDC.to_lowercase());
+    assert_eq!(call.value, "0");
+    // transfer(RECIPIENT, 5_000_000)
+    assert!(call.data.starts_with("0xa9059cbb"), "{}", call.data);
+    assert!(call.data.contains(&RECIPIENT[2..]), "{}", call.data);
+    assert!(
+        call.data.ends_with(&format!("{:064x}", 5_000_000u128)),
+        "{}",
+        call.data
+    );
+
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        Res::FeeEstimated {
+            outcome: SendFeeOutcome::Ok {
+                estimate: usdc_fee(1, 1_000_000),
+            },
+        },
+    );
+    let view = sut.view();
+    assert_eq!(view.amount, "3.5", "5 − 1.5 × the quote");
+    assert!(
+        view.fee.is_some(),
+        "the quote Max used is the fee on screen"
+    );
+}
+
+/// 078 M-03: after the person picks another fee coin, the quote in hand is
+/// the old coin's. Max must not reserve against it — it asks again, in the
+/// coin now chosen.
+#[test]
+fn max_after_a_fee_coin_switch_does_not_reserve_the_old_coins_fee() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    // A native quote: Max would hold 0.5 ETH back for it.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 500_000_000_000_000_000),
+    });
+    // The person moves the fee to USDC; USDC's quote has not arrived.
+    sut.dispatch(Event::ChooseFeeToken {
+        token: Some(USDC.to_owned()),
+    });
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(
+        ops.iter().any(|op| matches!(
+            op,
+            Op::EstimateFee {
+                gas_fee_token: Some(token),
+                ..
+            } if token.eq_ignore_ascii_case(USDC)
+        )),
+        "asks again in the chosen coin: {ops:?}"
+    );
+    assert_ne!(sut.view().amount, "1.5", "not the old coin's reserve");
+    // …and USDC pays, so the whole ETH balance is sendable.
+    sut.resolve(Res::FeeEstimated {
+        outcome: SendFeeOutcome::Ok {
+            estimate: usdc_fee(1, 1_000_000),
+        },
+    });
+    assert_eq!(sut.view().amount, "2");
+
+    // Picking native back: a USDC quote no longer counts either.
+    sut.dispatch(Event::ChooseFeeToken { token: None });
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(
+        ops.iter().any(|op| matches!(
+            op,
+            Op::EstimateFee {
+                gas_fee_token: None,
+                ..
+            }
+        )),
+        "asks again in the chain's coin: {ops:?}"
+    );
 }
 
 // ===========================================================================
