@@ -211,6 +211,21 @@ different).
   check. **S-08** panel ≤560, padding 32/48/48. **S-09** keys block sizes.
   **S-10** account rows (15 semibold, accent active, × remove). **S-11**
   endpoints/providers layout. **S-12** About. **S-13** nav rows r12 18 icon.
+  *Fixed (T053):* DST1–DST8 captured beside the web's gallery before and
+  after. The panel sits on the web's 1.4 line and its content caps at the
+  web's 560 row measure (was 640); it stays LEFT-aligned — the web centres
+  it, but the founder ruled against centring on 2026-09-02, and that
+  stands. S-06 url field radius 12. S-07 dropdown rows ≥52, padded 12, 15
+  labels (mono examples too), 18 check, radius 12. S-10 account rows on a
+  button's line with 30 identicons; the danger card's edge at 35 % of the
+  error colour, radius 12. S-11 provider names 17 (was 20), 24 from the
+  description; storage total at 32, the bar's legend, "Clear all caches"
+  centred. S-12 About: the mark in a 56 raised disc, 24 around the hero,
+  sections padded 24/8, footer centred. S-13 nav rows radius 12, 18 glyph,
+  hover = text colour only. Left: the text-size slider draws eight dark
+  stops where the web draws six light ones (`ui/step_slider.rs`, changed by
+  Shelchin the same day — theirs to reconcile); S-09 keys block and the
+  account dialog's × were not in the compared states.
 
 ## Explore (E)
 

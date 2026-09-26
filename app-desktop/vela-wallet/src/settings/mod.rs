@@ -263,6 +263,10 @@ pub struct SettingsStrings {
     pub count_sites: String,
     pub storage_clear: SharedString,
     pub storage_clear_all: SharedString,
+    /// The bar's legend (078 S-11).
+    pub storage_legend_user: SharedString,
+    pub storage_legend_caches: SharedString,
+    pub storage_legend_sessions: SharedString,
     pub storage_disconnect_all: SharedString,
     /// "Clear all caches?" — the question before it happens.
     pub storage_clear_title: SharedString,
@@ -490,6 +494,9 @@ impl SettingsStrings {
             count_sites: raw("settings.storage.sitesCount"),
             storage_clear: s("settings.storage.clear"),
             storage_clear_all: s("settings.storage.clearAllCaches"),
+            storage_legend_user: s("settings.storage.legendUserData"),
+            storage_legend_caches: s("settings.storage.legendCaches"),
+            storage_legend_sessions: s("settings.storage.legendSessions"),
             storage_disconnect_all: s("settings.storage.disconnectAll"),
             storage_clear_title: s("settings.storage.clearTitle"),
             storage_clear_body: s("settings.storage.clearBody"),

@@ -377,7 +377,10 @@ pub const SETTINGS_DIALOG_W: f32 = 520.;
 /// The panel's own content column. Measured on DST7: the storage bar runs
 /// 505 -> 1146 inside the 1280 frame, so the content is 640 wide and starts
 /// 48 past the nav column's right edge (240 + 216 + 48 = 504).
-pub const SETTINGS_PANEL_W: f32 = 640.;
+/// Since 078 S-08 the web's `--layout-rowMeasure`, 560: the panel is that
+/// measure plus its 48 sides — at 640 a label sat further from its control
+/// than the web draws.
+pub const SETTINGS_PANEL_W: f32 = 560.;
 
 /// That 48. Left-aligned like the wallet's own content column, never centred:
 /// centring parks the form in the middle of a wide window and opens a gap the

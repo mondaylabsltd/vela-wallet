@@ -89,7 +89,7 @@ screenshot checked against the web.
 - [x] T050 Wallet home H-08…H-12.
 - [x] T051 Flows F-09…F-11.
 - [x] T052 Contacts C-09.
-- [ ] T053 Settings S-06…S-13.
+- [x] T053 Settings S-06…S-13.
 - [ ] T054 Explore E-04, E-05; signing G-06.
 
 ## Phase 5 — acceptance

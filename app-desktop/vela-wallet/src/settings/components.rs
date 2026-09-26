@@ -140,18 +140,31 @@ pub fn settings_nav_row(
     } else {
         theme.fg_muted
     };
+    // The web's nav button (078 S-13): radius 12, an 18 glyph, and a hover
+    // that is the text colour only — the raised wash is the SELECTED look.
     let row = div()
         .id(id)
+        .group("settings-nav-row")
         .h(px(SETTINGS_NAV_ROW_H))
         .px(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .flex()
         .items_center()
         .gap(px(12.))
         .cursor_pointer()
-        .child(icon_img(icons, icon, false, tint, GLYPH_SM))
+        .child(crate::wallet::components::hover_icon(
+            icons,
+            icon,
+            false,
+            tint,
+            theme.fg_base,
+            18.,
+            "settings-nav-row",
+        ))
         .child(
             div()
+                .id("settings-nav-label")
+                .group_hover("settings-nav-row", |style| style.text_color(theme.fg_base))
                 // Truncate inside the pill rather than draw outside it. At
                 // `xlarge` the selected pill's last letter was being painted
                 // past its own white background and over the column divider;
@@ -170,7 +183,9 @@ pub fn settings_nav_row(
             .border_1()
             .border_color(theme.divider)
     } else {
-        row.hover(|el| el.bg(theme.bg_raised))
+        // Same box as the selected row, edge included, so selecting does not
+        // shift the label by the hairline.
+        row.border_1().border_color(gpui::transparent_black())
     }
 }
 
@@ -319,15 +334,18 @@ fn menu_of(
         .flex_col();
     let last = rows.len().saturating_sub(1);
     for (i, (label, note, selected)) in rows.iter().enumerate() {
+        // The web's `SelectRow` (078 S-07): at least 52, padded 12, the
+        // label 15 — mono examples too — and an 18 check.
         let mut row = div()
             .flex()
             .items_center()
             .gap(px(8.))
-            .py(px(10.))
+            .min_h(px(52.))
+            .py(px(12.))
             .child(
                 div()
                     .when(mono, |el| el.font_family(theme::font_mono()))
-                    .text_size(theme::text_row_sub())
+                    .text_size(theme::text_row_title())
                     .text_color(if *selected {
                         theme.accent
                     } else {
@@ -346,7 +364,7 @@ fn menu_of(
             );
         }
         if *selected {
-            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 16.));
+            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
         }
         match on_pick.as_ref() {
             Some(pick) => {
@@ -370,7 +388,7 @@ fn menu_of(
         .left_0()
         .right_0()
         .px(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .bg(theme.bg_raised)
         .border_1()
         .border_color(theme.divider)
@@ -893,7 +911,7 @@ pub fn url_field(
         div()
             .h(px(WALLET_CONTROL_H))
             .px(px(12.))
-            .rounded(px(10.))
+            .rounded(px(12.))
             .bg(theme.bg_sunken)
             // A 1px border even at rest: on dark, sunken and base are one step
             // apart and the box would otherwise have no edge at all.
@@ -1183,10 +1201,12 @@ pub fn danger_card(
         .items_center()
         .gap(px(12.))
         .p(px(16.))
-        .rounded(px(10.))
+        // The web's card (078 S-10): radius 12, its edge the error colour at
+        // 35 % — a full-strength red border shouted over the words inside it.
+        .rounded(px(12.))
         .bg(theme.error_soft)
         .border_1()
-        .border_color(theme.error_base)
+        .border_color(theme.error_base.opacity(0.35))
         .child(
             div()
                 .flex_1()

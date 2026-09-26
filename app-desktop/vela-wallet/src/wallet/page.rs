@@ -8183,6 +8183,9 @@ impl WalletPage {
             // different screen from the one that was designed.
             .px(px(SETTINGS_PANEL_PAD_X))
             .pb(px(48.))
+            // The web body's 1.4 under everything a row does not set itself
+            // (078 S-08): gpui's ~1.6 stood every settings row taller.
+            .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
             .child(
                 div()
                     .max_w(px(SETTINGS_PANEL_W))
@@ -8375,6 +8378,7 @@ impl WalletPage {
                 }));
 
             let name_colour = if active { theme.accent } else { theme.fg_base };
+            // A button's line, as the web's account rows (078 S-10).
             let mut pick = div()
                 .id(ElementId::from((row_id, index)))
                 .flex_1()
@@ -8383,6 +8387,7 @@ impl WalletPage {
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
+                .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
                 .child(
                     div()
                         .flex_1()
@@ -8596,10 +8601,12 @@ impl WalletPage {
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
+                .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
+                // The live rows' 30, as the web's `row` identicon.
                 .child(crate::wallet::components::identicon_avatar(
                     &mut self.identicons,
                     &seed,
-                    40.,
+                    SWITCHER_IDENTICON,
                 ))
                 .child(
                     div()
@@ -10041,11 +10048,12 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
+        // 24 from the description to the first provider, 32 between
+        // providers, as the web's panel (078 S-11).
         let mut col = div().flex().flex_col().gap(px(32.)).child(
             div()
-                .pb(px(8.))
+                .mb(px(-8.))
                 .text_size(theme::text_row_sub())
-                .line_height(px(20.))
                 .text_color(theme.fg_muted)
                 .child(self.settings.providers_desc.clone()),
         );
@@ -10084,7 +10092,8 @@ impl WalletPage {
                                     div()
                                         .flex_1()
                                         .min_w(px(0.))
-                                        .text_size(theme::text_panel_title())
+                                        // `--text-xl`, as the web's `h3`.
+                                        .text_size(theme::text_section())
                                         .font_weight(gpui::FontWeight::BOLD)
                                         .text_color(theme.fg_base)
                                         .child(settings_live::provider_name(id)),
@@ -10200,7 +10209,7 @@ impl WalletPage {
                         .gap(px(8.))
                         .child(
                             div()
-                                .text_size(theme::text_panel_title())
+                                .text_size(theme::text_section())
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(theme.fg_base)
                                 .child(p.name),
@@ -11025,9 +11034,10 @@ impl WalletPage {
                     .items_baseline()
                     .gap(px(8.))
                     .pb(px(16.))
+                    // `--text-4xl` (078 S-11): the size, not the headline.
                     .child(
                         div()
-                            .text_size(theme::text_balance_hero())
+                            .text_size(theme::text_amount_detail())
                             .font_weight(gpui::FontWeight::BOLD)
                             .text_color(theme.fg_base)
                             .child(amount),
@@ -11046,7 +11056,30 @@ impl WalletPage {
                             .child(summary),
                     ),
             )
-            .child(storage_bar(theme, &segments));
+            .child(storage_bar(theme, &segments))
+            // What the three colours are (078 S-11): the web's legend, a dot
+            // and a word each, 16 apart, 8 under the bar.
+            .child({
+                let words = [
+                    self.settings.storage_legend_user.clone(),
+                    self.settings.storage_legend_caches.clone(),
+                    self.settings.storage_legend_sessions.clone(),
+                ];
+                let mut legend = div().flex().gap(px(16.)).pt(px(8.)).pb(px(8.));
+                for ((_, color), word) in segments.iter().zip(words) {
+                    legend = legend.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(div().size(px(8.)).rounded_full().bg(gpui::rgb(*color)))
+                            .child(word),
+                    );
+                }
+                legend
+            });
 
         let Some(report) = report else {
             // The design surfaces: the mock's three groups, drawn and inert.
@@ -11057,6 +11090,7 @@ impl WalletPage {
                     col = col.child(
                         div()
                             .pt(px(16.))
+                            .text_center()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.info_base)
                             .child(action),
@@ -11109,8 +11143,10 @@ impl WalletPage {
                             cx.notify();
                         },
                     ))),
+                    // Centred under its group, as the web's (078 S-11).
                     div()
                         .pt(px(16.))
+                        .text_center()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.info_base)
                         .child(clear_all),
@@ -11258,14 +11294,26 @@ impl WalletPage {
             .flex()
             .flex_col()
             .child(
+                // The web's `.hero` (078 S-12): padded 24 above and below,
+                // the mark in a 56 raised disc, the tagline over the version.
                 div()
                     .flex()
                     .items_center()
                     .gap(px(16.))
-                    .pb(px(24.))
+                    .py(px(24.))
                     // DST8 draws the mark beside the tagline; without it the
                     // panel opens on two lines of grey text and no brand.
-                    .child(crate::ui::vela_mark(theme, px(44.)))
+                    .child(
+                        div()
+                            .flex_none()
+                            .size(px(56.))
+                            .rounded_full()
+                            .bg(theme.bg_raised)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(crate::ui::vela_mark(theme, px(36.))),
+                    )
                     .child(
                         div()
                             .flex()
@@ -11288,7 +11336,8 @@ impl WalletPage {
             )
             .child(
                 div()
-                    .pb(px(4.))
+                    .pt(px(24.))
+                    .pb(px(8.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
                     .child(s.about_section_technical.clone()),
@@ -11327,7 +11376,7 @@ impl WalletPage {
         col = col.child(
             div()
                 .pt(px(24.))
-                .pb(px(4.))
+                .pb(px(8.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
                 .child(self.settings.about_section_links.clone()),
@@ -11346,6 +11395,7 @@ impl WalletPage {
         col.child(
             div()
                 .pt(px(24.))
+                .text_center()
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(self.settings.about_footer.clone()),
