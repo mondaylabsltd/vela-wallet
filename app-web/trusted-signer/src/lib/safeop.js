@@ -132,9 +132,12 @@ window.VelaCS = window.VelaCS || {};
       if (!inner) return null;
       return { kind: 'multiSend', calls: unpackMultiSend(inner[0]) };
     }
+    // `operation` travels with the call: a delegatecall to anything but the
+    // MultiSend above runs someone else's code as this account — the Bybit
+    // primitive — and the resolver refuses it rather than drawing it as a call.
     return {
       kind: 'call',
-      calls: [{ to: to, value: '0x' + value.toString(16), data: data }],
+      calls: [{ to: to, value: '0x' + value.toString(16), data: data, operation: operation }],
     };
   }
 
@@ -146,6 +149,9 @@ window.VelaCS = window.VelaCS || {};
     while (i + 170 <= body.length) {
       var length = Number(BigInt('0x' + body.slice(i + 106, i + 170)));
       calls.push({
+        // Kept, not dropped: MULTI_SEND is Safe's MultiSend, not CallOnly, so
+        // a leg marked 1 really is executed as a delegatecall.
+        operation: parseInt(body.slice(i, i + 2), 16),
         to: '0x' + body.slice(i + 2, i + 42),
         value: '0x' + BigInt('0x' + body.slice(i + 42, i + 106)).toString(16),
         data: '0x' + body.slice(i + 170, i + 170 + length * 2),

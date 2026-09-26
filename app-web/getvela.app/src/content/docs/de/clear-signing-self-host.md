@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Eine Seite aus einer einzigen Datei unter sign.getvela.app, die eine Anfrage selbst dekodiert und mit deinem Passkey signiert – was sie prüft, welche Apps sie nutzen und wie du sie nachbaust oder eine eigene Kopie betreibst."
-source: 3a605b8d68ee
+source: 43a1af6ffdcd
 ---
 
 <script>
@@ -64,6 +64,13 @@ vollständigen Durchlauf.
   nicht kennt, einen Token, der an seinen eigenen Vertrag gesendet wird, eine
   Operation, die er nicht lesen kann, und eine Anmeldung, deren Challenge der
   Anfragende mitgeliefert hat.
+- **Er lehnt ab, was dein Konto aus der Hand geben würde,** nach derselben Regel
+  wie die Apps: einen Aufruf deines Kontos an eine seiner eigenen Funktionen für
+  Owner, Module, Guard oder Fallback, auch innerhalb eines Batches; einen
+  `delegatecall`, außer in den MultiSend-Vertrag von Safe, der die Aufrufe einer
+  Operation bündelt; und eine `SafeTx`-Signatur. Er prüft jeden Aufruf in der
+  Operation, die die App zusammengestellt hat, nicht nur die Aufrufe, um die die
+  Seite gebeten hat.
 - **Er zeigt die Adresse des Kontos und ein in der Seite berechnetes Identicon.**
   Empfänger und Verträge werden nie anhand der Anfrage benannt – nur die eigene,
   geprüfte Tabelle der Seite kann einen Vertrag benennen. Der eigene Name des Kontos,

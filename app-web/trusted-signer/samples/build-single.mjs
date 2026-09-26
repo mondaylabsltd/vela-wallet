@@ -65,13 +65,9 @@
 //     already falls back to a drawn letter when an image fails ("a logo is
 //     never allowed to leave a hole where a symbol should be", render.js), and
 //     the identicon — the actual anti-poisoning signal — is computed locally;
-//   · the `memberProof` ceremony's registry fetch (`lib/ceremony.js`
-//     `fetchMemberChallenge`). Transaction signing never touches the network,
-//     but that one ceremony does, and `connect-src` would hand the page a way
-//     out. The fix is for the WALLET to fetch the challenge and pass it in
-//     over the channel — the page already refuses any challenge it cannot
-//     recompute itself, so nothing is weakened by where it arrives from.
-//     Until that lands, memberProof does not work in the single-file build.
+//   · any network at all. The `memberProof` ceremony used to fetch its
+//     challenge from the registry; it now computes it from what the request
+//     carries (`lib/ceremony.js`), so no ceremony needs `connect-src`.
 
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';

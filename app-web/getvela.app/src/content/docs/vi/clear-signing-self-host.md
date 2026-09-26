@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Một trang chỉ gồm một tệp tại sign.getvela.app, tự giải mã yêu cầu và tự ký bằng passkey của bạn — nó kiểm tra những gì, ứng dụng nào dùng nó, và cách build lại hoặc chạy bản sao của riêng bạn."
-source: 3a605b8d68ee
+source: 43a1af6ffdcd
 ---
 
 <script>
@@ -54,6 +54,12 @@ chưa ứng dụng nào trong số đó có một lần chạy trọn vẹn đư
 - **Nó từ chối những gì nó không thể đứng ra bảo đảm:** `eth_sign`, một phương thức nó không
   biết, một token được gửi tới chính hợp đồng của token đó, một thao tác nó không đọc được, và
   một lần đăng nhập có thử thách (challenge) do bên yêu cầu cung cấp.
+- **Nó từ chối những gì sẽ trao tài khoản của bạn cho người khác,** theo đúng quy tắc
+  mà các ứng dụng áp dụng: một lệnh gọi từ tài khoản của bạn tới một trong các hàm chủ
+  sở hữu, module, guard hoặc fallback của chính nó, kể cả bên trong một lô; một
+  `delegatecall`, trừ khi vào hợp đồng MultiSend của Safe, nơi gom các lệnh gọi của một
+  thao tác; và một chữ ký `SafeTx`. Nó kiểm tra mọi lệnh gọi trong thao tác mà ứng dụng
+  đã lắp ráp, không chỉ những lệnh gọi mà trang web yêu cầu.
 - **Nó hiện địa chỉ của tài khoản và một identicon được tính ngay trên trang.** Người nhận và
   hợp đồng không bao giờ được đặt tên theo yêu cầu — chỉ bảng đã được rà soát của chính trang
   mới có thể đặt tên cho một hợp đồng. Tên của chính tài khoản, do ứng dụng gửi để bạn chọn

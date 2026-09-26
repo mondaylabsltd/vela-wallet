@@ -585,10 +585,10 @@ pub enum KeyMethod {
     /// A removable authenticator — a USB/NFC security key.
     SecurityKey,
     /// Spec 075: the Trusted Signer — our own route to a passkey. A page that
-    /// shows what is being signed runs the ceremony (on this device over a
-    /// loopback socket or `postMessage`, on another over the tunnel or BLE)
-    /// and the answer comes back to be verified here. A peer of the three
-    /// above, offered wherever they are.
+    /// shows what is being signed runs the ceremony in this device's browser
+    /// (the request in the link, the answer back through
+    /// `velawallet://sign-result`) and the answer is verified here. A peer of
+    /// the three above, on the desktop and phone apps.
     TrustedSigner,
 }
 

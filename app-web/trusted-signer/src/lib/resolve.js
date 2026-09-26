@@ -624,6 +624,7 @@ window.VelaCS = window.VelaCS || {};
     while (i + 170 <= body.length) {
       var length = Number(BigInt('0x' + body.slice(i + 106, i + 170)));
       legs.push({
+        operation: parseInt(body.slice(i, i + 2), 16),
         to: '0x' + body.slice(i + 2, i + 42),
         value: BigInt('0x' + body.slice(i + 42, i + 106)),
         data: '0x' + body.slice(i + 170, i + 170 + length * 2),
@@ -1155,6 +1156,88 @@ window.VelaCS = window.VelaCS || {};
     return view;
   }
 
+  // --- who controls the account ---------------------------------------------
+  //
+  // The core refuses these before a request ever reaches this page
+  // (`vela-core` `self_call_guard.rs`, spec 081). The page refuses them again,
+  // because the whole point of it is not to trust the app that assembled the
+  // operation: a call from the account to itself that rewrites its owners,
+  // modules, guard or fallback handler hands the account over as completely as
+  // the payload that drained Bybit, and so does any delegatecall.
+
+  var SELF_CALL = {
+    '0x0d582f13': 'addOwnerWithThreshold',
+    '0xf8dc5dd9': 'removeOwner',
+    '0xe318b52b': 'swapOwner',
+    '0x694e80c3': 'changeThreshold',
+    '0x610b5925': 'enableModule',
+    '0xe009cfde': 'disableModule',
+    '0xe19a9dd9': 'setGuard',
+    '0xe068df37': 'setModuleGuard',
+    '0xf08a0323': 'setFallbackHandler',
+    '0xb63e800d': 'setup',
+    '0x6a761202': 'execTransaction',
+    '0x468721a7': 'execTransactionFromModule',
+    '0x5229073f': 'execTransactionFromModule',
+  };
+  var MULTI_SEND_SELECTOR = '0x8d80ff0a';
+  var EXEC_TRANSACTION_SELECTOR = '0x6a761202';
+  var EXEC_TRANSACTION =
+    'execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)';
+  // Past anything legitimate; the cap keeps a crafted payload cheap to read.
+  var MAX_NESTING = 4;
+
+  /**
+   * The function a call would run against the account's control, or null. It
+   * follows `multiSend` and `execTransaction` payloads (a batch hides the same
+   * call one level down), and any delegatecall inside them is refused whatever
+   * its target — the same rule as the core's `inspect_call`.
+   */
+  function takeover(call, account, depth) {
+    if (Number(call.operation) === 1) return 'delegatecall';
+    var data = call.data || '0x';
+    var selector = abi.selectorOf(data);
+    if (!selector) return null; // empty calldata: the fee leg's own shape
+    if (account && String(call.to || '').toLowerCase() === String(account).toLowerCase() && SELF_CALL[selector]) {
+      return SELF_CALL[selector];
+    }
+    if (depth >= MAX_NESTING) return null;
+    var inner = [];
+    if (selector === MULTI_SEND_SELECTOR) {
+      var packed = abi.decode('multiSend(bytes)', data);
+      if (packed) inner = decodeMultiSend(packed[0]);
+    } else if (selector === EXEC_TRANSACTION_SELECTOR) {
+      var exec = abi.decode(EXEC_TRANSACTION, data);
+      if (exec) inner = [{ to: exec[0], data: exec[2], operation: Number(exec[3]) }];
+    }
+    for (var i = 0; i < inner.length; i++) {
+      var found = takeover(inner[i], account, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function refuseTakeover(fn, view) {
+    view.refuse = true;
+    view.risk = 'danger';
+    view.warnings.push(fn === 'delegatecall'
+      ? { tone: 'danger', key: 'refuse.delegateCall' }
+      : { tone: 'danger', key: 'refuse.selfCall', params: { fn: fn } });
+  }
+
+  /** A `SafeTx` is an instruction to a Safe, executable by anyone later. */
+  function isSafeTx(intent) {
+    var params = intent.params || [];
+    for (var i = 0; i < params.length; i++) {
+      var entry = params[i];
+      if (typeof entry === 'string') {
+        try { entry = JSON.parse(entry); } catch (e) { continue; }
+      }
+      if (entry && typeof entry === 'object' && entry.primaryType === 'SafeTx') return true;
+    }
+    return false;
+  }
+
   // --- entry point -----------------------------------------------------------
 
   /**
@@ -1245,6 +1328,25 @@ window.VelaCS = window.VelaCS || {};
       view.risk = 'danger';
       view.sentence = text('sentence.unknownMethod', { method: intent.method });
       view.refuse = true;
+    }
+
+    // Checked last, over whatever the method branches decided, and only ever
+    // adding a refusal: every call of the operation (or of the request when no
+    // operation came), not just the ones the site asked for — an app that
+    // slipped in a leg of its own is exactly what this page is here to catch.
+    var account = (ctx.operation && ctx.operation.userOp && ctx.operation.userOp.sender) ||
+      ctx.account || null;
+    var calls = intent.method === 'eth_sendTransaction' ? [intent.params[0] || {}]
+      : intent.method === 'wallet_sendCalls' ? ((intent.params[0] || {}).calls || [])
+      : [];
+    for (var c = 0; c < calls.length; c++) {
+      var fn = takeover(calls[c], account, 0);
+      if (fn) { refuseTakeover(fn, view); break; }
+    }
+    if (intent.method && intent.method.indexOf('signTypedData') >= 0 && isSafeTx(intent)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.safeTx' });
     }
 
     if (!view.dapp.originVerified && view.dapp.origin) {

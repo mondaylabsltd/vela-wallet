@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "sign.getvela.app adresinde, bir isteği kendi başına çözen ve geçiş anahtarınızla imzalayan tek dosyalık bir sayfa — neyi kontrol ettiği, hangi uygulamaların onu kullandığı ve onu nasıl yeniden derleyeceğiniz ya da kendi kopyanızı nasıl çalıştıracağınız."
-source: 3a605b8d68ee
+source: 43a1af6ffdcd
 ---
 
 <script>
@@ -58,6 +58,12 @@ kullanıyor; hiçbirinin henüz kaydı tutulmuş eksiksiz bir çalıştırması 
 - **Arkasında duramayacağı şeyleri reddeder:** `eth_sign`, tanımadığı bir yöntem,
   token'ın kendi sözleşmesine gönderilen bir token, okuyamadığı bir işlem ve sınaması
   (challenge) isteyen tarafça verilmiş bir giriş.
+- **Hesabını başkasına teslim edecek şeyleri reddeder,** uygulamaların uyguladığı
+  kuralla: hesabının kendi sahip, modül, guard veya fallback işlevlerinden birini
+  çağırması (toplu bir işlemin içinde de); Safe'in, bir işlemin çağrılarını bir araya
+  getiren MultiSend sözleşmesine yapılan dışında her `delegatecall`; ve bir `SafeTx`
+  imzası. Yalnızca sitenin istediği çağrıları değil, uygulamanın oluşturduğu işlemdeki
+  her çağrıyı kontrol eder.
 - **Hesabın adresini ve sayfada hesaplanan bir identicon'u gösterir.** Alıcılar ve
   sözleşmeler asla istekten gelen bilgiyle adlandırılmaz — bir sözleşmeye ad
   verebilecek tek şey sayfanın kendi incelenmiş tablosudur. Uygulamanın, doğru geçiş

@@ -58,6 +58,12 @@ wiring; none of them has a recorded full run yet.
 - **It refuses what it cannot stand behind:** `eth_sign`, a method it does not
   know, a token sent to its own contract, an operation it cannot read, and a
   sign-in whose challenge the requester supplied.
+- **It refuses what would hand over your account,** by the rule the apps apply:
+  a call from your account to one of its own owner, module, guard or fallback
+  functions, inside a batch too; a `delegatecall`, except into Safe's MultiSend
+  contract, which bundles an operation's calls; and a `SafeTx` signature. It
+  checks every call in the operation the app assembled, not only the calls the
+  site asked for.
 - **It shows the account's address and an identicon computed on the page.**
   Recipients and contracts are never named from the request — only the page's own
   reviewed table can name a contract. The account's own name, which the app sends

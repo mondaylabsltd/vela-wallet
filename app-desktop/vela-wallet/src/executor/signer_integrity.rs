@@ -21,11 +21,11 @@
 //!
 //! # Observe only, for now
 //!
-//! [`BUILD_ALLOWED`] ships empty until the page is published under
-//! `/b/<sha256>/`, and an empty set opens nothing. So [`check`] is written to
-//! be CALLED and LOGGED, not to gate the open: turning it into a gate before
-//! there is a published page would brick a Trusted Signer that works today. The
-//! gate is one `if` away, and belongs in the commit that fills the set.
+//! The page is published under `/b/<sha256>/` and [`BUILD_ALLOWED`] lists the
+//! builds this app accepts, but `integrity::ENFORCE` is still `false`. So
+//! [`check`] is CALLED and LOGGED, not a gate on the open: a page that does not
+//! match is opened anyway. The gate is one `if` away, and belongs in the commit
+//! that flips `ENFORCE`.
 
 use std::time::Duration;
 

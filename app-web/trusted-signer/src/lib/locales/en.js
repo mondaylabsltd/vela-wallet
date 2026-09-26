@@ -166,6 +166,9 @@ window.VelaCS.i18n.register('en', {
 
   'refuse.opMismatch': 'The operation does not contain the call the site asked for — it was altered during assembly. Not signing.',
   'refuse.opUnreadable': "This operation's calldata cannot be read, so what is on screen cannot be tied to what would be signed. Not signing.",
+  'refuse.selfCall': 'This asks your account to call {fn} on itself, which would change who controls it. Vela never needs that. Not signing.',
+  'refuse.delegateCall': 'This runs another contract’s code as your account (a delegatecall), the technique used to drain Bybit. Not signing.',
+  'refuse.safeTx': 'This asks your key to sign a Safe transaction (SafeTx), an instruction a Safe can carry out later. No site needs that from Vela. Not signing.',
   'warn.nonCanonicalModule': "This operation names an EntryPoint or 4337 module that is not Vela's — signing it endorses a different set of contracts.",
   'ui.digest': 'Signed digest · {kind}',
   'ui.digestUnwrapped': 'not wrapped in SafeMessage — an EOA-style signature a Safe will not accept',
