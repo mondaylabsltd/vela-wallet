@@ -821,14 +821,6 @@ struct RootView: View {
                                 onLink: openPolicy
                             )
                             .navigationBarBackButtonHidden()
-                        case .settings:
-                            settingsScreen()
-                                .navigationBarBackButtonHidden()
-                                // The steer is spent on arrival: the screen has
-                                // already seeded its page from it, and leaving
-                                // it set would send the NEXT visit to the same
-                                // place for no reason.
-                                .onAppear { pendingSettingsPage = nil }
                         }
                     }
             }
@@ -840,11 +832,15 @@ struct RootView: View {
             // launch animation already covers that frame and bouncing through a
             // spinner route would make a cold start flicker.
             .onChange(of: session.view.allowedRoute) { _, route in
-                if route == .onboarding { router.path.removeAll() }
+                if route == .onboarding {
+                    router.path.removeAll()
+                    leaveSettings()
+                }
             }
             .onChange(of: onboarding.finished) { _, finished in
                 if finished {
                     router.path.removeAll()
+                    leaveSettings()
                     onboarding.consumeFinished()
                 }
             }
@@ -1211,6 +1207,13 @@ struct RootView: View {
                     .onDisappear { wallet.homePoller.homeVisible(false) }
                 case .contacts:
                     contactsSection
+                case .settings:
+                    settingsScreen()
+                        // The steer is spent on arrival: the screen has
+                        // already seeded its page from it, and leaving it set
+                        // would send the NEXT visit to the same place for no
+                        // reason.
+                        .onAppear { pendingSettingsPage = nil }
                 case .explore:
                     // Spec 053: 探索 is a browser. Its start page is this
                     // person's own favourites, groups and recents, its tab
@@ -1599,11 +1602,21 @@ struct RootView: View {
 
     private func selectTab(_ tab: WalletTab) {
         switch tab {
-        case .settings: router.path.append(.settings)
+        case .settings: section = .settings
         case .wallet: section = .wallet
         case .contacts: section = .contacts
         case .explore: section = .explore
         }
+    }
+
+    /// Where a wallet lands after signing out or finishing a create/sign-in.
+    ///
+    /// Settings used to be a pushed route, and clearing the path took it away
+    /// with the rest; as a section it has to be left by hand. Only settings:
+    /// a person who added an account from the browser's switcher goes back to
+    /// the browser, as before.
+    private func leaveSettings() {
+        if section == .settings { section = .wallet }
     }
 
     /// The address book, live (spec 050).
@@ -2527,7 +2540,7 @@ struct RootView: View {
                         // from the tab doing nothing.
                         flows.close()
                         pendingSettingsPage = .addNetwork
-                        router.path.append(.settings)
+                        section = .settings
                     },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
@@ -2824,11 +2837,7 @@ struct RootView: View {
             // Every tab leaves Settings for its own section — only 钱包
             // answered before (spec 072), so 通讯录 and 探索 took the tap and
             // stayed here.
-            onSelectTab: { tab in
-                guard tab != .settings else { return }
-                selectTab(tab)
-                if !router.path.isEmpty { router.path.removeLast() }
-            },
+            onSelectTab: selectTab,
             // The way out of a signed-in wallet, on the row a person would
             // look for it.
             onSignOut: { session.signOut() },
@@ -3371,9 +3380,11 @@ struct RootView: View {
 /// A section, not a route: `docs/design/contacts/C1` draws the tab bar with
 /// 通讯录 **selected**, so it is a peer of 钱包 rather than something pushed
 /// over it, and a browser tab is not somewhere a person should be able to
-/// deep-link into before they have a wallet. 设置 is the opposite case — its
-/// drawing has a back affordance — and stays an `AppRoute`.
-enum WalletSection { case wallet, contacts, explore }
+/// deep-link into before they have a wallet. 设置 is a peer for the same
+/// reason — its home draws the tab bar with 设置 selected and no back — and
+/// as a pushed route it was the one tab that slid in from the edge while the
+/// other three swapped in place (founder-found, 2026-09-26).
+enum WalletSection { case wallet, contacts, explore, settings }
 
 /// Where the contacts section is, inside itself (spec 050).
 ///
