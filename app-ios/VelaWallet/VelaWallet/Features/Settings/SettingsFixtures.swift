@@ -591,7 +591,27 @@ enum SettingsFixtures {
             ],
             consent: loc.t(k.bugConsent),
             send: loc.t(k.bugSend),
-            githubLink: loc.t(k.bugGithub)
+            githubLink: loc.t(k.bugGithub),
+            stepsPlaceholder: loc.t(k.bugStepsPlaceholder),
+            sending: loc.t(k.bugSending),
+            successTitle: loc.t(k.bugSuccessTitle),
+            successBodyNew: loc.t(k.bugSuccessBodyNew, vars: ["number": "{{number}}"]),
+            successBodyDeduped: loc.t(k.bugSuccessBodyDeduped, vars: ["number": "{{number}}"]),
+            viewIssue: loc.t(k.bugViewIssue),
+            fallbackTitle: loc.t(k.bugFallbackTitle),
+            fallbackBody: loc.t(k.bugFallbackBody),
+            openGithub: loc.t(k.bugOpenGithub),
+            done: loc.t(k.bugDone),
+            screenshotsLabel: loc.t(k.bugScreenshotsLabel),
+            addScreenshots: loc.t(k.bugAddScreenshots),
+            screenshotsHint: loc.t(k.bugScreenshotsHint, vars: ["max": String(ScreenshotPrep.maxCount)]),
+            screenshotsPublic: loc.t(k.bugScreenshotsPublic),
+            removeScreenshot: loc.t(k.bugRemoveScreenshot, vars: ["index": "{{index}}"]),
+            screenshotsLimit: loc.t(k.bugScreenshotsLimit, vars: ["max": String(ScreenshotPrep.maxCount)]),
+            screenshotUnsupported: loc.t(k.bugScreenshotUnsupported),
+            screenshotsDropped: loc.t(k.bugScreenshotsDropped),
+            fallbackScreenshots: loc.t(k.bugFallbackScreenshots),
+            tryAgain: loc.t(k.commonTryAgain)
         )
     }
 

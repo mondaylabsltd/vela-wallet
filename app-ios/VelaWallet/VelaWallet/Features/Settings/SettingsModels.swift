@@ -381,10 +381,38 @@ struct FeedbackModel {
     let placeholder: String
     let addSteps: String
     let previewToggle: String
-    let previewLines: [String]
+    /// What is sent, line for line — the live builder replaces the drawing's.
+    var previewLines: [String]
     let consent: String
     let send: String
     let githubLink: String
+    var stepsPlaceholder = ""
+    var sending = ""
+    var successTitle = ""
+    /// "Logged as issue #{{number}}…" — `{{number}}` filled by the sheet.
+    var successBodyNew = ""
+    var successBodyDeduped = ""
+    var viewIssue = ""
+    var fallbackTitle = ""
+    var fallbackBody = ""
+    var openGithub = ""
+    var done = ""
+    var screenshotsLabel = ""
+    var addScreenshots = ""
+    /// "Optional · up to 5".
+    var screenshotsHint = ""
+    var screenshotsPublic = ""
+    /// "Remove screenshot {{index}}" — `{{index}}` (1-based) filled per tile.
+    var removeScreenshot = ""
+    var screenshotsLimit = ""
+    var screenshotUnsupported = ""
+    var screenshotsDropped = ""
+    var fallbackScreenshots = ""
+    /// The send button's word after a fallback: sending again is a retry.
+    var tryAgain = ""
+    /// Only a LIVE sheet sends: the gallery draws this sheet as a picture of
+    /// itself, and a picture must never file an issue.
+    var live = false
 }
 
 /// SR1: the amber "these networks are down" banner and its per-chain fixes.

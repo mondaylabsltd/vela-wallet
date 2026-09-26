@@ -42,16 +42,21 @@ struct SettingsRow: View {
                 // that row is for (2026-09-26).
                 TitleAndValue {
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                        // A title may wrap to a second line; it is never
+                        // cut to "…" (round 3, all shells). Nor is the line
+                        // under it.
                         Text(row.title)
                             .typeRole(Typography.fieldLabel)
                             .fontWeight(.semibold)
                             .foregroundStyle(tint)
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                         if let subtitle = row.subtitle {
                             Text(subtitle)
                                 .typeRole(Typography.flowCaption)
                                 .foregroundStyle(theme.fgSubtle)
-                                .lineLimit(1)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     if let value = row.value {

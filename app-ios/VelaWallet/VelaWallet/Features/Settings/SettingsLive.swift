@@ -1365,22 +1365,14 @@ enum SettingsLive {
         let unreachable = facts.unreachable.isEmpty
             ? loc.t(k.bugPreviewNone)
             : facts.unreachable.joined(separator: ", ")
-        live.feedback = FeedbackModel(
-            title: model.feedback.title,
-            subtitle: model.feedback.subtitle,
-            placeholder: model.feedback.placeholder,
-            addSteps: model.feedback.addSteps,
-            previewToggle: model.feedback.previewToggle,
-            previewLines: [
-                "\(loc.t(k.bugPreviewVersion)): v\(facts.version) (\(facts.commit))",
-                "\(loc.t(k.bugPreviewPlatform)): \(facts.platform)",
-                "\(loc.t(k.bugPreviewLanguage)): \(facts.language)",
-                "\(loc.t(k.bugPreviewRpc)): \(unreachable)",
-            ].map(redact),
-            consent: model.feedback.consent,
-            send: model.feedback.send,
-            githubLink: model.feedback.githubLink
-        )
+        live.feedback.previewLines = [
+            "\(loc.t(k.bugPreviewVersion)): v\(facts.version) (\(facts.commit))",
+            "\(loc.t(k.bugPreviewPlatform)): \(facts.platform)",
+            "\(loc.t(k.bugPreviewLanguage)): \(facts.language)",
+            "\(loc.t(k.bugPreviewRpc)): \(unreachable)",
+        ].map(redact)
+        // These lines ARE the report's `environment` — so this sheet may send.
+        live.feedback.live = true
         return live
     }
 

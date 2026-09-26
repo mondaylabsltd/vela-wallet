@@ -758,24 +758,32 @@ struct FeeRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-            HStack(spacing: Tokens.Space.s8) {
+            // ONE card (round 3): the figure and, inside it at the trailing
+            // edge, a fixed round refresh button — as the web and the desktop
+            // draw it. Round 2's full-height block beside the card grew into a
+            // slab at the largest text size.
+            HStack(alignment: .center, spacing: Tokens.Space.s8) {
                 Button(action: onOpen) {
-                    HStack(spacing: Tokens.Space.s8) {
+                    // Label and value side by side while both fit whole; the
+                    // label on its own line and the value under it otherwise.
+                    // It used to break the label inside a word
+                    // ("Netzwerkg / ebühr") and cut the value to "0.00421…".
+                    TitleAndValue {
                         Text(verbatim: fee.label)
                             .typeRole(Typography.body.scaled(textScale))
                             .foregroundStyle(theme.fgMuted)
-                        Spacer(minLength: Tokens.Space.s8)
-                        InlineTokenMark(mark: fee.mark)
-                        Text(verbatim: fee.value)
-                            .typeRole(Typography.body.scaled(textScale))
-                            .foregroundStyle(theme.fgBase)
-                            .lineLimit(1)
-                        LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
-                            .foregroundStyle(theme.fgMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(alignment: .center, spacing: Tokens.Space.s8) {
+                            InlineTokenMark(mark: fee.mark)
+                            Text(verbatim: fee.value)
+                                .typeRole(Typography.body.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                                .fixedSize(horizontal: false, vertical: true)
+                            LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
+                                .foregroundStyle(theme.fgMuted)
+                        }
                     }
-                    .padding(Tokens.Space.s12)
-                    .frame(maxHeight: .infinity)
-                    .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+                    .padding(.vertical, Tokens.Space.s12)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -786,13 +794,12 @@ struct FeeRowView: View {
                         // it — so a second tap is never ambiguous.
                         LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
                             .foregroundStyle(fee.refreshing ? theme.fgSubtle : theme.fgMuted)
-                            .padding(.horizontal, Tokens.Space.s12)
-                            // The card's own height, top and bottom edges
-                            // shared, at every text size (round 2): it used to
-                            // be its glyph's height and float mid-card once the
-                            // card wrapped to two lines.
-                            .frame(maxHeight: .infinity)
-                            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+                            .frame(width: WalletFlowGeometry.feeRefreshButton,
+                                   height: WalletFlowGeometry.feeRefreshButton)
+                            .background(Circle().fill(theme.bgSunken))
+                            // The target is a little larger than the circle.
+                            .frame(width: WalletFlowGeometry.feeRefreshTarget,
+                                   height: WalletFlowGeometry.feeRefreshTarget)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -800,8 +807,9 @@ struct FeeRowView: View {
                     .accessibilityLabel(refreshLabel)
                 }
             }
-            // One height for the pair: the card's, which is the taller.
-            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, Tokens.Space.s12)
+            .padding(.trailing, fee.refreshLabel == nil ? Tokens.Space.s12 : Tokens.Space.s4)
+            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
             if fee.refreshLabel != nil {
                 // Calm and muted: an old figure is not a fault. Always the
                 // line's full height, so nothing jumps when it appears.
@@ -833,18 +841,22 @@ struct FeeSpeedControlView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
             Button(action: onToggle) {
-                HStack(spacing: Tokens.Space.s8) {
+                // Side by side while both fit whole; stacked otherwise — the
+                // header read "Geschw…" at an accessibility size (round 3).
+                TitleAndValue {
                     Text(verbatim: speed.label)
                         .typeRole(Typography.body.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
-                    Spacer(minLength: Tokens.Space.s8)
-                    Text(verbatim: speed.value)
-                        .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
-                        .lineLimit(1)
-                    LucideIcon(.chevronDown, size: LucideIconSize.smallChevron)
-                        .foregroundStyle(theme.fgMuted)
-                        .rotationEffect(.degrees(speed.open ? 180 : 0))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: Tokens.Space.s8) {
+                        Text(verbatim: speed.value)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .fixedSize(horizontal: false, vertical: true)
+                        LucideIcon(.chevronDown, size: LucideIconSize.smallChevron)
+                            .foregroundStyle(theme.fgMuted)
+                            .rotationEffect(.degrees(speed.open ? 180 : 0))
+                    }
                 }
                 .padding(.horizontal, Tokens.Space.s12)
                 .padding(.vertical, Tokens.Space.s8)
@@ -874,6 +886,7 @@ struct FeeSpeedControlView: View {
         Text(verbatim: text)
             .typeRole(Typography.flowCaption.scaled(textScale))
             .foregroundStyle(theme.fgSubtle)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Tokens.Space.s12)
     }
 
@@ -890,15 +903,18 @@ struct FeeSpeedControlView: View {
         let name = (option.selected ? Typography.bodyStrong : Typography.body).scaled(textScale)
         return HStack(alignment: .top, spacing: Tokens.Space.s8) {
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                // The name and its fee side by side while both fit whole; the
+                // fee under the name otherwise — "Stand…" at an accessibility
+                // size said nothing (round 3).
+                TitleAndValue {
                     Text(verbatim: option.label)
                         .typeRole(name)
                         .foregroundStyle(theme.fgBase)
-                    Spacer(minLength: Tokens.Space.s8)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(verbatim: option.value)
                         .typeRole(Typography.body.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 // The reason wraps in its own column; the bid never gives way.
                 // Below six of the reason's own characters that column would

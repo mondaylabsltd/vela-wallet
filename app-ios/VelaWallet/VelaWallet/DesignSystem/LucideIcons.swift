@@ -38,6 +38,8 @@ enum LucideGlyph: String {
     case messageSquareText
     // Wallet-flow glyphs (spec 021 — lucide v1.11.0).
     case clock, userRound, chevronsUpDown, creditCard, fileText, image, zap, rotateCcw
+    // Feedback screenshots (2026-09-26 — lucide v1.11.0).
+    case imagePlus
     // Explore + signing glyphs (spec 022 — lucide v1.11.0, except `star`,
     // which is a computed five-point path: a mis-recalled star draws a shape
     // nobody can name). Spec 022's screens were written against these names
@@ -151,6 +153,8 @@ enum LucideGlyph: String {
             return ##"<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>"##
         case .rotateCcw:
             return ##"<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>"##
+        case .imagePlus:
+            return ##"<path d="M16 5h6"/><path d="M19 2v6"/><path d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/><circle cx="9" cy="9" r="2"/>"##
         case .eye:
             return ##"<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>"##
         case .arrowLeft:
