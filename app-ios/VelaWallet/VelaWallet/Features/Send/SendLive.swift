@@ -197,7 +197,9 @@ enum SendLive {
             ticker: token.symbol,
             chain: ChainCatalog.meta(token.chainId)?.displayName ?? token.network,
             badgeColor: chainColor(token.chainId),
-            balance: "\(trim(token.balance)) \(token.symbol)",
+            // The asset list's own formatter (`WalletLive.trimBalance`): the
+            // picker lists the same holdings, so it prints them the same way.
+            balance: "\(WalletLive.tokenAmountText(token.balance)) \(token.symbol)",
             // The picker's job is to choose an asset, so the row states the
             // holding. A priced row's fiat line is the home's business.
             fiat: token.priceUsd == nil ? .noPrice("") : .value(""),
@@ -244,7 +246,12 @@ enum SendLive {
                     tokenAddress: held.tokenAddress, color: chainColor(held.chainId)
                 ),
                 symbol: held.symbol,
-                detail: "\(chain) · \(trim(held.balance))",
+                // "Gnosis · Balance 0.53097" — labelled, as the other shells
+                // say it, and formatted by the very call the asset list's row
+                // makes for this balance (spec 078): the figure here and the
+                // figure on the home row are one number, digit for digit. The
+                // core's full precision used to go on this line unrounded.
+                detail: "\(chain) · " + loc.t("send.balanceLabel", vars: ["amount": WalletLive.tokenAmountText(held.balance)]),
                 max: model.token?.max
             )
         }
@@ -257,8 +264,11 @@ enum SendLive {
         live.amount = model.amount.map { drawn in
             AmountFieldModel(
                 value: view.amount.isEmpty ? "0" : view.amount,
+                // The token figure behind a typed currency amount reads like
+                // every other token figure — the core's exact `token_amount`
+                // runs to eighteen places, which is not something to glance at.
                 fiat: view.amountFiatCode != nil
-                    ? "\(trim(view.tokenAmount)) \(symbol)"
+                    ? "≈ \(WalletLive.tokenAmountText(view.tokenAmount.isEmpty ? "0" : view.tokenAmount)) \(symbol)"
                     : fiatLine(view, token: token, display: display),
                 // What the figure is typed IN: its own code, or the token's
                 // symbol — never the display currency, which is not the unit
@@ -317,12 +327,12 @@ enum SendLive {
                         tokenAddress: token.tokenAddress, color: chainColor(token.chainId)
                     ),
                     symbol: token.symbol,
-                    balanceLabel: "\(trim(token.balance)) \(token.symbol)",
+                    balanceLabel: "\(WalletLive.tokenAmountText(token.balance)) \(token.symbol)",
                     // **No spec, no figure.** Falling back to the balance would
                     // print a number the operation does not carry — the whole
                     // reason these rows read `multi_specs` at all. An empty
                     // amount is "not worked out yet", which is true.
-                    amount: spec.map { "\(trim($0.amount)) \(token.symbol)" } ?? "",
+                    amount: spec.map { "\(WalletLive.tokenAmountText($0.amount)) \(token.symbol)" } ?? "",
                     // No Max on a sweep row: the sweep already moves the
                     // maximum of each one, and the only event behind that chip
                     // is `tap_max`, which acts on the SINGLE selected token —
@@ -714,15 +724,22 @@ enum SendLive {
     static func formWarning(_ view: SendViewWire, loc: Loc) -> String? {
         if let issue = view.sameAssetFeeIssue {
             let decimals = view.selectedToken?.decimals ?? 18
+            // The asset list's figures (spec 078), not 18-digit remainders:
+            // "you have" is the balance on the token card above, digit for
+            // digit. The most that can be sent is rounded DOWN — typed back,
+            // it has to fit (the web's `sameFeeWords`).
+            let human = { (base: String, rounding: WalletLive.TokenRounding) in
+                WalletLive.tokenAmountText(fromBase(base, decimals: decimals), rounding: rounding)
+            }
             let body = loc.t("send.sameFeeTokenBody", vars: [
-                "amount": fromBase(issue.transferAmount, decimals: decimals),
-                "fee": fromBase(issue.feeAmount, decimals: decimals),
-                "total": fromBase(issue.total, decimals: decimals),
+                "amount": human(issue.transferAmount, .halfUp),
+                "fee": human(issue.feeAmount, .halfUp),
+                "total": human(issue.total, .halfUp),
                 "symbol": issue.symbol,
-                "balance": fromBase(issue.balance, decimals: decimals),
+                "balance": human(issue.balance, .halfUp),
             ])
             let most = loc.t("send.sameFeeTokenMax", vars: [
-                "amount": fromBase(issue.maxTransferAmount, decimals: decimals),
+                "amount": human(issue.maxTransferAmount, .down),
                 "symbol": issue.symbol,
             ])
             return "\(body) \(most)"
@@ -810,7 +827,13 @@ enum SendLive {
         // drawn SD3b/SD3c carry "Alice 50 USDT" and a three-coin sweep, and a
         // confirm page is the one screen that must not show a payee nobody
         // typed: it is what the person reads before they sign.
-        var amount = "\(trim(view.confirmAmount)) \(symbol)"
+        // A single send's figure through the asset list's formatter: a Max
+        // is exact to the wei (`0.043790209243313861`), and the page someone
+        // reads before signing must not be where that runs off the screen. A
+        // split's total stays exact — it is the sum of the rows beneath it.
+        var amount = view.splitMode
+            ? "\(trim(view.confirmAmount)) \(symbol)"
+            : "\(WalletLive.tokenAmountText(view.confirmAmount)) \(symbol)"
         var subline = view.confirmAmountIssue.map { issue in
             loc.t("send.warnCannotConvert", vars: ["code": issue.code, "symbol": issue.symbol])
         } ?? fiatLine(view, token: token, display: display)
@@ -923,7 +946,7 @@ enum SendLive {
             }?.amount ?? token.balance
             let usd = token.priceUsd.flatMap { price in Double(amount).map { $0 * price } }
             if let usd { total += usd }
-            let value = "\(trim(amount)) \(token.symbol)"
+            let value = "\(WalletLive.tokenAmountText(amount)) \(token.symbol)"
             return BreakdownRowModel(
                 lead: TokenMarkModel.of(
                     chainId: token.chainId, symbol: token.symbol,
@@ -1070,8 +1093,11 @@ enum SendLive {
                 }
             }
         case .confirmed:
+            let sent = view.receipt?.amount ?? view.confirmAmount
             title = loc.t("send.txConfirmedTitle", vars: [
-                "amount": trim(view.receipt?.amount ?? view.confirmAmount),
+                // As on the confirm page: the asset list's formatter for one
+                // send, the exact sum for a split.
+                "amount": view.splitMode ? trim(sent) : WalletLive.tokenAmountText(sent),
                 "symbol": symbol,
             ])
             // A split names its count here and its people below; "To " with

@@ -423,6 +423,12 @@ struct RootView: View {
             fees: feeStore, identity: identity, metadata: metadata, accountStore: store,
             balances: { [weak wallet] in wallet?.balance },
             networks: { [weak settingsStore] in settingsStore?.networkAdmin },
+            // The asset list's own rounds (spec 078): a flow opened before the
+            // dashboard settled for this account waits for its first round —
+            // booting it if nothing has — instead of answering "could not load";
+            // a round that reached nothing is read once more first.
+            holdingsRound: { [weak wallet] address in wallet?.settledRound(for: address) },
+            openHoldings: { [weak wallet] address in wallet?.open(address: address) },
             ports: SendExecutor.Ports(
                 // A send the relay accepted is the tracker's from that moment.
                 // The permission is asked HERE — at the first submit, never at
@@ -1021,13 +1027,14 @@ struct RootView: View {
                     else { return }
                     fees.requote()
                 }
-                // The picker is a READ of what the balance machine had at the
-                // instant the flow opened — and on a cold start that instant
-                // is before the chains have answered. Without this the list is
-                // empty forever, which is what the device showed: not the
-                // fixture's tokens, not the wallet's, nothing at all.
-                .onChange(of: wallet.balance?.tokens.count) { _, _ in
-                    if sendStates.contains(state) { send.refreshTokens() }
+                // Send shows the asset list's holdings, and follows them: every
+                // round the dashboard settles while a journey is open is handed
+                // over (`holdings_updated`, spec 078) — a pull, a poll, a send
+                // confirming. The first round of a cold start is waited for by
+                // `fetch_tokens` itself. The store ignores another account's
+                // round and a closed journey.
+                .onChange(of: wallet.round) { _, round in
+                    if let balance = wallet.balance { send.holdingsUpdated(balance, round: round) }
                 }
                 .task(id: state) {
                     // The activity LIST polls at its own faster cadence while

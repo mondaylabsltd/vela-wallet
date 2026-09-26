@@ -22,7 +22,7 @@ final class SendExecutor {
     /// Every operation this executor is required to handle.
     static let operations = [
         "fetch_tokens", "clear_token_cache", "resolve_token_metadata", "add_network",
-        "estimate_fee", "probe_treasury", "load_account_credential", "submit_user_op",
+        "estimate_fee", "probe_treasury", "prewarm_fees", "load_account_credential", "submit_user_op",
         "cancel_passkey_sign", "persist_tx_records", "track_submitted", "resolve_identity",
         "resolve_risk", "simulate_calls", "start_timer", "haptic", "show_alert", "close",
     ]
@@ -43,7 +43,16 @@ final class SendExecutor {
         /// hears a cancelled ceremony — back to confirm, nothing sent — and
         /// the screen says which of the Trusted Signer's sentences applies.
         var trustedSignerEnded: (TrustedSignerNotice) -> Void = { _ in }
+        /// What the asset list has so far, while `fetch_tokens` waits for its
+        /// first round — `tokens_partial`, display-only (the store installs it).
+        var tokensPartial: ([[String: Any]]) -> Void = { _ in }
     }
+
+    /// How long `fetch_tokens` waits for the asset list's first round before
+    /// it answers with what has arrived. The dashboard's own pull gives up at
+    /// 20 s; a cold twelve-chain sweep is allowed a little longer here, since
+    /// the alternative is "could not load" over money that is on its way.
+    static let firstRoundWaitMs: Double = 30_000
 
     private let store: VelaStore
     private let relay: RelayClient
@@ -58,6 +67,13 @@ final class SendExecutor {
     /// The holdings the balance machine already read, and the person's chains.
     private let balances: () -> BalanceViewWire?
     private let networks: () -> NetViewWire?
+    /// The round the balance machine last settled for this address in this
+    /// run (`nil` = none yet) — the moment its tokens ARE the asset list, not
+    /// a stream, and how "the next full load" is told from the last one.
+    private let holdingsRound: (String) -> Int?
+    /// Point the balance machine at this address (booting it if nothing has
+    /// yet), so a round is on its way. Idempotent.
+    private let openHoldings: (String) -> Void
     /// `var` because two of these close over the STORE, which is built after
     /// this executor — the store installs them once it exists.
     var ports: Ports
@@ -77,6 +93,8 @@ final class SendExecutor {
         accountStore: AccountStore,
         balances: @escaping () -> BalanceViewWire?,
         networks: @escaping () -> NetViewWire?,
+        holdingsRound: @escaping (String) -> Int? = { _ in 0 },
+        openHoldings: @escaping (String) -> Void = { _ in },
         ports: Ports
     ) {
         self.store = store
@@ -90,6 +108,8 @@ final class SendExecutor {
         self.accountStore = accountStore
         self.balances = balances
         self.networks = networks
+        self.holdingsRound = holdingsRound
+        self.openHoldings = openHoldings
         self.ports = ports
     }
 
@@ -97,11 +117,21 @@ final class SendExecutor {
         switch operation["type"] as? String ?? "" {
 
         case "fetch_tokens":
-            return fetchTokens()
+            return await fetchTokens(address: operation["address"] as? String ?? "")
 
+        // The asset list re-reads; its new round reaches this screen as
+        // `holdings_updated` (the store), like every other round does.
         case "clear_token_cache":
             ports.refreshBalances()
             return CoreJSON.string(["type": "token_cache_cleared"])
+
+        // Answered at once; the reads run on without the core.
+        case "prewarm_fees":
+            prewarmFees(
+                account: operation["account"] as? String ?? "",
+                chainIds: (operation["chain_ids"] as? [NSNumber] ?? []).map(\.intValue)
+            )
+            return CoreJSON.string(["type": "fees_prewarmed"])
 
         case "resolve_token_metadata":
             let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
@@ -210,8 +240,72 @@ final class SendExecutor {
     ///
     /// Reading the chains again here would be a second opinion about what
     /// somebody owns, arriving a moment later than the one on the home screen.
-    private func fetchTokens() -> String {
-        guard let balance = balances() else {
+    ///
+    /// **Never `null` for money that is merely on its way** (spec 078). The
+    /// flow can open before the asset list has settled a round for this
+    /// account — a cold start, a dashboard nobody booted — and answering
+    /// `null` then raised "could not load" over a wallet that had simply not
+    /// been read yet. So it waits for the first round, handing the picker what
+    /// has arrived meanwhile (`tokens_partial`, as the home streams it).
+    ///
+    /// **And a round that reached nothing is read once more** (the desktop's
+    /// rule, all four shells): one source has one failure mode — a round in
+    /// which no chain answered, a proxy blip at launch — and it used to become
+    /// "could not load tokens" at once, the picker empty until the next poll.
+    /// So the dashboard is asked for ONE forced re-read (the home recovers with
+    /// it) and the NEXT full load answers, whatever it holds; only a second
+    /// load that reached nothing is the refusal.
+    private func fetchTokens(address: String) async -> String {
+        guard !address.isEmpty else { return tokensAnswer(balances(), address: address) }
+        if holdingsRound(address) == nil { openHoldings(address) }
+        var started = Date()
+        var streamed: [BalanceTokenWire] = []
+        /// `.some(round met)` once the one re-read is out (`nil` inside: it
+        /// met no settled round, only an unreachable dashboard).
+        var retriedFrom: Int?? = nil
+        while Date().timeIntervalSince(started) * 1000 < Self.firstRoundWaitMs, !Task.isCancelled {
+            let view = balances().flatMap { Self.sameAccount($0, address) ? $0 : nil }
+            let round = holdingsRound(address)
+            let unreachable = view?.unreachable == true
+            if let view, round != nil || unreachable {
+                let met: Int?? = .some(round)
+                if !Self.reachedNothing(view) {
+                    return tokensAnswer(view, address: address)
+                }
+                switch retriedFrom {
+                case .none:
+                    // The one re-read, and a fresh budget for it.
+                    retriedFrom = met
+                    started = Date()
+                    ports.refreshBalances()
+                case .some(let asked) where asked == round:
+                    break // still the load that reached nothing: the re-read is out
+                case .some:
+                    return tokensAnswer(view, address: address) // the second empty load
+                }
+            }
+            if let view, !view.tokens.isEmpty, view.tokens != streamed {
+                streamed = view.tokens
+                ports.tokensPartial(Self.sendTokens(view))
+            }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        return tokensAnswer(balances(), address: address)
+    }
+
+    /// A load that reached nothing: no holdings, and chains that did not
+    /// answer (or nothing could be read at all). An account that holds
+    /// nothing is an EMPTY list, which is an answer — not this.
+    static func reachedNothing(_ balance: BalanceViewWire) -> Bool {
+        balance.tokens.isEmpty && (!balance.failedChainIds.isEmpty || balance.unreachable == true)
+    }
+
+    /// `tokens_loaded` from the dashboard as it stands: `null` only for a load
+    /// that reached nothing (or another account's), the holdings otherwise.
+    private func tokensAnswer(_ balance: BalanceViewWire?, address: String) -> String {
+        guard let balance, address.isEmpty || Self.sameAccount(balance, address),
+              !Self.reachedNothing(balance)
+        else {
             return CoreJSON.string(["type": "tokens_loaded", "tokens": NSNull(), "chains": []])
         }
         let rows = networks()?.networks ?? []
@@ -222,7 +316,22 @@ final class SendExecutor {
                 "native_symbol": row.nativeSymbol,
             ] as [String: Any]
         }
-        let tokens = (balance.tokens + balance.unpricedTokens).map { token in
+        return CoreJSON.string([
+            "type": "tokens_loaded", "tokens": Self.sendTokens(balance), "chains": chains,
+        ])
+    }
+
+    /// The asset list's holdings in the send machine's vocabulary — ONE
+    /// mapping, for the `fetch_tokens` answer, `tokens_partial` and
+    /// `holdings_updated` alike, so the three can never describe the same
+    /// holding two ways.
+    ///
+    /// **`tokens` only.** `unpriced_tokens` is a SUBSET of `tokens` (the
+    /// detail sheet's "couldn't be priced" list), not its complement: adding
+    /// the two listed every unpriceable holding twice in the picker — the
+    /// same mistake `WalletLive.assetRows` documents for the home.
+    static func sendTokens(_ balance: BalanceViewWire) -> [[String: Any]] {
+        balance.tokens.map { token in
             [
                 "network": "chain-\(token.chainId)",
                 "chain_id": token.chainId,
@@ -235,7 +344,46 @@ final class SendExecutor {
                 "spam": token.spam,
             ] as [String: Any]
         }
-        return CoreJSON.string(["type": "tokens_loaded", "tokens": tokens, "chains": chains])
+    }
+
+    /// The dashboard is reading THIS account (addresses compare lower-cased).
+    static func sameAccount(_ balance: BalanceViewWire, _ address: String) -> Bool {
+        balance.address?.lowercased() == address.lowercased()
+    }
+
+    // MARK: - Fees, read ahead
+
+    /// Warm the caches the fee executor reads, for each chain the person
+    /// holds value on, while they are still choosing a token (spec 078).
+    ///
+    /// The SAME reads a quote makes, through the same `RelayClient` calls, so
+    /// they land in the same caches — nothing is priced here and nothing comes
+    /// back: the deployment read, the gas signals (no tip on Tempo, the core's
+    /// `want_tip`), the relay's gas price for the tier in force (one response
+    /// carries every tier), the in-band rows — and on Tempo the fee recipient
+    /// instead of the gas price. Measured on the live relay those are 3–5 s of
+    /// a 4.5–6 s first quote; read here, the quote a pick starts is left with
+    /// its simulation. Every failure is swallowed: a read that did not warm is
+    /// simply made again by the quote.
+    private func prewarmFees(account: String, chainIds: [Int]) {
+        guard !account.isEmpty, !chainIds.isEmpty else { return }
+        let tier = fees.speed?.tier ?? "fast"
+        let relay = self.relay
+        Task {
+            await withTaskGroup(of: Void.self) { group in
+                for chainId in chainIds {
+                    let tempo = isChainWithoutNativeCoin(chainId: UInt32(chainId))
+                    group.addTask { _ = await relay.isDeployed(chainId: chainId, address: account) }
+                    group.addTask { _ = await relay.gasSignals(chainId: chainId, wantTip: !tempo) }
+                    group.addTask { _ = await relay.inBandQuotes(chainId: chainId, safe: account) }
+                    if tempo {
+                        group.addTask { _ = await relay.accountInfo(chainId: chainId, safe: account) }
+                    } else {
+                        group.addTask { _ = await relay.bundlerQuote(chainId: chainId, tier: tier) }
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - The fee, through the live session
@@ -261,7 +409,11 @@ final class SendExecutor {
             deployed: deployed,
             publicKeyAvailable: publicKey != nil,
             calls: calls,
-            feeToken: operation["gas_fee_token"] as? String
+            feeToken: operation["gas_fee_token"] as? String,
+            // Nobody chose the coin on this form: the fee machine picks one
+            // that can pay, and the estimate's `fee_asset` says which. A chip
+            // tap makes the core send `false` from then on.
+            autoFeeToken: operation["auto_fee_token"] as? Bool ?? false
         )
         guard let settled else {
             // Superseded by a newer request. The core still needs an answer for
@@ -452,6 +604,8 @@ final class SendExecutor {
             ])
         case "probe_treasury":
             return CoreJSON.string(["type": "treasury_probed", "probe": ["type": "unknown"]])
+        case "prewarm_fees":
+            return CoreJSON.string(["type": "fees_prewarmed"])
         case "load_account_credential":
             return CoreJSON.string(["type": "account_credential", "public_key_hex": NSNull()])
         case "submit_user_op":
