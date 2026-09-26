@@ -388,7 +388,7 @@ pub const CONTACTS_RAIL_ROW_H: f32 = 36.;
 /// The `分组` caption block between the 全部联系人 row and the group rows.
 pub const CONTACTS_RAIL_LABEL_H: f32 = 32.;
 /// Inset from the header hairline down to the first rail row / list section.
-pub const CONTACTS_BODY_PAD_TOP: f32 = 16.;
+pub const CONTACTS_BODY_PAD_TOP: f32 = 24.;
 /// Header/CTA control height shared by 添加联系人, 群发转账 and the ⋯ buttons.
 pub const CONTACTS_BUTTON_H: f32 = 40.;
 /// Page-local search field in the contacts header (DC1: 780 → 1060).
@@ -410,7 +410,7 @@ pub const GALLERY_BAR_H: f32 = 45.;
 /// Contact detail hero avatar (desktop third-column size — measured 48 in DC2).
 pub const CONTACTS_HERO_AVATAR: f32 = 48.;
 /// Contact row leading avatar (row size, same as the wallet rows).
-pub const CONTACTS_ROW_AVATAR: f32 = 40.;
+pub const CONTACTS_ROW_AVATAR: f32 = 30.;
 
 /// Contacts motion contract (spec 018 FR-011): named here so all four
 /// platforms share one set of values. The gpui build renders fixture states

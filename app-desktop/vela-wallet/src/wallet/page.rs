@@ -3754,7 +3754,8 @@ impl WalletPage {
             px(self.contacts_top(window)
                 + CONTACTS_HEADER_H
                 + CONTACTS_BODY_PAD_TOP
-                + CONTACTS_BUTTON_H),
+                // The round ⋯ is 36 (078 C-09).
+                + 36.),
         )
     }
 
@@ -3768,6 +3769,8 @@ impl WalletPage {
                 + CONTACTS_HEADER_H
                 + CONTACTS_BODY_PAD_TOP
                 + CONTACTS_RAIL_ROW_H
+                // The title's 8 above and its 1 rule (078 C-09).
+                + 9.
                 + CONTACTS_RAIL_LABEL_H
                 + CONTACTS_RAIL_ROW_H),
         )
@@ -3796,7 +3799,7 @@ impl WalletPage {
             .flex_1()
             .flex()
             .items_center()
-            .gap(px(16.))
+            .gap(px(8.))
             .px(px(WALLET_PAD_X))
             .when(caption, |el| el.pt(px(CONTACTS_HEADER_CAPTION_PAD)))
             .child(
@@ -3812,11 +3815,11 @@ impl WalletPage {
                 search_field(theme, &mut self.icons, placeholder, Some(live))
             })
             .child(
-                outline_button(
+                crate::contacts::components::header_pill(
                     "contacts-add",
                     theme,
                     &mut self.icons,
-                    Some(Icon::UserRoundPlus),
+                    Icon::UserRoundPlus,
                     add,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
@@ -3824,16 +3827,20 @@ impl WalletPage {
                 })),
             )
             .child(
-                icon_button("contacts-more", theme, &mut self.icons, Icon::Ellipsis).on_click(
-                    cx.listener(|this, _, window, cx| {
-                        this.menu = Some((
-                            ContactsMenu::Header,
-                            this.header_menu_anchor(window),
-                            Anchor::TopRight,
-                        ));
-                        cx.notify();
-                    }),
-                ),
+                crate::contacts::components::round_icon_button(
+                    "contacts-more",
+                    theme,
+                    &mut self.icons,
+                    Icon::Ellipsis,
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.menu = Some((
+                        ContactsMenu::Header,
+                        this.header_menu_anchor(window),
+                        Anchor::TopRight,
+                    ));
+                    cx.notify();
+                })),
             );
 
         div()
@@ -3842,13 +3849,8 @@ impl WalletPage {
             .flex()
             .flex_col()
             .child(row)
-            .child(
-                div()
-                    .mx(px(WALLET_PAD_X))
-                    .h(px(1.))
-                    .flex_none()
-                    .bg(theme.divider),
-            )
+            // Edge to edge, as the web's `.head-rule` (078 C-09).
+            .child(div().h(px(1.)).flex_none().bg(theme.divider))
     }
 
     /// Nobody in the book (078 C-03): the core's loaded, empty roster — or
@@ -4607,11 +4609,13 @@ impl WalletPage {
         let batch_send = self.contacts.batch_send.clone();
         let add_member = self.contacts.add_member.clone();
 
+        // The web's `.group-head` (078 C-09): gap 8, 20 below; the count in
+        // the subtle colour; a 36 accent pill and the round ⋯.
         let header = div()
             .flex()
             .items_center()
-            .gap(px(12.))
-            .pb(px(12.))
+            .gap(px(8.))
+            .pb(px(20.))
             .child(
                 div()
                     .text_size(theme::text_section())
@@ -4622,27 +4626,31 @@ impl WalletPage {
             .child(
                 div()
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_muted)
+                    .text_color(theme.fg_subtle)
                     .child(members_label),
             )
             .child(div().flex_1().min_w(px(0.)))
             .child(
-                accent_button("group-batch-send", theme, &mut self.icons, None, batch_send)
+                crate::contacts::components::header_cta("group-batch-send", theme, batch_send)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.batch_send_to_group(&batch_targets, cx);
                     })),
             )
             .child(
-                icon_button("group-more", theme, &mut self.icons, Icon::Ellipsis).on_click(
-                    cx.listener(|this, _, window, cx| {
-                        this.menu = Some((
-                            ContactsMenu::Group,
-                            this.group_header_menu_anchor(window),
-                            Anchor::TopRight,
-                        ));
-                        cx.notify();
-                    }),
-                ),
+                crate::contacts::components::round_icon_button(
+                    "group-more",
+                    theme,
+                    &mut self.icons,
+                    Icon::Ellipsis,
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.menu = Some((
+                        ContactsMenu::Group,
+                        this.group_header_menu_anchor(window),
+                        Anchor::TopRight,
+                    ));
+                    cx.notify();
+                })),
             );
 
         let mut column = div().flex_1().min_w(px(0.)).flex().flex_col().child(header);
@@ -5006,9 +5014,9 @@ impl WalletPage {
             // right edge of the window. The chips above wrap for the same
             // reason.
             .flex_wrap()
-            .gap(px(10.))
+            .gap(px(8.))
             .child(
-                action_pill(
+                contacts_components::detail_action(
                     "contact-send",
                     theme,
                     &mut self.icons,
@@ -5034,7 +5042,7 @@ impl WalletPage {
                 })),
             )
             .child(
-                action_pill(
+                contacts_components::detail_action(
                     "contact-receive",
                     theme,
                     &mut self.icons,
@@ -5050,12 +5058,17 @@ impl WalletPage {
                 })),
             )
             .child(
-                action_pill("contact-qr", theme, &mut self.icons, Icon::QrCode, qr).on_click(
-                    cx.listener(move |this, _, _, cx| {
-                        this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
-                        cx.notify();
-                    }),
-                ),
+                contacts_components::detail_action(
+                    "contact-qr",
+                    theme,
+                    &mut self.icons,
+                    Icon::QrCode,
+                    qr,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
+                    cx.notify();
+                })),
             );
 
         let mut activity = div().flex().flex_col().child(

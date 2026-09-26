@@ -185,6 +185,15 @@ different).
 - **C-09 P2 · Chrome**: header 16/24 gap 8; Add 36 pill 13 semibold hairline;
   ⋯ 36 round; body padding 24; rail "Groups" hairline 16/12/4; detail
   actions 44/13.
+  *Fixed (T052):* DC1–DC6 captured beside the web's gallery before and
+  after. Rows 66 → 52 tall (30 identicon, padded 8/12 on a button's line,
+  radius 12; the web's 53); letters 8/12/4 11 medium; header gap 8 with a
+  36 Add pill (13 semibold, hairline, raised) and a round 36 ⋯; the head
+  rule edge to edge; body padded 24; rail title under a hairline 8 below
+  "All contacts"; the group heading's 36 accent pill and round ⋯; detail
+  actions 44/13 (the wallet's 52 pill had stood in) and the address copy a
+  plain 36 button. Menu anchors moved with them. The web gallery's "+ Groups"
+  chip is live-only on the desktop.
 
 ## Settings (S)
 
