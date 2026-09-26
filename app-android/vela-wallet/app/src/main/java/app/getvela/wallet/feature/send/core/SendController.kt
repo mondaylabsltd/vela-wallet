@@ -556,9 +556,13 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
     override suspend fun routingOf(address: String): Pair<String, KeyMethod> {
         val record = record { it.optString("address").equals(address, ignoreCase = true) }
         val transports = record?.optJSONArray("keys")?.optJSONObject(0)?.optString("transports").orEmpty()
+        // `ble` with `usb` and `nfc` (as tokens: the retired `cable` is not one):
+        // whatever reports one is a key to present, and the method is what
+        // sends a ceremony down the security-key path.
+        val hints = transports.split(',').map { it.trim() }
         val method = when {
             transports.contains("hybrid") && !transports.contains("internal") -> KeyMethod.Hybrid
-            transports.contains("usb") || transports.contains("nfc") -> KeyMethod.SecurityKey
+            transports.contains("usb") || transports.contains("nfc") || "ble" in hints -> KeyMethod.SecurityKey
             else -> KeyMethod.Platform
         }
         return transports to method

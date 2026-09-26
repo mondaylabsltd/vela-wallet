@@ -5,6 +5,8 @@ import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.onboarding.core.SessionExecutor
+import app.getvela.wallet.feature.onboarding.core.assertionRequest
+import app.getvela.wallet.feature.onboarding.core.presentedKeyPath
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.StoreAccountPort
 import app.getvela.wallet.feature.send.core.TrustedSigner
@@ -23,6 +25,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.vela_core_uniffi.WalletKeyRecord
@@ -96,6 +99,47 @@ class SignInKeySigningTest {
         val second = keyset[1].credentialIdHex
         assertEquals(listOf(Ceremony(second, "usb,nfc,ble", KeyMethod.SecurityKey, second)), ceremonies)
         assertTrue("an EIP-1271 envelope: $signature", signature.startsWith("0x") && signature.length > 66)
+    }
+
+    /**
+     * "This device" was chosen at sign-in and a phone answered (a cross-platform
+     * attachment). The route names both, the ceremony carries that list as it
+     * is, and it goes to Credential Manager with every hint — not to the
+     * app-owned USB path, which would ask a phone passkey to be plugged in.
+     */
+    @Test
+    fun `a platform sign-in answered from elsewhere reaches the key wherever the sign-in found it`() = runBlocking<Unit> {
+        val first = keyset[0].credentialIdHex
+        val store = storeWith(record(signedIn(0, "platform").put("transports", "usb,nfc,ble,hybrid")))
+        spine(store).signMessage(100, safe, digest)
+        val ceremony = ceremonies.single()
+        assertEquals(Ceremony(first, "internal,usb,nfc,ble,hybrid", KeyMethod.Platform, first), ceremony)
+
+        assertFalse("Credential Manager, not the app-owned USB path", presentedKeyPath(ceremony.transports, ceremony.method))
+        val allow = assertionRequest(digest, "getvela.app", ceremony.credentialId, ceremony.transports)
+            .getJSONArray("allowCredentials").getJSONObject(0)
+        val hints = allow.getJSONArray("transports").let { list -> (0 until list.length()).map(list::getString) }
+        assertEquals(listOf("internal", "usb", "nfc", "ble", "hybrid"), hints)
+    }
+
+    /**
+     * A record from before the sign-in key goes down the path it always did,
+     * whatever its first key reported: the old rule is written out here as
+     * the reference (any `usb`/`nfc`/`ble` token, or a `usb`/`nfc` method).
+     */
+    @Test
+    fun `a record from before the sign-in key takes the path it always took`() = runBlocking<Unit> {
+        fun oldPath(transports: String): Boolean {
+            val tokens = transports.split(',').map { it.trim() }
+            val removable = tokens.any { it == "usb" || it == "nfc" || it == "ble" }
+            return removable || transports.contains("usb") || transports.contains("nfc")
+        }
+        listOf("", "internal", "hybrid,internal", "usb,nfc", "ble,nfc,usb", "ble", "internal,ble", "hybrid,internal,ble", "cable,internal", "internal,usb").forEach { transports ->
+            val port = StoreAccountPort(AccountStore(storeWith(record(null, firstTransports = transports))))
+            val (routed, method) = port.routingOf(safe)
+            assertEquals(transports, routed)
+            assertEquals("path for \"$transports\"", oldPath(transports), presentedKeyPath(routed, method))
+        }
     }
 
     /** Records written before 2026-09-26 sign exactly as they always did: the first key over its stored route. */
