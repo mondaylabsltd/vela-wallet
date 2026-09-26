@@ -100,6 +100,57 @@
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
+		<!-- The in-app report (Settings → Send feedback), 2026-09-27. When the
+		     person taps Send, Core/BugReport.swift POSTs to
+		     getvela.app/api/bug-report, which files a PUBLIC GitHub issue and
+		     keeps any screenshots in Cloudflare R2 until deleted — so all three
+		     below are collected. None is linked: the report carries no address,
+		     key or account id (addresses and URLs are scrubbed on the device and
+		     again on the server), and nothing ties a report to a wallet. Optional
+		     and user-initiated every time; the sheet shows what will be sent and
+		     says screenshots are public. Evidence: privacy-evidence.md §3a. -->
+		<dict>
+			<!-- The preview lines: app version, platform, language, names of
+			     unreachable networks. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherDiagnosticData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- What the person types: what happened, steps to reproduce. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCustomerSupport</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- Up to five screenshots the person picks (PhotosPicker, out of
+			     process — no photo-library permission), re-encoded on device so
+			     no EXIF or location leaves it. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePhotosorVideos</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
 	</array>
 
 	<!-- Required-reason APIs the BINARY imports. Measured, then declared. -->
