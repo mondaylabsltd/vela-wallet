@@ -1,7 +1,7 @@
 ---
 title: Audit e problemi noti
 description: "Ogni contratto da cui Vela dipende, chi ha sottoposto ad audit quale versione, se la versione controllata è quella deployata, i rilievi aperti che teniamo d'occhio e ciò che non ha avuto alcun audit."
-source: a9c5e58e7ed3
+source: 377855411c74
 ---
 
 «Ha avuto un audit» è un'affermazione su un codice specifico in una versione
@@ -161,8 +161,7 @@ indicato che si tratta di un compromesso voluto:
 - **Un'approvazione illimitata parte se la mantieni** — un compromesso voluto,
   perché un'approvazione limitata rompe Permit2 e gli swap in batch.
   Un'approvazione «illimitata» (2^200 o più; 2^152 per Permit2) viene mostrata in
-  rosso e inviata come l'ha chiesta la dApp, a meno che tu non la limiti. Sul web e
-  su desktop un'approvazione dentro un batch non si può ancora limitare, e i permit
+  rosso e inviata come l'ha chiesta la dApp, a meno che tu non la limiti. I permit
   firmati non si possono limitare da nessuna parte.
 - **La pagina di firma indipendente non è collegata** ancora a nessuna app.
 - **Il sito web carica uno script di analytics di terze parti** sullo stesso

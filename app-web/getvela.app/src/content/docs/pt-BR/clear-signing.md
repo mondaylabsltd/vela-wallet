@@ -1,7 +1,7 @@
 ---
 title: Assinatura legível
 description: "A Vela decodifica as transações em linguagem clara antes de você aprovar — intenção, valores, endereços e risco — em vez de um hexadecimal opaco. Quando não consegue decodificar uma chamada, ela avisa em vez de fingir que entendeu."
-source: 7c184bfe125c
+source: 29a66a1584f1
 ---
 
 <script>
@@ -80,9 +80,10 @@ o seu saldo (quando dá para lê-lo) ou — exceto no <code>increaseAllowance</c
 uma revogação. A menos que você escolha um deles, ela é enviada exatamente como o
 dApp a montou: o Permit2 foi projetado em torno de uma aprovação permanente, e o lote
 de uma conta inteligente gasta essa permissão na mesma transação, então um limite
-abaixo desse gasto faz o lote inteiro falhar. Dentro de um lote, cada aprovação pode
-ser limitada nos apps de iOS e Android; na web e no desktop, o lote é sinalizado em
-vermelho, mas ainda não pode ser editado. Uma última verificação antes do envio lê a
+abaixo desse gasto faz o lote inteiro falhar. Dentro de um lote, cada aprovação
+ilimitada pode receber o seu próprio limite do mesmo jeito (um valor ou uma
+revogação).
+Uma última verificação antes do envio lê a
 calldata crua, então uma aprovação ilimitada que a tela de aprovação nunca mostrou
 não tem como sair. Uma <strong>aprovação finita alta</strong> (mesmo muito acima do
 seu saldo) aparece com um alerta. <strong>Permits assinados</strong> (assinaturas

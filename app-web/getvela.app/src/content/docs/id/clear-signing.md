@@ -1,7 +1,7 @@
 ---
 title: Clear signing
 description: "Vela mendekode transaksi menjadi bahasa yang mudah dipahami sebelum Anda menyetujuinya — maksud, jumlah, alamat, dan risiko — alih-alih hex yang tak terbaca. Kalau tidak bisa mendekode sebuah panggilan, Vela memperingatkan Anda, bukan berpura-pura paham."
-source: 7c184bfe125c
+source: 29a66a1584f1
 ---
 
 <script>
@@ -79,8 +79,8 @@ tertentu, sebesar saldo Anda (kalau saldonya bisa dibaca), atau — kecuali pada
 persetujuan itu dikirim persis seperti yang dibuat dApp: Permit2 dirancang dengan
 mengandalkan persetujuan yang tetap berlaku, dan batch akun pintar membelanjakan allowance
 itu dalam transaksi yang sama, jadi batas yang lebih rendah dari pembelanjaan itu membuat
-seluruh batch gagal. Di dalam batch, setiap persetujuan bisa dibatasi di aplikasi iOS dan
-Android; di web dan desktop, batch-nya ditandai merah tetapi belum bisa diubah.
+seluruh batch gagal. Di dalam batch, setiap persetujuan tanpa batas bisa diberi batasnya
+sendiri dengan cara yang sama (jumlah tertentu atau pencabutan).
 Pemeriksaan terakhir sebelum pengiriman membaca calldata mentah, jadi persetujuan tanpa
 batas yang tidak pernah ditampilkan di layar persetujuan tidak bisa keluar.
 <strong>Persetujuan besar yang terbatas</strong> (bahkan jauh di atas saldo Anda)

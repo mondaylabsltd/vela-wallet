@@ -1,7 +1,7 @@
 ---
 title: Audit & masalah yang diketahui
 description: "Setiap kontrak yang diandalkan Vela, siapa yang mengaudit versi mana, apakah versi yang diaudit sama dengan yang di-deploy, temuan terbuka yang kami pantau, dan apa saja yang sama sekali tidak diaudit."
-source: a9c5e58e7ed3
+source: 377855411c74
 ---
 
 "Sudah diaudit" adalah klaim tentang kode tertentu pada versi tertentu, jadi halaman ini
@@ -155,9 +155,8 @@ kecuali yang disebut sebagai kompromi yang disengaja:
 - **Persetujuan tanpa batas tetap dikirim kalau Anda membiarkannya** — kompromi yang
   disengaja, karena persetujuan yang dibatasi merusak Permit2 dan swap dalam batch.
   Persetujuan "tanpa batas" (2^200 atau lebih; 2^152 untuk Permit2) ditampilkan merah dan
-  dikirim sesuai permintaan dApp kecuali Anda membatasinya. Di web dan desktop, persetujuan
-  di dalam batch belum bisa dibatasi, dan permit yang ditandatangani tidak bisa dibatasi di
-  mana pun.
+  dikirim sesuai permintaan dApp kecuali Anda membatasinya. Permit yang ditandatangani tidak
+  bisa dibatasi di mana pun.
 - **Halaman tanda tangan independen belum terhubung** ke aplikasi mana pun.
 - **Situs web memuat skrip analitik pihak ketiga** di domain yang sama dengan passkey.
   Situs itu melarang halamannya sendiri memakai passkey (lewat header Permissions-Policy),

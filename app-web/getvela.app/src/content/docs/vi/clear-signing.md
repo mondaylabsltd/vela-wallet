@@ -1,7 +1,7 @@
 ---
 title: Ký minh bạch
 description: "Vela giải mã giao dịch thành ngôn ngữ dễ hiểu trước khi bạn duyệt — ý định, số tiền, địa chỉ và rủi ro — thay vì một chuỗi hex khó hiểu. Khi không giải mã được một lệnh gọi, nó cảnh báo bạn chứ không giả vờ đã hiểu."
-source: 7c184bfe125c
+source: 29a66a1584f1
 ---
 
 <script>
@@ -73,9 +73,9 @@ lượng cụ thể, bằng số dư của bạn (khi đọc được), hoặc �
 dApp đã tạo: Permit2 được thiết kế dựa trên một lệnh cấp quyền thường trực, và một giao
 dịch gộp của tài khoản thông minh tiêu khoản được cấp quyền đó ngay trong cùng giao dịch,
 nên một hạn mức thấp hơn khoản tiêu đó sẽ khiến cả giao dịch gộp thất bại. Bên trong một
-giao dịch gộp, mỗi lệnh cấp quyền đều có thể đặt hạn mức trong ứng dụng iOS và Android;
-trên web và ứng dụng máy tính, giao dịch gộp được đánh dấu màu đỏ nhưng chưa chỉnh sửa
-được. Một lần kiểm tra cuối trước khi gửi đọc thẳng calldata thô, nên một lệnh cấp quyền
+giao dịch gộp, mỗi lệnh cấp quyền không giới hạn đều có thể đặt hạn mức riêng theo cùng
+cách đó (một số lượng cụ thể hoặc thu hồi). Một lần kiểm tra cuối trước khi gửi đọc
+thẳng calldata thô, nên một lệnh cấp quyền
 không giới hạn mà màn hình cấp quyền chưa từng hiện ra thì không thể gửi đi. Một
 <strong>lệnh cấp quyền lớn nhưng hữu hạn</strong> (kể cả khi vượt xa số dư của bạn) được
 hiện kèm cảnh báo thận trọng. <strong>Permit dạng chữ ký</strong> (chữ ký EIP-2612 và

@@ -1,7 +1,7 @@
 ---
 title: Klartext-Signatur
 description: "Vela übersetzt Transaktionen vor der Freigabe in verständliche Sprache – Absicht, Beträge, Adressen und Risiko – statt undurchsichtigem Hex. Kann es einen Aufruf nicht dekodieren, warnt es dich, statt so zu tun, als ob."
-source: 7c184bfe125c
+source: 29a66a1584f1
 ---
 
 <script>
@@ -81,9 +81,9 @@ oder – außer bei <code>increaseAllowance</code> – einen Widerruf. Wählst d
 davon, wird sie genau so gesendet, wie die dApp sie gebaut hat: Permit2 ist auf eine
 dauerhafte Freigabe ausgelegt, und ein Batch eines Smart Accounts verbraucht die
 Freigabe in derselben Transaktion, sodass eine Obergrenze unter diesem Betrag den
-ganzen Batch scheitern lässt. Innerhalb eines Batches lässt sich jede Freigabe in den
-iOS- und Android-Apps begrenzen; im Web und auf dem Desktop wird der Batch rot
-markiert, ist aber noch nicht bearbeitbar. Eine letzte Prüfung vor dem Absenden liest
+ganzen Batch scheitern lässt. Innerhalb eines Batches lässt sich jede unbegrenzte
+Freigabe auf dieselbe Weise einzeln begrenzen (ein Betrag oder ein Widerruf).
+Eine letzte Prüfung vor dem Absenden liest
 die rohe Calldata, sodass keine unbegrenzte Freigabe hinausgehen kann, die der
 Freigabebildschirm nie gezeigt hat. Eine <strong>große, aber begrenzte Freigabe</strong>
 (selbst weit über deinem Guthaben) wird mit einem Vorsichtshinweis angezeigt.

@@ -1,7 +1,7 @@
 ---
 title: Açık imzalama
 description: "Vela, siz onaylamadan önce işlemleri anlaşılmaz hex yerine sade bir dile çevirir — niyet, tutarlar, adresler ve risk. Bir çağrıyı çözemediğinde anlamış gibi yapmaz, sizi uyarır."
-source: 7c184bfe125c
+source: 29a66a1584f1
 ---
 
 <script>
@@ -77,9 +77,9 @@ yaygın yollarından biridir. Bir dApp "sınırsız" düzeyde bir onay istediği
 dApp'in oluşturduğu haliyle aynen gönderilir: Permit2 kalıcı bir onay üzerine
 kurulmuştur ve akıllı hesabın toplu işlemi bu harcama iznini aynı işlem içinde harcar;
 bu yüzden o harcamanın altında kalan bir üst sınır, toplu işlemin tamamını başarısız
-kılar. Toplu işlemin içindeki her onaya iOS ve Android uygulamalarında üst sınır
-konabilir; web ve masaüstünde toplu işlem kırmızıyla işaretlenir ama henüz
-düzenlenemez. Gönderimden hemen önceki son kontrol ham calldata'yı okur; böylece onay
+kılar. Toplu işlemin içindeki her sınırsız onaya da aynı şekilde ayrı bir üst sınır
+konabilir (bir tutar ya da iptal).
+Gönderimden hemen önceki son kontrol ham calldata'yı okur; böylece onay
 ekranının hiç göstermediği sınırsız bir onay gönderilemez. <strong>Büyük ama sınırlı
 bir onay</strong> (bakiyenizin çok üstünde olsa bile) bir uyarıyla gösterilir.
 <strong>İmzalı izinlere</strong> (EIP-2612 ve Permit2 imzaları) üst sınır konamaz —

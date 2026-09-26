@@ -1,7 +1,7 @@
 ---
 title: Auditorías y problemas conocidos
 description: "Cada contrato del que depende Vela, quién auditó qué versión, si la versión auditada es la que está desplegada, los hallazgos abiertos que vigilamos y lo que no se ha auditado en absoluto."
-source: a9c5e58e7ed3
+source: 377855411c74
 ---
 
 «Auditado» es una afirmación sobre un código específico en una versión específica,
@@ -158,9 +158,8 @@ indica que es una concesión deliberada:
 - **Una aprobación ilimitada se envía si la conservas**: una concesión deliberada,
   porque una aprobación con tope rompe Permit2 y los swaps en lote. Una aprobación
   «ilimitada» (2^200 o más; 2^152 para Permit2) se muestra en rojo y se envía tal
-  como la pidió la dApp, a menos que le pongas un tope. En la web y en escritorio,
-  a una aprobación dentro de un lote todavía no se le puede poner tope, y a los
-  permisos firmados no se les puede poner tope en ningún lado.
+  como la pidió la dApp, a menos que le pongas un tope. A los permisos firmados no
+  se les puede poner tope en ningún lado.
 - **La página de firma independiente no está conectada** a ninguna app todavía.
 - **El sitio web carga un script de analítica de terceros** en el mismo dominio que
   las passkeys. El sitio prohíbe que sus páginas usen passkeys (con un encabezado

@@ -1,7 +1,7 @@
 ---
 title: Audits et problèmes connus
 description: "Chaque contrat dont Vela dépend, qui a audité quelle version, si la version auditée est bien celle qui est déployée, les constats ouverts que nous surveillons, et ce qui n'a pas été audité du tout."
-source: a9c5e58e7ed3
+source: 377855411c74
 ---
 
 « Audité » est une affirmation qui porte sur un code précis, dans une version
@@ -163,9 +163,8 @@ correction, sauf là où il est indiqué qu'il s'agit d'un compromis délibéré
 - **Une approbation illimitée part si vous la gardez** — un compromis délibéré, car
   une approbation plafonnée casse Permit2 et les swaps groupés. Une approbation
   « illimitée » (2^200 ou plus ; 2^152 pour Permit2) s'affiche en rouge et est
-  envoyée telle que la dApp l'a demandée, sauf si vous la plafonnez. Sur le web et
-  dans l'app de bureau, une approbation à l'intérieur d'un lot ne peut pas encore
-  être plafonnée, et les permits signés ne peuvent être plafonnés nulle part.
+  envoyée telle que la dApp l'a demandée, sauf si vous la plafonnez. Les permits
+  signés ne peuvent être plafonnés nulle part.
 - **La page de signature indépendante n'est encore reliée** à aucune app.
 - **Le site web charge un script d'analyse d'audience tiers** sur le même domaine
   que les passkeys. Le site interdit à ses pages d'utiliser les passkeys (un en-tête

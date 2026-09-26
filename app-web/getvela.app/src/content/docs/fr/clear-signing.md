@@ -1,7 +1,7 @@
 ---
 title: Signature lisible
 description: "Vela décode les transactions en langage clair avant que vous ne les approuviez — intention, montants, adresses et risque — plutôt qu'en hexadécimal opaque. Quand il ne parvient pas à décoder un appel, il vous prévient au lieu de faire semblant."
-source: 7c184bfe125c
+source: 29a66a1584f1
 ---
 
 <script>
@@ -86,9 +86,9 @@ un plafond : un montant précis, votre solde (quand il peut être lu) ou — sau
 est envoyée exactement telle que la dApp l'a construite : Permit2 est conçu autour
 d'une approbation permanente, et le lot d'un compte intelligent dépense cette
 allocation dans la même transaction, si bien qu'un plafond inférieur à cette
-dépense fait échouer tout le lot. Dans un lot, chaque approbation peut être
-plafonnée dans les apps iOS et Android ; sur le web et dans l'app de bureau, le lot
-est signalé en rouge mais n'est pas encore modifiable. Une dernière vérification
+dépense fait échouer tout le lot. Dans un lot, chaque approbation illimitée peut
+recevoir son propre plafond de la même façon (un montant ou une révocation).
+Une dernière vérification
 avant l'envoi lit la calldata brute, si bien qu'une approbation illimitée que
 l'écran d'approbation n'a jamais montrée ne peut pas partir. Une <strong>approbation
 finie mais élevée</strong> (même bien au-delà de votre solde) s'affiche avec un

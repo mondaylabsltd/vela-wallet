@@ -1,7 +1,7 @@
 ---
 title: Audits und bekannte Probleme
 description: "Jeder Vertrag, von dem Vela abhängt, wer welche Version auditiert hat, ob die auditierte Version die bereitgestellte ist, die offenen Befunde, die wir beobachten, und was überhaupt nicht auditiert wurde."
-source: a9c5e58e7ed3
+source: 377855411c74
 ---
 
 „Auditiert“ ist eine Aussage über bestimmten Code in einer bestimmten Version, deshalb
@@ -160,8 +160,7 @@ bewusster Kompromiss ausgewiesen ist:
   Kompromiss, denn eine begrenzte Freigabe lässt Permit2 und gebündelte Swaps
   scheitern. Eine „unbegrenzte“ Freigabe (2^200 oder mehr; 2^152 bei Permit2) wird
   rot angezeigt und so gesendet, wie die dApp sie angefragt hat, sofern du sie nicht
-  begrenzt. Im Web und auf dem Desktop lässt sich eine Freigabe innerhalb eines
-  Batches noch nicht begrenzen, und signierte Permits lassen sich nirgends begrenzen.
+  begrenzt. Signierte Permits lassen sich nirgends begrenzen.
 - **Die unabhängige Signaturseite ist noch an keine App angebunden.**
 - **Die Website lädt ein Analyse-Skript eines Drittanbieters** auf derselben Domain
   wie die Passkeys. Die Website verbietet ihren Seiten die Nutzung von Passkeys (über

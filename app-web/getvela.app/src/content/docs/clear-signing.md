@@ -72,8 +72,8 @@ balance (when it can be read), or â€” except on <code>increaseAllowance</code> â
 revoke. Unless you pick one, it is sent exactly as the dApp built it: Permit2 is
 designed around a standing approval, and a smart-account batch spends the
 allowance in the same transaction, so a cap below that spend makes the whole batch
-fail. Inside a batch, each approval can be capped in the iOS and Android apps; on
-web and desktop the batch is flagged in red but not yet editable. A last check
+fail. Inside a batch, each unlimited approval gets its own cap the same way (an
+amount or a revoke). A last check
 before submission reads the raw calldata, so an unlimited approval the approval
 screen never showed can't go out. A <strong>large finite approval</strong> (even
 far above your balance) is shown with a caution. <strong>Signed permits</strong>

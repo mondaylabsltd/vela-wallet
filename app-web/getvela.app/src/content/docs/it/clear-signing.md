@@ -1,7 +1,7 @@
 ---
 title: Firma leggibile
 description: "Vela decodifica le transazioni in linguaggio chiaro prima che tu le approvi — intento, importi, indirizzi e rischio — invece di esadecimale incomprensibile. Quando non riesce a decodificare una chiamata, ti avvisa invece di fingere."
-source: 7c184bfe125c
+source: 29a66a1584f1
 ---
 
 <script>
@@ -82,9 +82,9 @@ un importo preciso, il tuo saldo (quando Vela riesce a leggerlo) o — tranne ch
 esattamente come l'ha costruita la dApp: Permit2 è pensato attorno a
 un'approvazione permanente, e il batch di uno smart account spende l'allowance
 nella stessa transazione, quindi un limite inferiore a quella spesa fa fallire
-l'intero batch. Dentro un batch, ogni approvazione si può limitare nelle app iOS e
-Android; sul web e su desktop il batch viene segnalato in rosso ma non è ancora
-modificabile. Un ultimo controllo prima dell'invio legge la calldata grezza, quindi
+l'intero batch. Dentro un batch, ogni approvazione illimitata si può limitare
+singolarmente allo stesso modo (un importo o una revoca).
+Un ultimo controllo prima dell'invio legge la calldata grezza, quindi
 un'approvazione illimitata che la schermata di approvazione non ha mai mostrato non
 può partire. Un'<strong>approvazione finita ma elevata</strong> (anche molto oltre
 il tuo saldo) viene mostrata con un avviso. I <strong>permit firmati</strong>

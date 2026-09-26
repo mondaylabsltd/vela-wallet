@@ -1,7 +1,7 @@
 ---
 title: Denetimler ve bilinen sorunlar
 description: "Vela'nın bağlı olduğu her sözleşme, hangi sürümü kimin denetlediği, denetlenen sürümün dağıtılan sürüm olup olmadığı, izlediğimiz açık bulgular ve hiç denetlenmemiş olanlar."
-source: a9c5e58e7ed3
+source: 377855411c74
 ---
 
 "Denetlendi", belirli bir kodun belirli bir sürümü hakkında bir iddiadır; bu yüzden bu
@@ -155,9 +155,8 @@ hariç:
 - **Sınırsız bir onay, olduğu gibi bırakırsanız gönderilir** — bilinçli bir ödünleşim,
   çünkü üst sınır konmuş bir onay Permit2'yi ve toplu takasları bozar. "Sınırsız" bir
   onay (2^200 ya da daha fazla; Permit2 için 2^152) kırmızıyla gösterilir ve siz üst
-  sınır koymadıkça dApp'in istediği gibi gönderilir. Web ve masaüstünde toplu işlemin
-  içindeki bir onaya henüz üst sınır konamaz; imzalı izinlere (permit) ise hiçbir yerde
-  üst sınır konamaz.
+  sınır koymadıkça dApp'in istediği gibi gönderilir. İmzalı izinlere (permit) hiçbir
+  yerde üst sınır konamaz.
 - **Bağımsız imza sayfası** henüz hiçbir uygulamaya **bağlı değil**.
 - **Web sitesi, geçiş anahtarlarıyla aynı alan adında üçüncü taraf bir analitik
   betiği yükler.** Site kendi sayfalarının geçiş anahtarı kullanmasını yasaklar (bir

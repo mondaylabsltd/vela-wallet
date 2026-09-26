@@ -1,7 +1,7 @@
 ---
 title: Firma legible
 description: "Vela decodifica las transacciones en lenguaje claro antes de que las apruebes (intención, montos, direcciones y riesgo) en lugar de hexadecimal opaco. Cuando no puede decodificar una llamada, te advierte en vez de fingir."
-source: 7c184bfe125c
+source: 29a66a1584f1
 ---
 
 <script>
@@ -81,9 +81,9 @@ específico, tu saldo (cuando se puede leer) o, salvo en <code>increaseAllowance
 una revocación. Si no eliges ninguno, se envía tal como la armó la dApp: Permit2 está
 diseñado en torno a una aprobación permanente, y el lote de una cuenta inteligente
 gasta esa autorización en la misma transacción, así que un tope por debajo de ese
-gasto hace que falle todo el lote. Dentro de un lote, a cada aprobación se le puede
-poner un tope en las apps de iOS y Android; en la web y en escritorio, el lote se
-marca en rojo, pero todavía no se puede editar. Una última revisión antes del envío
+gasto hace que falle todo el lote. Dentro de un lote, a cada aprobación ilimitada se
+le puede poner su propio tope de la misma forma (un monto o una revocación).
+Una última revisión antes del envío
 lee el calldata crudo, así que no puede salir una aprobación ilimitada que la
 pantalla de aprobación nunca mostró. Una <strong>aprobación finita grande</strong>
 (aunque esté muy por encima de tu saldo) se muestra con una advertencia. A los
