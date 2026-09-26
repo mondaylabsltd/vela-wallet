@@ -12730,15 +12730,18 @@ public func verifiedNameStep(chainId: UInt32, registry: String, address: String,
 }
 /**
  * Which passkeys control the wallet at `address` — the Settings keys view
- * (spec 062). See `vela_core::wallet_keys`.
+ * (spec 062). `sign_in_credential` is the account's sign-in route credential
+ * (`sign_in_route`), empty for none: its row is marked `signs_here`. See
+ * `vela_core::wallet_keys`.
  */
-public func walletKeysStep(address: String, deviceKeysJson: String, answersJson: String) -> String  {
+public func walletKeysStep(address: String, deviceKeysJson: String, answersJson: String, signInCredential: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_wallet_keys_step(
         FfiConverterString.lower(address),
         FfiConverterString.lower(deviceKeysJson),
-        FfiConverterString.lower(answersJson),uniffiCallStatus
+        FfiConverterString.lower(answersJson),
+        FfiConverterString.lower(signInCredential),uniffiCallStatus
     )
 })
 }
@@ -13672,7 +13675,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_verified_name_step() != 265) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_wallet_keys_step() != 48208) {
+    if (uniffi_vela_core_uniffi_checksum_func_wallet_keys_step() != 21357) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_webauthn_signing_hash() != 22291) {

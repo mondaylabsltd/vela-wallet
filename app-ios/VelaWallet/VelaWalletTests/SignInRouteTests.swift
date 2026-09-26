@@ -372,6 +372,54 @@ struct SignInRouteTests {
                 == [TrustedSignerFixture.base64url(Data([0xb2, 0xb2, 0xb2, 0xb2]))])
     }
 
+    // MARK: - The keys list
+
+    /// Founder, 2026-09-26: where Settings lists an account's keys, the one it
+    /// signed in with stands out. Through the real record, the real core and
+    /// the real builder: exactly that row is marked, and only that row wears
+    /// the filled "Signed in" pill — first, before the outlined facts.
+    @Test func theKeysListMarksExactlyTheKeyTheAccountSignedInWith() async throws {
+        let store = await Self.store(record(signedInWith: ["credential_id": second, "method": "security_key"]))
+        let port = SendAccountPort(accounts: store)
+        let credential = await WalletKeys.signInCredential(of: address, in: port)
+        #expect(credential == second)
+        let device = await WalletKeys.deviceKeys(of: address, walletName: "Mine", in: port)
+        #expect(device.map(\.credentialId) == [first, second], "the walk cannot match a key it is not told")
+
+        // No address: the record alone answers, and no chain is asked.
+        let rows = await WalletKeys(ethCall: { _, _, _ in nil })
+            .read(address: "", device: device, signInCredential: credential).rows
+        #expect(rows.map(\.signsHere) == [false, true])
+
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let drawn = SettingsLive.withWalletKeys(
+            WalletKeys.Result(source: .device, rows: rows), backup: nil,
+            on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        ).keys?.rows ?? []
+        #expect(drawn.map { $0.pills.filter { $0.tone == .signsHere }.count } == [0, 1])
+        #expect(drawn.last?.pills.first == KeyPillModel(text: "Signed in", tone: .signsHere), "not first among the pills")
+    }
+
+    /// A record from before the sign-in key signs with no single key, so no
+    /// row is marked and no pill is drawn.
+    @Test func aRecordFromBeforeTheSignInKeyMarksNoKey() async throws {
+        let store = await Self.store(record())
+        let port = SendAccountPort(accounts: store)
+        let credential = await WalletKeys.signInCredential(of: address, in: port)
+        #expect(credential.isEmpty)
+        let rows = await WalletKeys(ethCall: { _, _, _ in nil }).read(
+            address: "", device: await WalletKeys.deviceKeys(of: address, walletName: "Mine", in: port),
+            signInCredential: credential
+        ).rows
+        #expect(rows.count == 2 && rows.allSatisfy { !$0.signsHere })
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let drawn = SettingsLive.withWalletKeys(
+            WalletKeys.Result(source: .device, rows: rows), backup: nil,
+            on: SettingsFixtures.build(.st1, loc: loc), loc: loc
+        ).keys?.rows ?? []
+        #expect(drawn.allSatisfy { $0.pills.allSatisfy { $0.tone != .signsHere } })
+    }
+
     // MARK: - Plumbing
 
     /// The record as the core writes it (`app::Account`, snake_case).

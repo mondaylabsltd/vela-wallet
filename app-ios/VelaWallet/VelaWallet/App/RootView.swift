@@ -158,6 +158,11 @@ struct RootView: View {
     @State private var backupCheck: (address: String, check: RegistryBackup.Check)?
     /// Which passkeys control that wallet, and for which wallet it was asked.
     @State private var walletKeys: (address: String, result: WalletKeys.Result)?
+    /// Bumped whenever a create or sign-in finishes. Signing in to the SAME
+    /// account with another key changes which key it signs with (and so which
+    /// row the keys list marks) without changing the address the keys walk is
+    /// keyed on.
+    @State private var signInEpoch = 0
     /// What the person is typing. Held locally and echoed to the core, which
     /// owns the value: a field bound straight to a machine loses characters on
     /// the round trip (Android found it on the device).
@@ -842,6 +847,7 @@ struct RootView: View {
                 if finished {
                     router.path.removeAll()
                     onboarding.consumeFinished()
+                    signInEpoch += 1
                 }
             }
             // The ONE onboarding sheet. Every app-owned ceremony prompt — the
@@ -2942,7 +2948,7 @@ struct RootView: View {
             Task { await checkEthereumBackup() }
         }
         .task(id: session.view.address) { await checkEthereumBackup() }
-        .task(id: session.view.address) { await readWalletKeys() }
+        .task(id: "\(session.view.address)#\(signInEpoch)") { await readWalletKeys() }
         .task {
             settings.open()
             // The connected sites are the browser core's to list; reading
@@ -3073,6 +3079,7 @@ struct RootView: View {
         let device = await WalletKeys.deviceKeys(
             of: address, walletName: session.view.activeName, in: sendAccountPort
         )
+        let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
         let reader = WalletKeys(ethCall: { [pool] chainId, to, data in
             let outcome = await pool.call(
                 chainId: chainId, method: "eth_call",
@@ -3082,7 +3089,7 @@ struct RootView: View {
             else { return nil }
             return hex
         })
-        walletKeys = (address, await reader.read(address: address, device: device))
+        walletKeys = (address, await reader.read(address: address, device: device, signInCredential: signingKey))
     }
 
     /// Reads, from the chains themselves, whether this wallet's founding keys
