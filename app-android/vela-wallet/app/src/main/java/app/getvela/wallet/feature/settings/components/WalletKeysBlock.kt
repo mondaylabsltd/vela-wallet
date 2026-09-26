@@ -176,7 +176,10 @@ private fun KeyRow(row: WalletKeyRowModel, copyLabel: String, copiedLabel: Strin
                         append(row.holder)
                         if (row.fingerprint.isNotEmpty()) {
                             append("  ·  ")
-                            withStyle(SpanStyle(fontFamily = VelaMonoFontFamily)) { append(row.fingerprint) }
+                            // One unit: word joiners around the ellipsis, so a
+                            // wrapped line moves the whole fingerprint rather than
+                            // splitting it into `7802…` and `2eec`.
+                            withStyle(SpanStyle(fontFamily = VelaMonoFontFamily)) { append(row.fingerprint.replace("…", "\u2060…\u2060")) }
                         }
                     },
                     color = colors.fgSubtle,
