@@ -13,7 +13,7 @@
  * and the core reads it (`signInRoute`); nothing here chooses.
  */
 
-import { signInRoute, toHex, type TrustedSignerKey } from '$lib/core/kernels';
+import { signInRoute, toHex, type SignInRoute, type TrustedSignerKey } from '$lib/core/kernels';
 import { cancelSign, sign, signWithAny, type Assertion } from '$lib/onboarding/core/passkey';
 import { loadAccounts } from '$lib/onboarding/core/storage';
 import type { Account } from '$lib/onboarding/generated/Account';
@@ -45,7 +45,7 @@ export async function signChallenge(
 		(record) => record.address.toLowerCase() === signer.account.toLowerCase()
 	);
 	const route = account ? signInRoute(account) : null;
-	if (route === null) return signAsBefore(challenge, signer, account);
+	if (account === undefined || route === null) return signAsBefore(challenge, signer, account);
 	// Spec 075: a key behind a Trusted Signer page can only be signed THERE —
 	// and the web wallet has no Trusted Signer (owner, 2026-09-23), so it says
 	// so instead of asking a platform sheet for a key no authenticator on this
@@ -56,10 +56,29 @@ export async function signChallenge(
 		);
 	}
 	// The one credential, over the transports the core names — where it was
-	// chosen to be and where the sign-in found it — and no WebAuthn hint: the
-	// web's sign-in applies none, and a signature must never be stricter than
+	// chosen to be and where the sign-in found it. The chosen method's hint
+	// only when that is the same place: a key the sign-in found somewhere else
+	// must not be steered away from it, and a signature is never stricter than
 	// the ceremony that proved the key answers.
-	return sign(toHex(challenge), route.credential_id, route.transports);
+	return sign(
+		toHex(challenge),
+		route.credential_id,
+		route.transports,
+		foundWhereChosen(account, route) ? route.method : undefined
+	);
+}
+
+/**
+ * Whether the sign-in found the key where the person chose it to be: the route
+ * names nothing beyond what the choice alone would. "What the choice alone
+ * would" is the core's answer for the same record without where the key was
+ * found — the rule stays the core's, not a copy of it here.
+ */
+function foundWhereChosen(account: Account, route: SignInRoute): boolean {
+	const key = account.signed_in_with;
+	if (!key?.transports) return true;
+	const chosen = signInRoute({ ...account, signed_in_with: { ...key, transports: '' } });
+	return chosen?.transports === route.transports;
 }
 
 /**

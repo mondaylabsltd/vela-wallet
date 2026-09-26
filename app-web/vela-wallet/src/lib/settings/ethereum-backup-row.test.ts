@@ -23,6 +23,7 @@ const key = (over: Partial<WalletKeyRow>): WalletKeyRow => ({
 	credential_id: '',
 	attestation_hex: '',
 	user_verified: null,
+	signs_here: false,
 	...over
 });
 
@@ -198,6 +199,7 @@ describe('walletKeysModel', () => {
 		it('hands the walk each key’s origin — the registry cannot tell it', () => {
 			expect(
 				deviceKeys({
+					id: 'one',
 					name: 'Wallet',
 					public_key_hex: '04ab',
 					keys: [
@@ -218,16 +220,30 @@ describe('walletKeysModel', () => {
 				})
 			).toEqual([
 				{
+					credential_id: 'one',
 					public_key_hex: '04ab',
 					name: 'On the page',
 					transports: 'internal',
 					signer_origin: PAGE
 				},
-				{ public_key_hex: '04cd', name: 'Built in', transports: 'internal', signer_origin: null }
+				{
+					credential_id: 'two',
+					public_key_hex: '04cd',
+					name: 'Built in',
+					transports: 'internal',
+					signer_origin: null
+				}
 			]);
-			// A legacy record is one key and predates the field.
-			expect(deviceKeys({ name: 'Old', public_key_hex: '04ef', keys: [] })).toEqual([
-				{ public_key_hex: '04ef', name: 'Old', transports: '', signer_origin: null }
+			// A legacy record is one key, its credential the record's id, and
+			// predates the origin.
+			expect(deviceKeys({ id: 'old', name: 'Old', public_key_hex: '04ef', keys: [] })).toEqual([
+				{
+					credential_id: 'old',
+					public_key_hex: '04ef',
+					name: 'Old',
+					transports: '',
+					signer_origin: null
+				}
 			]);
 		});
 

@@ -762,8 +762,12 @@ export interface WalletKeyRowModel {
 	holder?: string;
 	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
 	fingerprint: string;
-	/** "Verify to use", "Cloud-synced" / "Device-bound" — drawn as pills, the explorer's way. */
-	pills: { text: string; tone: 'verified' | 'synced' | 'local' }[];
+	/**
+	 * "Verify to use", "Cloud-synced" / "Device-bound" — drawn as pills, the
+	 * explorer's way. First, and the only filled one, `signs_here`: the key this
+	 * device signs with (founder, 2026-09-26: it must stand out).
+	 */
+	pills: { text: string; tone: 'signs_here' | 'verified' | 'synced' | 'local' }[];
 	/**
 	 * What the row opens onto: the registry explorer's facts, each copyable.
 	 * Empty when only the device answered — then there is nothing to open.

@@ -3,8 +3,9 @@
  * with, over the route it signed in over — never a choice made per signature.
  * The account record says which, the real core reads it (`signInRoute`), and
  * this asserts what the browser is then actually asked: that one credential,
- * over the transports the core names, and never a WebAuthn hint — the web's
- * sign-in applies none, so a signature must not be stricter than it.
+ * over the transports the core names, with the chosen method's hint only when
+ * the sign-in found the key where it was chosen — a key found somewhere else is
+ * not steered away from it.
  *
  * A record written before it named its sign-in key must sign exactly as it
  * always did: every founding key allowed with its own transports, no hint, the
@@ -112,26 +113,44 @@ async function attempt(): Promise<{ asked: Asked | undefined; error: unknown }> 
 }
 
 const pinned = (request: Asked | undefined) =>
-	request?.allowCredentials?.map((c) => ({ id: bytesToHex(c.id), transports: c.transports }));
+	(request?.allowCredentials ?? []).map((c) => ({
+		id: bytesToHex(c.id),
+		transports: c.transports
+	}));
 
 describe('an account that names its sign-in key', () => {
 	it('signs with THAT key over THAT route — the second key, as a security key', async () => {
-		saveAccount(wallet({ credential_id: 'bb02', method: 'security_key' }));
+		saveAccount(
+			wallet({ credential_id: 'bb02', method: 'security_key', transports: 'usb,nfc,ble,hybrid' })
+		);
 		const { asked: request } = await attempt();
 		expect(asked).toHaveLength(1);
-		expect('hints' in (request ?? {})).toBe(false);
 		// Not keys[0], and not every key for the browser to choose between.
-		expect(pinned(request)).toEqual([{ id: 'bb02', transports: ['usb', 'nfc', 'ble'] }]);
+		expect(pinned(request).map((c) => c.id)).toEqual(['bb02']);
 	});
 
-	it('reaches a passkey registered on this device over a phone when that is how it signed in', async () => {
+	it('found where it was chosen: the method’s hint, over the method’s transports', async () => {
+		const cases = [
+			['platform', 'internal', 'client-device', ['internal']],
+			['hybrid', 'internal', 'hybrid', ['hybrid', 'internal']],
+			['security_key', 'usb,nfc,ble', 'security-key', ['usb', 'nfc', 'ble']]
+		] as const;
+		for (const [method, found, hint, transports] of cases) {
+			saveAccount(wallet({ credential_id: 'bb02', method, transports: found }));
+			const { asked: request } = await attempt();
+			expect(request?.hints, method).toEqual([hint]);
+			expect(pinned(request), method).toEqual([{ id: 'bb02', transports: [...transports] }]);
+		}
+	});
+
+	it('a record that says nothing about where it was found reads as found where chosen', async () => {
 		saveAccount(wallet({ credential_id: 'aa01', method: 'hybrid' }));
 		const { asked: request } = await attempt();
-		expect('hints' in (request ?? {})).toBe(false);
+		expect(request?.hints).toEqual(['hybrid']);
 		expect(pinned(request)).toEqual([{ id: 'aa01', transports: ['hybrid', 'internal'] }]);
 	});
 
-	it('"This device" answered by a phone or a key: the route names both, with no hint', async () => {
+	it('"This device" answered by a phone or a key: every place named, and no hint', async () => {
 		saveAccount(
 			wallet({ credential_id: 'aa01', method: 'platform', transports: 'usb,nfc,ble,hybrid' })
 		);
@@ -173,12 +192,12 @@ describe('a record from before the sign-in key', () => {
 		saveAccount(wallet({ credential_id: 'cc03', method: 'security_key' }));
 		const { asked: request } = await attempt();
 		expect('hints' in (request ?? {})).toBe(false);
-		expect(pinned(request)?.map((c) => c.id)).toEqual(['aa01', 'bb02']);
+		expect(pinned(request).map((c) => c.id)).toEqual(['aa01', 'bb02']);
 	});
 
 	it('with nothing stored for the address, the request is the path’s own', async () => {
 		const { asked: request } = await attempt();
-		expect(pinned(request)?.map((c) => c.id)).toEqual(['aa01', 'bb02']);
+		expect(pinned(request).map((c) => c.id)).toEqual(['aa01', 'bb02']);
 	});
 
 	it('still refuses when its first key lives behind a Trusted Signer page', async () => {
