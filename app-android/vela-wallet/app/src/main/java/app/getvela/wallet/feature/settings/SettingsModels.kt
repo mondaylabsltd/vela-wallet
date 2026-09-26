@@ -500,7 +500,8 @@ data class WalletKeysModel(
     val copiedLabel: String,
 )
 
-enum class KeyPillTone { Verified, Synced, Local }
+/** [SignsHere] is the one filled pill — the key this device signs with; the rest are outlined. */
+enum class KeyPillTone { SignsHere, Verified, Synced, Local }
 
 data class KeyPillModel(val text: String, val tone: KeyPillTone)
 
