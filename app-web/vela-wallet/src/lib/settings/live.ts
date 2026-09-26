@@ -1558,6 +1558,7 @@ export function walletKeysModel(
 		holder: key.method === 'trusted_signer' ? fallbackFor(key.method) : undefined,
 		fingerprint: keyFingerprint(key.public_key_hex),
 		pills: [
+			...(key.signs_here ? [{ text: m.keys.signsHere, tone: 'signs_here' as const }] : []),
 			...(key.user_verified === true
 				? [{ text: m.keys.userVerified, tone: 'verified' as const }]
 				: []),

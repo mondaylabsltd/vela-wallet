@@ -368,6 +368,8 @@ export interface SettingsMessages {
 		transport: string;
 		attestation: string;
 		userVerified: string;
+		/** The key this device signs with — the one it signed in with. */
+		signsHere: string;
 		copy: string;
 		copied: string;
 	};
@@ -506,6 +508,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.keys.transport',
 	'settingsModals.keys.attestation',
 	'settingsModals.keys.userVerified',
+	'settingsModals.keys.signsHere',
 	'settingsModals.backup.explain',
 	'componentsUi.signing.copyValue',
 	'receive.copied',

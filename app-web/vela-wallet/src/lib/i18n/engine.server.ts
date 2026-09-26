@@ -605,6 +605,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			transport: k('settingsModals.keys.transport'),
 			attestation: k('settingsModals.keys.attestation'),
 			userVerified: k('settingsModals.keys.userVerified'),
+			signsHere: k('settingsModals.keys.signsHere'),
 			copy: k('componentsUi.signing.copyValue'),
 			copied: k('receive.copied')
 		},
