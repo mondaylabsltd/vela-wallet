@@ -611,9 +611,9 @@
    "featureSafeContractBody": "Konten basieren auf auditierten Safe-Contracts, nicht auf einer Eigenentwicklung.",
    "featureStablecoinGasTitle": "Gas mit Stablecoins zahlen",
    "featureStablecoinGasBody": "Auf den meisten Netzwerken können Sie die Gebühren mit Stablecoins zahlen — Sie müssen nicht erst den nativen Coin besitzen.",
-   "heroTitle": "Nur Sie kontrollieren\nIhre Ethereum-Wallet",
+   "heroTitle": "Eine Ethereum-Wallet,\ndie wirklich dir gehört",
    "heroTitleFit": "long",
-   "heroSubtitle": "Signieren mit Passkey. Vela sieht deinen Schlüssel nie."
+   "heroSubtitle": "Signiert wird auf deinem Gerät. Der private Schlüssel deines Passkeys gelangt nie zu Vela."
   },
   "intro": {
    "skip": "Überspringen",

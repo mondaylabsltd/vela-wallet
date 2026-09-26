@@ -17,9 +17,9 @@
       "featureSafeContractBody": "계정은 자체 구현이 아니라 감사를 거친 Safe 컨트랙트를 기반으로 합니다.",
       "featureStablecoinGasTitle": "가스비는 스테이블코인으로",
       "featureStablecoinGasBody": "대부분의 네트워크에서 수수료를 스테이블코인으로 낼 수 있어, 네이티브 코인을 미리 준비해 둘 필요가 없습니다.",
-      "heroTitle": "오직 나만 관리하는\n이더리움 지갑",
+      "heroTitle": "진짜 내 것이 되는\n이더리움 지갑",
       "heroTitleFit": "regular",
-      "heroSubtitle": "패스키로 서명합니다. Vela는 키를 볼 수 없습니다."
+      "heroSubtitle": "서명은 당신의 기기에서 이뤄집니다. 패스키의 개인 키는 절대 Vela에 전달되지 않습니다."
     },
     "intro": {
       "skip": "건너뛰기",

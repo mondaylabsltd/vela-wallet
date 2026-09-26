@@ -611,9 +611,9 @@
    "featureSafeContractBody": "アカウントは監査済みの Safe コントラクトの上に構築されており、独自実装ではありません。",
    "featureStablecoinGasTitle": "ガス代はステーブルコインで",
    "featureStablecoinGasBody": "ほとんどのネットワークで手数料をステーブルコインで支払えるので、先にネイティブコインを用意しておく必要はありません。",
-   "heroTitle": "あなただけが管理する\nイーサリアムウォレット",
+   "heroTitle": "本当に\nあなたのものになる\nイーサリアムウォレット",
    "heroTitleFit": "long",
-   "heroSubtitle": "パスキーで署名します。鍵を Vela が見ることはありません。"
+   "heroSubtitle": "署名はあなたの端末で行われます。パスキーの秘密鍵が Vela に渡ることはありません。"
   },
   "intro": {
    "skip": "スキップ",

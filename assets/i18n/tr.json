@@ -611,9 +611,9 @@
    "featureSafeContractBody": "Hesaplar, özel yazılmış bir çözüm değil, denetimden geçmiş Safe sözleşmeleri üzerine kuruludur.",
    "featureStablecoinGasTitle": "Gas'ı stablecoin ile ödeyin",
    "featureStablecoinGasBody": "Çoğu ağ, ücretleri stablecoin ile ödemenize izin verir — önceden yerel coin edinmeniz gerekmez.",
-   "heroTitle": "Sadece sizin olan\nEthereum cüzdanı",
-   "heroTitleFit": "regular",
-   "heroSubtitle": "Passkey ile imzalayın. Vela anahtarınızı asla görmez."
+   "heroTitle": "Gerçekten size ait\nbir Ethereum cüzdanı",
+   "heroTitleFit": "long",
+   "heroSubtitle": "İmzalama cihazınızda yapılır. Geçiş anahtarınızın özel anahtarı hiçbir zaman Vela'ya gitmez."
   },
   "intro": {
    "skip": "Atla",

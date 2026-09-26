@@ -17,9 +17,9 @@
       "featureSafeContractBody": "Las cuentas se basan en contratos Safe auditados, no en una implementación propia.",
       "featureStablecoinGasTitle": "Paga el gas con monedas estables",
       "featureStablecoinGasBody": "La mayoría de las redes permiten pagar las comisiones con monedas estables — no necesitas conseguir antes la moneda nativa.",
-      "heroTitle": "Solo tú controlas\ntu billetera Ethereum",
+      "heroTitle": "Una wallet de Ethereum\nque de verdad es tuya",
       "heroTitleFit": "long",
-      "heroSubtitle": "Firma con una passkey. Vela nunca ve tu clave."
+      "heroSubtitle": "La firma se hace en tu dispositivo. La llave privada de tu passkey nunca llega a Vela."
     },
     "intro": {
       "skip": "Omitir",

@@ -17,9 +17,9 @@
       "featureSafeContractBody": "Les comptes reposent sur des contrats Safe audités, et non sur une implémentation maison.",
       "featureStablecoinGasTitle": "Payez le gas en stablecoins",
       "featureStablecoinGasBody": "La plupart des réseaux permettent de payer les frais en stablecoins — inutile de détenir d'abord la pièce native.",
-      "heroTitle": "Vous seul contrôlez\nvotre wallet Ethereum",
+      "heroTitle": "Un portefeuille\nEthereum qui vous\nappartient vraiment",
       "heroTitleFit": "long",
-      "heroSubtitle": "Signez avec une passkey. Vela ne voit jamais votre clé."
+      "heroSubtitle": "La signature se fait sur votre appareil. La clé privée de votre passkey n'est jamais transmise à Vela."
     },
     "intro": {
       "skip": "Passer",

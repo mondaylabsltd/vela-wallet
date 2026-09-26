@@ -137,9 +137,9 @@ struct SignInMethodSheet: View {
         loc: Loc(),
         model: WelcomeModel(
             content: WelcomeContent(
-                heroTitle: "The unstoppable\nEthereum wallet",
+                heroTitle: "An Ethereum wallet\nyou actually own",
                 heroTitleFit: .regular,
-                heroSubtitle: "Sign with a passkey. Vela never sees your key.",
+                heroSubtitle: "Signing is done on your device. Your passkey’s private key never goes to Vela.",
                 createWallet: "Create Wallet",
                 alreadyHaveWallet: "I already have a wallet"
             ),

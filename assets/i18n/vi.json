@@ -611,9 +611,9 @@
    "featureSafeContractBody": "Tài khoản được xây dựng trên các hợp đồng Safe đã qua kiểm toán, không phải bản tự phát triển.",
    "featureStablecoinGasTitle": "Trả gas bằng stablecoin",
    "featureStablecoinGasBody": "Hầu hết các mạng cho phép trả phí bằng stablecoin — không cần có sẵn coin gốc trước.",
-   "heroTitle": "Chỉ bạn kiểm soát\nví Ethereum của mình",
-   "heroTitleFit": "long",
-   "heroSubtitle": "Ký bằng passkey. Vela không bao giờ thấy khoá của bạn."
+   "heroTitle": "Ví Ethereum\nthực sự là của bạn",
+   "heroTitleFit": "regular",
+   "heroSubtitle": "Việc ký được thực hiện ngay trên thiết bị của bạn. Khóa riêng tư của passkey không bao giờ được gửi tới Vela."
   },
   "intro": {
    "skip": "Bỏ qua",

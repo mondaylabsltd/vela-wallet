@@ -17,9 +17,9 @@
       "featureSafeContractBody": "帳戶基於經過審計的 Safe 合約，而非自行開發的實作。",
       "featureStablecoinGasTitle": "用穩定幣付 gas",
       "featureStablecoinGasBody": "多數網路支援用穩定幣支付手續費，不必先準備原生幣。",
-      "heroTitle": "真正由你掌控的\n以太坊錢包",
+      "heroTitle": "真正屬於你的\n以太坊錢包",
       "heroTitleFit": "regular",
-      "heroSubtitle": "用通行密鑰簽署，Vela 看不到你的金鑰。"
+      "heroSubtitle": "簽署都在你的裝置上完成。密碼金鑰的私鑰絕不會交給 Vela。"
     },
     "intro": {
       "skip": "略過",

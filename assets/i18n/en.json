@@ -618,9 +618,9 @@
    "featureSafeContractBody": "Accounts are built on audited Safe contracts, not a custom implementation.",
    "featureStablecoinGasTitle": "Pay gas in stablecoins",
    "featureStablecoinGasBody": "Most networks let you pay fees in stablecoins — no need to hold the native coin first.",
-   "heroTitle": "The unstoppable\nEthereum wallet",
+   "heroTitle": "An Ethereum wallet\nyou actually own",
    "heroTitleFit": "regular",
-   "heroSubtitle": "Sign with a passkey. Vela never sees your key."
+   "heroSubtitle": "Signing is done on your device. Your passkey’s private key never goes to Vela."
   },
   "intro": {
    "skip": "Skip",
