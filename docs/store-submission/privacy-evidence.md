@@ -67,7 +67,7 @@ Settings → the endpoint is persisted per install and read back at
 | `api.openchain.xyz`, then `www.4byte.directory` | Third parties | A transaction the wallet cannot otherwise decode | A 4-byte function selector + IP. **Not** the wallet address. | `app-ios/.../Signing/Core/ClearExecutor.swift:182,193`; `app-android/.../feature/signing/core/ClearExecutor.kt:69,89` — the two store apps ask these two, sequentially. Desktop additionally asks `api.4byte.sourcify.dev` (`app-desktop/vela-wallet/src/executor/clear_signing.rs:156`); that host is **not** in the iOS/Android path. |
 | dApp sites opened in the in-app browser, **and the connected site's own origin at signing time** | Third parties | User navigates there / a signing sheet opens | Normal web browsing; the site learns the wallet address once the user connects. The signing sheet fetches the site's icon **from the site itself** — `{origin}/apple-touch-icon.png` then `{origin}/favicon.ico` — so **the dApp's server sees the user's IP at the moment they are asked to sign**. | `app-ios/.../Features/Signing/SigningLive.swift:70` + `Components/Wallet/RemoteLogoView.swift:31-38`; `app-android/.../feature/signing/SigningLive.kt:70-72` + `core/marks/RemoteLogo.kt:56-69`. No favicon proxy and no Google favicon service is used anywhere. Explore tiles deliberately draw a letter avatar instead of fetching (`app-ios/.../Features/Explore/ExploreLive.swift:17`). Browser history is **on device only** (`rust/crates/vela-core/src/app/browser_history.rs:11-16`). |
 | Blockchain explorers (`etherscan.io`, `basescan.org`, …) | Third parties | User taps "view on explorer" | Nothing — **the URL is handed to the OS browser; no shell has an HTTP client pointed at an explorer host** | `app-android/.../feature/flows/FlowHost.kt:300-310` (`Intent.ACTION_VIEW`) |
-| `github.com` (system browser, not the app) | Third party | User taps Settings → Feedback → Send | A prefilled `issues/new` URL containing app version+commit, platform, language, failed chain names, recent failure strings. **Handed to the OS browser; the app sends nothing.** | `app-android/.../navigation/VelaNavHost.kt:1693-1699`; contents built at `app-android/.../feature/settings/SettingsLive.kt:569-578` |
+| `github.com` (system browser, not the app) | Third party | User taps Settings → Feedback → Send | A prefilled `issues/new` URL containing app version+commit, platform, language, failed chain names, recent failure strings. **Handed to the OS browser; the app sends nothing.** | `app-android/.../navigation/VelaNavHost.kt:1693-1699`; contents built at `app-android/.../feature/settings/SettingsLive.kt:569-578` **→ Superseded on branch 078 (2026-09-27): see §3a.** |
 | `api.telegram.org` | Third party, **server→server only** | Operator alerts | Never contacted by the app. Relay/index alerts carry operation hashes and the relay's own address, never a user address. | `vela-relay/vela-relay-cf/src/arms/telegram.rs:41`; `p256-index/p256-index-cf/src/telegram.rs:35-37` |
 
 **Not contacted by the apps:** no ad network, no analytics host, no crash-report host, no push
@@ -355,6 +355,62 @@ server-side first.
 
 ---
 
+## 3a. Addendum 2026-09-27 — the reporter is wired on both store apps (branch 078)
+
+**What changed.** §3 was true on `main` @ `746e2259`. On branch `078-desktop-web-parity`
+(commits `5af20247` site, `ac4462f1` iOS, `5ad84b64` web, `40657cbc` Android) **both store binaries POST the report to `https://getvela.app/api/bug-report`**, with
+up to five user-picked screenshots. The prefilled GitHub form survives only as the fallback
+when that POST is refused, times out or fails. Nothing ships until the founder deploys the site
+and releases the apps — **update the labels in that same release** (§6.5 #4 anticipated this).
+
+**What a report carries** (identical on iOS, Android, web, desktop — one payload shape):
+- `what` / `steps` — what the person typed. Not scrubbed: they wrote it and see it.
+- `environment` — the preview lines the sheet shows before Send, built by the same function
+  that fills the payload: app version + commit, platform, language, display names of
+  unreachable networks, and (Android/web/desktop) recent failure summaries. iOS keeps no failure
+  counters, so it sends four lines. Addresses → `[address]`, anything with a scheme → `[url]`
+  on the client **and again on the server** (`app-web/getvela.app/src/lib/server/bug-report.ts`
+  `redact`, applied to `environment`, `diagnostics`, `area` — the re-implementation §6.5 #4
+  required before any shell was re-wired).
+- `area` (a fixed label), `fingerprint` (FNV-1a of the words + build — collides for the same
+  complaint, identifies nobody).
+- `screenshots` — ≤ 5 plain-base64 JPEGs. Each is decoded, redrawn upright, scaled to a
+  ≤ 1920 px edge and **re-encoded on the device**, which drops EXIF/GPS/maker data
+  (iOS `Core/ScreenshotPrep.swift`, also strips any APP1 the encoder writes; Android
+  `core/diagnostics/ScreenshotPrep.kt`; web `lib/services/screenshot-prep.ts`). Tests prove a
+  GPS-tagged input leaves with no APP1/EXIF (iOS `FeedbackScreenshotTests`, Android
+  `ScreenshotPrepDeviceTest`).
+
+**Where it goes and how long it stays.**
+- The Worker files a **public** issue in `mondaylabsltd/vela-wallet` (or a +1 comment on the
+  open issue with the same fingerprint) under the site's bot token.
+- Screenshots are stored in Cloudflare R2 (`DOWNLOADS` bucket, `bug-attachments/<yyyy-mm>/<uuid>.<ext>`),
+  served publicly by `/api/bug-report/attachments/[...key]` and embedded in the issue. **No
+  automatic deletion** — kept until the founder deletes them (the privacy page says "email us").
+  If the issue fails to be created, the stored screenshots are deleted again.
+- The client IP is used only by the isolate-local in-memory rate limiter (5 / 10 min), never
+  stored, logged or forwarded — unchanged from §3.
+- The sheet says "Screenshots are public on GitHub" beside the picker whenever one is attached,
+  and the consent line above Send says what is sent.
+
+**Recommended label changes (founder decision).**
+
+| Store | Data type | Collected | Linked | Tracking / Shared | Optional | Purpose | Why |
+|---|---|---|---|---|---|---|---|
+| Apple | Diagnostics → **Other Diagnostic Data** | Yes | **No** | No | — | App Functionality | `environment` lines reach our server. Nothing ties them to a wallet or person. |
+| Apple | User Content → **Customer Support** | Yes | No | No | — | App Functionality | The typed description/steps of a support request. |
+| Apple | User Content → **Photos or Videos** | Yes | No | No | — | App Functionality | User-picked screenshots, stored in R2. |
+| Play | App info & performance → **Diagnostics** | Yes | — | Shared: **No** | **Optional** | App functionality | Same as above. Publishing on GitHub is a user-initiated transfer the sheet announces, which Play does not count as sharing — state it in the review notes. |
+| Play | App activity → **Other user-generated content** | Yes | — | No | Optional | App functionality | Typed description. |
+| Play | Photos and videos → **Photos** | Yes | — | No | Optional | App functionality | Screenshots. |
+
+Apple's optional-disclosure exemption for feedback forms does **not** clearly apply: one of its
+conditions is that the user's name or account name is shown in the submission form, and this
+form is deliberately anonymous. Declaring is the accurate answer. No permission is needed for
+either picker (PhotosPicker / Android Photo Picker run out of process), so §5 is unchanged.
+
+---
+
 ## 4. Tracking — proof of absence, from manifests
 
 | Shell | Manifest read | Finding |
@@ -435,7 +491,7 @@ is wrong about all three.
 | **Search History** | No | — | — | No search query is sent to any first-party host. |
 | **Purchases**, **Payment Info** | No | — | — | No IAP, no card, no fiat on-ramp. (Crypto balances are declared under Other Financial Info, not here.) |
 | **Usage Data**, **Product Interaction**, **Advertising Data** | No | — | — | No analytics SDK in any manifest (§4); in-app counters never leave RAM. |
-| **Diagnostics → Crash Data / Performance Data / Other Diagnostic Data** | **No** (see §6.5 #4) | — | — | iOS has no send path at all (`SettingsSheet.swift:307-330`); Android hands a prefilled URL to the system browser (`VelaNavHost.kt:1693-1699`). No shipped binary POSTs diagnostics anywhere. |
+| **Diagnostics → Crash Data / Performance Data / Other Diagnostic Data** | **No** (see §6.5 #4) | — | — | iOS has no send path at all (`SettingsSheet.swift:307-330`); Android hands a prefilled URL to the system browser (`VelaNavHost.kt:1693-1699`). No shipped binary POSTs diagnostics anywhere. **→ Superseded on branch 078 (2026-09-27): see §3a.** |
 | **Contacts** (the address book feature) | No | — | — | Contacts are the user's own saved wallet addresses, stored on device; they are never uploaded. Note the index may be asked for a saved address's registered wallet name (`registry_lookup.rs:19-24`) — that is a lookup *about* an address, covered by the Identifiers declaration. |
 
 **Used for Tracking: No, for every single item.** Nothing is joined with data from other
@@ -453,7 +509,7 @@ transaction; without registering the key set there is no cross-device recovery.
 | **Financial info → Other financial info** (wallet address, transactions) | Yes | **Yes** | No | Required | App functionality, Account management | Relay stores/logs the address and operation (`admission.rs:203-205`, `lane_do.rs:1400-1412`); index publishes the address on a public chain (`protocol.rs:88`). |
 | **Personal info → User IDs** (wallet address as account id, public key, credential ID) | Yes | **Yes** | No | Required | Account management, App functionality | `submitter.rs:399-411` (stored), `protocol.rs:27,88` (published on-chain forever). |
 | **Personal info → Other info** (user-chosen wallet and key names) | Yes | **Yes** | No | Required | Account management | `registry_metadata.rs:49` `key_names`; published on-chain. |
-| **App activity / App info & performance** | **No** | — | — | — | — | No diagnostics leave the app (§3). |
+| **App activity / App info & performance** | **No** | — | — | — | — | No diagnostics leave the app (§3). **→ Superseded on branch 078 (2026-09-27): see §3a.** |
 | **Device or other IDs** | No | — | — | — | — | No advertising ID, no device ID (§4). |
 | Location, Contacts, Calendar, Photos/Videos, Audio, SMS/Call logs, Health, Web browsing history, Installed apps | No | — | — | — | — | §4, §5, `browser_history.rs`. |
 
@@ -554,7 +610,7 @@ readings are given with their consequence.
    their own API key (`network_admin.rs:544-546, 665-683`) — that is unambiguously
    user-directed, and unambiguously not a partner relationship.
 
-4. **Diagnostics: declare or not?**
+4. **Diagnostics: declare or not?** **→ Superseded on branch 078 (2026-09-27): see §3a.**
    Today no store binary transmits diagnostics (§3), so the honest answer is **Not collected**.
    *Reading B (declare anyway, Not Linked, App Functionality):* belt-and-braces, and it stays
    true if the in-app reporter is ever wired to `/api/bug-report`.
@@ -631,7 +687,7 @@ readings are given with their consequence.
 | 0 | "Balances / tx history / RPC prefs — No — on-device `AsyncStorage`" | Stale vocabulary (Expo deleted in spec 039) and incomplete — the relay holds the operation and its receipt. |
 | 0 | "`NSPrivacyTracking=false` already set in `ios/VelaWallet/PrivacyInfo.xcprivacy`" | Path no longer exists; the manifest is at `app-ios/VelaWallet/VelaWallet/PrivacyInfo.xcprivacy` **and is not on `main`**. |
 | 1.B | Judgement framed as "safe to declare even though we store nothing" | The premise is wrong; declaring is now the *accurate* answer, not the cautious one. |
-| 1.C | Diagnostics "Collected: Yes" | No store binary transmits diagnostics. Should be **Not collected** today (§6.5 #4). |
+| 1.C | Diagnostics "Collected: Yes" | No store binary transmits diagnostics. Should be **Not collected** today (§6.5 #4). **→ Superseded on branch 078 (2026-09-27): see §3a.** |
 | 1 | `ITSAppUsesNonExemptEncryption` "✅ Done" in `app.json` | `app.json` is deleted; the key is in neither `Info.plist` nor `project.pbxproj`. |
 | 4, 5 | Review notes: "No Bluetooth", "dApp Connect pairs … WalletConnect-style relay" | Bluetooth **is** used for caBLE on both platforms (§5). WalletPair/dApp-session pairing was dropped by founder ruling 2026-09-08 — describing a feature the binary does not have is its own review risk. |
 | 6 | "Removed all `BLUETOOTH*` … `ACCESS_FINE_LOCATION`" | Reversed by spec 019; both are back in `AndroidManifest.xml:59-71`. |
