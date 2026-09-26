@@ -74,6 +74,8 @@ pub enum Icon {
     MessageSquareText,
     HardDrive,
     Info,
+    /// Lucide `circle-alert` — the send form's refusal line (078 F-09).
+    CircleAlert,
     LogOut,
     ExternalLink,
     // explore + signing (spec 022; lucide v1.11.0 except `Star`, a computed
@@ -221,6 +223,9 @@ fn body(icon: Icon, solid: bool) -> &'static str {
         }
         Icon::Info => {
             r##"<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>"##
+        }
+        Icon::CircleAlert => {
+            r##"<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>"##
         }
         Icon::LogOut => {
             r##"<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>"##

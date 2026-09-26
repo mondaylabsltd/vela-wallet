@@ -13,6 +13,7 @@ import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
+import { liveAssetRow } from '$lib/wallet/live';
 import { buildFlowState } from './fixtures';
 import {
 	liveFeeTokenPick,
@@ -437,6 +438,113 @@ describe('the form', () => {
 		expect(model.mode).toBe('single');
 		expect(model.recipients).toBeUndefined();
 		expect(model.summary).toBeUndefined();
+	});
+});
+
+/**
+ * Spec 078: Send shows the SAME holdings as the asset list, so the balance on
+ * the token card is the asset row's figure for that token — one call — and the
+ * figures after Max (the core writes a rounded one) never fall back to the
+ * exact 18-digit remainder of a fee to the wei.
+ */
+describe('one figure for one balance (spec 078)', () => {
+	const RICH_ETH: SendToken = { ...ETH, balance: '0.043968123456789012', price_usd: 2700 };
+	const MAXED = '0.043790209243313861';
+
+	it('the token card reads "{Network} · Balance {amount}" with the asset row’s amount', () => {
+		const model = liveSendForm(formModel(), inputs({ selected_token: RICH_ETH }));
+		const row = liveAssetRow(
+			{
+				chain_id: RICH_ETH.chain_id,
+				symbol: RICH_ETH.symbol,
+				name: 'Ether',
+				balance: RICH_ETH.balance,
+				decimals: RICH_ETH.decimals,
+				token_address: RICH_ETH.token_address,
+				price_usd: RICH_ETH.price_usd,
+				spam: false
+			},
+			USD,
+			// The row's wording is not under test; its balance figure is.
+			{ balance: { noPrice: '—' } } as Parameters<typeof liveAssetRow>[2],
+			false
+		);
+		expect(row.balance).toBe('0.043968');
+		expect(model.token?.detail).toBe(
+			`Ethereum · ${fill(m['send.balanceLabel'], { amount: row.balance })}`
+		);
+	});
+
+	it('a list the wallet could not read says so — not "no tokens with balance"', () => {
+		expect(liveSendPick(pickModel(), inputs({ tokens: [] })).empty).toBe(
+			m['send.noTokensWithBalance']
+		);
+		expect(
+			liveSendPick(pickModel(), {
+				...inputs({ tokens: [] }),
+				alert: { type: 'load_tokens_failed' }
+			}).empty
+		).toBe(m['send.alertLoadTokensError']);
+	});
+
+	it('the picker lists the same figure', () => {
+		const model = liveSendPick(pickModel(), inputs({ tokens: [RICH_ETH] }));
+		expect(model.rows[0].balance).toBe('0.043968');
+	});
+
+	it('the same-asset warning says figures, not 18-digit remainders — and a ceiling that fits', () => {
+		const form = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: RICH_ETH,
+				same_asset_fee_issue: {
+					symbol: 'ETH',
+					transfer_amount: '43790209243313861',
+					balance: '43968123456789012',
+					fee_amount: '3060000000000000',
+					total: '46850209243313861',
+					max_transfer_amount: '40908623456789012'
+				}
+			})
+		);
+		expect(form.alert).toBe(
+			`${fill(m['send.sameFeeTokenBody'], {
+				amount: '0.04379',
+				fee: '0.00306',
+				total: '0.04685',
+				symbol: 'ETH',
+				balance: '0.043968'
+			})} ${fill(m['send.sameFeeTokenMax'], { amount: '0.040908', symbol: 'ETH' })}`
+		);
+	});
+
+	it('the confirm and the receipt read the exact Max as the field did', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: RICH_ETH, confirm_amount: MAXED, recipient: '0x' + 'ab'.repeat(20) })
+		);
+		expect(confirm.amount).toBe('0.04379 ETH');
+		const receipt = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				selected_token: RICH_ETH,
+				confirm_amount: MAXED,
+				tx_status: 'confirmed',
+				tx_hash: '0xtx',
+				receipt: {
+					status: 'confirmed',
+					hold_reason: null,
+					kind: null,
+					transfers: [],
+					amount: MAXED,
+					usd_value: 110.45,
+					submitted_at_ms: null,
+					typical_inclusion_s: null
+				}
+			})
+		);
+		expect(receipt.title).toContain('0.04379');
+		expect(receipt.title).not.toContain(MAXED);
 	});
 });
 

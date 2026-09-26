@@ -488,6 +488,12 @@ pub fn text_amount_unit(rung: f32) -> Pixels {
 pub fn text_balance_decimals() -> Pixels {
     scaled(26.)
 }
+/// The figure on the confirm and a transaction's detail (`--text-4xl`,
+/// 078 F-11) — smaller than the balance hero: it states what was sent, it
+/// does not headline the screen.
+pub fn text_amount_detail() -> Pixels {
+    scaled(32.)
+}
 /// A token circle's ticker (`--text-xs`, 078 H-09).
 pub fn text_glyph() -> Pixels {
     scaled(10.)

@@ -370,9 +370,16 @@ final class SigningController {
             guard let deployed = await relay.isDeployed(chainId: chainId, address: wallet.address)
             else { return }
             // HOW FAST is the speed core's to say: the store asks at its tier.
+            // WHICH COIN is the fee machine's until the person taps one (spec
+            // 078): it pays in a coin that can, and the approve carries the
+            // fee view's `fee_token` — the very coin it picked — beside the
+            // amount from the same estimate (`approveOpts`), so what the slide
+            // shows is what is signed. A tap re-asks with the pick turned off
+            // (`FeeStore.chooseFeeToken`).
             fees.ask(
                 chainId: chainId, account: wallet.address, deployed: deployed,
-                publicKeyAvailable: true, calls: feeCalls, feeToken: nil
+                publicKeyAvailable: true, calls: feeCalls, feeToken: nil,
+                autoFeeToken: true
             )
         }
     }

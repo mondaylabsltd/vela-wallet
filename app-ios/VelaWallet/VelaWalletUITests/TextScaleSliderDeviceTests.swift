@@ -165,14 +165,14 @@ final class TextScaleSliderDeviceTests: XCTestCase {
         settle(1)
     }
 
-    /// The row is  A ·12· track ·12· A  with the stops a thumb-radius (10pt)
-    /// in from each end of the track; the glyphs are about 9 and 14pt wide.
-    /// Within a few points is enough: a stop is ~55pt from the next.
+    /// The row is  A ·4· track ·4· A  with the stops the pressed ring's radius
+    /// (22pt) in from each end of the track; the glyphs are about 9 and 14pt
+    /// wide. Within a few points is enough: a stop is ~53pt from the next.
     private func tap(stop: Int, of slider: XCUIElement) {
         let width = slider.frame.width
-        let trackStart: CGFloat = 9 + 12
-        let track = width - trackStart - 12 - 14
-        let x = trackStart + 10 + (track - 20) * CGFloat(stop) / 5
+        let trackStart: CGFloat = 9 + 4
+        let track = width - trackStart - 4 - 14
+        let x = trackStart + 22 + (track - 44) * CGFloat(stop) / 5
         slider.coordinate(withNormalizedOffset: CGVector(dx: x / width, dy: 0.5)).tap()
     }
 

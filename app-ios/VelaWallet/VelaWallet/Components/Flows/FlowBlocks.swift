@@ -155,6 +155,9 @@ enum QrPattern {
 struct AmountInputView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
+    /// The hero rung's line, following Dynamic Type exactly as the figure's
+    /// `.largeTitle`-relative font does, so the fixed line never clips it.
+    @ScaledMetric(relativeTo: .largeTitle) private var heroLine = WalletFlowGeometry.amountHeroLine
 
     let amount: AmountFieldModel
     var onDenom: () -> Void = {}
@@ -199,63 +202,162 @@ struct AmountInputView: View {
         .padding(.vertical, Tokens.Space.s24)
     }
 
+    /// What the figure reads right now: the field's own text while it is
+    /// typed into (the ladder must follow the keystroke, not the core's echo),
+    /// the drawn value otherwise.
+    private var shown: String {
+        if let text, !amount.locked { return text.wrappedValue }
+        return amount.value
+    }
+
     /// The figure, wearing its unit (issue 231): "4.00" alone could be dollars
     /// or coins. A currency symbol leads at the figure's own size; a ticker or
     /// a code follows, smaller and quieter, so the number still reads first.
-    /// With no unit this is exactly the drawn figure.
-    @ViewBuilder private var figure: some View {
-        if amount.unitPrefix == nil && amount.unitSuffix == nil {
-            entry
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s0) {
-                if let prefix = amount.unitPrefix {
-                    // Set exactly as the digits beside it are: the live field
-                    // takes the role's font directly, the drawn figure the role.
-                    if text != nil && !amount.locked {
-                        Text(verbatim: prefix)
-                            .font(Typography.amountHero.scaled(textScale).font)
-                            .foregroundStyle(theme.fgMuted)
-                    } else {
-                        Text(verbatim: prefix)
-                            .typeRole(Typography.amountHero.scaled(textScale))
-                            .foregroundStyle(theme.fgMuted)
-                    }
-                }
-                // Hugging its digits, so the unit sits against them rather
-                // than at the far edge of a full-width field.
-                entry.fixedSize(horizontal: true, vertical: false)
-                if let suffix = amount.unitSuffix {
-                    Text(verbatim: suffix)
-                        .typeRole(Typography.amountHeroDecimals.scaled(textScale))
-                        .foregroundStyle(theme.fgMuted)
-                        .lineLimit(1)
-                        .padding(.leading, Tokens.Space.s8)
-                }
+    ///
+    /// **On the hero ladder** (spec 078, the web's `AmountInput`): 46 / 38 / 31
+    /// by drawn length, the unit stepping down with the digits, on the hero
+    /// rung's line whatever is drawn. The units never give way — the digits
+    /// do: a read-only figure past the last rung is cut at its END with "…",
+    /// a typed one scrolls inside its own field. The old figure hugged its
+    /// digits with `fixedSize`, which also meant it could never shrink, so a
+    /// Max of `0.043790209243313861` ran off both sides of the screen.
+    private var figure: some View {
+        let rung = AmountRung.of(
+            figure: shown.isEmpty ? Self.placeholder : shown,
+            prefix: amount.unitPrefix, suffix: amount.unitSuffix
+        )
+        let digits = rung.figure.scaled(textScale)
+        let editable = text != nil && !amount.locked
+        return HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s0) {
+            if let prefix = amount.unitPrefix {
+                Text(verbatim: prefix)
+                    .typeRole(digits)
+                    .foregroundStyle(theme.fgMuted)
+                    .lineLimit(1)
+                    .fixedSize()
             }
-            // The unit is drawn for the eye; the field's label names it.
-            .frame(maxWidth: .infinity)
+            entry(digits)
+            if let suffix = amount.unitSuffix {
+                Text(verbatim: suffix)
+                    .typeRole(rung.unit.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(
+                        .leading,
+                        editable ? Tokens.Space.s8 - WalletFlowGeometry.amountCaretSlack : Tokens.Space.s8
+                    )
+            }
+        }
+        .frame(height: heroLine * textScale)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// What an empty field shows.
+    private static let placeholder = "0"
+
+    @ViewBuilder private func entry(_ role: TypeRole) -> some View {
+        if let text, !amount.locked {
+            // As wide as what is in it, and never wider than what is left
+            // beside the units: a hidden mirror of the text sets the width
+            // (the web's `.sizer`), the field fills it and scrolls past it.
+            MirrorWidth {
+                Text(verbatim: text.wrappedValue.isEmpty ? Self.placeholder : text.wrappedValue)
+                    .typeRole(role)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.trailing, WalletFlowGeometry.amountCaretSlack)
+                    .hidden()
+                    .accessibilityHidden(true)
+                // `typeRole` is a `Text` extension (the sanctioned styling
+                // seam); a `TextField` takes the same role's font directly.
+                TextField(Self.placeholder, text: text)
+                    .font(role.font)
+                    .foregroundStyle(theme.fgBase)
+                    .multilineTextAlignment(.leading)
+                    .keyboardType(.decimalPad)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("send.amount")
+            }
+        } else {
+            Text(verbatim: amount.value)
+                .typeRole(role)
+                .foregroundStyle(theme.fgBase)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+}
+
+/// Which rung of the hero ladder a figure is drawn on — the web's
+/// `AmountInput` `size` and the desktop's `amount_hero_rung`, counted the same
+/// way: the figure's characters, the prefix's, and HALF the suffix's (it is set
+/// smaller). Up to 8 drawn → hero, up to 11 → compact, beyond → tight.
+enum AmountRung: Equatable {
+    case hero, compact, tight
+
+    static func of(figure: String, prefix: String?, suffix: String?) -> AmountRung {
+        let drawn = Double(figure.count + (prefix?.count ?? 0)) + Double(suffix?.count ?? 0) / 2
+        if drawn <= WalletFlowGeometry.amountHeroMaxDrawn { return .hero }
+        if drawn <= WalletFlowGeometry.amountCompactMaxDrawn { return .compact }
+        return .tight
+    }
+
+    /// The digits' role on this rung.
+    var figure: TypeRole {
+        switch self {
+        case .hero: Typography.amountEntry
+        case .compact: Typography.amountEntryCompact
+        case .tight: Typography.amountEntryTight
         }
     }
 
-    @ViewBuilder private var entry: some View {
-        if let text, !amount.locked {
-            // `typeRole` is a `Text` extension (the sanctioned styling
-            // seam); a `TextField` takes the same role's font directly.
-            TextField("0", text: text)
-                .font(Typography.amountHero.scaled(textScale).font)
-                .foregroundStyle(theme.fgBase)
-                .multilineTextAlignment(.center)
-                .keyboardType(.decimalPad)
-                .minimumScaleFactor(WalletGeometry.heroMinScale)
-                .lineLimit(1)
-                .accessibilityIdentifier("send.amount")
-        } else {
-            Text(verbatim: amount.value)
-                .typeRole(Typography.amountHero.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
-                .minimumScaleFactor(WalletGeometry.heroMinScale)
-                .lineLimit(1)
+    /// The unit's role on this rung — a step of the type scale below.
+    var unit: TypeRole {
+        switch self {
+        case .hero: Typography.amountUnit
+        case .compact: Typography.amountUnitCompact
+        case .tight: Typography.amountUnitTight
         }
+    }
+}
+
+/// Sizes its SECOND subview (a field) to the width its FIRST (a hidden mirror
+/// of the same text) wants, capped at what the parent offers.
+///
+/// A `TextField` takes every point it is offered, and `fixedSize` pins it to
+/// its content with no ceiling — the trap that ran an 18-decimal Max off the
+/// screen. This is the ceiling: hugging while it fits, the field's own width
+/// once it does not, where the text scrolls to its caret.
+struct MirrorWidth: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let mirror = subviews.first else { return .zero }
+        let ideal = mirror.sizeThatFits(.unspecified)
+        let width = min(ideal.width, proposal.width ?? ideal.width)
+        let field = subviews.dropFirst().first?
+            .sizeThatFits(ProposedViewSize(width: width, height: proposal.height)) ?? .zero
+        return CGSize(width: width, height: max(ideal.height, field.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews {
+            subview.place(
+                at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading,
+                proposal: ProposedViewSize(width: bounds.width, height: bounds.height)
+            )
+        }
+    }
+
+    /// Both children on one baseline: the field's, which is the text's.
+    func explicitAlignment(
+        of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+        subviews: Subviews, cache: inout ()
+    ) -> CGFloat? {
+        guard let field = subviews.dropFirst().first else { return nil }
+        let size = field.sizeThatFits(ProposedViewSize(width: bounds.width, height: bounds.height))
+        let top = bounds.midY - size.height / 2
+        return field.dimensions(in: ProposedViewSize(width: bounds.width, height: bounds.height))[guide]
+            + top
     }
 }
 

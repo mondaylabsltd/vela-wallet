@@ -957,6 +957,19 @@ fn begin_fetch(model: &mut Model, force: bool, pull: bool) -> Command<BalanceEff
 /// The streaming merge (`useHomeController.ts:326-330`): chains present in
 /// the snapshot replace their previous tokens; chains still in flight keep
 /// their last value — the total never drops to $0 mid-refresh (invariant ④).
+/// A holding with its coin written the wallet's way
+/// (`network_admin::display_native_symbol`): the asset list, the picker and
+/// the fee row name Gnosis's coin one way, not "XDAI" in one and "xDAI" in
+/// the next.
+fn with_display_symbol(mut token: BalanceToken) -> BalanceToken {
+    token.symbol = super::network_admin::display_native_symbol(
+        token.chain_id,
+        token.token_address.as_deref(),
+        &token.symbol,
+    );
+    token
+}
+
 fn chain_assets_arrived(
     model: &mut Model,
     address: &str,
@@ -975,7 +988,8 @@ fn chain_assets_arrived(
     merged.extend(
         tokens
             .into_iter()
-            .filter(|t| token_balance_double(&t.balance) > 0.0),
+            .filter(|t| token_balance_double(&t.balance) > 0.0)
+            .map(with_display_symbol),
     );
     sort_by_usd_desc(&mut merged);
     model.tokens = merged;
@@ -1037,6 +1051,7 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             let mut live: Vec<BalanceToken> = tokens
                 .into_iter()
                 .filter(|t| token_balance_double(&t.balance) > 0.0)
+                .map(with_display_symbol)
                 .collect();
             sort_by_usd_desc(&mut live);
             model.tokens = live;

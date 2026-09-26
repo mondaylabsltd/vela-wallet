@@ -314,16 +314,7 @@ pub fn balance_detail(
                     if view.hidden {
                         crate::wallet::fixtures::MASK.to_owned()
                     } else {
-                        token.balance.parse::<f64>().map_or_else(
-                            |_| token.balance.clone(),
-                            |amount| {
-                                format_token_amount(
-                                    amount,
-                                    crate::executor::format_prefs::current().number,
-                                    false,
-                                )
-                            },
-                        )
+                        token_amount_text(&token.balance)
                     }
                 )),
                 false,
@@ -386,6 +377,38 @@ mod tests {
     use super::*;
     use crate::core_host::CoreHost;
     use vela_core::app::balance_dashboard::{BalanceDashboard, Event as BalanceEvent};
+
+    /// The one token-amount rule, pinned with the core's own vectors
+    /// (`a_max_reads_on_the_balance_lines_ladder`) — the same list web and
+    /// iOS pin — ungrouped, so a balance matches the Max taken from it.
+    #[test]
+    fn token_amounts_read_on_the_one_ladder() {
+        for (exact, shown) in [
+            ("0.043790209243313861", "0.04379"),
+            ("0.0439686", "0.043969"),
+            ("1.22456789123456789", "1.2246"),
+            ("1234.567", "1234.57"),
+            ("2", "2"),
+            ("0", "0"),
+            ("0.9999996", "1"),
+            ("999.99996", "1000"),
+            ("0.0000001234", "0.00000012"),
+            ("5.000000", "5"),
+        ] {
+            assert_eq!(token_amount_text(exact), shown, "{exact}");
+        }
+    }
+
+    /// A ceiling is cut, never rounded up past what the balance covers.
+    #[test]
+    fn a_ceiling_is_cut_down() {
+        assert_eq!(token_amount_text_down("0.0439686"), "0.043968");
+        assert_eq!(token_amount_text_down("1.22456789"), "1.2245");
+        assert_eq!(token_amount_text_down("999.99996"), "999.9999");
+        assert_eq!(token_amount_text_down("1234.567"), "1234.56");
+        assert_eq!(token_amount_text_down("0.0000001234"), "0.00000012");
+        assert_eq!(token_amount_text_down("3"), "3");
+    }
 
     /// A real `BalanceView` with the total substituted.
     ///
@@ -1509,11 +1532,7 @@ pub fn asset_rows(
                 balance: if view.hidden {
                     SharedString::from(crate::wallet::fixtures::MASK)
                 } else {
-                    SharedString::from(format_token_amount(
-                        amount,
-                        crate::executor::format_prefs::current().number,
-                        false,
-                    ))
+                    SharedString::from(token_amount_text(&token.balance))
                 },
                 fiat: if view.hidden {
                     Fiat::Masked
@@ -1731,11 +1750,7 @@ pub fn asset_detail(
         } else {
             SharedString::from(format!(
                 "{} {}",
-                format_token_amount(
-                    amount,
-                    crate::executor::format_prefs::current().number,
-                    false
-                ),
+                token_amount_text(&token.balance),
                 token.symbol
             ))
         },
@@ -1914,6 +1929,62 @@ pub(crate) fn activity_row(
 /// Privacy masks the FIGURE and keeps the unit, on every surface together —
 /// the detail panel is one of them, and reading a second flag is how one ends
 /// up out of step.
+/// A token amount as every balance surface reads it — the asset list rows, a
+/// token's page, the Send picker and card, the confirm and the receipt — ONE
+/// rule on all four shells: the core's ladder (`send::max_figure`, the very
+/// figure `Max` writes — 6 places under 1, 4 under 1000, 2 above, half up), in
+/// the person's decimal mark and UNGROUPED like the field `Max` fills, so a
+/// balance and the Max taken from it read the same digits (web
+/// `tokenAmountText`, iOS `WalletLive.tokenAmountText`).
+#[must_use]
+pub fn token_amount_text(value: &str) -> String {
+    with_decimal_mark(vela_core::app::send::max_figure(value))
+}
+
+/// The same ladder cut DOWN — for a ceiling the person may type back ("you
+/// can send up to", what is left): rounded up, it would be a figure the
+/// balance cannot cover.
+#[must_use]
+pub fn token_amount_text_down(value: &str) -> String {
+    let exact = value.trim();
+    let (int_raw, frac_raw) = exact.split_once('.').unwrap_or((exact, ""));
+    if !int_raw.bytes().all(|b| b.is_ascii_digit()) || !frac_raw.bytes().all(|b| b.is_ascii_digit())
+    {
+        return exact.to_owned();
+    }
+    let int_digits = int_raw.trim_start_matches('0');
+    let places = match int_digits.len() {
+        0 => 6,
+        1..=3 => 4,
+        _ => 2,
+    };
+    let cut: String = frac_raw.chars().take(places).collect();
+    // Below the last place, the half-up rule's two significant digits are
+    // already a cut; anything else is the truncation itself.
+    if int_digits.is_empty() && cut.trim_end_matches('0').is_empty() {
+        return token_amount_text(exact);
+    }
+    let int_part = if int_digits.is_empty() { "0" } else { int_digits };
+    let frac = cut.trim_end_matches('0');
+    with_decimal_mark(if frac.is_empty() {
+        int_part.to_owned()
+    } else {
+        format!("{int_part}.{frac}")
+    })
+}
+
+fn with_decimal_mark(figure: String) -> String {
+    let decimal = crate::executor::format_prefs::current()
+        .number
+        .separators()
+        .decimal;
+    if decimal == "." {
+        figure
+    } else {
+        figure.replace('.', decimal)
+    }
+}
+
 pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> SharedString {
     if hidden {
         return SharedString::from(crate::wallet::fixtures::MASK);

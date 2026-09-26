@@ -284,6 +284,15 @@ sealed class FeeEvent {
         val tier: FeeTier,
         val calls: List<FeeCall> = emptyList(),
         val fee_token: String? = null,
+        /**
+         * Nobody has chosen a fee coin: the machine pays in one that can
+         * (covers the fee on top of what the operation itself moves of it;
+         * a coin not being sent first, then a stablecoin, then the larger
+         * balance). `fee_token` is then only the fallback. `false` = the
+         * person's own pick, priced exactly as asked. The view's `fee_token`
+         * and `options[].selected` say which coin was taken.
+         */
+        val auto_fee_token: Boolean = false,
     ) : FeeEvent()
 
     @Serializable

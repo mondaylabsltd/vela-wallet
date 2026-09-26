@@ -62,7 +62,7 @@ use crate::settings::components::{
     confirm_sheet, danger_card, dropdown_menu, dropdown_menu_choices, dropdown_menu_details,
     dropdown_menu_picks, dropdown_trigger, editable_url_field, form_row, key_value_row,
     network_row, rpc_banner, segmented, segmented_picks, settings_nav_row, status_pill,
-    storage_bar, storage_group, storage_group_with, text_scale, text_scale_picks, url_field,
+    storage_bar, storage_group, storage_group_with, text_scale, text_scale_slider, url_field,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -654,14 +654,23 @@ pub struct WalletPage {
     address_selected: bool,
     address_focus: gpui::FocusHandle,
     /// The Wallet column's scroll position, for the bar drawn beside it.
-    content_scroll: gpui::ScrollHandle,
+    /// These columns glide (`ui::smooth_scroll`); `render` steps each of them
+    /// once per frame — see `scrolls`.
+    content_scroll: crate::ui::SmoothScroll,
     /// The third column's body, and which subject it last scrolled for.
-    panel_scroll: gpui::ScrollHandle,
+    panel_scroll: crate::ui::SmoothScroll,
     panel_scroll_subject: String,
     /// The sidebar's network list — twenty-odd chains outgrow a short window.
-    networks_scroll: gpui::ScrollHandle,
+    networks_scroll: crate::ui::SmoothScroll,
     /// The settings panel's, for the same bar.
-    settings_scroll: gpui::ScrollHandle,
+    settings_scroll: crate::ui::SmoothScroll,
+    /// The text-size slider's pointer state and motion (`ui::step_slider`).
+    text_scale_slider: crate::ui::StepSlider,
+    /// The address book's list, the Explore start page's, and a pick
+    /// dialog's.
+    contacts_scroll: crate::ui::SmoothScroll,
+    explore_scroll: crate::ui::SmoothScroll,
+    pick_scroll: crate::ui::SmoothScroll,
     /// The network menu's rows — `(chain, name, current)` — named when it
     /// opened; `menu_origin` says which site it is about.
     site_networks: Vec<(u32, SharedString, bool)>,
@@ -819,9 +828,9 @@ pub struct WalletPage {
     /// 078 H-01 — the account switcher, opened from the sidebar header's
     /// name, over whichever section is on screen.
     account_switcher: bool,
-    switcher_scroll: gpui::ScrollHandle,
+    switcher_scroll: crate::ui::SmoothScroll,
     /// Each `ui::dialog`'s body scroll, by dialog id (078 X-04).
-    dialog_scrolls: std::collections::HashMap<&'static str, gpui::ScrollHandle>,
+    dialog_scrolls: std::collections::HashMap<&'static str, crate::ui::SmoothScroll>,
     /// 078 H-02 — the identicon viewer, over everything, switcher included.
     identicon_viewer: Option<IdenticonViewer>,
     /// DC3: the fixture roster is empty.
@@ -1128,11 +1137,15 @@ impl WalletPage {
             address_draft: None,
             address_selected: false,
             address_focus: cx.focus_handle(),
-            content_scroll: gpui::ScrollHandle::new(),
-            panel_scroll: gpui::ScrollHandle::new(),
+            content_scroll: crate::ui::SmoothScroll::new(),
+            panel_scroll: crate::ui::SmoothScroll::new(),
             panel_scroll_subject: String::new(),
-            networks_scroll: gpui::ScrollHandle::new(),
-            settings_scroll: gpui::ScrollHandle::new(),
+            networks_scroll: crate::ui::SmoothScroll::new(),
+            settings_scroll: crate::ui::SmoothScroll::new(),
+            text_scale_slider: crate::ui::StepSlider::new(),
+            contacts_scroll: crate::ui::SmoothScroll::new(),
+            explore_scroll: crate::ui::SmoothScroll::new(),
+            pick_scroll: crate::ui::SmoothScroll::new(),
             site_networks: Vec::new(),
             browser_url_pinned: false,
             send_amount_focus: cx.focus_handle(),
@@ -1186,7 +1199,7 @@ impl WalletPage {
             switcher_addresses: None,
             removing_account: None,
             account_switcher: false,
-            switcher_scroll: gpui::ScrollHandle::new(),
+            switcher_scroll: crate::ui::SmoothScroll::new(),
             dialog_scrolls: std::collections::HashMap::new(),
             identicon_viewer: None,
             contacts_empty: false,
@@ -1835,6 +1848,7 @@ impl WalletPage {
         let Some(group) = self.group.and_then(|index| view.groups.get(index)) else {
             return;
         };
+        self.pick_scroll = crate::ui::SmoothScroll::new();
         self.pick = Some(PickDialog {
             subject: PickSubject::Members {
                 group_id: group.id.clone(),
@@ -1854,6 +1868,7 @@ impl WalletPage {
     fn open_group_pick(&mut self, address: &str, cx: &mut Context<Self>) {
         let view = resident::resident::<Contacts>(cx).read(cx).view();
         let lower = address.to_lowercase();
+        self.pick_scroll = crate::ui::SmoothScroll::new();
         self.pick = Some(PickDialog {
             subject: PickSubject::Groups {
                 address: address.to_owned(),
@@ -1972,12 +1987,14 @@ impl WalletPage {
                     .child(empty),
             );
         } else {
-            let mut list = div()
-                .id("pick-list")
-                .flex()
-                .flex_col()
-                .max_h(window.viewport_size().height * 0.5)
-                .overflow_y_scroll();
+            let mut list = self.pick_scroll.attach(
+                div()
+                    .id("pick-list")
+                    .flex()
+                    .flex_col()
+                    .max_h(window.viewport_size().height * 0.5),
+                window,
+            );
             for (
                 index,
                 PickRow {
@@ -3193,8 +3210,22 @@ impl WalletPage {
 
     /// A dialog's body scroll, kept per dialog so two stacked ones do not
     /// share a position.
-    fn dialog_scroll(&mut self, id: &'static str) -> gpui::ScrollHandle {
+    fn dialog_scroll(&mut self, id: &'static str) -> crate::ui::SmoothScroll {
         self.dialog_scrolls.entry(id).or_default().clone()
+    }
+
+    /// The columns this page builds without the window at hand, stepped once
+    /// per frame at the top of `render` (`ui::smooth_scroll`). Dialogs and the
+    /// pick list step their own, in `attach`.
+    fn scrolls(&self) -> [&crate::ui::SmoothScroll; 6] {
+        [
+            &self.content_scroll,
+            &self.panel_scroll,
+            &self.networks_scroll,
+            &self.settings_scroll,
+            &self.contacts_scroll,
+            &self.explore_scroll,
+        ]
     }
 
     /// Escape: the dialog on top goes, and only that one — the same order
@@ -3314,15 +3345,16 @@ impl WalletPage {
             });
         }
 
-        let mut networks = div()
-            .id("sidebar-networks")
-            .track_scroll(&self.networks_scroll)
-            .flex()
-            .flex_col()
-            // Row against row, as the web's list items sit: each is already
-            // a 44 hit target (078 H-11).
-            .size_full()
-            .overflow_y_scroll();
+        let mut networks = self.networks_scroll.wire(
+            div()
+                .id("sidebar-networks")
+                .flex()
+                .flex_col()
+                // Row against row, as the web's list items sit: each is
+                // already a 44 hit target (078 H-11).
+                .size_full(),
+            cx.entity_id(),
+        );
         let chain_rows = self.chain_models(cx);
         let live = self.identity.is_some();
         for (i, row) in chain_rows.iter().enumerate() {
@@ -3583,11 +3615,9 @@ impl WalletPage {
         // can cross. The balance stays outside it: one-ended, and a large one
         // needs the room. Full-screen, the rows used to run the width of the
         // monitor with a token's name at one end and its amount at the other.
-        let column = div()
-            .id("wallet-content")
-            .track_scroll(&self.content_scroll)
-            .size_full()
-            .overflow_y_scroll()
+        let column = self
+            .content_scroll
+            .wire(div().id("wallet-content").size_full(), cx.entity_id())
             .child(
                 // Block: see `assets_col`.
                 div()
@@ -4111,7 +4141,7 @@ impl WalletPage {
         self.account_switcher = true;
         self.removing_account = None;
         self.menu = None;
-        self.switcher_scroll = gpui::ScrollHandle::new();
+        self.switcher_scroll = crate::ui::SmoothScroll::new();
         cx.notify();
     }
 
@@ -4471,14 +4501,16 @@ impl WalletPage {
             }
             _ => None,
         };
-        let mut list = div()
-            .id("contacts-list")
-            .flex_1()
-            .min_w(px(0.))
-            .min_h(px(0.))
-            .overflow_y_scroll()
-            .flex()
-            .flex_col();
+        let mut list = self.contacts_scroll.wire(
+            div()
+                .id("contacts-list")
+                .flex_1()
+                .min_w(px(0.))
+                .min_h(px(0.))
+                .flex()
+                .flex_col(),
+            cx.entity_id(),
+        );
 
         let sections = self.contact_sections(cx);
         if sections.is_empty() && !self.contacts_query.trim().is_empty() {
@@ -5145,6 +5177,26 @@ impl WalletPage {
         body: Div,
         cx: &mut Context<Self>,
     ) -> Div {
+        self.panel_scaffold_foot(theme, title, lead, underline, body, None, cx)
+    }
+
+    /// [`panel_scaffold_with`], with a foot pinned under the scrolling body —
+    /// the web's `.pinned` (078 F-09): on the page's colour, a hairline above
+    /// it where the list ends, padded as the body is.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the scaffold and its one extra slot"
+    )]
+    fn panel_scaffold_foot(
+        &mut self,
+        theme: &Theme,
+        title: SharedString,
+        lead: Option<gpui::AnyElement>,
+        underline: bool,
+        body: Div,
+        foot: Option<Div>,
+        cx: &mut Context<Self>,
+    ) -> Div {
         // The web's `ThirdPanel` (`wallet/ui/ThirdPanel.svelte`): header
         // 16/24 with a gap of 8 — its top here is the caption strip's
         // clearance, which the browser does not have — a 36px close with a
@@ -5247,22 +5299,44 @@ impl WalletPage {
                     self.panel_scroll_subject = subject;
                     self.panel_scroll.set_offset(gpui::point(px(0.), px(0.)));
                 }
+                // With a foot, the body takes its own height and shrinks
+                // (then scrolls) only when it must, so the foot sits under
+                // the content and pins to the bottom once the list overflows
+                // — CSS `sticky`, as the web's `.pinned` is (078 F-09).
+                let with_foot = foot.is_some();
+                // Content-sized, both levels shrinkable flex items: a
+                // `size_full` scroll view has no height to take from a parent
+                // that is itself sized by content, and collapsed to nothing.
                 div()
                     .relative()
-                    .flex_1()
+                    .when(with_foot, |el| el.flex_initial().flex().flex_col())
+                    .when(!with_foot, |el| el.flex_1())
                     .min_h(px(0.))
                     .child(
-                        div()
-                            .id("panel-body")
-                            .track_scroll(&self.panel_scroll)
-                            .size_full()
-                            .overflow_y_scroll()
+                        self.panel_scroll
+                            .wire(
+                                div()
+                                    .id("panel-body")
+                                    .when(with_foot, |el| el.w_full().flex_initial().min_h(px(0.)))
+                                    .when(!with_foot, |el| el.size_full()),
+                                cx.entity_id(),
+                            )
                             .px(px(24.))
                             .pb(px(24.))
                             .child(body),
                     )
                     .children(crate::ui::vertical_scrollbar(theme, &self.panel_scroll))
             })
+            .children(foot.map(|foot| {
+                div()
+                    .flex_none()
+                    .px(px(24.))
+                    .pt(px(4.))
+                    .bg(theme.bg_base)
+                    .border_t_1()
+                    .border_color(theme.divider)
+                    .child(foot)
+            }))
     }
 
     /// The flow column: spec 015's panel scaffold plus the back chevron the
@@ -5273,13 +5347,14 @@ impl WalletPage {
         title: SharedString,
         back: Option<SharedString>,
         body: Div,
+        foot: Option<Div>,
         cx: &mut Context<Self>,
     ) -> Div {
         // The root of a flow has nowhere to step back TO — closing the column
         // and stepping back one level are different gestures, and only the
         // close button should offer the first.
         let Some(_label) = back else {
-            return self.panel_scaffold_with(theme, title, None, true, body, cx);
+            return self.panel_scaffold_foot(theme, title, None, true, body, foot, cx);
         };
         let chevron = div()
             .id("flow-back")
@@ -5301,12 +5376,13 @@ impl WalletPage {
             .on_click(cx.listener(|this, _, _, cx| {
                 this.flow_back(cx);
             }));
-        self.panel_scaffold_with(
+        self.panel_scaffold_foot(
             theme,
             title,
             Some(chevron.into_any_element()),
             true,
             body,
+            foot,
             cx,
         )
     }
@@ -5918,7 +5994,7 @@ impl WalletPage {
                     .bg(theme.accent)
                     .text_size(theme::text_row_title())
                     .text_color(theme.fg_inverse)
-                    .child(self.flow_strings.done.clone())
+                    .child(self.flow_strings.got_it.clone())
                     .on_click(dismiss),
             );
             return Some(scrim("send-alert-scrim").child(card).into_any_element());
@@ -8081,11 +8157,9 @@ impl WalletPage {
             None => None,
         };
 
-        let panel = div()
-            .id("settings-panel")
-            .track_scroll(&self.settings_scroll)
-            .size_full()
-            .overflow_y_scroll()
+        let panel = self
+            .settings_scroll
+            .wire(div().id("settings-panel").size_full(), cx.entity_id())
             // Left-aligned against the nav column, exactly as the wallet's own
             // content column is. The padding is the panel's, the cap is the
             // content's: a settings form stretched to a 2000px window is a
@@ -9482,10 +9556,12 @@ impl WalletPage {
                 el.child(Self::settings_menu_layer(menu, cx))
             });
 
-        let scale_control = text_scale_picks(
+        let scale_control = text_scale_slider(
             theme,
+            &self.text_scale_slider,
             vela_core::prefs::TEXT_SCALE_LEVELS.len(),
             settings_live::text_scale_index(prefs.text_scale),
+            cx.reduce_motion(),
             {
                 let page = page.clone();
                 move |index, window, cx| {
@@ -13325,14 +13401,16 @@ impl WalletPage {
     }
 
     fn explore_start(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
-        let mut column = div()
-            .id("explore-start")
-            .flex_1()
-            .min_h(px(0.))
-            .overflow_y_scroll()
-            .p(px(32.))
-            .flex()
-            .flex_col();
+        let mut column = self.explore_scroll.wire(
+            div()
+                .id("explore-start")
+                .flex_1()
+                .min_h(px(0.))
+                .p(px(32.))
+                .flex()
+                .flex_col(),
+            cx.entity_id(),
+        );
 
         // The person's own grid once they are signed in; the drawn one before
         // that, which is what the gallery reviews. Same fork as Recent.
@@ -14814,7 +14892,7 @@ impl WalletPage {
                         self.tick_receipt(cx);
                     }
                     actions.copy = Some(self.flow_copy_action(cx));
-                    let rendered = panels::render(
+                    let (rendered, foot) = panels::render_parts(
                         &body,
                         theme,
                         &mut self.icons,
@@ -14826,7 +14904,15 @@ impl WalletPage {
                     // level deep: closing the whole column is not the same
                     // gesture as stepping back one.
                     let back = (self.flows.len() > 1).then(|| self.flow_strings.back.clone());
-                    columns.child(self.flow_scaffold(theme, title, back, rendered, cx))
+                    // The web body's 1.4 under everything the panel does not
+                    // set itself (078 F-11): gpui's ~1.6 default made every
+                    // flow screen taller than the web's, row by row.
+                    let rendered =
+                        rendered.line_height(gpui::relative(crate::wallet::components::LINE_BODY));
+                    let foot = foot.map(|foot| {
+                        foot.line_height(gpui::relative(crate::wallet::components::LINE_BODY))
+                    });
+                    columns.child(self.flow_scaffold(theme, title, back, rendered, foot, cx))
                 }
             },
         };
@@ -16532,6 +16618,9 @@ impl WalletPage {
 
 impl Render for WalletPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        for scroll in self.scrolls() {
+            scroll.step(window);
+        }
         self.watch_field_blurs(window, cx);
         self.watch_money(cx);
         // The 10 s Activity poll runs while the Activity can be seen: the

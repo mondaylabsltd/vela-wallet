@@ -123,6 +123,18 @@ enum Typography {
     static let amountHero = TypeRole(fontName: FontName.bold, size: Tokens.TextSize.t40, relativeTo: .largeTitle, leading: Tokens.Leading.amountHero)
     /// Hero balance decimals — de-emphasised trailing part, text.t26.
     static let amountHeroDecimals = TypeRole(fontName: FontName.bold, size: Tokens.TextSize.t26, relativeTo: .title2, leading: Tokens.Leading.amountHero)
+    /// The send form's figure, one role per rung of the hero ladder
+    /// (`WalletFlowGeometry.amountHero…`, picked by `AmountRung`) — bold, the
+    /// largest type on the screen because it is what the person came to decide.
+    static let amountEntry = TypeRole(fontName: FontName.bold, size: WalletFlowGeometry.amountHero, relativeTo: .largeTitle, leading: Tokens.Leading.tight)
+    static let amountEntryCompact = TypeRole(fontName: FontName.bold, size: WalletFlowGeometry.amountHeroCompact, relativeTo: .largeTitle, leading: Tokens.Leading.tight)
+    static let amountEntryTight = TypeRole(fontName: FontName.bold, size: WalletFlowGeometry.amountHeroTight, relativeTo: .largeTitle, leading: Tokens.Leading.tight)
+    /// …and its unit ("BNB", "PLN"): a word beside a number — medium, and a rung
+    /// of the type scale below the figure on each rung (26 / 20 / 17), as the
+    /// web's `.suffix` steps `text-3xl` / `2xl` / `xl`.
+    static let amountUnit = TypeRole(fontName: FontName.medium, size: Tokens.TextSize.t26, relativeTo: .title2, leading: Tokens.Leading.none)
+    static let amountUnitCompact = TypeRole(fontName: FontName.medium, size: Tokens.TextSize.t20, relativeTo: .title3, leading: Tokens.Leading.none)
+    static let amountUnitTight = TypeRole(fontName: FontName.medium, size: Tokens.TextSize.t17, relativeTo: .body, leading: Tokens.Leading.none)
     /// Row title (activity/asset primary line) — text.t17, semibold.
     static let rowTitle = TypeRole(fontName: FontName.semiBold, size: Tokens.TextSize.t17, relativeTo: .body, leading: Tokens.Leading.tight)
     /// Row trailing value (amount/balance) — text.t17, semibold.

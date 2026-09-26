@@ -398,7 +398,9 @@ class AppContainer(private val app: Application) {
                     SendHapticKind.Error -> Haptics.error(app)
                 }
             },
-            refreshBalances = { wallet.refresh() },
+            // `clear_token_cache`: the token list must be read again, not
+            // throttled away; the new round reaches Send as HoldingsUpdated.
+            refreshBalances = { wallet.refresh(force = true) },
             feedChanged = { wallet.feedReconciled() },
             identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
             currencyCode = { settings.currency.value.code },
@@ -412,6 +414,8 @@ class AppContainer(private val app: Application) {
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
             trustedSigner = { trustedSigner },
+            // Spec 078: one source for the picker and the asset list.
+            holdings = wallet.holdings,
         ).also { controller ->
             // Spec 069: the stored default speed, read now and followed after —
             // Settings changing it reaches a send already open.

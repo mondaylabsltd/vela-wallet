@@ -6,7 +6,8 @@
   "error": "오류",
   "somethingWrong": "문제가 발생했습니다",
   "tryAgain": "다시 시도",
-  "done": "완료"
+  "done": "완료",
+  "gotIt": "확인"
  },
  "language": {
   "title": "언어",

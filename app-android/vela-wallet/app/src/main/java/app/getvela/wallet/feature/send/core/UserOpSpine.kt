@@ -262,6 +262,10 @@ class UserOpSpine(
     ): String {
         val keys = accounts.keysOf(account)
         if (keys.isEmpty()) other("No passkey credential for the active account")
+        // A submit, and the first quote after it, landed or not, measure the
+        // chain again (issue 212) — the held gas readings and the held
+        // simulation with them: the nonce this op consumes is not the next's.
+        relay.invalidateFeeSignals(chainId)
         val pinned = keys.first()
         val tempo = isChainWithoutNativeCoin(chainId.toUInt())
         val deployed = relay.isDeployed(chainId, account)

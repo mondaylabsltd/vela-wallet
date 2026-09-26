@@ -9,6 +9,7 @@ use gpui::{
     ParentElement, SharedString, StatefulInteractiveElement as _, Styled, Window, div, px,
 };
 
+use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 
 use crate::icons::{Icon, IconCache};
@@ -21,9 +22,9 @@ use crate::wallet::components::{
 use super::components::{
     CopyButton, accent_button, address_card, danger_button, disabled_accent_button, fact_row,
     fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option, fee_speed_summary, fee_stale_line,
-    filter_chips, flow_search, ghost_button, inline_mark, max_chip, mono_field, network_pill,
-    network_row, qr_card, recipient_card, search_empty, search_matches, segmented_toggle,
-    status_chip, token_header_card,
+    filter_chips, flow_search, ghost_button, max_chip, mono_field, network_pill, network_row,
+    qr_card, recipient_card, search_empty, search_matches, segmented_toggle, status_chip,
+    token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -271,12 +272,13 @@ fn breakdown_list(
                 .child(title.clone()),
         );
     }
+    // A raised surface, as every card on the web's flows (078 F-11).
     let mut list = div()
         .flex()
         .flex_col()
         .px(px(12.))
         .rounded(px(12.))
-        .bg(theme.bg_sunken);
+        .bg(theme.bg_raised);
     for item in rows {
         let mut row = div().flex().items_center().gap(px(8.)).py(px(8.));
         if let Some(seed) = item.seed.as_ref() {
@@ -314,6 +316,30 @@ fn divider(theme: &Theme) -> Div {
 
 /// Dispatch one body model to its panel. `Scan` never arrives — the page draws
 /// DS1L as a centred modal instead of a column.
+/// [`render`], with a split send form's foot handed back apart from its
+/// body (078 F-09): in a split the total, the refusal and Continue travel
+/// together at the bottom of the column — a split can be sixty rows long,
+/// and what it adds up to is the figure that matters while they are typed.
+pub fn render_parts(
+    body: &FlowBody,
+    theme: &Theme,
+    icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
+    window: &Window,
+    actions: PanelActions,
+) -> (Div, Option<Div>) {
+    if let FlowBody::SendForm(model) = body
+        && !model.recipients.is_empty()
+    {
+        let (body, foot) = send_form_parts(model, theme, icons, identicons, window, actions);
+        return (body, Some(foot));
+    }
+    (
+        render(body, theme, icons, identicons, window, actions),
+        None,
+    )
+}
+
 pub fn render(
     body: &FlowBody,
     theme: &Theme,
@@ -459,13 +485,15 @@ fn receive(
     // network N.
     let mut per_row = per_row.into_iter().map(Some).collect::<Vec<_>>();
     let mut shown = 0;
+    // One flush list, a hairline on each row after the first (078 F-11): a
+    // divider as its own child took the panel's 12 gap on BOTH sides, and
+    // every network row stood 85 tall to the web's 65.
+    let mut list = div().flex().flex_col();
     for (i, row) in model.rows.iter().enumerate() {
         if !search_matches(&query, &row.name) {
             continue;
         }
-        if shown > 0 {
-            col = col.child(divider(theme));
-        }
+        let ruled = shown > 0;
         shown += 1;
         let action = per_row
             .get_mut(i)
@@ -478,12 +506,17 @@ fn receive(
             .as_ref()
             .map(|copy| copy.button(format!("network:{i}"), row.address_full.clone()));
         let (row_click, qr_click) = split_click(action);
-        col = col.child(clickable(
-            ElementId::from(("network", i)),
-            row_click,
-            network_row(theme, icons, row, i, copy, qr_click),
-        ));
+        list = list.child(
+            div()
+                .when(ruled, |el| el.border_t_1().border_color(theme.divider))
+                .child(clickable(
+                    ElementId::from(("network", i)),
+                    row_click,
+                    network_row(theme, icons, row, i, copy, qr_click),
+                )),
+        );
     }
+    col = col.child(list);
     if shown == 0 && !model.rows.is_empty() {
         col = col.child(search_empty(
             theme,
@@ -507,7 +540,8 @@ fn receive_qr(
 ) -> Div {
     let mut col = column().child(
         div()
-            .text_size(theme::text_row_sub())
+            .text_size(theme::text_row_title())
+            .font_weight(gpui::FontWeight::SEMIBOLD)
             .text_color(theme.fg_base)
             .child(model.title.clone()),
     );
@@ -595,7 +629,9 @@ fn receive_qr(
     )))
     .child(
         div()
-            .text_size(theme::text_row_sub())
+            // Centred 11 subtle, as the web's `.warning` (078 F-11).
+            .text_size(theme::text_label())
+            .text_center()
             .text_color(theme.fg_subtle)
             .child(model.warning.clone()),
     )
@@ -766,7 +802,7 @@ fn tx_detail(
         )
         .child(
             div()
-                .text_size(theme::text_balance_hero())
+                .text_size(theme::text_amount_detail())
                 .font_weight(gpui::FontWeight::BOLD)
                 // Money in is green; money out is plain ink, not red. Red means
                 // something went wrong, and a transfer you chose to make did not.
@@ -875,45 +911,56 @@ fn assets(
                     .flex_col()
                     .gap(px(8.))
                     .p(px(12.))
-                    .rounded(px(14.))
+                    .rounded(px(16.))
                     .border_1()
-                    .border_color(theme.border_card)
-                    // Question, answer, then the button — DT4L puts the CTA at
-                    // the BOTTOM of the card, because it is what to do about
-                    // the paragraph above it, not a heading for it.
+                    .border_color(theme.divider)
+                    // The web's `HintCard` (078 F-11): the button first, then
+                    // the question 13 semibold and the answer 11 on 1.6. The
+                    // DT4L mock drew the button last; the web — this spec's
+                    // reference — leads with it.
+                    .child(div().pb(px(8.)).child(clickable(
+                        "assets-empty-cta",
+                        open_add_token,
+                        ghost_button(theme, empty.cta.clone()),
+                    )))
                     .child(
                         div()
                             .text_size(theme::text_row_sub())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_base)
                             .child(empty.hint_title.clone()),
                     )
                     .child(
                         div()
-                            .text_size(theme::text_row_sub())
+                            .text_size(theme::text_label())
+                            .line_height(gpui::relative(1.6))
                             .text_color(theme.fg_muted)
                             .child(empty.hint_body.clone()),
-                    )
-                    .child(clickable(
-                        "assets-empty-cta",
-                        open_add_token,
-                        ghost_button(theme, empty.cta.clone()),
-                    )),
+                    ),
             );
     }
 
     let mut shown = 0;
+    // One list, row against row with a hairline between, as the web's
+    // `Assets` (078 F-11) — the column gap made each row 76 tall.
+    let mut list = div().flex().flex_col();
     for (i, row) in model.rows.iter().enumerate() {
         if !search_matches(&query, &format!("{} {}", row.ticker, row.chain)) {
             continue;
         }
         shown += 1;
-        col = col.child(asset_row(
-            ElementId::from(("flow-asset", i)),
-            theme,
-            icons,
-            row,
-        ));
+        list = list.child(
+            div()
+                .when(shown > 1, |el| el.border_t_1().border_color(theme.divider))
+                .child(asset_row(
+                    ElementId::from(("flow-asset", i)),
+                    theme,
+                    icons,
+                    row,
+                )),
+        );
     }
+    col = col.child(list);
     if shown == 0 && !model.rows.is_empty() {
         col = col.child(search_empty(theme, model.no_match.clone()));
     }
@@ -966,13 +1013,20 @@ fn add_token(
     if let Some((mark, name)) = &model.network {
         col = col.child(
             div()
+                // Raised, with the coin's own circle (078 F-11) — the web's
+                // network select, not a sunken well with a bare ticker.
                 .flex()
                 .items_center()
-                .gap(px(8.))
-                .p(px(10.))
+                .gap(px(12.))
+                .p(px(12.))
                 .rounded(px(12.))
-                .bg(theme.bg_sunken)
-                .child(inline_mark(theme, mark))
+                .bg(theme.bg_raised)
+                .child(crate::wallet::components::token_icon_logos(
+                    theme,
+                    mark.ticker.as_ref(),
+                    mark.badge,
+                    &mark.logos,
+                ))
                 .child(
                     div()
                         .flex_1()
@@ -1280,8 +1334,32 @@ fn cta_button(
     let button = accent_button(theme, label);
     match state {
         CtaState::Enabled => clickable(id, action, button),
-        CtaState::Busy => clickable(id, None, button.opacity(0.7)),
-        CtaState::Disabled => clickable(id, None, button.opacity(0.4)),
+        // The web's `loading` (078 F-09): full emphasis, the words kept for
+        // the width but not shown, a spinner where they were — busy is a
+        // wait, not a refusal, and a faded button read as one.
+        CtaState::Busy => clickable(
+            id,
+            None,
+            div()
+                .relative()
+                .child(button.text_color(gpui::transparent_black()))
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(crate::ui::spinner(
+                            gpui::Hsla::from(gpui::rgb(0xffffff)),
+                            px(20.),
+                            px(1.5),
+                        )),
+                ),
+        ),
+        CtaState::Disabled => clickable(id, None, button.opacity(0.45)),
     }
 }
 
@@ -1338,26 +1416,42 @@ fn send_pick(
     // SD1b's chain lock, in the corpus's own sentence: the first pick names
     // the network and the greying that follows is explained rather than left
     // to be guessed at.
-    if let Some((colour, letter, text)) = model
+    if let Some((chain_id, colour, letter, text)) = model
         .selection
         .as_ref()
         .and_then(|selection| selection.notice.clone())
     {
+        // The web's `NoticeBanner` (078 F-10): raised, padded 8/12, radius 12,
+        // 11 on 1.4, with the chain's own logo — the tinted letter only while
+        // it loads or where there is none.
+        let mark = move || {
+            crate::settings::components::chain_mark(letter.clone(), colour, 20.).into_any_element()
+        };
+        let logo = match crate::marks::chain_logo_url(chain_id) {
+            Some(url) => gpui::img(url)
+                .size(px(20.))
+                .rounded_full()
+                .with_loading(mark.clone())
+                .with_fallback(mark)
+                .into_any_element(),
+            None => mark(),
+        };
         col = col.child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(10.))
-                .p(px(12.))
-                .rounded(px(10.))
-                .bg(theme.bg_well)
-                .child(crate::settings::components::chain_mark(letter, colour, 20.))
+                .gap(px(8.))
+                .py(px(8.))
+                .px(px(12.))
+                .rounded(px(12.))
+                .bg(theme.bg_raised)
+                .child(div().flex_none().child(logo))
                 .child(
                     div()
                         .flex_1()
                         .min_w(px(0.))
-                        .text_size(theme::text_row_sub())
-                        .line_height(px(18.))
+                        .text_size(theme::text_label())
+                        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
                         .text_color(theme.fg_muted)
                         .child(text),
                 ),
@@ -1370,6 +1464,9 @@ fn send_pick(
     // token N.
     let mut per_row = per_row.into_iter().map(Some).collect::<Vec<_>>();
     let mut shown = 0;
+    // One list, row against row with a hairline between (the web's `li + li`,
+    // 078 F-10) — the panel's 12 gap between rows made each 76 tall.
+    let mut list = div().flex().flex_col();
     for (i, row) in model.rows.iter().enumerate() {
         if !search_matches(&query, &format!("{} {}", row.ticker, row.chain)) {
             continue;
@@ -1390,18 +1487,26 @@ fn send_pick(
             .and_then(|s| s.dimmed.get(i).copied())
             .unwrap_or(false);
         let drawn = asset_row(ElementId::from(("flow-send", i)), theme, icons, row);
-        let mut wrapper = div().when(selected, |el| {
-            el.rounded(px(10.)).bg(theme.accent.opacity(0.10))
-        });
+        // Selected lifts the whole row, bleeding 8 past the margin at radius
+        // 12, as the web's `.selected` does — not an accent tint.
+        let mut wrapper = div()
+            .when(shown > 1, |el| el.border_t_1().border_color(theme.divider))
+            .when(selected, |el| {
+                el.rounded(px(12.))
+                    .bg(theme.bg_raised)
+                    .px(px(8.))
+                    .mx(px(-8.))
+            });
         wrapper = wrapper.child(if dimmed {
             // Off-network rows are readable and inert. The core refuses them
             // anyway; drawing them as pressable would be an offer it declines.
-            drawn.opacity(0.4).into_any_element()
+            drawn.opacity(0.45).into_any_element()
         } else {
             clickable(ElementId::from(("flow-send-row", i)), action, drawn).into_any_element()
         });
-        col = col.child(wrapper);
+        list = list.child(wrapper);
     }
+    col = col.child(list);
     if shown == 0 && !model.rows.is_empty() {
         col = col.child(search_empty(theme, model.no_match.clone()));
     }
@@ -1411,43 +1516,43 @@ fn send_pick(
             "flow-send-select-all",
             select_all,
             div()
-                .py(px(8.))
-                .text_size(theme::text_row_sub())
+                .py(px(4.))
+                .text_size(theme::text_label())
                 .text_color(theme.fg_muted)
                 .child(selection.select_all.clone()),
         ));
     }
 
-    // DSD1L sets this as a quiet centred link, not a button: sending several
-    // tokens at once is a different journey, not the main one on this panel.
-    // Once tokens ARE ticked it becomes the accent action, because then it is.
-    let label = div()
+    // A real button, as the web's `Button` (078 F-10): the secondary pill —
+    // outlined, muted — while this is the other journey, the primary once
+    // tokens are ticked and it is the one being taken. 52 tall, 17 semibold,
+    // padded 8 above and 16 below.
+    let face = div()
+        .h(px(52.))
         .flex()
+        .items_center()
         .justify_center()
-        .py(px(8.))
-        .text_size(theme::text_row_sub())
-        .text_color(if model.cta_accent {
-            theme.fg_inverse
-        } else {
-            theme.fg_muted
-        })
+        .px(px(24.))
+        .text_size(theme::text_button())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .line_height(gpui::relative(1.2))
         .child(model.cta.clone());
-    col.child(clickable(
-        "flow-send-cta",
-        cta,
-        if model.cta_accent {
-            div()
-                .h(px(44.))
-                .rounded(px(12.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.accent)
-                .child(label)
-        } else {
-            label
-        },
-    ))
+    let face = if model.cta_accent {
+        face.rounded(px(12.))
+            .bg(theme.accent)
+            .text_color(theme.fg_inverse)
+    } else {
+        face.rounded_full()
+            .border_1()
+            .border_color(theme.border_strong)
+            .text_color(theme.fg_muted)
+    };
+    col.child(
+        div()
+            .pt(px(8.))
+            .pb(px(16.))
+            .child(clickable("flow-send-cta", cta, face)),
+    )
 }
 
 fn send_form(
@@ -1456,8 +1561,22 @@ fn send_form(
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     window: &Window,
-    mut actions: PanelActions,
+    actions: PanelActions,
 ) -> Div {
+    let (body, foot) = send_form_parts(model, theme, icons, identicons, window, actions);
+    body.child(foot)
+}
+
+/// The form, and its foot — the total (in a split), the refusal and
+/// Continue, in the web's order: after the fee, together (078 F-09).
+fn send_form_parts(
+    model: &SendForm,
+    theme: &Theme,
+    icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
+    window: &Window,
+    mut actions: PanelActions,
+) -> (Div, Div) {
     let (mark, symbol, detail, max) = &model.token;
     // The speed control's listeners, taken before the split rows borrow the
     // rest of `actions`.
@@ -1623,8 +1742,19 @@ fn send_form(
                 .items_center()
                 .py(px(16.))
                 .child(
+                    // The drawn figure steps down the same ladder as the typed
+                    // one and is cut at its end past the last rung.
                     div()
-                        .text_size(theme::text_balance_hero())
+                        .w_full()
+                        .min_w(px(0.))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_center()
+                        .text_size(theme::text_amount_hero(theme::amount_hero_rung(
+                            value.chars().count(),
+                            0,
+                        )))
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_base)
                         .child(value.clone()),
@@ -1902,54 +2032,72 @@ fn send_form(
         col = col.child(pills);
     }
 
+    let mut foot = div().flex().flex_col().gap(px(4.));
+    // The web's `SummaryLine` (078 F-09): the label 11 muted with what is
+    // left under it, the total 15 bold at the end — the figure the eye goes
+    // to, where the desktop printed it as a 13 regular line.
     if let Some((label, value)) = &model.summary {
-        col = col.child(
+        foot = foot.child(
             div()
                 .flex()
-                .items_center()
+                .items_start()
                 .justify_between()
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_subtle)
-                        .child(label.clone()),
-                )
+                .gap(px(12.))
+                .py(px(8.))
                 .child(
                     div()
                         .flex()
                         .flex_col()
-                        .items_end()
+                        .gap(px(2.))
                         .child(
                             div()
-                                .text_size(theme::text_row_sub())
-                                // Over the balance, the total says so in ink
-                                // before Continue has to refuse it.
-                                .text_color(if model.summary_over {
-                                    theme.error_base
-                                } else {
-                                    theme.fg_base
-                                })
-                                .child(value.clone()),
+                                .text_size(theme::text_label())
+                                .text_color(theme.fg_muted)
+                                .child(label.clone()),
                         )
                         .when_some(model.remaining.clone(), |el, left| {
                             el.child(
                                 div()
-                                    .text_size(theme::text_label())
+                                    .text_size(theme::text_glyph())
                                     .text_color(theme.fg_muted)
                                     .child(left),
                             )
                         }),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::BOLD)
+                        // Over the balance, the total says so in ink before
+                        // Continue has to refuse it.
+                        .text_color(if model.summary_over {
+                            theme.error_base
+                        } else {
+                            theme.fg_base
+                        })
+                        .child(value.clone()),
                 ),
         );
     }
 
+    // The refusal where the eye is when the button did nothing: one line, 11
+    // on 1.4 with a 14 icon, as the web's `.alert` (078 F-09) — the sentence
+    // and what can be sent instead, no heading and no "Edit amount": the
+    // amount is the field right above it. The one exception is the relay's
+    // treasury stop, which the web raises as its own sheet with an address to
+    // fund and a way to close it; here it stays the card that holds those.
     if let Some(notice) = &model.notice {
-        col = col.child(notice_card(
-            notice,
-            theme,
-            actions.notice_action.take(),
-            actions.notice_dismiss.take(),
-        ));
+        let one_line = notice.dismiss.is_none();
+        foot = foot.child(if one_line {
+            alert_line(theme, icons, notice)
+        } else {
+            notice_card(
+                notice,
+                theme,
+                actions.notice_action.take(),
+                actions.notice_dismiss.take(),
+            )
+        });
     }
     // The fee row, and beside it the refresh control — outside the row's
     // own click, so measuring again never opens the fee-coin sheet.
@@ -1981,13 +2129,43 @@ fn send_form(
     if let Some(speed) = &model.speed {
         fee_block = fee_block.child(speed_control(theme, icons, speed, toggle_speed, pick_speed));
     }
-    col.child(fee_block).child(cta_button(
+    let foot = foot.child(div().pt(px(8.)).pb(px(16.)).child(cta_button(
         "flow-form-cta",
         theme,
         model.cta.clone(),
         model.cta_state,
         actions.advance.take(),
-    ))
+    )));
+    (col.child(fee_block), foot)
+}
+
+/// The core's refusal as the web's form prints it: a 14 icon and the words,
+/// 11 on 1.4 — red when nothing can proceed, amber while still typing (the
+/// desktop's own two tones, which the core's `error` flag carries).
+fn alert_line(theme: &Theme, icons: &mut IconCache, notice: &SendNotice) -> Div {
+    let color = if notice.error {
+        theme.error_base
+    } else {
+        theme.warning
+    };
+    div()
+        .flex()
+        .items_start()
+        .gap(px(4.))
+        .text_size(theme::text_label())
+        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
+        .text_color(color)
+        .child(div().flex_none().mt(px(1.)).child(icon_img(
+            icons,
+            Icon::CircleAlert,
+            false,
+            color,
+            14.,
+        )))
+        .child(div().flex_1().min_w(px(0.)).child(match &notice.detail {
+            Some(detail) => SharedString::from(format!("{} {detail}", notice.body)),
+            None => notice.body.clone(),
+        }))
 }
 
 /// The speed control under the fee row (spec 068): folded, the word and the
@@ -2066,7 +2244,7 @@ fn contact_pick(
                 .gap(px(8.))
                 .p(px(12.))
                 .rounded(px(12.))
-                .bg(theme.bg_sunken)
+                .bg(theme.bg_raised)
                 .child(icon_img(icons, Icon::QrCode, false, theme.fg_subtle, 15.))
                 .child(
                     div()
@@ -2095,47 +2273,54 @@ fn contact_pick(
     if !groups.is_empty() {
         col = col.child(
             div()
-                .pt(px(4.))
-                .text_size(theme::text_row_sub())
+                .pt(px(8.))
+                .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(model.groups_title.clone()),
         );
     }
     let mut per_group = std::mem::take(&mut group_rows).into_iter();
     for (index, (name, count, first, second)) in groups.iter().enumerate() {
+        // The web's group row (078 F-11): 30 discs overlapping 12, the name
+        // 15 semibold, the count 11, a 14 chevron; padded 12 on a button's
+        // line.
         let row = div()
             .flex()
             .items_center()
             .gap(px(12.))
-            .py(px(8.))
+            .py(px(12.))
+            .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
             // Two overlapping discs stand for "several people" without
             // drawing any of them — a group has no single face to show.
             .child(
                 div()
                     .flex()
-                    .child(div().w(px(28.)).h(px(28.)).rounded(px(14.)).bg(*first))
-                    .child(
-                        div()
-                            .w(px(28.))
-                            .h(px(28.))
-                            .rounded(px(14.))
-                            .bg(*second)
-                            .ml(px(-10.)),
-                    ),
+                    .flex_none()
+                    .child(div().size(px(30.)).rounded_full().bg(*first))
+                    .child(div().size(px(30.)).rounded_full().bg(*second).ml(px(-12.))),
             )
             .child(
                 div()
                     .flex_1()
+                    .min_w(px(0.))
                     .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_base)
                     .child(name.clone()),
             )
             .child(
                 div()
-                    .text_size(theme::text_row_sub())
+                    .text_size(theme::text_label())
                     .text_color(theme.fg_subtle)
                     .child(count.clone()),
-            );
+            )
+            .child(icon_img(
+                icons,
+                Icon::ChevronRight,
+                false,
+                theme.fg_subtle,
+                14.,
+            ));
         col = col.child(clickable(
             ElementId::from(("flow-group", index)),
             per_group.next(),
@@ -2145,8 +2330,8 @@ fn contact_pick(
 
     col = col.child(
         div()
-            .pt(px(4.))
-            .text_size(theme::text_row_sub())
+            .pt(px(8.))
+            .text_size(theme::text_label())
             .text_color(theme.fg_subtle)
             .child(model.contacts_title.clone()),
     );
@@ -2155,19 +2340,26 @@ fn contact_pick(
         if !search_matches(&query, &format!("{} {}", contact.name, contact.address)) {
             continue;
         }
-        let mut name_row = div().flex().items_center().gap(px(6.)).child(
+        // The web's `ContactPickRow` (078 F-11): a 30 avatar, the name 15
+        // semibold with its group as a raised 10 tag, the address mono 11,
+        // a 14 chevron; padded 12 on a button's line.
+        let mut name_row = div().flex().items_center().gap(px(4.)).min_w(px(0.)).child(
             div()
+                .min_w(px(0.))
                 .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_base)
+                .truncate()
                 .child(contact.name.clone()),
         );
         if let Some(group) = &contact.group {
             name_row = name_row.child(
                 div()
-                    .px(px(6.))
+                    .flex_none()
+                    .px(px(4.))
                     .rounded(px(4.))
-                    .bg(theme.bg_sunken)
-                    .text_size(theme::text_label())
+                    .bg(theme.bg_raised)
+                    .text_size(theme::text_glyph())
                     .text_color(theme.fg_muted)
                     .child(group.clone()),
             );
@@ -2176,11 +2368,12 @@ fn contact_pick(
             .flex()
             .items_center()
             .gap(px(12.))
-            .py(px(8.))
+            .py(px(12.))
+            .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
             .child(crate::wallet::components::identicon_avatar(
                 identicons,
                 contact.seed.as_ref(),
-                28.,
+                30.,
             ))
             .child(
                 div()
@@ -2188,12 +2381,14 @@ fn contact_pick(
                     .min_w(px(0.))
                     .flex()
                     .flex_col()
+                    .gap(px(2.))
                     .child(name_row)
                     .child(
                         div()
                             .font_family(theme::font_mono())
-                            .text_size(theme::text_mono_address())
+                            .text_size(theme::text_label())
                             .text_color(theme.fg_subtle)
+                            .truncate()
                             .child(contact.address.clone()),
                     ),
             )
@@ -2202,7 +2397,7 @@ fn contact_pick(
                 Icon::ChevronRight,
                 false,
                 theme.fg_subtle,
-                12.,
+                14.,
             ));
         col = col.child(clickable(
             ElementId::from(("flow-contact", i)),
@@ -2220,23 +2415,27 @@ fn fee_token(
     per_row: Vec<Click>,
 ) -> Div {
     let mut per_row = per_row.into_iter();
-    let mut col = column().child(
+    let col = column().child(
         // Paying gas in a stablecoin is unusual enough that someone seeing USDC
         // offered as a fee token will wonder whether they are being asked to
         // send it. Saying what the choice is for, once, is cheaper than a
         // tooltip on each row.
         div()
-            .text_size(theme::text_row_sub())
+            .text_size(theme::text_label())
             .text_color(theme.fg_muted)
             .child(model.hint.clone()),
     );
+    // One list, the rows flush (the web's `ul`); each padded 12 on a
+    // button's line, the chosen one raised (078 F-11).
+    let mut list = div().flex().flex_col();
     for (i, row) in model.rows.iter().enumerate() {
         let shell = div()
             .flex()
             .items_center()
             .gap(px(12.))
-            .p(px(10.))
-            .rounded(px(12.));
+            .p(px(12.))
+            .rounded(px(12.))
+            .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL));
         let shell = if row.selected {
             shell.bg(theme.bg_raised)
         } else {
@@ -2255,15 +2454,17 @@ fn fee_token(
                     .min_w(px(0.))
                     .flex()
                     .flex_col()
+                    .gap(px(2.))
                     .child(
                         div()
                             .text_size(theme::text_row_title())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(theme.fg_base)
                             .child(row.symbol.clone()),
                     )
                     .child(
                         div()
-                            .text_size(theme::text_row_sub())
+                            .text_size(theme::text_label())
                             .text_color(theme.fg_muted)
                             .child(row.balance.clone()),
                     ),
@@ -2279,18 +2480,22 @@ fn fee_token(
                             .text_color(theme.fg_base)
                             .child(row.fee.clone()),
                     )
+                    .gap(px(2.))
                     .child(
                         div()
-                            .text_size(theme::text_label())
+                            .text_size(theme::text_glyph())
                             .text_color(theme.fg_subtle)
                             .child(model.estimate_label.clone()),
                     ),
             );
-        // Only the chosen row draws the tick; the others leave the space, so
-        // choosing one does not shift the rows under it.
+        // Only the chosen row draws the tick; the others keep its 20 column
+        // (the web's `.tick`, always laid out), so choosing one does not
+        // shift the figures under it — they lined up with nothing before.
+        let mut tick = div().w(px(20.)).flex_none().flex().justify_center();
         if row.selected {
-            entry = entry.child(icon_img(icons, Icon::Check, false, theme.accent, 14.));
+            tick = tick.child(icon_img(icons, Icon::Check, false, theme.accent, 16.));
         }
+        entry = entry.child(tick);
         // A coin that cannot cover the fee is shown for context and answers
         // to nothing (invariant ⑧) — the listener is dropped, not just dimmed.
         let action = per_row.next();
@@ -2299,13 +2504,13 @@ fn fee_token(
         } else {
             (entry, action)
         };
-        col = col.child(clickable(
+        list = list.child(clickable(
             ElementId::from(("flow-fee-row", i)),
             action,
             entry,
         ));
     }
-    col
+    col.child(list)
 }
 
 fn batch_import(
@@ -2599,14 +2804,32 @@ fn send_confirm(
             &mark.logos,
         ));
     }
-    let mut col = column().child(
-        hero.child(
+    // The figure and its unit on one baseline, the unit set as the Send
+    // form's hero sets it (26/46 of the digits, medium, muted): the page that
+    // signs reads "0.45767" first and "xDAI" second, as the form did.
+    let mut figure = div()
+        .flex()
+        .items_baseline()
+        .gap(px(8.))
+        .child(
             div()
-                .text_size(theme::text_balance_hero())
+                .text_size(theme::text_amount_detail())
+                .line_height(gpui::relative(1.2))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.fg_base)
                 .child(model.amount.clone()),
-        )
+        );
+    if let Some(unit) = &model.amount_unit {
+        figure = figure.child(
+            div()
+                .text_size(theme::text_amount_detail() * (26. / 46.))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(theme.fg_muted)
+                .child(unit.clone()),
+        );
+    }
+    let mut col = column().child(
+        hero.child(figure)
         .child(
             div()
                 .text_size(theme::text_row_sub())
@@ -2620,7 +2843,7 @@ fn send_confirm(
         .flex_col()
         .px(px(12.))
         .rounded(px(12.))
-        .bg(theme.bg_sunken);
+        .bg(theme.bg_raised);
     for (i, fact) in model.facts.iter().enumerate() {
         if i > 0 {
             card = card.child(divider(theme));

@@ -197,11 +197,12 @@ enum WalletLive {
                 ticker: token.symbol,
                 chain: ChainCatalog.meta(token.chainId)?.displayName ?? "",
                 badgeColor: chainColor(token.chainId),
-                // Six places, as the web's `trimBalance` and Android's
-                // `trimAmount` show a balance. The core's full precision
-                // ("0.00067035411363817") pushed the ticker and chain out of
-                // the row on a phone — both read "…" (seen on the iPhone 11).
-                balance: trimBalance(token.balance),
+                // The one token-amount rule every shell prints (spec 078,
+                // `tokenAmountText`): the core's ladder, so this row, the Send
+                // picker, the token card and the figure Max writes agree digit
+                // for digit. The core's full precision ("0.00067035411363817")
+                // pushed the ticker and chain out of the row on a phone.
+                balance: tokenAmountText(token.balance),
                 fiat: fiat(token, hidden: view.hidden, display: display),
                 masked: view.hidden,
                 // The real logo, with the lettermark behind it (058). The
@@ -215,6 +216,79 @@ enum WalletLive {
                 )
             )
         }
+    }
+
+    /// Which way `tokenAmountText` leaves the last place.
+    enum TokenRounding {
+        /// Every figure that is READ: a balance, an amount, a receipt.
+        case halfUp
+        /// A CEILING the person may type back ("you can send up to"): rounded
+        /// up, it would be a figure the balance cannot cover.
+        case down
+    }
+
+    /// A token amount as every money surface reads it — the asset list's rows,
+    /// the Send picker and token card, the confirm and the receipt — ONE call,
+    /// so the balance on the home row and the balance beside the token on Send
+    /// are the same digits, and the figure `Max` writes (the core's
+    /// `send::max_figure`) is the figure the confirm repeats.
+    ///
+    /// The core's ladder, digit for digit (`l10n::number::format_token_amount`,
+    /// the desktop's rows; the web's `tokenAmountText`): 6 places under 1, 4
+    /// under 1000, 2 from 1000, rounded HALF UP, trailing zeros dropped; an
+    /// amount too small to survive six places keeps two significant digits
+    /// (cut) instead of reading `0`. String arithmetic only — a uint256 must
+    /// never pass through a `Double` — and the decimal mark is the person's
+    /// preset. Ungrouped, like the field `Max` fills. Anything that is not a
+    /// plain decimal passes through as written rather than gaining digits.
+    ///
+    /// It replaces `trimBalance`'s six places, TRUNCATED, at every magnitude:
+    /// `1.22456789` read "1.224567" on the row while Max wrote "1.2246".
+    static func tokenAmountText(_ amount: String, rounding: TokenRounding = .halfUp) -> String {
+        let exact = amount.trimmingCharacters(in: .whitespaces)
+        let parts = exact.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
+        let intRaw = parts.first.map(String.init) ?? ""
+        let fracRaw = parts.count > 1 ? String(parts[1]) : ""
+        let isDigits = { (text: String) in text.unicodeScalars.allSatisfy { $0.value >= 48 && $0.value <= 57 } }
+        guard !(intRaw.isEmpty && fracRaw.isEmpty), isDigits(intRaw), isDigits(fracRaw) else {
+            return exact
+        }
+        let intDigits = String(intRaw.drop { $0 == "0" })
+        let places = intDigits.isEmpty ? 6 : (intDigits.count <= 3 ? 4 : 2)
+        let fracDigits = Array(fracRaw.utf8).map { Int($0) - 48 }
+        var digits = Array(intDigits.utf8).map { Int($0) - 48 }
+            + (0..<places).map { $0 < fracDigits.count ? fracDigits[$0] : 0 }
+        if rounding == .halfUp, places < fracDigits.count, fracDigits[places] >= 5 {
+            var index = digits.count
+            while true {
+                if index == 0 {
+                    digits.insert(1, at: 0)
+                    break
+                }
+                index -= 1
+                if digits[index] == 9 {
+                    digits[index] = 0
+                } else {
+                    digits[index] += 1
+                    break
+                }
+            }
+        }
+        let decimal = Formats.separators(Formats.current.number).decimal
+        let split = digits.count - places
+        let intPart = digits[..<split].map(String.init).joined()
+        let whole = intPart.isEmpty ? "0" : intPart
+        var fraction = digits[split...].map(String.init).joined()
+        while fraction.hasSuffix("0") { fraction.removeLast() }
+        if whole == "0" && fraction.isEmpty {
+            // Below the ladder's last place: two significant digits, cut.
+            let lead = fracRaw.prefix { $0 == "0" }.count
+            if lead == fracRaw.count { return "0" }
+            var kept = String(fracRaw.prefix(min(lead + 2, fracRaw.count)))
+            while kept.hasSuffix("0") { kept.removeLast() }
+            return "0" + decimal + kept
+        }
+        return fraction.isEmpty ? whole : whole + decimal + fraction
     }
 
     /// A balance to glance at (the web's `trimBalance`): at most `maxDecimals`

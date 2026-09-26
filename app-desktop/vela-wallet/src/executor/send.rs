@@ -274,6 +274,37 @@ pub fn chain_infos() -> Vec<SendChainInfo> {
 ///
 /// Shared by the executor's own fetch and the host's answer from the
 /// dashboard's settled round (`SendHost::answer_tokens`): one rule for both.
+/// Every read a first quote on these chains makes before its simulation, all
+/// at once, each through the cache the fee session reads (and each
+/// single-flight, so a pick landing mid-read waits for it instead of asking
+/// again). Errors are nobody's business here: the quote reads for itself.
+fn prewarm_fees(account: &str, chain_ids: &[u32]) {
+    use crate::executor::{chain, fee_signals};
+    use vela_core::app::fee_policy::{FeeTier, is_tempo_chain};
+    std::thread::scope(|scope| {
+        for &chain_id in chain_ids {
+            let tempo = is_tempo_chain(chain_id);
+            scope.spawn(move || {
+                let _ = chain::is_deployed(account, chain_id);
+            });
+            scope.spawn(move || {
+                let _ = fee_signals::gas_signals(chain_id, !tempo);
+            });
+            scope.spawn(move || {
+                if tempo {
+                    let _ = relay::account_info(chain_id, account);
+                } else {
+                    // One call answers every tier.
+                    let _ = fee_signals::bundler_quote(chain_id, FeeTier::Fast);
+                }
+            });
+            scope.spawn(move || {
+                let _ = relay::in_band_quotes(chain_id, account);
+            });
+        }
+    });
+}
+
 pub fn tokens_loaded(tokens: &[BalanceToken], failed_chain_ids: &[u32]) -> SendShellResult {
     let tokens = if tokens.is_empty() && !failed_chain_ids.is_empty() {
         None
@@ -478,6 +509,18 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             SendAnswer::Blocking(Box::new(move || SendShellResult::TreasuryProbed {
                 probe: relay::probe_treasury(chain_id),
             }))
+        }
+
+        // Read ahead while the person chooses: the same cached readers the fee
+        // session calls, so the quote a pick starts finds them answered. The
+        // core does not wait for any of it.
+        SendOperation::PrewarmFees { account, chain_ids } => {
+            let (account, chain_ids) = (account.clone(), chain_ids.clone());
+            let started = std::thread::Builder::new()
+                .name("vela-fee-prewarm".to_owned())
+                .spawn(move || prewarm_fees(&account, &chain_ids));
+            drop(started);
+            SendAnswer::Now(SendShellResult::FeesPrewarmed)
         }
 
         SendOperation::LoadAccountCredential { account_id } => {
@@ -857,6 +900,7 @@ mod tests {
                 batch: None,
                 gas_fee_token: None,
                 public_key_hex: None,
+                auto_fee_token: true,
             },
             SendOperation::TrackSubmitted {
                 user_op_hash: String::new(),

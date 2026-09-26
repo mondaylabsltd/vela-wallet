@@ -414,8 +414,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (the Trusted Signer, then −23 as its cross-device channels went). The
 //   corpus is the UNION of both, so the total is neither, and the number below
 //   is the merged corpus's own — not a guess, and not either side's.
-if (PATHS.length !== 1729) fail(`expected 1729 paths (1640 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1640) fail(`expected 1640 leaf paths, got ${leafSet.size}`);
+// 1729 (spec 078, 2026-09-26): + `common.gotIt`. An alert's acknowledgement
+//   ("知道了" / "Got it") had no word of its own: Android and the desktop
+//   borrowed the receipt's "Done", and iOS hard-coded English "OK" in every
+//   language. One leaf under the existing `common` branch: 1728 + 1 = 1729.
+// 1730 (082, 2026-09-26): + `settingsModals.keys.signsHere` — the keys list
+//   marks the key this device signs with ("当前登录" / "Signed in"). One leaf
+//   under the existing `settingsModals.keys` branch: 1729 + 1 = 1730.
+if (PATHS.length !== 1730) fail(`expected 1730 paths (1641 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1641) fail(`expected 1641 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

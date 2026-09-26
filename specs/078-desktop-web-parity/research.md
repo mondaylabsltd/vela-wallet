@@ -150,6 +150,25 @@ different).
   surfaces, 32px amounts on confirm and detail (not 40), fixed 20px tick
   column, danger Delete, network rows with the chain logo, receive address
   card without a well.
+  *Fixed (T051, F-09…F-11):* all 19 flow states captured beside the web's
+  gallery before and after. The flow body sits on the web's 1.4 line; lists
+  are flush with hairlines (a divider as its own child took the panel's 12
+  gap twice — network rows were 85 tall to the web's 65); cards are raised,
+  not sunken. F-09: in a split the total (11 label / 15 bold figure), the
+  refusal and Continue sit in a foot pinned under the scrolling body once it
+  overflows (checked with twelve rows); the form's refusal is one 11 line
+  with a 14 circle-alert, the ceiling folded into it; busy Continue is a
+  spinner at full colour. F-10: chips raised 4/12 11 medium; hairline rows;
+  selected raised r12 bleed 8; dimmed .45; select-all 11; the chain notice
+  raised 8/12 with the chain's logo; the CTA a real 52 pill. F-11: contact
+  pick (30 avatars and discs, 15 semibold, raised tags, mono 11, 14
+  chevrons), fee token (padded 12, fixed 20 tick column), confirm and tx
+  detail at 32, network rows with the chain logo, receive address card with
+  no well and a centred 11 warning, status chip 10 semibold, the empty
+  assets hint in the web's order (button first — the DT4L mock drew it
+  last). Left: the send form fixture has no unit after its figure (live
+  shows it), and the desktop receipt shows the hash while "submitted",
+  where the web's fixture does not.
 
 ## Contacts (C)
 

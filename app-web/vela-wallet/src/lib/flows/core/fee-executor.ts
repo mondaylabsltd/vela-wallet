@@ -26,7 +26,7 @@ import {
 	fetchRawBundlerQuote,
 	fetchRawGasSignals,
 	keySetOf,
-	measureCallGas,
+	measureCallGasForQuote,
 	simulateUserOpGas
 } from '$lib/services/safe-transaction';
 import { findAccountByAddress } from '$lib/services/accounts';
@@ -193,7 +193,9 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 				// The core already appended the fee leg to these calls, so what is
 				// simulated is byte-identical to what is submitted. The shell only
 				// encodes: `FeeCall.value` is a decimal base-unit string on the wire and
-				// the MultiSend builder reads hex.
+				// the MultiSend builder reads hex. The reader shares one simulation
+				// per exact operation, so the speed previews and the session in force
+				// settle on the same answer at the same moment.
 				const outcome = await simulateUserOpGas({
 					chainId: operation.chain_id,
 					account: operation.account,
@@ -239,7 +241,7 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 				// call, `null` where nobody answered.
 				const gas = await Promise.all(
 					operation.calls.map((call) =>
-						measureCallGas(
+						measureCallGasForQuote(
 							operation.chain_id,
 							operation.from,
 							call.to,

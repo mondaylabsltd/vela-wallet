@@ -189,3 +189,43 @@ describe('FeeQuote.generation — the other tiers re-price when this one does', 
 		expect(quote.lastRequest).toEqual({ ...REQUEST, tier: 'slow' });
 	});
 });
+
+// Spec 078: when nobody has chosen the fee coin the machine picks one that can
+// pay. The flag is a quote PARAMETER the shell only carries — and once the
+// person taps a coin, the request on record stops asking the machine to choose,
+// so the speed previews (which replay it) price the coin that was tapped.
+describe('FeeQuote — the fee coin nobody chose (spec 078)', () => {
+	const autoOf = (mock: typeof seams.start | typeof seams.dispatch, call = 0) =>
+		(mock.mock.calls[call]?.[0] as { auto_fee_token?: boolean } | undefined)?.auto_fee_token;
+
+	it('carries `autoFeeToken` onto `quote_requested`', async () => {
+		const quote = new FeeQuote();
+		void quote.requestQuote({ ...REQUEST, autoFeeToken: true });
+		await vi.waitFor(() => expect(seams.start).toHaveBeenCalledTimes(1));
+		expect(autoOf(seams.start)).toBe(true);
+	});
+
+	it('a request that says nothing asks for exactly the coin it names', async () => {
+		const quote = new FeeQuote();
+		void quote.requestQuote(REQUEST);
+		await vi.waitFor(() => expect(seams.start).toHaveBeenCalledTimes(1));
+		expect(autoOf(seams.start)).toBe(false);
+	});
+
+	it('a tapped coin becomes the question on record, no longer the machine’s to choose', async () => {
+		const quote = new FeeQuote();
+		void quote.requestQuote({ ...REQUEST, autoFeeToken: true });
+		await vi.waitFor(() => expect(seams.start).toHaveBeenCalledTimes(1));
+		const USDC = '0x' + 'cc'.repeat(20);
+		quote.selectAsset(USDC);
+		expect(seams.dispatch).toHaveBeenCalledWith({ type: 'select_fee_asset', token: USDC });
+		expect(quote.lastRequest).toMatchObject({ feeToken: USDC, autoFeeToken: false });
+		// And a replay of it — what every speed preview does — asks for that coin.
+		void quote.requestQuote({ ...(quote.lastRequest as NonNullable<typeof quote.lastRequest>) });
+		await vi.waitFor(() => expect(seams.dispatch).toHaveBeenCalledTimes(2));
+		expect(autoOf(seams.dispatch, 1)).toBe(false);
+		expect(
+			(seams.dispatch.mock.calls[1]?.[0] as { fee_token?: string | null } | undefined)?.fee_token
+		).toBe(USDC);
+	});
+});

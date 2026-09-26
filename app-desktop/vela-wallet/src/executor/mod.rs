@@ -73,6 +73,7 @@ pub mod sign_pref;
 pub mod sign_request;
 /// Spec 076: is the Trusted Signer's page the page it is supposed to be?
 pub mod signer_integrity;
+pub mod single_flight;
 pub mod sim;
 pub mod storage;
 pub mod token_trust;

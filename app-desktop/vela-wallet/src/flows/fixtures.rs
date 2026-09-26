@@ -432,7 +432,9 @@ pub struct SendSelection {
     pub select_all: SharedString,
     /// "Gnosis selected — a multi-token send stays on one network…", with the
     /// chain's own mark beside it. `None` until the first pick names a chain.
-    pub notice: Option<(u32, SharedString, SharedString)>,
+    /// `(chain_id, tint, letter, text)` — the chain's logo is drawn, the
+    /// tinted letter is what shows while it loads or when it has none.
+    pub notice: Option<(u32, u32, SharedString, SharedString)>,
 }
 
 #[derive(Clone)]
@@ -686,6 +688,11 @@ pub struct SendConfirm {
     /// carried art. `None` on a sweep: several coins, no one mark.
     pub mark: Option<TokenMark>,
     pub amount: SharedString,
+    /// The unit after `amount`, drawn as the Send form's hero draws its unit
+    /// — smaller, lighter, muted — so "0.45767 xDAI" reads as a number first,
+    /// on the page that signs it as on the form it came from. `None` when the
+    /// figure carries its own words (a sweep's "3 assets", a split total).
+    pub amount_unit: Option<SharedString>,
     pub subline: SharedString,
     pub facts: Vec<FactRow>,
     pub breakdown: Vec<BreakdownRow>,
@@ -1426,7 +1433,8 @@ fn batch_import(s: &FlowStrings) -> BatchImport {
 fn send_confirm(s: &FlowStrings) -> SendConfirm {
     SendConfirm {
         mark: Some(mark("USDT", (NETWORKS[0].color)())),
-        amount: "120 USDT".into(),
+        amount: "120".into(),
+        amount_unit: Some("USDT".into()),
         subline: "≈ $120.00".into(),
         facts: vec![
             FactRow {

@@ -275,7 +275,11 @@ class SigningController(
         )
         SignExecutor.callsOf(request.method, request.paramsJson)?.let { calls ->
             val feeCalls = calls.map { FeeCall(to = it.to, value = it.value, data = it.data) }
-            speedControl.ask(request.chainId, wallet.address, publicKeyAvailable = true, calls = feeCalls, feeToken = null)
+            // Nobody has chosen the fee coin for this request yet: the fee
+            // machine pays in one that can, and the approve carries the view's
+            // `fee_token` — the coin it picked — exactly as it carries a tap
+            // (`approveOpts`). A chip tap ends auto (`SpeedControl.chooseFeeToken`).
+            speedControl.ask(request.chainId, wallet.address, publicKeyAvailable = true, calls = feeCalls, feeToken = null, autoFeeToken = true)
             // Spec 046 US1: the one block a site cannot author. Read only.
             scope.launch {
                 val judged = runCatching { ports.simulate(request.chainId, wallet.address, calls.map { SimDeltas.Call(it.to, it.value, it.data) }) }

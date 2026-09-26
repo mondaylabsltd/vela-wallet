@@ -558,111 +558,47 @@ pub fn segmented_picks(
     })
 }
 
-/// A ——●—— A, drawn only. The gallery still wants the picture; a real session
-/// uses [`text_scale_stops`] so the thumb can be moved.
+/// A ——●—— A, drawn only: the gallery and the design surfaces, which have
+/// nothing to move it with, get the thumb at rest. A real session draws
+/// [`text_scale_slider`].
 pub fn text_scale(theme: &Theme, steps: usize, index: usize) -> Div {
-    text_scale_stops(theme, steps, index, &mut |_, stop| stop.into_any_element())
-}
-
-/// The same control, with each stop handed to the caller first — the live
-/// panel wraps them in `.id().on_click(...)`.
-///
-/// The stop keeps a 20px-tall hit area whatever its dot is: a 4px target is
-/// not a target. The dots themselves stay the mock's two sizes, because the
-/// thumb has to read as the thumb at a glance.
-pub fn text_scale_stops(
-    theme: &Theme,
-    steps: usize,
-    index: usize,
-    wrap: &mut dyn FnMut(usize, Div) -> gpui::AnyElement,
-) -> Div {
-    let mut track = div()
-        .flex_1()
-        .h(px(20.))
-        .flex()
-        .items_center()
-        .justify_between();
-    for i in 0..steps {
-        let dot = if i == index {
-            div().size(px(16.)).rounded_full().bg(theme.fg_muted)
-        } else {
-            div().size(px(4.)).rounded_full().bg(theme.outline_strong)
-        };
-        let stop = div()
-            .h(px(20.))
-            .w(px(20.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(dot);
-        track = track.child(wrap(i, stop));
-    }
-    div()
-        .w_full()
-        .flex()
-        .items_center()
-        .gap(px(12.))
-        .child(
-            div()
-                .text_size(theme::text_row_sub())
-                .font_weight(gpui::FontWeight::BOLD)
-                .text_color(theme.fg_base)
-                .child("A"),
-        )
-        .child(track)
-        .child(
-            div()
-                .text_size(theme::text_panel_title())
-                .font_weight(gpui::FontWeight::BOLD)
-                .text_color(theme.fg_base)
-                .child("A"),
-        )
+    text_scale_frame(theme, crate::ui::step_slider_picture(theme, steps, index))
 }
 
 /// The text-size control, live (spec 072): one stop per level the core ships
-/// (`vela_core::prefs::TEXT_SCALE_LEVELS`), each its own target. The picture
-/// above spaced dots along a track; a dot four pixels wide is not something a
-/// person can click, so here every stop owns an equal share of the track.
-pub fn text_scale_picks(
+/// (`vela_core::prefs::TEXT_SCALE_LEVELS`), on a track that is pressed and
+/// dragged like the web's range input — [`crate::ui::StepSlider`] has how.
+/// `on_pick` is handed each stop the press or the drag reaches.
+pub fn text_scale_slider(
     theme: &Theme,
+    slider: &crate::ui::StepSlider,
     steps: usize,
     index: usize,
+    reduce_motion: bool,
     on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    let on_pick: PickAction = Rc::new(on_pick);
-    let mut track = div().flex_1().h(px(28.)).flex().items_center();
-    for i in 0..steps {
-        let pick = on_pick.clone();
-        let hover = theme.fg_subtle;
-        track = track.child(
-            div()
-                .id(("text-scale-stop", i))
-                .flex_1()
-                .h_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .cursor_pointer()
-                .on_click(move |_, window, cx| pick(i, window, cx))
-                .child(if i == index {
-                    div().size(px(16.)).rounded_full().bg(theme.fg_muted)
-                } else {
-                    div()
-                        .size(px(6.))
-                        .rounded_full()
-                        .bg(theme.outline_strong)
-                        .hover(move |el| el.bg(hover))
-                }),
-        );
-    }
+    text_scale_frame(
+        theme,
+        slider.render("text-scale", theme, steps, index, reduce_motion, on_pick),
+    )
+}
+
+/// The two glyphs either side of the track, sized to what they promise.
+///
+/// They are NOT through the text-size setting (`theme::text_*` is): they are
+/// the picture of the scale's two ends, as the web draws them, and a glyph
+/// that grew with every stop would shrink the track under a pointer that is
+/// dragging along it.
+fn text_scale_frame(theme: &Theme, track: impl IntoElement) -> Div {
     div()
         .w_full()
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap(px(10.))
         .child(
             div()
-                .text_size(theme::text_row_sub())
+                .flex_none()
+                .text_size(px(13.))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.fg_base)
                 .child("A"),
@@ -670,7 +606,8 @@ pub fn text_scale_picks(
         .child(track)
         .child(
             div()
-                .text_size(theme::text_panel_title())
+                .flex_none()
+                .text_size(px(20.))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.fg_base)
                 .child("A"),

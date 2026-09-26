@@ -6,7 +6,8 @@
     "error": "Error",
     "somethingWrong": "Algo salió mal",
     "tryAgain": "Intentar de nuevo",
-    "done": "Listo"
+    "done": "Listo",
+    "gotIt": "Entendido"
   },
   "language": {
     "title": "Idioma",

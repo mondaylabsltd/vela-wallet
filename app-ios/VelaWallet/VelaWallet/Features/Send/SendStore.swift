@@ -32,6 +32,12 @@ final class SendStore {
     private let executor: SendExecutor
     /// Whether `Open` has been sent for the journey currently on screen.
     private var entered = false
+    /// Whose money the journey on screen is about (lower-cased) — the only
+    /// account whose asset-list rounds it follows.
+    private var account: String?
+    /// The asset-list round this journey last heard of, so one round is
+    /// handed over once however often the screen re-renders.
+    private var heardRound: Int?
 
     init(executor: SendExecutor) {
         self.executor = executor
@@ -54,6 +60,11 @@ final class SendStore {
         }
         executor.ports.alert = { [weak self] kind in self?.alert = kind }
         executor.ports.trustedSignerEnded = { [weak self] notice in self?.trustedSignerNotice = notice }
+        // What the asset list has so far, while the first fetch waits for its
+        // round. Display-only: the core takes it only while that load is out.
+        executor.ports.tokensPartial = { [weak self] tokens in
+            self?.dispatch(["type": "tokens_partial", "tokens": tokens])
+        }
         // Leaving re-arms `Open`, and it is the CORE's leaving that counts —
         // not a view disappearing. SwiftUI tears a view down and rebuilds it
         // for reasons that have nothing to do with the journey, and an
@@ -63,6 +74,8 @@ final class SendStore {
         executor.ports.closed = { [weak self] in
             leaving()
             self?.entered = false
+            self?.account = nil
+            self?.heardRound = nil
             self?.trustedSignerNotice = nil
         }
     }
@@ -106,7 +119,26 @@ final class SendStore {
         ])
         guard !entered else { return }
         entered = true
+        account = address.lowercased()
+        heardRound = nil
         if !core.boot(event) { core.dispatch(event) }
+    }
+
+    /// The asset list settled a round while this journey is open (spec 078).
+    ///
+    /// Send shows the SAME holdings the home does — one source, so a refresh
+    /// started from here, a poll, or a transfer confirming moves this screen
+    /// too. Handed over whole, mapped exactly as `fetch_tokens` is answered;
+    /// what follows is the core's (`holdings_updated`): the picker always, the
+    /// form's selected balance and a Max behind it on the form, never a
+    /// confirm page. Another account's round, or a round already heard, is
+    /// not handed over.
+    func holdingsUpdated(_ balance: BalanceViewWire, round: Int) {
+        guard entered, let account, SendExecutor.sameAccount(balance, account),
+              heardRound != round
+        else { return }
+        heardRound = round
+        dispatch(["type": "holdings_updated", "tokens": SendExecutor.sendTokens(balance)])
     }
 
     private static func display(code: String, rate: Double?, decimals: Int) -> [String: Any] {
