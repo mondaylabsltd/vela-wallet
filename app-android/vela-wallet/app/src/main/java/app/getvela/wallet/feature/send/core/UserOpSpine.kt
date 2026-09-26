@@ -23,6 +23,8 @@ import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
 import uniffi.vela_core_uniffi.parseExistingUserOpHash
 import uniffi.vela_core_uniffi.quotedFeeUsable
 import uniffi.vela_core_uniffi.relayErrorMessage
+import uniffi.vela_core_uniffi.signInRoute
+import uniffi.vela_core_uniffi.signRoute
 import uniffi.vela_core_uniffi.userOpApplyEstimate
 import uniffi.vela_core_uniffi.userOpDraft
 import uniffi.vela_core_uniffi.userOpFloors
@@ -61,13 +63,6 @@ class UserOpSpine(
      */
     private val measureCall: suspend (chainId: Int, from: String, to: String, valueHex: String, data: String) -> String? =
         { _, _, _, _, _ -> null },
-    /**
-     * The person's "Sign with" choice for the request in hand — `auto` unless a
-     * signing sheet says otherwise. WHICH key that pins, and how it is reached,
-     * is the core's (`signRoute`); `auto` is the stored route, untouched.
-     */
-    private val signMethod: () -> String = { "auto" },
-    private val route: (keysJson: String, method: String) -> String? = { keys, method -> uniffi.vela_core_uniffi.signRoute(keys, method) },
     /** Spec 071: the Trusted Signer, when this build can open one. */
     private val trustedSigner: () -> TrustedSigner? = { null },
 ) {
@@ -75,51 +70,55 @@ class UserOpSpine(
      * Where one ceremony goes: the credential it is pinned to, the transports
      * the request carries, the method the shell routes by, and — for
      * `trusted_signer` — the page the key lives behind (spec 075; empty means
-     * the person's page from Settings).
+     * the person's page from Settings). [signInKey]: the account's own sign-in
+     * route, which answers for that one key and no other.
      */
     data class Route(
         val credentialId: String,
         val transports: String,
         val method: KeyMethod,
         val signerOrigin: String = "",
+        val signInKey: Boolean = false,
     )
 
     /**
-     * The core's `signRoute`, for EVERY choice including `auto`.
+     * Where this account's signatures go (founder, 2026-09-26): the key it was
+     * created or last signed in with, over the route that reached it — the
+     * core's `signInRoute`, read from the stored record. There is no choice at
+     * signing time; signing in with another key is how the signing key changes.
      *
-     * Spec 075 made `auto` a real question: a key minted or found through the
-     * Trusted Signer lives behind one page, and `auto` must follow it there —
-     * asking Credential Manager for a credential no provider on this device
-     * holds would draw the system's "no passkeys" sheet over a wallet whose
-     * key is perfectly reachable, one page away. Before this, `auto` never
-     * consulted the core at all.
+     * A record written before the account named its sign-in key signs as it
+     * always did: the core's `signRoute` for `auto` (spec 075 — a key that lives
+     * behind a Trusted Signer page is followed there), else the first key over
+     * its stored transports.
      */
     internal suspend fun routeFor(account: String, first: WalletKeyRecord): Route {
-        val chosen = signMethod()
-        runCatching { route(accounts.keyRoutesJson(account), chosen)?.let(::JSONObject) }.getOrNull()?.let { picked ->
-            val method = KeyMethod.entries.firstOrNull { it.wire == picked.optString("method") }
-            if (method != null && picked.optString("credential_id").isNotEmpty()) {
-                return Route(
-                    credentialId = picked.optString("credential_id"),
-                    transports = picked.optString("transports"),
-                    method = method,
-                    signerOrigin = picked.optString("signer_origin"),
-                )
-            }
-        }
-        // The Trusted Signer by name, for a wallet the core could route nothing
-        // for (no stored key routes yet): the person's own page.
-        if (chosen == TRUSTED_SIGNER) {
-            return Route(first.credentialId, "", KeyMethod.TrustedSigner)
-        }
+        runCatching { accounts.accountJson(account)?.let(::signInRoute)?.let(::JSONObject) }.getOrNull()
+            ?.let { routeOf(it, signInKey = true) }
+            ?.let { return it }
+        runCatching { signRoute(accounts.keyRoutesJson(account), AUTO)?.let(::JSONObject) }.getOrNull()
+            ?.let { routeOf(it, signInKey = false) }
+            ?.let { return it }
         val (transports, method) = accounts.routingOf(account)
         return Route(first.credentialId, transports, method)
     }
 
+    private fun routeOf(picked: JSONObject, signInKey: Boolean): Route? {
+        val method = KeyMethod.entries.firstOrNull { it.wire == picked.optString("method") } ?: return null
+        val credentialId = picked.optString("credential_id").ifEmpty { return null }
+        return Route(
+            credentialId = credentialId,
+            transports = picked.optString("transports"),
+            method = method,
+            signerOrigin = picked.optString("signer_origin"),
+            signInKey = signInKey,
+        )
+    }
+
     /**
-     * The one signature of an attempt: the person's passkey, routed as the
-     * "Sign with" choice says — or, for `trusted_signer`, the Trusted Signer page
-     * the key lives behind ([request] is only called then).
+     * The one signature of an attempt: the person's passkey over the account's
+     * route — or, for `trusted_signer`, the Trusted Signer page the key lives
+     * behind ([request] is only called then, with the keys the page may use).
      */
     private suspend fun ceremony(
         challenge: ByteArray,
@@ -127,16 +126,23 @@ class UserOpSpine(
         account: String,
         pinned: WalletKeyRecord,
         keys: List<WalletKeyRecord>,
-        request: (TrustedSignerLabels) -> String,
+        request: (TrustedSignerLabels, List<WalletKeyRecord>) -> String,
     ): Assertion = try {
         val picked = routeFor(account, pinned)
         if (picked.method == KeyMethod.TrustedSigner) {
             val channel = trustedSigner() ?: other("The Trusted Signer cannot be opened here")
-            val requestJson = runCatching { request(channel.describe(chainId, account)) }.getOrElse { error ->
+            // The sign-in key only: the page is told to allow it alone, and the
+            // answer is judged against it alone.
+            val allowed = if (picked.signInKey) {
+                keys.filter { it.credentialId.equals(picked.credentialId, ignoreCase = true) }.ifEmpty { keys }
+            } else {
+                keys
+            }
+            val requestJson = runCatching { request(channel.describe(chainId, account), allowed) }.getOrElse { error ->
                 if (error is Refused) throw error
                 other(error.message ?: "The Trusted Signer's request could not be built")
             }
-            channel.sign(requestJson, challenge, keys, picked.signerOrigin)
+            channel.sign(requestJson, challenge, allowed, picked.signerOrigin)
         } else {
             signer().sign(challenge, picked.credentialId, picked.transports, picked.method)
         }
@@ -157,9 +163,9 @@ class UserOpSpine(
 
     class Refused(val failure: Failure) : Exception()
 
-    internal companion object {
-        /** `wallet_keys::SIGN_METHODS`' fifth value. */
-        const val TRUSTED_SIGNER = "trusted_signer"
+    private companion object {
+        /** `wallet_keys::SIGN_METHODS`' first value: what a record without a sign-in key always did. */
+        const val AUTO = "auto"
     }
 
     private fun other(message: String): Nothing = throw Refused(Failure.Other(message))
@@ -214,14 +220,14 @@ class UserOpSpine(
         val challenge = runCatching { safeMessageHash(originalHash, chainId.toULong(), account) }
             .getOrElse { other(it.message ?: "The message could not be hashed") }
         signingStarted()
-        val assertion = ceremony(challenge, chainId, account, pinned, keys) { labels ->
+        val assertion = ceremony(challenge, chainId, account, pinned, keys) { labels, allowed ->
             val asked = intent ?: other("The Trusted Signer needs the page's own request")
             trustedSignerRequest(
                 TrustedSignerInput(
                     method = asked.method, paramsJson = asked.paramsJson, origin = asked.origin,
                     chainId = chainId.toUInt(), chainName = labels.chainName, nativeSymbol = labels.nativeSymbol,
                     account = account, accountName = labels.accountName,
-                    credentialIdsHex = keys.map { it.credentialId }, calls = emptyList(),
+                    credentialIdsHex = allowed.map { it.credentialId }, calls = emptyList(),
                 ),
                 null,
             )
@@ -318,13 +324,13 @@ class UserOpSpine(
         val challenge = userOpSafeOpHash(draft, chainId.toUInt())
         signingStarted()
         val assembled = draft
-        val assertion = ceremony(challenge, chainId, account, pinned, keys) { labels ->
+        val assertion = ceremony(challenge, chainId, account, pinned, keys) { labels, allowed ->
             trustedSignerRequest(
                 TrustedSignerInput(
                     method = intent?.method.orEmpty(), paramsJson = intent?.paramsJson ?: "[]", origin = intent?.origin.orEmpty(),
                     chainId = chainId.toUInt(), chainName = labels.chainName, nativeSymbol = labels.nativeSymbol,
                     account = account, accountName = labels.accountName,
-                    credentialIdsHex = keys.map { it.credentialId }, calls = calls,
+                    credentialIdsHex = allowed.map { it.credentialId }, calls = calls,
                 ),
                 assembled,
             )

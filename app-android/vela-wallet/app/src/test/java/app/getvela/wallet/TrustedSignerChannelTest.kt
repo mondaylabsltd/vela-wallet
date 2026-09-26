@@ -16,7 +16,6 @@ import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerAsk
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerCallbacks
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel
 import app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerScheme
-import app.getvela.wallet.feature.signing.core.SigningController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -294,36 +293,28 @@ class TrustedSignerChannelTest {
     private fun <V : Any> CoreHost<V>.settle(predicate: (V) -> Boolean): V =
         runBlocking { withTimeout(10_000L) { view.first(predicate) } }
 
+    /**
+     * `sign_pref` keeps the Trusted Signer page only (founder, 2026-09-26). A
+     * default method an older build stored stays where it is, unread and never
+     * rewritten: how a signature is routed is the account's sign-in key.
+     */
     @Test
-    fun `the picker's methods are the core's, in the core's order`() {
-        val host = prefHost(FakeStore())
-        host.start()
-        host.dispatch(SignPrefEvent.Refresh, SignPrefEvent.serializer())
-        val view = host.settle { true }
-        assertEquals(SigningController.SIGN_METHODS, view.offered)
-        assertEquals(SigningController.SIGN_METHODS, SignPrefView().offered)
-    }
-
-    @Test
-    fun `the default method and the signer page reach the store, and a page a browser would not sign on does not`() {
-        val store = FakeStore()
+    fun `the signer page reaches the store, a page a browser would not sign on does not, and an old default method is left alone`() {
+        val store = FakeStore(mapOf("vela.signMethod" to "security_key", KeyValueStore.Keys.TRUSTED_SIGNER_URL to "https://my.signer.test/"))
         val host = prefHost(store)
         host.start()
         host.dispatch(SignPrefEvent.Refresh, SignPrefEvent.serializer())
-        host.settle { !it.method_committed }
-        host.dispatch(SignPrefEvent.MethodChosen("trusted_signer"), SignPrefEvent.serializer())
-        host.settle { it.method == "trusted_signer" }
+        assertEquals("https://my.signer.test/", host.settle { !it.signer_url_is_default }.signer_url)
         host.dispatch(SignPrefEvent.SignerUrlSubmitted("http://192.168.1.4/"), SignPrefEvent.serializer())
         assertEquals("insecure", host.settle { it.signer_url_error != null }.signer_url_error)
         host.dispatch(SignPrefEvent.SignerUrlSubmitted("http://127.0.0.1:8140"), SignPrefEvent.serializer())
-        val chosen = host.settle { !it.signer_url_is_default }
-        assertEquals("http://127.0.0.1:8140/", chosen.signer_url)
+        val chosen = host.settle { it.signer_url == "http://127.0.0.1:8140/" }
         assertEquals(false, chosen.signer_uses_wallet_passkeys)
-        runBlocking { withTimeout(10_000L) { while (store.values[KeyValueStore.Keys.TRUSTED_SIGNER_URL] == null) kotlinx.coroutines.delay(20) } }
-        assertEquals("trusted_signer", store.values[KeyValueStore.Keys.SIGN_METHOD])
+        runBlocking { withTimeout(10_000L) { while (store.values[KeyValueStore.Keys.TRUSTED_SIGNER_URL] != "http://127.0.0.1:8140/") kotlinx.coroutines.delay(20) } }
         host.dispatch(SignPrefEvent.SignerUrlReset, SignPrefEvent.serializer())
         host.settle { it.signer_url_is_default }
         runBlocking { withTimeout(10_000L) { while (store.values.containsKey(KeyValueStore.Keys.TRUSTED_SIGNER_URL)) kotlinx.coroutines.delay(20) } }
+        assertEquals("security_key", store.values["vela.signMethod"])
     }
 
     // --- the test page ------------------------------------------------------

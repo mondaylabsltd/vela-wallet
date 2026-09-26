@@ -83,31 +83,11 @@ object SettingsLive {
     }
 
     /**
-     * How this device signs by default (spec 071): the "Sign with" row and its
-     * sheet, the Trusted Signer page row and its sheet — all from the `sign_pref`
-     * core, so the row, the sheet and every signing sheet say the same thing.
+     * Which Trusted Signer page this device opens (spec 071): the row and its
+     * sheet, from the `sign_pref` core. How a signature is routed is not a
+     * setting — the account signs with the key it signed in with.
      */
     fun withSignPref(model: SettingsScreenModel, view: SignPrefView, s: VelaStrings): SettingsScreenModel {
-        val titles = mapOf(
-            "auto" to s.t("common.automatic"),
-            "platform" to s.t("onboarding.create.methodPlatformTitle"),
-            "hybrid" to s.t("onboarding.create.methodHybridTitle"),
-            "security_key" to s.t("onboarding.create.methodSecurityKeyTitle"),
-            "trusted_signer" to s.t("componentsUi.signing.trustedSignerTitle"),
-        )
-        val sheet = SelectSheetModel(
-            title = s.t("settings.signing.title"),
-            subtitle = s.t("settings.signing.subtitle"),
-            rows = view.offered.mapNotNull { id ->
-                val title = titles[id] ?: return@mapNotNull null
-                SelectRowModel(
-                    id = id,
-                    label = title,
-                    detail = if (id == "trusted_signer") s.t("componentsUi.signing.trustedSignerBody") else null,
-                    selected = id == view.method,
-                )
-            },
-        )
         val official = s.t("settings.signing.pageOfficial")
         val host = view.signer_url.substringAfter("://").substringBefore('/')
         val page = SignerPageModel(
@@ -127,15 +107,14 @@ object SettingsLive {
             sections = model.sections.map { section ->
                 section.copy(
                     rows = section.rows.map { row ->
-                        when (row.id) {
-                            SettingsFixtures.SIGN_WITH_ROW -> row.copy(value = titles[view.method] ?: row.value)
-                            SettingsFixtures.SIGNER_PAGE_ROW -> row.copy(value = if (view.signer_url_is_default) official else host)
-                            else -> row
+                        if (row.id == SettingsFixtures.SIGNER_PAGE_ROW) {
+                            row.copy(value = if (view.signer_url_is_default) official else host)
+                        } else {
+                            row
                         }
                     },
                 )
             },
-            signWithSheet = sheet,
             signerPage = page,
         )
     }
