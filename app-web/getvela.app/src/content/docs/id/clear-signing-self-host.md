@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Halaman satu file di sign.getvela.app yang mendekode permintaan dan menandatanganinya dengan passkey Anda secara mandiri — apa yang diperiksanya, aplikasi mana yang memakainya, dan cara mem-build ulang atau menjalankan salinan Anda sendiri."
-source: 3a605b8d68ee
+source: 43a1af6ffdcd
 ---
 
 <script>
@@ -62,6 +62,13 @@ iPhone memakai sambungan yang sama; belum ada satu pun yang punya catatan uji me
 - **Menolak apa yang tidak bisa dipertanggungjawabkannya:** `eth_sign`, metode yang tidak
   dikenalnya, token yang dikirim ke kontrak token itu sendiri, operasi yang tidak bisa
   dibacanya, dan proses masuk yang challenge-nya diberikan oleh peminta.
+- **Menolak apa pun yang akan menyerahkan akun Anda,** dengan aturan yang sama
+  seperti di aplikasi: panggilan dari akun Anda ke salah satu fungsinya sendiri
+  untuk pemilik, modul, guard, atau fallback, termasuk di dalam batch;
+  `delegatecall`, kecuali ke kontrak MultiSend milik Safe yang menggabungkan
+  panggilan-panggilan dalam satu operasi; dan tanda tangan `SafeTx`. Halaman ini
+  memeriksa setiap panggilan dalam operasi yang disusun aplikasi, bukan hanya
+  panggilan yang diminta situs.
 - **Menampilkan alamat akun dan identicon yang dihitung di halaman itu.** Penerima dan
   kontrak tidak pernah diberi nama berdasarkan permintaan — hanya tabel milik halaman itu
   sendiri yang sudah ditinjau yang bisa menamai sebuah kontrak. Nama akun itu sendiri, yang

@@ -1,14 +1,16 @@
 // Where requests come in, and where the answers go back.
 //
-// Four channels, one shape. Every channel opens a SESSION (spec 075 §1.5):
+// Three channels, one shape. The apps use one of them: the URL fragment, with
+// the answer handed back through `velawallet://sign-result` (076). Every
+// channel opens a SESSION (spec 075 §1.5):
 //
 //   session.next()      → Promise<request | null>   null: the session is over,
 //                                                    and session.endReason says why
 //   session.end(reason)   the page ends it (says `bye` where the channel can)
 //   session.persistent    true when it carries several requests in order
 //                         (loopback WebSocket, postMessage); the URL fragment
-//                         and the extension carry exactly one
-//   session.channel       'post' | 'url' | 'ws' | 'ext'
+//                         carries exactly one
+//   session.channel       'post' | 'url' | 'ws'
 //
 // The two CROSS-DEVICE channels — a WebSocket tunnel and a BLE link — were
 // retired on 2026-09-23. The wallet's owner cut them because only a page the
@@ -259,7 +261,10 @@ window.VelaCS = window.VelaCS || {};
     return Promise.resolve(session);
   }
 
-  // --- 2. same machine, native app: URL fragment in, loopback callback out ---
+  // --- 2. native app: URL fragment in, callback link out ----------------------
+  //
+  // The apps' callback is `velawallet://sign-result`; tests use a loopback
+  // http address.
 
   function fromUrlFragment(options) {
     var hash = new URLSearchParams(location.hash.replace(/^#/, ''));
@@ -320,6 +325,9 @@ window.VelaCS = window.VelaCS || {};
   }
 
   // --- 2b. same device, native app: a WebSocket on the app's loopback --------
+  //
+  // No app uses this any more (076): the published page's `default-src 'none'`
+  // is inside its hashed bytes, so it cannot open this socket. Kept for tests.
   //
   // A phone app cannot catch a redirect to 127.0.0.1 — it is suspended the
   // moment the browser tab covers it — but it can keep a loopback socket open
@@ -423,7 +431,9 @@ window.VelaCS = window.VelaCS || {};
       return forcedResult || Promise.reject(new Error('channel ' + forced + ' found no request'));
     }
 
-    var order = ['ext', 'url', 'post'];
+    // No `ext`: the extension channel went with the extension (2026-09-23), and
+    // asking for its missing adapter threw before any channel was tried.
+    var order = ['url', 'post'];
     for (var i = 0; i < order.length; i++) {
       var attempt = adapters[order[i]]();
       if (attempt) return attempt;

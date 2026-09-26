@@ -1,7 +1,7 @@
 ---
 title: Trusted Signer
 description: "Una pagina in un solo file su sign.getvela.app che decodifica una richiesta e la firma con la tua passkey per conto proprio — cosa controlla, quali app la usano e come ricostruirla o gestirne una tua copia."
-source: 3a605b8d68ee
+source: 43a1af6ffdcd
 ---
 
 <script>
@@ -60,6 +60,12 @@ registrata.
 - **Rifiuta ciò di cui non può rispondere:** `eth_sign`, un metodo che non conosce,
   un token inviato al contratto del token stesso, un'operazione che non riesce a
   leggere e un accesso la cui challenge è stata fornita dal richiedente.
+- **Rifiuta ciò che consegnerebbe il tuo account,** con la stessa regola delle app:
+  una chiamata del tuo account a una delle sue funzioni per owner, moduli, guard o
+  fallback, anche dentro un batch; un `delegatecall`, tranne verso il contratto
+  MultiSend di Safe, che raggruppa le chiamate di un'operazione; e una firma
+  `SafeTx`. Controlla ogni chiamata dell'operazione assemblata dall'app, non solo
+  quelle chieste dal sito.
 - **Mostra l'indirizzo dell'account e un identicon calcolato nella pagina.**
   Destinatari e contratti non vengono mai nominati in base alla richiesta — solo la
   tabella della pagina stessa, sottoposta a revisione, può dare un nome a un

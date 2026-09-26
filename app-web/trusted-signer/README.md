@@ -22,22 +22,25 @@ Opening `index.html` straight off disk (`file://`) also works.
 
 ## 通道
 
-三种通道，一种意图格式，**没有服务器**。规范见 [PROTOCOL.md](PROTOCOL.md)。
+App 用的只有**一条**通道，一种意图格式，**没有服务器**。规范见 [PROTOCOL.md](PROTOCOL.md)。
 
 | 请求方 | 通道 | 状态 |
 | --- | --- | --- |
-| 同浏览器网页 | `postMessage` | ✅ 端到端已验证 |
-| 同机桌面 App | URL 片段 + 回环回调 | ✅ 端到端已验证 |
-| 同机手机 App | 回环 WebSocket | ✅ 由 Android 的 Kotlin 测试覆盖 |
+| 桌面 App（macOS / Windows / Linux）、iPhone、Android | 请求放在 URL 片段里（`sign.html?ch=url#i=…`），回答走 `velawallet://sign-result` 自定义 scheme 交回 App | ✅ Android、Windows 11 有端到端记录；macOS / iOS / Linux 接线相同、尚无完整跑通记录 |
+| 同浏览器网页 | `postMessage`（代码还在，没有 App 使用） | 仅测试用 |
+| 同机 App | 回环 WebSocket（`?ch=ws`，代码还在，没有 App 使用） | 仅测试用：发布页的 CSP 连不出去 |
 
-跨设备的 BLE 与 WebSocket 隧道在 075 被砍掉（「只留回环这个，这样更加安全」）；
-扩展端口在 2026-09-23 随扩展形态一起砍掉。
+已砍掉：跨设备的 BLE 与 WebSocket 隧道（075，「只留回环这个，这样更加安全」）；
+扩展端口（2026-09-23 随扩展形态一起砍掉）；App 不再用回环 WebSocket（076 改走自定义
+scheme —— 发布页的 `default-src 'none'` 就在被哈希的字节里，页面里的 WebSocket 连不出去）。
+网页版钱包不用签名页（075）。
 
 ```sh
-node samples/hostile-test.mjs   # 35 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
+node samples/hostile-test.mjs   # 32 项：请求方能控制的字段全填毒串，断言一个都不当事实显示
 node samples/channels-test.mjs  # 19 项：postMessage / URL 片段 + 真 WebAuthn + 交易 + 篡改拒签
 node samples/safeop-test.mjs    #  9 项：SafeOp / SafeMessage 对拍 vela-core
 node samples/identicon-test.mjs #  9 项：identicon 与 vela-core 逐字节一致（含 1000 随机地址）
+node samples/takeover-test.mjs  # 18 项：自调用 / delegatecall / SafeTx 拒签 —— 与 vela-core self_call_guard 同一规则
 ```
 
 每样东西的来源见 [PROTOCOL.md](PROTOCOL.md) 第 9 节。
@@ -60,6 +63,15 @@ EIP-191 / EIP-712 对上权威向量，SafeOp 与 SafeMessage 与 **vela-core �
 逐字节一致**。交易还要过一道绑定检查 —— 站点请求的那一笔调用必须真的在被签的操作里，
 否则拒签。`eth_sign` 永远拒签。
 
+**会交出账户的请求一律拒签**（2026-09-27，与 vela-core 的 `self_call_guard.rs` 同一规则）：
+账户对自己调用 `addOwnerWithThreshold` / `removeOwner` / `swapOwner` / `changeThreshold` /
+`enableModule` / `disableModule` / `setGuard` / `setModuleGuard` / `setFallbackHandler` /
+`setup` / `execTransaction` / `execTransactionFromModule`（穿透 `multiSend` 与
+`execTransaction` 最多 4 层）；任何 delegatecall —— 包括操作外层 delegatecall 到 MultiSend
+以外的地址、MultiSend 里标了 operation 1 的腿；以及请求方要签的 EIP-712 `SafeTx`。
+核心在请求到达本页之前就拦了；本页再拦一次，因为它存在的意义就是不信任组装操作的 App ——
+检查的是**操作里的每一条腿**，不只是站点要的那几条。
+
 ```sh
 node samples/safeop-test.mjs    # 9 项：SafeOp / SafeMessage 对拍 vela-core + calldata 解码
 ```
@@ -68,8 +80,9 @@ node samples/safeop-test.mjs    # 9 项：SafeOp / SafeMessage 对拍 vela-core 
 
 1. **这一页不能改签名意图。** 意图到达即定死，只有「签」和「不签」两种出路。
    因此没有费币选择器，也**没有授权额度编辑器** —— 编辑器会重写 calldata，
-   那正是本页要防的「所见非所签」。无限额请求在这里的正确行为是**拒签并指路**
-   （回请求方要一个有限额度）。
+   那正是本页要防的「所见非所签」。无限额的授权与 permit（本页门槛 2^128）**标红、可原样签**
+   （2026-09-26 创始人裁决：Permit2 与批量交易依赖原样额度）；要设上限，是在请求到达这里之前、
+   在钱包自己的授权界面上设。对整个 NFT 合集的授权仍然拒签。
 2. **逻辑不产生任何人话。** `resolve.js` 只输出 i18n key + 参数，措辞全在
    `lib/locales/`。缺 key 会原样显示 key —— 签名提示上的窟窿必须刺眼。
 3. **数据全部来自外部。** 页面不内嵌任何场景；画廊 fetch `samples/intents.json`
@@ -117,9 +130,7 @@ python3 -m http.server 8099   # → http://localhost:8099/gallery.html
 | `lib/resolve.js` | 意图 → 视图模型：降级阶梯与所有安全闸门都在这里 |
 | `lib/render.js` | 视图模型 → DOM，不做任何判断 |
 | `samples/intents.json` | 33 个场景的意图（外部数据，页面不内嵌） |
-| `lib/transport/ble.js` | BLE 中心端：分帧、ECDH 握手、AES-GCM、防重放 |
-| `samples/ble-peripheral.mjs` | 参考外设（Node），三个原生端照它实现 |
-| `lib/intake.js` | 四种通道归一成一个形状，并标注来源是否可验证 |
+| `lib/intake.js` | 通道归一成一个形状（App 用 URL 片段，另有 `postMessage`），并标注来源是否可验证 |
 | `lib/digest.js` | 算得出就签，算不出就拒 |
 | `lib/safeop.js` | SafeOp / SafeMessage 摘要 + 读回操作 calldata |
 | `lib/signer.js` | passkey 仪式（创建 / 断言） |
@@ -135,8 +146,10 @@ Creating a key calls `navigator.credentials.create`, signing calls
 `navigator.credentials.get`. There is no fixture key and no fake prompt on
 either surface — the authenticator prompt you see is the browser's.
 
-The assertion is then verified in the page with WebCrypto alone, the same four
-things `vela-core` checks:
+On the self-check page (`demo/index.html`) the assertion is then verified with
+WebCrypto alone, the same four things `vela-core` checks. The signing page
+itself does not verify its own answer — the app that asked does, in
+`vela-core`'s `trusted_signer::verify`:
 
 - the ECDSA P-256 signature covers `authenticatorData ‖ sha256(clientDataJSON)`
 - `authenticatorData[0..32]` equals `sha256(rpId)`
