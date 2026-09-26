@@ -62,7 +62,7 @@ use crate::settings::components::{
     confirm_sheet, danger_card, dropdown_menu, dropdown_menu_choices, dropdown_menu_details,
     dropdown_menu_picks, dropdown_trigger, editable_url_field, form_row, key_value_row,
     network_row, rpc_banner, segmented, segmented_picks, settings_nav_row, status_pill,
-    storage_bar, storage_group, storage_group_with, text_scale, text_scale_picks, url_field,
+    storage_bar, storage_group, storage_group_with, text_scale, text_scale_slider, url_field,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -664,6 +664,8 @@ pub struct WalletPage {
     networks_scroll: crate::ui::SmoothScroll,
     /// The settings panel's, for the same bar.
     settings_scroll: crate::ui::SmoothScroll,
+    /// The text-size slider's pointer state and motion (`ui::step_slider`).
+    text_scale_slider: crate::ui::StepSlider,
     /// The address book's list, the Explore start page's, and a pick
     /// dialog's.
     contacts_scroll: crate::ui::SmoothScroll,
@@ -1140,6 +1142,7 @@ impl WalletPage {
             panel_scroll_subject: String::new(),
             networks_scroll: crate::ui::SmoothScroll::new(),
             settings_scroll: crate::ui::SmoothScroll::new(),
+            text_scale_slider: crate::ui::StepSlider::new(),
             contacts_scroll: crate::ui::SmoothScroll::new(),
             explore_scroll: crate::ui::SmoothScroll::new(),
             pick_scroll: crate::ui::SmoothScroll::new(),
@@ -9504,10 +9507,12 @@ impl WalletPage {
                 el.child(Self::settings_menu_layer(menu, cx))
             });
 
-        let scale_control = text_scale_picks(
+        let scale_control = text_scale_slider(
             theme,
+            &self.text_scale_slider,
             vela_core::prefs::TEXT_SCALE_LEVELS.len(),
             settings_live::text_scale_index(prefs.text_scale),
+            cx.reduce_motion(),
             {
                 let page = page.clone();
                 move |index, window, cx| {
