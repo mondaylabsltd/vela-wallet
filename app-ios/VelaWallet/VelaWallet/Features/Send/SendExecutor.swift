@@ -554,9 +554,13 @@ struct SendAccountPort: UserOpSpine.AccountPort {
         let hints = Set(transports.split(separator: ",").map {
             $0.trimmingCharacters(in: .whitespaces)
         })
+        // `ble` with `usb` and `nfc`: whatever reports one is a key to present,
+        // and the method is what sends a ceremony down the security-key path
+        // (`PasskeyExecutor.assertionPath`) — so a record from before the
+        // sign-in key keeps the path it always took.
         let method: KeyMethod
         if hints.contains("hybrid") && !hints.contains("internal") { method = .hybrid }
-        else if hints.contains("usb") || hints.contains("nfc") { method = .securityKey }
+        else if !hints.isDisjoint(with: ["usb", "nfc", "ble"]) { method = .securityKey }
         else { method = .platform }
         return (transports, method)
     }

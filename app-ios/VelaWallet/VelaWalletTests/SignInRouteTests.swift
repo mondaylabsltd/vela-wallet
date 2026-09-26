@@ -13,6 +13,7 @@
 //  WHERE a ceremony was sent is the whole claim.
 //
 
+import AuthenticationServices
 import CryptoKit
 import Foundation
 import Testing
@@ -115,6 +116,64 @@ struct SignInRouteTests {
         #expect(signer.asked == [
             .init(credentialIdHex: second, transports: "internal,usb,nfc,ble,hybrid", method: .platform),
         ])
+    }
+
+    /// …and that ceremony goes to the SYSTEM sheet, not the app-owned USB path:
+    /// the method decides, and transports are only the allow-list's hint. The
+    /// sheet is pinned to the key on both of its requests, and the security-key
+    /// request names every removable cable the route lists — so the system can
+    /// still offer the key over NFC, or a nearby device.
+    @Test func aPlatformRouteWithEveryTransportGoesToTheSystemSheetWithThemAll() throws {
+        let transports = "internal,usb,nfc,ble,hybrid"
+        #expect(PasskeyExecutor.assertionPath(transports: transports, method: .platform)
+                == .system(offersSecurityKey: true))
+
+        let requests = try PasskeyExecutor().systemRequests(
+            challenge: Data(repeating: 7, count: 32), credentialIdHex: second, transports: transports
+        )
+        #expect(requests.count == 2)
+        let platform = try #require(requests.first as? ASAuthorizationPlatformPublicKeyCredentialAssertionRequest)
+        #expect(platform.allowedCredentials.map(\.credentialID) == [Data([0xb2, 0xb2, 0xb2, 0xb2])])
+        let securityKey = try #require(requests.last as? ASAuthorizationSecurityKeyPublicKeyCredentialAssertionRequest)
+        #expect(securityKey.allowedCredentials.map(\.credentialID) == [Data([0xb2, 0xb2, 0xb2, 0xb2])])
+        #expect(securityKey.allowedCredentials.first?.transports == [.usb, .nfc, .bluetooth])
+
+        // A security-key sign-in is the app-owned path whatever else it lists.
+        #expect(PasskeyExecutor.assertionPath(transports: "usb,nfc,ble,hybrid", method: .securityKey) == .securityKey)
+    }
+
+    /// A record from before the sign-in key takes the path it always took,
+    /// whatever its first key reported. The old rule is written out here as the
+    /// reference: the method from `usb`/`nfc`, then caBLE for `hybrid`, the
+    /// app-owned USB path for any removable token or a security-key method,
+    /// and otherwise the system sheet offering the security key unless the key
+    /// is known to live on a phone.
+    @Test func aRecordFromBeforeTheSignInKeyTakesThePathItAlwaysTook() async throws {
+        func oldPath(_ transports: String) -> PasskeyExecutor.AssertionPath {
+            let hints = Set(transports.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            let method: KeyMethod = hints.contains("hybrid") && !hints.contains("internal") ? .hybrid
+                : hints.contains("usb") || hints.contains("nfc") ? .securityKey : .platform
+            if method == .hybrid { return .hybrid }
+            let removable = !hints.isDisjoint(with: ["usb", "nfc", "ble"])
+            if removable || method == .securityKey { return .securityKey }
+            let platformOnly = !hints.isEmpty && hints.isDisjoint(with: ["usb", "nfc", "ble"])
+            return .system(offersSecurityKey: !platformOnly)
+        }
+        let lists = [
+            "", "internal", "hybrid,internal", "internal,hybrid", "hybrid", "usb,nfc", "usb", "nfc", "ble",
+            "ble,nfc,usb", "internal,ble", "hybrid,internal,ble", "internal,usb", "cable,internal",
+            "usb,nfc,ble,hybrid",
+        ]
+        for transports in lists {
+            var legacy = record()
+            var keys = try #require(legacy["keys"] as? [[String: Any]])
+            keys[0]["transports"] = transports
+            legacy["keys"] = keys
+            let (routed, method) = await SendAccountPort(accounts: await Self.store(legacy)).routing(of: address)
+            #expect(routed == transports)
+            #expect(PasskeyExecutor.assertionPath(transports: routed, method: method) == oldPath(transports),
+                    "path for \"\(transports)\"")
+        }
     }
 
     /// A record naming a key this wallet does not hold is read as naming none:
