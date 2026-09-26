@@ -9429,7 +9429,9 @@ impl WalletPage {
                 cx.notify();
             }))
             .child(trigger)
-            .when_some(menu, |el, menu| el.child(deferred(menu).with_priority(1)));
+            .when_some(menu, |el, menu| {
+                el.child(Self::settings_menu_layer(menu, cx))
+            });
 
         let scale_control = text_scale_picks(
             theme,
@@ -9640,7 +9642,9 @@ impl WalletPage {
                 // paints in child order, so an open menu drawn inside row 2 was
                 // painted over by rows 3 and 4 — the date and time triggers sat
                 // on top of it and swallowed one of its options.
-                .when_some(menu, |el, menu| el.child(deferred(menu).with_priority(1)));
+                .when_some(menu, |el, menu| {
+                    el.child(Self::settings_menu_layer(menu, cx))
+                });
             col = col.child(form_row(theme, label, control));
         }
         col
@@ -10328,7 +10332,29 @@ impl WalletPage {
                 cx.notify();
             }))
             .child(trigger)
-            .when_some(menu, |el, menu| el.child(deferred(menu).with_priority(1)))
+            .when_some(menu, |el, menu| {
+                el.child(Self::settings_menu_layer(menu, cx))
+            })
+    }
+
+    /// An open settings menu, drawn over the rows after it (`deferred`) and
+    /// dismissed the way the web's `Dropdown` is. It keeps the clicks that
+    /// land on it (`occlude`): it opens over its own trigger, so a click on
+    /// its first row — often the one already chosen — also reached the
+    /// trigger underneath and toggled the menu straight back open. A press
+    /// anywhere else closes it without choosing, as Esc does (the root's key
+    /// handler).
+    fn settings_menu_layer(
+        menu: impl gpui::InteractiveElement + IntoElement + 'static,
+        cx: &mut Context<Self>,
+    ) -> gpui::Deferred {
+        deferred(menu.occlude().on_mouse_down_out(cx.listener(
+            |this, _: &MouseDownEvent, _, cx| {
+                this.settings_open_dropdown = None;
+                cx.notify();
+            },
+        )))
+        .with_priority(1)
     }
 
     /// How this device signs by default (spec 071): the five ways in the
@@ -16851,8 +16877,8 @@ impl Render for WalletPage {
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
                 // Esc peels one layer at a time: the dialog on top first, then
-                // the anchored menu, then the third column (desktop SPEC
-                // keyboard map).
+                // the anchored menu or an open settings dropdown, then the
+                // third column (desktop SPEC keyboard map).
                 if ks.key == "escape" && this.dismiss_top_dialog(cx) {
                     return;
                 }
@@ -16863,6 +16889,9 @@ impl Render for WalletPage {
                 if ks.key == "escape" {
                     if this.menu.is_some() {
                         this.menu = None;
+                        cx.notify();
+                    } else if this.settings_open_dropdown.is_some() {
+                        this.settings_open_dropdown = None;
                         cx.notify();
                     } else if this.panel != PanelId::None {
                         // Escape is the ✕: a signing column tells its core,
