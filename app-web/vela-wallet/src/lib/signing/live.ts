@@ -272,11 +272,17 @@ function allowanceBlock(
  * ladder simply emits more warnings and fewer decoded rows — the ladder is the
  * core's, and this reads it rather than re-deriving it.
  */
-/** The calldata's length in bytes — what the two "unable to decode" lines name. */
-function calldataBytes(paramsJson: string): number {
+/**
+ * The calldata's length in bytes — what the two "unable to decode" lines name.
+ * A batch counts its FIRST leg, the one its decode describes (the desktop's
+ * and the phones' `first_call`); `params[0]` of a bundle has no `data`, and a
+ * bundle read as "(0 bytes)".
+ */
+export function calldataBytes(paramsJson: string): number {
 	try {
 		const params = JSON.parse(paramsJson) as unknown[];
-		const data = (params[0] as { data?: string } | undefined)?.data;
+		const first = params[0] as { data?: string; calls?: { data?: string }[] } | undefined;
+		const data = Array.isArray(first?.calls) ? first.calls[0]?.data : first?.data;
 		if (typeof data !== 'string') return 0;
 		return Math.max(0, Math.floor((data.replace(/^0x/, '').length || 0) / 2));
 	} catch {

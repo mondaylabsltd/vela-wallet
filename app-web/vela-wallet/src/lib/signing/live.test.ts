@@ -21,7 +21,7 @@ import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
-import { buildSigningModel, cappedApproval, type SigningLiveInputs } from './live';
+import { buildSigningModel, calldataBytes, cappedApproval, type SigningLiveInputs } from './live';
 
 const m = resolveSigningMessages('en');
 const identity: WalletIdentity = {
@@ -914,5 +914,14 @@ describe('the fee coin can be switched, as it can when sending', () => {
 	it('with one coin there is nothing to choose, so nothing opens', () => {
 		const fee = feeOf({ fee: { ...two, options: [option({})] }, feeOpen: true });
 		expect(fee.kind === 'onchain' && fee.selector).toBeUndefined();
+	});
+});
+
+describe('the blind line names the real length', () => {
+	it("a batch counts its first leg's calldata, as the other shells do", () => {
+		const call = { to: '0xdd', data: '0x095ea7b3' + '00'.repeat(64) };
+		expect(calldataBytes(JSON.stringify([call]))).toBe(68);
+		expect(calldataBytes(JSON.stringify([{ version: '2.0.0', calls: [call, call] }]))).toBe(68);
+		expect(calldataBytes('not json')).toBe(0);
 	});
 });
