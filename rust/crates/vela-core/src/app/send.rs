@@ -53,10 +53,9 @@ use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
 
 use super::fee_policy::{
-    encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable,
-    reserve_fee_token, reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset,
-    FeeAssetView, FeeCall, FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec,
-    TEMPO_DEFAULT_FEE_TOKEN,
+    encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable, reserve_fee_token,
+    reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset, FeeAssetView, FeeCall,
+    FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
 
@@ -2630,9 +2629,9 @@ fn select_token(model: &mut Model, token_id: &str) -> Cmd {
     };
     model.multi_select_mode = false; // single-token path
     model.fee_estimate = None; // a prior network's quote must never gate this token
-    // A fee coin picked for another token's form is a contract on that
-    // token's chain; carried across, it priced this send in a coin the chain
-    // may not have. The new form starts from the fee machine's own pick.
+                               // A fee coin picked for another token's form is a contract on that
+                               // token's chain; carried across, it priced this send in a coin the chain
+                               // may not have. The new form starts from the fee machine's own pick.
     model.gas_fee_token = None;
     model.fee_coin_chosen = false;
     model.max_fill = None;
@@ -3353,9 +3352,19 @@ pub fn max_figure(exact: &str) -> String {
         }
     }
     let split = digits.len() - places;
-    let int_part: String = digits[..split].iter().map(|d| char::from(b'0' + d)).collect();
-    let frac_part: String = digits[split..].iter().map(|d| char::from(b'0' + d)).collect();
-    let int_part = if int_part.is_empty() { "0".to_owned() } else { int_part };
+    let int_part: String = digits[..split]
+        .iter()
+        .map(|d| char::from(b'0' + d))
+        .collect();
+    let frac_part: String = digits[split..]
+        .iter()
+        .map(|d| char::from(b'0' + d))
+        .collect();
+    let int_part = if int_part.is_empty() {
+        "0".to_owned()
+    } else {
+        int_part
+    };
     let frac_part = frac_part.trim_end_matches('0');
     if int_part == "0" && frac_part.is_empty() {
         // Below the ladder's last place: two significant digits, cut — never
@@ -4412,7 +4421,8 @@ fn quoted_fee_token(model: &Model, fee: Option<&FeeEstimate>) -> Option<String> 
     }
     match fee.map(|f| (&f.fee_asset, f.chain_id)) {
         Some((FeeAsset::Erc20 { token, .. }, chain_id))
-            if !(is_tempo_chain(chain_id) && token.eq_ignore_ascii_case(TEMPO_DEFAULT_FEE_TOKEN)) =>
+            if !(is_tempo_chain(chain_id)
+                && token.eq_ignore_ascii_case(TEMPO_DEFAULT_FEE_TOKEN)) =>
         {
             Some(token.clone())
         }

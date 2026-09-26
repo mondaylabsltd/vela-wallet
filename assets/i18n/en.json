@@ -37,7 +37,7 @@
   "appearance": {
    "themeLight": "Light",
    "themeDark": "Dark",
-   "themeAuto": "Follow System",
+   "themeAuto": "System",
    "avatarInitials": "Initials",
    "avatarIdenticon": "Identicon",
    "themeTitle": "Theme",

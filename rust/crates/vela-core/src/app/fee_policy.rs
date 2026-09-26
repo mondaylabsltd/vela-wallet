@@ -2305,7 +2305,9 @@ impl Outflows {
     fn of_calls(calls: &[FeeCall]) -> Self {
         let mut out = Self::default();
         for call in calls {
-            out.native = out.native.saturating_add(parse_units(&call.value).unwrap_or(0));
+            out.native = out
+                .native
+                .saturating_add(parse_units(&call.value).unwrap_or(0));
             let data = call.data.trim_start_matches("0x").to_ascii_lowercase();
             if data.len() == 8 + 64 + 64 && data.starts_with(ERC20_TRANSFER_SELECTOR) {
                 let amount = U256::from_str_radix(&data[8 + 64..], 16)
@@ -2369,8 +2371,7 @@ fn auto_pick(
     };
     let mut best: Option<&ParsedQuote> = None;
     for row in rows.iter().filter(|row| row.is_native || row.balance > 0) {
-        let covers = fee_for(row)
-            .is_some_and(|fee| fee.saturating_add(out.of(row)) <= row.balance);
+        let covers = fee_for(row).is_some_and(|fee| fee.saturating_add(out.of(row)) <= row.balance);
         if !covers {
             continue;
         }
@@ -2382,7 +2383,13 @@ fn auto_pick(
             best = Some(row);
         }
     }
-    best.map(|row| if row.is_native { None } else { row.fee_token.clone() })
+    best.map(|row| {
+        if row.is_native {
+            None
+        } else {
+            row.fee_token.clone()
+        }
+    })
 }
 
 /// Whether the coin in force still pays once the real gas is known. The pick
@@ -2702,11 +2709,14 @@ fn price_tempo(
     expected_gas: u128,
 ) -> Command<FeeEffect, Event> {
     let mut plan = plan.clone();
-    if let (true, PricePlan::Tempo {
-        gas_price_atto,
-        fee_token,
-        ..
-    }) = (model.auto_fee_token, &mut plan)
+    if let (
+        true,
+        PricePlan::Tempo {
+            gas_price_atto,
+            fee_token,
+            ..
+        },
+    ) = (model.auto_fee_token, &mut plan)
     {
         // The simulation can price above the static model; the coin picked
         // on that model must still pay, or the pick is made again here.
