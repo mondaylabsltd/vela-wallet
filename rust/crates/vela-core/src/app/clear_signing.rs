@@ -5752,17 +5752,21 @@ mod clear_term_tests {
         terms.push(ClearTerm::ValueUnlimited);
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/i18n/locales");
         let mut checked = 0;
-        for entry in std::fs::read_dir(root).expect("locales") {
-            let dir = entry.expect("entry").path();
+        for entry in std::fs::read_dir(root).unwrap_or_else(|e| unreachable!("locales: {e}")) {
+            let dir = entry.unwrap_or_else(|e| unreachable!("entry: {e}")).path();
             if !dir.is_dir() {
                 continue;
             }
-            let text =
-                std::fs::read_to_string(dir.join("componentsUi.json")).expect("componentsUi.json");
-            let catalog: serde_json::Value = serde_json::from_str(&text).expect("json");
+            let text = std::fs::read_to_string(dir.join("componentsUi.json"))
+                .unwrap_or_else(|e| unreachable!("componentsUi.json: {e}"));
+            let catalog: serde_json::Value =
+                serde_json::from_str(&text).unwrap_or_else(|e| unreachable!("json: {e}"));
             for term in &terms {
-                let leaf = serde_json::to_value(term).expect("serialize");
-                let leaf = leaf.as_str().expect("a string");
+                let leaf =
+                    serde_json::to_value(term).unwrap_or_else(|e| unreachable!("serialize: {e}"));
+                let Some(leaf) = leaf.as_str() else {
+                    unreachable!("a ClearTerm serializes to a string")
+                };
                 let word = catalog["componentsUi"]["signing"][leaf]
                     .as_str()
                     .unwrap_or("");
