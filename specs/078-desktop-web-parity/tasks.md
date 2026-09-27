@@ -53,9 +53,13 @@ screenshot checked against the web.
 
 ## Phase 3 — P1 features
 - [x] T030 H-01 account switcher dialog from the sidebar header.
-- [ ] T031 H-02 (header and switcher rows done; contact rows, recipient
-      cards, the signer line open) identicon viewer from every addressed
-      identicon.
+- [x] T031 H-02 identicon viewer from every addressed identicon: an
+      `openable_identicon` raises an `IdenticonRequest` global the page turns
+      into the viewer (the web's `identiconViewer` store) — contact rows,
+      split recipient cards, the signing party line, fact rows and the receive
+      address card, beside the header and switcher rows. Checked live: a
+      contact's artwork opens the viewer and not the contact; its name still
+      opens the contact.
 - [x] T032 H-03 balance status line: RPC-fix dialog / balance breakdown; the
       web's text order and colours.
 - [x] T033 F-01 scan from the send form (recipient card button, contact

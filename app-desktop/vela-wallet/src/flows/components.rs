@@ -18,7 +18,7 @@ use qrcode::{Color as QrColorModule, QrCode};
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{icon_img, identicon_avatar, token_icon_logos};
+use crate::wallet::components::{icon_img, openable_identicon, token_icon_logos};
 
 use super::fixtures::{
     FactLead, FactRow, FeeRow, FeeSpeedModel, FeeSpeedOption, FilterChip, NetworkRow,
@@ -312,7 +312,7 @@ pub fn fact_row(
         FactLead::None => value_side,
         FactLead::Token(mark) => value_side.child(inline_mark(theme, mark)),
         FactLead::Identicon(seed) => {
-            value_side.child(identicon_avatar(identicons, seed.as_ref(), 20.))
+            value_side.child(openable_identicon(identicons, seed.as_ref(), 20.))
         }
     };
 
@@ -722,7 +722,7 @@ pub fn address_card(
         .items_center()
         .gap(px(12.))
         .py(px(12.))
-        .child(identicon_avatar(identicons, seed, 36.))
+        .child(openable_identicon(identicons, seed, 36.))
         .child(
             div()
                 .flex_1()
@@ -1263,7 +1263,7 @@ pub fn recipient_card(
         .p(px(12.))
         .rounded(px(12.))
         .bg(theme.bg_raised)
-        .child(identicon_avatar(identicons, recipient.seed.as_ref(), 28.))
+        .child(openable_identicon(identicons, recipient.seed.as_ref(), 28.))
         .child(
             div()
                 .flex_1()

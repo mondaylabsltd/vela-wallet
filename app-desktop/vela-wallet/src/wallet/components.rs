@@ -71,6 +71,34 @@ pub fn identicon_avatar(
         .flex_none()
 }
 
+/// An address whose artwork was pressed, waiting for the page to open the
+/// identicon viewer on it (078 H-02). A `Global`, as the web's
+/// `identiconViewer` store is, so any component can draw an openable
+/// identicon without a listener threaded down to it from the page.
+pub struct IdenticonRequest(pub Option<String>);
+impl gpui::Global for IdenticonRequest {}
+
+/// [`identicon_avatar`] as the web's `Identicon` with an `address`: a button
+/// that opens the viewer (078 H-02). It stops the press there, so a row the
+/// artwork sits in (a contact, a recipient) does not open as well.
+pub fn openable_identicon(
+    identicons: &mut IdenticonCache,
+    address: &str,
+    size: f32,
+) -> gpui::Stateful<gpui::Div> {
+    let owned = address.to_owned();
+    gpui::div()
+        .id(gpui::ElementId::Name(format!("identicon-{address}").into()))
+        .flex_none()
+        .cursor_pointer()
+        .child(identicon_avatar(identicons, address, size))
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            cx.set_global(IdenticonRequest(Some(owned.clone())));
+            window.refresh();
+        })
+}
+
 /// A passkey provider's mark, or nothing when the catalog does not know the
 /// authenticator model (a hardware key, or one that reported no AAGUID). Square
 /// with a soft corner, not a circle: it is a logo, not a person.

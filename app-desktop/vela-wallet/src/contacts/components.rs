@@ -20,7 +20,7 @@ use crate::theme::{
     CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme,
 };
 use crate::wallet::components::{
-    balanced_wrap_width, empty_state_wrapped, icon_img, identicon_avatar,
+    balanced_wrap_width, empty_state_wrapped, icon_img, openable_identicon,
 };
 
 use super::fixtures::MenuModel;
@@ -58,7 +58,7 @@ pub fn contact_row(
         .rounded(px(12.))
         .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
         .cursor_pointer()
-        .child(identicon_avatar(
+        .child(openable_identicon(
             identicons,
             &contact.address_full,
             CONTACTS_ROW_AVATAR,

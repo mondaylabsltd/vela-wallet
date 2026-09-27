@@ -16779,6 +16779,15 @@ impl Render for WalletPage {
         }
         self.watch_field_blurs(window, cx);
         self.watch_money(cx);
+        // An identicon somewhere was pressed (078 H-02): open the viewer on
+        // its address. The artwork raised the request; the viewer lives here.
+        if let Some(address) = cx
+            .try_global::<crate::wallet::components::IdenticonRequest>()
+            .and_then(|request| request.0.clone())
+        {
+            cx.set_global(crate::wallet::components::IdenticonRequest(None));
+            self.open_identicon_viewer(address, cx);
+        }
         // The 10 s Activity poll runs while the Activity can be seen: the
         // wallet section, in a window on screen (078 W-09).
         crate::executor::activity_feed::set_visible(
