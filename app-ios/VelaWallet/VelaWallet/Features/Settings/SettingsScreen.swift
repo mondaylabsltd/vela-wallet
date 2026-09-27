@@ -108,6 +108,12 @@ struct SettingsScreen: View {
     /// its fields again from the core's values, not the addresses typed
     /// before the reset.
     @State private var endpointsGeneration = 0
+    /// The size this page is drawn at — watched so the slider that chose it
+    /// can be put back under the finger (`TextScaleAnchor`).
+    @Environment(\.walletTextScale) private var textScale
+    @State private var sliderAnchor = TextScaleAnchor()
+    private static let scrollSpace = "settings-scroll"
+    private static let sliderTarget = "settings-text-scale"
 
     init(
         model: SettingsScreenModel,
@@ -167,13 +173,26 @@ struct SettingsScreen: View {
             IndexDownScreen(model: model.indexDown)
         } else {
             VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        header
-                        if !model.rescue { pageBody }
+                ScrollViewReader { scroll in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            header
+                            if !model.rescue { pageBody }
+                        }
+                        .padding(.horizontal, Tokens.Space.s24)
+                        .padding(.bottom, Tokens.Space.s32)
                     }
-                    .padding(.horizontal, Tokens.Space.s24)
-                    .padding(.bottom, Tokens.Space.s32)
+                    // The viewport the slider's frame is measured in.
+                    .coordinateSpace(.named(Self.scrollSpace))
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                        sliderAnchor.viewport = height
+                    }
+                    // A size was chosen and the page above the slider re-laid
+                    // out at it: scroll so the slider is where it was let go.
+                    .onChange(of: textScale) {
+                        guard let anchor = sliderAnchor.release() else { return }
+                        scroll.scrollTo(Self.sliderTarget, anchor: anchor)
+                    }
                 }
                 // A URL field saves when it loses focus, so there has to be a
                 // way to lose focus. Dragging the page is the one every iOS
@@ -409,7 +428,19 @@ struct SettingsScreen: View {
             // The two appearance controls are not rows: they are the control
             // itself, shown inline under 语言 (ST1).
             if section.appearanceControls {
-                TextScaleSlider(model: model.textScale, onSelect: appearance.onTextScale)
+                TextScaleSlider(
+                    model: model.textScale,
+                    onSelect: appearance.onTextScale.map { choose in
+                        { index in
+                            sliderAnchor.hold()
+                            choose(index)
+                        }
+                    }
+                )
+                .id(Self.sliderTarget)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.scrollSpace)) } action: { frame in
+                    sliderAnchor.frame = frame
+                }
                 SettingsSegmentedControl(model: model.theme, onSelect: { appearance.onTheme?($0) })
             }
         }

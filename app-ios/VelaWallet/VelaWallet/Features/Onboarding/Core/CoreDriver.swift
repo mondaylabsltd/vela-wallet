@@ -69,6 +69,17 @@ final class CoreDriver {
     private var running: [UInt64: Task<Void, Never>] = [:]
     private var disposed = false
 
+    /// No effect is in flight: the machine is waiting on nothing but its next
+    /// event, so its view cannot change until somebody sends one.
+    ///
+    /// Exact, not a guess: an effect's task leaves `running` and the effects
+    /// its answer raises join it in the same main-actor turn (`run` →
+    /// `resolve` → `apply`), so no turn ever sees an empty map while an
+    /// answer is still owed. It is what lets a test wait for the machine to
+    /// FINISH rather than for a clock — a clock measures how busy the
+    /// scheduler was, which on a shared CI runner is not the machine.
+    var isIdle: Bool { running.isEmpty }
+
     init(
         bridge: CoreBridge,
         /// Perform one operation and return the result JSON. Must not throw.

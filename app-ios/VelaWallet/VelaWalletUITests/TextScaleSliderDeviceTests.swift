@@ -65,7 +65,7 @@ final class TextScaleSliderDeviceTests: XCTestCase {
 
         // A tap jumps to the tapped stop — 标准, the third, which also puts
         // the phone back where it was.
-        tap(stop: 2, of: slider)
+        tap(stop: 2, of: slider, in: app)
         settle(1)
         attach(app.screenshot(), named: "slider-tapped-standard")
         XCTAssertEqual(slider.value as? String, "3", "a tap did not jump to the tapped stop")
@@ -91,12 +91,15 @@ final class TextScaleSliderDeviceTests: XCTestCase {
         let heading = app.staticTexts["外观"].firstMatch
         XCTAssertTrue(heading.waitForExistence(timeout: 8), "Settings has no 外观 heading")
 
-        drag(slider, from: 0.9, to: 0.02)
+        stays(slider, "the smallest size") { drag(slider, from: 0.9, to: 0.02) }
         XCTAssertEqual(slider.value as? String, "1", "a drag to the small end did not reach the smallest size")
         let small = heading.frame.height
         attach(app.screenshot(), named: "settings-at-smallest")
 
-        drag(slider, from: 0.1, to: 0.98)
+        // Everything above the slider grows by ~230pt between these two
+        // sizes. Before `TextScaleAnchor` that carried the slider down behind
+        // the tab bar, where the put-back tap below landed on 通讯录.
+        stays(slider, "the largest size") { drag(slider, from: 0.1, to: 0.98) }
         XCTAssertEqual(slider.value as? String, "6", "a drag to the large end did not reach the largest size")
         let large = heading.frame.height
         attach(app.screenshot(), named: "settings-at-largest")
@@ -112,8 +115,9 @@ final class TextScaleSliderDeviceTests: XCTestCase {
         )
 
         // Put it back: 标准 is the third stop.
-        tap(stop: 2, of: slider)
+        tap(stop: 2, of: slider, in: app)
         settle(1)
+        attach(app.screenshot(), named: "settings-put-back")
         XCTAssertEqual(slider.value as? String, "3", "the size was not put back")
         app.terminate()
     }
@@ -132,9 +136,22 @@ final class TextScaleSliderDeviceTests: XCTestCase {
         return app
     }
 
+    /// Settings, with everything above the slider arrived.
+    ///
+    /// The keys block reads the wallet's keys from the chain after the page
+    /// opens (from this device's record when no chain answers) and holds one
+    /// placeholder row until they land. The parallel space has three, and at
+    /// the largest size they are ~250pt more than the placeholder: in a full
+    /// local run (2026-09-27) they landed between the slider being scrolled
+    /// into reach and the tap on it, so the tap opened 通讯录. Their row says
+    /// who holds the key — 内置通行密钥, the fixed keyset's — which is there
+    /// only once they have.
     private func openSettings(in app: XCUIApplication) {
         tapTab("设置", in: app)
         XCTAssertTrue(app.staticTexts["高级"].waitForExistence(timeout: 10), "Settings did not open")
+        let keys = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "内置通行密钥")).firstMatch
+        XCTAssertTrue(keys.waitForExistence(timeout: 40), "the wallet's keys never arrived on Settings")
         settle(1)
     }
 
@@ -143,17 +160,57 @@ final class TextScaleSliderDeviceTests: XCTestCase {
     private func slider(in app: XCUIApplication) -> XCUIElement {
         let slider = app.descendants(matching: .any)["text-scale-slider"].firstMatch
         XCTAssertTrue(slider.waitForExistence(timeout: 8), "no text-size slider on Settings")
+        reach(slider, in: app)
+        return slider
+    }
+
+    /// The slider scrolled into the open middle of the screen, clear of the
+    /// tab bar below and the parallel-space badge above.
+    ///
+    /// `isHittable` is not enough to aim a tap by: with the slider's top
+    /// 14pt above the tab bar it answered `true` (its hit point is in the
+    /// visible sliver) while the middle of the row — where a tap is aimed —
+    /// was the bar's 通讯录.
+    private func reach(_ slider: XCUIElement, in app: XCUIApplication) {
         let screen = app.frame.height
         var swipes = 0
-        while slider.frame.maxY > screen * 0.75, swipes < 5 {
+        while swipes < 6 {
+            let frame = slider.frame
             // Dragged from above the slider, so the scroll is the page's own.
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
-                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)))
+            if frame.maxY > screen * 0.75 {
+                page(app, from: 0.55, to: 0.3)
+            } else if frame.minY < screen * 0.25 {
+                page(app, from: 0.3, to: 0.55)
+            } else {
+                break
+            }
             swipes += 1
             settle(0.8)
         }
-        XCTAssertTrue(slider.isHittable, "the text-size slider could not be scrolled into reach")
-        return slider
+        let frame = slider.frame
+        XCTAssertTrue(
+            slider.isHittable && frame.minY >= screen * 0.25 && frame.maxY <= screen * 0.75,
+            "the text-size slider could not be scrolled into reach (\(frame))"
+        )
+    }
+
+    private func page(_ app: XCUIApplication, from: CGFloat, to: CGFloat) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
+    }
+
+    /// Choosing a size re-lays the page out at it, and the slider stays where
+    /// the finger let go of it — `TextScaleAnchor`. Within a few points: the
+    /// scroll is put back by `scrollTo`, and a slider carried off by the page
+    /// moves by tens (the smallest size) or hundreds (the largest).
+    private func stays(_ slider: XCUIElement, _ size: String, choosing: () -> Void) {
+        let before = slider.frame.minY
+        choosing()
+        let after = slider.frame.minY
+        XCTAssertLessThanOrEqual(
+            abs(after - before), 4,
+            "choosing \(size) moved the slider out from under the finger (top \(before) → \(after))"
+        )
     }
 
     /// A finger put down at one fraction of the slider's width and dragged to
@@ -168,7 +225,12 @@ final class TextScaleSliderDeviceTests: XCTestCase {
     /// The row is  A ·4· track ·4· A  with the stops the pressed ring's radius
     /// (22pt) in from each end of the track; the glyphs are about 9 and 14pt
     /// wide. Within a few points is enough: a stop is ~53pt from the next.
-    private func tap(stop: Int, of slider: XCUIElement) {
+    ///
+    /// Aimed at where the slider IS: brought into reach first, and its frame
+    /// read after that, so a tap never lands on whatever now covers the spot
+    /// it used to be.
+    private func tap(stop: Int, of slider: XCUIElement, in app: XCUIApplication) {
+        reach(slider, in: app)
         let width = slider.frame.width
         let trackStart: CGFloat = 9 + 4
         let track = width - trackStart - 4 - 14

@@ -24,7 +24,7 @@ import Testing
 @testable import VelaWallet
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(2)))
 struct NetworkEventsTests {
 
     /// Which operations the machine asked for, in order, and of which URLs.
@@ -102,15 +102,32 @@ struct NetworkEventsTests {
             }
         )
         settings.openNetworks()
-        await settle { settings.isLoaded }
+        await settle(settings) { settings.isLoaded }
         #expect(settings.isLoaded, "the networks machine never loaded")
         return World(settings: settings, shelf: shelf, accounts: accounts, asked: asked)
     }
 
-    private func settle(seconds: Double = 5, until condition: () -> Bool) async {
-        let deadline = Date().addingTimeInterval(seconds)
-        while Date() < deadline, !condition() {
-            try? await Task.sleep(nanoseconds: 20_000_000)
+    /// Wait until `condition` holds — or until the networks machine has
+    /// nothing left in flight, when only a new event could make it hold and
+    /// waiting longer cannot change the answer.
+    ///
+    /// It used to give up after five seconds by the clock, and that failed on
+    /// CI (2026-09-27, `anEndpointEditIsShownAndItsBlurIsSaved`: not loaded,
+    /// and `read_store` the only operation ever asked). The load is not one
+    /// step: the effect's task starts on the main actor, hops to the
+    /// `AccountStore` actor, and comes back to the main actor to answer —
+    /// and the main actor is shared with every other `@MainActor` suite
+    /// running at once (on that run a DappBrowserTests case took 37 s). Two
+    /// turns in a long queue outlast five seconds, and the answer was still
+    /// queued, not refused: the clock measured the runner, not the machine.
+    /// Reproduced by holding the main actor with 200 tasks of 30 ms turns
+    /// beside this suite — the same three failures, `["read_store"]` and
+    /// all; with this wait the same run loads after 12 s and passes. So it
+    /// waits for the machine to FINISH (`networksIdle`, exact by
+    /// construction), and the suite's time limit is what catches a hang.
+    private func settle(_ settings: SettingsStore, until condition: () -> Bool) async {
+        while !condition(), !settings.networksIdle {
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
     }
 
@@ -138,7 +155,12 @@ struct NetworkEventsTests {
         #expect(endpoint(world, .passkeyIndex)?.value == url, "the edit never reached the core")
 
         world.settings.blurEndpoint(field: .passkeyIndex)
-        await settle { world.shelf.readObject(VelaStore.Key.serviceEndpoints)["passkeyIndexURL"] as? String == url }
+        // Waits for both things asserted below: the save and the re-probe
+        // are separate effects, and the write can land first.
+        await settle(world.settings) {
+            world.shelf.readObject(VelaStore.Key.serviceEndpoints)["passkeyIndexURL"] as? String == url
+                && world.asked.types.contains("fetch_service_health")
+        }
         #expect(world.shelf.readObject(VelaStore.Key.serviceEndpoints)["passkeyIndexURL"] as? String == url)
         // And the page asked the new address how it is.
         #expect(world.asked.types.contains("fetch_service_health"))
@@ -149,7 +171,7 @@ struct NetworkEventsTests {
     @Test func openingTheEndpointsPageProbesEveryField() async {
         let world = await world()
         world.settings.openEndpoints()
-        await settle {
+        await settle(world.settings) {
             NetEndpointFieldWire.allCases.allSatisfy { field in
                 if case .unreachable = endpoint(world, field)?.health { return true }
                 return false
@@ -168,11 +190,11 @@ struct NetworkEventsTests {
         let world = await world()
         world.settings.editEndpoint(field: .bundlerService, value: "https://relay.example.org")
         world.settings.blurEndpoint(field: .bundlerService)
-        await settle { world.shelf.readObject(VelaStore.Key.serviceEndpoints)["bundlerServiceURL"] != nil }
+        await settle(world.settings) { world.shelf.readObject(VelaStore.Key.serviceEndpoints)["bundlerServiceURL"] != nil }
 
         world.settings.resetEndpoints()
         #expect(endpoint(world, .bundlerService)?.value != "https://relay.example.org")
-        await settle { world.shelf.readObject(VelaStore.Key.serviceEndpoints)["bundlerServiceURL"] as? String != "https://relay.example.org" }
+        await settle(world.settings) { world.shelf.readObject(VelaStore.Key.serviceEndpoints)["bundlerServiceURL"] as? String != "https://relay.example.org" }
         #expect(world.shelf.readObject(VelaStore.Key.serviceEndpoints)["bundlerServiceURL"] as? String != "https://relay.example.org")
     }
 
@@ -188,12 +210,12 @@ struct NetworkEventsTests {
         #expect(provider(world, .alchemy)?.key == "k3y", "the keystroke never reached the core")
 
         world.settings.blurProviderKey(id: NetProviderIdWire.alchemy.rawValue)
-        await settle { (world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y" }
+        await settle(world.settings) { (world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y" }
         #expect((world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y")
         #expect(provider(world, .alchemy)?.hasKey == true)
 
         world.settings.testProvider(id: NetProviderIdWire.alchemy.rawValue)
-        await settle { provider(world, .alchemy)?.test?.done == true }
+        await settle(world.settings) { provider(world, .alchemy)?.test?.done == true }
         let test = provider(world, .alchemy)?.test
         #expect(test?.done == true, "the test never ran")
         #expect((test?.total ?? 0) > 0)
@@ -212,7 +234,7 @@ struct NetworkEventsTests {
         // Another provider's field touched and left.
         world.settings.editProviderKey(provider: .ankr, value: "a")
         world.settings.blurProviderKey(id: NetProviderIdWire.ankr.rawValue)
-        await settle { world.shelf.readObject(VelaStore.Key.rpcProviders)["ankr"] != nil }
+        await settle(world.settings) { world.shelf.readObject(VelaStore.Key.rpcProviders)["ankr"] != nil }
         #expect((world.shelf.readObject(VelaStore.Key.rpcProviders)["drpc"] as? String) == "saved-key")
     }
 
@@ -233,7 +255,7 @@ struct NetworkEventsTests {
 
         world.settings.blurOverride(chainId: 100)
         let saved = { world.shelf.readList(VelaStore.Key.networkConfig).first { ($0["chainId"] as? Int) == 100 } }
-        await settle { saved()?["rpcURL"] as? String == rpc }
+        await settle(world.settings) { saved()?["rpcURL"] as? String == rpc }
         #expect(saved()?["rpcURL"] as? String == rpc)
         #expect(saved()?["explorerURL"] as? String == explorer)
     }
@@ -244,7 +266,7 @@ struct NetworkEventsTests {
         world.settings.expandNetwork(chainId: 100)
         world.settings.editOverride(chainId: 100, field: .rpc, value: "https://bsc.example.org")
         world.settings.blurOverride(chainId: 100)
-        await settle { row(world, chainId: 100)?.rpcChainMismatch != nil }
+        await settle(world.settings) { row(world, chainId: 100)?.rpcChainMismatch != nil }
 
         #expect(row(world, chainId: 100)?.rpcChainMismatch
                 == NetChainMismatchWire(expectedChainId: 100, reportedChainId: 56))
@@ -258,7 +280,7 @@ struct NetworkEventsTests {
     @Test func addingByChainIdAsksForTheChain() async {
         let world = await world()
         world.settings.addByChainId(7_777_777)
-        await settle { world.settings.networkAdmin?.wizard.error != nil }
+        await settle(world.settings) { world.settings.networkAdmin?.wizard.error != nil }
         #expect(world.asked.types.contains("fetch_chain_info"), "the add never reached the core")
         #expect(world.settings.networkAdmin?.wizard.error == .notFound(chainId: 7_777_777))
     }
@@ -277,7 +299,7 @@ struct NetworkEventsTests {
 
         world.settings.deleteNetwork(id: "custom-7777777")
         #expect(row(world, chainId: 7_777_777) == nil)
-        await settle { world.shelf.readList(VelaStore.Key.customNetworks).isEmpty }
+        await settle(world.settings) { world.shelf.readList(VelaStore.Key.customNetworks).isEmpty }
         #expect(world.shelf.readList(VelaStore.Key.customNetworks).isEmpty)
     }
 
@@ -298,13 +320,13 @@ struct NetworkEventsTests {
             ]]
         )
         world.settings.selectChain(7_777_777)
-        await settle { world.settings.networkAdmin?.wizard.compat != nil }
+        await settle(world.settings) { world.settings.networkAdmin?.wizard.compat != nil }
         // Nothing answered, so nothing was learned: unverified, not a verdict.
         #expect(world.settings.networkAdmin?.wizard.compat?.rpcFailure != nil)
         #expect(!world.asked.urls.contains(mine))
 
         world.settings.recheck(customRpc: mine)
-        await settle { world.settings.networkAdmin?.wizard.compat?.rpcFailure == nil
+        await settle(world.settings) { world.settings.networkAdmin?.wizard.compat?.rpcFailure == nil
             && world.settings.networkAdmin?.wizard.compat != nil }
 
         #expect(world.settings.networkAdmin?.wizard.customRpc == mine)

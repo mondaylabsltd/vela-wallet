@@ -9,6 +9,7 @@
 //
 
 import CoreGraphics
+import SwiftUI
 import Testing
 @testable import VelaWallet
 
@@ -212,5 +213,36 @@ struct TextScaleSliderTests {
         drag.hover(over: nil)
         #expect(drag.lift == .rest)
         #expect(drag.aimed(committed: 2) == nil)
+    }
+
+    // MARK: - Where the slider is left
+
+    /// The anchor `scrollTo` is given puts the slider's top back where it was
+    /// when the size was chosen: `anchor.y × (viewport − height)` is that top.
+    @Test func theSliderIsPutBackWhereItWasLetGo() throws {
+        let viewport: CGFloat = 700, height: CGFloat = 68
+        for top: CGFloat in [0, 120, 316, 632] {
+            let anchor = try #require(TextScaleAnchor.anchor(top: top, height: height, viewport: viewport))
+            #expect(abs(anchor.y * (viewport - height) - top) < 0.001, "a slider let go at \(top) was put back elsewhere")
+        }
+        // Half behind the tab bar, or half above the page: back whole.
+        #expect(TextScaleAnchor.anchor(top: 680, height: height, viewport: viewport)?.y == 1)
+        #expect(TextScaleAnchor.anchor(top: -30, height: height, viewport: viewport)?.y == 0)
+        // A viewport the slider does not fit in has no answer.
+        #expect(TextScaleAnchor.anchor(top: 0, height: height, viewport: 60) == nil)
+    }
+
+    /// It answers once per choice, and only for a choice: a size that changed
+    /// some other way leaves the scroll alone.
+    @Test func theAnchorIsHeldByAChoiceAndSpentOnce() {
+        let anchor = TextScaleAnchor()
+        anchor.viewport = 700
+        anchor.frame = CGRect(x: 24, y: 316, width: 354, height: 68)
+        #expect(anchor.release() == nil, "a size nobody chose on the slider moved the page")
+        anchor.hold()
+        // The page re-lays out before the scroll is put back.
+        anchor.frame = CGRect(x: 24, y: 546, width: 354, height: 68)
+        #expect(anchor.release() == UnitPoint(x: 0.5, y: 0.5))
+        #expect(anchor.release() == nil, "one choice put the page back twice")
     }
 }

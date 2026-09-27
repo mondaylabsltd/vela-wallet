@@ -67,6 +67,11 @@ final class SettingsStore {
     /// are dropped by the core.
     var isLoaded: Bool { networkAdmin?.loaded == true }
 
+    /// The networks machine has no effect in flight: every storage read and
+    /// write, probe and debounce it asked for has been answered, so nothing
+    /// but a new event can change `networkAdmin` or what is on disk.
+    var networksIdle: Bool { core.isIdle }
+
     private let executor: NetworkAdminExecutor
     private let currencyExecutor: DisplayCurrencyExecutor
     private var core: CoreStore<NetViewWire>!

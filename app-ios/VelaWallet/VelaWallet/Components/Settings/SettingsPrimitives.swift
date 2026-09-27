@@ -508,6 +508,54 @@ enum TextScaleTrack {
     }
 }
 
+/// Keeps the text-size slider where the finger left it while the page it
+/// sits on re-lays out at the size just chosen.
+///
+/// Everything above the slider on Settings is drawn at the chosen size, so a
+/// new size moves it: from the smallest size to the largest, the account, its
+/// keys and their backup grow by about 230pt on an iPhone 17 Pro, and the
+/// slider the person had just let go of came to rest behind the tab bar. To
+/// step back down they had to go and find it again (2026-09-27: the
+/// text-size device test failed on CI because its put-back tap, aimed at
+/// where the slider had gone, landed on the 通讯录 tab). A browser keeps
+/// the node you were at in place (scroll anchoring); this is the same for
+/// the one control that moves the page under itself.
+///
+/// Deliberately not `@Observable`: the position is written on every scroll
+/// frame, and nothing is drawn from it.
+final class TextScaleAnchor {
+    /// The slider's frame in the page's viewport, as last laid out.
+    var frame: CGRect?
+    /// The viewport's height.
+    var viewport: CGFloat = 0
+    /// Where the slider's top was when a size was chosen — taken before the
+    /// size is stored, so the re-layout cannot overwrite it first.
+    var pending: CGFloat?
+
+    /// A size is being chosen: remember where the slider is now.
+    func hold() {
+        pending = frame?.minY
+    }
+
+    /// The `scrollTo` anchor that puts the slider's top back at `pending`,
+    /// once, or `nil` when there is nothing to put back.
+    func release() -> UnitPoint? {
+        defer { pending = nil }
+        guard let top = pending, let height = frame?.height else { return nil }
+        return Self.anchor(top: top, height: height, viewport: viewport)
+    }
+
+    /// `scrollTo(id, anchor: a)` lines the point `a.y` of the way down the
+    /// view up with the point `a.y` of the way down the viewport, which puts
+    /// the view's top at `a.y × (viewport − height)`. Solved for `top`, and
+    /// clamped: a slider that was half off the screen comes back whole.
+    static func anchor(top: CGFloat, height: CGFloat, viewport: CGFloat) -> UnitPoint? {
+        let room = viewport - height
+        guard room > 0 else { return nil }
+        return UnitPoint(x: 0.5, y: min(max(top / room, 0), 1))
+    }
+}
+
 /// One gesture on the text-size slider: the stop under the finger, the
 /// detent each new stop earns, and how far the thumb is lifted. Apart from
 /// the view so a test can run a finger across it.
