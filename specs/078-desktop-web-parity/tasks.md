@@ -127,7 +127,10 @@ screenshot checked against the web.
 - [x] T064 DR2, DR3: with no logo to show, the QR centre is the web's `.mark` —
       a 36 disc in the chain's colour, the ticker in white — not the token
       icon's grey placeholder. Live (a logo) unchanged, checked on Ethereum.
-- [ ] T065 DA2, DA3: tx-detail row height and the space under the amount.
+- [x] T065 DA2, DA3: the web's `TxDetail` — no column gap, the head 15
+      semibold, the amount hero padded 12/16 with a 15 fiat line, the facts
+      one hairline-ruled list, the buttons 16 under it; every `FactRow` padded
+      12 with a 13 medium value (DSD3's confirm rows line up too).
 - [ ] T066 Send form: DSD2 unit and ⇕ switch; DSD2b recipient rows, icon
       pills, stacked total; DSD3 unit size; the live disabled Continue label.
 - [ ] T067 Labels and small gaps: DSD1 title, DST1 nav label, DST2 theme

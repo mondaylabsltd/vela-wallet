@@ -323,7 +323,13 @@ pub fn fact_row(
     } else {
         div().text_size(theme::text_row_sub())
     };
-    value_side = value_side.child(value.text_color(theme.fg_base).child(fact.value.clone()));
+    // `.value`: 13 medium (078 T065).
+    value_side = value_side.child(
+        value
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(theme.fg_base)
+            .child(fact.value.clone()),
+    );
 
     // `FactRow.svelte`: a 20 box with a 14 glyph in `fg-subtle`, a tick in
     // the success colour for 150 ms after it copies.
@@ -360,12 +366,13 @@ pub fn fact_row(
         });
     }
 
+    // `.fact`: padded 12, as the web's (078 T065).
     let row = div()
         .flex()
         .items_center()
         .justify_between()
         .gap(px(12.))
-        .py(px(10.))
+        .py(px(12.))
         .child(
             div()
                 .text_size(theme::text_row_sub())
@@ -379,7 +386,7 @@ pub fn fact_row(
         // fact about the value, not a warning about it.
         Some(note) => div().flex().flex_col().child(row.pb(px(2.))).child(
             div()
-                .pb(px(10.))
+                .pb(px(12.))
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(note.clone()),

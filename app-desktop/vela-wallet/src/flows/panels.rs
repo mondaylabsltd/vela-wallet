@@ -813,7 +813,13 @@ fn tx_detail(
     copy: Option<CopyAction>,
     delete_tx: Option<Click>,
 ) -> Div {
-    let mut col = column()
+    // The web's `TxDetail` (078 T065): no gap of its own — the head, the
+    // `AmountHero` padded 12/16, the facts as one hairline-ruled list, and the
+    // buttons 16 under it, 8 apart. The column's 12 on both sides of every
+    // divider had the rows half as tall again as the web's.
+    let mut col = div()
+        .flex()
+        .flex_col()
         .child(
             div()
                 .flex()
@@ -821,7 +827,8 @@ fn tx_detail(
                 .gap(px(8.))
                 .child(
                     div()
-                        .text_size(theme::text_row_sub())
+                        .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.fg_base)
                         .child(model.title.clone()),
                 )
@@ -829,60 +836,83 @@ fn tx_detail(
         )
         .child(
             div()
-                .text_size(theme::text_amount_detail())
-                .font_weight(gpui::FontWeight::BOLD)
-                // Money in is green; money out is plain ink, not red. Red means
-                // something went wrong, and a transfer you chose to make did not.
-                .text_color(if model.positive {
-                    theme.success_base
-                } else {
-                    theme.fg_base
-                })
-                .child(model.amount.clone()),
-        )
-        .child(
-            div()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_subtle)
-                .child(model.fiat.clone()),
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .pt(px(12.))
+                .pb(px(16.))
+                .child(
+                    div()
+                        .text_size(theme::text_amount_detail())
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .line_height(gpui::relative(1.2))
+                        // Money in is green; money out is plain ink, not red.
+                        // Red means something went wrong, and a transfer you
+                        // chose to make did not.
+                        .text_color(if model.positive {
+                            theme.success_base
+                        } else {
+                            theme.fg_base
+                        })
+                        .child(model.amount.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_subtle)
+                        .child(model.fiat.clone()),
+                ),
         );
 
+    let mut facts = div()
+        .flex()
+        .flex_col()
+        .border_t_1()
+        .border_color(theme.divider);
     for (i, fact) in model.facts.iter().enumerate() {
-        if i > 0 {
-            col = col.child(divider(theme));
-        }
         let button = fact
             .copy
             .clone()
             .zip(copy.as_ref())
             .map(|(text, copy)| copy.button(format!("fact:{i}"), text));
-        col = col.child(fact_row(theme, icons, identicons, fact, button));
+        let row = fact_row(theme, icons, identicons, fact, button);
+        facts = facts.child(if i > 0 {
+            row.border_t_1().border_color(theme.divider)
+        } else {
+            row
+        });
     }
+    col = col.child(facts);
     if !model.breakdown.is_empty() {
-        col = col.child(breakdown_list(
+        col = col.child(div().pt(px(12.)).child(breakdown_list(
             theme,
             identicons,
             model.breakdown_title.as_ref(),
             &model.breakdown,
-        ));
+        )));
     }
-    col = col.child(explorer_button(
-        "tx-explorer",
-        theme,
-        model.view_on_explorer.clone(),
-        model.explorer_url.as_ref(),
-    ));
+    let mut cta = div()
+        .flex()
+        .flex_col()
+        .gap(px(8.))
+        .pt(px(16.))
+        .child(explorer_button(
+            "tx-explorer",
+            theme,
+            model.view_on_explorer.clone(),
+            model.explorer_url.as_ref(),
+        ));
     // Under the explorer, filled in the danger colour (the web's
     // `variant="danger"`).
     // It removes the local record only; the chain keeps the transaction.
     if let Some(label) = &model.delete_label {
-        col = col.child(clickable(
+        cta = cta.child(clickable(
             "tx-delete",
             delete_tx,
             danger_button(theme, label.clone()),
         ));
     }
-    col
+    col.child(cta)
 }
 
 fn assets(
