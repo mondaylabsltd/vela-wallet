@@ -227,36 +227,34 @@ impl StepSlider {
                         // not only while it is over the track.
                         let state = follow.clone();
                         let pick = follow_pick.clone();
-                        window.on_mouse_event(
-                            move |event: &MouseMoveEvent, phase, window, cx| {
-                                if phase != DispatchPhase::Bubble {
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                            if phase != DispatchPhase::Bubble {
+                                return;
+                            }
+                            let reached = {
+                                let mut state = state.borrow_mut();
+                                if !state.dragging {
                                     return;
                                 }
-                                let reached = {
-                                    let mut state = state.borrow_mut();
-                                    if !state.dragging {
-                                        return;
-                                    }
-                                    // Let go somewhere no release reached us.
-                                    if event.pressed_button != Some(MouseButton::Left) {
-                                        state.dragging = false;
-                                        None
-                                    } else {
-                                        state.stop_at(event.position.x, steps).filter(|stop| {
-                                            let new = state.committed != Some(*stop);
-                                            if new {
-                                                state.committed = Some(*stop);
-                                            }
-                                            new
-                                        })
-                                    }
-                                };
-                                if let Some(stop) = reached {
-                                    pick(stop, window, cx);
+                                // Let go somewhere no release reached us.
+                                if event.pressed_button != Some(MouseButton::Left) {
+                                    state.dragging = false;
+                                    None
+                                } else {
+                                    state.stop_at(event.position.x, steps).filter(|stop| {
+                                        let new = state.committed != Some(*stop);
+                                        if new {
+                                            state.committed = Some(*stop);
+                                        }
+                                        new
+                                    })
                                 }
-                                window.refresh();
-                            },
-                        );
+                            };
+                            if let Some(stop) = reached {
+                                pick(stop, window, cx);
+                            }
+                            window.refresh();
+                        });
                     },
                 )
                 .absolute()
@@ -364,7 +362,10 @@ fn track(theme: &Theme, steps: usize, look: Look) -> Div {
     let shadow = BoxShadow::new(px(0.), px(1.), hsla(0., 0., 0., 0.18)).blur_radius(px(3.));
     rail = rail
         .when(ring_alpha > 0.005, |rail| {
-            rail.child(at(look.place, dot(ring, theme.fg_muted.opacity(ring_alpha))))
+            rail.child(at(
+                look.place,
+                dot(ring, theme.fg_muted.opacity(ring_alpha)),
+            ))
         })
         .child(at(
             look.place,
