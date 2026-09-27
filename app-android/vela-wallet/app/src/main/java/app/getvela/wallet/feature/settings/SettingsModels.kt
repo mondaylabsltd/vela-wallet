@@ -432,6 +432,12 @@ data class FeedbackModel(
     val screenshotsDropped: String = "",
     /** Not filed: the form cannot carry the images. */
     val fallbackScreenshots: String = "",
+    /** TalkBack's label for a tile, which opens the viewer (078 §C); carries `{{index}}` (1-based). */
+    val viewScreenshot: String = "",
+    /** The viewer's ✕, for TalkBack. */
+    val closeViewer: String = "",
+    /** The viewer's visible remove button. */
+    val removeFromViewer: String = "",
     /** Where the last 发送 stands; the gallery draws [FeedbackStatus.Idle]. */
     val status: FeedbackStatus = FeedbackStatus.Idle,
     /** An answer that arrived after the sheet was closed: the settings page's notice. */

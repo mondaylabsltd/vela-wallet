@@ -1,8 +1,10 @@
 package app.getvela.wallet.feature.settings.components
 
 import android.graphics.Bitmap
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,6 +14,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,22 +39,35 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -62,16 +82,28 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
+import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.diagnostics.BugReport
 import app.getvela.wallet.core.diagnostics.ScreenshotTray
+import app.getvela.wallet.core.diagnostics.ScreenshotViewerRules
+import app.getvela.wallet.core.platform.VelaHaptic
+import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.feature.settings.FeedbackModel
+import kotlinx.coroutines.flow.first
 
 /** One tile as the sheet draws it: its id, and its thumbnail once prepared. */
 data class ScreenshotTileView(val id: Long, val thumbnail: Bitmap?, val ready: Boolean)
+
+/**
+ * Where focus goes after the viewer closed (spec 078 §C4): the tile [id], or
+ * the add target when null. [seq] makes a second return to the same tile a
+ * new request.
+ */
+data class ScreenshotFocusReturn(val id: Long?, val seq: Int)
 
 private const val TILE_MOTION_MS = 150
 
@@ -106,10 +138,32 @@ fun FeedbackScreenshotsSection(
     onAdd: () -> Unit,
     onRemove: (id: Long) -> Unit,
     modifier: Modifier = Modifier,
-    /** False while the report is sending: nothing here may change (v3 B9). */
+    /** False while the report is sending: nothing here may change or open (v3 B9, §C5). */
     enabled: Boolean = true,
+    /** A prepared tile was tapped: open the viewer on it (spec 078 §C1). */
+    onOpen: (id: Long) -> Unit = {},
+    /** The viewer closed: focus goes here — the tile, or the add target (§C4) — for TalkBack or a keyboard. */
+    focusReturn: ScreenshotFocusReturn? = null,
 ) {
     val colors = VelaTheme.colors
+    val tileFocus = remember { mutableMapOf<Long, FocusRequester>() }
+    val addFocus = remember { FocusRequester() }
+    val windowInfo = LocalWindowInfo.current
+    val context = LocalContext.current
+    val inputModes = LocalInputModeManager.current
+    LaunchedEffect(focusReturn) {
+        val back = focusReturn ?: return@LaunchedEffect
+        // Only for someone who moves by focus — TalkBack, or a keyboard. A
+        // finger needs no focus back, and a focused add target would wear the
+        // ripple's grey focus veil (seen on the Xiaomi after removing the last image).
+        val talkBack = context.getSystemService(AccessibilityManager::class.java)?.isTouchExplorationEnabled == true
+        if (!talkBack && inputModes.inputMode != InputMode.Keyboard) return@LaunchedEffect
+        // The viewer's window is going away: focus can only land once the
+        // sheet's window has it back.
+        snapshotFlow { windowInfo.isWindowFocused }.first { it }
+        val target = back.id?.let { tileFocus[it] } ?: addFocus
+        runCatching { target.requestFocus() }
+    }
     Column(modifier = modifier.fillMaxWidth()) {
         VelaLabelBesideValue(
             modifier = Modifier.fillMaxWidth(),
@@ -145,6 +199,9 @@ fun FeedbackScreenshotsSection(
                     .clip(RoundedCornerShape(VelaRadius.lg))
                     .background(colors.bgSunken)
                     .dashedOutline(colors.borderStrong)
+                    // Focus returns here when the viewer removed the last tile.
+                    .focusRequester(addFocus)
+                    .focusProperties { canFocus = enabled }
                     .clickable(enabled = enabled, role = Role.Button, onClick = onAdd)
                     .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
@@ -161,6 +218,8 @@ fun FeedbackScreenshotsSection(
         } else {
             // ONE row, five equal columns: images + the add tile never exceed
             // five, and a tile is 72dp or whatever a fifth of the row leaves.
+            // A tile the viewer removed never ran its own exit: forget its focus handle here.
+            tileFocus.keys.retainAll(tiles.mapTo(HashSet()) { it.id })
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 // 12dp, as iOS and the web draw it.
                 val gap = VelaSpacing.lg
@@ -172,8 +231,14 @@ fun FeedbackScreenshotsSection(
                                 tile = item,
                                 size = tile,
                                 removeLabel = model.removeScreenshot.replace("{{index}}", (index + 1).toString()),
+                                viewLabel = model.viewScreenshot.replace("{{index}}", (index + 1).toString()),
                                 enabled = enabled,
-                                onRemoved = { onRemove(item.id) },
+                                focus = tileFocus.getOrPut(item.id) { FocusRequester() },
+                                onOpen = { onOpen(item.id) },
+                                onRemoved = {
+                                    tileFocus.remove(item.id)
+                                    onRemove(item.id)
+                                },
                             )
                         }
                     }
@@ -184,6 +249,8 @@ fun FeedbackScreenshotsSection(
                                 .clip(RoundedCornerShape(VelaRadius.lg))
                                 .background(colors.bgSunken)
                                 .dashedOutline(colors.borderStrong)
+                                .focusRequester(addFocus)
+                                .focusProperties { canFocus = enabled }
                                 .clickable(enabled = enabled, role = Role.Button, onClick = onAdd)
                                 .semantics { contentDescription = model.addScreenshots },
                             contentAlignment = Alignment.Center,
@@ -229,15 +296,39 @@ private fun NoteLine(icon: ImageVector, text: String, tint: Color) {
  * it parts from any screenshot under it — overlapping the top-trailing corner by 4dp,
  * inside a 44dp hit area. The tile fades and scales in; a remove fades and
  * scales it out first, then takes it off the tray.
+ *
+ * The tile's body is a button (spec 078 §C1): a TAP on a prepared tile opens
+ * the viewer on it, with the press answered by a small squeeze and a tick; a
+ * tile still being prepared does not open. Both the body and the ✕ act only on
+ * a real tap ([tapGuard]) — a scroll or a sideways drag that starts on a tile
+ * or on its ✕ never opens or deletes anything (the iPhone's 2026-09-27 find).
  */
 @Composable
-private fun ScreenshotTile(tile: ScreenshotTileView, size: Dp, removeLabel: String, enabled: Boolean, onRemoved: () -> Unit) {
+private fun ScreenshotTile(
+    tile: ScreenshotTileView,
+    size: Dp,
+    removeLabel: String,
+    viewLabel: String,
+    enabled: Boolean,
+    focus: FocusRequester,
+    onOpen: () -> Unit,
+    onRemoved: () -> Unit,
+) {
     val colors = VelaTheme.colors
     val shape = RoundedCornerShape(VelaRadius.lg)
     val shown = remember { MutableTransitionState(false).apply { targetState = true } }
     LaunchedEffect(shown.isIdle, shown.currentState, shown.targetState) {
         if (shown.isIdle && !shown.currentState && !shown.targetState) onRemoved()
     }
+    val slop = LocalViewConfiguration.current.touchSlop
+    val openTap = remember(slop) { ScreenshotViewerRules.TapSlop(slop) }
+    val removeTap = remember(slop) { ScreenshotViewerRules.TapSlop(slop) }
+    val haptic = rememberVelaHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val focused by interaction.collectIsFocusedAsState()
+    val keyboard = LocalInputModeManager.current.inputMode == InputMode.Keyboard
+    val scale by animateFloatAsState(if (pressed) VelaMotion.pressScaleButton else 1f, VelaMotion.pressSpring, label = "tilePress")
     AnimatedVisibility(
         visibleState = shown,
         enter = fadeIn(tween(TILE_MOTION_MS)) + scaleIn(tween(TILE_MOTION_MS), initialScale = 0.85f),
@@ -247,9 +338,35 @@ private fun ScreenshotTile(tile: ScreenshotTileView, size: Dp, removeLabel: Stri
             Box(
                 modifier = Modifier
                     .matchParentSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
                     .clip(shape)
                     .background(colors.bgSunken)
-                    .border(VelaBorder.hairline, colors.borderBase, shape),
+                    .border(
+                        // The keyboard's focus ring; a finger never draws one.
+                        if (focused && keyboard) 2.dp else VelaBorder.hairline,
+                        if (focused && keyboard) colors.fixed.focusRingOuter else colors.borderBase,
+                        shape,
+                    )
+                    .tapGuard(openTap)
+                    // Focus comes back here when the viewer closes (§C4) — in
+                    // touch mode too, so TalkBack lands on the tile it left.
+                    .focusRequester(focus)
+                    .focusProperties { canFocus = enabled }
+                    .clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        enabled = enabled && tile.ready,
+                        role = Role.Button,
+                    ) {
+                        if (openTap.accept()) {
+                            haptic(VelaHaptic.Press)
+                            onOpen()
+                        }
+                    }
+                    .semantics { contentDescription = viewLabel },
                 contentAlignment = Alignment.Center,
             ) {
                 val thumbnail = tile.thumbnail
@@ -272,7 +389,12 @@ private fun ScreenshotTile(tile: ScreenshotTileView, size: Dp, removeLabel: Stri
                     .align(Alignment.TopEnd)
                     .offset(x = hit / 2 - discCentreIn, y = -(hit - (discCentreIn + disc / 2)))
                     .size(hit)
-                    .clickable(enabled = enabled, role = Role.Button) { shown.targetState = false }
+                    // That outward area is where a thumb starts scrolling the
+                    // sheet: only a tap removes.
+                    .tapGuard(removeTap)
+                    .clickable(enabled = enabled, role = Role.Button) {
+                        if (removeTap.accept()) shown.targetState = false
+                    }
                     .semantics { contentDescription = removeLabel },
                 contentAlignment = Alignment.BottomCenter,
             ) {
@@ -292,6 +414,34 @@ private fun ScreenshotTile(tile: ScreenshotTileView, size: Dp, removeLabel: Stri
                 }
             }
         }
+    }
+}
+
+/**
+ * Watches a press without taking it (the Initial pass, nothing consumed — a
+ * scroll that starts here still scrolls) so the control's click can ask
+ * [ScreenshotViewerRules.TapSlop.accept] whether it was a tap. The press is
+ * forgotten on the up's Final pass, after the click (if any) was decided, so a
+ * later click with no finger behind it — TalkBack, a keyboard — always counts.
+ */
+internal fun Modifier.tapGuard(guard: ScreenshotViewerRules.TapSlop): Modifier = pointerInput(guard) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        guard.down(down.position.x, down.position.y)
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == down.id }
+            if (change == null) {
+                guard.cancel()
+                break
+            }
+            // A second finger is a pinch or a scroll, never a tap.
+            if (event.changes.count { it.pressed } > 1) guard.cancel()
+            guard.move(change.position.x, change.position.y)
+            if (!change.pressed) break
+        }
+        awaitPointerEvent(PointerEventPass.Final)
+        guard.end()
     }
 }
 

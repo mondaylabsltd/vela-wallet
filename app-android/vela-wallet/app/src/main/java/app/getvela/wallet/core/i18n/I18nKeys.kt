@@ -988,6 +988,10 @@ object I18nKeys {
         const val BUG_SCREENSHOT_UNSUPPORTED = "componentsUi.bugReport.screenshotUnsupported"
         const val BUG_SCREENSHOTS_DROPPED = "componentsUi.bugReport.screenshotsDropped"
         const val BUG_FALLBACK_SCREENSHOTS = "componentsUi.bugReport.fallbackScreenshots"
+        // Tap a screenshot to see it large (078 §C).
+        const val BUG_VIEW_SCREENSHOT = "componentsUi.bugReport.viewScreenshot"
+        const val BUG_CLOSE_VIEWER = "componentsUi.bugReport.closeViewer"
+        const val BUG_REMOVE_FROM_VIEWER = "componentsUi.bugReport.removeFromViewer"
 
         // Rescue (SR1–SR5).
         const val RPC_UNAVAILABLE_MULTIPLE = "assets.rpcUnavailableMultiple"

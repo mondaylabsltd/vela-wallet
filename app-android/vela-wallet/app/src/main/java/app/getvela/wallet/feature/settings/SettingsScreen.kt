@@ -37,10 +37,14 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import app.getvela.wallet.feature.settings.components.ScreenshotTileView
 import app.getvela.wallet.feature.settings.components.FeedbackScreenshotsSection
+import app.getvela.wallet.feature.settings.components.ScreenshotFocusReturn
+import app.getvela.wallet.feature.settings.components.ScreenshotViewer
+import app.getvela.wallet.feature.settings.components.ViewerImage
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.diagnostics.ScreenshotTray
+import app.getvela.wallet.core.diagnostics.ScreenshotViewerRules
 import app.getvela.wallet.core.diagnostics.ScreenshotPrep
 import app.getvela.wallet.core.diagnostics.BugReport
 import app.getvela.wallet.core.designsystem.components.VelaStatusBadge
@@ -1831,6 +1835,12 @@ private fun FeedbackSheetBody(
                 .padding(vertical = VelaSpacing.lg),
         )
     }
+    // 078 §C: a prepared tile opens the viewer on it. [viewing] is the image it
+    // opened on; [returnTo] is the tile focus goes back to when it closes (the
+    // one that opened it, or the one that took its place after a remove).
+    var viewing by remember { mutableStateOf<Long?>(null) }
+    var returnTo by remember { mutableStateOf<Long?>(null) }
+    var focusReturn by remember { mutableStateOf<ScreenshotFocusReturn?>(null) }
     FeedbackScreenshotsSection(
         model = model,
         tiles = tiles.map { ScreenshotTileView(it.id, it.ready?.thumbnail, it.ready != null) },
@@ -1838,7 +1848,36 @@ private fun FeedbackSheetBody(
         onAdd = pick,
         onRemove = { id -> haptic(VelaHaptic.Press); tray.remove(id) },
         enabled = !inert,
+        onOpen = { id ->
+            if (ScreenshotViewerRules.opens(tray.tiles.value, id, sending = inert)) {
+                returnTo = id
+                viewing = id
+            }
+        },
+        focusReturn = focusReturn,
     )
+    viewing?.let { start ->
+        // The prepared bytes — what will be sent — labelled by their place among ALL tiles.
+        val images = remember(tiles, model.viewScreenshot) {
+            tiles.mapIndexedNotNull { index, tile ->
+                tile.ready?.let { ViewerImage(tile.id, it.jpeg, it.width, it.height, model.viewScreenshot.replace("{{index}}", (index + 1).toString())) }
+            }
+        }
+        ScreenshotViewer(
+            images = images,
+            startId = start,
+            closeLabel = model.closeViewer,
+            removeLabel = model.removeFromViewer,
+            onRemove = { id ->
+                returnTo = ScreenshotViewerRules.returnAfterRemove(tray.tiles.value.map { it.id }, returnTo, id)
+                tray.remove(id)
+            },
+            onClosed = {
+                viewing = null
+                focusReturn = ScreenshotFocusReturn(returnTo, (focusReturn?.seq ?: 0) + 1)
+            },
+        )
+    }
     Spacer(modifier = Modifier.height(VelaSpacing.xl))
     FeedbackPreview(model, open = previewOpen, onToggle = { previewOpen = !previewOpen })
     Spacer(modifier = Modifier.height(VelaSpacing.xl))

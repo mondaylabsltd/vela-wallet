@@ -805,6 +805,9 @@ object SettingsFixtures {
         screenshotUnsupported = s.t(I18nKeys.SettingsUi.BUG_SCREENSHOT_UNSUPPORTED),
         screenshotsDropped = s.t(I18nKeys.SettingsUi.BUG_SCREENSHOTS_DROPPED),
         fallbackScreenshots = s.t(I18nKeys.SettingsUi.BUG_FALLBACK_SCREENSHOTS),
+        viewScreenshot = s.t(I18nKeys.SettingsUi.BUG_VIEW_SCREENSHOT, mapOf("index" to "{{index}}")),
+        closeViewer = s.t(I18nKeys.SettingsUi.BUG_CLOSE_VIEWER),
+        removeFromViewer = s.t(I18nKeys.SettingsUi.BUG_REMOVE_FROM_VIEWER),
     )
 
     // --- Rescue --------------------------------------------------------------

@@ -214,6 +214,28 @@ class MainActivity : ComponentActivity() {
             null
         }
 
+    /**
+     * Debug walks on a phone that is somebody's real wallet: this launch's
+     * theme and text size, NEVER written to their settings — a force-stop and
+     * a plain start put back exactly what they chose.
+     *
+     *   adb shell am start -n app.getvela.wallet/.MainActivity --ez vela.debugDark true --es vela.debugTextScale xlarge
+     *
+     * Read ONCE in onCreate: right after launch the app brings itself to the
+     * front with an extra-less intent (onNewIntent → setIntent), so reading
+     * `intent` at a later recomposition would silently lose them.
+     */
+    private var debugDark: Boolean? = null
+    private var debugTextScale: app.getvela.wallet.core.format.TextScaleLevel? = null
+
+    private fun readDebugOverrides() {
+        if (!BuildConfig.DEBUG) return
+        debugDark = intent?.takeIf { it.hasExtra("vela.debugDark") }?.getBooleanExtra("vela.debugDark", false)
+        debugTextScale = intent?.getStringExtra("vela.debugTextScale")?.let { wire ->
+            app.getvela.wallet.core.format.TextScaleLevel.entries.firstOrNull { it.wire == wire }
+        }
+    }
+
     private fun startDestination(): String =
         intent?.getStringExtra("vela.startDestination")
             ?.takeIf { it in VelaDestinations.ALL }
@@ -256,6 +278,7 @@ class MainActivity : ComponentActivity() {
         // The gallery skips the launch animation for deterministic walkthroughs.
         val coldStart = savedInstanceState == null && !launchAnimationDisabled() && !galleryRequested()
         super.onCreate(savedInstanceState)
+        readDebugOverrides()
         securityKeyCeremony = SecurityKeyCeremony(this)
         cameraPermissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
@@ -328,7 +351,7 @@ class MainActivity : ComponentActivity() {
             val preference = themePreference
             if (!i18nState.ready || preference == null) return@setContent
 
-            val darkTheme = preference.isDarkEffective()
+            val darkTheme = debugDark ?: preference.isDarkEffective()
 
             // enableEdgeToEdge's defaults key bar-icon appearance off the SYSTEM uiMode
             // only; the FR-006 override must re-style the bars for the EFFECTIVE theme.
@@ -351,7 +374,7 @@ class MainActivity : ComponentActivity() {
                 if (i18nState.direction == "rtl") LayoutDirection.Rtl else LayoutDirection.Ltr
 
             val prefs by container.preferences.view.collectAsStateWithLifecycle()
-            VelaTheme(darkTheme = darkTheme, fontScale = prefs.textScale.factor) {
+            VelaTheme(darkTheme = darkTheme, fontScale = (debugTextScale ?: prefs.textScale).factor) {
                 val colors = VelaTheme.colors
 
                 // Spec 012. `coldStart` is true only for a fresh process — a
