@@ -3337,19 +3337,17 @@ fn batch_rows(view: &BatchView, symbol: &str, s: &FlowStrings) -> Vec<BatchRow> 
                 row.line,
                 BatchRow {
                     ok: row.ok,
-                    address: row
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| row.address.clone())
-                        .into(),
+                    // The sheet's name over the address, as the web draws
+                    // them (078 T062) — the name ALONE hid which address it
+                    // would pay.
+                    name: row.name.clone().map(Into::into),
+                    address: crate::contacts::model::shorten(&row.address),
+                    seed: Some(row.address.clone().into()),
+                    amount: amount.into(),
                     // A fiat sheet's figure exactly as the sheet wrote it, so
-                    // it can be read back against the sheet — beside what it
-                    // became (the mock's "5,000 CNY → 689.66").
-                    conversion: if fiat {
-                        format!("{} {} → {amount}", row.raw_amount, view.fiat_code).into()
-                    } else {
-                        amount.into()
-                    },
+                    // it can be read back against the sheet under what it
+                    // became.
+                    source: fiat.then(|| format!("{} {}", row.raw_amount, view.fiat_code).into()),
                     note: if row.dup {
                         Some(s.batch_dup.clone())
                     } else if row.valid {
@@ -3366,8 +3364,11 @@ fn batch_rows(view: &BatchView, symbol: &str, s: &FlowStrings) -> Vec<BatchRow> 
             error.line,
             BatchRow {
                 ok: false,
+                name: None,
                 address: error.raw.clone().into(),
-                conversion: SharedString::default(),
+                seed: None,
+                amount: SharedString::default(),
+                source: None,
                 note: Some(match error.reason {
                     BatchParseReason::NoAddress => s.batch_bad_address.clone(),
                     BatchParseReason::NoAmount => s.bad_amount.clone(),
@@ -3471,22 +3472,33 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
         n => fill(&s.batch_rejected_other, "count", &n.to_string()),
     };
     BatchImport {
+        unit_caption: s.batch_unit_caption.clone(),
         unit_fiat: fill(&s.batch_unit_fiat, "code", code).into(),
         unit_token: fill(&s.batch_unit_token, "sym", symbol).into(),
         fiat_on: view.unit == BatchUnit::Fiat,
         paste: paste.into(),
+        paste_empty: view.file_name.is_none() && view.raw_text.is_empty(),
         import_file: if view.busy {
             s.batch_reading.clone()
         } else {
-            format!("{} (xlsx / csv / txt)", s.batch_import_file).into()
+            s.batch_import_file.clone()
         },
         template: if view.template_saved {
             s.batch_template_saved.clone()
         } else {
             s.batch_template.clone()
         },
+        template_saved: view.template_saved,
+        // What the picker takes — or, once a file was picked, which file the
+        // rows below came from (the web's `formats` / `fileName`).
+        formats: view
+            .file_name
+            .clone()
+            .map_or_else(|| crate::flows::fixtures::BATCH_FORMATS.into(), Into::into),
+        file_named: view.file_name.is_some(),
         rate_section: s.batch_rate_section.clone(),
         rate_value: rate_value.into(),
+        rate_equation: None,
         rate_hint: rate_hint.into(),
         // Lines READ, not rows kept: the count above a list is the length of
         // that list, refused lines included (the web's `seen`).
@@ -5733,11 +5745,12 @@ mod parity_tests {
             ],
             "sheet order, each skipped line with its reason"
         );
-        assert_eq!(model.rows[0].conversion, "5000 CNY → 689.66 USDT");
+        assert_eq!(model.rows[0].amount, "689.66 USDT");
+        assert_eq!(model.rows[0].source.as_deref(), Some("5000 CNY"));
         assert_eq!(model.parsed, fill(&s.batch_parsed, "n", "4"), "lines read");
         assert!(
-            model.rows[1].conversion.is_empty(),
-            "a refused line has no figure"
+            model.rows[1].amount.is_empty() && model.rows[1].seed.is_none(),
+            "a refused line has no figure and nobody to draw"
         );
 
         let total = batch_total(&view, "USDT", "1000", None, &s)

@@ -20,11 +20,11 @@ use crate::wallet::components::{
 };
 
 use super::components::{
-    CopyButton, accent_button, address_card, danger_button, disabled_accent_button, fact_row,
-    fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option, fee_speed_summary, fee_stale_line,
-    filter_chips, flow_search, ghost_button, max_chip, mono_field, network_pill, network_row,
-    qr_card, recipient_card, search_empty, search_matches, segmented_toggle, status_chip,
-    token_header_card,
+    CopyButton, GhostPill, accent_button, address_card, danger_button, disabled_accent_button,
+    fact_row, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option, fee_speed_summary,
+    fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row, max_chip, mono_field,
+    network_pill, network_row, qr_card, recipient_card, search_empty, search_matches,
+    segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -334,6 +334,12 @@ pub fn render_parts(
         let (body, foot) = send_form_parts(model, theme, icons, identicons, window, actions);
         return (body, Some(foot));
     }
+    // The importer's total and button wait at the bottom — pinned, because a
+    // payroll is long (the web's sticky `.footer`, 078 T062).
+    if let FlowBody::BatchImport(model) = body {
+        let (body, foot) = batch_import_parts(model, theme, icons, identicons, window, actions);
+        return (body, Some(foot.pt(px(8.)).pb(px(24.))));
+    }
     (
         render(body, theme, icons, identicons, window, actions),
         None,
@@ -426,7 +432,10 @@ pub fn render(
             actions.pick_group_rows,
         ),
         FlowBody::FeeToken(model) => fee_token(model, theme, icons, actions.fee_rows),
-        FlowBody::BatchImport(model) => batch_import(model, theme, icons, window, actions),
+        FlowBody::BatchImport(model) => {
+            let (body, foot) = batch_import_parts(model, theme, icons, identicons, window, actions);
+            body.child(foot.pt(px(12.)).border_t_1().border_color(theme.divider))
+        }
         FlowBody::SendConfirm(model) => send_confirm(
             model,
             theme,
@@ -2513,52 +2522,114 @@ fn fee_token(
     col.child(list)
 }
 
-fn batch_import(
+/// SD2c's body and its foot — the total and the button — apart, so the
+/// scaffold can pin the foot (see `render_parts`).
+fn batch_import_parts(
     model: &BatchImport,
     theme: &Theme,
     icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
     window: &Window,
     mut actions: PanelActions,
-) -> Div {
-    let toggle = segmented_toggle(
-        theme,
-        "batch-unit",
-        model.unit_fiat.clone(),
-        model.unit_token.clone(),
-        model.fiat_on,
-        actions.batch_unit.take(),
+) -> (Div, Div) {
+    // The web's `BatchImport` (078 T062), top to bottom as the job goes: say
+    // what the amounts are IN, bring the list, check the rate, read each
+    // person's share back, and see what it adds up to against the balance.
+    let mut col = div().flex().flex_col().gap(px(16.));
+
+    // What the figures are — the toggle answers a question it now asks.
+    col = col.child(
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(
+                div()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_muted)
+                    .child(model.unit_caption.clone()),
+            )
+            .child(segmented_toggle(
+                theme,
+                "batch-unit",
+                model.unit_fiat.clone(),
+                model.unit_token.clone(),
+                model.fiat_on,
+                actions.batch_unit.take(),
+            )),
     );
-    let mut col = column()
-        .child(toggle)
-        .child(clickable(
-            "batch-paste",
-            actions.batch_paste.take(),
-            mono_field(theme, None, model.paste.clone()),
-        ))
-        .child(
-            div()
-                .flex()
-                .justify_center()
-                .gap(px(8.))
-                .child(clickable(
-                    "batch-pick-file",
-                    actions.batch_pick_file.take(),
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(model.import_file.clone()),
-                ))
-                .child(clickable(
-                    "batch-template",
-                    actions.batch_template.take(),
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(model.template.clone()),
-                )),
-        )
-        .child(divider(theme));
-    col = match actions.batch_rate_field.take() {
+
+    // Bringing the list: the paste box, the two ways a list arrives without
+    // being pasted, and what the picker takes — or which file it took.
+    // Five lines tall, as the web's `rows={5}`; the placeholder in the
+    // placeholder's ink, not the ink of something already pasted.
+    let paste = div()
+        .min_h(px(106.))
+        .p(px(12.))
+        .rounded(px(12.))
+        .bg(theme.bg_raised)
+        .font_family(theme::font_mono())
+        .text_size(theme::text_mono_address())
+        .text_color(if model.paste_empty {
+            theme.fg_subtle
+        } else {
+            theme.fg_base
+        })
+        .child(model.paste.clone());
+    col = col.child(
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(clickable("batch-paste", actions.batch_paste.take(), paste))
+            .child(ghost_pill_row(
+                theme,
+                icons,
+                vec![
+                    GhostPill {
+                        id: "batch-pick-file".into(),
+                        icon: Icon::Upload,
+                        label: model.import_file.clone(),
+                        done: false,
+                        action: actions.batch_pick_file.take(),
+                    },
+                    GhostPill {
+                        id: "batch-template".into(),
+                        icon: if model.template_saved {
+                            Icon::Check
+                        } else {
+                            Icon::Download
+                        },
+                        label: model.template.clone(),
+                        done: model.template_saved,
+                        action: actions.batch_template.take(),
+                    },
+                ],
+            ))
+            .child(
+                div()
+                    .text_center()
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_glyph())
+                    .text_color(if model.file_named {
+                        theme.fg_muted
+                    } else {
+                        theme.fg_subtle
+                    })
+                    .child(model.formats.clone()),
+            ),
+    );
+
+    // The rate, under its own rule: the label, the equation, and a pencil
+    // where it can be typed over (the live field replaces the equation).
+    let mut rate = div()
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .pt(px(16.))
+        .border_t_1()
+        .border_color(theme.divider);
+    rate = match actions.batch_rate_field.take() {
         Some(field) => {
             let strings = crate::ui::NameFieldStrings {
                 label: model.rate_section.clone(),
@@ -2588,195 +2659,352 @@ fn batch_import(
                     pill(theme, reset.clone()),
                 ));
             }
-            col.child(row)
+            rate.child(row)
         }
-        None => col.child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_subtle)
-                        .child(model.rate_section.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_base)
-                        .child(model.rate_value.clone()),
-                ),
-        ),
-    };
-    col = col
-        .child(
-            div()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_subtle)
-                .child(model.rate_hint.clone()),
-        )
-        .child(
-            div()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_muted)
-                .child(model.parsed.clone()),
-        );
-
-    for row in &model.rows {
-        col = col.child(
+        None => rate.child(
             div()
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .py(px(6.))
-                .child(icon_img(
-                    icons,
-                    if row.ok { Icon::Check } else { Icon::X },
-                    false,
-                    if row.ok {
-                        theme.success_base
-                    } else {
-                        theme.error_base
-                    },
-                    13.,
-                ))
                 .child(
                     div()
                         .flex_1()
-                        .min_w(px(0.))
-                        .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
-                        .text_color(theme.fg_base)
-                        .child(row.address.clone()),
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(model.rate_section.clone()),
                 )
-                .child(
-                    div()
+                // "1 USDT ≈ 7.25 CNY" as one sentence, only the figure that
+                // can be typed over in the base ink (the web's `.equation`).
+                .child(match &model.rate_equation {
+                    Some((lead, figure, code)) => div()
                         .flex()
-                        .flex_col()
-                        .items_end()
-                        // A refused line has no figure; its reason alone.
-                        .when(!row.conversion.is_empty(), |el| {
-                            el.child(
-                                div()
-                                    .text_size(theme::text_row_sub())
-                                    .text_color(theme.fg_muted)
-                                    .child(row.conversion.clone()),
-                            )
-                        })
-                        // Why this line will not be paid, beside the line.
-                        .when_some(row.note.clone(), |el, note| {
-                            el.child(
-                                div()
-                                    .text_size(theme::text_label())
-                                    .text_color(theme.error_base)
-                                    .child(note),
-                            )
-                        }),
-                ),
+                        .items_baseline()
+                        .gap(px(4.))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(lead.clone())
+                        .child(
+                            div()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(figure.clone()),
+                        )
+                        .child(code.clone()),
+                    None => div()
+                        .text_size(theme::text_row_sub())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.fg_base)
+                        .child(model.rate_value.clone()),
+                })
+                .child(icon_img(icons, Icon::Pencil, false, theme.fg_subtle, 14.)),
+        ),
+    };
+    if !model.rate_hint.is_empty() {
+        rate = rate.child(
+            div()
+                .text_size(theme::text_label())
+                .text_color(theme.fg_muted)
+                .child(model.rate_hint.clone()),
         );
     }
-    if let Some(total) = &model.total {
-        col = col.child(batch_total_line(total, theme));
+    col = col.child(rate);
+
+    // Who gets what, in sheet order: an uppercase count over the rows.
+    if !model.rows.is_empty() {
+        let mut preview = div().flex().flex_col().child(
+            div()
+                .pb(px(4.))
+                .text_size(theme::text_glyph())
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(theme.fg_subtle)
+                .child(model.parsed.to_uppercase()),
+        );
+        for (i, row) in model.rows.iter().enumerate() {
+            preview = preview.child(batch_row(row, i > 0, theme, icons, identicons));
+        }
+        col = col.child(preview);
     }
 
-    col = col.child(
-        div()
-            .text_size(theme::text_row_sub())
-            .text_color(theme.error_base)
-            .child(model.rejected.clone()),
-    );
+    // Skipped rows and rows past the cap, together — never one hiding the
+    // other — in the colour for "look at this", not the refusal red.
+    if !model.rejected.is_empty() {
+        col = col.child(warning_line(theme, icons, model.rejected.clone()));
+    }
     if let Some(notice) = &model.notice {
         col = col.child(notice_card(notice, theme, None, None));
     }
-    // What the import does to the rows already on the form, beside the button
-    // that does it — and the way to choose the other, because either can be
-    // what is meant.
+
+    // The total and the button, under a rule: the figure beside what it is
+    // measured against, and — when it is too much — why the button is shut.
+    let mut footer = div().flex().flex_col().gap(px(12.));
+    if let Some(total) = &model.total {
+        footer = footer.child(batch_total_line(total, theme, icons));
+    }
+    // What the import does to the rows already on the form, and the way to
+    // choose the other — a link's weight, never the accent: it changes what
+    // the button below will do, it does not do it.
     if let Some((note, action)) = &model.merge {
-        col = col.child(
+        footer = footer.child(
             div()
                 .flex()
-                .flex_wrap()
-                .items_center()
-                .gap_x(px(8.))
-                .text_size(theme::text_row_sub())
-                .child(div().text_color(theme.fg_muted).child(note.clone()))
-                .child(clickable(
-                    "batch-merge",
-                    actions.batch_merge.take(),
+                .items_start()
+                .gap(px(4.))
+                .text_size(theme::text_label())
+                .text_color(theme.fg_muted)
+                .child(div().flex_none().mt(px(2.)).child(icon_img(
+                    icons,
+                    Icon::Info,
+                    false,
+                    theme.fg_muted,
+                    14.,
+                )))
+                .child(
                     div()
-                        .cursor_pointer()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme.accent)
-                        .child(action.clone()),
-                )),
+                        .flex()
+                        .flex_wrap()
+                        .gap_x(px(4.))
+                        .child(note.clone())
+                        .child(clickable(
+                            "batch-merge",
+                            actions.batch_merge.take(),
+                            div()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .underline()
+                                .child(action.clone()),
+                        )),
+                ),
         );
     }
     // Bad rows are marked and skipped, never silently dropped, and the CTA
-    // counts only the good ones — a button that says "Import 3" and imports 2
-    // is how someone underpays a contractor. A gate the core shut is drawn
-    // shut: dimmed, and it answers to nothing.
-    let cta = accent_button(theme, model.cta.clone());
-    if model.cta_enabled {
-        col.child(clickable("batch-apply", actions.advance.take(), cta))
+    // counts only the good ones. A gate the core shut is drawn shut.
+    footer = if model.cta_enabled {
+        footer.child(clickable(
+            "batch-apply",
+            actions.advance.take(),
+            accent_button(theme, model.cta.clone()),
+        ))
     } else {
-        col.child(cta.opacity(0.4))
-    }
+        footer.child(disabled_accent_button(theme, model.cta.clone()))
+    };
+    (col, footer)
 }
 
-/// DSD2cL's total: the figure the import sends and, under it, what it draws
-/// from — or, in error ink, that it draws more than there is.
-fn batch_total_line(total: &super::fixtures::BatchTotal, theme: &Theme) -> Div {
-    let over = total.over.is_some();
+/// One line of the sheet read back (078 T062, the web's `.preview li`): the
+/// person's identicon, name over address, and what they get over what the
+/// sheet said. A skipped row stays — it was in the sheet — but steps back
+/// and says why; a refused line has a cross where the face would be.
+fn batch_row(
+    row: &super::fixtures::BatchRow,
+    ruled: bool,
+    theme: &Theme,
+    icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
+) -> Div {
+    const ART: f32 = 30.;
+    let dim = if row.ok || row.seed.is_none() {
+        1.
+    } else {
+        0.4
+    };
+    let art = match &row.seed {
+        Some(seed) => {
+            div()
+                .flex_none()
+                .opacity(dim)
+                .child(crate::wallet::components::identicon_avatar(
+                    identicons,
+                    seed.as_ref(),
+                    ART,
+                ))
+        }
+        None => div()
+            .flex_none()
+            .size(px(ART))
+            .rounded_full()
+            .bg(theme.bg_sunken)
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(icon_img(icons, Icon::X, false, theme.fg_muted, 14.)),
+    };
+    let mut who = div()
+        .flex_1()
+        .min_w(px(0.))
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .opacity(dim);
+    who = match (&row.name, &row.seed) {
+        (Some(name), _) => who
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(theme.fg_base)
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(name.clone()),
+            )
+            .child(
+                div()
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_glyph())
+                    .text_color(theme.fg_muted)
+                    .child(row.address.clone()),
+            ),
+        // No name in the sheet: the address IS who. A refused line is the
+        // text to find it by, muted.
+        (None, seed) => who.child(
+            div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_label())
+                .text_color(if seed.is_some() {
+                    theme.fg_base
+                } else {
+                    theme.fg_muted
+                })
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(row.address.clone()),
+        ),
+    };
+    let end = match &row.note {
+        Some(note) => div()
+            .flex_none()
+            .max_w(px(120.))
+            .text_right()
+            .text_size(theme::text_glyph())
+            .text_color(theme.warning_base)
+            .child(note.clone()),
+        None => div()
+            .flex_none()
+            .flex()
+            .flex_col()
+            .items_end()
+            .gap(px(2.))
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(row.amount.clone()),
+            )
+            .when_some(row.source.clone(), |el, source| {
+                el.child(
+                    div()
+                        .text_size(theme::text_glyph())
+                        .text_color(theme.fg_muted)
+                        .child(source),
+                )
+            }),
+    };
+    // A hairline between people, set in past the artwork so it runs under
+    // the text it divides.
+    let line = div()
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .py(px(8.))
+        .child(art)
+        .child(who)
+        .child(end);
+    div()
+        .flex()
+        .flex_col()
+        .when(ruled, |el| {
+            el.child(div().ml(px(ART + 12.)).h(px(1.)).bg(theme.divider))
+        })
+        .child(line)
+}
+
+/// A warning in the flow of the page (the web's `.notices li`): a 14
+/// triangle and the sentence, in the warning ink.
+fn warning_line(theme: &Theme, icons: &mut IconCache, text: SharedString) -> Div {
     div()
         .flex()
         .items_start()
-        .justify_between()
-        .gap(px(8.))
-        .pt(px(10.))
-        .border_t_1()
-        .border_color(theme.divider)
-        .child(
-            div()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_subtle)
-                .child(total.label.clone()),
-        )
+        .gap(px(4.))
+        .text_size(theme::text_label())
+        .text_color(theme.warning_base)
+        .child(div().flex_none().mt(px(1.)).child(icon_img(
+            icons,
+            Icon::TriangleAlert,
+            false,
+            theme.warning_base,
+            14.,
+        )))
+        .child(div().flex_1().min_w(px(0.)).child(text))
+}
+
+/// DSD2cL's total (the web's `.total`): the label and the figure on one line,
+/// what it draws from and the sheet's own sum under them, and — when it is
+/// more than there is — the figure in the refusal colour with the sentence.
+fn batch_total_line(
+    total: &super::fixtures::BatchTotal,
+    theme: &Theme,
+    icons: &mut IconCache,
+) -> Div {
+    let over = total.over.is_some();
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
         .child(
             div()
                 .flex()
-                .flex_col()
-                .items_end()
+                .items_baseline()
+                .justify_between()
+                .gap(px(12.))
                 .child(
                     div()
-                        .text_size(theme::text_row_sub())
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_muted)
+                        .child(total.label.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::BOLD)
                         .text_color(if over {
                             theme.error_base
                         } else {
                             theme.fg_base
                         })
                         .child(total.value.clone()),
-                )
-                .when_some(total.detail.clone(), |el, detail| {
-                    el.child(
-                        div()
-                            .text_size(theme::text_label())
-                            .text_color(theme.fg_muted)
-                            .child(detail),
-                    )
-                })
-                .child(
-                    div()
-                        .text_size(theme::text_label())
-                        .text_color(if over {
-                            theme.error_base
-                        } else {
-                            theme.fg_muted
-                        })
-                        .child(total.over.clone().unwrap_or_else(|| total.balance.clone())),
                 ),
         )
+        .child(
+            div()
+                .flex()
+                .justify_between()
+                .gap(px(12.))
+                .text_size(theme::text_glyph())
+                .text_color(theme.fg_muted)
+                .child(total.balance.clone())
+                .children(total.detail.clone()),
+        )
+        .when_some(total.over.clone(), |el, text| {
+            el.child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(px(4.))
+                    .pt(px(2.))
+                    .text_size(theme::text_label())
+                    .text_color(theme.error_base)
+                    .child(div().flex_none().mt(px(1.)).child(icon_img(
+                        icons,
+                        Icon::CircleAlert,
+                        false,
+                        theme.error_base,
+                        14.,
+                    )))
+                    .child(div().flex_1().min_w(px(0.)).child(text)),
+            )
+        })
 }
 
 fn send_confirm(

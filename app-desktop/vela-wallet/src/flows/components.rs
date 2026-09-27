@@ -593,6 +593,60 @@ pub fn segmented_toggle(
 
 /// The monospace field. Addresses are compared character by character by the
 /// people pasting them, which is the whole reason for the face.
+/// One pill of a [`ghost_pill_row`].
+pub struct GhostPill {
+    pub id: ElementId,
+    pub icon: Icon,
+    pub label: SharedString,
+    /// Done (a template saved): the pill turns to the success ink.
+    pub done: bool,
+    pub action: Option<super::panels::Click>,
+}
+
+/// The web's `GhostPillRow` (078 T062): hairline pills that share the row,
+/// each a 14 glyph and an 11 medium label, the raised colour on hover.
+pub fn ghost_pill_row(theme: &Theme, icons: &mut IconCache, pills: Vec<GhostPill>) -> Div {
+    let mut row = div().flex().flex_wrap().gap(px(4.));
+    for pill in pills {
+        let ink = if pill.done {
+            theme.success_base
+        } else {
+            theme.fg_base
+        };
+        let hover = theme.bg_raised;
+        let mut body = div()
+            .id(pill.id)
+            .flex_1()
+            .min_h(px(36.))
+            .p(px(8.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(px(4.))
+            .rounded_full()
+            .border_1()
+            .border_color(if pill.done {
+                theme.success_base
+            } else {
+                theme.border_strong
+            })
+            .cursor_pointer()
+            .hover(move |el| el.bg(hover))
+            .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
+            .text_size(theme::text_label())
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(ink)
+            .whitespace_nowrap()
+            .child(icon_img(icons, pill.icon, false, ink, 14.))
+            .child(pill.label);
+        if let Some(action) = pill.action {
+            body = body.on_click(move |event, window, cx| action(event, window, cx));
+        }
+        row = row.child(body);
+    }
+    row
+}
+
 pub fn mono_field(theme: &Theme, label: Option<SharedString>, value: SharedString) -> Div {
     // The web's `MonoField` (078 F-11): an 11 label over a raised field.
     let mut col = div().flex().flex_col().gap(px(6.));
@@ -1353,8 +1407,12 @@ pub fn secondary_button(theme: &Theme, label: SharedString) -> Div {
 /// `--opacity-disabled`, with no hover to lift it. The caller withholds the
 /// click and the pointer. (It took the finished button once, and stacking a
 /// second hover on it panics a debug build.)
+///
+/// The fill fades and the label stays white (078 T062): CSS fades the button
+/// as ONE layer, so its white label lands white on the page, where gpui's
+/// element opacity faded the label on its own into a pink smear.
 pub fn disabled_accent_button(theme: &Theme, label: SharedString) -> Div {
-    accent_fill(button_face(label), theme).opacity(theme::OPACITY_DISABLED)
+    accent_fill(button_face(label), theme).bg(theme.accent.opacity(theme::OPACITY_DISABLED))
 }
 
 /// `primary`, `rounded`: the accent CTA. In this product the accent means

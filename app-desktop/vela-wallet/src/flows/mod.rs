@@ -352,6 +352,7 @@ pub struct FlowStrings {
 
     // Send · batch import.
     pub batch_title: SharedString,
+    pub batch_unit_caption: SharedString,
     pub batch_unit_fiat: String,
     pub batch_unit_token: String,
     pub batch_import_file: SharedString,
@@ -666,6 +667,7 @@ impl FlowStrings {
             group_members: raw("contacts.groupMembers"),
 
             batch_title: s("send.batchTitle"),
+            batch_unit_caption: s("send.batchUnitCaption"),
             batch_unit_fiat: raw("send.batchUnitFiat"),
             batch_unit_token: raw("send.batchUnitToken"),
             batch_import_file: s("send.batchImportFile"),

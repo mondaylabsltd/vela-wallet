@@ -105,3 +105,23 @@ screenshot checked against the web.
   (DSD2) and the batch recipient rows (DSD2b). Explore and signing have no
   shared fixture state and were compared live in T054.
 - [ ] T061 The owner's hour next to the web (SC-003).
+
+## Phase 5b — the gaps T060's pairs showed (screenshot each against the web)
+- [x] T062 DSD2c batch import on the web's screen: the unit question, file and
+      template as icon pills over the formats line, the rate as one equation,
+      rows with identicon, name over address and amount over the sheet's
+      figure, the duplicate dimmed with its reason, the refused line with a
+      cross, the skipped-rows warning, and the total over the balance with the
+      refusal — pinned with the button at the foot. Checked on the fixture and
+      live (a pasted sheet: named, unnamed, duplicate and refused lines). A
+      disabled accent CTA now fades its fill, not its label.
+- [ ] T063 DSR1: the RPC banner behind the dialog draws empty; provider chips
+      without their link glyph; Save & Retry and DST4b's Add Network short.
+- [ ] T064 DR2, DR3: the QR centre badge (chain / token art, not a grey disc).
+- [ ] T065 DA2, DA3: tx-detail row height and the space under the amount.
+- [ ] T066 Send form: DSD2 unit and ⇕ switch; DSD2b recipient rows, icon
+      pills, stacked total; DSD3 unit size; the live disabled Continue label.
+- [ ] T067 Labels and small gaps: DSD1 title, DST1 nav label, DST2 theme
+      label, DST4b search field, DST5 counts and key link, DR1 hairlines,
+      DT1/DT4 filter row, D2 network chevron, DC1 rail networks, DC2 groups
+      and action widths, DC6 menu anchor, DSD4 hash.
