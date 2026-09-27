@@ -93,5 +93,15 @@ screenshot checked against the web.
 - [x] T054 Explore E-04, E-05; signing G-06.
 
 ## Phase 5 — acceptance
-- [ ] T060 Screenshot pairs for every gallery state both apps draw (SC-001).
+- [x] T060 Screenshot pairs for every gallery state both apps draw (SC-001).
+  *Done 2026-09-27:* 38 pairs (D1–D3, DC1–DC6, DST1–DST8 + DST4b + DSR1,
+  and the 19 flow states), taken on this branch at 1282×801 @175% against
+  wallet.getvela.app at the same size and scale, and published for review at
+  https://claude.ai/artifact/GAN4Ss8BR3kxW7xHDcT6np. 14 match; 24 still show a gap,
+  each named under its pair. The largest are DSD2c (the desktop still draws the
+  older import screen: no names, no duplicate row, no over-balance refusal),
+  DSR1 (the RPC banner behind the dialog draws empty), the QR centre badge
+  (DR2, DR3), the tx-detail row height (DA2, DA3), the send amount's unit
+  (DSD2) and the batch recipient rows (DSD2b). Explore and signing have no
+  shared fixture state and were compared live in T054.
 - [ ] T061 The owner's hour next to the web (SC-003).
