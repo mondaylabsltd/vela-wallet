@@ -4,7 +4,7 @@
 	 * slider is — the desktop's `ui::StepSlider` on the web.
 	 *
 	 * - The whole track is the target, `--size-hitTarget` tall. It used to be
-	 *   the range input alone, which is as tall as its 4px line: a press a few
+	 *   the range input alone, only as tall as its thin line: a press a few
 	 *   pixels above or below the dots did nothing.
 	 * - Press anywhere and the thumb goes to the nearest stop; keep the button
 	 *   down and it steps from stop to stop under the pointer. The pointer is
