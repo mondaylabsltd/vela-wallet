@@ -10237,6 +10237,19 @@ impl WalletPage {
                         .text_color(theme.fg_subtle)
                         .child(support),
                 );
+            } else {
+                // A provider with nothing set up: where to get a key, under
+                // the card, as the web's `.link` (078 T067).
+                card = card.child(
+                    div()
+                        .pt(px(8.))
+                        .text_size(theme::text_label())
+                        .text_color(theme.info_base)
+                        .child(SharedString::from(format!(
+                            "{} →",
+                            self.settings.provider_get_key
+                        ))),
+                );
             }
             col = col.child(card);
         }
@@ -14985,7 +14998,7 @@ impl WalletPage {
                     let title = match (&send, panel) {
                         // A sweep is several coins: "Send tokens", never the
                         // first pick's "Send ETH" (the web's `multiSendTitle`).
-                        (Some(_), FlowPanel::Dsd2 | FlowPanel::Dsd2b)
+                        (Some(_), FlowPanel::Dsd1 | FlowPanel::Dsd2 | FlowPanel::Dsd2b)
                             if self
                                 .send_views(cx)
                                 .is_some_and(|(view, _)| view.multi_select_mode) =>

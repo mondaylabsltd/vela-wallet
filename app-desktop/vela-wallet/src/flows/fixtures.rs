@@ -1130,11 +1130,8 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
 
 fn assets_panel(s: &FlowStrings, empty: bool) -> AssetsPanel {
     AssetsPanel {
-        filter: Some((
-            NETWORKS[..3].iter().map(|n| (n.color)()).collect(),
-            s.pill_all.clone(),
-            s.assets_add.clone(),
-        )),
+        // None, as the web's (078 T067).
+        filter: None,
         search_placeholder: s.assets_search.clone(),
         no_match: s.no_matching_tokens.clone(),
         rows: if empty { Vec::new() } else { assets_rows() },
@@ -1593,7 +1590,8 @@ pub fn panel_title(panel: FlowPanel, s: &FlowStrings) -> SharedString {
         FlowPanel::Da2 | FlowPanel::Da3 => s.detail_section_title.clone(),
         FlowPanel::Dt1 | FlowPanel::Dt4 => s.assets_title.clone(),
         FlowPanel::Dt3 | FlowPanel::Dt3b => s.add_token_title.clone(),
-        FlowPanel::Dsd1 => s.send_action.clone(),
+        // "Select Token", as the web's pick screen (078 T067).
+        FlowPanel::Dsd1 => s.select_token_title.clone(),
         FlowPanel::Dsd2 | FlowPanel::Dsd2b => fill(&s.send_title, "symbol", "USDT").into(),
         FlowPanel::Dsd2c => s.batch_title.clone(),
         FlowPanel::Dsd2e => s.pick_contact_title.clone(),

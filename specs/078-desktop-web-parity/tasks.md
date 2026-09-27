@@ -138,7 +138,17 @@ screenshot checked against the web.
       stacks its fiat under the figure (DSD2b); a disabled Continue fades its
       fill and keeps a white label (checked live). DSD3's unit is already the
       web's (`amountUnit`) — the T060 note was against an older deploy.
-- [ ] T067 Labels and small gaps: DSD1 title, DST1 nav label, DST2 theme
-      label, DST4b search field, DST5 counts and key link, DR1 hairlines,
-      DT1/DT4 filter row, D2 network chevron, DC1 rail networks, DC2 groups
-      and action widths, DC6 menu anchor, DSD4 hash.
+- [x] T067 The small gaps, each read against the web SOURCE (the deployed
+      site the T060 pairs were taken from dates from 24 Sep and lags it):
+      fixed — the token picker is titled "Select Token" (live: "Send tokens"
+      in a sweep), the assets panel drops its filter row (its pill and "Add"
+      answered no click; the web has none), and a keyless provider card
+      offers "Get a key →" under it in the gallery too. Not gaps against the
+      source — DR1's rules (both #ECEBE4), DSD4's hash (the web's live receipt
+      shows it submitted), DC1's rail networks (the web's live Contacts omits
+      them, RULING 2), DC2's action widths (flex: 1 on both), DST2's "System"
+      (`themeAuto`), DST4b's search (T063). Left — D2's chevron (the web's
+      opens nothing; a chevron that leads nowhere is a defect), DC2's add
+      chip in the gallery (live draws it), DST5's count (each gallery's own
+      constant), DC6's menu offset (gallery only), DST1's nav label (the web
+      source has no signer nav row to compare with).

@@ -176,24 +176,10 @@ pub fn assets(
     // blank column under a pill reads as a panel that failed to load.
     let filtered_empty = rows.is_empty() && !view.tokens.is_empty();
     AssetsPanel {
-        // The chain filter's dots: the chains this person actually holds on,
-        // in the order the core sorted them. A filter offering chains with
-        // nothing on them is a filter that does nothing.
-        filter: Some((
-            // Narrowed: this chain's own dot and its name, so the panel says
-            // WHICH list this is. The web puts the same fact in the same pill.
-            match filter {
-                Some(chain_id) => vec![tint(chain_id)],
-                None => chain_dots(&view.tokens),
-            },
-            match filter {
-                Some(chain_id) => {
-                    SharedString::from(crate::executor::custom_tokens::network_name(chain_id))
-                }
-                None => s.pill_all.clone(),
-            },
-            s.assets_add.clone(),
-        )),
+        // No filter row (078 T067): the web's Assets screen has none, and
+        // this one's pill and "Add" answered no click. Which chain the list
+        // is narrowed to is the sidebar's selected network.
+        filter: None,
         search_placeholder: s.assets_search.clone(),
         no_match: s.no_matching_tokens.clone(),
         rows: rows.clone(),
@@ -206,20 +192,6 @@ pub fn assets(
             hint_body: s.not_showing_body.clone(),
         }),
     }
-}
-
-/// Up to three chain dots for the filter pill, deduped in holdings order.
-fn chain_dots(tokens: &[BalanceToken]) -> Vec<Hsla> {
-    let mut seen = Vec::new();
-    for token in tokens {
-        if !seen.contains(&token.chain_id) {
-            seen.push(token.chain_id);
-        }
-        if seen.len() == 3 {
-            break;
-        }
-    }
-    seen.into_iter().map(tint).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -4266,32 +4238,27 @@ mod tests {
         );
     }
 
-    /// The filter dots are the chains this person actually holds on.
+    /// No filter row over the assets (078 T067): the web's Assets screen has
+    /// none, and the desktop's pill and "Add" answered no click. Narrowed or
+    /// not, the sidebar's selected network says which list this is.
     #[test]
-    fn the_chain_filter_offers_only_chains_with_something_on_them() {
+    fn the_assets_panel_draws_no_filter_row() {
         let mut view = view();
         view.tokens = vec![
             token(100, "xDAI", "1", Some(1.0)),
-            token(100, "USDC", "1", Some(1.0)),
             token(1, "ETH", "1", Some(2000.0)),
-            token(56, "BNB", "1", Some(700.0)),
-            token(137, "POL", "1", Some(0.4)),
         ];
-        let panel = assets(
-            &view,
-            &strings(),
-            &wallet_strings(),
-            "en-US",
-            None,
-            crate::wallet::live::Money::usd(),
-        );
-        let dots = panel
-            .filter
-            .as_ref()
-            .map(|(dots, _, _)| dots.len())
-            .unwrap_or_default();
-        // Deduped by chain (Gnosis appears twice) and capped at three.
-        assert_eq!(dots, 3);
+        for narrowed in [None, Some(100)] {
+            let panel = assets(
+                &view,
+                &strings(),
+                &wallet_strings(),
+                "en-US",
+                narrowed,
+                crate::wallet::live::Money::usd(),
+            );
+            assert!(panel.filter.is_none(), "narrowed = {narrowed:?}");
+        }
     }
 
     /// Every network shows the SAME address — that is what a Safe is.
