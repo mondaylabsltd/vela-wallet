@@ -430,8 +430,11 @@ for (let i = 1; i < PATHS.length; i++) {
 //   removeFromViewer}` — a screenshot tile opens a preview (founder: "上传的截图要
 //   能点击放大预览"): the tile's a11y label, the viewer's close and its remove
 //   button. Same branch: 1740 + 3 = 1743.
-if (PATHS.length !== 1743) fail(`expected 1743 paths (1654 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1654) fail(`expected 1654 leaf paths, got ${leafSet.size}`);
+// 1744 (078, 2026-09-27): + `settings.sections.community` — the settings
+//   group holding the official X / Telegram / Discord links (founder). The
+//   rows are brand names and handles, never translated. 1743 + 1 = 1744.
+if (PATHS.length !== 1744) fail(`expected 1744 paths (1655 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1655) fail(`expected 1655 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
