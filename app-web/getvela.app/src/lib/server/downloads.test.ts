@@ -23,25 +23,52 @@ const asset = (name: string, size = EXE_BYTES.length) => ({
 	browser_download_url: `https://github.test/dl/${name}`
 });
 
-/** A GitHub that can be switched off, and counts what it was asked. */
-function github(options: { assets?: ReturnType<typeof asset>[]; sums?: string } = {}) {
-	const state = { down: false, calls: [] as string[] };
+/** A GitHub that can be switched off, rate-limited, or asked conditionally. */
+function github(
+	options: {
+		assets?: ReturnType<typeof asset>[];
+		sums?: string;
+		etag?: string;
+		apiStatus?: number;
+	} = {}
+) {
+	const state = { down: false, notModified: false, conditional: false, calls: [] as string[] };
 	const assets = options.assets ?? [asset(EXE), asset('SHA256SUMS', 90)];
 	const sums = options.sums ?? `${EXE_SHA}  ./${EXE}\n`;
-	const fetcher: typeof fetch = async (input) => {
+	const fetcher: typeof fetch = async (input, init) => {
 		const url = String(input);
 		state.calls.push(url);
 		if (state.down) throw new Error('connect timeout');
+		const headers = new Headers(init?.headers);
 		if (url.includes('api.github.com')) {
-			return Response.json([
-				{ tag_name: 'v0.9.4', draft: true, assets: [] },
-				{ tag_name: 'desktop-v0.1.1', draft: false, assets: [] },
-				{ tag_name: 'v0.9.3', draft: false, assets },
-				{ tag_name: 'v0.9.2', draft: false, assets: [] }
-			]);
+			if (headers.has('If-None-Match')) state.conditional = true;
+			if (state.notModified) return new Response(null, { status: 304 });
+			if (options.apiStatus) return new Response('rate limited', { status: options.apiStatus });
+			return Response.json(
+				[
+					{ tag_name: 'v0.9.4', draft: true, assets: [] },
+					{ tag_name: 'desktop-v0.1.1', draft: false, assets: [] },
+					{ tag_name: 'v0.9.3', draft: false, assets },
+					{ tag_name: 'v0.9.2', draft: false, assets: [] }
+				],
+				options.etag ? { headers: { ETag: options.etag } } : undefined
+			);
+		}
+		// The no-API route: `releases/latest` redirects to the tag's page, and
+		// every file is reachable at a name-shaped URL under that tag.
+		if (url.endsWith('/releases/latest')) {
+			return Response.redirect(
+				`https://github.com/${'mondaylabsltd/vela-wallet'}/releases/tag/v0.9.3`,
+				302
+			);
 		}
 		if (url.endsWith('/SHA256SUMS')) return new Response(sums);
-		if (url.endsWith(`/${EXE}`)) return new Response(EXE_BYTES as BodyInit);
+		if (url.endsWith('/SHA256SUMS-macos')) return new Response('not found', { status: 404 });
+		if (url.endsWith(`/${EXE}`)) {
+			return init?.method === 'HEAD'
+				? new Response(null, { headers: { 'Content-Length': String(EXE_BYTES.length) } })
+				: new Response(EXE_BYTES as BodyInit);
+		}
 		return new Response('not found', { status: 404 });
 	};
 	return { state, fetcher };
@@ -152,6 +179,49 @@ describe('loadRelease', () => {
 		const gh = github();
 		gh.state.down = true;
 		await expect(loadRelease(depsWith({ fetch: gh.fetcher }))).rejects.toThrow();
+	});
+
+	it('asks conditionally once it has an ETag, and a 304 keeps the list without re-reading it', async () => {
+		const gh = github({ etag: 'W/"abc"' });
+		const deps = depsWith({ fetch: gh.fetcher });
+		const first = await loadRelease(deps);
+		expect(first.etag).toBe('W/"abc"');
+
+		gh.state.notModified = true;
+		deps.clock.t += FRESH_MS + 1;
+		const second = await loadRelease(deps);
+		expect(second.files.map((f) => f.name)).toEqual([EXE]);
+		expect(second.fetchedAt).toBe(deps.clock.t);
+		expect(gh.state.conditional).toBe(true);
+	});
+
+	it('rate-limited API: the release is read through plain downloads instead (rule 6)', async () => {
+		const gh = github({ apiStatus: 403 });
+		const info = await loadRelease(depsWith({ fetch: gh.fetcher }));
+		expect(info.tag).toBe('v0.9.3');
+		expect(info.files.map((f) => f.name)).toEqual([EXE]);
+		expect(info.files[0].size).toBe(EXE_BYTES.length);
+		expect(info.checksums[EXE]).toBe(EXE_SHA);
+	});
+
+	it('both routes gone: the stale list is served, and says so out loud', async () => {
+		const gh = github();
+		const deps = depsWith({ fetch: gh.fetcher });
+		await loadRelease(deps);
+
+		const said: string[] = [];
+		const wasError = console.error;
+		console.error = (...args: unknown[]) => said.push(args.join(' '));
+		try {
+			gh.state.down = true;
+			deps.clock.t += FRESH_MS + 30 * 60_000;
+			const info = await loadRelease(deps);
+			expect(info.tag).toBe('v0.9.3');
+		} finally {
+			console.error = wasError;
+		}
+		expect(said.join(' ')).toMatch(/could not refresh/);
+		expect(said.join(' ')).toMatch(/35 minutes ago/);
 	});
 
 	it('an unreadable checksum file costs the mirror, not the list', async () => {

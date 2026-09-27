@@ -385,8 +385,10 @@ fn win_failure(error: vela_passkey_win::WinError) -> PasskeyFailure {
 ///
 /// `Hybrid` never reaches here — `register` and `assert` hand it to the app's
 /// own caBLE client before the Windows half is consulted. Neither does
-/// `TrustedSigner`: `executor` sends it to the signer page before this module
-/// is called at all. Both map to the security key only so the match is total.
+/// `TrustedSigner` (spec 075): `executor::perform` answers it before any
+/// ceremony starts. Both map to the security key only so the match is total,
+/// which is also what the non-Windows path does with a method it did not
+/// route away — there, anything left over runs the one USB ceremony.
 #[cfg(windows)]
 fn win_attachment(method: KeyMethod) -> vela_passkey_win::Attachment {
     match method {
