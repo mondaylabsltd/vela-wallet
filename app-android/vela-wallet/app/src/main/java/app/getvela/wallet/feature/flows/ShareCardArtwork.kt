@@ -1,5 +1,9 @@
 package app.getvela.wallet.feature.flows
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,19 +26,25 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.content.res.ResourcesCompat
+import app.getvela.wallet.R
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
@@ -94,7 +104,11 @@ fun ShareCardArtwork(model: ShareCardModel, modifier: Modifier = Modifier, logo:
     val ink = VelaTheme.colors.fixed.shadowInk
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 24)
-    val layout = remember(model, density, measurer, ink) { ShareCardLayout.of(model, CardText(measurer, density), ink) }
+    val context = LocalContext.current
+    val emboldenCjk = remember(context) { !CjkBold.honoured(context) }
+    val layout = remember(model, density, measurer, ink, emboldenCjk) {
+        ShareCardLayout.of(model, CardText(measurer, density, emboldenCjk), ink)
+    }
     // The SAME encoder every Vela platform uses, over the bridge, at level H.
     // A blank code is the gallery's: its placeholder pattern, as `QrCard` draws.
     val matrix = remember(model.code) {
@@ -196,7 +210,12 @@ private object AppIconArt {
 }
 
 /** Text in the card's faces, measured in dp (the card's units) at the capture's density. */
-private class CardText(private val measurer: TextMeasurer, private val density: Density) {
+private class CardText(
+    private val measurer: TextMeasurer,
+    private val density: Density,
+    /** [CjkBold]: this phone's fallback face ignores a bold request, so the card supplies the weight. */
+    private val emboldenCjk: Boolean,
+) {
     fun layout(text: String, size: Float, weight: FontWeight, color: Color, mono: Boolean = false): TextLayoutResult =
         measurer.measure(
             text = AnnotatedString(text),
@@ -216,10 +235,80 @@ private class CardText(private val measurer: TextMeasurer, private val density: 
 
     fun width(text: String, size: Float, weight: FontWeight, mono: Boolean = false): Float =
         if (text.isEmpty()) 0f else layout(text, size, weight, Color.Unspecified, mono).getLineRight(0) / density.density
+
+    /**
+     * The CJK glyphs of a bold [text] once more, as outlines only — drawn
+     * over the fill they are Android's own fake bold, for those glyphs alone,
+     * and only on a phone whose fallback face would not draw them bold
+     * ([CjkBold]). Fake-bolding the whole line would thicken the Latin, which
+     * Jakarta already draws bold. `null` when there is nothing to embolden.
+     * Same text, same style, so the glyphs land exactly on the fill's.
+     */
+    fun cjkOutline(text: String, size: Float, weight: FontWeight, color: Color): TextLayoutResult? {
+        if (!emboldenCjk || weight < FontWeight.SemiBold || text.none { isCjk(it) }) return null
+        val annotated = buildAnnotatedString {
+            text.forEach { ch -> withStyle(SpanStyle(color = if (isCjk(ch)) color else Color.Transparent)) { append(ch) } }
+        }
+        return measurer.measure(
+            text = annotated,
+            style = TextStyle(
+                fontFamily = VelaFontFamily,
+                fontWeight = weight,
+                fontSize = with(density) { size.dp.toSp() },
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+                // Skia's fake-bold width at display sizes: a 32nd of the size.
+                drawStyle = Stroke(width = size * density.density / 32f),
+            ),
+            softWrap = false,
+            maxLines = 1,
+            density = density,
+        )
+    }
+
+    /** CJK and beyond (the web's estimator's line); both halves of a surrogate pair land on the same side. */
+    private fun isCjk(ch: Char): Boolean = ch.code >= 0x2E80
 }
 
-/** One line of text, placed: its left edge and its baseline, in dp. */
-private class Placed(val text: TextLayoutResult, val x: Float, val baseline: Float)
+/**
+ * Does this phone draw CJK bold when a bold line asks for it?
+ *
+ * Jakarta has no CJK, so 扫码向我转账 and a Chinese name fall back to the
+ * system face, and whether that face answers a bold request is the phone's
+ * business. Measured 2026-09-27 as the ink of 国大表 in Jakarta Bold over
+ * Jakarta Regular: a Pixel (API 34) 1.40, the Xiaomi (MIUI 13) 1.12 — where
+ * asking the system for weight 700 changed nothing and only fake-bold did,
+ * while Latin measured 1.60 on both. Below [THRESHOLD] the card emboldens its
+ * CJK itself. Measured once per process, with the faces the card resolves to.
+ */
+internal object CjkBold {
+    private const val THRESHOLD = 1.25f
+
+    @Volatile private var measured: Boolean? = null
+
+    fun honoured(context: Context): Boolean = measured ?: measure(context).also { measured = it }
+
+    private fun measure(context: Context): Boolean = runCatching {
+        val regular = ResourcesCompat.getFont(context, R.font.plus_jakarta_sans_regular) ?: return true
+        val bold = ResourcesCompat.getFont(context, R.font.plus_jakarta_sans_bold) ?: return true
+        ink(bold) >= ink(regular) * THRESHOLD
+    }.getOrDefault(true)
+
+    /** Pixels more than half covered by 国大表 set at 120 px in [face]. */
+    private fun ink(face: Typeface): Int {
+        val bitmap = Bitmap.createBitmap(420, 160, Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(bitmap).drawText(
+            "国大表", 10f, 120f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = face; textSize = 120f },
+        )
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        bitmap.recycle()
+        return pixels.count { (it ushr 24) > 128 }
+    }
+}
+
+/** One line of text, placed: its left edge and its baseline, in dp; [outline] emboldens its CJK. */
+private class Placed(val text: TextLayoutResult, val x: Float, val baseline: Float, val outline: TextLayoutResult? = null)
 
 /**
  * Every position on the card, computed once — `composeShareSvg`'s arithmetic,
@@ -253,7 +342,12 @@ private class ShareCardLayout(
             val cx = C.WIDTH / 2
             fun centred(line: String, size: Float, weight: FontWeight, color: Color, centre: Float): Placed {
                 val laid = text.layout(line, size, weight, color)
-                return Placed(laid, cx - text.width(line, size, weight) / 2, baseline(centre, size))
+                return Placed(
+                    laid,
+                    cx - text.width(line, size, weight) / 2,
+                    baseline(centre, size),
+                    text.cjkOutline(line, size, weight, color),
+                )
             }
 
             // The orange: headline, then the network it may be paid on.
@@ -293,6 +387,7 @@ private class ShareCardLayout(
                 text.layout(name, C.NAME_SIZE, bold, ink),
                 textX,
                 baseline(idTop + C.NAME_LINE / 2, C.NAME_SIZE),
+                text.cjkOutline(name, C.NAME_SIZE, bold, ink),
             )
             val addressTop = idTop + C.NAME_LINE + C.NAME_ADDRESS_GAP
             val address = lines.mapIndexed { i, line ->
@@ -394,7 +489,9 @@ internal fun truncate(text: String, width: Float, fits: (String) -> Float): Stri
 
 /** Draws [placed] with its baseline where the layout put it. */
 private fun DrawScope.drawPlaced(placed: Placed) {
-    drawText(placed.text, topLeft = Offset(placed.x.dp.toPx(), placed.baseline.dp.toPx() - placed.text.firstBaseline))
+    val topLeft = Offset(placed.x.dp.toPx(), placed.baseline.dp.toPx() - placed.text.firstBaseline)
+    drawText(placed.text, topLeft = topLeft)
+    placed.outline?.let { drawText(it, topLeft = topLeft) }
 }
 
 private fun DrawScope.drawCard(
