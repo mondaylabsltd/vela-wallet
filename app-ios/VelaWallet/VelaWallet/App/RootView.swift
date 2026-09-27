@@ -976,23 +976,14 @@ struct RootView: View {
                     if value != batchRate { batchRate = value }
                 }
                 .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
-                // Spec 073: cleaned by the core's rule before the machine
-                // sees it; a cleaned figure is written back and sent by the
-                // change that write raises, a refused paste puts back what the
-                // field had.
-                .onChange(of: amountDraft) { old, value in
-                    guard let clean = AmountText.clean(value, previous: old) else {
-                        amountDraft = old
-                        return
-                    }
-                    if clean != value {
-                        amountDraft = clean
-                        return
-                    }
-                    send.setAmount(clean)
-                }
-                .onChange(of: send.view?.amount) { _, value in
-                    if let value, value != amountDraft { amountDraft = value }
+                // The machine's figure, when it changed for its own reasons —
+                // Max, the ⇄ swap, a cleared form. Its LIVE value, not the one
+                // this change was raised with: that one can be older than the
+                // field (every edit reaches the machine in the edit, see
+                // `amountBinding`), and writing it back overwrote keys typed
+                // since. A figure the field just sent is already in the field.
+                .onChange(of: send.view?.amount) { _, _ in
+                    if let live = send.view?.amount, live != amountDraft { amountDraft = live }
                 }
                 // The bridge between the two money machines. The core keeps
                 // them apart on purpose — the signing sheet uses the fee
@@ -2359,6 +2350,26 @@ struct RootView: View {
         [.sd1, .sd1b, .sd2, .sd2b, .sd2c, .sd2d, .sd2e, .sd2f, .sd3, .sd3b, .sd3c, .sd4a, .sd4b, .sd4c]
     }
 
+    /// The send amount as its field edits it.
+    ///
+    /// Each edit arrives already cleaned by the core's rule (spec 073,
+    /// `AmountTextField`) and goes to the machine in the same call, so the
+    /// machine's figure is never behind the field's. It went through an
+    /// `onChange` before, which runs a render later: fast keys were lost to a
+    /// write-back of older text (the decimal-comma device test, one run in
+    /// three). Only the person's edits come through here — a figure the
+    /// machine wrote itself is shown, not sent back as if typed, which would
+    /// end the Max it came from.
+    private var amountBinding: Binding<String> {
+        Binding(
+            get: { amountDraft },
+            set: { value in
+                amountDraft = value
+                send.setAmount(value)
+            }
+        )
+    }
+
     /// Open the flow for the signed-in account. Idempotent.
     ///
     /// The account **id** is the founding credential's, and the session view
@@ -2528,7 +2539,7 @@ struct RootView: View {
                             saveOutcome = nil
                         }
                     },
-                    sendAmount: sendStates.contains(state) ? $amountDraft : nil,
+                    sendAmount: sendStates.contains(state) ? amountBinding : nil,
                     sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
                     sendRow: splitRows(for: state),
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },

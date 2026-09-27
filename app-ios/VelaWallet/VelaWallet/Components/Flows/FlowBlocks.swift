@@ -270,14 +270,16 @@ struct AmountInputView: View {
                     .hidden()
                     .accessibilityHidden(true)
                 // `typeRole` is a `Text` extension (the sanctioned styling
-                // seam); a `TextField` takes the same role's font directly.
-                TextField(Self.placeholder, text: text)
-                    .font(role.font)
-                    .foregroundStyle(theme.fgBase)
-                    .multilineTextAlignment(.leading)
-                    .keyboardType(.decimalPad)
-                    .lineLimit(1)
-                    .accessibilityIdentifier("send.amount")
+                // seam); the field takes the same role's font directly. Each
+                // edit is cleaned inside the edit (`AmountTextField` says why
+                // a `TextField` cleaned in `onChange` dropped keys).
+                AmountTextField(
+                    text: text,
+                    placeholder: Self.placeholder,
+                    font: role.uiFont,
+                    color: theme.fgBase,
+                    identifier: "send.amount"
+                )
             }
         } else {
             Text(verbatim: amount.value)

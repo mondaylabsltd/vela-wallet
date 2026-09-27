@@ -83,23 +83,18 @@ private struct CustomCapField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
             HStack(spacing: Tokens.Space.s8) {
-                TextField(input.placeholder, text: $text)
-                    .keyboardType(.decimalPad)
-                    .font(Typography.title.scaled(textScale).font)
-                    .foregroundStyle(theme.fgBase)
-                    // Spec 073: the cap's parser drops every comma, so a raw
-                    // "4,5" allowed 45 — cleaned by the core's rule first.
-                    .onChange(of: text) { old, value in
-                        guard let clean = AmountText.clean(value, previous: old) else {
-                            text = old
-                            return
-                        }
-                        if clean != value {
-                            text = clean
-                            return
-                        }
-                        onChange(clean)
-                    }
+                // Spec 073: the cap's parser drops every comma, so a raw
+                // "4,5" allowed 45 — the field cleans each edit by the core's
+                // rule, and every edit goes on the moment it is made.
+                AmountTextField(
+                    text: Binding(get: { text }, set: { value in
+                        text = value
+                        onChange(value)
+                    }),
+                    placeholder: input.placeholder,
+                    font: Typography.title.scaled(textScale).uiFont,
+                    color: theme.fgBase
+                )
                 Text(verbatim: input.symbol)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)

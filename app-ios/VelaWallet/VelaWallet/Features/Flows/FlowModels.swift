@@ -402,7 +402,13 @@ struct SendTokenCardModel {
 
 /// SD2b's split row: who, how much, and a way to drop them.
 struct RecipientCardModel: Identifiable {
-    let id = UUID()
+    /// The core's row id; the ordinal in a fixture, which has none. It was a
+    /// fresh `UUID()` per init, and the form is rebuilt on every render — a
+    /// keystroke's, a fee quote's — so every render replaced every row, and
+    /// the amount field being typed into went with it: the first key stayed,
+    /// the focus and the rest did not ("0,25" typed, "0" and 金额无效 left;
+    /// found 2026-09-28 beside the send amount's lost keys).
+    var id: String { rowId.isEmpty ? ordinal : rowId }
     let ordinal: String
     let name: String
     let identiconSeed: String

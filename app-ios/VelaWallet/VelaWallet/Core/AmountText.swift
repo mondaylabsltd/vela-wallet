@@ -16,16 +16,23 @@ import VelaCore
 
 enum AmountText {
     /// `next` as the core reads it, `previous` being the field's text before
-    /// the edit — how one keystroke is told from a paste (a SwiftUI field
-    /// cannot say which it was, so anything but one added character reads as
-    /// a paste). `nil`: a paste with no reading as one figure ("1.5e-7"); the
-    /// field keeps `previous` and nothing is sent.
-    static func clean(_ next: String, previous: String) -> String? {
+    /// the edit. `pasted` says how the edit arrived when the caller knows
+    /// (`AmountTextField` does: it sees each edit); `nil` leaves the core to
+    /// tell one keystroke from a paste by length — anything but one added
+    /// character reads as a paste. `nil` back: a paste with no reading as one
+    /// figure ("1.5e-7"); the field keeps `previous` and nothing is sent.
+    static func clean(_ next: String, previous: String, pasted: Bool? = nil) -> String? {
         amountTextClean(
             raw: next,
             number: Formats.resolve(Formats.current.number).rawValue,
             previous: previous,
-            pasted: nil
+            pasted: pasted
         )
+    }
+
+    /// Where the caret belongs in `clean`, having been at `caret` in `raw`
+    /// (UTF-16 units).
+    static func caret(raw: String, clean: String, caret: Int) -> Int {
+        Int(amountTextCaret(raw: raw, clean: clean, caret: UInt32(clamping: max(0, caret))))
     }
 }

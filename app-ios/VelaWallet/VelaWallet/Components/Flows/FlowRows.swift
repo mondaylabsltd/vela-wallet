@@ -281,12 +281,14 @@ struct RecipientCardView: View {
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 if let amount {
-                    TextField("0", text: amount)
-                        .font(Typography.rowValue.scaled(textScale).font)
-                        .foregroundStyle(theme.fgBase)
-                        .multilineTextAlignment(.trailing)
-                        .keyboardType(.decimalPad)
-                        .frame(maxWidth: WalletGeometry.splitAmountWidth)
+                    AmountTextField(
+                        text: amount,
+                        placeholder: "0",
+                        font: Typography.rowValue.scaled(textScale).uiFont,
+                        color: theme.fgBase,
+                        alignment: .right
+                    )
+                    .frame(maxWidth: WalletGeometry.splitAmountWidth)
                 } else {
                     Text(verbatim: recipient.amount)
                         .typeRole(Typography.rowValue.scaled(textScale))
