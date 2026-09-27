@@ -346,9 +346,12 @@ pub const WALLET_TOAST_TOP: f32 = 16.;
 pub const CONTACTS_RAIL_W: f32 = 216.;
 
 /// Spec 023 desktop SPEC: the settings second-level nav column, measured 216
-/// in DST1–DST8. Same width as the contacts group rail and for the same
-/// reason — it is the same column, doing the same job, one section over.
-pub const SETTINGS_NAV_W: f32 = 216.;
+/// in DST1–DST8 — the contacts group rail's width. 240, the sidebar's, since
+/// the Community rows (2026-09-27): a brand mark, the handle, and a trailing
+/// ↗ in its own column left "discord.gg/23gWrtaYSa" 108 of the 128 it
+/// takes at the standard size, and it broke in two. It has no space to wrap
+/// at, and the type is not made smaller to fit (`community_handle_room`).
+pub const SETTINGS_NAV_W: f32 = 240.;
 
 /// The same column, at the person's text size.
 ///
@@ -360,8 +363,8 @@ pub const SETTINGS_NAV_W: f32 = 216.;
 ///
 /// It only ever GROWS. Multiplying it down at the smaller stops bought
 /// nothing — the panel beside it has room to spare either way — and cost two
-/// German labels their endings at `compact`, where a 216px column would have
-/// held them whole.
+/// German labels their endings at `compact`, where the full column would
+/// have held them whole.
 #[must_use]
 pub fn settings_nav_w() -> f32 {
     let factor = crate::executor::appearance_prefs::text_factor();

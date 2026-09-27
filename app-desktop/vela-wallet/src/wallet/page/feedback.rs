@@ -174,6 +174,13 @@ pub(super) struct FeedbackDraft {
     /// The add target / add tile, where the keyboard goes when the tile it
     /// was on is removed from the viewer.
     add_focus: gpui::FocusHandle,
+    /// The keyboard put focus on the tile or add target that has it — Tab,
+    /// or Esc out of the viewer — so its ring may show. gpui's
+    /// `focus_visible` asks only whether the LAST input was a key: a click
+    /// on the add target, then ⌘V for one more, drew the ring on the stop
+    /// the pointer had chosen. A press on the form, or opening the viewer,
+    /// clears it.
+    keyboard_focus: bool,
     /// `VELA_FEEDBACK_STATE=autosend[-away]`: send for real on the first
     /// frame — and, `true`, leave for the Wallet at once.
     autosend: Option<bool>,
@@ -194,6 +201,7 @@ impl FeedbackDraft {
             steps_focus: cx.focus_handle().tab_stop(true),
             tile_focus: std::collections::HashMap::new(),
             add_focus: cx.focus_handle().tab_stop(true),
+            keyboard_focus: false,
             autosend: None,
         }
     }
@@ -283,8 +291,9 @@ fn even_width(window: &Window, text: &SharedString, size: Pixels, room: Pixels) 
     crate::wallet::components::even_wrap_width(window, text, size, room)
 }
 
-/// The keyboard's ring (`focus_visible`: only when the keyboard moved
-/// focus, never on a click): solid, 2, the info colour.
+/// The keyboard's ring (`focus_visible`, and only where the keyboard put
+/// focus — `FeedbackDraft::keyboard_focus` — never after a click): solid,
+/// 2, the info colour.
 fn focus_ring(mut style: gpui::StyleRefinement, color: gpui::Hsla) -> gpui::StyleRefinement {
     style.border_style = Some(gpui::BorderStyle::Solid);
     style.border_2().border_color(color)
@@ -589,6 +598,9 @@ impl WalletPage {
             return;
         }
         self.feedback.viewer = Some(id);
+        // Its ✕ and Remove are clicks: focus they hand back is the pointer's.
+        // Esc says otherwise as it closes.
+        self.feedback.keyboard_focus = false;
         self.focus_handle.focus(window, cx);
         cx.notify();
     }
@@ -669,6 +681,7 @@ impl WalletPage {
             let plain = !ks.modifiers.platform && !ks.modifiers.control && !ks.modifiers.alt;
             match ks.key.as_str() {
                 "escape" => {
+                    self.feedback.keyboard_focus = true;
                     self.feedback_close_viewer(window, cx);
                     return true;
                 }
@@ -924,11 +937,19 @@ impl WalletPage {
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
                 this.feedback_add_paths(paths.paths().to_vec(), cx);
             }))
+            // A press anywhere on the form: whatever it focuses, the pointer
+            // chose it, and no key pressed after it draws the ring there.
+            .capture_any_mouse_down(cx.listener(|this, _, _, cx| {
+                if this.feedback.keyboard_focus {
+                    this.feedback.keyboard_focus = false;
+                    cx.notify();
+                }
+            }))
             // Tab walks the form's stops: the two wells, each tile, the add
             // target (C1). Nothing else in this shell binds Tab, so it is
             // the form's to take. (⇧Tab never arrives on macOS at this gpui:
             // a key with no character goes to the input context first.)
-            .on_key_down(cx.listener(|_, event: &KeyDownEvent, window, cx| {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
                 if ks.key != "tab"
                     || ks.modifiers.platform
@@ -942,7 +963,9 @@ impl WalletPage {
                 } else {
                     window.focus_next(cx);
                 }
+                this.feedback.keyboard_focus = true;
                 cx.stop_propagation();
+                cx.notify();
             }));
 
         let what_placeholder = s.bug_what_placeholder.clone();
@@ -1214,6 +1237,7 @@ impl WalletPage {
             let raised = theme.bg_raised;
             let add_focus = self.feedback.add_focus.clone();
             let ring_color = theme.info_base;
+            let keyboard = self.feedback.keyboard_focus;
             section = section.child(
                 div()
                     .id("feedback-add-screenshots")
@@ -1226,8 +1250,9 @@ impl WalletPage {
                     .border_dashed()
                     .border_color(theme.border_strong)
                     .when(!busy, |el| {
-                        el.track_focus(&add_focus)
-                            .focus_visible(move |style| focus_ring(style, ring_color))
+                        el.track_focus(&add_focus).when(keyboard, |el| {
+                            el.focus_visible(move |style| focus_ring(style, ring_color))
+                        })
                     })
                     .bg(theme.bg_sunken)
                     .flex()
@@ -1328,6 +1353,7 @@ impl WalletPage {
         let disc = badge_disc(theme);
         let white = theme.fg_inverse;
         let ring_color = theme.info_base;
+        let keyboard = self.feedback.keyboard_focus;
         let shots: Vec<(u64, Option<Arc<gpui::RenderImage>>)> = self
             .feedback
             .report
@@ -1418,7 +1444,9 @@ impl WalletPage {
                     .when(openable, |el| {
                         el.track_focus(&handle)
                             .rounded(px(14.))
-                            .focus_visible(move |style| focus_ring(style, ring_color))
+                            .when(keyboard, |el| {
+                                el.focus_visible(move |style| focus_ring(style, ring_color))
+                            })
                     })
                     // The tile is a button (C1): its picture opens the
                     // viewer at it. A tile still being prepared is not
@@ -1460,8 +1488,9 @@ impl WalletPage {
                     .border_dashed()
                     .border_color(theme.border_strong)
                     .when(!busy, |el| {
-                        el.track_focus(&add_focus)
-                            .focus_visible(move |style| focus_ring(style, ring_color))
+                        el.track_focus(&add_focus).when(keyboard, |el| {
+                            el.focus_visible(move |style| focus_ring(style, ring_color))
+                        })
                     })
                     .bg(theme.bg_sunken)
                     .flex()

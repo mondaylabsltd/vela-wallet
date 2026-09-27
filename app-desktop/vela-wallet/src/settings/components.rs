@@ -124,7 +124,7 @@ pub fn callout(
 
 // -- SettingsNavList ----------------------------------------------------------
 
-/// One row of the 216px second-level nav (DST1–DST8). The selected row takes
+/// One row of the second-level nav (DST1–DST8). The selected row takes
 /// `bg_raised` PLUS a hairline: on dark, raised is barely a step off sunken and
 /// the fill alone does not read as a selection (desktop SPEC 暗色注意).
 /// `wrap`: the label may run to a second line — the page passes `false`
@@ -179,6 +179,31 @@ pub fn settings_nav_row(
     }
 }
 
+/// A community row's inset at each end, and the gap after its mark and
+/// before its arrow — the nav row's 12, so the names line up with the labels
+/// above them.
+const COMMUNITY_PAD_X: f32 = 12.;
+const COMMUNITY_GAP: f32 = 12.;
+
+/// The trailing arrow: the size of the words beside it.
+fn community_arrow(factor: f32) -> f32 {
+    (12. * factor).round()
+}
+
+/// The width a community row leaves its handle, in a nav column `nav_w`
+/// wide at text factor `factor`: the column's padding, the row's, the mark,
+/// the arrow and the gaps between them. The page measures each handle
+/// against it and breaks one after its slash only when it does not fit.
+pub fn community_handle_room(nav_w: f32, factor: f32) -> f32 {
+    nav_w
+        - 2. * theme::SIDEBAR_PAD
+        - 2. * COMMUNITY_PAD_X
+        - GLYPH_SM
+        - COMMUNITY_GAP
+        - COMMUNITY_GAP
+        - community_arrow(factor)
+}
+
 /// One official community account in the nav column (Settings → Community):
 /// the brand's mark, its name, the handle under it — never cut, so it wraps
 /// before it truncates — and an arrow that says the row leaves the app.
@@ -194,12 +219,12 @@ pub fn community_row(
     div()
         .id(id)
         .min_h(px(SETTINGS_NAV_ROW_H))
-        .px(px(12.))
+        .px(px(COMMUNITY_PAD_X))
         .py(px(6.))
         .rounded(px(10.))
         .flex()
         .items_center()
-        .gap(px(12.))
+        .gap(px(COMMUNITY_GAP))
         .cursor_pointer()
         .hover(move |el| el.bg(raised))
         .active(|el| el.opacity(0.7))
@@ -234,7 +259,7 @@ pub fn community_row(
             Icon::ArrowUpRight,
             false,
             theme.fg_muted,
-            (12. * crate::executor::appearance_prefs::text_factor()).round(),
+            community_arrow(crate::executor::appearance_prefs::text_factor()),
         ))
 }
 
@@ -1481,4 +1506,36 @@ pub fn rpc_banner(
                 ),
         )
         .child(row)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::community_handle_room;
+    use crate::settings::fixtures::COMMUNITY_LINKS;
+    use crate::theme::SETTINGS_NAV_W;
+
+    /// The Discord invite reads on one line at the standard text size, in
+    /// every language: it is the same Latin string in the same bundled face
+    /// whatever the locale. Split after its slash, it read as two handles.
+    #[test]
+    fn the_discord_invite_fits_one_line_at_the_standard_size() {
+        // "discord.gg/23gWrtaYSa" at `text_label`'s 11px in the bundled
+        // PlusJakartaSans_400Regular.ttf: 127.58 shaped with its kerning
+        // (hb-shape), 128.68 by bare advances. The larger, so a shaper that
+        // skips the kerning still fits it.
+        const INVITE_W: f32 = 128.68;
+        let discord = COMMUNITY_LINKS
+            .iter()
+            .find(|link| link.name == "Discord")
+            .expect("the Discord row");
+        assert_eq!(
+            discord.handle, "discord.gg/23gWrtaYSa",
+            "a new invite is a new width: measure it again"
+        );
+        let room = community_handle_room(SETTINGS_NAV_W, 1.0);
+        assert!(
+            room >= INVITE_W,
+            "{room} of the {INVITE_W} the invite takes"
+        );
+    }
 }

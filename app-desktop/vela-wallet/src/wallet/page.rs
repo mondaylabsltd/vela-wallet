@@ -7940,11 +7940,11 @@ impl WalletPage {
 
     // -- spec 023: the settings section --------------------------------------
 
-    /// Column 2 of the settings section: the 216px second-level nav.
+    /// Column 2 of the settings section: the second-level nav
+    /// (`theme::settings_nav_w`).
     ///
     /// The same column the contacts group rail occupies, doing the same job one
-    /// section over — which is why it reuses the width rather than inventing a
-    /// second one.
+    /// section over — 24 wider, for the Discord invite (`SETTINGS_NAV_W`).
     fn settings_nav(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let title = self.settings.title.clone();
         let current = self.settings_page;
@@ -7978,10 +7978,11 @@ impl WalletPage {
                     theme,
                     self.settings.nav_community.clone(),
                 ));
-                // The handle's room: a label's, less the trailing arrow and
-                // its gap (`community_row`).
-                let factor = crate::executor::appearance_prefs::text_factor();
-                let handle_room = room - px((12. * factor).round() + 12.);
+                // The handle's room, from the row's own geometry.
+                let handle_room = px(crate::settings::components::community_handle_room(
+                    theme::settings_nav_w(),
+                    crate::executor::appearance_prefs::text_factor(),
+                ));
                 for (n, link) in settings_fixtures::COMMUNITY_LINKS.iter().enumerate() {
                     let url = link.url;
                     let fits = crate::wallet::components::text_width(
