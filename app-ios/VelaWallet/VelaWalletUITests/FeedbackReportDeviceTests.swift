@@ -194,6 +194,20 @@ final class FeedbackReportDeviceTests: XCTestCase {
         }
     }
 
+    /// The three marks, light then dark, English — looked at, never tapped.
+    func testBCCommunityMarks() {
+        for theme in ["light", "dark"] {
+            let app = launchApp(theme: theme)
+            openSettings(app)
+            scrollSettings(to: "Discord", in: app)
+            for title in ["X (Twitter)", "Telegram", "Discord"] {
+                XCTAssertTrue(app.staticTexts[title].exists, "no \(title) row in \(theme)")
+            }
+            shot(app, "bc-community-\(theme)")
+            app.terminate()
+        }
+    }
+
     /// Close the three Safari tabs the Community rows opened — and only
     /// those: it stops at the first tab that is not x.com / t.me / discord.
     func testBZCloseCommunityTabs() {
