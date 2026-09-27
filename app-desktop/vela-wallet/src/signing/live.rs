@@ -99,7 +99,36 @@ pub struct RequestFacts {
 /// The same rule in every shell.
 #[must_use]
 pub fn capped_approval(clear: &ClearSigningView, guard: &GuardView) -> ClearSigningView {
+    capped(clear.clone(), guard)
+}
+
+/// The core's words in the reader's language. A clear-signing result is
+/// English — a descriptor's intent and labels, the "Unlimited" a threshold
+/// prints — and the core names the ones it recognises (`intent_term`,
+/// `label_term`, `value_term`). Each named word is swapped for this locale's;
+/// anything unnamed stays as the descriptor wrote it. Same rule in every
+/// shell; runs before [`capped_approval`]. The confirm is left alone:
+/// [`confirm_label`] switches on its English intent and falls back to the term.
+#[must_use]
+pub fn localized_terms(clear: &ClearSigningView, s: &SigningStrings) -> ClearSigningView {
+    use vela_core::app::clear_signing::ClearTerm;
+    let word = |term: Option<ClearTerm>, text: &mut String| {
+        if let Some(word) = term.and_then(|term| s.terms.get(&term)) {
+            *text = word.to_string();
+        }
+    };
     let mut shown = clear.clone();
+    if let Some(result) = shown.result.as_mut() {
+        word(result.intent_term, &mut result.intent);
+        for field in &mut result.fields {
+            word(field.label_term, &mut field.label);
+            word(field.value_term, &mut field.value);
+        }
+    }
+    shown
+}
+
+fn capped(mut shown: ClearSigningView, guard: &GuardView) -> ClearSigningView {
     let Some(cap) = cap_text(guard) else {
         return shown;
     };
@@ -1315,15 +1344,18 @@ pub fn confirm_label(clear: &ClearSigningView, s: &SigningStrings) -> SharedStri
         ClearConfirm::Sign => return s.sign_label.clone(),
         ClearConfirm::Confirm => None,
         // The intent travels as a canonical English key; the shell localizes
-        // the ones it has words for and shows the neutral verb for the rest,
-        // which is better than showing an English key to somebody reading
-        // Chinese.
-        ClearConfirm::ConfirmIntent { intent } => match intent.as_str() {
+        // the ones it has words for — its own four, then the core's term —
+        // and shows the neutral verb for the rest, which is better than
+        // showing an English key to somebody reading Chinese.
+        ClearConfirm::ConfirmIntent {
+            intent,
+            intent_term,
+        } => match intent.as_str() {
             "send" => Some(s.confirm_send.clone()),
             "swap" => Some(s.confirm_swap.clone()),
             "deposit" => Some(s.confirm_deposit.clone()),
             "withdraw" => Some(s.confirm_withdraw.clone()),
-            _ => None,
+            _ => intent_term.and_then(|term| s.terms.get(&term).cloned()),
         },
     };
     match action {
@@ -1356,6 +1388,8 @@ mod tests {
             expired: false,
             address: None,
             usd_value: None,
+            label_term: None,
+            value_term: None,
         }
     }
 
@@ -1414,6 +1448,7 @@ mod tests {
             partial: false,
             best_effort: false,
             to_own_token: false,
+            intent_term: None,
         }
     }
 
@@ -1718,6 +1753,55 @@ mod tests {
         assert!(
             !modes.contains(&GuardEditorMode::Grant),
             "a `grant all anyway` chip reached a screen"
+        );
+    }
+
+    /// The core names the words; the sheet says them in the reader's
+    /// language, leaves unnamed ones as written, and a chosen cap still
+    /// replaces the translated "Unlimited".
+    #[test]
+    fn named_words_are_translated_and_unnamed_ones_kept() {
+        use vela_core::app::clear_signing::{ClearConfirm, ClearTerm};
+        let mut s = strings();
+        s.terms.insert(ClearTerm::IntentApprove, "授权".into());
+        s.terms.insert(ClearTerm::LabelAmount, "金额".into());
+        s.terms.insert(ClearTerm::ValueUnlimited, "无限额".into());
+        let mut amount = field("Amount", "Unlimited");
+        amount.label_term = Some(ClearTerm::LabelAmount);
+        amount.value_term = Some(ClearTerm::ValueUnlimited);
+        let mut approve = result(vec![amount, field("Referral code", "abc")]);
+        approve.intent = "Approve".to_owned();
+        approve.intent_term = Some(ClearTerm::IntentApprove);
+        let mut clear = view(approve);
+        clear.confirm = ClearConfirm::ConfirmIntent {
+            intent: "Approve".to_owned(),
+            intent_term: Some(ClearTerm::IntentApprove),
+        };
+
+        let shown = localized_terms(&clear, &s);
+        let result = shown.result.clone().unwrap_or_else(|| unreachable!("kept"));
+        assert_eq!(result.intent, "授权");
+        assert_eq!(
+            (
+                result.fields[0].label.as_str(),
+                result.fields[0].value.as_str()
+            ),
+            ("金额", "无限额")
+        );
+        assert_eq!(
+            (
+                result.fields[1].label.as_str(),
+                result.fields[1].value.as_str()
+            ),
+            ("Referral code", "abc")
+        );
+        assert!(
+            confirm_label(&clear, &s).ends_with("授权"),
+            "the slide says the word too"
+        );
+        assert_eq!(
+            shown.confirm, clear.confirm,
+            "the slide switches on the English intent itself"
         );
     }
 

@@ -23,6 +23,7 @@ import { WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { SigningMessages } from '$lib/signing/messages';
+import { CLEAR_TERMS } from '$lib/signing/terms';
 import type { SettingsMessages } from '$lib/settings/messages';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
@@ -924,6 +925,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techIdentityToken: k('componentsUi.signing.techIdentityToken'),
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
+		terms: Object.fromEntries(CLEAR_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])),
 		backupIntent: k('settingsModals.backup.intent'),
 		backupRegisteredAs: k('settingsModals.backup.registeredAs'),
 		backupAddress: k('contacts.addressLabel'),

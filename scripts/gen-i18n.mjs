@@ -433,8 +433,14 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1744 (078, 2026-09-27): + `settings.sections.community` — the settings
 //   group holding the official X / Telegram / Discord links (founder). The
 //   rows are brand names and handles, never translated. 1743 + 1 = 1744.
-if (PATHS.length !== 1744) fail(`expected 1744 paths (1655 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1655) fail(`expected 1655 leaf paths, got ${leafSet.size}`);
+// 1773 (078, 2026-09-27): + 29 `componentsUi.signing.{intent*,label*,valueUnlimited}`
+//   leaves — the clear-signing sheet showed descriptor words ("Approve",
+//   "Amount", "Spender", "Unlimited") in English on a Chinese sheet (founder).
+//   The core names each one (`clear_signing::ClearTerm`, whose serialized name
+//   IS the leaf) and the shells translate it; the 19 words the old app already
+//   had are reused, these are the rest. Same branch: 1744 + 29 = 1773.
+if (PATHS.length !== 1773) fail(`expected 1773 paths (1684 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1684) fail(`expected 1684 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
@@ -748,7 +754,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 137,700 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 138,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

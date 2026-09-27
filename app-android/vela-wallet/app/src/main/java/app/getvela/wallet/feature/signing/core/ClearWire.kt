@@ -201,7 +201,11 @@ sealed class ClearConfirm {
 
     @Serializable
     @SerialName("confirm_intent")
-    data class ConfirmIntent(val intent: String) : ClearConfirm()
+    data class ConfirmIntent(
+        val intent: String,
+        /** The core's name for `intent` when it has one (`ClearTerm`: the key leaf under `componentsUi.signing`). */
+        val intent_term: String? = null,
+    ) : ClearConfirm()
 }
 
 @Serializable
@@ -217,11 +221,16 @@ data class ClearSignField(
     val expired: Boolean = false,
     val address: String? = null,
     val usd_value: Double? = null,
+    /** `label` / `value` as words the shell translates (`ClearTerm`). See `SigningLive.localizedTerms`. */
+    val label_term: String? = null,
+    val value_term: String? = null,
 )
 
 @Serializable
 data class ClearSignResult(
     val intent: String,
+    /** `intent` as a word the shell translates (`ClearTerm`). */
+    val intent_term: String? = null,
     val contract_name: String? = null,
     val owner: String? = null,
     val fields: List<ClearSignField> = emptyList(),

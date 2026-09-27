@@ -609,6 +609,37 @@ function localizedOwnBackup(clear: ClearSigningView, own: boolean, m: SigningMes
 }
 
 /**
+ * The core's words in the reader's language. A clear-signing result is
+ * English — a descriptor's intent and labels, the "Unlimited" a threshold
+ * prints — and the core names the ones it recognises (`intent_term`,
+ * `label_term`, `value_term`, the confirm's `intent_term`). Each named word is
+ * swapped for this locale's; anything unnamed stays as the descriptor wrote
+ * it. Runs before `cappedApproval`, which replaces the warning value with the
+ * cap anyway.
+ */
+export function localizedTerms(clear: ClearSigningView, m: SigningMessages): ClearSigningView {
+	const word = (term: string | null | undefined, text: string) =>
+		(term ? m.terms[term] : undefined) || text;
+	const result = clear.result;
+	return {
+		...clear,
+		result: result && {
+			...result,
+			intent: word(result.intent_term, result.intent),
+			fields: result.fields.map((field) => ({
+				...field,
+				label: word(field.label_term, field.label),
+				value: word(field.value_term, field.value)
+			}))
+		},
+		confirm:
+			clear.confirm.type === 'confirm_intent'
+				? { ...clear.confirm, intent: word(clear.confirm.intent_term, clear.confirm.intent) }
+				: clear.confirm
+	};
+}
+
+/**
  * The cap the person chose, where the decode still says "Unlimited".
  *
  * The clear-signing result describes the REQUEST, and an unlimited approve
@@ -661,7 +692,10 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		typeof window !== 'undefined' && raw.sign.request.origin === window.location.origin;
 	const inputs = {
 		...raw,
-		clear: cappedApproval(localizedOwnBackup(raw.clear, ownRequest, raw.m), raw.guard)
+		clear: cappedApproval(
+			localizedTerms(localizedOwnBackup(raw.clear, ownRequest, raw.m), raw.m),
+			raw.guard
+		)
 	};
 	const { sign, clear, guard, fee, m, identity, identicon } = inputs;
 	if (sign.surface === 'hidden' || !sign.request) return null;

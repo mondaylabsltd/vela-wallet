@@ -116,6 +116,34 @@ object SigningLive {
     }
 
     /**
+     * The core's words in the reader's language. A clear-signing result is
+     * English — a descriptor's intent and labels, the "Unlimited" a threshold
+     * prints — and the core names the ones it recognises (`intent_term`,
+     * `label_term`, `value_term`: the key leaf under `componentsUi.signing`).
+     * Each named word is swapped for this locale's; anything unnamed stays as
+     * the descriptor wrote it. Same rule in every shell; runs before
+     * [cappedApproval]. The confirm is left alone: [confirmLabel] switches on
+     * its English intent and falls back to the term.
+     */
+    fun localizedTerms(clear: ClearSigningView, strings: VelaStrings): ClearSigningView {
+        val result = clear.result ?: return clear
+        fun word(term: String?, text: String): String {
+            if (term == null) return text
+            val key = "componentsUi.signing.$term"
+            val translated = strings.t(key)
+            return if (translated.isBlank() || translated == key) text else translated
+        }
+        return clear.copy(
+            result = result.copy(
+                intent = word(result.intent_term, result.intent),
+                fields = result.fields.map { field ->
+                    field.copy(label = word(field.label_term, field.label), value = word(field.value_term, field.value))
+                },
+            ),
+        )
+    }
+
+    /**
      * The cap the person chose, where the decode still says "Unlimited".
      *
      * The clear-signing result describes the REQUEST, and an unlimited
@@ -176,7 +204,10 @@ object SigningLive {
         speed: SendLive.SpeedInputs? = null,
     ): SigningScreenModel {
         val s = ctx.strings
-        val clear = cappedApproval(localizedOwnBackup(rawClear, request.transportId == WALLET_TRANSPORT, s), guard)
+        val clear = cappedApproval(
+            localizedTerms(localizedOwnBackup(rawClear, request.transportId == WALLET_TRANSPORT, s), s),
+            guard,
+        )
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
         val facts = SigningController.firstCall(request.paramsJson)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0
@@ -613,7 +644,8 @@ object SigningLive {
             "swap" -> s.s("confirmSwap")
             "deposit" -> s.s("confirmDeposit")
             "withdraw" -> s.s("confirmWithdraw")
-            else -> s.s("confirmLabel")
+            // The core's word for the rest ("Approve" → 授权), else the neutral verb.
+            else -> confirm.intent_term?.let { s.s(it) } ?: s.s("confirmLabel")
         }
     }
 }

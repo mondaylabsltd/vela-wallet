@@ -90,6 +90,32 @@ enum SigningLive {
         return next
     }
 
+    /// The core's words in the reader's language. A clear-signing result is
+    /// English — a descriptor's intent and labels, the "Unlimited" a threshold
+    /// prints — and the core names the ones it recognises (`intentTerm`,
+    /// `labelTerm`, `valueTerm`: the key leaf under `componentsUi.signing`).
+    /// Each named word is swapped for this locale's; anything unnamed stays as
+    /// the descriptor wrote it. Same rule in every shell; runs before
+    /// `cappedApproval`. The confirm is left alone: `confirmLabel` switches on
+    /// its English intent and falls back to the term.
+    static func localizedTerms(_ clear: ClearSigningViewWire, loc: Loc) -> ClearSigningViewWire {
+        guard var result = clear.result else { return clear }
+        func word(_ term: String?, _ text: String) -> String {
+            guard let term else { return text }
+            let key = "componentsUi.signing.\(term)"
+            let translated = loc.t(key)
+            return translated == key || translated.isEmpty ? text : translated
+        }
+        result.intent = word(result.intentTerm, result.intent)
+        for index in result.fields.indices {
+            result.fields[index].label = word(result.fields[index].labelTerm, result.fields[index].label)
+            result.fields[index].value = word(result.fields[index].valueTerm, result.fields[index].value)
+        }
+        var next = clear
+        next.result = result
+        return next
+    }
+
     /// The cap the person chose, where the decode still says "Unlimited".
     ///
     /// The clear-signing result describes the REQUEST; once the guard holds a
@@ -142,7 +168,10 @@ enum SigningLive {
         let loc = context.loc
         let host = BrowserEngine.hostOf(origin: request.origin)
         let own = request.transportId == walletTransport
-        let clear = cappedApproval(localizedOwnBackup(rawClear, own: own, loc: loc), guard: guardView)
+        let clear = cappedApproval(
+            localizedTerms(localizedOwnBackup(rawClear, own: own, loc: loc), loc: loc),
+            guard: guardView
+        )
         let facts = SigningController.firstCall(paramsJson: request.paramsJson)
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
@@ -824,13 +853,14 @@ enum SigningLive {
         switch clear.confirm {
         case .sign: s(loc, "signLabel")
         case .confirm: s(loc, "confirmLabel")
-        case .confirmIntent(let intent):
+        case .confirmIntent(let intent, let term):
             switch intent {
             case "send": s(loc, "confirmSend")
             case "swap": s(loc, "confirmSwap")
             case "deposit": s(loc, "confirmDeposit")
             case "withdraw": s(loc, "confirmWithdraw")
-            default: s(loc, "confirmLabel")
+            // The core's word for the rest ("Approve" → 授权), else the neutral verb.
+            default: term.map { s(loc, $0) } ?? s(loc, "confirmLabel")
             }
         }
     }

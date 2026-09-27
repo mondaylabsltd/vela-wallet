@@ -505,6 +505,46 @@ struct SigningLiveTests {
         }, "the byte count is the only honest measure of what nobody could read")
     }
 
+    /// **The core names a descriptor's words; the sheet says them in the
+    /// reader's language.** The founder read "Approve / Amount / Spender /
+    /// Unlimited" in English on a Chinese sheet (2026-09-27). Decoded from the
+    /// core's own JSON shape, so the snake_case terms are proved to arrive.
+    @Test func namedDescriptorWordsReadInTheReadersLanguage() throws {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        func field(_ label: String, _ labelTerm: Any, _ value: String, _ valueTerm: Any, warning: Bool, role: String) -> [String: Any] {
+            ["label": label, "label_term": labelTerm, "value": value, "value_term": valueTerm,
+             "format": warning ? "tokenAmount" : "raw", "token_address": NSNull(), "warning": warning,
+             "unverified": false, "role": role, "detail": false, "expired": false,
+             "address": NSNull(), "usd_value": NSNull()]
+        }
+        let view = try CoreJSON.decode(ClearSigningViewWire.self, from: [
+            "resolving": false, "resolved": true, "surface": "clear_sign",
+            "confirm": ["type": "confirm_intent", "intent": "Approve", "intent_term": "intentApprove"],
+            "message": NSNull(), "blind_typed": NSNull(), "danger_haptic": false,
+            "result": [
+                "intent": "Approve", "intent_term": "intentApprove",
+                "contract_name": NSNull(), "owner": NSNull(), "risk": "danger",
+                "contract_address": "0xa0b8", "verified": false, "provenance": "standard",
+                "sign_type": "transaction", "partial": false, "best_effort": false, "to_own_token": false,
+                "fields": [
+                    field("Amount", "labelAmount", "Unlimited", "valueUnlimited", warning: true, role: "generic"),
+                    field("Spender", "labelSpender", "0x1111", NSNull(), warning: false, role: "spender"),
+                    field("Referral code", NSNull(), "abc", NSNull(), warning: false, role: "generic"),
+                ],
+            ],
+        ])
+        let shown = SigningLive.localizedTerms(view, loc: zh)
+        let result = try #require(shown.result)
+        #expect(result.intent == zh.t("componentsUi.signing.intentApprove"))
+        #expect(result.intent != "Approve")
+        #expect(result.fields.map(\.label) == [
+            zh.t("componentsUi.signing.labelAmount"), zh.t("componentsUi.signing.labelSpender"), "Referral code",
+        ])
+        #expect(result.fields.map(\.value) == [zh.t("componentsUi.signing.valueUnlimited"), "0x1111", "abc"])
+        // The slide says the core's word for an intent it has no verb of its own for.
+        #expect(SigningLive.confirmLabel(clear: view, loc: zh) == zh.t("componentsUi.signing.intentApprove"))
+    }
+
     /// **The slide's verb is a corpus string, never a raw intent id.**
     ///
     /// Android shipped a button reading 确认send — the id concatenated onto a

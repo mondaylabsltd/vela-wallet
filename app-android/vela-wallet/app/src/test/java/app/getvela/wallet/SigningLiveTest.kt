@@ -362,4 +362,38 @@ class SigningLiveTest {
     // `BrowserMachineTest."a refused request tells the page what happened and
     // why"`, against the real machine, plus the core's own
     // `dapp_rpc::tests::a_refused_request_is_answered_with_a_sentence_and_a_kind`.
+
+    /**
+     * The core names a descriptor's words; the sheet says them in the reader's
+     * language (the founder read "Approve / Amount / Spender / Unlimited" in
+     * English on a Chinese sheet, 2026-09-27). Unnamed words stay as written.
+     */
+    @Test
+    fun namedDescriptorWordsReadInTheReadersLanguage() {
+        val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
+        val zh: VelaStrings = I18nRuntime { tag -> File(root, "assets/i18n/$tag.json").readBytes() }.apply { initialize("zh") }
+        val clear = app.getvela.wallet.feature.signing.core.ClearSigningView(
+            resolved = true,
+            surface = ClearSurface.ClearSign,
+            confirm = ClearConfirm.ConfirmIntent("Approve", intent_term = "intentApprove"),
+            result = app.getvela.wallet.feature.signing.core.ClearSignResult(
+                intent = "Approve",
+                intent_term = "intentApprove",
+                fields = listOf(
+                    app.getvela.wallet.feature.signing.core.ClearSignField(
+                        label = "Amount", label_term = "labelAmount",
+                        value = "Unlimited", value_term = "valueUnlimited",
+                        format = "tokenAmount", warning = true,
+                    ),
+                    app.getvela.wallet.feature.signing.core.ClearSignField(label = "Referral code", value = "abc"),
+                ),
+            ),
+        )
+        val result = SigningLive.localizedTerms(clear, zh).result!!
+        assertEquals(zh.t("componentsUi.signing.intentApprove"), result.intent)
+        assertTrue("translated, not the English", result.intent != "Approve")
+        assertEquals(listOf(zh.t("componentsUi.signing.labelAmount"), "Referral code"), result.fields.map { it.label })
+        assertEquals(listOf(zh.t("componentsUi.signing.valueUnlimited"), "abc"), result.fields.map { it.value })
+        assertEquals(zh.t("componentsUi.signing.intentApprove"), SigningLive.confirmLabel(clear, zh))
+    }
 }

@@ -69,6 +69,10 @@ struct ClearSignFieldWire: Decodable, Equatable {
     /// The full lowercased address, for address-name fields.
     let address: String?
     let usdValue: Double?
+    /// `label` / `value` as words the shell translates (`ClearTerm`: the key
+    /// leaf under `componentsUi.signing`). See `SigningLive.localizedTerms`.
+    var labelTerm: String? = nil
+    var valueTerm: String? = nil
 }
 
 /// Where a description came from (spec 081 FR-008) — the ground `verified`
@@ -90,6 +94,8 @@ struct ClearSignResultWire: Decodable, Equatable {
     /// verbatim is how Android shipped a confirm button reading "确认send".
     /// `var`, with `fields`: see `relabelled`.
     var intent: String
+    /// `intent` as a word the shell translates (`ClearTerm`).
+    var intentTerm: String? = nil
     let contractName: String?
     let owner: String?
     var fields: [ClearSignFieldWire]
@@ -210,10 +216,13 @@ enum ClearConfirmWire: Decodable, Equatable {
     /// approval, which is `approval_guard`'s surface.
     case confirm
     /// "Confirm {intent}", where `intent` is the canonical English key for
-    /// the shell to localise — never printed raw.
-    case confirmIntent(String)
+    /// the shell to localise — never printed raw — and `term` the core's name
+    /// for it when it has one (`ClearTerm`).
+    case confirmIntent(String, term: String? = nil)
 
-    private enum Keys: String, CodingKey { case type, intent }
+    /// Post-`convertFromSnakeCase` names (`CoreJSON.decoder`): `intent_term`
+    /// arrives as `intentTerm`.
+    private enum Keys: String, CodingKey { case type, intent, intentTerm }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: Keys.self)
@@ -221,7 +230,10 @@ enum ClearConfirmWire: Decodable, Equatable {
         case "sign": self = .sign
         case "confirm": self = .confirm
         case "confirm_intent":
-            self = .confirmIntent(try container.decode(String.self, forKey: .intent))
+            self = .confirmIntent(
+                try container.decode(String.self, forKey: .intent),
+                term: try container.decodeIfPresent(String.self, forKey: .intentTerm)
+            )
         case let other:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: container,

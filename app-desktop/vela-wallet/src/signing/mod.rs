@@ -49,6 +49,11 @@ pub struct SigningStrings {
     pub receipt_done: SharedString,
     pub signing_account: SharedString,
     pub advanced_toggle: SharedString,
+    /// The words the core names on a clear-signing result (`ClearTerm`):
+    /// descriptor intents, field labels, the threshold's "Unlimited" — each
+    /// the key `componentsUi.signing.<leaf>`. `live::localized_terms` swaps
+    /// them in.
+    pub terms: std::collections::HashMap<vela_core::app::clear_signing::ClearTerm, SharedString>,
     /// The wallet's own key backup, in the person's language.
     pub backup_intent: SharedString,
     pub backup_labels: [SharedString; 3],
@@ -255,6 +260,9 @@ impl SigningStrings {
             receipt_done: loc.t("componentsTx.receipt.done"),
             signing_account: s("signingAccount"),
             advanced_toggle: s("advancedToggle"),
+            terms: vela_core::app::clear_signing::ClearTerm::all()
+                .map(|term| (term, s(&term.leaf())))
+                .collect(),
             backup_intent: loc.t("settingsModals.backup.intent"),
             backup_labels: [
                 loc.t("settingsModals.backup.registeredAs"),

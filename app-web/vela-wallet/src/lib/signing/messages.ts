@@ -173,6 +173,13 @@ export interface SigningMessages {
 	techIdentityToken: string;
 	techIdentityRecipient: string;
 	copyValue: string;
+	/**
+	 * The words the core names on a clear-signing result (`ClearTerm` → its
+	 * word here): descriptor intents, field labels, the threshold's
+	 * "Unlimited". A result's text is English; `localizedTerms` in `live.ts`
+	 * swaps in these. Keyed by term (`signing/terms.ts` lists them).
+	 */
+	terms: Record<string, string>;
 	/** The wallet's own key backup, in the person's language (the core's built-in result is English). */
 	backupIntent: string;
 	backupRegisteredAs: string;

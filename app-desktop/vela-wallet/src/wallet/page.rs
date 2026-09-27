@@ -14165,7 +14165,10 @@ impl WalletPage {
                 // swap under a true header is the worst thing this column can say.
                 // …reading the cap the person chose, not the request's
                 // "Unlimited", once there is one.
-                let clear = signing_live::capped_approval(&host.clear_view, &host.guard_view);
+                let clear = signing_live::capped_approval(
+                    &signing_live::localized_terms(&host.clear_view, &self.signing),
+                    &host.guard_view,
+                );
                 model.blocks = signing_live::blocks(&clear, &host.facts, &self.signing);
                 // What the chain says it would MOVE, under what the site says
                 // it would do. Last, because it is the answer to everything

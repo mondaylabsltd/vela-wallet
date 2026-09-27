@@ -17,7 +17,7 @@ use vela_core::app::approval_guard::{self, AmountBits, GuardAmount as U256};
 use vela_core::app::clear_signing::{
     ClearConfirm, ClearDangerClass, ClearFieldRole, ClearLocale, ClearOperation as Op, ClearProbe,
     ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignResult,
-    ClearSignType, ClearSigning, ClearSiweBinding, ClearSurface, Event,
+    ClearSignType, ClearSigning, ClearSiweBinding, ClearSurface, ClearTerm, Event,
 };
 
 type Sut = DomainDriver<ClearSigning>;
@@ -517,6 +517,14 @@ fn unlimited_approve_reads_danger() {
     assert_eq!(amount.value, "Unlimited");
     let spender = &result.fields[1];
     assert_eq!(spender.role, ClearFieldRole::Spender);
+
+    // The words a shell translates (the founder read "Approve / Amount /
+    // Spender / Unlimited" in English on a Chinese sheet, 2026-09-27).
+    assert_eq!(result.intent_term, Some(ClearTerm::IntentApprove));
+    assert_eq!(amount.label_term, Some(ClearTerm::LabelAmount));
+    assert_eq!(amount.value_term, Some(ClearTerm::ValueUnlimited));
+    assert_eq!(spender.label_term, Some(ClearTerm::LabelSpender));
+    assert_eq!(spender.value_term, None, "an address is never a term");
 }
 
 /// An ERC-20 `approve(SPENDER, amount)` on USDC, resolved through the
@@ -2206,7 +2214,13 @@ fn confirm_semantics_follow_the_resolved_request() {
     });
     let view = sut.view();
     let intent = view.result.expect("decoded").intent;
-    assert_eq!(view.confirm, ClearConfirm::ConfirmIntent { intent });
+    assert_eq!(
+        view.confirm,
+        ClearConfirm::ConfirmIntent {
+            intent,
+            intent_term: Some(ClearTerm::IntentSend)
+        }
+    );
 
     // A plain native send — no calldata, nothing to resolve.
     let mut sut = Sut::new();
@@ -2223,7 +2237,8 @@ fn confirm_semantics_follow_the_resolved_request() {
     assert_eq!(
         view.confirm,
         ClearConfirm::ConfirmIntent {
-            intent: "send".to_owned()
+            intent: "send".to_owned(),
+            intent_term: Some(ClearTerm::IntentSend)
         }
     );
 

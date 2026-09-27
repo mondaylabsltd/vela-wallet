@@ -50,6 +50,7 @@ export * from './ClearSigningView';
 export * from './ClearSiweBinding';
 export * from './ClearSiweFields';
 export * from './ClearSurface';
+export * from './ClearTerm';
 export * from './ClearTimeFormat';
 export * from './CompletionMode';
 export * from './Contact';

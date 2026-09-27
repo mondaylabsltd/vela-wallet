@@ -18,10 +18,17 @@ import { FeeSpeedCore } from '$lib/core/client';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
+import { CLEAR_TERMS } from './terms';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
-import { buildSigningModel, calldataBytes, cappedApproval, type SigningLiveInputs } from './live';
+import {
+	buildSigningModel,
+	calldataBytes,
+	cappedApproval,
+	localizedTerms,
+	type SigningLiveInputs
+} from './live';
 
 const m = resolveSigningMessages('en');
 const identity: WalletIdentity = {
@@ -88,8 +95,10 @@ function field(over: Partial<ClearSignField> = {}): ClearSignField {
 		expired: false,
 		address: null,
 		usd_value: 100,
+		label_term: null,
+		value_term: null,
 		...over
-	};
+	} as ClearSignField;
 }
 
 const DECODED: ClearSigningView = {
@@ -98,6 +107,7 @@ const DECODED: ClearSigningView = {
 	surface: 'clear_sign',
 	result: {
 		intent: 'Send USDC',
+		intent_term: null,
 		contract_name: 'USD Coin',
 		owner: null,
 		fields: [
@@ -923,5 +933,56 @@ describe('the blind line names the real length', () => {
 		expect(calldataBytes(JSON.stringify([call]))).toBe(68);
 		expect(calldataBytes(JSON.stringify([{ version: '2.0.0', calls: [call, call] }]))).toBe(68);
 		expect(calldataBytes('not json')).toBe(0);
+	});
+});
+
+describe("localizedTerms — the core names the word, the sheet says it in the reader's language", () => {
+	const zh = resolveSigningMessages('zh');
+	const approve: ClearSigningView = {
+		...DECODED,
+		result: {
+			...DECODED.result!,
+			intent: 'Approve',
+			intent_term: 'intentApprove',
+			risk: 'danger',
+			fields: [
+				field({
+					label: 'Amount',
+					label_term: 'labelAmount',
+					value: 'Unlimited',
+					value_term: 'valueUnlimited',
+					warning: true,
+					format: 'tokenAmount'
+				}),
+				field({
+					label: 'Spender',
+					label_term: 'labelSpender',
+					value: '0x1111…1111',
+					role: 'spender'
+				}),
+				field({ label: 'Referral code', value: 'abc' })
+			]
+		},
+		confirm: { type: 'confirm_intent', intent: 'Approve', intent_term: 'intentApprove' }
+	};
+
+	it('swaps every named word and leaves the unnamed ones as the descriptor wrote them', () => {
+		const out = localizedTerms(approve, zh);
+		expect(out.result?.intent).toBe(zh.terms.intentApprove);
+		expect(out.result?.fields.map((f) => [f.label, f.value])).toEqual([
+			[zh.terms.labelAmount, zh.terms.valueUnlimited],
+			[zh.terms.labelSpender, '0x1111…1111'],
+			['Referral code', 'abc']
+		]);
+		expect(out.confirm).toEqual({
+			type: 'confirm_intent',
+			intent: zh.terms.intentApprove,
+			intent_term: 'intentApprove'
+		});
+		expect(zh.terms.intentApprove).not.toBe('Approve');
+	});
+
+	it('every term the core can name has a word in this locale', () => {
+		for (const term of CLEAR_TERMS) expect(zh.terms[term], term).toBeTruthy();
 	});
 });
