@@ -176,24 +176,10 @@ pub fn assets(
     // blank column under a pill reads as a panel that failed to load.
     let filtered_empty = rows.is_empty() && !view.tokens.is_empty();
     AssetsPanel {
-        // The chain filter's dots: the chains this person actually holds on,
-        // in the order the core sorted them. A filter offering chains with
-        // nothing on them is a filter that does nothing.
-        filter: Some((
-            // Narrowed: this chain's own dot and its name, so the panel says
-            // WHICH list this is. The web puts the same fact in the same pill.
-            match filter {
-                Some(chain_id) => vec![tint(chain_id)],
-                None => chain_dots(&view.tokens),
-            },
-            match filter {
-                Some(chain_id) => {
-                    SharedString::from(crate::executor::custom_tokens::network_name(chain_id))
-                }
-                None => s.pill_all.clone(),
-            },
-            s.assets_add.clone(),
-        )),
+        // No filter row (078 T067): the web's Assets screen has none, and
+        // this one's pill and "Add" answered no click. Which chain the list
+        // is narrowed to is the sidebar's selected network.
+        filter: None,
         search_placeholder: s.assets_search.clone(),
         no_match: s.no_matching_tokens.clone(),
         rows: rows.clone(),
@@ -206,20 +192,6 @@ pub fn assets(
             hint_body: s.not_showing_body.clone(),
         }),
     }
-}
-
-/// Up to three chain dots for the filter pill, deduped in holdings order.
-fn chain_dots(tokens: &[BalanceToken]) -> Vec<Hsla> {
-    let mut seen = Vec::new();
-    for token in tokens {
-        if !seen.contains(&token.chain_id) {
-            seen.push(token.chain_id);
-        }
-        if seen.len() == 3 {
-            break;
-        }
-    }
-    seen.into_iter().map(tint).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -2575,6 +2547,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                         .clone()
                         .unwrap_or_else(|| shorten(&draft.address))
                         .into(),
+                    address: draft.name.as_ref().map(|_| shorten(&draft.address).into()),
                     seed: draft.address.clone().into(),
                     amount: format!("{} {symbol}", draft.amount)
                         .trim()
@@ -2616,6 +2589,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                 },
             )
         }),
+        summary_detail: None,
         remaining: send.split_remaining.as_ref().filter(|_| split).map(|left| {
             fill(
                 &s.split_remaining,
@@ -3337,19 +3311,17 @@ fn batch_rows(view: &BatchView, symbol: &str, s: &FlowStrings) -> Vec<BatchRow> 
                 row.line,
                 BatchRow {
                     ok: row.ok,
-                    address: row
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| row.address.clone())
-                        .into(),
+                    // The sheet's name over the address, as the web draws
+                    // them (078 T062) — the name ALONE hid which address it
+                    // would pay.
+                    name: row.name.clone().map(Into::into),
+                    address: crate::contacts::model::shorten(&row.address),
+                    seed: Some(row.address.clone().into()),
+                    amount: amount.into(),
                     // A fiat sheet's figure exactly as the sheet wrote it, so
-                    // it can be read back against the sheet — beside what it
-                    // became (the mock's "5,000 CNY → 689.66").
-                    conversion: if fiat {
-                        format!("{} {} → {amount}", row.raw_amount, view.fiat_code).into()
-                    } else {
-                        amount.into()
-                    },
+                    // it can be read back against the sheet under what it
+                    // became.
+                    source: fiat.then(|| format!("{} {}", row.raw_amount, view.fiat_code).into()),
                     note: if row.dup {
                         Some(s.batch_dup.clone())
                     } else if row.valid {
@@ -3366,8 +3338,11 @@ fn batch_rows(view: &BatchView, symbol: &str, s: &FlowStrings) -> Vec<BatchRow> 
             error.line,
             BatchRow {
                 ok: false,
+                name: None,
                 address: error.raw.clone().into(),
-                conversion: SharedString::default(),
+                seed: None,
+                amount: SharedString::default(),
+                source: None,
                 note: Some(match error.reason {
                     BatchParseReason::NoAddress => s.batch_bad_address.clone(),
                     BatchParseReason::NoAmount => s.bad_amount.clone(),
@@ -3471,22 +3446,33 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
         n => fill(&s.batch_rejected_other, "count", &n.to_string()),
     };
     BatchImport {
+        unit_caption: s.batch_unit_caption.clone(),
         unit_fiat: fill(&s.batch_unit_fiat, "code", code).into(),
         unit_token: fill(&s.batch_unit_token, "sym", symbol).into(),
         fiat_on: view.unit == BatchUnit::Fiat,
         paste: paste.into(),
+        paste_empty: view.file_name.is_none() && view.raw_text.is_empty(),
         import_file: if view.busy {
             s.batch_reading.clone()
         } else {
-            format!("{} (xlsx / csv / txt)", s.batch_import_file).into()
+            s.batch_import_file.clone()
         },
         template: if view.template_saved {
             s.batch_template_saved.clone()
         } else {
             s.batch_template.clone()
         },
+        template_saved: view.template_saved,
+        // What the picker takes — or, once a file was picked, which file the
+        // rows below came from (the web's `formats` / `fileName`).
+        formats: view
+            .file_name
+            .clone()
+            .map_or_else(|| crate::flows::fixtures::BATCH_FORMATS.into(), Into::into),
+        file_named: view.file_name.is_some(),
         rate_section: s.batch_rate_section.clone(),
         rate_value: rate_value.into(),
+        rate_equation: None,
         rate_hint: rate_hint.into(),
         // Lines READ, not rows kept: the count above a list is the length of
         // that list, refused lines included (the web's `seen`).
@@ -4252,32 +4238,27 @@ mod tests {
         );
     }
 
-    /// The filter dots are the chains this person actually holds on.
+    /// No filter row over the assets (078 T067): the web's Assets screen has
+    /// none, and the desktop's pill and "Add" answered no click. Narrowed or
+    /// not, the sidebar's selected network says which list this is.
     #[test]
-    fn the_chain_filter_offers_only_chains_with_something_on_them() {
+    fn the_assets_panel_draws_no_filter_row() {
         let mut view = view();
         view.tokens = vec![
             token(100, "xDAI", "1", Some(1.0)),
-            token(100, "USDC", "1", Some(1.0)),
             token(1, "ETH", "1", Some(2000.0)),
-            token(56, "BNB", "1", Some(700.0)),
-            token(137, "POL", "1", Some(0.4)),
         ];
-        let panel = assets(
-            &view,
-            &strings(),
-            &wallet_strings(),
-            "en-US",
-            None,
-            crate::wallet::live::Money::usd(),
-        );
-        let dots = panel
-            .filter
-            .as_ref()
-            .map(|(dots, _, _)| dots.len())
-            .unwrap_or_default();
-        // Deduped by chain (Gnosis appears twice) and capped at three.
-        assert_eq!(dots, 3);
+        for narrowed in [None, Some(100)] {
+            let panel = assets(
+                &view,
+                &strings(),
+                &wallet_strings(),
+                "en-US",
+                narrowed,
+                crate::wallet::live::Money::usd(),
+            );
+            assert!(panel.filter.is_none(), "narrowed = {narrowed:?}");
+        }
     }
 
     /// Every network shows the SAME address — that is what a Safe is.
@@ -5733,11 +5714,12 @@ mod parity_tests {
             ],
             "sheet order, each skipped line with its reason"
         );
-        assert_eq!(model.rows[0].conversion, "5000 CNY → 689.66 USDT");
+        assert_eq!(model.rows[0].amount, "689.66 USDT");
+        assert_eq!(model.rows[0].source.as_deref(), Some("5000 CNY"));
         assert_eq!(model.parsed, fill(&s.batch_parsed, "n", "4"), "lines read");
         assert!(
-            model.rows[1].conversion.is_empty(),
-            "a refused line has no figure"
+            model.rows[1].amount.is_empty() && model.rows[1].seed.is_none(),
+            "a refused line has no figure and nobody to draw"
         );
 
         let total = batch_total(&view, "USDT", "1000", None, &s)

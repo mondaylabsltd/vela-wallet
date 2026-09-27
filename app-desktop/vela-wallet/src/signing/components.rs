@@ -13,7 +13,7 @@ use gpui::{
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{icon_img, identicon_avatar};
+use crate::wallet::components::{icon_img, openable_identicon};
 
 use super::Tone;
 use super::fixtures::{Block, FeeModel, SigningModel};
@@ -515,19 +515,33 @@ fn block_inner(
             address,
             badge,
         } => {
-            let mut who = div().flex().flex_col().gap(px(2.)).child(
-                div()
-                    .text_size(theme::text_row_title())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_base)
-                    .child(name.clone()),
-            );
+            // May shrink, so the badge beside it stays on the column (078
+            // G-06): "Unverified" was pushed out past the edge by a full
+            // address that had nowhere to break.
+            let mut who = div()
+                .flex_1()
+                .min_w(px(0.))
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.fg_base)
+                        .child(name.clone()),
+                );
             if let Some(address) = address {
                 who = who.child(
+                    // Middle-truncated: both ends of an address are what a
+                    // person checks, and hex has no space to wrap at.
                     div()
-                        .font_family("monospace")
+                        .font_family(theme::font_mono())
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis_middle()
                         .child(address.clone()),
                 );
             }
@@ -544,14 +558,17 @@ fn block_inner(
                     Tone::Danger => (theme.error_base, theme.error_soft),
                     _ => (theme.fg_muted, theme.bg_sunken),
                 };
+                // The web's `.badge`: never shrinks, 11, padded 2/8.
                 line = line.child(
                     div()
+                        .flex_none()
                         .px(px(8.))
                         .py(px(2.))
                         .rounded(px(4.))
                         .bg(fill)
-                        .text_size(theme::text_row_sub())
+                        .text_size(theme::text_label())
                         .text_color(ink)
+                        .whitespace_nowrap()
                         .child(text.clone()),
                 );
             }
@@ -583,8 +600,13 @@ fn block_inner(
             } else {
                 theme.warning_base
             };
+            // The web's `WarningBanner` (078 G-06): padded 12/16, a 16 glyph,
+            // a caution edged in the soft warning border (the danger one in
+            // full red), and words that WRAP — without `min_w(0)` a sentence
+            // with no break it liked ran straight out of the card.
             div()
-                .p(px(12.))
+                .py(px(12.))
+                .px(px(16.))
                 .rounded(px(12.))
                 .bg(if danger {
                     theme.error_soft
@@ -592,14 +614,25 @@ fn block_inner(
                     theme.warning_soft
                 })
                 .border_1()
-                .border_color(ink)
+                .border_color(if danger {
+                    theme.error_base
+                } else {
+                    theme.warning_border
+                })
                 .flex()
                 .items_start()
                 .gap(px(12.))
-                .child(icon_img(icons, Icon::TriangleAlert, false, ink, 14.))
+                .child(div().flex_none().mt(px(2.)).child(icon_img(
+                    icons,
+                    Icon::TriangleAlert,
+                    false,
+                    ink,
+                    16.,
+                )))
                 .child(
                     div()
                         .flex_1()
+                        .min_w(px(0.))
                         .text_size(theme::text_row_sub())
                         .text_color(ink)
                         .child(text.clone()),
@@ -974,7 +1007,7 @@ pub fn signer_row(
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .child(identicon_avatar(identicons, seed, 18.))
+                .child(openable_identicon(identicons, seed, 18.))
                 .child(
                     div()
                         .text_size(theme::text_row_sub())

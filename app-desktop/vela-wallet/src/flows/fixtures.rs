@@ -99,6 +99,8 @@ pub const ADDRESS_DISPLAY: &str = "0x14fB1f…D1eA5c";
 // Spec 018's roster, reused rather than re-invented.
 pub const ALICE_DISPLAY: &str = "0x9F3c…21aE";
 pub const ALICE_FULL: &str = "0x9F3cA71b04E82f5C55d9B21aE00734F8Dd8021aE";
+/// What the importer's file picker takes — extensions, not words (078 T062).
+pub const BATCH_FORMATS: &str = "xlsx · csv · txt";
 pub const A_HAO_FULL: &str = "0x77Bd59A302cC93D23dB0d0BA6a45C6830EF74F02";
 pub const HOLD_ON_DISPLAY: &str = "0xCafe…F00d";
 pub const HOLD_ON_FULL: &str = "0xCafe9078B1c2A04d33Ff21B0BC934eB8A812F00d";
@@ -441,6 +443,10 @@ pub struct SendSelection {
 pub struct RecipientCard {
     pub ordinal: SharedString,
     pub name: SharedString,
+    /// The short address under a name the book knows (078 T066, the web's
+    /// `RecipientCard`): the name alone hid which address it would pay.
+    /// `None` when `name` IS the address.
+    pub address: Option<SharedString>,
     pub seed: SharedString,
     pub amount: SharedString,
     /// Live only: what the core says about this row — a repeat of an earlier
@@ -551,6 +557,9 @@ pub struct SendForm {
     pub recipients: Vec<RecipientCard>,
     pub recipient_actions: Vec<SharedString>,
     pub summary: Option<(SharedString, SharedString)>,
+    /// The total's other denomination, under the figure (the web's
+    /// `SummaryLine.detail`) — "≈ $120.00".
+    pub summary_detail: Option<SharedString>,
     /// Live only, split: what the balance has left to give out (the core's
     /// `split_remaining`, #265), and whether the rows already outrun it —
     /// the total then draws in the error ink.
@@ -618,13 +627,24 @@ pub struct FeeTokenPick {
     pub rows: Vec<FeeTokenRow>,
 }
 
+/// One line of the sheet, read back (078 T062, the web's `BatchRowModel` /
+/// `BatchRefusedModel`): who is paid and what they get — or, for a line the
+/// parser refused, the line as written and why.
 #[derive(Clone)]
 pub struct BatchRow {
     pub ok: bool,
+    /// The sheet's own name for the person, when it has a name column.
+    pub name: Option<SharedString>,
+    /// The short address — or, on a refused line, the text to find it by.
     pub address: SharedString,
-    pub conversion: SharedString,
-    /// Live only: why the row will not be paid — a duplicate, an address
-    /// that is not one, a line the parser refused.
+    /// The identicon's seed. `None` on a refused line: nobody to draw.
+    pub seed: Option<SharedString>,
+    /// What is SENT — "689.655172 USDT" — or a dash when nothing can be.
+    pub amount: SharedString,
+    /// The figure as the sheet wrote it, "5,000 CNY": fiat sheets only.
+    pub source: Option<SharedString>,
+    /// Why the row will not be paid — a duplicate, an address that is not
+    /// one, a line the parser refused.
     pub note: Option<SharedString>,
 }
 
@@ -643,15 +663,28 @@ pub struct BatchTotal {
 
 #[derive(Clone)]
 pub struct BatchImport {
+    /// "How the amounts are written" — the toggle's question (078 T062).
+    pub unit_caption: SharedString,
     pub unit_fiat: SharedString,
     pub unit_token: SharedString,
     /// Which half of the unit toggle is on. The mock shows fiat.
     pub fiat_on: bool,
     pub paste: SharedString,
+    /// Nothing pasted or picked: `paste` is the placeholder, drawn subtle.
+    pub paste_empty: bool,
     pub import_file: SharedString,
     pub template: SharedString,
+    /// The template was saved: its pill turns to a check.
+    pub template_saved: bool,
+    /// Under the two pills: "xlsx · csv · txt", or the picked file's name.
+    pub formats: SharedString,
+    /// A file was picked, so `formats` names it.
+    pub file_named: bool,
     pub rate_section: SharedString,
     pub rate_value: SharedString,
+    /// The rate as the web's equation — ("1 USDT ≈", "7.25", "CNY") — where
+    /// only the figure takes the base ink. `None` ⇒ `rate_value` as it is.
+    pub rate_equation: Option<(SharedString, SharedString, SharedString)>,
     pub rate_hint: SharedString,
     pub parsed: SharedString,
     /// Live only: the total line (`None` until a row parses).
@@ -1097,11 +1130,8 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
 
 fn assets_panel(s: &FlowStrings, empty: bool) -> AssetsPanel {
     AssetsPanel {
-        filter: Some((
-            NETWORKS[..3].iter().map(|n| (n.color)()).collect(),
-            s.pill_all.clone(),
-            s.assets_add.clone(),
-        )),
+        // None, as the web's (078 T067).
+        filter: None,
         search_placeholder: s.assets_search.clone(),
         no_match: s.no_matching_tokens.clone(),
         rows: if empty { Vec::new() } else { assets_rows() },
@@ -1249,6 +1279,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                 RecipientCard {
                     ordinal: fill(&s.recipient_n, "n", "1").into(),
                     name: ALICE_DISPLAY.into(),
+                    address: None,
                     seed: ALICE_FULL.into(),
                     amount: "50".into(),
                     notes: Vec::new(),
@@ -1256,6 +1287,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                 RecipientCard {
                     ordinal: fill(&s.recipient_n, "n", "2").into(),
                     name: "Alice".into(),
+                    address: Some("0x77Bd…4F02".into()),
                     seed: A_HAO_FULL.into(),
                     amount: "30".into(),
                     notes: Vec::new(),
@@ -1263,6 +1295,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                 RecipientCard {
                     ordinal: fill(&s.recipient_n, "n", "3").into(),
                     name: "hold on".into(),
+                    address: Some("0xCafe…F00d".into()),
                     seed: HOLD_ON_FULL.into(),
                     amount: "40".into(),
                     notes: Vec::new(),
@@ -1280,8 +1313,9 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                     fill(&s.recipient_count, "count", "3")
                 )
                 .into(),
-                "120 USDT · ≈$120.00".into(),
+                "120 USDT".into(),
             )),
+            summary_detail: Some("≈ $120.00".into()),
             remaining: None,
             summary_over: false,
             fill_empty: None,
@@ -1310,11 +1344,13 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         recipients: Vec::new(),
         recipient_actions: Vec::new(),
         summary: None,
+        summary_detail: None,
         remaining: None,
         summary_over: false,
         fill_empty: None,
         amount_unit: None,
-        denom_toggle: None,
+        // The web's mock draws the ⇕ beside the fiat line (078 T066).
+        denom_toggle: Some(true),
         pick_contacts: None,
         notice: None,
         fee,
@@ -1387,45 +1423,86 @@ fn fee_token(s: &FlowStrings) -> FeeTokenPick {
     }
 }
 
+/// The web's DSD2c (078 T062): a sheet with a name column, the same person
+/// twice, and a line that never became a row — and an account that holds 53
+/// USDT against a sheet asking for 1,793, because the refusal is the state
+/// with the most to say.
 fn batch_import(s: &FlowStrings) -> BatchImport {
+    const BOB_FULL: &str = "0x44AaF19cE84f22101b5D6cbA918B92DcA5f19C21";
     BatchImport {
+        unit_caption: s.batch_unit_caption.clone(),
         unit_fiat: fill(&s.batch_unit_fiat, "code", "CNY").into(),
         unit_token: fill(&s.batch_unit_token, "sym", "USDT").into(),
         fiat_on: true,
-        paste: "0xabc… , 5000\n0xdef… , 8000".into(),
-        import_file: format!("{} (xlsx / csv / txt)", s.batch_import_file).into(),
+        paste: "Alice, 0x9F3c…21aE, 5000\nBob, 0x44Aa…9C21, 8000\nAlice, 0x9F3c…21aE, 5000\nMallory, 0x12zz, 10".into(),
+        paste_empty: false,
+        import_file: s.batch_import_file.clone(),
         template: s.batch_template.clone(),
+        template_saved: false,
+        formats: BATCH_FORMATS.into(),
+        file_named: false,
         rate_section: s.batch_rate_section.clone(),
         rate_value: format!("{} 7.25 CNY", fill(&s.batch_rate_label, "sym", "USDT")).into(),
+        // "≈": a fetched rate mirrors the market, it is not exact — the sign
+        // turns to "=" only once the person types their own (the web's).
+        rate_equation: Some(("1 USDT ≈".into(), "7.25".into(), "CNY".into())),
         rate_hint: fill(&fill(&s.batch_rate_hint, "code", "CNY"), "sym", "USDT").into(),
-        parsed: fill(&s.batch_parsed, "n", "3").into(),
-        total: None,
+        parsed: fill(&s.batch_parsed, "n", "4").into(),
+        total: Some(BatchTotal {
+            label: format!("{} · {}", s.split_total, s.recipients(2)).into(),
+            value: "1,793.103448 USDT".into(),
+            detail: Some("13,000 CNY".into()),
+            balance: fill(&s.balance_label, "amount", "53.4836 USDT").into(),
+            over: Some(fill(&s.batch_over_balance, "sym", "USDT").into()),
+        }),
         rows: vec![
             BatchRow {
                 ok: true,
+                name: Some("Alice".into()),
                 address: ALICE_DISPLAY.into(),
-                conversion: "5,000 CNY → 689.66".into(),
+                seed: Some(ALICE_FULL.into()),
+                amount: "689.655172 USDT".into(),
+                source: Some("5,000 CNY".into()),
                 note: None,
             },
             BatchRow {
                 ok: true,
-                address: "0x21aE…9F3c".into(),
-                conversion: "8,000 CNY → 1,103.45".into(),
+                name: Some("Bob · 泵泵".into()),
+                address: "0x44Aa…9C21".into(),
+                seed: Some(BOB_FULL.into()),
+                amount: "1,103.448276 USDT".into(),
+                source: Some("8,000 CNY".into()),
                 note: None,
             },
+            // The same person twice is what a sheet actually gets wrong: the
+            // first line keeps the payment and this one is skipped, by name.
             BatchRow {
                 ok: false,
-                address: format!("0x12zz…{}", s.batch_bad_address).into(),
-                conversion: "—".into(),
-                note: None,
+                name: Some("Alice".into()),
+                address: ALICE_DISPLAY.into(),
+                seed: Some(ALICE_FULL.into()),
+                amount: "—".into(),
+                source: None,
+                note: Some(s.batch_dup.clone()),
+            },
+            // A line that never became a row: the text to find it by.
+            BatchRow {
+                ok: false,
+                name: None,
+                address: "Mallory , 0x12zz , 10".into(),
+                seed: None,
+                amount: SharedString::default(),
+                source: None,
+                note: Some(s.batch_bad_address.clone()),
             },
         ],
-        rejected: fill(&s.batch_rejected_one, "count", "1").into(),
+        rejected: fill(&s.batch_rejected_other, "count", "2").into(),
         // Two of three rows parsed, so the button offers two — never three.
         notice: None,
         rate_reset: None,
         merge: None,
-        cta_enabled: true,
+        // Over the balance: the core shuts the gate, and the picture shows it.
+        cta_enabled: false,
         cta: fill(&s.batch_apply, "count", "2").into(),
     }
 }
@@ -1513,7 +1590,8 @@ pub fn panel_title(panel: FlowPanel, s: &FlowStrings) -> SharedString {
         FlowPanel::Da2 | FlowPanel::Da3 => s.detail_section_title.clone(),
         FlowPanel::Dt1 | FlowPanel::Dt4 => s.assets_title.clone(),
         FlowPanel::Dt3 | FlowPanel::Dt3b => s.add_token_title.clone(),
-        FlowPanel::Dsd1 => s.send_action.clone(),
+        // "Select Token", as the web's pick screen (078 T067).
+        FlowPanel::Dsd1 => s.select_token_title.clone(),
         FlowPanel::Dsd2 | FlowPanel::Dsd2b => fill(&s.send_title, "symbol", "USDT").into(),
         FlowPanel::Dsd2c => s.batch_title.clone(),
         FlowPanel::Dsd2e => s.pick_contact_title.clone(),
@@ -1677,9 +1755,12 @@ mod tests {
             panic!()
         };
         assert_eq!(batch.rows.iter().filter(|r| r.ok).count(), 2);
-        // The CTA promises what it delivers — three parsed, two importable.
-        assert!(batch.parsed.contains('3'));
+        // The CTA promises what it delivers — four read, two importable.
+        assert!(batch.parsed.contains('4'));
         assert!(batch.cta.contains('2'));
+        // A refused line has nobody to draw, only its text and its reason.
+        let refused = &batch.rows[3];
+        assert!(refused.seed.is_none() && refused.note.is_some());
     }
 
     #[test]

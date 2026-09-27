@@ -93,13 +93,23 @@ pub fn callout(
         CalloutTone::Info => (theme.info_base, theme.info_soft, Icon::Info),
         CalloutTone::Success => (theme.success_base, theme.success_soft, Icon::Check),
     };
+    // The web's `Callout` (078 T063): radius 12 and a hairline in the tone —
+    // the warning's own soft border, the rest their ink at 30% — with the
+    // sentence on a 1.4 line.
+    let edge = match tone {
+        CalloutTone::Warning => theme.warning_border,
+        _ => fg.opacity(0.3),
+    };
     div()
         .flex()
         .items_start()
         .gap(px(12.))
         .p(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .bg(bg)
+        .border_1()
+        .border_color(edge)
+        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
         .child(
             div()
                 .flex_none()
@@ -145,19 +155,33 @@ pub fn settings_nav_row(
     } else {
         theme.fg_muted
     };
+    // The web's nav button (078 S-13): radius 12, an 18 glyph, and a hover
+    // that is the text colour only — the raised wash is the SELECTED look.
     let row = div()
         .id(id)
+        .group("settings-nav-row")
+        // Grows with its label rather than cutting it (see the label below).
         .min_h(px(SETTINGS_NAV_ROW_H))
         .px(px(12.))
         .py(px(6.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .flex()
         .items_center()
         .gap(px(12.))
         .cursor_pointer()
-        .child(icon_img(icons, icon, false, tint, GLYPH_SM))
+        .child(crate::wallet::components::hover_icon(
+            icons,
+            icon,
+            false,
+            tint,
+            theme.fg_base,
+            18.,
+            "settings-nav-row",
+        ))
         .child(
             div()
+                .id("settings-nav-label")
+                .group_hover("settings-nav-row", |style| style.text_color(theme.fg_base))
                 // Wraps inside the pill rather than being cut or drawn
                 // outside it: "Transaktionsgeschwindigkeit" and "Velocidad de
                 // transacción" read whole on two lines, as the community rows
@@ -175,7 +199,9 @@ pub fn settings_nav_row(
             .border_1()
             .border_color(theme.divider)
     } else {
-        row.hover(|el| el.bg(theme.bg_raised))
+        // Same box as the selected row, edge included, so selecting does not
+        // shift the label by the hairline.
+        row.border_1().border_color(gpui::transparent_black())
     }
 }
 
@@ -420,15 +446,18 @@ fn menu_of(
         .flex_col();
     let last = rows.len().saturating_sub(1);
     for (i, (label, note, selected)) in rows.iter().enumerate() {
+        // The web's `SelectRow` (078 S-07): at least 52, padded 12, the
+        // label 15 — mono examples too — and an 18 check.
         let mut row = div()
             .flex()
             .items_center()
             .gap(px(8.))
-            .py(px(10.))
+            .min_h(px(52.))
+            .py(px(12.))
             .child(
                 div()
                     .when(mono, |el| el.font_family(theme::font_mono()))
-                    .text_size(theme::text_row_sub())
+                    .text_size(theme::text_row_title())
                     .text_color(if *selected {
                         theme.accent
                     } else {
@@ -447,7 +476,7 @@ fn menu_of(
             );
         }
         if *selected {
-            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 16.));
+            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
         }
         match on_pick.as_ref() {
             Some(pick) => {
@@ -471,7 +500,7 @@ fn menu_of(
         .left_0()
         .right_0()
         .px(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .bg(theme.bg_raised)
         .border_1()
         .border_color(theme.divider)
@@ -969,6 +998,31 @@ pub fn url_field(
     // `action`: the blue action inside the box — DST5's 检查密钥 / 获取密钥.
     action: Option<gpui::SharedString>,
 ) -> Div {
+    url_field_with(
+        theme,
+        label,
+        value,
+        theme.fg_base,
+        badge,
+        hint,
+        tone,
+        action,
+    )
+}
+
+/// [`url_field`] with the value's ink chosen — the subtle one when what the
+/// box shows is its placeholder, not an entry (078 T063).
+#[allow(clippy::too_many_arguments)]
+pub fn url_field_with(
+    theme: &Theme,
+    label: Option<gpui::SharedString>,
+    value: gpui::SharedString,
+    ink: gpui::Hsla,
+    badge: Option<&Pill>,
+    hint: Option<gpui::SharedString>,
+    tone: Option<Tone>,
+    action: Option<gpui::SharedString>,
+) -> Div {
     let border = match tone {
         Some(Tone::Error) => theme.error_base,
         Some(Tone::Ok) => theme.success_base,
@@ -994,7 +1048,7 @@ pub fn url_field(
         div()
             .h(px(WALLET_CONTROL_H))
             .px(px(12.))
-            .rounded(px(10.))
+            .rounded(px(12.))
             .bg(theme.bg_sunken)
             // A 1px border even at rest: on dark, sunken and base are one step
             // apart and the box would otherwise have no edge at all.
@@ -1011,7 +1065,7 @@ pub fn url_field(
                     .truncate()
                     .font_family(theme::font_mono())
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
+                    .text_color(ink)
                     .child(value),
             )
             .when_some(action, |el, action| {
@@ -1284,10 +1338,12 @@ pub fn danger_card(
         .items_center()
         .gap(px(12.))
         .p(px(16.))
-        .rounded(px(10.))
+        // The web's card (078 S-10): radius 12, its edge the error colour at
+        // 35 % — a full-strength red border shouted over the words inside it.
+        .rounded(px(12.))
         .bg(theme.error_soft)
         .border_1()
-        .border_color(theme.error_base)
+        .border_color(theme.error_base.opacity(0.35))
         .child(
             div()
                 .flex_1()

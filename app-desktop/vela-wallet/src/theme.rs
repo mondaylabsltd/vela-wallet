@@ -385,7 +385,10 @@ pub const SETTINGS_DIALOG_W: f32 = 520.;
 /// The panel's own content column. Measured on DST7: the storage bar runs
 /// 505 -> 1146 inside the 1280 frame, so the content is 640 wide and starts
 /// 48 past the nav column's right edge (240 + 216 + 48 = 504).
-pub const SETTINGS_PANEL_W: f32 = 640.;
+/// Since 078 S-08 the web's `--layout-rowMeasure`, 560: the panel is that
+/// measure plus its 48 sides — at 640 a label sat further from its control
+/// than the web draws.
+pub const SETTINGS_PANEL_W: f32 = 560.;
 
 /// That 48. Left-aligned like the wallet's own content column, never centred:
 /// centring parks the form in the middle of a wide window and opens a gap the
@@ -396,9 +399,13 @@ pub const CONTACTS_RAIL_ROW_H: f32 = 36.;
 /// The `分组` caption block between the 全部联系人 row and the group rows.
 pub const CONTACTS_RAIL_LABEL_H: f32 = 32.;
 /// Inset from the header hairline down to the first rail row / list section.
-pub const CONTACTS_BODY_PAD_TOP: f32 = 16.;
+pub const CONTACTS_BODY_PAD_TOP: f32 = 24.;
 /// Header/CTA control height shared by 添加联系人, 群发转账 and the ⋯ buttons.
 pub const CONTACTS_BUTTON_H: f32 = 40.;
+/// A settings dialog's buttons: the web's `Button` at `--size-control-lg`
+/// (078 T063) — Add Network, the chain setup tool, Save & Retry and the
+/// erase pair were drawn at the contacts page's 40.
+pub const DIALOG_BUTTON_H: f32 = 52.;
 /// Page-local search field in the contacts header (DC1: 780 → 1060).
 pub const CONTACTS_SEARCH_W: f32 = 280.;
 /// Dropdown/context menu card width and row height (M1/M2).
@@ -418,7 +425,7 @@ pub const GALLERY_BAR_H: f32 = 45.;
 /// Contact detail hero avatar (desktop third-column size — measured 48 in DC2).
 pub const CONTACTS_HERO_AVATAR: f32 = 48.;
 /// Contact row leading avatar (row size, same as the wallet rows).
-pub const CONTACTS_ROW_AVATAR: f32 = 40.;
+pub const CONTACTS_ROW_AVATAR: f32 = 30.;
 
 /// Contacts motion contract (spec 018 FR-011): named here so all four
 /// platforms share one set of values. The gpui build renders fixture states

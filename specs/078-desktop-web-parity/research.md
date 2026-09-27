@@ -185,6 +185,15 @@ different).
 - **C-09 P2 · Chrome**: header 16/24 gap 8; Add 36 pill 13 semibold hairline;
   ⋯ 36 round; body padding 24; rail "Groups" hairline 16/12/4; detail
   actions 44/13.
+  *Fixed (T052):* DC1–DC6 captured beside the web's gallery before and
+  after. Rows 66 → 52 tall (30 identicon, padded 8/12 on a button's line,
+  radius 12; the web's 53); letters 8/12/4 11 medium; header gap 8 with a
+  36 Add pill (13 semibold, hairline, raised) and a round 36 ⋯; the head
+  rule edge to edge; body padded 24; rail title under a hairline 8 below
+  "All contacts"; the group heading's 36 accent pill and round ⋯; detail
+  actions 44/13 (the wallet's 52 pill had stood in) and the address copy a
+  plain 36 button. Menu anchors moved with them. The web gallery's "+ Groups"
+  chip is live-only on the desktop.
 
 ## Settings (S)
 
@@ -202,6 +211,21 @@ different).
   check. **S-08** panel ≤560, padding 32/48/48. **S-09** keys block sizes.
   **S-10** account rows (15 semibold, accent active, × remove). **S-11**
   endpoints/providers layout. **S-12** About. **S-13** nav rows r12 18 icon.
+  *Fixed (T053):* DST1–DST8 captured beside the web's gallery before and
+  after. The panel sits on the web's 1.4 line and its content caps at the
+  web's 560 row measure (was 640); it stays LEFT-aligned — the web centres
+  it, but the founder ruled against centring on 2026-09-02, and that
+  stands. S-06 url field radius 12. S-07 dropdown rows ≥52, padded 12, 15
+  labels (mono examples too), 18 check, radius 12. S-10 account rows on a
+  button's line with 30 identicons; the danger card's edge at 35 % of the
+  error colour, radius 12. S-11 provider names 17 (was 20), 24 from the
+  description; storage total at 32, the bar's legend, "Clear all caches"
+  centred. S-12 About: the mark in a 56 raised disc, 24 around the hero,
+  sections padded 24/8, footer centred. S-13 nav rows radius 12, 18 glyph,
+  hover = text colour only. Left: the text-size slider draws eight dark
+  stops where the web draws six light ones (`ui/step_slider.rs`, changed by
+  Shelchin the same day — theirs to reconcile); S-09 keys block and the
+  account dialog's × were not in the compared states.
 
 ## Explore (E)
 
@@ -216,6 +240,16 @@ different).
 - **E-05 P2 · Start page**: ≤800, 8-column grid (20/8 gaps), two-column rows;
   tile label 11; row padding 12; connection panel sizes; chain logo on the
   network dot (currently always Ethereum's colour).
+  *Fixed (T054):* live start page beside the web's DE2. The page caps at
+  800 and padding 32 ("Edit" sat a screen away from its tiles); favourites
+  on the 8-up grid (85 tiles, 8 across, 20 down) with 11 labels; group rows
+  two to a line, 32 apart, padded 12 on a button's line. Toolbar: radius 8,
+  sunken hover, forward drawn disabled (subtle at 45 %) as the web's
+  `canForward: false`, the star FILLED in the accent on a pinned page; tabs
+  radius 8, the start tab wearing the sail, a 20 close box raised on hover.
+  Not done: real back/forward availability — the web has no live browser
+  to copy it from; the desktop would need the page's `navigation.canGoBack`
+  reported over the bridge.
 
 ## Signing (G)
 
@@ -229,6 +263,12 @@ different).
   copy/explorer, raw params in a sunken card, mono 13.
 - **G-06 P2 · Footer/blocks**: blocks gap 16 padding 16, footer hairline gap
   12; warning border colour, padding 12/16, 16 icon; fee selector 12/16.
+  *Fixed (T054):* live signing column beside the web's DE4. Two overflow
+  bugs (noted since T043): the warning's words ran out of the card (no
+  `min_w(0)`), and the party badge was pushed past the column by a full
+  address — now the text wraps, the badge never shrinks, and the address is
+  middle-truncated. Warning padded 12/16, 16 glyph, caution edged in
+  `warning_border`; badge 11; the column on the body's 1.4.
 
 ## Money logic (M) — the core, every shell
 

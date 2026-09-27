@@ -18,7 +18,7 @@ use qrcode::{Color as QrColorModule, QrCode};
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{icon_img, identicon_avatar, token_icon_logos};
+use crate::wallet::components::{icon_img, openable_identicon, token_icon_logos};
 
 use super::fixtures::{
     FactLead, FactRow, FeeRow, FeeSpeedModel, FeeSpeedOption, FilterChip, NetworkRow,
@@ -312,7 +312,7 @@ pub fn fact_row(
         FactLead::None => value_side,
         FactLead::Token(mark) => value_side.child(inline_mark(theme, mark)),
         FactLead::Identicon(seed) => {
-            value_side.child(identicon_avatar(identicons, seed.as_ref(), 20.))
+            value_side.child(openable_identicon(identicons, seed.as_ref(), 20.))
         }
     };
 
@@ -323,7 +323,13 @@ pub fn fact_row(
     } else {
         div().text_size(theme::text_row_sub())
     };
-    value_side = value_side.child(value.text_color(theme.fg_base).child(fact.value.clone()));
+    // `.value`: 13 medium (078 T065).
+    value_side = value_side.child(
+        value
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(theme.fg_base)
+            .child(fact.value.clone()),
+    );
 
     // `FactRow.svelte`: a 20 box with a 14 glyph in `fg-subtle`, a tick in
     // the success colour for 150 ms after it copies.
@@ -360,12 +366,13 @@ pub fn fact_row(
         });
     }
 
+    // `.fact`: padded 12, as the web's (078 T065).
     let row = div()
         .flex()
         .items_center()
         .justify_between()
         .gap(px(12.))
-        .py(px(10.))
+        .py(px(12.))
         .child(
             div()
                 .text_size(theme::text_row_sub())
@@ -379,7 +386,7 @@ pub fn fact_row(
         // fact about the value, not a warning about it.
         Some(note) => div().flex().flex_col().child(row.pb(px(2.))).child(
             div()
-                .pb(px(10.))
+                .pb(px(12.))
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(note.clone()),
@@ -593,6 +600,82 @@ pub fn segmented_toggle(
 
 /// The monospace field. Addresses are compared character by character by the
 /// people pasting them, which is the whole reason for the face.
+/// A split row's payee by name (the web's `RecipientCard .who`): the name
+/// 13 medium in the UI face over its short address, 10 mono muted.
+fn recipient_who(theme: &Theme, name: SharedString, address: SharedString) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(theme.fg_base)
+                .child(name),
+        )
+        .child(
+            div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_glyph())
+                .text_color(theme.fg_muted)
+                .child(address),
+        )
+}
+
+/// One pill of a [`ghost_pill_row`].
+pub struct GhostPill {
+    pub id: ElementId,
+    pub icon: Icon,
+    pub label: SharedString,
+    /// Done (a template saved): the pill turns to the success ink.
+    pub done: bool,
+    pub action: Option<super::panels::Click>,
+}
+
+/// The web's `GhostPillRow` (078 T062): hairline pills that share the row,
+/// each a 14 glyph and an 11 medium label, the raised colour on hover.
+pub fn ghost_pill_row(theme: &Theme, icons: &mut IconCache, pills: Vec<GhostPill>) -> Div {
+    let mut row = div().flex().flex_wrap().gap(px(4.));
+    for pill in pills {
+        let ink = if pill.done {
+            theme.success_base
+        } else {
+            theme.fg_base
+        };
+        let hover = theme.bg_raised;
+        let mut body = div()
+            .id(pill.id)
+            .flex_1()
+            .min_h(px(36.))
+            .p(px(8.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(px(4.))
+            .rounded_full()
+            .border_1()
+            .border_color(if pill.done {
+                theme.success_base
+            } else {
+                theme.border_strong
+            })
+            .cursor_pointer()
+            .hover(move |el| el.bg(hover))
+            .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
+            .text_size(theme::text_label())
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(ink)
+            .whitespace_nowrap()
+            .child(icon_img(icons, pill.icon, false, ink, 14.))
+            .child(pill.label);
+        if let Some(action) = pill.action {
+            body = body.on_click(move |event, window, cx| action(event, window, cx));
+        }
+        row = row.child(body);
+    }
+    row
+}
+
 pub fn mono_field(theme: &Theme, label: Option<SharedString>, value: SharedString) -> Div {
     // The web's `MonoField` (078 F-11): an 11 label over a raised field.
     let mut col = div().flex().flex_col().gap(px(6.));
@@ -639,7 +722,7 @@ pub fn address_card(
         .items_center()
         .gap(px(12.))
         .py(px(12.))
-        .child(identicon_avatar(identicons, seed, 36.))
+        .child(openable_identicon(identicons, seed, 36.))
         .child(
             div()
                 .flex_1()
@@ -1087,16 +1170,23 @@ pub fn recipient_card(
         // form, not a payroll.
         Some(field) if !field.value.is_empty() && !field.focus.is_focused(window) => {
             let focus = field.focus.clone();
-            let mut reading = div().flex().items_center().gap(px(4.)).child(
-                div()
-                    .id(gpui::ElementId::from(("split-reading", index)))
-                    .cursor_text()
+            // A name the book knows over the address it stands for, as the
+            // drawn card (078 T066); an unnamed row is its address.
+            let text = match &recipient.address {
+                Some(address) => recipient_who(theme, recipient.name.clone(), address.clone()),
+                None => div()
                     .font_family(theme::font_mono())
                     .text_size(theme::text_mono_address())
                     .text_color(theme.fg_base)
                     .child(gpui::SharedString::from(
                         crate::wallet::live::shorten_address(&field.value),
-                    ))
+                    )),
+            };
+            let mut reading = div().flex().items_center().gap(px(4.)).child(
+                div()
+                    .id(gpui::ElementId::from(("split-reading", index)))
+                    .cursor_text()
+                    .child(text)
                     .on_click(move |_, window, cx| focus.focus(window, cx)),
             );
             if let Some(pick) = pick {
@@ -1152,12 +1242,17 @@ pub fn recipient_card(
             }
             well.into_any_element()
         }
-        None => div()
-            .font_family(theme::font_mono())
-            .text_size(theme::text_mono_address())
-            .text_color(theme.fg_base)
-            .child(recipient.name.clone())
-            .into_any_element(),
+        None => match &recipient.address {
+            Some(address) => {
+                recipient_who(theme, recipient.name.clone(), address.clone()).into_any_element()
+            }
+            None => div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_mono_address())
+                .text_color(theme.fg_base)
+                .child(recipient.name.clone())
+                .into_any_element(),
+        },
     };
     // A raised card padded 12, as the web's `RecipientCard` (078 F-11); its
     // wells are the page colour inside it.
@@ -1168,7 +1263,7 @@ pub fn recipient_card(
         .p(px(12.))
         .rounded(px(12.))
         .bg(theme.bg_raised)
-        .child(identicon_avatar(identicons, recipient.seed.as_ref(), 28.))
+        .child(openable_identicon(identicons, recipient.seed.as_ref(), 28.))
         .child(
             div()
                 .flex_1()
@@ -1353,8 +1448,12 @@ pub fn secondary_button(theme: &Theme, label: SharedString) -> Div {
 /// `--opacity-disabled`, with no hover to lift it. The caller withholds the
 /// click and the pointer. (It took the finished button once, and stacking a
 /// second hover on it panics a debug build.)
+///
+/// The fill fades and the label stays white (078 T062): CSS fades the button
+/// as ONE layer, so its white label lands white on the page, where gpui's
+/// element opacity faded the label on its own into a pink smear.
 pub fn disabled_accent_button(theme: &Theme, label: SharedString) -> Div {
-    accent_fill(button_face(label), theme).opacity(theme::OPACITY_DISABLED)
+    accent_fill(button_face(label), theme).bg(theme.accent.opacity(theme::OPACITY_DISABLED))
 }
 
 /// `primary`, `rounded`: the accent CTA. In this product the accent means

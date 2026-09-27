@@ -306,8 +306,15 @@ fn svg_document(icon: Icon, solid: bool, color_hex: &str) -> String {
         let inner = inner.replace("{c}", color_hex);
         format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">{inner}</svg>"##)
     } else {
+        // The one filled outline icon: the toolbar's star on a page that is
+        // already a favourite (078 E-04). Filled by its own stroke colour.
+        let fill = if solid && icon == Icon::Star {
+            color_hex
+        } else {
+            "none"
+        };
         format!(
-            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color_hex}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{inner}</svg>"##
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="{fill}" stroke="{color_hex}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{inner}</svg>"##
         )
     }
 }

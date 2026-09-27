@@ -53,9 +53,13 @@ screenshot checked against the web.
 
 ## Phase 3 — P1 features
 - [x] T030 H-01 account switcher dialog from the sidebar header.
-- [ ] T031 H-02 (header and switcher rows done; contact rows, recipient
-      cards, the signer line open) identicon viewer from every addressed
-      identicon.
+- [x] T031 H-02 identicon viewer from every addressed identicon: an
+      `openable_identicon` raises an `IdenticonRequest` global the page turns
+      into the viewer (the web's `identiconViewer` store) — contact rows,
+      split recipient cards, the signing party line, fact rows and the receive
+      address card, beside the header and switcher rows. Checked live: a
+      contact's artwork opens the viewer and not the contact; its name still
+      opens the contact.
 - [x] T032 H-03 balance status line: RPC-fix dialog / balance breakdown; the
       web's text order and colours.
 - [x] T033 F-01 scan from the send form (recipient card button, contact
@@ -88,10 +92,67 @@ screenshot checked against the web.
 ## Phase 4 — P2 visuals, surface by surface (screenshot each)
 - [x] T050 Wallet home H-08…H-12.
 - [x] T051 Flows F-09…F-11.
-- [ ] T052 Contacts C-09.
-- [ ] T053 Settings S-06…S-13.
-- [ ] T054 Explore E-04, E-05; signing G-06.
+- [x] T052 Contacts C-09.
+- [x] T053 Settings S-06…S-13.
+- [x] T054 Explore E-04, E-05; signing G-06.
 
 ## Phase 5 — acceptance
-- [ ] T060 Screenshot pairs for every gallery state both apps draw (SC-001).
+- [x] T060 Screenshot pairs for every gallery state both apps draw (SC-001).
+  *Done 2026-09-27:* 38 pairs (D1–D3, DC1–DC6, DST1–DST8 + DST4b + DSR1,
+  and the 19 flow states), taken on this branch at 1282×801 @175% against
+  wallet.getvela.app at the same size and scale, and published for review at
+  https://claude.ai/artifact/GAN4Ss8BR3kxW7xHDcT6np. 14 match; 24 still show a gap,
+  each named under its pair. The largest are DSD2c (the desktop still draws the
+  older import screen: no names, no duplicate row, no over-balance refusal),
+  DSR1 (the RPC banner behind the dialog draws empty), the QR centre badge
+  (DR2, DR3), the tx-detail row height (DA2, DA3), the send amount's unit
+  (DSD2) and the batch recipient rows (DSD2b). Explore and signing have no
+  shared fixture state and were compared live in T054.
 - [ ] T061 The owner's hour next to the web (SC-003).
+
+## Phase 5b — the gaps T060's pairs showed (screenshot each against the web)
+- [x] T062 DSD2c batch import on the web's screen: the unit question, file and
+      template as icon pills over the formats line, the rate as one equation,
+      rows with identicon, name over address and amount over the sheet's
+      figure, the duplicate dimmed with its reason, the refused line with a
+      cross, the skipped-rows warning, and the total over the balance with the
+      refusal — pinned with the button at the foot. Checked on the fixture and
+      live (a pasted sheet: named, unnamed, duplicate and refused lines). A
+      disabled accent CTA now fades its fill, not its label.
+- [x] T063 DSR1 and DST4b dialogs on the web's measures: the identity name 17
+      and meta 11, callouts with a hairline in their tone on a 1.4 line, link
+      chips with the external-link glyph 24 under their hint, the report link
+      underlined, every settings-dialog button 52 with a 17 label (Add
+      Network, the chain setup tool, Save & Retry, the erase pair), and the
+      DST4b mock shows the verdict alone, as the live dialog and the web do.
+      The "empty banner" was the gallery's chip row pushing the page under
+      the dialog, not a defect. The DST4b "4 more contracts" stays: it is what
+      the live check counts (seen live on Scroll); the web fixture's 8 is off.
+- [x] T064 DR2, DR3: with no logo to show, the QR centre is the web's `.mark` —
+      a 36 disc in the chain's colour, the ticker in white — not the token
+      icon's grey placeholder. Live (a logo) unchanged, checked on Ethereum.
+- [x] T065 DA2, DA3: the web's `TxDetail` — no column gap, the head 15
+      semibold, the amount hero padded 12/16 with a 15 fiat line, the facts
+      one hairline-ruled list, the buttons 16 under it; every `FactRow` padded
+      12 with a 13 medium value (DSD3's confirm rows line up too).
+- [x] T066 Send form: the drawn figure carries its unit on the typed field's
+      rung and the fiat line at 15 with the ⇕ (DSD2); split rows put a name
+      the book knows over its short address, live too; the three pills are
+      the web's GhostPillRow with plus / users-round / upload; the split total
+      stacks its fiat under the figure (DSD2b); a disabled Continue fades its
+      fill and keeps a white label (checked live). DSD3's unit is already the
+      web's (`amountUnit`) — the T060 note was against an older deploy.
+- [x] T067 The small gaps, each read against the web SOURCE (the deployed
+      site the T060 pairs were taken from dates from 24 Sep and lags it):
+      fixed — the token picker is titled "Select Token" (live: "Send tokens"
+      in a sweep), the assets panel drops its filter row (its pill and "Add"
+      answered no click; the web has none), and a keyless provider card
+      offers "Get a key →" under it in the gallery too. Not gaps against the
+      source — DR1's rules (both #ECEBE4), DSD4's hash (the web's live receipt
+      shows it submitted), DC1's rail networks (the web's live Contacts omits
+      them, RULING 2), DC2's action widths (flex: 1 on both), DST2's "System"
+      (`themeAuto`), DST4b's search (T063). Left — D2's chevron (the web's
+      opens nothing; a chevron that leads nowhere is a defect), DC2's add
+      chip in the gallery (live draws it), DST5's count (each gallery's own
+      constant), DC6's menu offset (gallery only), DST1's nav label (the web
+      source has no signer nav row to compare with).
