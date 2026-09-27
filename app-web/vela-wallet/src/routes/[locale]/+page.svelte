@@ -34,7 +34,7 @@
 	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
 	import IntroCarousel from '$lib/ui/intro/IntroCarousel.svelte';
 	import AddMethodPicker from '$lib/ui/onboarding/v2/AddMethodPicker.svelte';
-	import Sheet from '$lib/ui/onboarding/Sheet.svelte';
+	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import SocialMeta from '$lib/ui/SocialMeta.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import { markIntroSeen, shouldShowIntro } from '$lib/intro/gate';
@@ -278,12 +278,17 @@
 	     phone or a security key is reachable by name, not only through
 	     whatever the browser's own sheet defaults to (spec 038 SC-428;
 	     founder: 弹框 on phone web and desktop web alike). -->
-	<Sheet label={strings('onboarding.login.header')} onClose={() => (methodsOpen = false)}>
+	<BottomSheet
+		title={strings('onboarding.login.header')}
+		hideTitle
+		variant="prompt"
+		onclose={() => (methodsOpen = false)}
+	>
 		<div class="methodsSheet">
 			<h2 class="methodsTitle">{strings('onboarding.login.header')}</h2>
 			<AddMethodPicker open={true} {strings} onPick={(method) => void signIn(method)} />
 		</div>
-	</Sheet>
+	</BottomSheet>
 {/if}
 
 <!-- Spec 075: signing in can run on the Trusted Signer's page — here is where
@@ -426,7 +431,7 @@
 		gap: var(--space-lg);
 	}
 
-	/* No padding of its own any more: `Sheet` pads its content, and this rule
+	/* No padding of its own any more: `BottomSheet` pads its content, and this rule
 	   was the workaround that proved it should. */
 
 	.methodsTitle {

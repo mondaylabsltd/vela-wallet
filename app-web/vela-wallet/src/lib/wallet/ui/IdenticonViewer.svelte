@@ -14,7 +14,7 @@
 	 * centred card above it.
 	 */
 	import { MediaQuery } from 'svelte/reactivity';
-	import Sheet from '$lib/ui/onboarding/Sheet.svelte';
+	import BottomSheet from './BottomSheet.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Identicon from './Identicon.svelte';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
@@ -85,9 +85,9 @@
 			<div class="card">{@render body()}</div>
 		</div>
 	{:else}
-		<Sheet bind:this={sheet} label={copy.title} {onClose}>
+		<BottomSheet bind:this={sheet} title={copy.title} hideTitle variant="prompt" onclose={onClose}>
 			{@render body()}
-		</Sheet>
+		</BottomSheet>
 	{/if}
 </div>
 

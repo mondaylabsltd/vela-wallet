@@ -23,7 +23,7 @@
 	 * centred card above it.
 	 */
 	import { MediaQuery } from 'svelte/reactivity';
-	import Sheet from '$lib/ui/onboarding/Sheet.svelte';
+	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import type { WalletMessages } from '$lib/wallet/messages';
@@ -104,9 +104,9 @@
 		<div class="card">{@render body()}</div>
 	</div>
 {:else}
-	<Sheet bind:this={sheet} label={copy.title} onClose={settle}>
+	<BottomSheet bind:this={sheet} title={copy.title} hideTitle variant="prompt" onclose={settle}>
 		{@render body()}
-	</Sheet>
+	</BottomSheet>
 {/if}
 
 <style>

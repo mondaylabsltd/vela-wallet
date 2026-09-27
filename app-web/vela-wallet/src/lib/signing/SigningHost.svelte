@@ -372,6 +372,7 @@
 	-->
 	<SigningSheetView
 		{model}
+		dismissible={!signView.is_signing && !signView.is_submitting}
 		onclose={() => signRequest.dispatch({ type: 'reject_tapped' })}
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
 		onchip={guardChip}

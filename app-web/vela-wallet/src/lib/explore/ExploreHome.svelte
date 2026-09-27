@@ -14,7 +14,7 @@
 	import ExploreEmpty from './ui/ExploreEmpty.svelte';
 	import GroupManageSheet from './ui/GroupManageSheet.svelte';
 	import SearchField from './ui/SearchField.svelte';
-	import Sheet from './ui/Sheet.svelte';
+	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import SiteMenuSheet from './ui/SiteMenuSheet.svelte';
 	import SiteRow from './ui/SiteRow.svelte';
 	import SiteTile from './ui/SiteTile.svelte';
@@ -256,8 +256,10 @@
 	{/if}
 
 	{#if sheet}
-		<Sheet
-			label={sheet.kind === 'connection' ? sheet.connection.title : copy.siteMenu}
+		<BottomSheet
+			title={sheet.kind === 'connection' ? sheet.connection.title : copy.siteMenu}
+			hideTitle
+			variant="menu"
 			onclose={() => (sheetOverride = null)}
 		>
 			{#if sheet.kind === 'group-manage'}
@@ -287,7 +289,7 @@
 					ondisconnect={() => (sheetOverride = null)}
 				/>
 			{/if}
-		</Sheet>
+		</BottomSheet>
 	{/if}
 
 	{#if signingUp && signing}
