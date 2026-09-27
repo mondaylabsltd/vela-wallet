@@ -43,7 +43,8 @@ const CORPUS_BYTES: usize = 990_499;
 /// sheet; the founder asked for them translated. 29 new words (19 more reused
 /// from the old app's keys) put the runtime route at 137,801, 101 bytes over.
 /// Same rule as the morning's move: the words were asked for, so the line goes
-/// to ~1 KB above the new measurement and stays a warning. Owner's call again.
+/// to ~1 KB above the new measurement and stays a warning. Approved by the
+/// owner the same day: 「同意呀，i18n_residency 可以增加预算」.
 const SC005_BUDGET: usize = 138_800;
 
 fn engine_with(active: &str) -> I18n {
