@@ -45,6 +45,21 @@ export const ATTACHMENT_PREFIX = 'bug-attachments/';
 /** Where the issue links them — the one origin whose route serves them. */
 export const ATTACHMENT_ORIGIN = 'https://getvela.app';
 
+/**
+ * Which app sent the report, and the tag the issue title carries for it —
+ * `[iOS] …`, `[Android] …` — so a triager sees the platform before opening
+ * the issue (founder, 2026-09-27, after the team's own `[iOS · Function] …`
+ * convention in #318).
+ */
+export const CLIENT_TAGS = {
+	ios: 'iOS',
+	android: 'Android',
+	web: 'Web',
+	extension: 'Extension',
+	desktop: 'Desktop'
+} as const;
+export type Client = keyof typeof CLIENT_TAGS;
+
 export interface ReportText {
 	what: string;
 	steps: string;
@@ -52,6 +67,12 @@ export interface ReportText {
 	environment: string;
 	diagnostics: string;
 	fingerprint: string;
+	/** One of {@link CLIENT_TAGS}, or '' from a client older than the field. */
+	client: Client | '';
+	/** The operating system as the app reads it — "iOS 26.0", "Android 14", "macOS 15.5". */
+	os: string;
+	/** The app's version, without a leading "v" — "0.9.4". */
+	appVersion: string;
 }
 
 export type ImageKind = 'jpg' | 'png' | 'webp';
@@ -143,6 +164,15 @@ function decodeBase64(data: string): Uint8Array | null {
 
 const field = (value: unknown): string => (typeof value === 'string' ? value : '');
 
+/** One short line: newlines collapsed, capped — for fields that land in a title or a header line. */
+const oneLine = (value: string, max: number): string =>
+	value.replace(/\s+/g, ' ').trim().slice(0, max);
+
+const clientOf = (value: unknown): Client | '' => {
+	const key = field(value).trim().toLowerCase();
+	return Object.hasOwn(CLIENT_TAGS, key) ? (key as Client) : '';
+};
+
 /**
  * The server's own scrub of the fields the APP writes — `environment`,
  * `diagnostics`, `area` — the same rule the clients apply
@@ -179,7 +209,14 @@ export async function parseReport(request: Request): Promise<ParsedReport> {
 		area: redact(field(parsed.area)),
 		environment: redact(field(parsed.environment)),
 		diagnostics: redact(field(parsed.diagnostics)),
-		fingerprint: field(parsed.fingerprint)
+		fingerprint: field(parsed.fingerprint),
+		client: clientOf(parsed.client),
+		os: oneLine(redact(field(parsed.os)), 120),
+		appVersion: field(parsed.appVersion)
+			.trim()
+			.replace(/^v/i, '')
+			.replace(/[^0-9A-Za-z.+_-]/g, '')
+			.slice(0, 40)
 	};
 	const chars = Object.values(text).reduce((sum, value) => sum + value.length, 0);
 	if (chars > MAX_REPORT_CHARS) return refuse(413, 'too_large');
@@ -218,35 +255,87 @@ function screenshotsMarkdown(urls: string[], dropped: number): string[] {
 	return lines;
 }
 
-/** The issue as GitHub will show it. */
+/** The issue form's catch-all area says nothing a title should repeat. */
+const specificArea = (area: string): string =>
+	area && !/^other\b/i.test(area.trim()) ? oneLine(area, 40) : '';
+
+/** The first line of what the person wrote, cut to `max` — at a space when one is near the end. */
+export function summary(what: string, max = 80): string {
+	const line = oneLine(what.split('\n').find((l) => l.trim() !== '') ?? what, 1000);
+	if (line.length <= max) return line;
+	const cut = line.slice(0, max);
+	const space = cut.lastIndexOf(' ');
+	return `${space > max * 0.6 ? cut.slice(0, space) : cut}…`;
+}
+
+/**
+ * `[iOS] Send stuck after tapping Confirm` / `[Android · Send] …` — the
+ * platform first, then the area when the report names a specific one. A
+ * client older than the `client` field keeps the old `[bug] …`.
+ */
+export function issueTitle(text: ReportText): string {
+	if (!text.client) return `[bug] ${summary(text.what)}`;
+	const area = specificArea(text.area);
+	return `[${CLIENT_TAGS[text.client]}${area ? ` · ${area}` : ''}] ${summary(text.what)}`;
+}
+
+/** "Platform: iOS 26.0. App v0.9.4." — the header line the team's own issues open with. */
+function platformLine(text: ReportText): string[] {
+	if (!text.client && !text.os && !text.appVersion) return [];
+	const platform = text.os || (text.client ? CLIENT_TAGS[text.client] : '');
+	const parts = [
+		platform && `Platform: ${platform}.`,
+		text.appVersion && `App v${text.appVersion}.`
+	];
+	return [parts.filter(Boolean).join(' ')];
+}
+
+/**
+ * The issue as GitHub will show it, in the shape the team writes by hand
+ * (#318): Platform / Area, a blank line, Problem — then steps, screenshots,
+ * and the device details folded away.
+ */
 export function issueBody(
 	marker: string,
 	text: ReportText,
 	urls: string[],
 	dropped: number
 ): string {
+	const area = specificArea(text.area);
 	return [
 		marker,
-		'> Filed from the in-app one-click reporter.',
+		...platformLine(text),
+		...(area ? [`Area: ${area}`] : []),
 		'',
-		'### What happened',
-		text.what,
-		...(text.steps ? ['', '### Steps to reproduce', text.steps] : []),
+		`Problem: ${text.what}`,
+		...(text.steps ? ['', 'Steps to reproduce:', text.steps] : []),
 		...screenshotsMarkdown(urls, dropped),
-		...(text.area ? ['', `**Area:** ${text.area}`] : []),
-		...(text.environment ? ['', '### Environment', text.environment] : []),
-		...(text.diagnostics ? ['', '### Diagnostics', '```', text.diagnostics, '```'] : [])
+		...(text.environment
+			? [
+					'',
+					'<details><summary>Device details</summary>',
+					'',
+					'```',
+					text.environment,
+					'```',
+					'</details>'
+				]
+			: []),
+		...(text.diagnostics ? ['', '### Diagnostics', '```', text.diagnostics, '```'] : []),
+		'',
+		'<sub>Sent from the in-app reporter.</sub>'
 	].join('\n');
 }
 
 /** The +1 comment on the open issue this report repeats — its screenshots included. */
 export function dedupComment(text: ReportText, urls: string[], dropped: number): string {
 	return [
-		'➕ Another in-app report for the same issue.',
+		'➕ Another in-app report of the same issue.',
 		'',
-		text.what,
-		...screenshotsMarkdown(urls, dropped),
-		...(text.environment ? ['', text.environment] : [])
+		...platformLine(text),
+		...(platformLine(text).length > 0 ? [''] : []),
+		`Problem: ${text.what}`,
+		...screenshotsMarkdown(urls, dropped)
 	].join('\n');
 }
 
@@ -338,7 +427,7 @@ export async function fileReport(
 
 	const fp = safeFingerprint(text.fingerprint);
 	const marker = `<!-- vela-fp:${fp} -->`;
-	const title = `[bug] ${text.what.slice(0, 80)}${text.what.length > 80 ? '…' : ''}`;
+	const title = issueTitle(text);
 	const { keys, dropped } = await storeScreenshots(report.screenshots, deps);
 	const urls = keys.map((key) => `${ATTACHMENT_ORIGIN}/api/bug-report/attachments/${key}`);
 	const filed = (number: number, url: string, deduped: boolean): Filed => ({

@@ -9,6 +9,8 @@ import {
 	attachmentKey,
 	fileReport,
 	isAttachmentKey,
+	issueBody,
+	issueTitle,
 	parseReport,
 	serveAttachment,
 	sniffImage,
@@ -270,8 +272,69 @@ const TEXT: ReportText = {
 	area: 'send',
 	environment: 'iOS 18',
 	diagnostics: 'log',
-	fingerprint: 'fp-1'
+	fingerprint: 'fp-1',
+	client: 'ios',
+	os: 'iOS 26.0',
+	appVersion: '0.9.4'
 };
+
+describe('the issue reads like the team writes them (#318)', () => {
+	const text = (over: Partial<ReportText> = {}): ReportText => ({
+		...TEXT,
+		area: 'Other (explain above)',
+		...over
+	});
+
+	it('titles it with the platform first, then a specific area when there is one', () => {
+		expect(issueTitle(text())).toBe('[iOS] Send stuck');
+		expect(issueTitle(text({ client: 'android', area: 'Send' }))).toBe(
+			'[Android · Send] Send stuck'
+		);
+		expect(issueTitle(text({ client: 'desktop' }))).toBe('[Desktop] Send stuck');
+		expect(issueTitle(text({ client: 'web' }))).toBe('[Web] Send stuck');
+	});
+
+	it('keeps the old title for a client that sends no platform', () => {
+		expect(issueTitle(text({ client: '' }))).toBe('[bug] Send stuck');
+	});
+
+	it('titles with the first line only, cut at a word near 80 characters', () => {
+		const long = `${'word '.repeat(30)}\nsecond line`;
+		const title = issueTitle(text({ what: long }));
+		expect(title.startsWith('[iOS] word word')).toBe(true);
+		expect(title.endsWith('…')).toBe(true);
+		expect(title).not.toContain('second line');
+		expect(title.length).toBeLessThanOrEqual('[iOS] '.length + 81);
+		expect(issueTitle(text({ what: '转账'.repeat(60) }))).toBe(`[iOS] ${'转账'.repeat(40)}…`);
+	});
+
+	it('opens the body with Platform / Area / Problem, and folds the device details away', () => {
+		const body = issueBody('<!-- vela-fp:x -->', text({ area: 'Send' }), ['https://s/1.jpg'], 0);
+		expect(body.split('\n').slice(0, 5)).toEqual([
+			'<!-- vela-fp:x -->',
+			'Platform: iOS 26.0. App v0.9.4.',
+			'Area: Send',
+			'',
+			'Problem: Send stuck'
+		]);
+		expect(body).toContain('Steps to reproduce:\n1. tap Send');
+		expect(body).toContain('![Screenshot 1](https://s/1.jpg)');
+		expect(body).toContain('<details><summary>Device details</summary>');
+		expect(body).not.toContain('Area: Other');
+	});
+
+	it('takes the platform fields from the report, one line each, versions without a "v"', async () => {
+		const parsed = await parseReport(
+			post({ what: 'x', client: 'IOS', os: 'iOS\n26.0', appVersion: 'v0.9.4 (abc)' })
+		);
+		expect(parsed).toMatchObject({
+			ok: true,
+			text: { client: 'ios', os: 'iOS 26.0', appVersion: '0.9.4abc' }
+		});
+		const unknown = await parseReport(post({ what: 'x', client: 'windows-phone' }));
+		expect(unknown).toMatchObject({ ok: true, text: { client: '' } });
+	});
+});
 
 function deps(
 	fetcher: typeof fetch,
