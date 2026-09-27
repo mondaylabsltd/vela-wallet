@@ -25,6 +25,17 @@ final class WalletStore {
 
     /// The core's view, decoded. `nil` until the home screen boots the machine.
     private(set) var balance: BalanceViewWire?
+    /// Bumped every time a round SETTLES — a whole fetch answered, as against
+    /// a chain's snapshot streaming in. Send follows the asset list by this
+    /// (`holdings_updated`, spec 078): one source, so the balance beside a
+    /// token there is the balance on the home row.
+    private(set) var round = 0
+    /// Which account the last settled round was for (lower-cased).
+    private(set) var settledAddress: String?
+    /// `last_refreshed_at_ms` of the last round counted. The core stamps it at
+    /// every settle and ONLY then — and keeps it across an account switch, so
+    /// a new account counts as settled only once its own round lands.
+    @ObservationIgnored private var countedRefreshAt: Double?
 
     private let executor: BalanceExecutor
     private var core: CoreStore<BalanceViewWire>!
@@ -40,7 +51,7 @@ final class WalletStore {
         self.core = CoreStore(
             bridge: BalanceDashboardCore(),
             perform: { [executor] operation in await executor.perform(operation) },
-            onView: { [weak self] view in self?.balance = view },
+            onView: { [weak self] view in self?.viewArrived(view) },
             onFault: { print("[vela-wallet] balance_dashboard fault: \($0)") }
         )
         // The port closes over this store, so it is installed after it exists
@@ -49,6 +60,30 @@ final class WalletStore {
             self?.chainAssetsArrived(tokens)
         }
         homePoller = HomeBalancePoller { [weak self] in self?.autoRefresh() }
+    }
+
+    private func viewArrived(_ view: BalanceViewWire) {
+        balance = view
+        guard let at = view.lastRefreshedAtMs, at != countedRefreshAt,
+              let address = view.address, !address.isEmpty
+        else { return }
+        countedRefreshAt = at
+        settledAddress = address.lowercased()
+        round += 1
+    }
+
+    /// Whether the dashboard has settled a round for `address` in this run and
+    /// is still reading it — i.e. its tokens are that account's asset list.
+    func hasSettled(_ address: String) -> Bool {
+        let lc = address.lowercased()
+        return settledAddress == lc && balance?.address?.lowercased() == lc
+    }
+
+    /// The round the dashboard last settled for `address`, or `nil` when it
+    /// has settled none for it (yet) — so a caller can tell "the next full
+    /// load" from the one it already saw.
+    func settledRound(for address: String) -> Int? {
+        hasSettled(address) ? round : nil
     }
 
     /// Called from the home screen's `.task`, with the signed-in address.

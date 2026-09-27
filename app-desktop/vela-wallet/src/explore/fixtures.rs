@@ -75,6 +75,21 @@ pub struct SiteModel {
     pub tint: Hsla,
     pub subtitle: Option<SharedString>,
     pub meta: Option<SharedString>,
+    /// What a click on the site opens: the history entry's URL, or the one a
+    /// favourite was pinned at. `None` for a drawn site, which opens its host.
+    pub url: Option<SharedString>,
+}
+
+impl SiteModel {
+    /// The address this site opens (078 E-02). Every row opens ITS site: a
+    /// drawn one opens its host rather than nothing — "nothing" is what let a
+    /// click fall through to whichever page was loaded last.
+    #[must_use]
+    pub fn open_url(&self) -> String {
+        self.url
+            .as_ref()
+            .map_or_else(|| format!("https://{}", self.host), ToString::to_string)
+    }
 }
 
 fn site(
@@ -92,6 +107,7 @@ fn site(
         tint,
         subtitle: None,
         meta: None,
+        url: None,
     }
 }
 
@@ -403,39 +419,22 @@ pub fn tile_menu(strings: &ExploreStrings) -> MenuModel {
 
 /// The browsing toolbar's ⋯ (M3): what you can do to the page you are on.
 pub fn site_menu(strings: &ExploreStrings) -> MenuModel {
+    // The web's `siteMenuItems`, in its order (078 E-03).
+    let item = |icon, label: &SharedString| MenuItemModel {
+        icon,
+        label: label.clone(),
+        destructive: false,
+    };
     MenuModel {
         items: vec![
-            MenuItemModel {
-                icon: Icon::RefreshCw,
-                label: strings.refresh.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::Share2,
-                label: strings.site_menu.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::Star,
-                label: strings.add_to_favorites.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::ExternalLink,
-                label: strings.open_in_new_tab.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::Power,
-                label: strings.disconnect.clone(),
-                destructive: false,
-            },
-            MenuItemModel {
-                icon: Icon::X,
-                label: strings.close.clone(),
-                destructive: false,
-            },
+            item(Icon::RefreshCw, &strings.refresh),
+            item(Icon::Share2, &strings.share),
+            item(Icon::Copy, &strings.copy_link),
+            item(Icon::Star, &strings.add_to_favorites),
+            item(Icon::ExternalLink, &strings.open_in_system_browser),
+            item(Icon::Power, &strings.disconnect),
+            item(Icon::X, &strings.close_page),
         ],
-        divider_after: Some(3),
+        divider_after: Some(4),
     }
 }

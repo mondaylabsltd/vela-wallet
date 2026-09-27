@@ -112,7 +112,7 @@ export function normaliseAccount(record: unknown): Account | null {
 		!Array.isArray(r.keys);
 	if (!old) return record as Account;
 	const keys = Array.isArray(r.keys) ? r.keys : [];
-	return {
+	const account: Account = {
 		id,
 		name: str(r.name) ?? '',
 		address,
@@ -138,6 +138,14 @@ export function normaliseAccount(record: unknown): Account | null {
 				return key;
 			})
 	};
+	// The key this device signs with (founder, 2026-09-26). Only the core
+	// writes it, always in snake_case, and the core judges it on the way in —
+	// so it is carried whole rather than read here. Dropping it would hand the
+	// choice of key back to the browser.
+	if (r.signed_in_with && typeof r.signed_in_with === 'object') {
+		account.signed_in_with = r.signed_in_with as Account['signed_in_with'];
+	}
+	return account;
 }
 
 /** Upsert by id. The whole record is written — see the invariant above. */

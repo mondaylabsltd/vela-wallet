@@ -1,5 +1,6 @@
 package app.getvela.wallet.navigation
 
+import app.getvela.wallet.core.diagnostics.BugReport
 import app.getvela.wallet.core.diagnostics.BugReportUrl
 import app.getvela.wallet.core.diagnostics.CrashSheet
 import app.getvela.wallet.feature.settings.SettingsPage
@@ -60,6 +61,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -344,7 +352,12 @@ fun VelaNavHost(
     // each carry a sheet of their own.
     var identiconViewer by remember { mutableStateOf<String?>(null) }
     CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }) {
-        NavHost(navController = navController, startDestination = startDestination) {
+        NavHost(
+            navController = navController,
+            startDestination = startDestination,
+            enterTransition = { if (betweenTabs()) EnterTransition.None else fadeIn(tween(ROUTE_FADE_MS)) },
+            exitTransition = { if (betweenTabs()) ExitTransition.None else fadeOut(tween(ROUTE_FADE_MS)) },
+        ) {
             composable(VelaDestinations.WELCOME) {
                 val welcome: WelcomeViewModel = viewModel()
                 var showSignInMethods by rememberSaveable { mutableStateOf(false) }
@@ -450,6 +463,13 @@ fun VelaNavHost(
                 }
                 LaunchedEffect(session.address) {
                     if (session.address.isEmpty()) return@LaunchedEffect
+                    // Read the book as the wallet opens, not when 通讯录 is
+                    // first tapped: that tap used to meet an unloaded book and
+                    // draw title + search before the list popped in — the flash
+                    // iOS never had, because its store is read at sign-in. The
+                    // screen's own open is then the same account again, which
+                    // the core keeps as it is (only the history is re-read).
+                    application.container.contacts.open(session.address)
                     // ORDER MATTERS. The pool asks the network machine which
                     // endpoints a chain has, so a fetch dispatched before that
                     // machine has read storage finds no chains at all and settles
@@ -513,6 +533,18 @@ fun VelaNavHost(
                 LaunchedEffect(online) {
                     if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
                 }
+                // Who the send is for and the money it shows — one definition for
+                // the open below and for a payment request that re-opens a Send
+                // already on screen.
+                fun sendAccount() = SendAccountRef(id = session.address, address = session.address, name = session.activeName)
+                fun sendDisplay(): SendDisplayContext {
+                    val money = WalletLive.Money.of(currency)
+                    return SendDisplayContext(
+                        code = money.code,
+                        rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
+                        fiat_decimals = 2,
+                    )
+                }
                 val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
                 LaunchedEffect(payLink) {
                     val uri = payLink ?: return@LaunchedEffect
@@ -529,14 +561,25 @@ fun VelaNavHost(
                         return@LaunchedEffect
                     }
                     VelaLog.event("paylink", "validated", "chain" to request.chain_id, "amount" to request.amount)
-                    application.container.pendingSendParams.value = SendOpenParams(
+                    val params = SendOpenParams(
                         prefilled_recipient = request.recipient,
                         prefilled_chain_id = request.chain_id.toString(),
                         prefilled_token_address = request.token_address,
                         prefilled_amount_base = request.amount_base,
                         locked = true,
                     )
-                    flows.enter(WalletFlowEntry.Send)
+                    // Spec 078 round 3: a Send already on screen opens the request
+                    // NOW — the locked request replaces the form, as it would from
+                    // a closed Send — and nothing is parked to re-apply later over
+                    // a recipient the person typed.
+                    val sendOpenNow = flows.top in SEND_STATES
+                    VelaLog.event("paylink", if (sendOpenNow) "opened on the send on screen" else "opening send")
+                    application.container.paymentHandOff.request(
+                        params = params,
+                        sendOpen = sendOpenNow,
+                        openNow = { p -> application.container.send.open(account = sendAccount(), display = sendDisplay(), params = p) },
+                        enterSend = { flows.enter(WalletFlowEntry.Send) },
+                    )
                     application.container.pendingPayLink.compareAndSet(uri, null)
                 }
                 var captureShare by remember { mutableStateOf<ShareCardModel?>(null) }
@@ -617,8 +660,6 @@ fun VelaNavHost(
                     val signSpeed by controller.speed.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
-                    val signMethod by controller.signMethod.collectAsStateWithLifecycle()
-                    val signWithOpen by controller.signWithOpen.collectAsStateWithLifecycle()
                     val feeOpen by controller.feeOpen.collectAsStateWithLifecycle()
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
@@ -631,8 +672,6 @@ fun VelaNavHost(
                         money = WalletLive.Money.of(currency),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
                         chainId = signChain,
-                        signMethod = signMethod,
-                        signWithOpen = signWithOpen,
                         feeOpen = feeOpen,
                         trustedSignerWaiting = trustedSignerWaiting,
                         trustedSignerNotice = trustedSignerNotice,
@@ -648,16 +687,10 @@ fun VelaNavHost(
                                 // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
                                 onDismiss = { controller.swipeDismissed() },
                                 onConfirm = { controller.approve() },
-                                onChip = { id ->
-                                    when (id) {
-                                        "requested" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Requested)
-                                        "balance" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Balance)
-                                        "custom" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom)
-                                        "revoke" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Revoke)
-                                    }
-                                },
+                                onChip = { id -> app.getvela.wallet.feature.signing.SigningLive.chipMode(id)?.let(controller::guardPreset) },
                                 onCustomAmount = { controller.guardCustomAmount(it) },
-                                onSignWith = { controller.signWith(it) },
+                                onLegChip = { leg, id -> app.getvela.wallet.feature.signing.SigningLive.chipMode(id)?.let { controller.guardLegPreset(leg, it) } },
+                                onLegCustomAmount = { leg, text -> controller.guardLegCustomAmount(leg, text) },
                                 onFee = { controller.feeTapped() },
                                 onFeePick = { id -> controller.pickFee(id.takeUnless { it == app.getvela.wallet.feature.signing.SigningLive.NATIVE_FEE_ID }) },
                                 onToggleSpeed = { controller.toggleSpeed() },
@@ -694,6 +727,10 @@ fun VelaNavHost(
                 val sendAlert by send.alert.collectAsStateWithLifecycle()
                 val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
                 var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
+                // Any open — also a payment request re-opening the Send on screen —
+                // starts without a fee sheet over it.
+                val sendOpens by send.opens.collectAsStateWithLifecycle()
+                LaunchedEffect(sendOpens) { feeSheetOpen = false }
                 val sweepPicking by send.sweepPicking.collectAsStateWithLifecycle()
                 val mainActivity = LocalContext.current.let { ctx ->
                     generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.firstOrNull { it is MainActivity } as? MainActivity
@@ -704,17 +741,13 @@ fun VelaNavHost(
                 LaunchedEffect(sendOpen, session.address) {
                     if (sendOpen && session.address.isNotEmpty()) {
                         feeSheetOpen = false
-                        val money = WalletLive.Money.of(currency)
-                        // Spec 047 D8: a validated /pay link opens the send locked, once.
-                        val linkParams = application.container.pendingSendParams.value?.also { application.container.pendingSendParams.value = null }
+                        // Spec 047 D8: a validated /pay link opens the send locked —
+                        // taken atomically, so it is applied once (spec 078 round 3).
+                        val linkParams = application.container.paymentHandOff.takeRequest()
                         send.open(
                             params = linkParams ?: SendOpenParams(),
-                            account = SendAccountRef(id = session.address, address = session.address, name = session.activeName),
-                            display = SendDisplayContext(
-                                code = money.code,
-                                rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
-                                fiat_decimals = 2,
-                            ),
+                            account = sendAccount(),
+                            display = sendDisplay(),
                         )
                         // Spec 048: a group's 群发转账 arrives as split rows to seed right
                         // after the machine opens (the web seeds the same way).
@@ -729,10 +762,7 @@ fun VelaNavHost(
                         // Spec 070: a payment code scanned in 探索 arrives already read.
                         if (flows.top == FlowState.S1) {
                             send.openScanner()
-                            application.container.pendingScan.value?.let { text ->
-                                application.container.pendingScan.value = null
-                                send.scanned(text)
-                            }
+                            application.container.paymentHandOff.takeScan()?.let { text -> send.scanned(text) }
                         }
                     }
                 }
@@ -1051,7 +1081,7 @@ fun VelaNavHost(
                         },
                         onSaveImage = {
                             val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
-                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id)
+                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id, networks.networks.firstOrNull { it.chain_id.toInt() == request.asset.chain_id }?.native_symbol)
                         },
                         addToken = AddTokenCallbacks(
                             onInput = { wallet.addTokenInput(it.trim()) },
@@ -1220,9 +1250,15 @@ fun VelaNavHost(
                                                 is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> onUrl(scanned.url)
                                                 is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Payment -> {
                                                     onClose()
-                                                    application.container.pendingScan.value = scanned.text
                                                     section = VelaTab.Wallet
-                                                    flows.push(FlowStep.Scan)
+                                                    // Spec 078 round 3: a Send already open reads it
+                                                    // now; otherwise it opens on the scanner with it.
+                                                    application.container.paymentHandOff.scan(
+                                                        text = scanned.text,
+                                                        sendOpen = flows.top in SEND_STATES,
+                                                        scanNow = { text -> application.container.send.scanned(text) },
+                                                        enterScanner = { flows.push(FlowStep.Scan) },
+                                                    )
                                                 }
                                                 app.getvela.wallet.feature.browser.ExploreLive.Scanned.WalletConnect ->
                                                     refusal = strings.t("explore.walletConnectUnsupported")
@@ -1651,7 +1687,7 @@ fun VelaNavHost(
                 val networks by settings.networks.collectAsStateWithLifecycle()
                 // Spec 069: the default transaction speed.
                 val feeTier by settings.feeTier.collectAsStateWithLifecycle()
-                // Spec 071: the default "Sign with" and the Trusted Signer page.
+                // Spec 071: the Trusted Signer page.
                 val signPref by settings.signPref.collectAsStateWithLifecycle()
                 // Spec 047 US1: the rows read the device — preferences, the pool,
                 // the session, the store's own keys, the relay's treasury.
@@ -1671,6 +1707,11 @@ fun VelaNavHost(
                 var storageTick by remember { mutableStateOf(0) }
                 var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
                 var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
+                // Spec 078 round 3: the report in flight, and how the last one ended —
+                // the app's, not this screen's (closing the sheet mid-send still ends
+                // in something the person sees).
+                val feedback = application.container.feedback
+                val feedbackState by feedback.state.collectAsStateWithLifecycle()
                 // The RPC fix the home asked for (the web's `openRpcFix`): which chain,
                 // the URL being typed until it is saved, and whether a save went out
                 // from the sheet (its probe then decides "restored").
@@ -1712,8 +1753,18 @@ fun VelaNavHost(
                     val address = session.address
                     if (address.isBlank()) return@LaunchedEffect
                     val device = application.container.deviceKeysOf(address, session.activeName)
-                    walletKeys = application.container.walletKeys.read(address, device)
+                    walletKeys = application.container.walletKeys.read(address, device, application.container.signInCredentialOf(address))
                 }
+                // What this device may say about itself in a report — five named
+                // fields, never an address, a balance or an endpoint URL.
+                val feedbackFacts = BugReport.DeviceFacts(
+                    version = BuildConfig.VERSION_NAME,
+                    commit = BuildConfig.GIT_COMMIT,
+                    platform = "Android ${android.os.Build.VERSION.RELEASE}",
+                    language = i18nState.language,
+                    unreachable = poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() },
+                    failures = VelaLog.recentFailures(),
+                )
                 val liveModel = run {
                     var m = SettingsLive.withWizard(
                         SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
@@ -1730,10 +1781,9 @@ fun VelaNavHost(
                     m = SettingsLive.withConnections(m, connectedSites.sites, strings)
                     m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings)
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
-                    m = SettingsLive.withFeedback(
-                        m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, "Android ${android.os.Build.VERSION.RELEASE}", i18nState.language,
-                        poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
-                    )
+                    m = SettingsLive.withFeedback(m, feedbackFacts, strings)
+                    m = SettingsLive.withFeedbackStatus(m, feedbackState.sending, feedbackState.outcome)
+                    m = SettingsLive.withFeedbackNotice(m, feedbackState.notice)
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
                     m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, balanceView.switcher, currency, strings)
@@ -1844,19 +1894,24 @@ fun VelaNavHost(
                                 }
                             }
                         },
-                        onFeedbackSend = { text ->
-                            // Spec 048: what was typed leads the report; the device lines follow.
-                            // Spec 081 FR-016: each in its OWN field — `what` and
-                            // `environment` — because `&body=` is dropped by GitHub
-                            // for an issue form, which is how this button spent its
-                            // whole life opening a blank page.
-                            val url = BugReportUrl.build(
-                                what = text.trim(),
-                                environment = liveModel.feedback.previewLines.joinToString("\n"),
-                            )
-                            VelaLog.event("feedback", "send", "typed" to text.length)
-                            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                        onFeedbackSend = { what, steps, screenshots ->
+                            // Spec 078 round 3: the report is POSTed (getvela.app), the
+                            // screenshots with it; any refusal hands back the prefilled
+                            // GitHub form, which the sheet offers.
+                            if (!feedbackState.sending && what.isNotBlank()) {
+                                val labels = SettingsLive.feedbackLabels(strings)
+                                val facts = feedbackFacts
+                                scope.launch {
+                                    val payload = withContext(Dispatchers.Default) {
+                                        BugReport.build(what, steps, BugReport.AREA_OTHER, labels, facts, screenshots)
+                                    }
+                                    feedback.submit(payload)
+                                }
+                            }
                         },
+                        onFeedbackOpened = { feedback.sheetOpened() },
+                        onFeedbackClosed = { feedback.sheetClosed() },
+                        onFeedbackNoticeShown = { feedback.noticeShown() },
                         onOverrideEdited = { chainId, field, value ->
                             settings.editOverride(chainId, if (field == "explorer") NetOverrideField.Explorer else NetOverrideField.Rpc, value)
                         },
@@ -1915,7 +1970,6 @@ fun VelaNavHost(
                             val prefsStore = application.container.preferences
                             when (sheet) {
                                 SettingsOverlay.Currency -> settings.chooseCurrency(id)
-                                SettingsOverlay.SignWith -> settings.chooseSignMethod(id)
                                 SettingsOverlay.FeeSpeed ->
                                     app.getvela.wallet.feature.send.core.FeeTier.entries
                                         .firstOrNull { it.name.equals(id, ignoreCase = true) && it != app.getvela.wallet.feature.send.core.FeeTier.Rapid }
@@ -2133,6 +2187,27 @@ fun VelaNavHost(
 }
 
 /**
+ * The tab bar's routes. 钱包 and 探索 are sections of [VelaDestinations.WALLET]
+ * and swap in place; 通讯录 and 设置 are routes of their own, and a move
+ * between any two of these must look like the in-place swap.
+ */
+private val TAB_ROUTES = setOf(VelaDestinations.WALLET, VelaDestinations.CONTACTS, VelaDestinations.SETTINGS)
+
+/** navigation-compose's own default fade, kept for every move that is not a tab. */
+private const val ROUTE_FADE_MS = 700
+
+/**
+ * A tab to a tab — pushes, swaps and pops alike — cuts instead of fading.
+ *
+ * The NavHost default is a 700 ms crossfade, which drew both screens at once
+ * for most of a second every time 通讯录 or 设置 was tapped, while 钱包 ⇄ 探索
+ * swapped in a frame: the Android tab bar felt sluggish where iOS and the
+ * desktop did not (founder-found, 2026-09-26).
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenTabs(): Boolean =
+    initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES
+
+/**
  * Move without stacking.
  *
  * The route guard can fire more than once for one decision — a recomposition, a
@@ -2247,7 +2322,7 @@ private fun SendAlertDialog(kind: SendAlertKind, strings: VelaStrings, onDismiss
         onDismissRequest = onDismiss,
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
-                androidx.compose.material3.Text(strings.t(I18nKeys.Flows.DONE))
+                androidx.compose.material3.Text(strings.t(I18nKeys.Common.GOT_IT))
             }
         },
         title = { androidx.compose.material3.Text(title) },

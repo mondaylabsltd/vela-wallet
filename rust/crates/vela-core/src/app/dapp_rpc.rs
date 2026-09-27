@@ -458,7 +458,12 @@ pub fn sign_error_message(kind: SignErrorKind) -> &'static str {
         SignErrorKind::UnauthorizedAccount => "Unauthorized account",
         SignErrorKind::InvalidParams => "Invalid params",
         SignErrorKind::UnsupportedCapability => "Unsupported capability",
-        SignErrorKind::UnlimitedApproval => "Unlimited approvals are disabled",
+        // Since 2026-09-26 an unlimited approval goes out when the approval
+        // screen showed it and it was kept; this refusal is the wallet not
+        // having shown it, not a policy against unlimited amounts.
+        SignErrorKind::UnlimitedApproval => {
+            "The wallet refused an unlimited approval its approval screen did not show"
+        }
         // Spec 081's self-call guard, brought in by the 075 merge. The NOTICE
         // carries the refused function in `detail` — that is what a page is
         // told, because it is the specific fact — and this is the sentence for

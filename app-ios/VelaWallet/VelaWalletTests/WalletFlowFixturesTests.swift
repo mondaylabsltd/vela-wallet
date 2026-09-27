@@ -209,7 +209,8 @@ struct WalletFlowFixturesTests {
             Issue.record("expected both confirmations")
             return
         }
-        #expect(sd3.amount == "120 USDT")
+        #expect(sd3.amount == "120")
+        #expect(sd3.amountUnit == "USDT", "the unit is its own piece (round 2)")
         #expect(sd3.facts.count == 4)
         #expect(sd3.breakdown.isEmpty)
 

@@ -12,7 +12,14 @@ import SwiftUI
 /// One card of the row: glyph above label. Spec 018 reuses the component
 /// with its own items (转账 / 收款 / 二维码) instead of a second row type.
 struct ActionCardItem: Identifiable {
-    let id = UUID()
+    /// The card's glyph: one per card in every row that draws them, and the
+    /// same on every render. It was a fresh `UUID()` per init, and the home
+    /// re-inits this row on every balance that lands — so each landing gave
+    /// the three buttons new identities, SwiftUI replaced them, and a tap in
+    /// flight on the old 转账 ended on a view that never saw it go down: the
+    /// send flow never opened (2026-09-27/28, the amount device test's "the
+    /// amount field never appeared", the tap made while €6.67 became €8.25).
+    var id: LucideGlyph { icon }
     let icon: LucideGlyph
     let label: String
     /// Spec 021: the card is an entry into a flow. Absent in the gallery,

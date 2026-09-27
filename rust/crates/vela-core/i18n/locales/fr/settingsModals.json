@@ -109,7 +109,8 @@
       "credential": "Identifiant",
       "transport": "Transport",
       "attestation": "Attestation",
-      "userVerified": "Vérification à chaque utilisation"
+      "userVerified": "Vérification à chaque utilisation",
+      "signsHere": "Connectée"
     }
   }
 }

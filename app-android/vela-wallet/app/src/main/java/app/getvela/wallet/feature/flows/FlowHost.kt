@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import app.getvela.wallet.feature.scan.ScanCallbacks
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.scan.LiveScanSurface
@@ -19,7 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -283,7 +283,7 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
         dismissed = true
         send?.onSheetDismissed?.invoke()
     }
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = { dismiss() },
         sheetState = state,
         containerColor = VelaTheme.colors.bgBase,

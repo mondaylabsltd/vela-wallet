@@ -7,9 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.draw.rotate
 import app.getvela.wallet.core.format.cleanAmountEdit
-import app.getvela.wallet.feature.signing.SignWithModel
 import app.getvela.wallet.core.designsystem.components.VelaLogo
 import app.getvela.wallet.core.marks.RemoteLogo
 import androidx.compose.foundation.layout.Column
@@ -844,69 +842,6 @@ fun SignerRow(label: String, name: String, seed: String, modifier: Modifier = Mo
     }
 }
 
-
-/**
- * "Sign with · Automatic ›" — where the passkey that signs this request is.
- *
- * Creating a wallet and signing in both let a person say whether their key is
- * on this phone, on another device, or on a security key. Signing did not: it
- * took the first key's stored route (founder, 2026-09-19). Per request; the
- * core decides which key the ceremony is pinned to (`sign_route`). Opens in
- * place — a sheet over the signing sheet is a modal under a modal.
- */
-@Composable
-fun SignWithRow(model: SignWithModel, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
-    val colors = VelaTheme.colors
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable { onSelect(null) },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
-        ) {
-            Text(model.label, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, modifier = Modifier.weight(1f))
-            Text(model.value, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
-            Icon(
-                imageVector = VelaIcons.ChevronDown,
-                contentDescription = null,
-                tint = colors.fgMuted,
-                modifier = Modifier.size(VelaIconSize.sm).rotate(if (model.open) 180f else 0f),
-            )
-        }
-        if (model.open) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
-                    .padding(VelaSpacing.sm),
-            ) {
-                model.options.forEach { option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(option.id) }
-                            .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.lg),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
-                            Text(
-                                option.title,
-                                color = if (option.selected) colors.fgBase else colors.fgMuted,
-                                fontFamily = VelaFontFamily,
-                                fontSize = VelaTextSize.base,
-                            )
-                            option.line?.let {
-                                Text(it, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
-                            }
-                        }
-                        if (option.selected) {
-                            Icon(VelaIcons.Check, contentDescription = null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 /**
  * The Trusted Signer's page is open (spec 071): what to do there, a way back to

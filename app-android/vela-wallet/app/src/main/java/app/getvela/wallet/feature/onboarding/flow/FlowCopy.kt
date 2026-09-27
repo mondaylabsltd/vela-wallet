@@ -72,8 +72,8 @@ fun progressFor(status: StatusKey?): ProgressPosition? = when (status) {
  * A method's title and caption in the add-key picker.
  *
  * Spec 075: the Trusted Signer is the fourth, from the signing corpus rather than
- * the create corpus — it is the same option the signing sheet and Settings
- * offer, so it must read the same in all three places.
+ * the create corpus — it is the same route the signing sheet's waiting card and
+ * Settings' page row speak of, so it must read the same in all three places.
  */
 fun methodCopy(method: KeyMethod): Pair<String, String> = when (method) {
     KeyMethod.Platform ->

@@ -153,6 +153,14 @@ export interface EmptyCtaModel {
 }
 
 export interface ContactsListModel {
+	/**
+	 * The book has not been read yet: draw the chrome (title, search) and
+	 * nothing else. Drawn as a list, the 分组 / 新建分组 head and "0 位" showed
+	 * for a beat and then vanished when an empty book turned into the empty
+	 * state — the flash iOS never had, because it renders nothing before
+	 * `loaded`.
+	 */
+	pending?: boolean;
 	search: SearchModel;
 	groupsTitle: string;
 	groupsAction: string;
@@ -180,6 +188,13 @@ export interface ContactsHomeModel {
 	editLabel: string;
 	menuLabel: string;
 	backLabel: string;
+	/**
+	 * The search field for a book with nothing in it yet. The list carries its
+	 * own; an empty book used to draw no field at all, where Android and iOS
+	 * keep it — and a book that loaded empty lost the field it had while
+	 * loading.
+	 */
+	search?: SearchModel;
 	list?: ContactsListModel;
 	detail?: ContactDetailModel;
 	group?: GroupDetailModel;
@@ -193,7 +208,15 @@ export interface ContactsHomeModel {
 export type ContactsPanelId = 'none' | 'contact-detail';
 
 export interface GroupRailModel {
+	/**
+	 * The book has not been read yet: the 全部联系人 row with no count, and no
+	 * 分组 head, no groups, no 新建分组 — chrome only, the same rule as the
+	 * phone list and iOS. Drawn before `loaded` the rail said "0" and then
+	 * jumped to the real count, and the group section appeared under it.
+	 */
+	pending?: boolean;
 	allLabel: string;
+	/** Blank while `pending` — "0" is a count of a book nobody has read. */
 	allCount: string;
 	allSelected: boolean;
 	groupsTitle: string;

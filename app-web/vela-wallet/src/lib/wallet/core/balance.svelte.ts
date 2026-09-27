@@ -15,10 +15,12 @@ import { loadCore } from '$lib/core/client';
 import { ensureCustomNetworks } from '$lib/services/networks';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import {
+	balanceSettledFor,
 	balanceView,
 	dispatchBalance,
 	ensureBalanceDashboard,
 	INITIAL_VIEW,
+	rereadHoldings,
 	subscribeBalanceDashboard
 } from './balance-resident';
 
@@ -43,6 +45,24 @@ class Balance {
 			this.view = balanceView();
 		})();
 		return this.#booted;
+	}
+
+	/**
+	 * Whether `address`'s holdings have settled a round (see `balanceSettledFor`).
+	 * Read alongside `view`, which is what makes a caller's effect re-run.
+	 */
+	settledFor(address: string): boolean {
+		return balanceSettledFor(address);
+	}
+
+	/**
+	 * One forced re-read for `address`; resolves when its next round has ended
+	 * (see `rereadHoldings`). Resolves at once before the machine has booted —
+	 * there is no round to wait for.
+	 */
+	reread(address: string): Promise<void> {
+		if (!this.#booted) return Promise.resolve();
+		return rereadHoldings(address);
 	}
 
 	/** The signed-in address changed (or arrived). The core re-hydrates for it. */

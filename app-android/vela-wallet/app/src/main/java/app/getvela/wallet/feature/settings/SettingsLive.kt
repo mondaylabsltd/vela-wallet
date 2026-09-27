@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.diagnostics.BugReport
+import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.FeeTierPrefView
 import app.getvela.wallet.feature.settings.core.SignPrefView
@@ -83,31 +85,11 @@ object SettingsLive {
     }
 
     /**
-     * How this device signs by default (spec 071): the "Sign with" row and its
-     * sheet, the Trusted Signer page row and its sheet — all from the `sign_pref`
-     * core, so the row, the sheet and every signing sheet say the same thing.
+     * Which Trusted Signer page this device opens (spec 071): the row and its
+     * sheet, from the `sign_pref` core. How a signature is routed is not a
+     * setting — the account signs with the key it signed in with.
      */
     fun withSignPref(model: SettingsScreenModel, view: SignPrefView, s: VelaStrings): SettingsScreenModel {
-        val titles = mapOf(
-            "auto" to s.t("common.automatic"),
-            "platform" to s.t("onboarding.create.methodPlatformTitle"),
-            "hybrid" to s.t("onboarding.create.methodHybridTitle"),
-            "security_key" to s.t("onboarding.create.methodSecurityKeyTitle"),
-            "trusted_signer" to s.t("componentsUi.signing.trustedSignerTitle"),
-        )
-        val sheet = SelectSheetModel(
-            title = s.t("settings.signing.title"),
-            subtitle = s.t("settings.signing.subtitle"),
-            rows = view.offered.mapNotNull { id ->
-                val title = titles[id] ?: return@mapNotNull null
-                SelectRowModel(
-                    id = id,
-                    label = title,
-                    detail = if (id == "trusted_signer") s.t("componentsUi.signing.trustedSignerBody") else null,
-                    selected = id == view.method,
-                )
-            },
-        )
         val official = s.t("settings.signing.pageOfficial")
         val host = view.signer_url.substringAfter("://").substringBefore('/')
         val page = SignerPageModel(
@@ -127,15 +109,14 @@ object SettingsLive {
             sections = model.sections.map { section ->
                 section.copy(
                     rows = section.rows.map { row ->
-                        when (row.id) {
-                            SettingsFixtures.SIGN_WITH_ROW -> row.copy(value = titles[view.method] ?: row.value)
-                            SettingsFixtures.SIGNER_PAGE_ROW -> row.copy(value = if (view.signer_url_is_default) official else host)
-                            else -> row
+                        if (row.id == SettingsFixtures.SIGNER_PAGE_ROW) {
+                            row.copy(value = if (view.signer_url_is_default) official else host)
+                        } else {
+                            row
                         }
                     },
                 )
             },
-            signWithSheet = sheet,
             signerPage = page,
         )
     }
@@ -697,16 +678,49 @@ object SettingsLive {
         },
     )
 
-    /** Feedback: the preview lines are the device's (version, platform, language, failed chains, recent failures). */
-    fun withFeedback(model: SettingsScreenModel, version: String, commit: String, platform: String, language: String, failedChains: List<String>, failures: List<String>, strings: VelaStrings): SettingsScreenModel = model.copy(
+    /** The corpus labels the report's environment lines wear — the preview's and the payload's alike. */
+    fun feedbackLabels(strings: VelaStrings): BugReport.EnvironmentLabels = BugReport.EnvironmentLabels(
+        version = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_VERSION),
+        platform = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_PLATFORM),
+        language = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_LANGUAGE),
+        rpc = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_RPC),
+        failures = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_FAILURES),
+        none = strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_NONE),
+    )
+
+    /**
+     * Feedback: the preview lines are the device's — built by the same
+     * function the payload's `environment` is ([BugReport.environmentLines]),
+     * so "only what you see is sent" is literal, redaction included.
+     */
+    fun withFeedback(model: SettingsScreenModel, facts: BugReport.DeviceFacts, strings: VelaStrings): SettingsScreenModel = model.copy(
+        feedback = model.feedback.copy(previewLines = BugReport.environmentLines(feedbackLabels(strings), facts)),
+    )
+
+    /**
+     * The notice for an answer that arrived with the sheet closed (the founder:
+     * a report always ends in something the person sees): filed → the success
+     * title and 在 GitHub 查看; not filed → the fallback title and 打开 GitHub 表单.
+     */
+    fun withFeedbackNotice(model: SettingsScreenModel, notice: BugReport.Outcome?): SettingsScreenModel {
+        val f = model.feedback
+        val shown = when (notice) {
+            is BugReport.Outcome.Filed -> FeedbackNoticeModel(f.successTitle, f.viewIssue, notice.url)
+            is BugReport.Outcome.Fallback -> FeedbackNoticeModel(f.fallbackTitle, f.openGithub, notice.fallbackUrl)
+            null -> null
+        }
+        return model.copy(feedback = f.copy(notice = shown))
+    }
+
+    /** Where the last 发送 stands: in flight, filed, or handed to the form. */
+    fun withFeedbackStatus(model: SettingsScreenModel, sending: Boolean, outcome: BugReport.Outcome?): SettingsScreenModel = model.copy(
         feedback = model.feedback.copy(
-            previewLines = listOf(
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_VERSION)}: v$version ($commit)",
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_PLATFORM)}: $platform",
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_LANGUAGE)}: $language",
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_RPC)}: ${failedChains.ifEmpty { listOf(strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_NONE)) }.joinToString(", ")}",
-                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_FAILURES)}: ${failures.ifEmpty { listOf(strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_NONE)) }.joinToString("; ")}",
-            ),
+            status = when {
+                sending -> FeedbackStatus.Sending
+                outcome is BugReport.Outcome.Filed -> FeedbackStatus.Filed(outcome.number, outcome.url, outcome.deduped, outcome.screenshotsDropped)
+                outcome is BugReport.Outcome.Fallback -> FeedbackStatus.Fallback(outcome.fallbackUrl)
+                else -> FeedbackStatus.Idle
+            },
         ),
     )
 
@@ -895,7 +909,7 @@ object SettingsLive {
                     id = "${token.chain_id}:${token.token_address ?: token.symbol}",
                     mark = mark(token.chain_id),
                     name = token.symbol,
-                    status = "${name(token.chain_id)} · ${if (view.hidden) MASK else WalletLive.trimAmount(token.balance)}",
+                    status = "${name(token.chain_id)} · ${if (view.hidden) MASK else tokenAmountText(token.balance)}",
                 )
             },
         )
@@ -957,6 +971,8 @@ object SettingsLive {
                 },
                 fingerprint = if (body.length >= 8) "${body.take(4)}…${body.takeLast(4)}".lowercase() else "",
                 pills = listOfNotNull(
+                    // First: the key this device signs with (founder, 2026-09-26).
+                    if (row.signsHere) KeyPillModel(strings.t(k.KEYS_SIGNS_HERE), KeyPillTone.SignsHere) else null,
                     if (row.userVerified == true) KeyPillModel(strings.t(k.KEYS_USER_VERIFIED), KeyPillTone.Verified) else null,
                     row.synced?.let { KeyPillModel(strings.t(if (it) k.KEYS_SYNCED else k.KEYS_NOT_SYNCED), if (it) KeyPillTone.Synced else KeyPillTone.Local) },
                 ),

@@ -102,7 +102,7 @@
 		padding: 1px 4px;
 		border: 1px solid var(--border);
 		border-radius: 4px;
-		font-size: 0.62rem;
+		font-size: max(0.62rem, var(--floor-label));
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		color: var(--text-tertiary);

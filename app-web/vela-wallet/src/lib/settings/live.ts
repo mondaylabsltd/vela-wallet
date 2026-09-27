@@ -37,7 +37,6 @@ import type { NetView } from '$lib/core/generated/NetView';
 import type { NetWizardView } from '$lib/core/generated/NetWizardView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
-import type { SignPrefView } from '$lib/core/generated/SignPrefView';
 import {
 	dateFormatOptions,
 	formatDate,
@@ -574,53 +573,6 @@ export function withLiveFeeSpeedDesktop(
 			rows: model.feeSpeed.rows.map((row) => ({ ...row, value: label, options: rows }))
 		}
 	};
-}
-
-/**
- * The default "Sign with" and the Trusted Signer's page, live (spec 071).
- *
- * The rows are the core's: `offered` in its order (a method this build has
- * no words for is not drawn), `method` ticked — always an offered name, the
- * factory `auto` when nothing was chosen. The page row names the HOST of the
- * page in force, or "Official"; the sheet says why the last address was
- * refused and whether a page there can use this wallet's passkeys — both the
- * core's findings, worded here.
- */
-export function withLiveSigning(model: SettingsHomeModel, view: SignPrefView): SettingsHomeModel {
-	const rows = liveSignWithRows(model.signWithSheet.rows, view);
-	const method = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
-	return {
-		...model,
-		sections: model.sections.map((section) => ({
-			...section,
-			rows: section.rows.map((row) => (row.id === 'sign-with' ? { ...row, value: method } : row))
-		})),
-		signWithSheet: { ...model.signWithSheet, rows }
-	};
-}
-
-/** DST's "Sign with" row, from the phone sheet's own rows. */
-export function withLiveSigningDesktop(
-	model: SettingsDesktopModel,
-	view: SignPrefView,
-	sheet: SelectSheetModel
-): SettingsDesktopModel {
-	const rows = liveSignWithRows(sheet.rows, view);
-	const label = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
-	return {
-		...model,
-		signing: {
-			...model.signing,
-			rows: model.signing.rows.map((row) => ({ ...row, value: label, options: rows }))
-		}
-	};
-}
-
-function liveSignWithRows(rows: SelectRowModel[], view: SignPrefView): SelectRowModel[] {
-	return view.offered.flatMap((id) => {
-		const row = rows.find((candidate) => candidate.id === id);
-		return row ? [{ ...row, selected: id === view.method }] : [];
-	});
 }
 
 /** The provider-driven list, when one has answered (spec 028 Phase 9, T491). */
@@ -1538,8 +1490,8 @@ function keyDetails(key: WalletKeys['keys'][number], m: SettingsMessages) {
 		// Spec 075: WHICH page, for a key that lives behind one. First, because
 		// it answers the question the rest of this list assumes — where the key
 		// is — and labelled with the Trusted Signer's own title, the same words the
-		// caption above it and the "Sign with" chooser use. Absent when the key
-		// lives behind no page, and then the row is exactly what it always was.
+		// caption above it uses. Absent when the key lives behind no page, and
+		// then the row is exactly what it always was.
 		{
 			label: m.signing.methods.trusted_signer,
 			value: key.signer_origin ?? '',
@@ -1585,8 +1537,7 @@ export function walletKeysModel(
 	 *
 	 * Spec 075 adds a fourth answer that is not about a device at all: a key
 	 * behind a Trusted Signer page lives behind the PAGE, and it is named with the
-	 * signing sheet's own title for that route, so Settings and the "Sign with"
-	 * chooser cannot call the same thing two names.
+	 * Trusted Signer's own title.
 	 */
 	const fallbackFor = (method: string) =>
 		method === 'trusted_signer'
@@ -1607,6 +1558,7 @@ export function walletKeysModel(
 		holder: key.method === 'trusted_signer' ? fallbackFor(key.method) : undefined,
 		fingerprint: keyFingerprint(key.public_key_hex),
 		pills: [
+			...(key.signs_here ? [{ text: m.keys.signsHere, tone: 'signs_here' as const }] : []),
 			...(key.user_verified === true
 				? [{ text: m.keys.userVerified, tone: 'verified' as const }]
 				: []),

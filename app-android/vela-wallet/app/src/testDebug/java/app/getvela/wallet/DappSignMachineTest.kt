@@ -27,6 +27,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.vela_dev_fixtures.fixtureAccounts
@@ -54,12 +55,14 @@ class DappSignMachineTest {
     @After
     fun stop() = scope.cancel()
 
-    private fun seedAccount() {
+    /** [signedInWith]: the key the account signed in with (2026-09-26); `null` = a record from before. */
+    private fun seedAccount(signedInWith: JSONObject? = null) {
         val keyset = fixtureAccounts()
         val keys = JSONArray()
         keyset.forEach { keys.put(JSONObject().put("credential_id", it.credentialIdHex).put("public_key_hex", it.publicKeyHex).put("name", it.name).put("transports", "internal")) }
         val account = JSONObject().put("id", keyset.first().credentialIdHex).put("name", "Parallel space").put("address", safe)
             .put("public_key_hex", keyset.first().publicKeyHex).put("created_at_iso", "2026-09-12T00:00:00Z").put("keys", keys)
+        if (signedInWith != null) account.put("signed_in_with", signedInWith)
         store.values["vela.accounts"] = JSONArray().put(account).toString()
         store.values["vela.activeAccountIndex"] = "0"
     }
@@ -102,10 +105,14 @@ class DappSignMachineTest {
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
     }
 
+    /** Where each ceremony went: the pinned credential, its transports, its method. */
+    private val routes = java.util.concurrent.CopyOnWriteArrayList<Triple<String?, String, KeyMethod>>()
+
     private val fixtureSigner = object : UserOpSigner {
         override suspend fun sign(challenge: ByteArray, credentialIdHex: String?, transports: String, method: KeyMethod): Assertion {
             signs += 1
             events += "sign"
+            routes += Triple(credentialIdHex, transports, method)
             val signed = fixtureAssert(challenge, listOfNotNull(credentialIdHex), 0u)
             return Assertion(signed.credentialIdHex, signed.signatureDerHex, signed.authenticatorDataHex, signed.clientDataJsonHex, null, "platform")
         }
@@ -176,6 +183,8 @@ class DappSignMachineTest {
         val answer = answers.first { it.first == "tab-1/r1" }.second
         assertEquals("the page gets the TRANSACTION hash once the receipt landed", "0xtx", answer.getString("result"))
         assertEquals("signed exactly once", 1, signs)
+        // A record from before the sign-in key: the first key, over its stored route.
+        assertEquals(listOf(Triple(fixtureAccounts().first().credentialIdHex, "internal", KeyMethod.Platform)), routes)
         assertTrue("the record precedes the response: $events", events.indexOf("persisted:with-hash") in 0 until events.indexOf("respond"))
         assertTrue("the tracker was handed a persisted row: $events", events.contains("track:persisted"))
         val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
@@ -186,6 +195,26 @@ class DappSignMachineTest {
         assertEquals("0xtx", JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0).getString("txHash"))
         assertEquals(origin, row.getString("dappOrigin"))
         assertTrue(row.getString("to").equals(founder, ignoreCase = true))
+        withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    /**
+     * Founder, 2026-09-26: a page's transaction signs with the key the account
+     * signed in with, over the route that reached it — here its SECOND key,
+     * on a security key. The sheet offers no other.
+     */
+    @Test
+    fun `a page's transaction signs with the key the account signed in with, over its route`() = runBlocking<Unit> {
+        val second = fixtureAccounts()[1].credentialIdHex
+        seedAccount(signedInWith = JSONObject().put("credential_id", second).put("method", "security_key")); scriptRelay()
+        val c = controller()
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        assertEquals("0xtx", answers.first { it.first == "tab-1/r1" }.second.getString("result"))
+        assertEquals(listOf(Triple<String?, String, KeyMethod>(second, "usb,nfc,ble", KeyMethod.SecurityKey)), routes)
         withTimeout(10_000) { c.closed.first { it } }
     }
 
@@ -277,7 +306,32 @@ class DappSignMachineTest {
     }
 
     @Test
-    fun `an unlimited approval is blocked until bounded, then leaves bounded`() = runBlocking<Unit> {
+    fun `an unlimited approval is kept as asked and goes out as the site built it`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        val usdc = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
+        val spender = "0x1111111111111111111111111111111111111111"
+        val data = "0x095ea7b3" + spender.drop(2).padStart(64, '0') + "f".repeat(64)
+        c.open(IncomingRequest("r3k", "eth_sendTransaction", JSONArray().put(JSONObject().put("from", safe).put("to", usdc).put("data", data).put("value", "0x0")).toString(), origin, "tab-1", 100))
+        val guard = withTimeout(20_000) { c.guard.first { it.detected != null } }
+        assertTrue(guard.detected!!.is_unbounded)
+        // 2026-09-26: Permit2 bundles revert when the wallet re-encodes the
+        // approve, so the site's ask is preselected — seen, said, consented.
+        assertTrue("kept as asked needs no extra tap", guard.confirm_allowed)
+        assertEquals(app.getvela.wallet.feature.signing.core.GuardChoice.Unlimited, guard.editor!!.choice)
+        assertTrue(guard.unlimited_consented)
+        assertNull("the site's own bytes", guard.rewritten_params_json)
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r3k" }) delay(50) }
+        assertTrue("the submit guard let the consented approval through", answers.first { it.first == "tab-1/r3k" }.second.has("result"))
+        assertEquals(1, signs)
+        assertEquals(1, port.calls.count { it.endsWith("eth_sendUserOperation") })
+    }
+
+    @Test
+    fun `an unlimited approval leaves bounded once the person names a cap`() = runBlocking<Unit> {
         seedAccount(); scriptRelay()
         val c = controller()
         val usdc = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
@@ -286,10 +340,10 @@ class DappSignMachineTest {
         c.open(IncomingRequest("r3", "eth_sendTransaction", JSONArray().put(JSONObject().put("from", safe).put("to", usdc).put("data", data).put("value", "0x0")).toString(), origin, "tab-1", 100))
         val guard = withTimeout(20_000) { c.guard.first { it.detected != null } }
         assertTrue(guard.detected!!.is_unbounded)
-        assertFalse("the guard holds the slide", guard.confirm_allowed)
         c.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom)
         c.guardCustomAmount("1")
         val bounded = withTimeout(20_000) { c.guard.first { it.confirm_allowed && it.rewritten_params_json != null } }
+        assertFalse("a cap withdraws the consent", bounded.unlimited_consented)
         assertTrue("the calldata carries the bounded amount", bounded.rewritten_params_json!!.contains("095ea7b3"))
         assertFalse(bounded.rewritten_params_json!!.contains("f".repeat(64)))
         withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }

@@ -15,7 +15,7 @@
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: 22 September 2026</p>
+	<p class="updated">Last updated: 26 September 2026</p>
 
 	<section>
 		<h2>Who we are</h2>
@@ -180,10 +180,25 @@
 	<section>
 		<h2>Bug reports</h2>
 		<p>
-			The feedback option in the apps opens a pre-filled <strong>public</strong> GitHub issue in your
-			browser; on Android it includes the app version, your system and language, and recent error messages.
-			Nothing is sent until you review it and submit it yourself on GitHub, where it is public. It never
-			includes keys or balances.
+			When you send feedback from the apps, the report goes to our bug-report service (<code
+				>getvela.app/api/bug-report</code
+			>), which files it as a <strong>public</strong> issue in our GitHub repository. A report contains
+			what you type, the device details the form shows you before you send — app version, system, language,
+			the names of networks the app couldn't reach and, where the app records them, recent error messages
+			— and any screenshots you attach. Wallet addresses and web addresses in those device details are
+			replaced before the issue is filed, and a report never includes your keys.
+		</p>
+		<p>
+			<strong>Screenshots are public.</strong> The app re-encodes each one on your device first, which
+			removes location and other photo metadata; our service then stores it on Cloudflare R2 and shows
+			it in the issue, where anyone can see it — crop out anything you'd rather keep private. We keep
+			reports and screenshots until we delete them; email us and we will.
+		</p>
+		<p>
+			The service uses your IP address, held only in memory, to limit how many reports can be sent;
+			it is not stored or passed to GitHub. If the service can't file a report, the app opens a
+			pre-filled GitHub form in your browser instead, and nothing is sent until you submit it there
+			yourself.
 		</p>
 	</section>
 
@@ -271,7 +286,7 @@
 	}
 	.updated {
 		color: var(--text-secondary);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		margin-bottom: 48px;
 	}
 
@@ -286,7 +301,7 @@
 	p {
 		color: var(--text-secondary);
 		line-height: 1.75;
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		margin-bottom: 12px;
 	}
 
@@ -299,7 +314,7 @@
 	}
 	li {
 		color: var(--text-secondary);
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		line-height: 1.7;
 		padding-left: 20px;
 		position: relative;

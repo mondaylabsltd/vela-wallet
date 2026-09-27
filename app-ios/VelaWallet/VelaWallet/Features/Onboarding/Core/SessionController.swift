@@ -28,6 +28,9 @@ final class SessionController {
     private let executor: SessionExecutor
     private var driver: CoreDriver!
 
+    /// No effect in flight — `CoreDriver.isIdle`.
+    var isIdle: Bool { driver.isIdle }
+
     init(store: AccountStore) {
         self.store = store
         self.executor = SessionExecutor(store: store)

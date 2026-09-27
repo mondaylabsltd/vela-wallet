@@ -6,7 +6,8 @@
   "error": "Fehler",
   "somethingWrong": "Etwas ist schiefgelaufen",
   "tryAgain": "Erneut versuchen",
-  "done": "Fertig"
+  "done": "Fertig",
+  "gotIt": "Verstanden"
  },
  "language": {
   "title": "Sprache",
@@ -25,6 +26,7 @@
    "appearance": "Darstellung",
    "localization": "Lokalisierung",
    "advanced": "Erweitert",
+   "community": "Community",
    "developer": "Entwickler"
   },
   "account": {
@@ -36,7 +38,7 @@
   "appearance": {
    "themeLight": "Hell",
    "themeDark": "Dunkel",
-   "themeAuto": "System folgen",
+   "themeAuto": "System",
    "avatarInitials": "Initialen",
    "avatarIdenticon": "Identicon",
    "themeTitle": "Design",
@@ -54,7 +56,7 @@
    "timeSubtitle": "12-Stunden- oder 24-Stunden-Format."
   },
   "feeSpeed": {
-   "title": "Transaktionsgeschwindigkeit",
+   "title": "Transaktionstempo",
    "subtitle": "Jede Überweisung, die du in Vela startest, beginnt hier. Eine einzelne kannst du beim Senden trotzdem ändern."
   },
   "signing": {
@@ -78,7 +80,7 @@
    "addNetworkSubtitle": "Eigenes EVM-Netzwerk hinzufügen",
    "endpointsTitle": "Dienst-Endpunkte",
    "endpointsSubtitle": "Chain-Daten, Identity-Index, Bundler",
-   "feeSpeedTitle": "Transaktionsgeschwindigkeit",
+   "feeSpeedTitle": "Transaktionstempo",
    "feeSpeedSubtitle": "Der Startwert für jede Überweisung"
   },
   "developer": {
@@ -611,9 +613,9 @@
    "featureSafeContractBody": "Konten basieren auf auditierten Safe-Contracts, nicht auf einer Eigenentwicklung.",
    "featureStablecoinGasTitle": "Gas mit Stablecoins zahlen",
    "featureStablecoinGasBody": "Auf den meisten Netzwerken können Sie die Gebühren mit Stablecoins zahlen — Sie müssen nicht erst den nativen Coin besitzen.",
-   "heroTitle": "Nur Sie kontrollieren\nIhre Ethereum-Wallet",
+   "heroTitle": "Eine Ethereum-Wallet,\ndie wirklich dir gehört",
    "heroTitleFit": "long",
-   "heroSubtitle": "Signieren mit Passkey. Vela sieht deinen Schlüssel nie."
+   "heroSubtitle": "Signiert wird auf deinem Gerät. Der private Schlüssel deines Passkeys gelangt nie zu Vela."
   },
   "intro": {
    "skip": "Überspringen",
@@ -1312,6 +1314,35 @@
    "labelShares": "Anteile",
    "labelChain": "Chain",
    "labelNonce": "Nonce",
+   "intentApproveNft": "NFT genehmigen",
+   "intentApproveAllNfts": "Alle NFTs genehmigen",
+   "intentAuthorizeSpending": "Ausgabe von Token genehmigen",
+   "intentBuyNft": "NFT kaufen",
+   "intentSupply": "Bereitstellen",
+   "intentTransfer": "Übertragen",
+   "intentTransferNfts": "NFTs übertragen",
+   "intentUnwrapWeth": "WETH unwrappen",
+   "intentWrapEth": "ETH wrappen",
+   "labelAmountToSpend": "Auszugebender Betrag",
+   "labelApproved": "Genehmigt",
+   "labelExpires": "Läuft ab",
+   "labelMaxSpendingAmount": "Maximaler Ausgabebetrag",
+   "labelNewContract": "Neuer Vertrag",
+   "labelNft": "NFT",
+   "labelOnBehalfOf": "Im Namen von",
+   "labelOperator": "Operator",
+   "labelPrice": "Preis",
+   "labelQuantities": "Mengen",
+   "labelQuantity": "Menge",
+   "labelRecipient": "Empfänger",
+   "labelSeller": "Verkäufer",
+   "labelTokenIds": "Token-IDs",
+   "labelValidUntil": "Gültig bis",
+   "labelYouPay": "Sie zahlen",
+   "labelYouPayMax": "Sie zahlen (max.)",
+   "labelYouReceive": "Sie erhalten",
+   "labelYouReceiveMin": "Sie erhalten (min.)",
+   "valueUnlimited": "Unbegrenzt",
    "simResultLabel": "Simulationsergebnis",
    "simResultNoChange": "Keine Vermögensänderungen",
    "simResultNoOther": "keine weiteren Änderungen",
@@ -1473,32 +1504,45 @@
   },
   "bugReport": {
    "title": "Problem melden",
-   "subtitle": "Sagen Sie uns, was schiefgelaufen ist.",
+   "subtitle": "Sagen Sie uns, was passiert ist. Ein Screenshot hilft uns, es schneller zu beheben.",
    "whatLabel": "Was ist passiert?",
    "whatPlaceholder": "z. B. Ich habe auf Senden getippt und der Bildschirm ist eingefroren.",
    "addSteps": "+ Schritte zum Nachstellen hinzufügen",
    "stepsLabel": "Schritte zum Nachstellen (optional)",
    "stepsPlaceholder": "1. Gehen Sie zu …\n2. Tippen Sie auf …\n3. Sehen Sie …",
+   "screenshotsLabel": "Screenshots",
+   "addScreenshots": "Screenshots hinzufügen",
+   "screenshotsHint": "Optional · bis zu {{max}}",
+   "screenshotsPublic": "Screenshots sind auf GitHub öffentlich sichtbar. Schneiden Sie vorher alles weg, was privat bleiben soll.",
+   "removeScreenshot": "Screenshot {{index}} entfernen",
+   "viewScreenshot": "Screenshot {{index}} ansehen",
+   "closeViewer": "Schließen",
+   "removeFromViewer": "Entfernen",
+   "screenshotsLimit": "Pro Meldung passen nur {{max}} — die übrigen wurden nicht hinzugefügt.",
+   "screenshotUnsupported": "Diese Datei ließ sich nicht als Bild öffnen.",
+   "dropHint": "Bilder hier ablegen oder einfügen",
    "previewToggle": "Was gesendet wird",
-   "consent": "Es wird nur gesendet, was Sie sehen — niemals Schlüssel, Seed-Phrase oder Guthaben.",
+   "consent": "Gesendet wird nur, was hier steht: Ihre Beschreibung, Ihre Screenshots und die Gerätedaten. Ihre Passkeys sind nie Teil davon.",
    "send": "Meldung senden",
    "sending": "Wird gesendet …",
    "cancel": "Abbrechen",
-   "successTitle": "Danke — gemeldet!",
-   "successBodyNew": "Als Issue #{{number}} erfasst. Sie können es jederzeit verfolgen.",
-   "successBodyDeduped": "Zu einer bestehenden Meldung (#{{number}}) hinzugefügt. Danke für den zusätzlichen Hinweis!",
-   "viewIssue": "Meldung ansehen",
-   "fallbackTitle": "Stattdessen auf GitHub öffnen",
-   "fallbackBody": "Das automatische Senden hat nicht geklappt, aber wir haben ein GitHub-Formular mit den Details vorausgefüllt.",
+   "successTitle": "Danke — Ihre Meldung ist angekommen",
+   "successBodyNew": "Sie ist jetzt Issue #{{number}} auf GitHub. Dort können Sie die Behebung verfolgen.",
+   "successBodyDeduped": "Jemand hat das auch gemeldet — wir haben Ihre Meldung zu #{{number}} hinzugefügt. Mehr Meldungen helfen uns beim Priorisieren.",
+   "screenshotsDropped": "Ihre Screenshots konnten nicht hochgeladen werden. Sie können sie auf der Issue-Seite ergänzen.",
+   "viewIssue": "Auf GitHub ansehen",
+   "fallbackTitle": "Senden aus der App nicht möglich",
+   "fallbackBody": "Ihre Meldung steht in einem GitHub-Formular bereit — öffnen Sie es zum Abschicken.",
+   "fallbackScreenshots": "Screenshots werden nicht übernommen. Fügen Sie sie im GitHub-Formular hinzu.",
    "openGithub": "GitHub-Formular öffnen",
    "openGithubForm": "Lieber GitHub? Issue-Formular öffnen →",
    "done": "Fertig",
    "previewVersion": "App-Version",
    "previewPlatform": "Plattform",
    "previewLanguage": "Sprache",
-   "previewRpc": "Nicht erreichbarer RPC",
-   "previewFailures": "Letzte Fehler",
-   "previewNone": "Keine"
+   "previewRpc": "Nicht erreichbare RPCs",
+   "previewFailures": "Jüngste Fehler",
+   "previewNone": "keine"
   },
   "identiconViewer": {
    "title": "Identicon",
@@ -1651,7 +1695,8 @@
    "credential": "Anmeldedaten",
    "transport": "Transport",
    "attestation": "Attestierung",
-   "userVerified": "Bestätigung bei Nutzung"
+   "userVerified": "Bestätigung bei Nutzung",
+   "signsHere": "Angemeldet"
   }
  },
  "contacts": {

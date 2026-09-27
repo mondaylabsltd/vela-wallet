@@ -208,10 +208,14 @@ struct ShareCardModel {
     var name: String
     var lines: [String]
     var networkNote: String
+    /// The network the address may be paid on. Its `logoURLs` are what the
+    /// save fetches for the code's centre; without them, or when the fetch
+    /// fails, the lettered disc (ticker on `badgeColor`) stands in.
     var networkMark: TokenMarkModel
     var identiconSeed: String
     let wordmark: String
-    /// The real code's modules. `nil` keeps the drawn demo pattern, which is
+    /// The real code's modules, at level H (`QrCode.shareModules`) — the logo
+    /// plate covers part of it. `nil` keeps the drawn demo pattern, which is
     /// what the gallery renders — see `QrCode`.
     var modules: [[Bool]]?
 }
@@ -398,7 +402,13 @@ struct SendTokenCardModel {
 
 /// SD2b's split row: who, how much, and a way to drop them.
 struct RecipientCardModel: Identifiable {
-    let id = UUID()
+    /// The core's row id; the ordinal in a fixture, which has none. It was a
+    /// fresh `UUID()` per init, and the form is rebuilt on every render — a
+    /// keystroke's, a fee quote's — so every render replaced every row, and
+    /// the amount field being typed into went with it: the first key stayed,
+    /// the focus and the rest did not ("0,25" typed, "0" and 金额无效 left;
+    /// found 2026-09-28 beside the send amount's lost keys).
+    var id: String { rowId.isEmpty ? ordinal : rowId }
     let ordinal: String
     let name: String
     let identiconSeed: String
@@ -709,8 +719,13 @@ struct SendConfirmModel {
     /// carried art — the one screen where "which coin is this?" must be
     /// answerable at a glance. `nil` on a sweep: several coins, no one mark.
     var mark: TokenMarkModel?
-    /// "120 USDT" / "3 assets".
+    /// "120" beside `amountUnit`; a split's "120 USDT" / a sweep's "3 assets"
+    /// whole, with no unit.
     let amount: String
+    /// A single send's coin, drawn as its own smaller muted piece on the
+    /// figure's baseline (round 2: the Send form's hero, on the page that
+    /// signs). `nil` = `amount` is the whole headline.
+    var amountUnit: String? = nil
     /// "≈ $120.00" / "Total ≈ $200.90 · Ethereum".
     let subline: String
     let facts: [FactRowModel]
@@ -878,6 +893,10 @@ enum WalletFlowSheet: Identifiable {
 struct FlowAlertModel {
     let title: String
     let message: String
+    /// The one button: `common.gotIt` ("知道了" / "Got it"). The alert only
+    /// informs, so its button acknowledges. It was the hard-coded English "OK"
+    /// on every language until round 2 (2026-09-26).
+    let dismiss: String
 }
 
 /// One state: the screen, and the sheet over it.

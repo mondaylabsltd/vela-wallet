@@ -1,7 +1,7 @@
 ---
 title: O ataque à Bybit e o caminho que ele usou
 description: "Em fevereiro de 2025, a Bybit perdeu cerca de US$ 1,5 bilhão. Os contratos Safe não foram quebrados — a interface foi. Esta página explica o caminho do ataque e o que no design da Vela o fecha."
-source: 14ae76da6694
+source: d8217ceb16b2
 ---
 
 # O ataque à Bybit e o caminho que ele usou
@@ -83,14 +83,17 @@ próprio código da Vela fosse trocado, como aconteceu com o da `Safe{Wallet}`, 
 decodificação também seria a do atacante — e é para isso que serve o próximo
 ponto.
 
-**Um caminho independente que pode conferir a interface.** A Vela construiu uma
-[página de assinatura](/pt-BR/docs/clear-signing-self-host) sem build e sem
-dependências que decodifica a solicitação e faz a assinatura WebAuthn por conta
-própria — uma única pasta de arquivos estáticos que você pode ler do começo ao fim,
-servir você mesmo ou carregar como extensão de navegador. O objetivo dela é ser uma
-segunda opinião que não compartilha a cadeia de suprimentos do app principal.
-*Situação: pronta e testada; não publicada, e nenhum app da Vela envia solicitações
-para ela ainda.* Esta página vai dizer isso com todas as letras quando mudar.
+**Um caminho independente que pode conferir a interface.** O
+[Trusted Signer](/pt-BR/docs/clear-signing-self-host) da Vela é uma página de
+arquivo único em sign.getvela.app que decodifica a solicitação e faz a assinatura
+WebAuthn por conta própria — uma página que você pode ler do começo ao fim,
+recompilar byte a byte ou servir você mesmo. Ele é uma segunda opinião que não
+compartilha a cadeia de suprimentos do app principal: o app só entrega a solicitação
+a ele, e a própria página calcula o que é assinado. *Situação: publicado; os apps de
+desktop, iPhone e Android o usam num aparelho em que você o escolheu ao criar a
+carteira ou fazer login. O app de desktop compara a página com as versões que vêm com
+ele, mas só registra uma divergência no log, e os apps de celular ainda não fazem essa
+conferência.*
 
 **Nenhum papel de administrador para perdermos.** As contas da Vela são
 [Safe v1.4.1 sem modificações](/pt-BR/docs/account-contract), e a Vela não tem

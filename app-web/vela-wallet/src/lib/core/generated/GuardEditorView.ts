@@ -21,6 +21,21 @@ display_amount_raw: string | null,
  */
 requested_finite: boolean, 
 /**
+ * The "Requested" chip exists and keeps an UNBOUNDED amount as the site
+ * asked (choice [`GuardChoice::Unlimited`]). Exclusive with
+ * `requested_finite`; the chip is offered when either is true. A shell
+ * that reads this `true` with the chip selected says the allowance is
+ * unlimited, in the danger tone.
+ */
+requested_unlimited: boolean, 
+/**
  * The one-tap finite Balance cap is offered (issue #86).
  */
-has_balance_cap: boolean, balance_raw: string | null, };
+has_balance_cap: boolean, 
+/**
+ * The Revoke chip is offered. Not on `increaseAllowance`: only the
+ * increment can be re-encoded, so "revoke" would sign an increase of 0
+ * and leave the existing allowance where it was — a chip that says one
+ * thing and signs another.
+ */
+revoke_offered: boolean, balance_raw: string | null, };

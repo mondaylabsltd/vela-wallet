@@ -34,7 +34,7 @@ use serde_json::{Value, json};
 
 use vela_core::app::fee_policy::FeeCall;
 use vela_core::app::sign_request::{
-    Event, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
+    Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
 };
 use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
@@ -51,7 +51,6 @@ const TX_KEY: &str = "vela.transactionHistory";
 /// `send::SendAnswer` — the signing panel owns its machines the way the send
 /// column owns its two, so `Screen` is the arm the host takes back.
 pub enum SignAnswer {
-    Now(SignShellResult),
     Blocking(Box<dyn FnOnce() -> SignShellResult + Send>),
     /// Reports events on the way and settles once — the submit.
     Streaming(Box<dyn FnOnce(&crate::resident::Sink<Event>) -> SignShellResult + Send>),
@@ -71,14 +70,11 @@ pub struct SignContext {
     pub keys: Vec<WalletKey>,
     pub key_method: KeyMethod,
     pub pinned_credential: Option<String>,
-    /// Every founding key's credential id and stored transports — what the
-    /// core's `sign_route` reads to pin the key of the chosen kind.
-    pub device_keys: Vec<vela_core::wallet_keys::DeviceKey>,
-    /// The person's "Sign with" choice for THIS request (founder, 2026-09-19):
-    /// the credential to pin and the method to route by. `None` = the stored
-    /// route above, untouched. Shared, because the context is cloned into the
-    /// executor when the request opens and the choice is made afterwards.
-    pub route_override: Arc<std::sync::Mutex<Option<(String, KeyMethod)>>>,
+    /// Spec 075: the Trusted Signer page this account signs on, and the one
+    /// key it may sign with there, as
+    /// [`crate::executor::send::SendContext::signer_page`] and `page_key`.
+    pub signer_page: Option<String>,
+    pub page_key: Option<String>,
     pub ceremony: Ceremony,
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
@@ -90,46 +86,27 @@ pub struct SignContext {
     /// The account's name, for the Trusted Signer's page.
     pub account_name: Option<String>,
     /// The Trusted Signer (spec 071): whether THIS request goes to it, and its
-    /// waiting sheet. Shared like `route_override`, and for the same reason.
+    /// waiting sheet. Shared, because the context is cloned into the executor
+    /// when the request opens and the host points it at the page afterwards.
     pub trusted_signer: Arc<trusted_signer::Channel>,
 }
 
 impl SignContext {
     /// The credential this request's ceremony is pinned to, and its method:
-    /// the person's choice when they made one, the stored route otherwise.
+    /// the account's sign-in route, fixed when the request opened.
     #[must_use]
     pub fn route(&self) -> (Option<String>, KeyMethod) {
-        let chosen = self
-            .route_override
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
-        match chosen {
-            Some((credential, method)) => (Some(credential), method),
-            None => (self.pinned_credential.clone(), self.key_method),
-        }
+        (self.pinned_credential.clone(), self.key_method)
     }
 
-    /// "Sign with": `auto` clears the choice; a place a passkey is asks the
-    /// core which key that pins (`wallet_keys::sign_route`); the Trusted Signer
-    /// routes the request to `page`. An answer of "none" — an unknown method,
-    /// a wallet with no usable credential — leaves the stored route in force
-    /// rather than guessing.
-    pub fn choose_method(&self, method: &str, page: &str) {
-        use crate::executor::send::Route;
-        let route = crate::executor::send::sign_route_of(&self.device_keys, method, page);
-        let (pinned, page) = match route {
-            Some(Route::Passkey(credential, key_method)) => (Some((credential, key_method)), None),
-            // Spec 075: the page the KEY lives behind when it has one, and the
-            // person's page from Settings when it does not.
-            Some(Route::TrustedSigner(page)) => (None, Some(page)),
-            None => (None, None),
-        };
-        *self
-            .route_override
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = pinned;
-        self.trusted_signer.choose(page);
+    /// Point the Trusted Signer channel at this account's page when it signs
+    /// on one — see [`crate::executor::send::SendContext::follow_sign_in`].
+    pub fn follow_sign_in(&self, settings_page: &str) {
+        self.trusted_signer
+            .choose(crate::executor::send::page_to_follow(
+                self.signer_page.as_deref(),
+                settings_page,
+            ));
     }
 
     /// This request as the Trusted Signer's page is told it (contract §1): a
@@ -159,8 +136,8 @@ impl SignContext {
             keys: send.keys,
             key_method: send.key_method,
             pinned_credential: send.pinned_credential,
-            device_keys: send.device_keys,
-            route_override: Arc::new(std::sync::Mutex::new(None)),
+            signer_page: send.signer_page,
+            page_key: send.page_key,
             ceremony: send.ceremony,
             signing_started: send.signing_started,
             site: None,
@@ -216,31 +193,60 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
             chain_id,
             account,
             bust_cache,
-            ..
+            bundler_cost_wei,
         } => {
             let (chain_id, account, bust_cache) = (*chain_id, account.clone(), *bust_cache);
+            let cost = bundler_cost_wei.as_deref().and_then(parse_wei);
             SignAnswer::Blocking(Box::new(move || {
                 if bust_cache {
                     // A retry after somebody funded the account must not read
                     // the balance from before they funded it.
                     relay::clear_cache(chain_id, Some(&account));
                 }
-                // `None` here means "proceed to submit" — including when the
-                // check itself failed. The core's doc is explicit that a
-                // timed-out or errored pre-check is not a refusal, and the
-                // submit's own underfunded answer is the authority.
-                SignShellResult::PreCheck { funding: None }
+                // `None` means "proceed to submit" — including when the check
+                // itself could not be made: an errored pre-check is not a
+                // refusal, and the submit's own underfunded answer is the
+                // authority (078 W-05).
+                SignShellResult::PreCheck {
+                    funding: relay::check_funding(chain_id, &account, cost).map(|funding| {
+                        SignFundingNeeded {
+                            deposit_address: funding.deposit_address,
+                            safe_address: funding.safe_address,
+                            chain_id: funding.chain_id,
+                            native_symbol: funding.native_symbol,
+                            threshold_wei: funding.threshold_wei.to_string(),
+                            recommended_wei: funding.recommended_wei.to_string(),
+                            current_balance_wei: funding.current_balance.to_string(),
+                        }
+                    }),
+                }
             }))
         }
 
-        // Silent sponsorship is a relay feature the desktop does not reach
-        // yet. Answered, never left hanging.
-        SignOperation::AttemptSponsorship { .. } => SignAnswer::Now(SignShellResult::Sponsorship {
-            // Denied with no reason rather than invented: the desktop has no
-            // sponsorship path, and `Funded` would be a claim that somebody
-            // else paid.
-            outcome: vela_core::app::sign_request::SignSponsorship::Denied { reason: None },
-        }),
+        // `attemptSilentSponsorship`: the treasury, asked only now that the
+        // person has approved (078 W-05).
+        SignOperation::AttemptSponsorship { funding, force } => {
+            let force = *force;
+            let funding = relay::FundingNeeded {
+                deposit_address: funding.deposit_address.clone(),
+                safe_address: funding.safe_address.clone(),
+                chain_id: funding.chain_id,
+                native_symbol: funding.native_symbol.clone(),
+                threshold_wei: parse_wei(&funding.threshold_wei).unwrap_or(0),
+                recommended_wei: parse_wei(&funding.recommended_wei).unwrap_or(0),
+                current_balance: parse_wei(&funding.current_balance_wei).unwrap_or(0),
+            };
+            SignAnswer::Blocking(Box::new(move || {
+                use vela_core::app::sign_request::SignSponsorship;
+                SignShellResult::Sponsorship {
+                    outcome: match relay::attempt_sponsorship(&funding, force) {
+                        relay::Sponsorship::Funded => SignSponsorship::Funded,
+                        relay::Sponsorship::Confirming => SignSponsorship::Confirming,
+                        relay::Sponsorship::Denied { reason } => SignSponsorship::Denied { reason },
+                    },
+                }
+            }))
+        }
 
         SignOperation::SignAndSubmit {
             id,
@@ -319,6 +325,7 @@ fn sign_and_submit(
             ask: &ask,
             page,
             channel: &ctx.trusted_signer,
+            only: ctx.page_key.as_deref(),
         },
         None => Signer::Passkey(&mut sign),
     };
@@ -376,6 +383,7 @@ fn sign_message(
             ask: &ask,
             page,
             channel: &ctx.trusted_signer,
+            only: ctx.page_key.as_deref(),
         },
         None => Signer::Passkey(&mut sign),
     };
@@ -704,6 +712,16 @@ fn clip(params_json: &str) -> (String, bool) {
     (params_json[..end].to_owned(), true)
 }
 
+/// A wei figure off the wire — decimal, as the core writes it, or `0x` hex
+/// (the web's `BigInt(value)` takes both). `None` when it is neither.
+fn parse_wei(value: &str) -> Option<u128> {
+    let value = value.trim();
+    match value.strip_prefix("0x") {
+        Some(hex) => u128::from_str_radix(hex, 16).ok(),
+        None => value.parse().ok(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -730,6 +748,13 @@ mod tests {
     }
 
     fn context(site: Option<&str>) -> SignContext {
+        context_signed_in(site, None)
+    }
+
+    fn context_signed_in(
+        site: Option<&str>,
+        signed_in_with: Option<vela_core::app::SignInKey>,
+    ) -> SignContext {
         let account = Account {
             id: "cred0".to_owned(),
             name: "savings".to_owned(),
@@ -743,6 +768,7 @@ mod tests {
                 transports: "internal".to_owned(),
                 signer_origin: None,
             }],
+            signed_in_with,
         };
         let mut ctx = SignContext::new(
             &account,
@@ -752,26 +778,45 @@ mod tests {
         ctx
     }
 
-    /// "Sign with" on the sheet (spec 071): the Trusted Signer routes THIS
-    /// request to the page and pins no key; a place a passkey is does the
-    /// opposite; `auto` clears both.
+    /// A site's request signs exactly as the wallet's own send does: with the
+    /// key the account signed in with, over its route (founder, 2026-09-26) —
+    /// the sheet offers no other.
     #[test]
-    fn the_sheets_choice_routes_this_request() {
-        let ctx = context(Some("https://app.uniswap.org"));
-        ctx.choose_method("trusted_signer", "https://sign.getvela.app/");
+    fn a_request_signs_with_the_sign_in_key() {
+        let ctx = context_signed_in(
+            Some("https://app.uniswap.org"),
+            Some(vela_core::app::SignInKey {
+                credential_id: "cred0".to_owned(),
+                method: KeyMethod::Hybrid,
+                transports: String::new(),
+                signer_origin: None,
+            }),
+        );
+        assert_eq!(ctx.route(), (Some("cred0".to_owned()), KeyMethod::Hybrid));
+        ctx.follow_sign_in("https://sign.getvela.app/");
+        assert_eq!(ctx.trusted_signer.chosen(), None);
+
+        let through_page = context_signed_in(
+            None,
+            Some(vela_core::app::SignInKey {
+                credential_id: "cred0".to_owned(),
+                method: KeyMethod::TrustedSigner,
+                transports: String::new(),
+                signer_origin: None,
+            }),
+        );
+        through_page.follow_sign_in("https://sign.getvela.app/");
         assert_eq!(
-            ctx.trusted_signer.chosen().as_deref(),
+            through_page.trusted_signer.chosen().as_deref(),
             Some("https://sign.getvela.app/")
         );
-        assert_eq!(ctx.route(), (Some("cred0".to_owned()), KeyMethod::Platform));
 
-        ctx.choose_method("hybrid", "https://sign.getvela.app/");
-        assert_eq!(ctx.trusted_signer.chosen(), None);
-        assert_eq!(ctx.route().1, KeyMethod::Hybrid);
-
-        ctx.choose_method("auto", "https://sign.getvela.app/");
-        assert_eq!(ctx.trusted_signer.chosen(), None);
-        assert_eq!(ctx.route().1, KeyMethod::Platform);
+        // A record from before the sign-in key: the first key, as always.
+        let legacy = context(None);
+        assert_eq!(
+            legacy.route(),
+            (Some("cred0".to_owned()), KeyMethod::Platform)
+        );
     }
 
     /// A site's request reaches the page as the site's — its method, its

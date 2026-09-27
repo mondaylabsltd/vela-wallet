@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -53,7 +53,7 @@ fun SignInMethodSheet(
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
 
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(),
         containerColor = colors.bgRaised,

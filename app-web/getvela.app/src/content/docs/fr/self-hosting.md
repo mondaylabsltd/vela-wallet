@@ -1,7 +1,7 @@
 ---
 title: Guide d'auto-hébergement
 description: "Tout ce que Vela fait tourner pour vous, le rôle de chaque élément, et comment le remplacer par le vôtre — le relais, l'index des clés publiques, les données de chaîne, les taux de change et les apps —, plus le seul élément que vous ne pouvez pas remplacer, et comment vous passer de getvela.app."
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -87,9 +87,10 @@ vous-même peut utiliser un téléphone ou une clé de sécurité parce que Vela
 communique directement avec eux ; la passkey propre au téléphone (« cet appareil »)
 exige que l'app soit signée par Vela, ce qui n'est pas le cas de la vôtre.
 
-La [page de signature](/fr/docs/clear-signing-self-host) n'est pas, à elle seule,
-un moyen d'accès : elle signe les demandes qu'un autre programme lui envoie, et
-aucune app Vela ne lui en envoie encore.
+Le [Trusted Signer](/fr/docs/clear-signing-self-host) n'est pas, à lui seul, un
+moyen d'accès : il signe les demandes qu'une app lui envoie — les apps Vela de bureau
+et mobiles —, et une copie sur votre propre domaine ne signe qu'avec des passkeys
+créées pour ce domaine.
 
 <Callout type="warning" title="Qui contrôle le domaine peut demander une signature">
 Toute page servie depuis getvela.app ou l'un de ses sous-domaines — ou par
@@ -343,4 +344,4 @@ Et ces éléments-là n'appartiennent pas à Vela : les bases publiques de séle
 les serveurs de tunnel d'Apple et de Google pour la connexion par téléphone, et les
 fournisseurs RPC que vous choisissez.
 
-Ensuite : [la page de signature que vous pouvez faire tourner vous-même](/fr/docs/clear-signing-self-host).
+Ensuite : [le Trusted Signer, et comment faire tourner le vôtre](/fr/docs/clear-signing-self-host).

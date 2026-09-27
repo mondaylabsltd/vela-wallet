@@ -59,7 +59,7 @@
 				"passkeys": "Comment fonctionnent les passkeys",
 				"signers": "Signataires et clés de sécurité",
 				"clear-signing": "Signature lisible",
-				"clear-signing-self-host": "Héberger la page de signature",
+				"clear-signing-self-host": "Trusted Signer",
 				"self-hosting": "Guide d'auto-hébergement",
 				"bybit-attack": "L'attaque de Bybit",
 				"recovery": "Récupération et connexion",
@@ -229,7 +229,7 @@
 				},
 				{
 					"feature": "Vérification supplémentaire",
-					"vela": "Une page de signature indépendante, prête mais pas encore reliée aux apps",
+					"vela": "Le Trusted Signer : une page indépendante qui décode et signe par elle-même, si vous le choisissez",
 					"metamask": "Alertes de risque fournies par un tiers",
 					"base": "—"
 				},
@@ -355,8 +355,8 @@
 				"body": "Aujourd'hui, certaines apps ignorent une partie de Réglages → Points d'accès des services — l'app iPhone entièrement, l'app web lors de la création d'un portefeuille ou de la connexion, et Android pour la recherche de noms. Toutes devraient les respecter."
 			},
 			{
-				"title": "La page de signature indépendante, reliée aux apps",
-				"body": "La page de signature qui décode et signe une demande par elle-même est prête. Prochaine étape : permettre aux apps de lui transmettre leurs demandes, pour qu'un programme que vous avez chargé vous-même vérifie chaque signature."
+				"title": "Un contrôle du Trusted Signer qui refuse",
+				"body": "L'app de bureau compare déjà la page de signature aux versions qu'elle embarque, mais ne fait que journaliser une différence. Prochaine étape : refuser une page qui ne correspond pas, et faire aussi cette vérification sur les téléphones."
 			},
 			{
 				"title": "Une signature lisible plus étendue",
@@ -368,6 +368,10 @@
 			}
 		],
 		"shipped": [
+			{
+				"title": "Trusted Signer",
+				"body": "Une page de signature indépendante, sur sign.getvela.app, qui décode une demande et la signe par elle-même, chaque version étant adressée par son contenu et reproductible. Les apps de bureau, iPhone et Android peuvent l'utiliser comme mode de signature."
+			},
 			{
 				"title": "Vos clés on-chain, avec une sauvegarde sur Ethereum",
 				"body": "Connectez-vous directement depuis le registre on-chain quand l'index est indisponible, affichez chaque clé avec laquelle votre portefeuille a été créé, et copiez l'enregistrement sur Ethereum."
@@ -402,7 +406,7 @@
 			},
 			{
 				"title": "Signature lisible (ERC-7730)",
-				"body": "Les transactions montrent ce qu'elles font — montant, destinataire, intention — plutôt que de l'hexadécimal brut, et une approbation au niveau « illimité » ne peut pas être soumise tant que vous ne l'avez pas réduite."
+				"body": "Les transactions montrent ce qu'elles font — montant, destinataire, intention — plutôt que de l'hexadécimal brut, et une approbation au niveau « illimité » s'affiche en rouge, avec un plafond proposé."
 			},
 			{
 				"title": "Naissance de Vela",
@@ -487,9 +491,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "a9482909de80",
+		"home": "9d4250ccd810",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

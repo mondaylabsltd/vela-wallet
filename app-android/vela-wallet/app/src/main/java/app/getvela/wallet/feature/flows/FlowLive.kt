@@ -90,10 +90,27 @@ object FlowLive {
      * visit never flashes a code before the warning about which networks this
      * address is safe on.
      */
-    /** R4 — the share card for THIS account (spec 047 US2): its identicon, name, address and network. */
-    fun shareCard(fallback: ShareCardModel, address: String, name: String, networkName: String, strings: VelaStrings, chainId: Int? = null): ShareCardModel = fallback.copy(
+    /**
+     * R4 — the share card for THIS account (spec 047 US2): its identicon, name,
+     * address and network.
+     *
+     * The mark in the code's centre is the NETWORK's, token or not (the web's
+     * `chainMark`): the card says which network may pay, and one card serves
+     * every asset on it. [nativeSymbol] letters the disc that stands in when
+     * the logo cannot be fetched; without a [chainId] the drawn mark stays.
+     */
+    fun shareCard(
+        fallback: ShareCardModel,
+        address: String,
+        name: String,
+        networkName: String,
+        strings: VelaStrings,
+        chainId: Int? = null,
+        nativeSymbol: String? = null,
+    ): ShareCardModel = fallback.copy(
         code = address,
         chainLogoUrl = chainId?.let { Marks.chainLogoUrl(it) },
+        networkMark = chainId?.let { WalletLive.chainMark(it, nativeSymbol ?: fallback.networkMark.ticker) } ?: fallback.networkMark,
         name = name.ifBlank { shortAddress(address) },
         lines = addressLines(address),
         identiconSeed = address,

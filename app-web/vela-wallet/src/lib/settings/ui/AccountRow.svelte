@@ -28,11 +28,16 @@
 		address={account.addressFull}
 	/>
 	<button type="button" class="main" onclick={onselect}>
-		<span class="text">
-			<span class="name">{account.name}</span>
-			<span class="address">{account.addressDisplay}</span>
+		<!-- The settings rows' rule (078 round 3): the name block and the action
+		     side by side while both fit, else the action under the name. The
+		     name wraps, never "…"; the shortened address stays one piece. -->
+		<span class="body">
+			<span class="text">
+				<span class="name">{account.name}</span>
+				<span class="address">{account.addressDisplay}</span>
+			</span>
+			<span class="action">{account.action}</span>
 		</span>
-		<span class="action">{account.action}</span>
 		<span class="chevron"><Icon icon={UTILITY_ICONS['chevron-right']} size="sm" /></span>
 	</button>
 </div>
@@ -61,11 +66,22 @@
 		cursor: pointer;
 	}
 
+	.body {
+		display: flex;
+		flex: 1;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		column-gap: var(--space-lg);
+		row-gap: var(--space-xs);
+		min-width: 0;
+	}
+
 	.text {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-xs);
-		flex: 1;
+		flex: 0 1 auto;
 		min-width: 0;
 	}
 
@@ -73,15 +89,14 @@
 		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		color: var(--color-fg-base);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+		white-space: nowrap;
 	}
 
 	.action {

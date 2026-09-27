@@ -4,9 +4,9 @@
 //
 //  BottomSheet + ChainFilterList (spec 015 vocabulary #14/#15, mock H8):
 //  drag handle, title row with trailing search icon, then chain rows —
-//  所有网络 first with an accent checkmark, each row a chain dot + name +
-//  per-chain asset count. Presented over the dimmed home via .sheet with
-//  a fixed detent.
+//  所有网络 first with an accent checkmark, each row a chain logo (over its
+//  dot) + name + per-chain asset count. Presented over the dimmed home via
+//  .sheet with a fixed detent.
 //
 
 import SwiftUI
@@ -59,7 +59,11 @@ struct ChainSelectSheet: View {
 
     private func chainRow(_ row: ChainRowModel) -> some View {
         HStack(spacing: Tokens.Space.s12) {
-            dot(row.dot)
+            // The chain's logo over the dot the boards draw: the dot shows
+            // until it loads and stays if it never does (the web's rows).
+            RemoteLogoView(urls: row.logoUrl.map { [$0] } ?? [], size: WalletGeometry.chainLogo) {
+                dot(row.dot)
+            }
             Text(verbatim: row.name)
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(theme.fgBase)

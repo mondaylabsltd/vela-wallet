@@ -221,12 +221,20 @@ class RelayClientTest {
 
     @Test
     fun `the nonce and the deployment state are chain reads through the pool`() = runBlocking {
+        val safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         port.answer("eth_call", body("0x" + "0".repeat(63) + "7"))
-        port.answer("eth_getCode", body("0x6080"), body("0x"))
-        assertEquals("0x7", relay.nonce(100, "0x88cCA0EeDbF2C4426110bbFc998F048689266894"))
-        assertEquals(true, relay.isDeployed(100, "0x88cCA0EeDbF2C4426110bbFc998F048689266894"))
-        assertEquals(false, relay.isDeployed(100, "0x88cCA0EeDbF2C4426110bbFc998F048689266894"))
-        assertNull(relay.isDeployed(100, "0x88cCA0EeDbF2C4426110bbFc998F048689266894"))
+        port.answer("eth_getCode", body("0x"), body("0x6080"))
+        assertEquals("0x7", relay.nonce(100, safe))
+        // Not deployed is never held: the first send deploys it.
+        assertEquals(false, relay.isDeployed(100, safe))
+        assertEquals(true, relay.isDeployed(100, safe))
+        // Deployed is held for good (spec 078): code does not go away, so the
+        // next asker is answered without a read — the queue here is empty and
+        // an unanswered read would be `null`.
+        assertEquals(true, relay.isDeployed(100, safe.lowercase()))
+        assertEquals(2, port.calls.count { it.endsWith("eth_getCode") })
+        // Unknown is never held either.
+        assertNull(relay.isDeployed(137, safe))
         assertTrue(port.calls.first { it.contains("eth_call") }.startsWith("Rpc:"))
     }
 

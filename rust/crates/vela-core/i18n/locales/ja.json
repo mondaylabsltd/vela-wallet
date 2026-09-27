@@ -6,7 +6,8 @@
     "error": "エラー",
     "somethingWrong": "問題が発生しました",
     "tryAgain": "再試行",
-    "done": "完了"
+    "done": "完了",
+    "gotIt": "OK"
   },
   "language": {
     "title": "言語",
@@ -25,6 +26,7 @@
       "appearance": "外観",
       "localization": "地域と言語",
       "advanced": "詳細設定",
+      "community": "コミュニティ",
       "developer": "開発者向け"
     },
     "account": {
@@ -36,7 +38,7 @@
     "appearance": {
       "themeLight": "ライト",
       "themeDark": "ダーク",
-      "themeAuto": "システムに合わせる",
+      "themeAuto": "自動",
       "avatarInitials": "イニシャル",
       "avatarIdenticon": "識別アイコン",
       "themeTitle": "テーマ",

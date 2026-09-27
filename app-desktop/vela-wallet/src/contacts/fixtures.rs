@@ -206,6 +206,9 @@ pub struct ContactDetailModel {
     pub chips: Vec<SharedString>,
     pub address_full: SharedString,
     pub activity: Vec<ActivityRowModel>,
+    /// Nothing has passed between us: the section says so instead of
+    /// offering to show "all" of nothing (078 C-04).
+    pub activity_empty: bool,
 }
 
 pub fn contact_detail(s: &ContactsStrings, c: &ContactFixture) -> ContactDetailModel {
@@ -219,6 +222,7 @@ pub fn contact_detail(s: &ContactsStrings, c: &ContactFixture) -> ContactDetailM
         } else {
             Vec::new()
         },
+        activity_empty: !c.has_activity,
     }
 }
 
@@ -236,6 +240,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
             positive: true,
             badge: chain_ethereum(),
             badge_logo: None,
+            day: None,
         },
         ActivityRowModel {
             kind: ActivityKind::Sent,
@@ -246,6 +251,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
             positive: false,
             badge: chain_arbitrum(),
             badge_logo: None,
+            day: None,
         },
     ]
 }
@@ -320,41 +326,6 @@ pub fn contact_context(s: &ContactsStrings) -> MenuModel {
             destructive(Icon::Trash2, s.delete.clone()),
         ],
         divider_after: Some(4),
-    }
-}
-
-/// Which groups this contact is in — the answer visible on every row.
-///
-/// A menu rather than a dialog with a Save button, for the reason the explore
-/// one is a menu: the question is "which of these", and a tick per row is the
-/// shortest way to both ask it and show the current answer. Every tap sends
-/// the WHOLE membership back (`SetContactGroups`), which is the event the core
-/// offers and the shape it normalises.
-pub fn contact_group_pick(groups: &[(SharedString, bool)]) -> MenuModel {
-    pick_menu(groups, Icon::UsersRound)
-}
-
-/// Which contacts this group holds — the same menu the other way round.
-///
-/// One shape for both directions, because they are one question asked from two
-/// screens, and two shapes would be two places to get the tick wrong.
-pub fn group_member_pick(contacts: &[(SharedString, bool)]) -> MenuModel {
-    pick_menu(contacts, Icon::UserRoundPlus)
-}
-
-fn pick_menu(rows: &[(SharedString, bool)], unpicked: Icon) -> MenuModel {
-    MenuModel {
-        divider_after: None,
-        items: rows
-            .iter()
-            .map(|(name, member)| MenuItemModel {
-                // The tick IS the state: `Check` for a row that is in the set,
-                // the neutral glyph for one that is not.
-                icon: if *member { Icon::Check } else { unpicked },
-                label: name.clone(),
-                destructive: false,
-            })
-            .collect(),
     }
 }
 

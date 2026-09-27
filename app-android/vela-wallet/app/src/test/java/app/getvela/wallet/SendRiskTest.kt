@@ -76,6 +76,7 @@ class SendRiskTest {
                     calls: List<app.getvela.wallet.feature.send.core.FeeCall>,
                     gasFeeToken: String?,
                     publicKeyAvailable: Boolean,
+                    autoFeeToken: Boolean,
                 ): SendFeeOutcome = error("unused")
             },
             ports = object : SendExecutor.SendPorts {

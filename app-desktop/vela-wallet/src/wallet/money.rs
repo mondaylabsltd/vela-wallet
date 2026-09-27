@@ -45,6 +45,7 @@ use futures::StreamExt as _;
 use gpui::{Context, Entity, FocusHandle};
 
 use vela_core::app::Account;
+use vela_core::app::balance_dashboard::{BalanceDashboard, BalanceView, Event as BalanceEvent};
 use vela_core::app::batch_import::{
     BatchImport, BatchOperation, BatchShellResult, BatchToken, BatchView, Event as BatchEvent,
 };
@@ -56,7 +57,7 @@ use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::send::{
     Event as SendEvent, Send, SendAccountRef, SendAlertKind, SendDisplayContext,
     SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation, SendReceiptOutcome,
-    SendRecipientDraft, SendShellResult, SendView,
+    SendRecipientDraft, SendShellResult, SendStage, SendView,
 };
 use vela_core::app::sign_pref::SignPref;
 use vela_core::app::tx_tracker::{TrackStatus, TxTracker};
@@ -67,14 +68,25 @@ use crate::ctap::usb::TouchRequest;
 use crate::executor::passkey::{CredentialChoice, PinRequest, WindowHandle};
 use crate::executor::send::{self as send_executor, SendAnswer, SendContext};
 use crate::executor::trusted_signer;
-use crate::executor::{batch, storage, tracker};
+use crate::executor::{balance_dashboard, batch, storage, tracker};
 use crate::resident::{self, ResidentCore};
+use vela_core::app::network_admin::{
+    Event as NetEvent, NetView, NetWizardErrorKind, NetWizardPhase, NetworkAdmin,
+};
+use vela_core::app::send::SendAddNetworkOutcome;
 
 use super::speed_control::{self, SpeedControl, SpeedHost};
 
 /// How often the ceremony channel and the signing flag are polled while a
 /// machine is busy. The same cadence onboarding uses.
 const TICK_MS: u64 = 120;
+
+/// How old the holdings may be when a send opens before the open asks the
+/// dashboard for a fresh round — the web's `TOKEN_CACHE_TTL_MS`, the age at
+/// which its send stops answering from the cache the home filled. The list
+/// shows at once either way; this only decides whether a re-read runs
+/// behind it.
+const HOLDINGS_FRESH_MS: f64 = 5.0 * 60.0 * 1000.0;
 
 /// The PIN dialog a security key raised mid-signature.
 pub struct PinDialog {
@@ -95,6 +107,21 @@ fn batch_apply_event(replaces: bool, recipients: Vec<SendRecipientDraft>) -> Sen
 
 pub struct SendHost {
     send: CoreHost<Send>,
+    /// The account this journey sends from, fixed when it opened.
+    address: String,
+    /// A `FetchTokens` waiting for this account's first settled round — a
+    /// send opened before the dashboard had ever finished reading it.
+    pending_tokens: Option<u64>,
+    /// The dashboard round the picker last received (`Settled::round`). A
+    /// newer one is pushed into an open picker.
+    holdings_round: Option<u64>,
+    /// A waiting `FetchTokens` met a round that reached nothing, and asked the
+    /// dashboard to read again: `Some(round)` is the round it met (`None`
+    /// inside when there was none). The NEXT round answers, whatever it holds.
+    holdings_retry: Option<Option<u64>>,
+    /// A locked request's "add this network" in flight (078 W-04): the
+    /// network admin's view is watched until its wizard settles.
+    add_network: Option<gpui::Subscription>,
     pub view: SendView,
     /// The fee sessions and the speed control (spec 069): the session in
     /// force is the quote the core pre-checks against, the quote the confirm
@@ -165,17 +192,22 @@ impl SendHost {
     ) -> Self {
         let channel = CeremonyChannel::new();
         let mut ctx = SendContext::new(&account, channel.ceremony(window_handle));
-        // The send has no "Sign with" of its own: it signs the way Settings
-        // says every signature starts (spec 071), read once as it opens.
+        // The send signs with the key the account signed in with (founder,
+        // 2026-09-26); the Trusted Signer's page, when that is where it
+        // signs, as Settings names it as the send opens.
         let (trusted_signer, changed) = trusted_signer::Channel::new();
         ctx.trusted_signer = trusted_signer;
         let preference = resident::resident::<SignPref>(cx).read(cx).view();
-        ctx.sign_with(&preference.method, &preference.signer_url);
+        ctx.follow_sign_in(&preference.signer_url);
         let send = CoreHost::<Send>::new();
         let view = send.view();
         let display_code = display.code.clone();
         let mut host = Self {
             send,
+            address: account.address.clone(),
+            pending_tokens: None,
+            holdings_round: None,
+            holdings_retry: None,
             view,
             speed: SpeedControl::new(),
             batch: None,
@@ -190,6 +222,7 @@ impl SendHost {
             last_fee: None,
             alert: None,
             closed: false,
+            add_network: None,
             pin: None,
             pick: None,
             watching: false,
@@ -231,6 +264,17 @@ impl SendHost {
         .detach();
         speed_control::reset(&mut host, cx);
 
+        // The picker's list is the Assets column's (`answer_tokens`), so it
+        // moves when that column does: every round the dashboard settles —
+        // its ten-minute tick, a pull, the refresh after a send, the window
+        // coming back — reaches an open picker too.
+        let dashboard = resident::resident::<BalanceDashboard>(cx);
+        cx.observe(&dashboard, |host, dashboard, cx| {
+            let view = dashboard.read(cx).view();
+            host.on_holdings(&view, cx);
+        })
+        .detach();
+
         host.dispatch(
             SendEvent::Open {
                 account: Some(SendAccountRef {
@@ -243,6 +287,7 @@ impl SendHost {
             },
             cx,
         );
+        host.revalidate_holdings(cx);
         host
     }
 
@@ -271,7 +316,166 @@ impl SendHost {
         self.sync_stage(cx);
         self.sync_batch(cx);
         self.ensure_watcher(cx);
+        // Back on the picker from the form: a round that settled meanwhile
+        // was held back (`on_holdings`), and is due now.
+        if self.view.stage == SendStage::SelectToken && self.pending_tokens.is_none() {
+            let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+            self.on_holdings(&view, cx);
+        }
         cx.notify();
+    }
+
+    // -- the holdings ---------------------------------------------------------
+
+    /// Is the dashboard reading the account this send is from? A send is
+    /// pinned to the account it opened for; the dashboard follows whichever
+    /// is active.
+    fn same_account(&self, view: &BalanceView) -> bool {
+        view.address
+            .as_deref()
+            .is_some_and(|address| address.eq_ignore_ascii_case(&self.address))
+    }
+
+    /// `FetchTokens`, answered from the round the Assets column was drawn
+    /// from instead of a second fan-out over every chain. That fan-out kept
+    /// the picker blank for as long as the slowest chain took, on every open,
+    /// and could disagree with the column beside it.
+    ///
+    /// `false` when the dashboard is reading another account: the executor's
+    /// own fetch answers then.
+    fn answer_tokens(&mut self, id: u64, cx: &mut Context<Self>) -> bool {
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        if !self.same_account(&view) {
+            return false;
+        }
+        self.pending_tokens = Some(id);
+        self.on_holdings(&view, cx);
+        true
+    }
+
+    /// The dashboard changed. Answer a waiting `FetchTokens` once this
+    /// account has settled a round (showing what has arrived until then), or
+    /// push a newer round into an open picker.
+    fn on_holdings(&mut self, view: &BalanceView, cx: &mut Context<Self>) {
+        if !self.same_account(view) {
+            // The person switched accounts while this send waited on its
+            // first round, which will now never come: fetch it directly.
+            if let Some(id) = self.pending_tokens.take() {
+                self.fetch_tokens_directly(id, cx);
+            }
+            return;
+        }
+        let settled = balance_dashboard::settled(&self.address);
+        if let Some(id) = self.pending_tokens {
+            // One source has one failure mode: a round in which no chain
+            // answered — a proxy blip at launch — used to become "could not
+            // load tokens" here at once, and the picker stayed empty until
+            // the next ten-minute poll. Ask the dashboard to read again first
+            // (the Assets column recovers with it) and answer whatever that
+            // next round holds; only a second empty round is the refusal.
+            let reached_nothing = match &settled {
+                Some(round) => round.tokens.is_empty() && !round.failed_chain_ids.is_empty(),
+                None => view.unreachable,
+            };
+            if reached_nothing {
+                let met = settled.as_ref().map(|round| round.round);
+                match self.holdings_retry {
+                    None => {
+                        self.holdings_retry = Some(met);
+                        balance_dashboard::dispatch(
+                            BalanceEvent::RefreshRequested {
+                                force: true,
+                                pull: false,
+                            },
+                            cx,
+                        );
+                        return;
+                    }
+                    // Still the round that reached nothing: the re-read is out.
+                    Some(asked) if asked == met => return,
+                    Some(_) => {}
+                }
+            }
+            self.holdings_retry = None;
+            let result = match &settled {
+                Some(round) => {
+                    self.holdings_round = Some(round.round);
+                    send_executor::tokens_loaded(&round.tokens, &round.failed_chain_ids)
+                }
+                // Nothing could be read and nothing is known.
+                None if view.unreachable => SendShellResult::TokensLoaded {
+                    tokens: None,
+                    chains: send_executor::chain_infos(),
+                },
+                None => {
+                    // The first round is still out: the chains that have
+                    // answered, display-only, as the Assets column shows them.
+                    if !view.tokens.is_empty() {
+                        let tokens = view
+                            .tokens
+                            .iter()
+                            .map(send_executor::to_send_token)
+                            .collect();
+                        self.dispatch(SendEvent::TokensPartial { tokens }, cx);
+                    }
+                    return;
+                }
+            };
+            self.pending_tokens = None;
+            self.resolve_send(id, result, cx);
+            return;
+        }
+        // A newer round than the screen holds: hand it over. What follows it
+        // is the core's to say (`holdings_updated`) — the picker always, the
+        // form's balance and its Max too, a confirm page never, since that is
+        // about the token as it was confirmed. Marked received BEFORE the
+        // dispatch, so its own renders cannot hand it over again.
+        let Some(round) = settled else {
+            return;
+        };
+        if self.holdings_round.is_some_and(|held| held != round.round) {
+            self.holdings_round = Some(round.round);
+            let tokens = round
+                .tokens
+                .iter()
+                .map(send_executor::to_send_token)
+                .collect();
+            self.dispatch(SendEvent::HoldingsUpdated { tokens }, cx);
+        }
+    }
+
+    /// Holdings older than [`HOLDINGS_FRESH_MS`] are shown at once and read
+    /// again behind them; the new round replaces the list when it settles.
+    fn revalidate_holdings(&self, cx: &mut Context<Self>) {
+        let Some(round) = balance_dashboard::settled(&self.address) else {
+            // Never settled: the first round is already out.
+            return;
+        };
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        if self.same_account(&view) && crate::executor::now_ms() - round.at_ms > HOLDINGS_FRESH_MS {
+            balance_dashboard::dispatch(
+                BalanceEvent::RefreshRequested {
+                    force: false,
+                    pull: false,
+                },
+                cx,
+            );
+        }
+    }
+
+    /// The executor's own fan-out, for a send the dashboard cannot answer.
+    fn fetch_tokens_directly(&mut self, id: u64, cx: &mut Context<Self>) {
+        let operation = SendOperation::FetchTokens {
+            address: self.address.clone(),
+        };
+        if let SendAnswer::Blocking(work) = send_executor::perform(&operation, &self.ctx) {
+            cx.spawn(async move |host, cx| {
+                let result = cx.background_executor().spawn(async move { work() }).await;
+                host.update(cx, |host, cx| host.resolve_send(id, result, cx))
+                    .ok();
+            })
+            .detach();
+        }
     }
 
     // -- the batch importer ----------------------------------------------------
@@ -474,6 +678,7 @@ impl SendHost {
                 batch,
                 gas_fee_token,
                 public_key_hex,
+                auto_fee_token,
             } => {
                 // A batch takes precedence only when it HAS legs; an empty
                 // one would otherwise silence the single call beside it.
@@ -488,6 +693,7 @@ impl SendHost {
                     account.clone(),
                     calls,
                     gas_fee_token.clone(),
+                    *auto_fee_token,
                     public_key_hex.is_some(),
                     cx,
                 );
@@ -503,6 +709,34 @@ impl SendHost {
                 tracker::submitted(user_op_hash.clone(), record_ids.clone(), *chain_id, cx);
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
                 return;
+            }
+            // A payment link on a chain this wallet does not have (078 W-04):
+            // the settings wizard's own journey — registry, chain document,
+            // compatibility probe, save — asked by chain id, as the web's
+            // `addCustomNetworkByChainId` asks it, and answered once the
+            // admin's wizard settles. It answered "error" unconditionally.
+            SendOperation::AddNetwork { chain_id } => {
+                let chain_id = *chain_id;
+                let admin = resident::resident::<NetworkAdmin>(cx);
+                self.add_network = Some(cx.observe(&admin, move |host, admin, cx| {
+                    if host.add_network.is_none() {
+                        return;
+                    }
+                    if let Some(outcome) = add_network_settled(&admin.read(cx).view(), chain_id) {
+                        host.add_network = None;
+                        host.resolve_send(id, SendShellResult::NetworkAdded { outcome }, cx);
+                    }
+                }));
+                let now_iso = crate::executor::now_iso();
+                admin.update(cx, |admin, cx| {
+                    admin.dispatch(NetEvent::AddByChainIdRequested { chain_id, now_iso }, cx);
+                });
+                return;
+            }
+            SendOperation::FetchTokens { .. } => {
+                if self.answer_tokens(id, cx) {
+                    return;
+                }
             }
             SendOperation::ShowAlert { kind } => {
                 self.alert = Some(kind.clone());
@@ -564,6 +798,7 @@ impl SendHost {
         account: String,
         calls: Vec<FeeCall>,
         fee_token: Option<String>,
+        auto_fee_token: bool,
         public_key_available: bool,
         cx: &mut Context<Self>,
     ) {
@@ -580,6 +815,7 @@ impl SendHost {
             public_key_available,
             calls,
             fee_token,
+            auto_fee_token,
             cx,
         );
     }
@@ -909,10 +1145,41 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
     }
 }
 
+/// Where the network admin's wizard has got to with `chain_id`, as the send
+/// machine words it — `None` while it is still resolving and probing. The
+/// web's `addCustomNetworkByChainId` mapping: saved is added; an unknown
+/// chain is not found; one already present counts as added only when it is a
+/// saved custom row; anything else it refused is not compatible.
+fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOutcome> {
+    let saved = view
+        .networks
+        .iter()
+        .any(|row| row.chain_id == chain_id && row.is_custom);
+    let wizard = &view.wizard;
+    if wizard.phase == NetWizardPhase::Error
+        && let Some(error) = &wizard.error
+    {
+        return Some(match error {
+            NetWizardErrorKind::NotFound { .. } => SendAddNetworkOutcome::NotFound,
+            NetWizardErrorKind::AlreadyAdded { .. } if saved => SendAddNetworkOutcome::Added,
+            _ => SendAddNetworkOutcome::NotCompatible { detail: None },
+        });
+    }
+    (wizard.phase == NetWizardPhase::Idle && saved).then_some(SendAddNetworkOutcome::Added)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
+    // The sync driver's own: the host hands its fee sessions to
+    // `speed_control` (069), so nothing above imports these any more.
+    #[cfg(feature = "dev-fixtures")]
+    use crate::executor::chain;
+    #[cfg(feature = "dev-fixtures")]
+    use crate::resident::{Answer, Machine};
+    #[cfg(feature = "dev-fixtures")]
+    use vela_core::app::fee_policy::FeeOperation;
 
     /// Issue #265: an import ADDS to the recipients already on the form, and
     /// replaces them only when the person chose "Replace them instead".
@@ -974,6 +1241,7 @@ mod tests {
                         batch,
                         gas_fee_token,
                         public_key_hex,
+                        auto_fee_token,
                     } => {
                         let calls = match (batch, tx) {
                             (Some(batch), _) if !batch.is_empty() => batch.clone(),
@@ -990,6 +1258,7 @@ mod tests {
                             tier: FeeTier::Fast,
                             calls,
                             fee_token: gas_fee_token.clone(),
+                            auto_fee_token: *auto_fee_token,
                         });
                         self.pump_fee(fee_pending);
                         let view = self.fee.view();
@@ -1016,6 +1285,10 @@ mod tests {
                         SendShellResult::AlertAcknowledged
                     }
                     SendOperation::Close => SendShellResult::Closed,
+                    // The screen's network admin is not part of this harness.
+                    SendOperation::AddNetwork { .. } => SendShellResult::NetworkAdded {
+                        outcome: vela_core::app::send::SendAddNetworkOutcome::Error,
+                    },
                     // The estimate race: answering the timer first would make
                     // every estimate a timeout. Left pending on purpose.
                     SendOperation::StartTimer { .. } => continue,
@@ -1074,8 +1347,10 @@ mod tests {
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.to_owned(),
                     transports: String::new(),
+                    signer_origin: None,
                 })
                 .collect(),
+            signed_in_with: None,
         };
         storage::save_account(&account).unwrap_or_else(|e| unreachable!("{e}"));
         storage::save_active_index(0).unwrap_or_else(|e| unreachable!("{e}"));
@@ -1431,6 +1706,8 @@ mod tests {
                         alerts.borrow_mut().push(kind.clone());
                         SendShellResult::AlertAcknowledged
                     }
+                    // The picker's read-ahead is fire-and-forget.
+                    SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
                     other => unreachable!("unexpected on this path: {other:?}"),
                 };
                 pending.extend(host.resolve(effect.id, result));
@@ -1680,6 +1957,7 @@ mod tests {
                 public_key_hex: "04aa".to_owned(),
                 created_at_iso: String::new(),
                 keys: Vec::new(),
+                signed_in_with: None,
             };
             let _ = storage::save_account(&account);
             account.id = "cred1".to_owned();

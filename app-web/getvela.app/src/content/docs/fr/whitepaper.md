@@ -1,7 +1,7 @@
 ---
 title: Livre blanc
 description: "Comment fonctionne Vela, et ce à quoi vous devez — ou non — faire confiance pour l'utiliser : le compte, les clés, les frais, le modèle de menaces, la récupération, et ce qui se passe si Vela disparaît."
-source: 60d297b650ac
+source: 227acd1acf3d
 ---
 
 <script>
@@ -184,9 +184,11 @@ de chaîne, ou rapprochés de formes standards de jetons —, puis, en dernier r
 qui reste reçoit un avertissement explicite de signature à l'aveugle. Un
 descripteur récupéré n'est jamais étiqueté vérifié — seul un descripteur intégré à
 l'app, ou un descripteur récupéré identique à celui-ci, mérite ce mot. Une
-approbation on-chain au niveau « illimité » (2^200 ou plus) ne peut pas être soumise
-tant que vous ne l'avez pas réduite ; une approbation finie mais élevée et les
-permits signés s'affichent avec un avertissement, sans être bloqués. Détails :
+approbation on-chain au niveau « illimité » (2^200 ou plus) s'affiche en rouge, avec
+un plafond proposé ; si vous ne la plafonnez pas, elle est envoyée exactement telle
+que la dApp l'a construite. Une approbation finie mais élevée s'affiche avec un
+avertissement ; les permits signés ne peuvent pas être plafonnés, donc ils sont
+signés tels que demandés ou refusés. Détails :
 [signature lisible](/fr/docs/clear-signing).
 
 ### Les réseaux
@@ -278,8 +280,11 @@ seconde partie capable de le faire.
   de l'extension ou des apps depuis les sources par vous-même (les paquets publiés
   sont accompagnés de sommes de contrôle SHA-256 et d'attestations de provenance de
   build GitHub nommant le commit et l'exécution du workflow ; l'installateur Windows
-  n'est toujours pas signé). Une page de signature indépendante, qui ne partage pas
-  le code de l'app, est construite mais pas encore reliée.
+  n'est toujours pas signé). Le [Trusted Signer](/fr/docs/clear-signing-self-host),
+  une page de signature indépendante qui ne partage pas le code de l'app, peut être
+  choisi comme mode de signature dans les apps de bureau, iPhone et Android ; le
+  contrôle d'intégrité de l'app de bureau ne fait que journaliser une page qui ne
+  correspond pas, et les apps mobiles ne vérifient pas encore.
 - **Tout ce qui est servi depuis le domaine** — n'importe quelle page de
   getvela.app ou de ses sous-domaines, y compris un script qu'elle charge, pourrait
   demander des signatures aux passkeys Vela, et l'invite n'affiche que

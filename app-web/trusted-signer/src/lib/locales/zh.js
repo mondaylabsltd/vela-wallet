@@ -114,7 +114,7 @@ window.VelaCS.i18n.register('zh', {
 
   // 警告
   'warn.unlimited': '无限额 — 该合约可以花费你所有 {symbol}。',
-  'warn.unlimitedLocked': '这里改不了额度：签名意图到达这一页就已经定死，只能签或不签。请回到请求方，让它换成一个有限的额度。',
+  'warn.unlimitedLocked': '这里改不了额度：签名意图到达这一页就已经定死，只能签或不签。要设上限，请在这里拒绝，然后在钱包自己的授权界面上选择上限。',
   'warn.unlimitedOffline': '无限额离线授权 — 离线签名改不了额度，只能拒绝或接受。',
   'warn.approveAll': '这个合集里你现在和以后持有的全部 NFT，对方都能随时取走。',
   'warn.approveAllLocked': '这个函数只有全有或全无，而这一页不能改写请求。要缩小范围，请回到请求方。',
@@ -172,6 +172,9 @@ window.VelaCS.i18n.register('zh', {
 
   'refuse.opMismatch': '这笔操作里没有站点请求的那一笔调用 —— 组装过程中被改过。不签。',
   'refuse.opUnreadable': '这笔操作的 calldata 读不出来，无法确认屏幕上显示的就是要签的东西。不签。',
+  'refuse.selfCall': '这个请求要你的账户对自己调用 {fn}，这会改变谁能控制这个账户。Vela 从来不需要这样做。不签。',
+  'refuse.delegateCall': '这个请求会以你账户的身份执行别的合约的代码（delegatecall），正是 Bybit 被盗时用的手法。不签。',
+  'refuse.safeTx': '这个请求要你的钥匙签一笔 Safe 交易（SafeTx），也就是一条 Safe 以后可以执行的指令。没有哪个网站需要 Vela 签这个。不签。',
   'warn.nonCanonicalModule': '这笔操作指向的不是 Vela 的 EntryPoint 或 4337 模块 —— 签了它，等于为另一套合约背书。',
   'ui.digest': '签名摘要 · {kind}',
   'ui.digestUnwrapped': '未包 SafeMessage：这是 EOA 式签名，Safe 的 EIP-1271 不会认',

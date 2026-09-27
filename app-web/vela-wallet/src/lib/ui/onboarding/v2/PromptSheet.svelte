@@ -12,7 +12,7 @@
 	 * than a dismissal, and it is the only one that gets two real buttons.
 	 */
 	import { MediaQuery } from 'svelte/reactivity';
-	import Sheet from '../Sheet.svelte';
+	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import type { PromptCopy } from '$lib/onboarding/core/copy';
@@ -79,9 +79,15 @@
 		<div class="card">{@render body()}</div>
 	</div>
 {:else}
-	<Sheet bind:this={sheet} label={copy.title} onClose={() => onAnswer(answer)}>
+	<BottomSheet
+		bind:this={sheet}
+		title={copy.title}
+		hideTitle
+		variant="prompt"
+		onclose={() => onAnswer(answer)}
+	>
 		{@render body()}
-	</Sheet>
+	</BottomSheet>
 {/if}
 
 <style>

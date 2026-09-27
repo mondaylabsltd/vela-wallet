@@ -1,7 +1,7 @@
 ---
 title: Audit & masalah yang diketahui
 description: "Setiap kontrak yang diandalkan Vela, siapa yang mengaudit versi mana, apakah versi yang diaudit sama dengan yang di-deploy, temuan terbuka yang kami pantau, dan apa saja yang sama sekali tidak diaudit."
-source: d0bb95c016da
+source: 09a0c3d8acc0
 ---
 
 "Sudah diaudit" adalah klaim tentang kode tertentu pada versi tertentu, jadi halaman ini
@@ -149,12 +149,19 @@ untuk v0.9, dan halaman ini akan memberi tahu kapan itu terjadi.
 ### Celah dalam pertahanan Vela sendiri
 
 Ini bukan temuan kontrak, melainkan tempat-tempat di mana dompet melindungi Anda lebih
-sedikit daripada yang mungkin Anda kira. Masing-masing sudah dicatat untuk diperbaiki:
+sedikit daripada yang mungkin Anda kira. Masing-masing sudah dicatat untuk diperbaiki,
+kecuali yang disebut sebagai kompromi yang disengaja:
 
-- **Pengaman persetujuan hanya menghentikan jumlah "tanpa batas"** (2^200 atau lebih;
-  2^152 untuk Permit2). Persetujuan besar yang terbatas, permit yang ditandatangani, atau
-  `setApprovalForAll` untuk NFT mendapat peringatan, bukan pemblokiran.
-- **Halaman tanda tangan independen belum terhubung** ke aplikasi mana pun.
+- **Persetujuan tanpa batas tetap dikirim kalau Anda membiarkannya** — kompromi yang
+  disengaja, karena persetujuan yang dibatasi merusak Permit2 dan swap dalam batch.
+  Persetujuan "tanpa batas" (2^200 atau lebih; 2^152 untuk Permit2) ditampilkan merah dan
+  dikirim sesuai permintaan dApp kecuali Anda membatasinya. Permit yang ditandatangani tidak
+  bisa dibatasi di mana pun.
+- **Trusted Signer bersifat opsional, dan pemeriksaan integritasnya belum menolak.**
+  Halaman tanda tangan independen itu hanya dipakai di perangkat tempat Anda memilihnya saat
+  membuat dompet atau masuk, dan dompet web tidak bisa memakainya. Aplikasi desktop
+  membandingkan halaman itu dengan versi-versi yang dibawanya, tetapi hanya mencatat
+  ketidakcocokan di log; aplikasi ponsel belum memeriksanya.
 - **Situs web memuat skrip analitik pihak ketiga** di domain yang sama dengan passkey.
   Situs itu melarang halamannya sendiri memakai passkey (lewat header Permissions-Policy),
   dan tidak memuat skrip tersebut di halaman yang memegang kunci.

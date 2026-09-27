@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import type { Contact } from '$lib/core/generated/Contact';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
 import { resolveContactsMessages } from '$lib/i18n/engine.server';
-import { buildContactsLive, displayName, letterSections } from './live';
+import { buildContactsDesktopLive, buildContactsLive, displayName, letterSections } from './live';
+import type { SidebarModel } from '$lib/wallet/model';
 
 const m = resolveContactsMessages('en');
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
@@ -117,6 +118,30 @@ describe('buildContactsLive', () => {
 		expect(model.empty?.primary).toBe(m.addContact);
 	});
 
+	// Founder, 2026-09-26: entering 通讯录 flashed 分组 / 新建分组 and "0 位",
+	// then an empty book became the empty state. Before `loaded`: chrome only.
+	it('an unread book is chrome only — no groups head, no count', () => {
+		const model = buildContactsLive(
+			{ ...VIEW, loaded: false, contacts: [], groups: [], sections: [] },
+			m,
+			identicon,
+			{ screen: 'list', query: '' }
+		);
+		expect(model.screen).toBe('list');
+		expect(model.list?.pending).toBe(true);
+		expect(model.list?.search.placeholder).toBe(m.searchPlaceholder);
+	});
+
+	// …and the empty book keeps the search field Android and iOS have.
+	it('an empty book still carries the search field', () => {
+		const model = buildContactsLive({ ...VIEW, contacts: [], groups: [] }, m, identicon, {
+			screen: 'list',
+			query: ''
+		});
+		expect(model.screen).toBe('empty');
+		expect(model.search?.placeholder).toBe(m.searchPlaceholder);
+	});
+
 	it('the list carries groups (with core ids), counts, and the full A–Z rail', () => {
 		const model = buildContactsLive(VIEW, m, identicon, { screen: 'list', query: '' });
 		expect(model.screen).toBe('list');
@@ -154,6 +179,44 @@ describe('buildContactsLive', () => {
 		});
 		expect(model.screen).toBe('group');
 		expect(model.group?.group.members.map((c) => c.name)).toEqual(['Alice', 'Bob']);
+	});
+});
+
+describe('buildContactsDesktopLive — the rail before the book is read', () => {
+	const sidebar = {} as SidebarModel;
+	const ui = { screen: 'list' as const, query: '' };
+
+	// The same rule as the phone list and iOS: the rail said 全部联系人 "0" and
+	// then jumped to the real count, with 分组 and its rows appearing under it.
+	it('draws the 全部联系人 row with no count, and no groups or 新建分组', () => {
+		const rail = buildContactsDesktopLive(
+			{ ...VIEW, loaded: false, contacts: [], groups: [], sections: [] },
+			m,
+			identicon,
+			ui,
+			sidebar
+		).rail;
+		expect(rail.pending).toBe(true);
+		expect(rail.allLabel).toBe(m.allContacts);
+		expect(rail.allCount).toBe('');
+		expect(rail.groups).toEqual([]);
+	});
+
+	it('draws the count and the groups once it is', () => {
+		const desktop = buildContactsDesktopLive(VIEW, m, identicon, ui, sidebar);
+		expect(desktop.rail.pending).toBe(false);
+		expect(desktop.rail.allCount).toBe('4');
+		expect(desktop.rail.groups.map((g) => g.name)).toEqual(['Payroll']);
+		// An empty book is a real "0" — it has been read.
+		const empty = buildContactsDesktopLive(
+			{ ...VIEW, contacts: [], groups: [], sections: [] },
+			m,
+			identicon,
+			ui,
+			sidebar
+		);
+		expect(empty.rail.allCount).toBe('0');
+		expect(empty.empty).toBeDefined();
 	});
 });
 

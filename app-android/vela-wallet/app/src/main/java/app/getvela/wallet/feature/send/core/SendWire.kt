@@ -574,11 +574,26 @@ sealed class SendOperation {
         val batch: List<FeeCall>? = null,
         val gas_fee_token: String? = null,
         val public_key_hex: String? = null,
+        /**
+         * Nobody has chosen the fee coin on this form: handed on as the fee
+         * session's `QuoteRequested.auto_fee_token`, so the fee machine pays in
+         * a coin that can. Which one comes back in the estimate's `fee_asset`.
+         */
+        val auto_fee_token: Boolean = false,
     ) : SendOperation()
 
     @Serializable
     @SerialName("probe_treasury")
     data class ProbeTreasury(val chain_id: Int) : SendOperation()
+
+    /**
+     * Read ahead, into the relay client's own fee caches, what a quote on each
+     * chain will need — answered `FeesPrewarmed` at once; the reads run on
+     * without the core.
+     */
+    @Serializable
+    @SerialName("prewarm_fees")
+    data class PrewarmFees(val account: String, val chain_ids: List<Int> = emptyList()) : SendOperation()
 
     @Serializable
     @SerialName("load_account_credential")
@@ -661,6 +676,11 @@ sealed class SendShellResult {
     @Serializable
     @SerialName("token_cache_cleared")
     data object TokenCacheCleared : SendShellResult()
+
+    /** `PrewarmFees` was taken; the reads run on without the core. */
+    @Serializable
+    @SerialName("fees_prewarmed")
+    data object FeesPrewarmed : SendShellResult()
 
     @Serializable
     @SerialName("token_metadata")
@@ -750,6 +770,15 @@ sealed class SendEvent {
     @Serializable
     @SerialName("tokens_partial")
     data class TokensPartial(val tokens: List<SendToken>) : SendEvent()
+
+    /**
+     * The asset list's holdings moved while Send is open — mapped exactly as
+     * `fetch_tokens` is answered. What follows them (the picker always, the
+     * form's balance and Max, never a confirm page) is the core's to say.
+     */
+    @Serializable
+    @SerialName("holdings_updated")
+    data class HoldingsUpdated(val tokens: List<SendToken>) : SendEvent()
 
     @Serializable
     @SerialName("refresh_tokens")

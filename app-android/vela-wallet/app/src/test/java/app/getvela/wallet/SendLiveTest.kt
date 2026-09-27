@@ -121,8 +121,47 @@ class SendLiveTest {
 
         // The person's own currency, at the committed rate only.
         val eur = ctx(CurrencyView(code = "EUR", rate = 2.0, committed = true))
-        // ×2 on 0.0546 USD, written with the preset's own two places.
-        assertEquals("0.000091 BNB · ≈€0.10", SendLive.form(drawn.model, view, FeeView(), eur).fee.value)
+        // ×2 on 0.0546 USD = 0.1092, written with the preset's own two places,
+        // rounded half up like every money figure (spec 078 round 2).
+        assertEquals("0.000091 BNB · ≈€0.11", SendLive.form(drawn.model, view, FeeView(), eur).fee.value)
+    }
+
+    /**
+     * Spec 078: the balance beside the token on the form is the asset list's
+     * row, digit for digit — the one token-amount rule, called on the same
+     * holding — and a Max's exact figure (balance less a fee to the wei) is
+     * never printed whole on the confirm page or the receipt.
+     */
+    @Test
+    fun `the token card and the confirm write the asset list's figure, never eighteen digits`() {
+        val exact = "0.043790209243313861"
+        val eth = xdai.copy(symbol = "ETH", balance = "0.0439686")
+        val home = WalletLive.home(
+            app.getvela.wallet.feature.wallet.WalletFixtures.buildMobileState(app.getvela.wallet.feature.wallet.WalletScreenState.H1, strings),
+            app.getvela.wallet.feature.wallet.core.BalanceView(
+                display_total_usd = 1.0,
+                tokens = listOf(app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "ETH", name = "ETH", balance = eth.balance, decimals = 18, price_usd = 1.0)),
+            ),
+            app.getvela.wallet.feature.wallet.core.FeedView(),
+            CurrencyView(code = "USD"),
+            strings,
+            mapOf(100 to "Gnosis"),
+        )
+        val row = home.assetRows.single().balance
+        assertEquals("0.043969 ETH", row)
+
+        val form = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val onForm = SendView(stage = SendStage.EnterDetails, selected_token = eth, tokens = listOf(eth), amount = "0.04379", token_amount = exact)
+        val card = SendLive.form(form.model, onForm, FeeView(), ctx()).token!!.detail
+        assertTrue(card, card.endsWith(" 0.043969"))
+        assertEquals(row.substringBefore(" "), card.substringAfterLast(" "))
+
+        val sd3 = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val confirming = SendView(stage = SendStage.Confirm, selected_token = eth, recipient = recipient, confirm_amount = exact, token_amount = exact, fee = fee())
+        val headline = SendLive.confirm(sd3.model, confirming, ctx())
+        assertEquals("0.04379", headline.amount)
+        // The unit is its own piece beside the figure (spec 078 round 2).
+        assertEquals("ETH", headline.amountUnit)
     }
 
     /**
@@ -193,7 +232,8 @@ class SendLiveTest {
         val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
         val view = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true)
         val live = SendLive.confirm(drawn.model, view, ctx(CurrencyView(code = "GBP", rate = 0.78, committed = true)))
-        assertEquals("0.001 XDAI", live.amount)
+        assertEquals("0.001", live.amount)
+        assertEquals("XDAI", live.amountUnit)
         assertTrue(live.subline.startsWith("≈ £"))
         assertTrue(live.facts.any { it.value.contains("0x7687") })
         assertTrue(live.facts.any { it.value.contains("0.0021") })
@@ -860,7 +900,8 @@ class SendLiveTest {
 
             val confirmDrawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
             val confirm = SendLive.confirm(confirmDrawn.model, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true), ctx())
-            assertEquals("0,001 XDAI", confirm.amount)
+            assertEquals("0,001", confirm.amount)
+            assertEquals("XDAI", confirm.amountUnit)
         } finally {
             Formats.current = saved
         }

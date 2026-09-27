@@ -6,7 +6,8 @@
     "error": "Kesalahan",
     "somethingWrong": "Terjadi kesalahan",
     "tryAgain": "Coba Lagi",
-    "done": "Selesai"
+    "done": "Selesai",
+    "gotIt": "Mengerti"
   },
   "language": {
     "title": "Bahasa",
@@ -25,6 +26,7 @@
       "appearance": "Tampilan",
       "localization": "Pelokalan",
       "advanced": "Lanjutan",
+      "community": "Komunitas",
       "developer": "Developer"
     },
     "account": {
@@ -36,7 +38,7 @@
     "appearance": {
       "themeLight": "Terang",
       "themeDark": "Gelap",
-      "themeAuto": "Ikuti Sistem",
+      "themeAuto": "Sistem",
       "avatarInitials": "Inisial",
       "avatarIdenticon": "Identicon",
       "themeTitle": "Tema",

@@ -1,15 +1,14 @@
-//! How this device signs by default (spec 071): the stored "Sign with" and
-//! the Trusted Signer's page — read raw, written as chosen.
+//! The Trusted Signer's page (spec 071) — read raw, written as chosen.
 //!
 //! `fee_tier_pref`'s shape against the same store, so there is one way a
-//! committed preference reaches disk here. Both values go back to the core
-//! RAW: whether a string is a method this build offers, and whether an
-//! address is a page a browser will sign on, are `sign_pref`'s calls — an
-//! unknown method reads as "never chose" and is left on disk for the newer
-//! build that wrote it.
+//! committed preference reaches disk here. The value goes back to the core
+//! RAW: whether an address is a page a browser will sign on is `sign_pref`'s
+//! call. The key survives sign-out, which clears only the accounts and the
+//! active index.
 //!
-//! Both keys survive sign-out, which clears only the accounts and the active
-//! index: how a person signs belongs to them and the device.
+//! How a signature is routed is not stored here: the account names the key it
+//! signed in with (founder, 2026-09-26). A `vela.signMethod` an older build
+//! wrote is never read.
 
 use gpui::App;
 use serde_json::Value;
@@ -39,16 +38,10 @@ impl Machine for SignPref {
             // Absent ALWAYS means "never chose" — including a read that
             // failed, which is why this cannot surface an error.
             SignPrefOperation::ReadStored => Answer::Now(SignPrefShellResult::Stored {
-                method: stored(storage::KEY_SIGN_METHOD),
                 signer_url: stored(storage::KEY_TRUSTED_SIGNER_URL),
             }),
-            // Best effort, both: the committed choice stays on screen either
-            // way, and the next launch simply reads the old value.
-            SignPrefOperation::WriteMethod { method } => {
-                let _ =
-                    storage::write_value(storage::KEY_SIGN_METHOD, Value::String(method.clone()));
-                Answer::Now(SignPrefShellResult::Written)
-            }
+            // Best effort: the committed choice stays on screen either way,
+            // and the next launch simply reads the old value.
             SignPrefOperation::WriteSignerUrl { url } => {
                 let _ = match url {
                     Some(url) => storage::write_value(
@@ -84,38 +77,25 @@ mod tests {
         host.view()
     }
 
-    /// A fresh install signs the way the wallet always did, on the official
-    /// page, and offers all five ways in the core's order.
+    /// A fresh install opens the official page.
     #[test]
-    fn a_fresh_install_is_automatic_on_the_official_page() {
+    fn a_fresh_install_is_on_the_official_page() {
         with_temp_state("sign-pref-fresh", || {
             let mut host = CoreHost::<SignPref>::new();
             let view = drive(&mut host, Event::Refresh);
-            assert_eq!(view.method, "auto");
-            assert!(!view.method_committed);
             assert_eq!(view.signer_url, DEFAULT_SIGNER_URL);
             assert!(view.signer_url_is_default);
             assert!(view.signer_uses_wallet_passkeys);
-            assert_eq!(
-                view.offered,
-                vela_core::wallet_keys::SIGN_METHODS.map(str::to_owned)
-            );
         });
     }
 
-    /// Both choices are written under the keys every client reads, and the
-    /// next launch reads them back.
+    /// The page is written under the key every client reads, and the next
+    /// launch reads it back.
     #[test]
-    fn the_choices_persist_across_launches() {
+    fn the_page_persists_across_launches() {
         with_temp_state("sign-pref-persist", || {
             let mut host = CoreHost::<SignPref>::new();
             drive(&mut host, Event::Refresh);
-            drive(
-                &mut host,
-                Event::MethodChosen {
-                    method: "trusted_signer".to_owned(),
-                },
-            );
             let view = drive(
                 &mut host,
                 Event::SignerUrlSubmitted {
@@ -123,10 +103,6 @@ mod tests {
                 },
             );
             assert_eq!(view.signer_url, "https://localhost:8140/");
-            assert_eq!(
-                storage::read_value(storage::KEY_SIGN_METHOD).ok().flatten(),
-                Some(Value::String("trusted_signer".to_owned()))
-            );
             assert_eq!(
                 storage::read_value(storage::KEY_TRUSTED_SIGNER_URL)
                     .ok()
@@ -136,8 +112,6 @@ mod tests {
 
             let mut next = CoreHost::<SignPref>::new();
             let view = drive(&mut next, Event::Refresh);
-            assert_eq!(view.method, "trusted_signer");
-            assert!(view.method_committed);
             assert_eq!(view.signer_url, "https://localhost:8140/");
             assert!(!view.signer_url_is_default);
             // Not a `getvela.app` page: it can show a request, not sign it.
@@ -185,26 +159,6 @@ mod tests {
                 storage::read_value(storage::KEY_TRUSTED_SIGNER_URL),
                 Ok(None)
             ));
-        });
-    }
-
-    /// A method this build does not offer reads as "never chose" and stays
-    /// on disk for the build that wrote it.
-    #[test]
-    fn an_unknown_method_reads_as_unset() {
-        with_temp_state("sign-pref-unknown", || {
-            let _ = storage::write_value(
-                storage::KEY_SIGN_METHOD,
-                Value::String("smoke_signals".to_owned()),
-            );
-            let mut host = CoreHost::<SignPref>::new();
-            let view = drive(&mut host, Event::Refresh);
-            assert_eq!(view.method, "auto");
-            assert!(!view.method_committed);
-            assert_eq!(
-                storage::read_value(storage::KEY_SIGN_METHOD).ok().flatten(),
-                Some(Value::String("smoke_signals".to_owned()))
-            );
         });
     }
 }

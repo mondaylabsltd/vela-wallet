@@ -2,17 +2,17 @@
 //! out. No i18n keys, no page state, no window management — the same contract
 //! `ui/` established in spec 007.
 
+use gpui::AnimationExt as _;
 use gpui::{
     Div, ElementId, ImageSource, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled, canvas, div,
-    fill as quad_fill, img, px,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, StyledImage as _, TextRun,
+    Window, canvas, div, fill as quad_fill, img, prelude::FluentBuilder as _, px,
 };
 
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{
-    self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_CONTROL_H, WALLET_NAV_ROW_H, WALLET_ROW_ICON,
-    WALLET_TOAST_DISC,
+    self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_NAV_ROW_H, WALLET_ROW_ICON, WALLET_TOAST_DISC,
 };
 
 use super::fixtures::{
@@ -43,7 +43,8 @@ pub(crate) fn icon_img(
 
 /// Small tinted glyphs the page composes into its own rows.
 pub fn close_icon(theme: &Theme, icons: &mut IconCache) -> impl IntoElement {
-    icon_img(icons, Icon::X, false, theme.fg_muted, 18.)
+    // `--icon-lg`, as every close on the web.
+    icon_img(icons, Icon::X, false, theme.fg_muted, 20.)
 }
 pub fn copy_icon(theme: &Theme, icons: &mut IconCache) -> impl IntoElement {
     icon_img(icons, Icon::Copy, false, theme.fg_base, 16.)
@@ -68,6 +69,34 @@ pub fn identicon_avatar(
         .h(px(size))
         .rounded(px(size / 2.))
         .flex_none()
+}
+
+/// An address whose artwork was pressed, waiting for the page to open the
+/// identicon viewer on it (078 H-02). A `Global`, as the web's
+/// `identiconViewer` store is, so any component can draw an openable
+/// identicon without a listener threaded down to it from the page.
+pub struct IdenticonRequest(pub Option<String>);
+impl gpui::Global for IdenticonRequest {}
+
+/// [`identicon_avatar`] as the web's `Identicon` with an `address`: a button
+/// that opens the viewer (078 H-02). It stops the press there, so a row the
+/// artwork sits in (a contact, a recipient) does not open as well.
+pub fn openable_identicon(
+    identicons: &mut IdenticonCache,
+    address: &str,
+    size: f32,
+) -> gpui::Stateful<gpui::Div> {
+    let owned = address.to_owned();
+    gpui::div()
+        .id(gpui::ElementId::Name(format!("identicon-{address}").into()))
+        .flex_none()
+        .cursor_pointer()
+        .child(identicon_avatar(identicons, address, size))
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            cx.set_global(IdenticonRequest(Some(owned.clone())));
+            window.refresh();
+        })
 }
 
 /// A passkey provider's mark, or nothing when the catalog does not know the
@@ -114,7 +143,17 @@ pub fn passkey_fallback_mark(
     )
 }
 
+/// A click on one of the header's two targets.
+pub type HeaderClick = Box<dyn Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App)>;
+
 /// Sidebar header: avatar + name + chevron + mono address.
+///
+/// Two targets side by side, as the web's `WalletHeader`: the artwork opens
+/// the identicon viewer on this address (078 H-02), the name-and-chevron
+/// opens the account switcher (078 H-01). The chevron promised a disclosure
+/// for as long as the desktop drew it, and nothing was listening. `None`
+/// leaves that half a picture — the gallery's header, or no account yet.
+#[allow(clippy::too_many_arguments, reason = "the header and its two targets")]
 pub fn wallet_header(
     theme: &Theme,
     icons: &mut IconCache,
@@ -122,46 +161,105 @@ pub fn wallet_header(
     seed: &str,
     name: SharedString,
     address: SharedString,
+    on_identicon: Option<HeaderClick>,
+    on_account: Option<HeaderClick>,
 ) -> Div {
-    div()
+    let mut avatar = div()
+        .id("wallet-header-identicon")
+        .flex_none()
+        .rounded_full()
+        .child(identicon_avatar(identicons, seed, WALLET_AVATAR));
+    if let Some(on_identicon) = on_identicon {
+        avatar = avatar
+            .cursor_pointer()
+            .active(|el| el.opacity(0.85))
+            .on_click(on_identicon);
+    }
+    let mut account = div()
+        .id("wallet-header-account")
         .flex()
-        .items_center()
-        .gap(px(10.))
-        .child(identicon_avatar(identicons, seed, WALLET_AVATAR))
+        .flex_col()
+        .gap(px(2.))
+        .min_w(px(0.))
         .child(
             div()
                 .flex()
-                .flex_col()
+                .items_center()
+                .gap(px(4.))
                 .min_w(px(0.))
                 .child(
+                    // Two lines, then the ellipsis (078 H-11): one line cut
+                    // "xiaoxiao · Key 1" and "… Key 2" to the same "xiaoxiao ·
+                    // K…", and the END of a name is what tells two apart.
                     div()
-                        .flex()
-                        .items_center()
-                        .gap(px(4.))
-                        .child(
-                            div()
-                                .text_size(theme::text_section())
-                                .font_weight(gpui::FontWeight::BOLD)
-                                .text_color(theme.fg_base)
-                                .whitespace_nowrap()
-                                .truncate()
-                                .child(name),
-                        )
-                        .child(icon_img(
-                            icons,
-                            Icon::ChevronDown,
-                            false,
-                            theme.fg_subtle,
-                            14.,
-                        )),
+                        .min_w(px(0.))
+                        .text_size(theme::text_section())
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_color(theme.fg_base)
+                        .line_height(gpui::relative(1.2))
+                        .line_clamp(2)
+                        .text_ellipsis()
+                        .child(name),
                 )
-                .child(
-                    div()
-                        .font_family(theme::font_mono())
-                        .text_size(theme::text_label())
-                        .text_color(theme.fg_subtle)
-                        .child(address),
-                ),
+                .child(div().flex_none().child(icon_img(
+                    icons,
+                    Icon::ChevronDown,
+                    false,
+                    theme.fg_base,
+                    14.,
+                ))),
+        )
+        .child(
+            div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_label())
+                .text_color(theme.fg_subtle)
+                .child(address),
+        );
+    if let Some(on_account) = on_account {
+        account = account.cursor_pointer().on_click(on_account);
+    }
+    div()
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .min_w(px(0.))
+        .child(avatar)
+        .child(account)
+}
+
+/// `line-height: normal` for Plus Jakarta Sans (its hhea 1038 + 222 over
+/// 1000) — what a web BUTTON's text sits on, since buttons do not inherit the
+/// body's line height.
+pub const LINE_NORMAL: f32 = 1.26;
+/// The web body's `--leading-normal`.
+pub const LINE_BODY: f32 = 1.4;
+
+/// An icon that follows its control's hover colour — the web's
+/// `currentColor`. An `icon_img` has its colour baked in, so the hovered one
+/// is drawn over the resting one and shown while `group` is hovered.
+pub fn hover_icon(
+    icons: &mut IconCache,
+    icon: Icon,
+    solid: bool,
+    rest: gpui::Hsla,
+    hover: gpui::Hsla,
+    size: f32,
+    group: &'static str,
+) -> Div {
+    div()
+        .relative()
+        .flex_none()
+        .size(px(size))
+        .child(icon_img(icons, icon, solid, rest, size))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .invisible()
+                .group_hover(group, |style| style.visible())
+                .child(icon_img(icons, icon, solid, hover, size)),
         )
 }
 
@@ -180,46 +278,86 @@ pub fn nav_row(
     } else {
         theme.fg_muted
     };
+    // Hover is the text colour only (078 H-11): the raised wash is what
+    // SELECTED looks like, and a hover that borrows it makes two rows look
+    // chosen at once.
     let row = div()
         .id(id)
+        .group("nav-row")
         .flex()
         .items_center()
         .gap(px(12.))
         .h(px(WALLET_NAV_ROW_H))
+        .flex_none()
         .px(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .cursor_pointer()
         .text_size(theme::text_row_title())
         .text_color(fg)
-        .child(icon_img(icons, icon, selected, fg, 20.))
+        .child(hover_icon(
+            icons,
+            icon,
+            selected,
+            fg,
+            theme.fg_base,
+            20.,
+            "nav-row",
+        ))
         .child(label);
     if selected {
         row.bg(theme.bg_raised)
             .font_weight(gpui::FontWeight::SEMIBOLD)
     } else {
-        row.hover(|el| el.bg(theme.bg_raised))
+        row.hover(|el| el.text_color(theme.fg_base))
     }
 }
 
-/// One network-filter row: dot, name, count, accent check when selected.
+/// One network-filter row: the chain's logo, name, count, accent check when
+/// selected.
+///
+/// The logo is the one the token badges already draw (`marks::chain_logo_url`),
+/// as the web's filter shows it. The coloured dot stays as what a row shows
+/// while the logo loads, when it cannot, and on the all-networks row, which
+/// has no chain to draw.
 pub fn chain_row(
     id: impl Into<ElementId>,
     theme: &Theme,
     icons: &mut IconCache,
     row: &ChainRowModel,
 ) -> Stateful<Div> {
-    let dot = div()
-        .w(px(10.))
-        .h(px(10.))
-        .flex_none()
-        .rounded(px(5.))
-        .bg(row.dot.unwrap_or(theme.fg_subtle));
+    // The web's `.mark` slot (`--icon-md`) and `.dot` (`--icon-xs`).
+    const MARK: f32 = 18.;
+    let colour = row.dot.unwrap_or(theme.fg_subtle);
+    let dot = move || {
+        div()
+            .size(px(MARK))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(div().size(px(12.)).rounded(px(6.)).bg(colour))
+            .into_any_element()
+    };
+    let dot = match row.chain_id.and_then(crate::marks::chain_logo_url) {
+        Some(url) => div().size(px(MARK)).flex_none().child(
+            img(url)
+                .size(px(MARK))
+                .rounded(px(MARK / 2.))
+                .with_loading(dot)
+                .with_fallback(dot),
+        ),
+        None => div().flex_none().child(dot()),
+    };
     let mut el = div()
         .id(id)
         .flex()
         .items_center()
         .gap(px(12.))
-        .h(px(32.))
+        // The web filter's row (`min-height: --size-hitTarget`): at 32
+        // twenty-odd chains read as one block of text rather than a list.
+        .h(px(WALLET_NAV_ROW_H))
+        // Never squeezed: a short window must scroll the list, not crush
+        // twenty rows into the height of ten.
+        .flex_none()
         .px(px(12.))
         .rounded(px(8.))
         .cursor_pointer()
@@ -243,30 +381,6 @@ pub fn chain_row(
             .text_color(theme.fg_subtle)
             .child(SharedString::from(row.count.to_string())),
     )
-}
-
-/// The pinned ⌘K search affordance (visual only in this feature).
-pub fn sidebar_search(theme: &Theme, icons: &mut IconCache, placeholder: SharedString) -> Div {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(8.))
-        .h(px(WALLET_CONTROL_H))
-        .px(px(12.))
-        .rounded(px(10.))
-        .bg(theme.bg_raised)
-        .border_1()
-        .border_color(theme.divider)
-        .text_size(theme::text_row_sub())
-        .text_color(theme.fg_subtle)
-        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
-        .child(div().flex_1().min_w(px(0.)).truncate().child(placeholder))
-        .child(
-            div()
-                .font_family(theme::font_mono())
-                .text_size(theme::text_label())
-                .child("⌘K"),
-        )
 }
 
 /// Hero balance with its four states and optional status line (spec FR-008:
@@ -300,10 +414,12 @@ pub fn balance_display(
     icons: &mut IconCache,
     model: &BalanceModel,
     on_toggle: Option<BalanceToggle>,
+    on_status: Option<BalanceToggle>,
 ) -> Div {
     let mut root = div().flex().flex_col().gap(px(8.)).child(
         div()
             .text_size(theme::text_label())
+            .line_height(gpui::relative(LINE_BODY))
             .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(theme.fg_subtle)
             // The code the figure beneath is DRAWN in, not a constant: the
@@ -315,12 +431,26 @@ pub fn balance_display(
     );
 
     root = match model.state {
+        // The web's `SkeletonRow variant="block"` (078 H-10): 55 % of the
+        // column, one `--text-4xl` tall, radius 8, breathing 1 → .4 → 1.
         BalanceState::Loading => root.child(
             div()
-                .w(px(220.))
-                .h(px(44.))
+                .w(gpui::relative(0.55))
+                .h(px(32.))
                 .rounded(px(8.))
-                .bg(theme.bg_sunken),
+                .bg(theme.bg_sunken)
+                .with_animation(
+                    "balance-skeleton",
+                    gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+                    |block, delta| {
+                        let t = if delta < 0.5 {
+                            delta * 2.
+                        } else {
+                            2. - delta * 2.
+                        };
+                        block.opacity(1. - 0.6 * t)
+                    },
+                ),
         ),
         BalanceState::Hidden => root.child(pressable(
             div()
@@ -330,6 +460,7 @@ pub fn balance_display(
                 .child(
                     div()
                         .text_size(theme::text_balance_hero())
+                        .line_height(gpui::relative(1.12))
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_base)
                         .child(model.integer.clone()),
@@ -341,9 +472,14 @@ pub fn balance_display(
             on_toggle,
         )),
         BalanceState::Normal | BalanceState::ZeroLive => {
-            let mut amount = div().flex().items_end().child(
+            // `--leading-amountHero` 1.12: gpui's default line is ~1.6, and
+            // at 40 px that pushed everything below the hero 10 px down.
+            // On one baseline, as the web's inline figure sets them: bottom
+            // alignment floated the smaller decimals above the integer's.
+            let mut amount = div().flex().items_baseline().child(
                 div()
                     .text_size(theme::text_balance_hero())
+                    .line_height(gpui::relative(1.12))
                     .font_weight(gpui::FontWeight::BOLD)
                     .text_color(theme.fg_base)
                     .child(model.integer.clone()),
@@ -351,11 +487,20 @@ pub fn balance_display(
             if let Some(decimals) = model.decimals.clone() {
                 amount = amount.child(
                     div()
-                        .pb(px(4.))
                         .text_size(theme::text_balance_decimals())
+                        .line_height(gpui::relative(1.12))
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(theme.fg_subtle)
-                        .child(SharedString::from(format!(".{decimals}"))),
+                        // The person's decimal mark, as the web's
+                        // `decimalMark` — a `.` after "1.575" read as a second
+                        // thousands separator.
+                        .child(SharedString::from(format!(
+                            "{}{decimals}",
+                            crate::executor::format_prefs::current()
+                                .number
+                                .separators()
+                                .decimal
+                        ))),
                 );
             }
             root.child(pressable(amount, on_toggle))
@@ -370,7 +515,30 @@ pub fn balance_display(
                 .gap(px(8.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
-                .child(div().w(px(8.)).h(px(8.)).rounded(px(4.)).bg(theme.success))
+                // The web's `.live-dot`: it breathes — opacity 1 to .35 and
+                // back over 800 ms — so the line reads as listening, not as
+                // a label (078 H-05).
+                .child(
+                    div()
+                        .w(px(8.))
+                        .h(px(8.))
+                        .rounded(px(4.))
+                        .bg(theme.success)
+                        .with_animation(
+                            "balance-live-dot",
+                            gpui::Animation::new(std::time::Duration::from_millis(1600)).repeat(),
+                            |dot, delta| {
+                                // Out and back in one cycle: the web's
+                                // `alternate` over two 800 ms halves.
+                                let t = if delta < 0.5 {
+                                    delta * 2.
+                                } else {
+                                    2. - delta * 2.
+                                };
+                                dot.opacity(1. - 0.65 * t)
+                            },
+                        ),
+                )
                 .child(live),
         );
     }
@@ -380,17 +548,28 @@ pub fn balance_display(
             StatusKind::Warning => (Icon::TriangleAlert, theme.warning),
             StatusKind::Refreshing => (Icon::RefreshCw, theme.fg_muted),
         };
-        root = root.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .text_size(theme::text_row_sub())
-                .text_color(color)
-                .child(icon_img(icons, icon, false, color, 14.))
-                .child(text)
-                .child(icon_img(icons, Icon::ChevronRight, false, color, 12.)),
-        );
+        // The web's `.status` button (`BalanceDisplay.svelte`): gap 8,
+        // padding 4/0, 13 text, 14 glyphs either side. It opens what the line
+        // is about — the unreachable chain's RPC editor, or the breakdown —
+        // so it is drawn as the button it is (078 H-03).
+        let line = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .py(px(4.))
+            .text_size(theme::text_row_sub())
+            .text_color(color)
+            .child(icon_img(icons, icon, false, color, 14.))
+            .child(text)
+            .child(icon_img(icons, Icon::ChevronRight, false, color, 14.));
+        root = root.child(match on_status {
+            Some(on_status) => line
+                .id("balance-status")
+                .cursor_pointer()
+                .on_click(on_status)
+                .into_any_element(),
+            None => line.into_any_element(),
+        });
     }
 
     root
@@ -417,11 +596,13 @@ pub fn action_pill(
         .border_1()
         .border_color(theme.border_card)
         .cursor_pointer()
-        .hover(|el| el.bg(theme.bg_sunken))
+        // `--opacity-hover` (078 H-12): the pill fades a touch; its colour
+        // does not change.
+        .hover(|el| el.opacity(0.92))
         .text_size(theme::text_row_title())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_base)
-        .child(icon_img(icons, icon, false, theme.fg_base, 16.))
+        .child(icon_img(icons, icon, false, theme.fg_base, 20.))
         .child(label)
 }
 
@@ -438,7 +619,7 @@ pub fn section_header(
 
 /// The header's frame, for callers that bind the halves separately.
 pub fn section_header_row() -> Div {
-    div().flex().items_center().justify_between().py(px(10.))
+    div().flex().items_center().justify_between().py(px(12.))
 }
 
 /// `section_header`, taken apart.
@@ -456,28 +637,47 @@ pub fn section_header_parts(
     (
         div()
             .text_size(theme::text_section())
+            .line_height(gpui::relative(LINE_BODY))
             .font_weight(gpui::FontWeight::BOLD)
             .text_color(theme.fg_base)
             .child(title),
+        // The web's header button (078 H-08): padded 4 and pulled back 4 at
+        // the end so the chevron still lines up with the column's edge; hover
+        // brings words and chevron to fg-base together.
         div()
+            .group("section-action")
             .flex()
             .items_center()
             .gap(px(2.))
+            .p(px(4.))
+            .mr(px(-4.))
+            .rounded(px(4.))
             .text_size(theme::text_row_sub())
+            .line_height(gpui::relative(LINE_NORMAL))
             .text_color(theme.fg_muted)
-            .child(action)
-            .child(icon_img(
+            // The words take the hover through the group, on an element with
+            // an id — gpui applies a text colour's hover only there (the same
+            // rule the backup row's title met).
+            .child(
+                div()
+                    .id("section-action-label")
+                    .group_hover("section-action", |style| style.text_color(theme.fg_base))
+                    .child(action),
+            )
+            .child(hover_icon(
                 icons,
                 Icon::ChevronRight,
                 false,
                 theme.fg_muted,
-                12.,
+                theme.fg_base,
+                14.,
+                "section-action",
             )),
     )
 }
 
 fn lead_circle(theme: &Theme, inner: impl IntoElement, badge: gpui::Hsla) -> Div {
-    lead_circle_logos(theme, inner, badge, &crate::marks::Logos::default())
+    lead_circle_logos(theme, inner, badge, &crate::marks::Logos::default(), true)
 }
 
 /// The lead circle with the endpoint's logos over it (issue 201).
@@ -494,6 +694,9 @@ fn lead_circle_logos(
     inner: impl IntoElement,
     badge: gpui::Hsla,
     logos: &crate::marks::Logos,
+    // A TOKEN's circle carries the hairline ring (`TokenIcon`'s 1 px
+    // border-base); an activity row's direction glyph does not (078 H-09).
+    ring: bool,
 ) -> Div {
     let mut circle = div()
         .relative()
@@ -506,6 +709,7 @@ fn lead_circle_logos(
                 .h_full()
                 .rounded(px(WALLET_ROW_ICON / 2.))
                 .bg(theme.bg_sunken)
+                .when(ring, |circle| circle.border_1().border_color(theme.divider))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -525,22 +729,29 @@ fn lead_circle_logos(
     if logos.badge_hidden {
         return circle;
     }
+    // 12, or 16 when it may carry a logo — a size a logo can be read at —
+    // ringed 1.5 in the page colour (078 H-09).
+    let side = if logos.badge_logo.is_some() {
+        16.
+    } else {
+        WALLET_BADGE
+    };
     let mut dot = div()
         .absolute()
         .bottom_0()
         .right_0()
-        .w(px(WALLET_BADGE))
-        .h(px(WALLET_BADGE))
-        .rounded(px(WALLET_BADGE / 2.))
+        .w(px(side))
+        .h(px(side))
+        .rounded(px(side / 2.))
         .bg(badge)
-        .border_2()
+        .border(px(1.5))
         .border_color(theme.bg_base);
     if let Some(url) = &logos.badge_logo {
         dot = dot.child(
             gpui::img(url.clone())
                 .w_full()
                 .h_full()
-                .rounded(px(WALLET_BADGE / 2.)),
+                .rounded(px(side / 2.)),
         );
     }
     circle.child(dot)
@@ -559,11 +770,15 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
     } else {
         theme.fg_base
     };
+    // Padded 12 on the font's own line (078 H-09): the web's rows are
+    // buttons, whose line-height is `normal` — Plus Jakarta Sans' 1.26 — so a
+    // row is 64 tall. gpui's default ~1.6 made it 66 and spread the lines.
     div()
         .flex()
         .items_center()
         .gap(px(12.))
-        .py(px(10.))
+        .py(px(12.))
+        .line_height(gpui::relative(LINE_NORMAL))
         .child(lead_circle_logos(
             theme,
             icon_img(icons, glyph, false, theme.fg_muted, 18.),
@@ -575,6 +790,7 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
                 badge_logo: row.badge_logo.clone(),
                 badge_hidden: false,
             },
+            false,
         ))
         .child(
             div()
@@ -624,7 +840,7 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
 fn token_glyph(theme: &Theme, ticker: &str) -> Div {
     let glyph: String = ticker.chars().take(3).collect::<String>().to_uppercase();
     div()
-        .text_size(theme::text_label())
+        .text_size(theme::text_glyph())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_muted)
         .child(SharedString::from(glyph))
@@ -642,7 +858,7 @@ pub fn token_icon_logos(
     badge: gpui::Hsla,
     logos: &crate::marks::Logos,
 ) -> Div {
-    lead_circle_logos(theme, token_glyph(theme, ticker), badge, logos)
+    lead_circle_logos(theme, token_glyph(theme, ticker), badge, logos, true)
 }
 
 /// Asset row. Caller chains `.on_click` (opens the detail panel — US2).
@@ -667,17 +883,17 @@ pub fn asset_row(
             .text_color(theme.fg_subtle)
             .child(super::fixtures::MASK),
     };
+    // The web's row (078 H-09): flush with the column, no hover wash, no
+    // radius — a list of holdings, not a stack of cards. Padded 12 on the
+    // font's own line, 64 tall.
     div()
         .id(id)
         .flex()
         .items_center()
         .gap(px(12.))
-        .py(px(10.))
-        .px(px(8.))
-        .mx(px(-8.))
-        .rounded(px(10.))
+        .py(px(12.))
+        .line_height(gpui::relative(LINE_NORMAL))
         .cursor_pointer()
-        .hover(|el| el.bg(theme.bg_raised))
         .child(token_icon_logos(
             theme,
             row.ticker.as_ref(),
@@ -725,6 +941,157 @@ pub fn asset_row(
         )
 }
 
+/// Marks a line may not open with — the CJK closing punctuation 禁则 names,
+/// and their Latin kin. gpui's wrapper breaks between any two CJK glyphs,
+/// so it will happily start a line with 「。」.
+const NO_LINE_START: &str = "。，、；：？！）」』》〉】〕…%.,;:!?)]}";
+
+/// The narrowest width, at most `max`, that still wraps `text` (the UI face
+/// at `size`) into as many lines as `max` does — the web's
+/// `text-wrap: balance`. A centred caption wrapped at its full width leaves a
+/// stub under a long line (「……也可以从文件导入 / 现有通讯录。」); balanced, the
+/// lines come out near-even. A width whose break opens a line with a closing
+/// mark (「粘贴 / 。也可以」) does not count — the browser's line breaker never
+/// makes that break, so the web never shows it. `max` when the text fits on
+/// one line.
+pub fn balanced_wrap_width(
+    window: &Window,
+    text: &SharedString,
+    size: Pixels,
+    max: Pixels,
+) -> Pixels {
+    let run = TextRun {
+        len: text.len(),
+        font: gpui::font(theme::font_ui()),
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    // Lines at `width`, or `None` when a break there strands a closing mark.
+    let lines = |width: Pixels| -> Option<usize> {
+        let shaped = window
+            .text_system()
+            .shape_text(
+                text.clone(),
+                size,
+                std::slice::from_ref(&run),
+                Some(width),
+                None,
+            )
+            .ok()?;
+        let mut count = 0;
+        for line in &shaped {
+            for boundary in line.wrap_boundaries() {
+                // A boundary names the first glyph of the new line.
+                let at =
+                    line.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index;
+                let opens = line.text.get(at..).and_then(|rest| rest.chars().next());
+                if opens.is_some_and(|c| NO_LINE_START.contains(c)) {
+                    return None;
+                }
+            }
+            count += line.wrap_boundaries().len() + 1;
+        }
+        Some(count)
+    };
+    let Some(target) = lines(max).filter(|&n| n > 1) else {
+        return max;
+    };
+    // `hi` always holds the text in `target` lines with no stranded mark.
+    let (mut lo, mut hi) = (max / target as f32, max);
+    for _ in 0..12 {
+        let mid = (lo + hi) / 2.;
+        if lines(mid) == Some(target) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    // A pixel of slack: the box the layout hands the text rounds, and a
+    // hair narrower than the measured width wraps one line more.
+    (hi.ceil() + px(1.)).min(max)
+}
+
+/// The widest width, at most `max`, at which no wrapped line of `text` (the
+/// UI face at `size`) begins with a closing mark — the rule every CJK
+/// typesetter keeps (kinsoku): 「…通行密钥 / 。」 is a break the browser never
+/// makes, and a lone 。 on a line of its own reads as a rendering fault. Steps
+/// in by one em at a time, which carries the character before the mark down
+/// with it. `max` when nothing strands.
+pub fn kinsoku_width(window: &Window, text: &SharedString, size: Pixels, max: Pixels) -> Pixels {
+    let run = TextRun {
+        len: text.len(),
+        font: gpui::font(theme::font_ui()),
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let strands = |width: Pixels| -> bool {
+        let Ok(shaped) = window.text_system().shape_text(
+            text.clone(),
+            size,
+            std::slice::from_ref(&run),
+            Some(width),
+            None,
+        ) else {
+            return false;
+        };
+        shaped.iter().any(|line| {
+            line.wrap_boundaries().iter().any(|boundary| {
+                let at =
+                    line.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index;
+                line.text
+                    .get(at..)
+                    .and_then(|rest| rest.chars().next())
+                    .is_some_and(|c| NO_LINE_START.contains(c))
+            })
+        })
+    };
+    let mut width = max;
+    for _ in 0..12 {
+        if !strands(width) {
+            return width;
+        }
+        width -= size;
+    }
+    max
+}
+
+/// How wide `text` is on one line, in the UI face at `size`.
+pub fn text_width(window: &Window, text: &str, size: Pixels) -> Pixels {
+    let run = TextRun {
+        len: text.len(),
+        font: gpui::font(theme::font_ui()),
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    window
+        .text_system()
+        .shape_line(
+            SharedString::from(text.to_owned()),
+            size,
+            std::slice::from_ref(&run),
+            None,
+        )
+        .width
+}
+
+/// The width `text` wraps at inside `max` so that its lines come out even —
+/// no word, and no 「钥。」, alone on the last line — and no line opens with a
+/// closing mark. Kinsoku first: at the full width the natural break can
+/// strand a 「。」, and [`balanced_wrap_width`] declines to balance a text it
+/// cannot break cleanly; balanced inside the kinsoku width, then checked
+/// again, because the balanced break can strand one too.
+pub fn even_wrap_width(window: &Window, text: &SharedString, size: Pixels, max: Pixels) -> Pixels {
+    let clean = kinsoku_width(window, text, size, max);
+    let balanced = balanced_wrap_width(window, text, size, clean);
+    kinsoku_width(window, text, size, balanced)
+}
+
 /// Empty state: sunken circle + outline icon, title, caption.
 pub fn empty_state(
     theme: &Theme,
@@ -732,6 +1099,19 @@ pub fn empty_state(
     icon: Icon,
     title: SharedString,
     caption: SharedString,
+) -> Div {
+    empty_state_wrapped(theme, icons, icon, title, caption, None)
+}
+
+/// [`empty_state`] with the caption wrapped at `caption_w` — a
+/// [`balanced_wrap_width`] — instead of at whatever its parent allows.
+pub fn empty_state_wrapped(
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+    title: SharedString,
+    caption: SharedString,
+    caption_w: Option<Pixels>,
 ) -> Div {
     div()
         .flex()
@@ -759,6 +1139,7 @@ pub fn empty_state(
         )
         .child(
             div()
+                .when_some(caption_w, |el, w| el.w(w))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_muted)
                 .child(caption),

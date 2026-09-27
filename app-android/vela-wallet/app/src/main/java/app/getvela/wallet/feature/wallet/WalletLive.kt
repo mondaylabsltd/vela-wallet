@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet
 
+import app.getvela.wallet.core.format.tokenAmountText
 import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.feature.wallet.core.BalanceSwitcherView
 import app.getvela.wallet.feature.settings.AccountsSheetRowModel
@@ -326,9 +327,11 @@ object WalletLive {
             )
         }
 
-        // `valueOf`, not the constructor: `BigDecimal(12.34)` is the binary
-        // double's exact expansion, 12.3399…, and cutting THAT printed $12.33.
-        val rounded = BigDecimal.valueOf(money.convert(total)).setScale(2, RoundingMode.DOWN)
+        // The exact binary value rounded HALF UP — `Formats.fixed2`'s rule and
+        // the web's `toFixed(2)`, so the hero and its rows agree with each
+        // other and with the web. It used to CUT: `BigDecimal(12.34)` is
+        // 12.3399…, and cutting that printed $12.33.
+        val rounded = BigDecimal(money.convert(total)).setScale(2, RoundingMode.HALF_UP)
         val whole = rounded.toBigInteger()
         val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
         // A zero is "live" only once EVERY chain has answered: a zero with a
@@ -400,26 +403,15 @@ object WalletLive {
         logoUrls = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).logoUrls,
         badgeLogoUrl = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).badgeLogoUrl,
         badgeHidden = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).badgeHidden,
-        balance = "${trimAmount(token.balance)} ${token.symbol}",
+        // The ONE token-amount rule (spec 078): Send's picker, token card,
+        // confirm and receipt call the same function on the same holding.
+        balance = "${tokenAmountText(token.balance)} ${token.symbol}",
         fiat = token.price_usd?.let { price ->
             val value = money.convert(amountAsDouble(token.balance) * price)
             AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
         } ?: AssetFiatModel.NoPrice("—"),
         masked = false,
     )
-
-    /**
-     * A holding's amount, shortened for a row.
-     *
-     * Six decimals is where a phone row stops being readable; the full figure
-     * lives on the asset's own screen. Truncated rather than rounded, because a
-     * rounded-up balance is a number the person does not have.
-     */
-    internal fun trimAmount(balance: String): String {
-        val parsed = balance.toBigDecimalOrNull() ?: return balance
-        // The decimal mark is the preset's; the grouping stays off (spec 049, the web's `trimBalance`).
-        return Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())
-    }
 
     private fun amountAsDouble(balance: String): Double = balance.toDoubleOrNull() ?: 0.0
 

@@ -10055,6 +10055,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tungstenite",
+ "unicode-segmentation",
  "ureq",
  "uuid",
  "vela-core",

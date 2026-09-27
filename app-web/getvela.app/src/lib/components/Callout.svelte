@@ -36,7 +36,7 @@
 	.title {
 		margin: 0 0 4px;
 		font-weight: 650;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		letter-spacing: 0.01em;
 	}
 	.body :global(p:last-child) {
@@ -44,7 +44,7 @@
 	}
 	.body :global(p) {
 		margin: 0 0 0.6em;
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		color: var(--text-secondary);
 	}
 

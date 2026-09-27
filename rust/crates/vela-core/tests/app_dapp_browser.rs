@@ -257,7 +257,7 @@ fn signing_words_live_in_the_core() {
     );
     assert_eq!(
         dapp_rpc::sign_error_message(SignErrorKind::UnlimitedApproval),
-        "Unlimited approvals are disabled"
+        "The wallet refused an unlimited approval its approval screen did not show"
     );
 }
 

@@ -8,7 +8,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -57,6 +59,8 @@ fun VelaPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     loading: Boolean = false,
+    /** While [loading]: the spinner BESIDE the label ("Sending…") instead of in its place. */
+    busyLabel: Boolean = false,
 ) {
     VelaButtonSurface(
         onClick = onClick,
@@ -68,8 +72,12 @@ fun VelaPrimaryButton(
             modifier = pressModifier.background(VelaTheme.colors.accentBase),
             contentAlignment = Alignment.Center,
         ) {
-            ButtonLabel(text = text, color = VelaOnAccent, loading = loading)
-            ButtonSpinner(color = VelaOnAccent, visible = loading)
+            if (loading && busyLabel) {
+                BusyLabel(text = text, color = VelaOnAccent)
+            } else {
+                ButtonLabel(text = text, color = VelaOnAccent, loading = loading)
+                ButtonSpinner(color = VelaOnAccent, visible = loading)
+            }
         }
     }
 }
@@ -81,6 +89,8 @@ fun VelaSecondaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     loading: Boolean = false,
+    /** While [loading]: the spinner BESIDE the label instead of in its place. */
+    busyLabel: Boolean = false,
 ) {
     VelaButtonSurface(
         onClick = onClick,
@@ -97,8 +107,12 @@ fun VelaSecondaryButton(
             contentAlignment = Alignment.Center,
         ) {
             // Label uses fg.base, not the mock's low-contrast gray (spec DV-001).
-            ButtonLabel(text = text, color = VelaTheme.colors.fgBase, loading = loading)
-            ButtonSpinner(color = VelaTheme.colors.fgBase, visible = loading)
+            if (loading && busyLabel) {
+                BusyLabel(text = text, color = VelaTheme.colors.fgBase)
+            } else {
+                ButtonLabel(text = text, color = VelaTheme.colors.fgBase, loading = loading)
+                ButtonSpinner(color = VelaTheme.colors.fgBase, visible = loading)
+            }
         }
     }
 }
@@ -175,6 +189,32 @@ internal fun VelaButtonSurface(
                 },
             ),
     )
+}
+
+/**
+ * Busy WITH words (spec 078 round 3, the report's 发送中…): the spinner and
+ * the label side by side, centred, at full emphasis — for an action whose
+ * wait is long enough that "what is it doing?" deserves an answer in words.
+ */
+@Composable
+private fun BusyLabel(text: String, color: androidx.compose.ui.graphics.Color) {
+    Row(
+        modifier = Modifier.padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        // Sized from the label's own text size, so it grows with it (v3 B4).
+        val spinner = with(androidx.compose.ui.platform.LocalDensity.current) { VelaTextSize.lg.toDp() }
+        CircularProgressIndicator(color = color, strokeWidth = VelaBorder.emphasis, modifier = Modifier.size(spinner))
+        Text(
+            text = text,
+            color = color,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.semibold,
+            fontSize = VelaTextSize.lg,
+            textAlign = TextAlign.Center,
+        )
+    }
 }
 
 /** The busy spinner, sized and coloured to sit where the label was. */

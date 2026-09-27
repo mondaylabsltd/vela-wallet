@@ -24,7 +24,17 @@ class FormatsTest {
         assertEquals("12,34,567.89", Formats(NumberFormatKey.Indian).number("1234567.891", 2, 2))
         assertEquals("0.001", Formats(NumberFormatKey.CommaDot).number("0.0010"))
         assertEquals("-1,000", Formats(NumberFormatKey.CommaDot).number("-1000"))
-        assertEquals("0.44", Formats(NumberFormatKey.CommaDot).fixed2(0.449))
+        // Money: the exact binary value rounded HALF UP — the web's
+        // `toFixed(2)`, digit for digit (spec 078 round 2). Never cut: 12.34
+        // (really 12.3399…) stays 12.34.
+        val money = Formats(NumberFormatKey.CommaDot)
+        assertEquals("0.45", money.fixed2(0.449))
+        assertEquals("0.44", money.fixed2(0.444))
+        assertEquals("12.34", money.fixed2(12.34))
+        assertEquals("1.00", money.fixed2(1.005))
+        assertEquals("2.67", money.fixed2(2.675))
+        assertEquals("110.44", money.fixed2(110.445))
+        assertEquals("0.13", money.fixed2(0.125))
         assertEquals("abc", Formats(NumberFormatKey.CommaDot).number("abc"))
     }
 

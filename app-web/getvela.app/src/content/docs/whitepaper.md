@@ -161,9 +161,10 @@ standard token shapes — then, as a last resort, a public selector database,
 labelled best effort. Anything left gets an explicit blind-signing warning.
 A fetched descriptor is never labelled verified — only one built into the app,
 or a fetched one identical to it, earns that word. An on-chain approval
-at the "unlimited" level (2^200 or more) cannot be submitted until you reduce it;
-a large finite approval and signed permits are shown with a caution but not
-blocked. Details:
+at the "unlimited" level (2^200 or more) is shown in red with a cap on offer;
+unless you cap it, it is sent exactly as the dApp built it. A large finite
+approval is shown with a caution; signed permits can't be capped, so they are
+signed as asked or rejected. Details:
 [clear signing](/docs/clear-signing).
 
 ### Networks
@@ -240,9 +241,11 @@ self-custody gives you is that Vela is not a second party who can.
   decoding and approval guard in the app itself, notarized macOS builds, and
   building the extension or apps from source yourself (release packages carry
   SHA-256 checksums and GitHub build-provenance attestations naming the commit
-  and workflow run; the Windows installer is still not code-signed). An
-  independent signing page that does not share the app's code is built but not
-  yet connected.
+  and workflow run; the Windows installer is still not code-signed). The
+  [Trusted Signer](/docs/clear-signing-self-host), an independent signing page
+  that does not share the app's code, can be chosen as the way you sign in the
+  desktop, iPhone and Android apps; the desktop's integrity check only logs a
+  mismatched page, and the phone apps don't check yet.
 - **Anything served from the domain** — any page on getvela.app or its
   subdomains, including a script it loads, could request signatures from Vela
   passkeys, and the prompt shows only "getvela.app". The website therefore forbids

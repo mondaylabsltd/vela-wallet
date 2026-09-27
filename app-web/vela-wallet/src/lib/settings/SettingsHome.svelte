@@ -12,8 +12,10 @@
 	 * not wired: the callbacks are how a route hooks the two behaviours that
 	 * already exist (signing out, and leaving for another tab).
 	 */
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { OPENED_EVENT, type OnNetEvent } from './net-events';
+	import type { ReportDraft } from './report-draft.svelte';
+	import { toastAnchor } from './report-toast.svelte';
 	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
@@ -96,11 +98,23 @@
 		 * `onsend`, and nothing ever passed one, so the button was inert on the
 		 * real screen while the sheet promised a report was being filed.
 		 */
-		onfeedbacksend?: (report: { what: string; steps: string }) => void;
+		onfeedbacksend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		/** 完成 on the filed report: the route forgets the outcome, so the next report starts fresh. */
+		onfeedbackdone?: () => void;
 		/** The route is waiting on the bug-report endpoint. */
 		feedbackSending?: boolean;
 		/** How the last send ended: filed (with its issue) or fell back. */
 		feedbackResult?: FeedbackResult;
+		/**
+		 * The report being written, owned by the route so closing the sheet —
+		 * even mid-send — never loses it. Absent: the sheet keeps its own.
+		 */
+		feedbackDraft?: ReportDraft;
+		/**
+		 * The report sheet came on screen or went (078): an outcome that
+		 * arrives while it is open is said in it, otherwise by a toast.
+		 */
+		onfeedbackopen?: (open: boolean) => void;
 	}
 
 	let {
@@ -120,8 +134,11 @@
 		onaccountsopen,
 		onclearcaches,
 		onfeedbacksend,
+		onfeedbackdone,
 		feedbackSending = false,
-		feedbackResult
+		feedbackResult,
+		feedbackDraft,
+		onfeedbackopen
 	}: Props = $props();
 
 	// Seeds, not bindings: a gallery state pins where this opens, and a person
@@ -156,7 +173,6 @@
 		'date-format': 'date-format',
 		'time-format': 'time-format',
 		'fee-speed': 'fee-speed',
-		'sign-with': 'sign-with',
 		feedback: 'feedback'
 	};
 
@@ -194,6 +210,14 @@
 		overlay = 'accounts';
 		onaccountsopen?.(true);
 	}
+
+	// Whether the report sheet is up, told to the route on every change (and
+	// "gone" when this screen goes, e.g. the window widens to the desktop).
+	$effect(() => {
+		const open = overlay === 'feedback';
+		untrack(() => onfeedbackopen?.(open));
+	});
+	onDestroy(() => onfeedbackopen?.(false));
 
 	/** The sub-page's own header copy. `home` has no back affordance. */
 	const header = $derived.by(() => {
@@ -236,8 +260,6 @@
 				return model.timeSheet.title;
 			case 'fee-speed':
 				return model.feeSpeedSheet.title;
-			case 'sign-with':
-				return model.signWithSheet.title;
 			case 'clear-caches':
 				return model.clearCachesSheet.title;
 			// The row being cleared or removed names it: "localhost:8814",
@@ -274,10 +296,10 @@
 				return model.timeSheet.subtitle;
 			case 'fee-speed':
 				return model.feeSpeedSheet.subtitle;
-			case 'sign-with':
-				return model.signWithSheet.subtitle;
 			case 'feedback':
-				return model.feedback.subtitle;
+				// Once filed, the sheet is a thank-you: "tell us what happened"
+				// above it would ask for what was just given.
+				return feedbackResult?.filed === true ? undefined : model.feedback.subtitle;
 			default:
 				return undefined;
 		}
@@ -296,7 +318,7 @@
 	<IndexDownScreen panel={model.indexDown} />
 {:else}
 	<div class="settings">
-		<div class="scroll">
+		<div class="scroll" {@attach toastAnchor}>
 			{#if rescue}
 				<h1 class="backdrop">{model.backdropTitle}</h1>
 				{#if model.rpcBanner !== undefined}
@@ -325,6 +347,12 @@
 					{/if}
 
 					{#each sections as section, index (index)}
+						{#if section.label === undefined && index > 0}
+							<!-- A group with no heading still starts a group: without the
+							     air a heading would have given it, About ran straight on
+							     from the last Community row and read as one of them. -->
+							<div class="group-gap" aria-hidden="true"></div>
+						{/if}
 						{#if section.label !== undefined}
 							<SectionLabel
 								label={section.label}
@@ -514,16 +542,6 @@
 							close();
 						}}
 					/>
-				{:else if overlay === 'sign-with'}
-					<!-- Spec 071: the DEFAULT "Sign with", stored. A signing sheet's
-					     own pick signs that one request and never comes through here. -->
-					<SelectSheetBody
-						sheet={model.signWithSheet}
-						onselect={(id) => {
-							onprefevent?.({ kind: 'sign-with', id });
-							close();
-						}}
-					/>
 				{:else if overlay === 'clear-storage-item' && pending}
 					<ConfirmSheet
 						sheet={pending.sheet}
@@ -581,6 +599,11 @@
 						onsend={onfeedbacksend}
 						sending={feedbackSending}
 						result={feedbackResult}
+						draft={feedbackDraft}
+						ondone={() => {
+							onfeedbackdone?.();
+							close();
+						}}
 					/>
 				{:else if overlay === 'rpc-fix'}
 					<RpcFixBody panel={model.rpcFix} onprimary={close} />
@@ -599,6 +622,11 @@
 		margin-top: var(--space-2xl);
 	}
 
+	/* The air a section heading would have given an unlabelled group. */
+	.group-gap {
+		height: var(--space-2xl);
+	}
+
 	.settings {
 		position: relative;
 		display: flex;
@@ -613,7 +641,8 @@
 		min-height: 0;
 		overflow-y: auto;
 		padding-inline: var(--layout-screenPaddingX);
-		padding-bottom: var(--space-4xl);
+		/* Plus room for a report toast over the list's end, while one shows. */
+		padding-bottom: calc(var(--space-4xl) + var(--toast-room, 0%));
 	}
 
 	.title {

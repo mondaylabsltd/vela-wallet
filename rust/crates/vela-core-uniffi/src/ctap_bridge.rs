@@ -633,6 +633,29 @@ pub fn qr_matrix(text: String) -> Option<QrMatrix> {
     })
 }
 
+/// The saved receive share card's code: [`qr_matrix`] at error-correction
+/// level H.
+///
+/// The card puts the network's logo on a plate in the code's centre (about 7%
+/// of its area) and the picture is recompressed by every chat app it passes
+/// through; level H recovers 30%. A plain address comes out 37 modules across
+/// instead of 29. The web (`encodeShareQr`) and the desktop (`share_card.rs`)
+/// encode the card's code at the same level.
+#[uniffi::export]
+pub fn share_card_qr_matrix(text: String) -> Option<QrMatrix> {
+    let code =
+        qrcode::QrCode::with_error_correction_level(text.as_bytes(), qrcode::EcLevel::H).ok()?;
+    let width = u32::try_from(code.width()).ok()?;
+    Some(QrMatrix {
+        width,
+        modules: code
+            .to_colors()
+            .into_iter()
+            .map(|color| color == qrcode::Color::Dark)
+            .collect(),
+    })
+}
+
 /// The caBLE flow's name for [`qr_matrix`], kept so onboarding does not move.
 #[uniffi::export]
 pub fn cable_qr_matrix(text: String) -> Option<QrMatrix> {

@@ -158,7 +158,29 @@ fn fetch_uncached(chain_id: u32) -> Option<ChainTokenData> {
 ///
 /// Shared with `clear_signing`, which fetches ERC-7730 descriptors from the
 /// same host, for exactly that reason.
+///
+/// Remembered until the wallet file is next written, or moves: `marks` builds
+/// every logo URL from it, once per row per frame, and reading it from disk
+/// each time was a fifth of every scrolling frame.
 pub(crate) fn data_base() -> String {
+    static LAST: Mutex<Option<(u64, std::path::PathBuf, String)>> = Mutex::new(None);
+    let generation = storage::generation();
+    let path = storage::path().unwrap_or_default();
+    if let Ok(last) = LAST.lock()
+        && let Some((seen, at, url)) = last.as_ref()
+        && *seen == generation
+        && *at == path
+    {
+        return url.clone();
+    }
+    let url = read_data_base();
+    if let Ok(mut last) = LAST.lock() {
+        *last = Some((generation, path, url.clone()));
+    }
+    url
+}
+
+fn read_data_base() -> String {
     storage::read_value(storage::KEY_SERVICE_ENDPOINTS)
         .ok()
         .flatten()
@@ -329,6 +351,22 @@ mod tests {
         assert_eq!(parse(1, &raw).native_decimals, 18);
         let negative = json!({ "nativeCurrency": { "decimals": -2 } });
         assert_eq!(parse(1, &negative).native_decimals, 18);
+    }
+
+    /// The host is remembered between frames, and the settings write that
+    /// moves it is what makes it forgotten: the next frame's logos come from
+    /// the new host, not from the one the wallet started with.
+    #[test]
+    fn the_remembered_data_host_follows_a_settings_write() {
+        storage::tests::with_temp_state("chain-tokens-host", || {
+            assert_eq!(data_base(), DEFAULT_ETHEREUM_DATA_URL);
+            let mut fields = serde_json::Map::new();
+            fields.insert("ethereumDataURL".to_owned(), json!("https://data.example"));
+            if storage::merge_value(storage::KEY_SERVICE_ENDPOINTS, fields).is_err() {
+                unreachable!("could not save the data endpoint");
+            }
+            assert_eq!(data_base(), "https://data.example");
+        });
     }
 
     /// Every chain with a pinned DEX names contracts for the protocol it says

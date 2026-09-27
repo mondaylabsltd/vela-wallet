@@ -369,7 +369,7 @@
 	-->
 	{#if stage.kind === 'consent' && request}
 		<div class="layer">
-			<BottomSheet title={cardTitle} closeLabel={m.cancel} onclose={onCancel}>
+			<BottomSheet title={cardTitle} closeLabel={m.cancel} dismissible={!busy} onclose={onCancel}>
 				<div class="card">
 					<p class="body">{m.body}</p>
 					<p class="method">{request.method}</p>

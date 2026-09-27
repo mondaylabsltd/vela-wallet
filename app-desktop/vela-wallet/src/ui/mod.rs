@@ -3,12 +3,18 @@
 
 mod ack_row;
 mod button;
+pub mod dialog;
+pub mod editor;
+pub mod editor_model;
 mod launch_animation;
 mod logo;
 mod name_field;
 mod rail;
+mod scrollbar;
+mod smooth_scroll;
 mod spinner;
 mod status_badge;
+mod step_slider;
 
 pub use ack_row::ack_row;
 pub use button::{
@@ -17,7 +23,13 @@ pub use button::{
 };
 pub use launch_animation::LaunchAnimation;
 pub use logo::{vela_mark, vela_wordmark};
-pub use name_field::{NameFieldStrings, name_field, text_field};
+pub use name_field::{
+    EditChord, NameFieldStrings, bare_text_field, edit_chord, hero_amount_field, name_field,
+    search_input, text_area, text_field,
+};
 pub use rail::{RailSlot, onboarding_rail};
+pub use scrollbar::vertical_scrollbar;
+pub use smooth_scroll::SmoothScroll;
 pub use spinner::spinner;
 pub use status_badge::status_badge;
+pub use step_slider::{StepSlider, step_slider_picture};

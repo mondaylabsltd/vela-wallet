@@ -67,6 +67,19 @@ export interface FeeQuoteRequest {
 	/** `null` = native. A quote PARAMETER: it changes the operation being priced. */
 	feeToken: string | null;
 	/**
+	 * Nobody has chosen the fee coin: the core pays in a coin that CAN
+	 * (`fee_policy`'s `auto_fee_token` — a coin the operation is not sending,
+	 * then a stablecoin, then the larger balance), and the view's `fee_token`
+	 * names the one it picked. `feeToken` is then only where that search falls
+	 * back to. Omitted = `false`: `feeToken` is the person's own pick and is
+	 * priced exactly as asked.
+	 *
+	 * A quote PARAMETER like `feeToken`, so it rides on every replay of this
+	 * request — the speed previews price the same question, and a preview
+	 * promoted in place must not change the coin under the person.
+	 */
+	autoFeeToken?: boolean;
+	/**
 	 * The passkey public key that builds the initCode for an undeployed Safe.
 	 * Carried on the REQUEST rather than held by the session, so the key that
 	 * builds the initCode belongs to the operation being priced.
@@ -122,6 +135,9 @@ function sameOperation(a: FeeQuoteRequest, b: FeeQuoteRequest): boolean {
 		a.chainId === b.chainId &&
 		a.account === b.account &&
 		a.feeToken === b.feeToken &&
+		// "Let the machine choose" and "this coin" are different questions even
+		// when they name the same fallback: the answers can be in two coins.
+		(a.autoFeeToken ?? false) === (b.autoFeeToken ?? false) &&
 		a.publicKeyHex === b.publicKeyHex &&
 		JSON.stringify(a.calls) === JSON.stringify(b.calls)
 	);
@@ -283,7 +299,8 @@ export class FeeQuote {
 				public_key_available: this.#publicKey != null,
 				tier: request.tier ?? DEFAULT_TIER,
 				calls: request.calls,
-				fee_token: request.feeToken
+				fee_token: request.feeToken,
+				auto_fee_token: request.autoFeeToken ?? false
 			};
 			this.#dispatching = true;
 			try {
@@ -301,8 +318,21 @@ export class FeeQuote {
 		});
 	}
 
-	/** The person picked a fee coin. */
+	/**
+	 * The person picked a fee coin.
+	 *
+	 * The core ends its own choosing there (`select_fee_asset`), and the
+	 * request on record follows: from now on the question is "priced in THIS
+	 * coin". The speed previews replay {@link lastRequest}; left saying "let
+	 * the machine choose" (or naming the old coin), they would price another
+	 * coin — and a preview the person then tapped would be promoted in place,
+	 * switching the coin back under them without a word.
+	 */
 	selectAsset(token: string | null): void {
+		const last = this.#lastRequest;
+		if (last && (last.feeToken !== token || last.autoFeeToken)) {
+			this.#lastRequest = { ...last, feeToken: token, autoFeeToken: false };
+		}
 		this.#session?.dispatch({ type: 'select_fee_asset', token });
 	}
 

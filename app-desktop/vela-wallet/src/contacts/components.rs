@@ -10,16 +10,18 @@
 use crate::contacts::model::ContactRowModel;
 use gpui::{
     Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, div, px,
+    StatefulInteractiveElement as _, Styled, Window, div, px,
 };
 
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{
-    self, CONTACTS_BUTTON_H, CONTACTS_MENU_ROW_H, CONTACTS_MENU_W, CONTACTS_RAIL_LABEL_H,
-    CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme, WALLET_CONTROL_H,
+    self, CONTACTS_BUTTON_H, CONTACTS_EMPTY_W, CONTACTS_MENU_ROW_H, CONTACTS_MENU_W,
+    CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme,
 };
-use crate::wallet::components::{empty_state, icon_img, identicon_avatar};
+use crate::wallet::components::{
+    balanced_wrap_width, empty_state_wrapped, icon_img, openable_identicon,
+};
 
 use super::fixtures::MenuModel;
 
@@ -44,17 +46,19 @@ pub fn contact_row(
     contact: &ContactRowModel,
     selected: bool,
 ) -> Stateful<Div> {
+    // The web's `ContactRow` (078 C-09): a 30 identicon, padded 8 with 12
+    // at the sides on a button's line, radius 12 — 51 tall where this was 66.
     let row = div()
         .id(id)
         .flex()
         .items_center()
         .gap(px(12.))
-        .py(px(10.))
-        .px(px(8.))
-        .mx(px(-8.))
-        .rounded(px(10.))
+        .py(px(8.))
+        .px(px(12.))
+        .rounded(px(12.))
+        .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
         .cursor_pointer()
-        .child(identicon_avatar(
+        .child(openable_identicon(
             identicons,
             &contact.address_full,
             CONTACTS_ROW_AVATAR,
@@ -78,7 +82,7 @@ pub fn contact_row(
                 .child(
                     div()
                         .font_family(theme::font_mono())
-                        .text_size(theme::text_row_sub())
+                        .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
                         .whitespace_nowrap()
                         .truncate()
@@ -102,16 +106,19 @@ pub fn row_divider(theme: &Theme) -> Div {
 /// Letter section header (DC1): the uppercase letter plus a hairline that runs
 /// to the end of the list column.
 pub fn section_letter(theme: &Theme, letter: gpui::SharedString) -> Div {
+    // The web's `.letter` (078 C-09): padded 8/12/4, 11 medium.
     div()
         .flex()
         .items_center()
-        .gap(px(8.))
-        .pt(px(14.))
-        .pb(px(6.))
+        .gap(px(12.))
+        .pt(px(8.))
+        .pb(px(4.))
+        .px(px(12.))
+        .text_size(theme::text_label())
+        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
         .child(
             div()
-                .text_size(theme::text_label())
-                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .font_weight(gpui::FontWeight::MEDIUM)
                 .text_color(theme.fg_subtle)
                 .child(SharedString::from(letter)),
         )
@@ -151,7 +158,7 @@ pub fn rail_row(
         .id(id)
         .flex()
         .items_center()
-        .gap(px(10.))
+        .gap(px(8.))
         .h(px(CONTACTS_RAIL_ROW_H))
         .px(px(12.))
         .rounded(px(8.))
@@ -197,14 +204,20 @@ pub fn rail_row(
 /// The `分组` caption above the group rows. Its fixed height is what lets the
 /// page place DC6's context menu on the 家人 row without measuring.
 pub fn rail_label(theme: &Theme, label: SharedString) -> Div {
+    // The web's `.rail-title` (078 C-09): a hairline above it, 8 below the
+    // "All contacts" row, the words padded 16/12/4 — the rule is what
+    // separates the book from its groups. Its height stays
+    // `CONTACTS_RAIL_LABEL_H` (+ the rule), which DC6's menu anchor reads.
     div()
+        .mt(px(8.))
         .h(px(CONTACTS_RAIL_LABEL_H))
         .flex()
         .items_end()
         .px(px(12.))
-        .pb(px(6.))
+        .pb(px(4.))
+        .border_t_1()
+        .border_color(theme.divider)
         .text_size(theme::text_label())
-        .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_subtle)
         .child(label)
 }
@@ -278,32 +291,57 @@ pub fn menu_card(
 
 /// A membership pill on the contact detail (DC2: `家人`).
 pub fn group_chip(theme: &Theme, label: SharedString) -> Div {
+    // The web's `.chip`: `--icon-xl` high, 12 across, a full radius on the
+    // raised surface, 11 muted.
     div()
-        .h(px(24.))
-        .px(px(10.))
-        .rounded(px(12.))
+        .h(px(26.))
+        .px(px(12.))
+        .rounded_full()
         .flex()
         .items_center()
-        .bg(theme.bg_sunken)
+        .bg(theme.bg_raised)
         .text_size(theme::text_label())
         .text_color(theme.fg_muted)
         .child(label)
 }
 
-/// The trailing `+ 分组` add chip (dashed-equivalent: outlined, not filled).
+/// The trailing `+ 分组` add chip — the web's `.chip.add`: the chip's size,
+/// no fill, a dashed hairline.
 pub fn add_chip(theme: &Theme, icons: &mut IconCache, label: SharedString) -> Div {
     div()
-        .h(px(24.))
-        .px(px(10.))
-        .rounded(px(12.))
+        .h(px(26.))
+        .px(px(12.))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .gap(px(2.))
+        .border_1()
+        .border_dashed()
+        .border_color(theme.border_card)
+        .text_size(theme::text_label())
+        .text_color(theme.fg_muted)
+        .child(icon_img(icons, Icon::Plus, false, theme.fg_muted, 12.))
+        .child(label)
+}
+
+/// Under a contact nobody has named: the way to name them, where the missing
+/// name is noticed (the web's `.name-action`, issue 191) — a raised pill with
+/// a hairline, 11 semibold.
+pub fn name_action_pill(theme: &Theme, icons: &mut IconCache, label: SharedString) -> Div {
+    div()
+        .h(px(26.))
+        .px(px(12.))
+        .rounded_full()
         .flex()
         .items_center()
         .gap(px(4.))
         .border_1()
-        .border_color(theme.divider)
+        .border_color(theme.border_card)
+        .bg(theme.bg_raised)
         .text_size(theme::text_label())
-        .text_color(theme.fg_subtle)
-        .child(icon_img(icons, Icon::Plus, false, theme.fg_subtle, 12.))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(theme.fg_base)
+        .child(icon_img(icons, Icon::Pencil, false, theme.fg_base, 12.))
         .child(label)
 }
 
@@ -345,12 +383,58 @@ pub fn address_block(
                         .child(address),
                 ),
         )
-        .child(match on_copy {
-            Some(on_copy) => {
-                icon_button("copy-contact-address", theme, icons, Icon::Copy).on_click(on_copy)
+        // The web's `AddressBlock` button (078 C-09): 36, no border, radius
+        // 8, the raised colour only on hover — not a boxed square.
+        .child({
+            let button = div()
+                .id("copy-contact-address")
+                .size(px(36.))
+                .flex_none()
+                .rounded(px(8.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .hover(|el| el.bg(theme.bg_raised))
+                .child(icon_img(icons, Icon::Copy, false, theme.fg_muted, GLYPH_MD));
+            match on_copy {
+                Some(on_copy) => button.on_click(on_copy),
+                None => button,
             }
-            None => icon_button("copy-contact-address", theme, icons, Icon::Copy),
         })
+}
+
+/// One of the contact detail's three actions (078 C-09): the web's
+/// `.actions button` — 44 tall, a hairline, radius 12 on the raised colour,
+/// 13 semibold with a 16 glyph, fading on hover. The wallet's 52 pill was
+/// standing in for it.
+pub fn detail_action(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+    label: SharedString,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex_1()
+        .h(px(44.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(px(8.))
+        .px(px(8.))
+        .rounded(px(12.))
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .cursor_pointer()
+        .hover(|el| el.opacity(0.92))
+        .text_size(theme::text_row_sub())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(theme.fg_base)
+        .child(icon_img(icons, icon, false, theme.fg_base, 16.))
+        .child(label)
 }
 
 // -- GhostAddRow --------------------------------------------------------------
@@ -429,6 +513,89 @@ pub fn accent_button(
         button = button.child(icon_img(icons, icon, false, theme.fg_inverse, GLYPH_SM));
     }
     button.child(label)
+}
+
+/// The page header's Add (078 C-09): the web's `.add` — 36 tall, padded
+/// 16, a hairline in border-base on the raised colour, 13 semibold; hover
+/// fades it a touch.
+pub fn header_pill(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+    label: SharedString,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex_none()
+        .h(px(36.))
+        .px(px(16.))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .cursor_pointer()
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .hover(|el| el.opacity(0.92))
+        .text_size(theme::text_row_sub())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(theme.fg_base)
+        .child(icon_img(icons, icon, false, theme.fg_base, GLYPH_SM))
+        .child(label)
+}
+
+/// The group heading's accent action (078 C-09): the web's `.cta` — 36 tall,
+/// padded 16, 13 bold.
+pub fn header_cta(id: impl Into<ElementId>, theme: &Theme, label: SharedString) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex_none()
+        .h(px(36.))
+        .px(px(16.))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .cursor_pointer()
+        .bg(theme.accent)
+        .hover(|el| el.bg(theme.accent_hover))
+        .text_size(theme::text_row_sub())
+        .font_weight(gpui::FontWeight::BOLD)
+        .text_color(theme.fg_inverse)
+        .child(label)
+}
+
+/// The header's round ⋯ (078 C-09): the web's `.icon-button` — 36, round,
+/// hairline, raised; the glyph muted, base on hover.
+pub fn round_icon_button(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .group("round-icon-button")
+        .size(px(36.))
+        .flex_none()
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .child(crate::wallet::components::hover_icon(
+            icons,
+            icon,
+            false,
+            theme.fg_muted,
+            theme.fg_base,
+            GLYPH_MD,
+            "round-icon-button",
+        ))
 }
 
 /// Outline CTA (DC1/DC3 添加联系人 in the header, DC3 从文件导入).
@@ -525,72 +692,109 @@ pub fn text_action(
 
 // -- SearchField --------------------------------------------------------------
 
-/// Page-local search (DC1 header) with the ⌘F badge. Visual only in this
-/// feature — the fixtures ship any filtered list.
-pub fn search_field(theme: &Theme, icons: &mut IconCache, placeholder: SharedString) -> Div {
-    div()
+/// The live half of the header search: the input the page owns, whether it
+/// has focus, and the ✕ that clears it (present once something is typed).
+pub struct SearchInput {
+    pub input: gpui::AnyElement,
+    pub focused: bool,
+    pub clear: Option<gpui::AnyElement>,
+}
+
+/// Page-local search (DC1 header) — the web's `SearchHeader` in its desktop
+/// layout: 36 high, padding 12, gap 8, radius 12 on `bg-sunken` with a
+/// hairline, a 14 glyph, 13 text; while focused the hairline is `fg-muted`.
+///
+/// `live: None` is the board's picture, which keeps the mock's ⌘F badge. A
+/// live field has none (founder, 2026-09-05: nothing listens for the chord,
+/// and a key cap that promises one is a control that lies) and shows the ✕
+/// in its place once there is something to clear.
+pub fn search_field(
+    theme: &Theme,
+    icons: &mut IconCache,
+    placeholder: SharedString,
+    live: Option<SearchInput>,
+) -> Div {
+    let focused = live.as_ref().is_some_and(|live| live.focused);
+    let well = div()
         .w(px(CONTACTS_SEARCH_W))
         .flex_none()
         .flex()
         .items_center()
         .gap(px(8.))
-        .h(px(WALLET_CONTROL_H))
+        // `--size-control-sm`.
+        .h(px(36.))
         .px(px(12.))
-        .rounded(px(10.))
-        .bg(theme.bg_raised)
+        .rounded(px(12.))
+        .bg(theme.bg_sunken)
         .border_1()
-        .border_color(theme.divider)
+        .border_color(if focused {
+            theme.fg_muted
+        } else {
+            theme.border_card
+        })
         .text_size(theme::text_row_sub())
         .text_color(theme.fg_subtle)
-        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
-        .child(div().flex_1().min_w(px(0.)).truncate().child(placeholder))
-        .child(
-            div()
-                .font_family(theme::font_mono())
-                .text_size(theme::text_label())
-                .child("⌘F"),
-        )
+        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.));
+    match live {
+        Some(live) => well.child(live.input).children(live.clear),
+        None => well
+            .child(div().flex_1().min_w(px(0.)).truncate().child(placeholder))
+            .child(
+                div()
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_label())
+                    .child("⌘F"),
+            ),
+    }
 }
 
 // -- EmptyStateCTA ------------------------------------------------------------
 
 /// Spec-015 `empty_state` (icon tile + title + caption) extended with the CTA
 /// pair the contacts mocks add: accent 添加联系人 + outline 从文件导入,
-/// inline on desktop (DC3).
+/// inline on desktop (DC3). The caption wraps balanced, as the web's.
 pub fn empty_state_cta(
+    window: &Window,
     theme: &Theme,
     icons: &mut IconCache,
     title: SharedString,
     caption: SharedString,
-    primary: SharedString,
-    secondary: SharedString,
+    (primary, secondary): (SharedString, SharedString),
+    actions: Option<(MenuAction, MenuAction)>,
 ) -> Div {
-    let artwork = empty_state(theme, icons, Icon::UsersRound, title, caption);
+    let (on_primary, on_secondary) = match actions {
+        Some((primary, secondary)) => (Some(primary), Some(secondary)),
+        None => (None, None),
+    };
+    let mut add = accent_button("empty-add-contact", theme, icons, None, primary);
+    if let Some(action) = on_primary {
+        add = add.on_click(move |event, window, cx| action(event, window, cx));
+    }
+    let mut import = outline_button("empty-import-file", theme, icons, None, secondary);
+    if let Some(action) = on_secondary {
+        import = import.on_click(move |event, window, cx| action(event, window, cx));
+    }
+    let caption_w = balanced_wrap_width(
+        window,
+        &caption,
+        theme::text_row_sub(),
+        px(CONTACTS_EMPTY_W),
+    );
+    let artwork = empty_state_wrapped(
+        theme,
+        icons,
+        Icon::UsersRound,
+        title,
+        caption,
+        Some(caption_w),
+    );
     div()
-        .w(px(360.))
+        .w(px(CONTACTS_EMPTY_W))
         .flex()
         .flex_col()
         .items_center()
         .gap(px(8.))
         .text_center()
         .child(artwork)
-        .child(
-            div()
-                .flex()
-                .gap(px(12.))
-                .child(accent_button(
-                    "empty-add-contact",
-                    theme,
-                    icons,
-                    None,
-                    primary,
-                ))
-                .child(outline_button(
-                    "empty-import-file",
-                    theme,
-                    icons,
-                    None,
-                    secondary,
-                )),
-        )
+        .child(div().flex().gap(px(12.)).child(add).child(import))
 }

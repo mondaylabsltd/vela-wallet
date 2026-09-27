@@ -184,8 +184,10 @@ const PERMIT2_TRANSFER_ENCODE_TYPE: &str = "PermitTransferFrom(TokenPermissions 
 /// guard caps at (`approval_guard::UNLIMITED_CAP_160`), so the sheet and the
 /// cap editor call the same number unlimited.
 const UNLIMITED_160: &str = "0x100000000000000000000000000000000000000";
-/// The same threshold for a `uint256` amount (2^255), as the interface
-/// descriptors have always used.
+/// The ERC-7730 registry's usual threshold for a `uint256` amount (2^255),
+/// kept as the descriptors write it. It is never the line the sheet draws:
+/// [`unlimited_line`] lowers it to the guard's 2^200, as it lowers every
+/// threshold a descriptor declares.
 const UNLIMITED_256: &str = "0x8000000000000000000000000000000000000000000000000000000000000000";
 
 /// USD-pegged stablecoins valued at ~$1 with no price lookup
@@ -612,7 +614,8 @@ impl ClearProvenance {
 
 /// One resolved display field (`ClearSignField` in TS; optional booleans
 /// became plain flags). `value` keywords ("Unlimited") are descriptor-borne
-/// vocabulary the shell localizes exactly as it localizes `intent`.
+/// vocabulary the shell localizes exactly as it localizes `intent` — through
+/// [`ClearTerm`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearSignField"))]
 pub struct ClearSignField {
@@ -634,6 +637,196 @@ pub struct ClearSignField {
     pub address: Option<String>,
     /// USD magnitude when cheaply known (stablecoin peg = $1).
     pub usd_value: Option<f64>,
+    /// `label` as a word the shell can translate — projected in
+    /// [`ClearSigning::view`]; builders write `None`.
+    #[serde(default)]
+    pub label_term: Option<ClearTerm>,
+    /// `value` as a word the shell can translate — only a warning's
+    /// "Unlimited". Projected in [`ClearSigning::view`]; builders write `None`.
+    #[serde(default)]
+    pub value_term: Option<ClearTerm>,
+}
+
+/// A word a descriptor puts on the sheet — an intent, a field label, the
+/// "Unlimited" a threshold prints — named so each shell can say it in the
+/// reader's language. The shell owns the words: the serialized name IS the key
+/// under `componentsUi.signing` (`intentApprove` → 授权), so a shell looks it up
+/// and shows the English text only when there is no term.
+///
+/// Matched on the WHOLE text, ignoring case and surrounding space: a
+/// descriptor that says "Amount" means what ours does; one that says anything
+/// else keeps its own words. A term is a translation, never a claim about where
+/// the text came from — Vela's own backup request is recognised by address
+/// (the shells' `localizedOwnBackup`), not by its words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum ClearTerm {
+    IntentApprove,
+    IntentApproveNft,
+    IntentApproveAllNfts,
+    IntentAuthorizeSpending,
+    IntentBorrow,
+    IntentBridge,
+    IntentBurn,
+    IntentBuyNft,
+    IntentClaim,
+    /// The key predates this vocabulary: `componentsUi.signing.deployIntent`.
+    #[serde(rename = "deployIntent")]
+    IntentDeployContract,
+    IntentDeposit,
+    IntentMint,
+    IntentRepay,
+    IntentRevoke,
+    IntentSend,
+    IntentStake,
+    IntentSupply,
+    IntentSwap,
+    IntentTransfer,
+    IntentTransferNft,
+    IntentTransferNfts,
+    IntentUnstake,
+    IntentUnwrap,
+    IntentUnwrapWeth,
+    IntentWithdraw,
+    IntentWrap,
+    IntentWrapEth,
+    LabelAmount,
+    LabelAmountToSpend,
+    LabelApproved,
+    LabelDeadline,
+    LabelExpires,
+    LabelFrom,
+    LabelMaxSpendingAmount,
+    LabelMinReceived,
+    LabelNewContract,
+    LabelNft,
+    LabelNonce,
+    LabelOnBehalfOf,
+    LabelOperator,
+    LabelOwner,
+    LabelPay,
+    LabelPrice,
+    LabelQuantities,
+    LabelQuantity,
+    LabelReceived,
+    LabelRecipient,
+    LabelSeller,
+    LabelSpender,
+    LabelTo,
+    LabelToken,
+    LabelTokenId,
+    LabelTokenIds,
+    LabelValidUntil,
+    LabelYouPay,
+    LabelYouPayMax,
+    LabelYouReceive,
+    LabelYouReceiveMin,
+    ValueUnlimited,
+}
+
+impl ClearTerm {
+    /// Every intent and label the built-in descriptors and builders write, in
+    /// lower case. A label that is also a verb ("Wrap", "Supply"…) reads the
+    /// intent's word.
+    const WORDS: &'static [(&'static str, ClearTerm)] = &[
+        ("approve", Self::IntentApprove),
+        ("approve nft", Self::IntentApproveNft),
+        ("approve all nfts", Self::IntentApproveAllNfts),
+        (
+            "authorize spending of tokens",
+            Self::IntentAuthorizeSpending,
+        ),
+        ("borrow", Self::IntentBorrow),
+        ("bridge", Self::IntentBridge),
+        ("burn", Self::IntentBurn),
+        ("buy nft", Self::IntentBuyNft),
+        ("claim", Self::IntentClaim),
+        ("deploy contract", Self::IntentDeployContract),
+        ("deposit", Self::IntentDeposit),
+        ("mint", Self::IntentMint),
+        ("repay", Self::IntentRepay),
+        ("revoke", Self::IntentRevoke),
+        ("send", Self::IntentSend),
+        ("stake", Self::IntentStake),
+        ("supply", Self::IntentSupply),
+        ("swap", Self::IntentSwap),
+        ("transfer", Self::IntentTransfer),
+        ("transfer nft", Self::IntentTransferNft),
+        ("transfer nfts", Self::IntentTransferNfts),
+        ("unstake", Self::IntentUnstake),
+        ("unwrap", Self::IntentUnwrap),
+        ("unwrap weth", Self::IntentUnwrapWeth),
+        ("withdraw", Self::IntentWithdraw),
+        ("wrap", Self::IntentWrap),
+        ("wrap eth", Self::IntentWrapEth),
+        ("amount", Self::LabelAmount),
+        ("amount to spend", Self::LabelAmountToSpend),
+        ("approved", Self::LabelApproved),
+        ("deadline", Self::LabelDeadline),
+        ("expires", Self::LabelExpires),
+        ("from", Self::LabelFrom),
+        ("max spending amount", Self::LabelMaxSpendingAmount),
+        ("min received", Self::LabelMinReceived),
+        ("new contract", Self::LabelNewContract),
+        ("nft", Self::LabelNft),
+        ("nonce", Self::LabelNonce),
+        ("on behalf of", Self::LabelOnBehalfOf),
+        ("operator", Self::LabelOperator),
+        ("owner", Self::LabelOwner),
+        ("pay", Self::LabelPay),
+        ("price", Self::LabelPrice),
+        ("quantities", Self::LabelQuantities),
+        ("quantity", Self::LabelQuantity),
+        ("received", Self::LabelReceived),
+        ("recipient", Self::LabelRecipient),
+        ("seller", Self::LabelSeller),
+        ("spender", Self::LabelSpender),
+        ("to", Self::LabelTo),
+        ("token", Self::LabelToken),
+        ("token id", Self::LabelTokenId),
+        ("token ids", Self::LabelTokenIds),
+        ("valid until", Self::LabelValidUntil),
+        ("you pay", Self::LabelYouPay),
+        ("you pay (max)", Self::LabelYouPayMax),
+        ("you receive", Self::LabelYouReceive),
+        ("you receive (min)", Self::LabelYouReceiveMin),
+    ];
+
+    /// The term for an intent or a label, if it is one of [`Self::WORDS`].
+    #[must_use]
+    pub fn of(text: &str) -> Option<Self> {
+        let text = text.trim().to_lowercase();
+        Self::WORDS
+            .iter()
+            .find(|(word, _)| *word == text)
+            .map(|(_, term)| *term)
+    }
+
+    /// Every term, once — for a shell that resolves the words up front.
+    pub fn all() -> impl Iterator<Item = Self> {
+        Self::WORDS
+            .iter()
+            .map(|(_, term)| *term)
+            .chain(std::iter::once(Self::ValueUnlimited))
+    }
+
+    /// The key leaf under `componentsUi.signing` — the serialized name.
+    #[must_use]
+    pub fn leaf(self) -> String {
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .unwrap_or_default()
+    }
+
+    /// The term for a field's value: only the "Unlimited" a threshold prints.
+    #[must_use]
+    pub fn of_value(text: &str) -> Option<Self> {
+        text.trim()
+            .eq_ignore_ascii_case("unlimited")
+            .then_some(Self::ValueUnlimited)
+    }
 }
 
 /// Resolved clear-signing result, ready for display (`ClearSignResult`).
@@ -641,6 +834,10 @@ pub struct ClearSignField {
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearSignResult"))]
 pub struct ClearSignResult {
     pub intent: String,
+    /// `intent` as a word the shell can translate — projected in
+    /// [`ClearSigning::view`]; builders write `None`.
+    #[serde(default)]
+    pub intent_term: Option<ClearTerm>,
     pub contract_name: Option<String>,
     pub owner: Option<String>,
     pub fields: Vec<ClearSignField>,
@@ -855,8 +1052,13 @@ pub enum ClearConfirm {
     /// token approval, which is `approval_guard`'s surface.
     Confirm,
     /// "Confirm {intent}" — the descriptor intent (or `send` for a plain native
-    /// transfer) travels as the canonical English key for the shell to localize.
-    ConfirmIntent { intent: String },
+    /// transfer) travels as the canonical English key for the shell to localize,
+    /// with its [`ClearTerm`] when it has one.
+    ConfirmIntent {
+        intent: String,
+        #[serde(default)]
+        intent_term: Option<ClearTerm>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -1262,6 +1464,20 @@ impl App for ClearSigning {
             result: model.result.clone().map(|mut r| {
                 r.to_own_token = to_own_token(&r);
                 r.verified = r.provenance.is_verified();
+                // The words the shells can translate, graded here for the
+                // same reason: one rule over every builder's output. A detail
+                // field is the raw decode (parameter names, type words) and
+                // stays as decoded rather than half-translated.
+                r.intent_term = ClearTerm::of(&r.intent);
+                for field in &mut r.fields {
+                    field.label_term = (!field.detail)
+                        .then(|| ClearTerm::of(&field.label))
+                        .flatten();
+                    field.value_term = field
+                        .warning
+                        .then(|| ClearTerm::of_value(&field.value))
+                        .flatten();
+                }
                 r
             }),
             message: model.message.clone(),
@@ -1310,6 +1526,7 @@ fn confirm_of(model: &Model) -> ClearConfirm {
             ClearSignType::Signature => ClearConfirm::Sign,
             ClearSignType::Transaction => ClearConfirm::ConfirmIntent {
                 intent: result.intent.clone(),
+                intent_term: ClearTerm::of(&result.intent),
             },
         };
     }
@@ -1319,6 +1536,7 @@ fn confirm_of(model: &Model) -> ClearConfirm {
         // the same sentence the decoded ERC-20 transfer gets.
         ReqKind::TxPlain => ClearConfirm::ConfirmIntent {
             intent: "send".to_owned(),
+            intent_term: Some(ClearTerm::IntentSend),
         },
         // Blind contract call, `eth_sign`, nothing presented: a neutral
         // "Confirm", never "Approve".
@@ -2422,6 +2640,7 @@ fn finish_calldata(
         // Filled by `to_own_token` in `view()` — the burn verdict is a
         // projection over the finished fields, never a builder's business.
         to_own_token: false,
+        intent_term: None,
     })
 }
 
@@ -2513,6 +2732,7 @@ fn finish_eip712(
         // Filled by `to_own_token` in `view()` — the burn verdict is a
         // projection over the finished fields, never a builder's business.
         to_own_token: false,
+        intent_term: None,
     })
 }
 
@@ -2570,6 +2790,7 @@ fn best_effort_result(run: &Run, sigs: &[String]) -> Option<ClearSignResult> {
             best_effort: true,
             // Filled by `to_own_token` in `view()`.
             to_own_token: false,
+            intent_term: None,
         });
     }
     None
@@ -2626,6 +2847,8 @@ fn build_best_effort_fields(tree: &abi::AbiValue, locale: &ClearLocale) -> Vec<C
                 expired: false,
                 address,
                 usd_value: None,
+                label_term: None,
+                value_term: None,
             }
         })
         .collect()
@@ -2727,6 +2950,8 @@ fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult>
             expired: false,
             address,
             usd_value: None,
+            label_term: None,
+            value_term: None,
         };
     let address = call.wallet_address.to_lowercase();
     Some(ClearSignResult {
@@ -2762,6 +2987,7 @@ fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult>
         partial: false,
         best_effort: false,
         to_own_token: false,
+        intent_term: None,
     })
 }
 
@@ -2800,6 +3026,8 @@ fn build_deploy_result(to: Option<&str>, data: &str) -> ClearSignResult {
                 expired: false,
                 address: None,
                 usd_value: None,
+                label_term: None,
+                value_term: None,
             }]
         })
         .unwrap_or_default();
@@ -2822,6 +3050,7 @@ fn build_deploy_result(to: Option<&str>, data: &str) -> ClearSignResult {
         // Filled by `to_own_token` in `view()` — the burn verdict is a
         // projection over the finished fields, never a builder's business.
         to_own_token: false,
+        intent_term: None,
     }
 }
 
@@ -3073,6 +3302,34 @@ fn js_slice(s: &str, start: i64, end: Option<i64>) -> String {
         .to_owned()
 }
 
+/// The line past which the sheet says "Unlimited": the descriptor's own
+/// threshold, lowered to the approval guard's. The guard's line is the one
+/// that asks for consent and offers a cap (`approval_guard::is_unbounded_amount`),
+/// so an amount it calls unlimited must never reach the screen as a
+/// seventy-digit number — the registry's usual 2^255, or 2^256-2, would leave
+/// everything from 2^200 up drawn as a figure beside the guard's warning, and
+/// a cap chosen there would not replace it (the shells swap only the field
+/// that reads "Unlimited").
+///
+/// Which of the guard's two lines applies is read off the declared threshold:
+/// one at or past 2^200 is a `uint256` sentinel (2^255, 2^256-1), one below
+/// it a `uint160` sentinel (Permit2's 2^160-1). A threshold already below the
+/// guard's line is kept — lowering is the only direction this goes.
+fn unlimited_line(declared: &str) -> String {
+    use super::approval_guard::{UNLIMITED_CAP_160, UNLIMITED_CAP_256};
+    let cap_256 = UNLIMITED_CAP_256.to_string();
+    let cap = if dec_ge(declared, &cap_256) {
+        cap_256
+    } else {
+        UNLIMITED_CAP_160.to_string()
+    };
+    if dec_ge(declared, &cap) {
+        cap
+    } else {
+        declared.to_owned()
+    }
+}
+
 fn resolve_metadata_ref(path: &str, metadata: &Value) -> Value {
     if path.is_empty() || metadata.is_null() {
         return Value::Null;
@@ -3211,6 +3468,8 @@ fn resolve_fields(
             expired: formatted.expired,
             address: formatted.address,
             usd_value: formatted.usd_value,
+            label_term: None,
+            value_term: None,
         });
     }
     fields
@@ -3260,18 +3519,27 @@ fn format_token_amount(
     let amount = to_bigint(raw);
 
     // Threshold for unlimited approvals — checked FIRST, before any token
-    // identity resolution, exactly as the TS does.
+    // identity resolution, exactly as the TS does. A threshold may be written
+    // out or name one of the descriptor's constants (`$.metadata.constants.max`).
     if let Some(threshold) = params.get("threshold").and_then(Value::as_str) {
-        let threshold_dec = threshold
+        let written = if threshold.starts_with("$.") {
+            match resolve_metadata_ref(threshold, metadata) {
+                Value::String(s) => s,
+                Value::Number(n) => n.to_string(),
+                _ => String::new(),
+            }
+        } else {
+            threshold.to_owned()
+        };
+        let threshold_dec = written
             .strip_prefix("0x")
+            .or_else(|| written.strip_prefix("0X"))
             .and_then(hex_to_dec)
             .or_else(|| {
-                threshold
-                    .bytes()
-                    .all(|b| b.is_ascii_digit())
-                    .then(|| dec_normalize(threshold))
+                (!written.is_empty() && written.bytes().all(|b| b.is_ascii_digit()))
+                    .then(|| dec_normalize(&written))
             });
-        if let Some(threshold_dec) = threshold_dec {
+        if let Some(threshold_dec) = threshold_dec.map(|t| unlimited_line(&t)) {
             if dec_ge(&amount, &threshold_dec) {
                 let message = params
                     .get("message")
@@ -5311,6 +5579,8 @@ mod to_own_token_tests {
             expired: false,
             address: address.map(str::to_owned),
             usd_value: None,
+            label_term: None,
+            value_term: None,
         }
     }
 
@@ -5328,6 +5598,7 @@ mod to_own_token_tests {
             partial: false,
             best_effort: false,
             to_own_token: false,
+            intent_term: None,
         }
     }
 
@@ -5439,5 +5710,89 @@ mod symbol_probe_tests {
     #[test]
     fn the_symbol_probe_is_its_own_question() {
         assert_ne!(ClearProbe::Symbol, ClearProbe::Decimals);
+    }
+}
+
+#[cfg(test)]
+mod clear_term_tests {
+    use super::ClearTerm;
+
+    /// The intents and labels this file writes — its descriptors and its own
+    /// builders — read straight from the source, so a word added later
+    /// without a term fails here rather than on a Chinese sheet.
+    fn words_in_this_file() -> Vec<String> {
+        let source = include_str!("clear_signing.rs");
+        let mut words = Vec::new();
+        for marker in ["\"intent\": \"", "\"label\": \""] {
+            for (at, _) in source.match_indices(marker) {
+                let rest = &source[at + marker.len()..];
+                if let Some(end) = rest.find('"') {
+                    words.push(rest[..end].to_owned());
+                }
+            }
+        }
+        words.extend(["Deploy contract", "New contract", "send"].map(str::to_owned));
+        words.sort();
+        words.dedup();
+        words
+    }
+
+    #[test]
+    fn every_word_this_file_writes_has_a_term() {
+        let missing: Vec<_> = words_in_this_file()
+            .into_iter()
+            .filter(|word| ClearTerm::of(word).is_none())
+            .collect();
+        assert!(missing.is_empty(), "no ClearTerm for {missing:?}");
+    }
+
+    #[test]
+    fn every_term_is_a_key_in_every_language() {
+        let mut terms: Vec<ClearTerm> = ClearTerm::WORDS.iter().map(|(_, term)| *term).collect();
+        terms.push(ClearTerm::ValueUnlimited);
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/i18n/locales");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(root).unwrap_or_else(|e| unreachable!("locales: {e}")) {
+            let dir = entry.unwrap_or_else(|e| unreachable!("entry: {e}")).path();
+            if !dir.is_dir() {
+                continue;
+            }
+            let text = std::fs::read_to_string(dir.join("componentsUi.json"))
+                .unwrap_or_else(|e| unreachable!("componentsUi.json: {e}"));
+            let catalog: serde_json::Value =
+                serde_json::from_str(&text).unwrap_or_else(|e| unreachable!("json: {e}"));
+            for term in &terms {
+                let leaf =
+                    serde_json::to_value(term).unwrap_or_else(|e| unreachable!("serialize: {e}"));
+                let Some(leaf) = leaf.as_str() else {
+                    unreachable!("a ClearTerm serializes to a string")
+                };
+                let word = catalog["componentsUi"]["signing"][leaf]
+                    .as_str()
+                    .unwrap_or("");
+                assert!(
+                    !word.trim().is_empty(),
+                    "{}: componentsUi.signing.{leaf} is missing",
+                    dir.display()
+                );
+            }
+            checked += 1;
+        }
+        assert_eq!(checked, 15, "every language checked");
+    }
+
+    #[test]
+    fn a_term_is_the_whole_text_in_any_case() {
+        assert_eq!(ClearTerm::of("  SPENDER "), Some(ClearTerm::LabelSpender));
+        assert_eq!(
+            ClearTerm::of("Spender address"),
+            None,
+            "a longer label keeps its own words"
+        );
+        assert_eq!(
+            ClearTerm::of_value("unlimited"),
+            Some(ClearTerm::ValueUnlimited)
+        );
+        assert_eq!(ClearTerm::of_value("Unlimited USDC"), None);
     }
 }

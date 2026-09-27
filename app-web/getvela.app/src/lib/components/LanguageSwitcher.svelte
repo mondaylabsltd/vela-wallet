@@ -74,7 +74,7 @@
 		padding: 5px 9px;
 		border-radius: 8px;
 		color: var(--text-secondary);
-		font-size: 0.82rem;
+		font-size: max(0.82rem, var(--floor-meta));
 		font-weight: 500;
 		white-space: nowrap;
 		transition:
@@ -108,7 +108,7 @@
 		display: block;
 		padding: 7px 12px;
 		border-radius: 8px;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		color: var(--text-secondary);
 		text-decoration: none;
 		white-space: nowrap;

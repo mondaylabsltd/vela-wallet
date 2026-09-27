@@ -6,7 +6,8 @@
     "error": "Hata",
     "somethingWrong": "Bir şeyler ters gitti",
     "tryAgain": "Tekrar Dene",
-    "done": "Bitti"
+    "done": "Bitti",
+    "gotIt": "Anladım"
   },
   "language": {
     "title": "Dil",
@@ -25,6 +26,7 @@
       "appearance": "Görünüm",
       "localization": "Yerelleştirme",
       "advanced": "Gelişmiş",
+      "community": "Topluluk",
       "developer": "Geliştirici"
     },
     "account": {
@@ -36,7 +38,7 @@
     "appearance": {
       "themeLight": "Açık",
       "themeDark": "Koyu",
-      "themeAuto": "Sistemi Takip Et",
+      "themeAuto": "Sistem",
       "avatarInitials": "Baş harfler",
       "avatarIdenticon": "Identicon",
       "themeTitle": "Tema",

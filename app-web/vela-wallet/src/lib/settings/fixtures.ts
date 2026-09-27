@@ -40,6 +40,7 @@ import type {
 	SettingsNavItemModel,
 	SettingsOverlayId,
 	SettingsPageId,
+	SettingsRowModel,
 	SettingsSectionModel,
 	StorageModel
 } from './model';
@@ -50,6 +51,7 @@ export {
 	MOBILE_SETTINGS_STATES as MOBILE_STATES
 } from './model';
 import { BUILD_COMMIT, BUILD_VERSION } from '$lib/build/info';
+import { MAX_SCREENSHOTS } from '$lib/services/bug-report';
 
 /** The signed-in account the mocks draw. Shared with the wallet fixtures. */
 export const ACCOUNT_NAME = '大表哥';
@@ -219,13 +221,6 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					title: m.contacts,
 					subtitle: m.account.contactsSubtitle,
 					trailing: 'chevron'
-				},
-				{
-					id: 'feedback',
-					icon: 'message-square-text',
-					title: m.feedback.title,
-					subtitle: m.feedback.subtitle,
-					trailing: 'external'
 				}
 			]
 		},
@@ -324,16 +319,6 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					value: m.feeSpeed.fast,
 					trailing: 'chevron'
 				},
-				// Spec 071, beside the speed: the other thing every signature
-				// starts at. The fixture draws the factory default and the
-				// official page.
-				{
-					id: 'sign-with',
-					icon: 'pencil',
-					title: m.signing.title,
-					value: m.signing.methods.auto,
-					trailing: 'chevron'
-				},
 				{
 					id: 'storage',
 					icon: 'hard-drive',
@@ -343,6 +328,16 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 				}
 			]
 		},
+		// The official accounts (founder, 2026-09-27), directly above the
+		// last group — so the page ends Advanced → Community → About.
+		{
+			label: m.sections.community,
+			rows: communityRows()
+		},
+		// The last group, the same on all four shells (2026-09-27): About, then
+		// Send feedback — "what is this" and "something is wrong" are one
+		// errand, and the report opens a sheet here, so its trailing mark is
+		// the chevron of a row that goes somewhere in the app.
 		{
 			rows: [
 				{
@@ -350,6 +345,13 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					icon: 'info',
 					title: m.about.title,
 					value: fill(m.about.subtitleTemplate, { version: APP_VERSION }),
+					trailing: 'chevron'
+				},
+				{
+					id: 'feedback',
+					icon: 'message-square-text',
+					title: m.feedback.title,
+					subtitle: m.feedback.subtitle,
 					trailing: 'chevron'
 				}
 			]
@@ -635,6 +637,48 @@ function storage(m: SettingsMessages): StorageModel {
 	};
 }
 
+/**
+ * The official accounts, as getvela.app's footer publishes them — defined
+ * ONCE, here beside About's links, and pinned by a test (fixtures.test.ts)
+ * so this shell cannot drift from the site or from the three native shells.
+ * The names and handles are brands, never translated.
+ */
+export const COMMUNITY_LINKS = [
+	{
+		id: 'x',
+		icon: 'brand-x',
+		title: 'X (Twitter)',
+		handle: '@realvelawallet',
+		url: 'https://x.com/realvelawallet'
+	},
+	{
+		id: 'telegram',
+		icon: 'brand-telegram',
+		title: 'Telegram',
+		handle: '@velawallet',
+		url: 'https://t.me/velawallet'
+	},
+	{
+		id: 'discord',
+		icon: 'brand-discord',
+		title: 'Discord',
+		handle: 'discord.gg/23gWrtaYSa',
+		url: 'https://discord.gg/23gWrtaYSa'
+	}
+] as const;
+
+/** The Community rows: each leaves the app for its link (a new tab, no opener). */
+export function communityRows(): SettingsRowModel[] {
+	return COMMUNITY_LINKS.map((link) => ({
+		id: `community-${link.id}`,
+		icon: link.icon,
+		title: link.title,
+		subtitle: link.handle,
+		trailing: 'external',
+		href: link.url
+	}));
+}
+
 function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
 	return {
 		title: m.about.title,
@@ -768,26 +812,6 @@ function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
 	};
 }
 
-/**
- * The default "Sign with" (spec 071): the four this shell offers, in the
- * core's order, named as the signing sheet names them. The core's fifth, the
- * Trusted Signer, is not one of them — the web wallet has none. The subtitle is load-bearing, as the
- * speed sheet's is: this is where every signature STARTS, and a single one
- * can still be signed another way.
- */
-function signWithSheet(m: SettingsMessages): SelectSheetModel {
-	return {
-		title: m.signing.title,
-		subtitle: m.signing.subtitle,
-		rows: [
-			{ id: 'auto', label: m.signing.methods.auto, selected: true },
-			{ id: 'platform', label: m.signing.methods.platform },
-			{ id: 'hybrid', label: m.signing.methods.hybrid },
-			{ id: 'security_key', label: m.signing.methods.security_key }
-		]
-	};
-}
-
 function currencySheet(m: SettingsMessages): SelectSheetModel {
 	return {
 		title: m.currency.title,
@@ -894,14 +918,32 @@ function feedback(m: SettingsMessages): FeedbackModel {
 			title: m.bugReport.successTitle,
 			bodyNew: m.bugReport.successBodyNew,
 			bodyDeduped: m.bugReport.successBodyDeduped,
-			view: m.bugReport.viewIssue
+			view: m.bugReport.viewIssue,
+			dropped: m.bugReport.screenshotsDropped,
+			done: m.bugReport.done
 		},
 		fallback: {
 			title: m.bugReport.fallbackTitle,
 			body: m.bugReport.fallbackBody,
-			open: m.bugReport.openGithub
+			open: m.bugReport.openGithub,
+			screenshots: m.bugReport.fallbackScreenshots,
+			retry: m.common.tryAgain
 		},
-		githubLink: m.bugReport.openGithubForm
+		githubLink: m.bugReport.openGithubForm,
+		screenshots: {
+			label: m.bugReport.screenshotsLabel,
+			add: m.bugReport.addScreenshots,
+			hint: fill(m.bugReport.screenshotsHint, { max: MAX_SCREENSHOTS }),
+			public: m.bugReport.screenshotsPublic,
+			remove: m.bugReport.removeScreenshot,
+			limit: fill(m.bugReport.screenshotsLimit, { max: MAX_SCREENSHOTS }),
+			unsupported: m.bugReport.screenshotUnsupported,
+			dropHint: m.bugReport.dropHint,
+			max: MAX_SCREENSHOTS,
+			view: m.bugReport.viewScreenshot,
+			close: m.bugReport.closeViewer,
+			removeFromViewer: m.bugReport.removeFromViewer
+		}
 	};
 }
 
@@ -1134,7 +1176,6 @@ export function buildMobileState(
 		languageSheet: languageSheet(m, 'zh'),
 		currencySheet: currencySheet(m),
 		feeSpeedSheet: feeSpeedSheet(m),
-		signWithSheet: signWithSheet(m),
 		numberSheet: formatSheet(
 			m,
 			m.localization.numberTitle,
@@ -1195,15 +1236,17 @@ export function buildDesktopState(
 		// Spec 068, in the phone's own order: the 高级 section puts 交易速度
 		// between 服务端点 and 存储, and this list mirrors that list.
 		{ id: 'fee-speed', icon: 'clock', label: m.advanced.feeSpeedTitle },
-		// Spec 071, beside the speed as on the phone.
-		{ id: 'signing', icon: 'pencil', label: m.signing.title },
 		{ id: 'storage', icon: 'hard-drive', label: m.storage.title },
 		// Spec 081 FR-016. The wide layout had no way in at all — the report was
 		// reachable only from `/gallery`, which no person who owns this wallet
 		// will ever open. It sits beside 关于 for the same reason the phone puts
 		// it there: "something is wrong" and "what is this" are the same errand.
-		{ id: 'feedback', icon: 'message-square-text', label: m.feedback.title },
-		{ id: 'about', icon: 'info', label: m.about.title }
+		// The phone's Community group, one click from Settings like About —
+		// and the phone's order after it: About, then Send feedback (the same
+		// on all four shells, 2026-09-27).
+		{ id: 'community', icon: 'messages-square', label: m.sections.community },
+		{ id: 'about', icon: 'info', label: m.about.title },
+		{ id: 'feedback', icon: 'message-square-text', label: m.feedback.title }
 	];
 	const accounts = accountsSheet(m, identicon);
 
@@ -1295,18 +1338,6 @@ export function buildDesktopState(
 				}
 			]
 		},
-		signing: {
-			title: m.signing.title,
-			description: m.signing.subtitle,
-			rows: [
-				{
-					id: 'sign-with',
-					label: m.signing.title,
-					kind: 'dropdown',
-					value: m.signing.methods.auto
-				}
-			],
-		},
 		networks: {
 			title: m.advanced.networksTitle,
 			subtitle: m.advanced.networksSubtitle,
@@ -1324,6 +1355,7 @@ export function buildDesktopState(
 		clearCachesSheet: clearCachesSheet(m),
 		eraseSheet: eraseSheet(m),
 		feedback: feedback(m),
+		community: { title: m.sections.community, rows: communityRows() },
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),
 		rpcFix: rpcFix(m, false),

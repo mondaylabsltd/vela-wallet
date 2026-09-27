@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Como a Vela funciona e em que você precisa — e não precisa — confiar para usá-la: a conta, as chaves, a taxa, o modelo de ameaças, a recuperação e o que acontece se a Vela deixar de existir."
-source: 60d297b650ac
+source: 227acd1acf3d
 ---
 
 <script>
@@ -173,9 +173,11 @@ correspondidos a formatos padrão de tokens — e, como último recurso, com um 
 dados público de seletores, marcado como melhor esforço. O que sobrar recebe um aviso
 explícito de assinatura às cegas. Um descritor buscado nunca recebe o rótulo de
 verificado — só um embutido no app, ou um buscado idêntico a ele, merece essa
-palavra. Uma aprovação on-chain no nível “ilimitado” (2^200 ou mais) não pode ser
-enviada até que você a reduza; uma aprovação finita alta e permits assinados
-aparecem com um alerta, mas não são bloqueados. Detalhes:
+palavra. Uma aprovação on-chain no nível “ilimitado” (2^200 ou mais) aparece em
+vermelho, com a opção de limitá-la; a menos que você a limite, ela é enviada
+exatamente como o dApp a montou. Uma aprovação finita alta aparece com um alerta;
+permits assinados não podem ser limitados, então são assinados como foram pedidos ou
+recusados. Detalhes:
 [assinatura legível](/pt-BR/docs/clear-signing).
 
 ### Redes
@@ -260,8 +262,12 @@ a Vela não é uma segunda parte capaz de fazer isso.
   possibilidade de compilar a extensão ou os apps você mesmo a partir do código-fonte
   (os pacotes de release trazem checksums SHA-256 e atestados de procedência de build
   do GitHub que nomeiam o commit e a execução do workflow; o instalador do Windows
-  continua sem assinatura de código). Uma página de assinatura independente, que não
-  compartilha o código do app, está pronta, mas ainda não conectada.
+  continua sem assinatura de código). O
+  [Trusted Signer](/pt-BR/docs/clear-signing-self-host), uma página de assinatura
+  independente que não compartilha o código do app, pode ser escolhido como a sua
+  forma de assinar nos apps de desktop, iPhone e Android; a verificação de integridade
+  do desktop só registra no log uma página que não corresponde, e os apps de celular
+  ainda não fazem essa conferência.
 - **Qualquer coisa servida pelo domínio** — qualquer página do getvela.app ou dos
   seus subdomínios, inclusive um script que ela carregue, poderia pedir assinaturas às
   passkeys da Vela, e o aviso mostra só “getvela.app”. Por isso, o site proíbe as

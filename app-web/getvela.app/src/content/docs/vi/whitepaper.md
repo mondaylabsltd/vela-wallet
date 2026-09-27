@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
-source: 60d297b650ac
+source: 227acd1acf3d
 ---
 
 <script>
@@ -156,9 +156,11 @@ token tiêu chuẩn — rồi, như phương án cuối cùng, một cơ sở d�
 gắn nhãn giải mã tốt nhất có thể. Những gì còn lại đều nhận cảnh báo ký mù rõ ràng. Một bộ
 mô tả lấy về không bao giờ được gắn nhãn đã xác minh — chỉ bộ mô tả có sẵn trong ứng dụng,
 hoặc bộ lấy về mà giống hệt bản có sẵn, mới xứng với chữ đó. Một lệnh cấp quyền trên chuỗi
-ở mức "không giới hạn" (từ 2^200 trở lên) không thể gửi đi cho đến khi bạn giảm nó xuống;
-một lệnh cấp quyền lớn nhưng hữu hạn và các permit dạng chữ ký thì hiện kèm cảnh báo thận
-trọng nhưng không bị chặn. Chi tiết: [ký minh bạch](/vi/docs/clear-signing).
+ở mức "không giới hạn" (từ 2^200 trở lên) được hiện màu đỏ, kèm lựa chọn đặt hạn mức; nếu
+bạn không đặt hạn mức, nó sẽ được gửi đi đúng như dApp đã tạo. Một lệnh cấp quyền lớn nhưng
+hữu hạn được hiện kèm cảnh báo thận trọng; permit dạng chữ ký không thể đặt hạn mức, nên
+chúng chỉ có thể được ký đúng như yêu cầu hoặc bị từ chối. Chi tiết:
+[ký minh bạch](/vi/docs/clear-signing).
 
 ### Mạng
 
@@ -233,8 +235,10 @@ lưu ký mang lại cho bạn là Vela không phải một bên thứ hai có đ
   mã và lớp chặn cấp quyền trong chính ứng dụng, các bản build macOS đã công chứng, và việc tự
   biên dịch tiện ích hoặc ứng dụng từ mã nguồn (các gói phát hành có checksum SHA-256 và các
   attestation nguồn gốc bản dựng của GitHub nêu rõ commit và lần chạy workflow; trình cài
-  đặt Windows vẫn chưa được ký mã). Một trang ký độc lập không dùng chung mã với ứng dụng đã được làm xong nhưng
-  chưa được kết nối.
+  đặt Windows vẫn chưa được ký mã). [Trusted Signer](/vi/docs/clear-signing-self-host),
+  một trang ký độc lập không dùng chung mã với ứng dụng, có thể được chọn làm cách ký trong
+  các ứng dụng máy tính, iPhone và Android; bước kiểm tra tính toàn vẹn trên máy tính chỉ ghi
+  lại một trang không khớp vào nhật ký, và các ứng dụng điện thoại chưa kiểm tra.
 - **Bất cứ thứ gì được phục vụ từ tên miền** — bất kỳ trang nào trên getvela.app hoặc các tên
   miền con của nó, kể cả một script mà trang đó tải, đều có thể xin chữ ký từ passkey của Vela,
   và lời nhắc chỉ hiện "getvela.app". Vì vậy trang web cấm chính các trang của mình dùng

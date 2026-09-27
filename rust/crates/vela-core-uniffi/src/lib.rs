@@ -524,12 +524,35 @@ pub fn sign_route(device_keys_json: String, method: String) -> Option<String> {
     vela_core::wallet_keys::sign_route_json(&device_keys_json, &method)
 }
 
-/// Which passkeys control the wallet at `address` — the Settings keys view
-/// (spec 062). See `vela_core::wallet_keys`.
+/// Where an account's signatures go (founder, 2026-09-26): the key it was
+/// created or signed in with, over the route that reached it — `None` for a
+/// record written before that existed, which signs as it always did.
+/// `account_json` is the stored account record. See
+/// `vela_core::app::Account::sign_in_route`.
 #[uniffi::export]
 #[must_use]
-pub fn wallet_keys_step(address: String, device_keys_json: String, answers_json: String) -> String {
-    vela_core::wallet_keys::step_json(&address, &device_keys_json, &answers_json)
+pub fn sign_in_route(account_json: String) -> Option<String> {
+    vela_core::app::sign_in_route_json(&account_json)
+}
+
+/// Which passkeys control the wallet at `address` — the Settings keys view
+/// (spec 062). `sign_in_credential` is the account's sign-in route credential
+/// (`sign_in_route`), empty for none: its row is marked `signs_here`. See
+/// `vela_core::wallet_keys`.
+#[uniffi::export]
+#[must_use]
+pub fn wallet_keys_step(
+    address: String,
+    device_keys_json: String,
+    answers_json: String,
+    sign_in_credential: String,
+) -> String {
+    vela_core::wallet_keys::step_json(
+        &address,
+        &device_keys_json,
+        &answers_json,
+        &sign_in_credential,
+    )
 }
 
 /// **Signing in when the index is gone** (spec 062): the registry contract's

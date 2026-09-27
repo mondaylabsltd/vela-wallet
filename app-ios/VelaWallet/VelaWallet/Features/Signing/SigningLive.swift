@@ -33,18 +33,10 @@ enum SigningLive {
         var sim: TrustSimViewWire?
         /// Where the simulation has got to. Three states, three sentences.
         var simulation: SigningController.Simulation = .pending
-        /// The person's "Sign with" choice for THIS request, and whether its list is open.
-        var signMethod = "auto"
-        var signWithOpen = false
         /// Whether the fee row's coin list is open (issue #262).
         var feeOpen = false
-        /// Every "Sign with" the core offers, in its order (`SignPrefView.offered`).
-        var signMethods = ["auto"]
         /// How the Trusted Signer last ended for this request without signing.
         var trustedSignerNotice: TrustedSignerNotice?
-        /// The parallel space is active: its built-in key signs every request,
-        /// so no passkey sheet will follow the slide (Debug builds only).
-        var parallelSpace = false
     }
 
     /// The fee list's id for the chain's own coin (the web's `'native'`).
@@ -77,57 +69,6 @@ enum SigningLive {
         return ["\(base)/apple-touch-icon.png", "\(base)/favicon.ico"]
     }
 
-    /// The "Sign with" row: the create flow's own words for where a passkey
-    /// is, and the Trusted Signer with its one line — for every value the core
-    /// offers, in its order. A name this build has no words for is not drawn.
-    static func signWith(context: Context) -> SignWithModel {
-        let loc = context.loc
-        #if DEBUG
-        // The parallel space signs with its built-in key the moment the slide
-        // lands — there is no passkey sheet to wait for, and none of the
-        // choices below would be used. Say so, rather than leave the slide
-        // looking as if it did nothing (owner, 2026-09-22, on an iPhone).
-        // A developer marker, like the "PARALLEL SPACE" banner: not corpus.
-        if context.parallelSpace {
-            return SignWithModel(
-                label: loc.t("componentsUi.signing.signWith"),
-                value: "平行空间内置钥匙",
-                open: false,
-                options: []
-            )
-        }
-        #endif
-        let options = context.signMethods.compactMap { id -> SignWithModel.Option? in
-            guard let title = signMethodTitle(id, loc: loc) else { return nil }
-            return .init(id: id, title: title, selected: id == context.signMethod,
-                         detail: signMethodDetail(id, loc: loc))
-        }
-        return SignWithModel(
-            label: loc.t("componentsUi.signing.signWith"),
-            value: options.first(where: \.selected)?.title ?? loc.t("common.automatic"),
-            open: context.signWithOpen,
-            options: options
-        )
-    }
-
-    /// One "Sign with" value in words — the signing sheet's and Settings'.
-    static func signMethodTitle(_ id: String, loc: Loc) -> String? {
-        switch id {
-        case "auto": loc.t("common.automatic")
-        case "platform": loc.t("onboarding.create.methodPlatformTitle")
-        case "hybrid": loc.t("onboarding.create.methodHybridTitle")
-        case "security_key": loc.t("onboarding.create.methodSecurityKeyTitle")
-        case UserOpSpine.trustedSignerMethod: loc.t("componentsUi.signing.trustedSignerTitle")
-        default: nil
-        }
-    }
-
-    /// The line under a value: only the Trusted Signer needs one — the other
-    /// four say where a key is, and this one says what it does instead.
-    static func signMethodDetail(_ id: String, loc: Loc) -> String? {
-        id == UserOpSpine.trustedSignerMethod ? loc.t("componentsUi.signing.trustedSignerBody") : nil
-    }
-
     /// The Trusted Signer's ending, when it left the request unsigned. Closed is
     /// a person's own decision, told calmly; a refusal or a mismatch is not.
     static func trustedSignerBlocks(_ notice: TrustedSignerNotice?, loc: Loc) -> [SigningBlock] {
@@ -149,6 +90,70 @@ enum SigningLive {
         return next
     }
 
+    /// The core's words in the reader's language. A clear-signing result is
+    /// English — a descriptor's intent and labels, the "Unlimited" a threshold
+    /// prints — and the core names the ones it recognises (`intentTerm`,
+    /// `labelTerm`, `valueTerm`: the key leaf under `componentsUi.signing`).
+    /// Each named word is swapped for this locale's; anything unnamed stays as
+    /// the descriptor wrote it. Same rule in every shell; runs before
+    /// `cappedApproval`. The confirm is left alone: `confirmLabel` switches on
+    /// its English intent and falls back to the term.
+    static func localizedTerms(_ clear: ClearSigningViewWire, loc: Loc) -> ClearSigningViewWire {
+        guard var result = clear.result else { return clear }
+        func word(_ term: String?, _ text: String) -> String {
+            guard let term else { return text }
+            let key = "componentsUi.signing.\(term)"
+            let translated = loc.t(key)
+            return translated == key || translated.isEmpty ? text : translated
+        }
+        result.intent = word(result.intentTerm, result.intent)
+        for index in result.fields.indices {
+            result.fields[index].label = word(result.fields[index].labelTerm, result.fields[index].label)
+            result.fields[index].value = word(result.fields[index].valueTerm, result.fields[index].value)
+        }
+        var next = clear
+        next.result = result
+        return next
+    }
+
+    /// The cap the person chose, where the decode still says "Unlimited".
+    ///
+    /// The clear-signing result describes the REQUEST; once the guard holds a
+    /// finite choice for an unlimited approve (a cap, or revoke), "Unlimited"
+    /// in red would describe bytes that are no longer the ones being signed.
+    static func cappedApproval(_ clear: ClearSigningViewWire, guard guardView: GuardViewWire) -> ClearSigningViewWire {
+        guard let result = clear.result, let cap = capText(guardView) else { return clear }
+        var next = clear
+        next.result = result.capped(to: cap)
+        return next
+    }
+
+    /// The guard's finite choice on an unlimited request, as the cap row prints
+    /// it — the single approval's, or a batch's FIRST leg's: a bundle decodes
+    /// from its first leg, so that is the line the decode's "Unlimited" sits on.
+    private static func capText(_ guardView: GuardViewWire) -> String? {
+        let detected: GuardDetectedApprovalWire?
+        let editor: GuardEditorViewWire?
+        let meta: GuardTokenMetaViewWire
+        switch guardView.surface {
+        case .approvalEditor:
+            (detected, editor, meta) = (guardView.detected, guardView.editor, guardView.meta)
+        case .batch:
+            guard let leg = guardView.batch?.legs.first else { return nil }
+            (detected, editor, meta) = (leg.approval, leg.editor, leg.meta)
+        default:
+            return nil
+        }
+        guard detected?.isUnbounded == true, let editor, let raw = editor.displayAmountRaw else { return nil }
+        switch editor.choice {
+        case .amount, .revoke:
+            return "\(SendLive.fromBase(raw, decimals: meta.decimals)) \(meta.symbol)"
+                .trimmingCharacters(in: .whitespaces)
+        default:
+            return nil
+        }
+    }
+
     static func model(
         fallback: SigningModel,
         request: SigningController.Incoming,
@@ -163,7 +168,10 @@ enum SigningLive {
         let loc = context.loc
         let host = BrowserEngine.hostOf(origin: request.origin)
         let own = request.transportId == walletTransport
-        let clear = localizedOwnBackup(rawClear, own: own, loc: loc)
+        let clear = cappedApproval(
+            localizedTerms(localizedOwnBackup(rawClear, own: own, loc: loc), loc: loc),
+            guard: guardView
+        )
         let facts = SigningController.firstCall(paramsJson: request.paramsJson)
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
@@ -235,7 +243,6 @@ enum SigningLive {
         model.dappOwn = own
         model.dappIconUrls = own ? [] : siteIconUrls(origin: request.origin)
         model.networkLogoUrl = Marks.chainLogoURL(request.chainId)
-        model.signWith = signWith(context: context)
         if !isOffChain(clear) {
             model.feeSpeed = speed.map {
                 SendLive.speedModel($0, view: nil, display: context.display, loc: loc)
@@ -320,7 +327,9 @@ enum SigningLive {
         }
         if let error = sign.error {
             let text: String = switch error.kind {
-            case .unlimitedApproval: a(loc, "unlimitedDisabled")
+            // `.unlimitedApproval` falls to the plain sentence: since
+            // 2026-09-26 it means the approval screen did not show the
+            // unlimited approval — a wallet fault, not "unlimited is disabled".
             // The blocked sheet above already says it, in full.
             case .selfCallBlocked: ""
             case .unsupportedChain: loc.t("send.lock.netNotFound")
@@ -678,7 +687,8 @@ enum SigningLive {
                                      name: AddressText.short(detected.spender),
                                      address: detected.spender))
             }
-            if guardView.detected?.isUnbounded == true, guardView.editor?.choice == nil {
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
+            if guardView.editor?.choice == .unlimited {
                 blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
             }
             return blocks
@@ -690,7 +700,7 @@ enum SigningLive {
                     blocks.append(allowanceBlock(
                         editor: editor, meta: leg.meta, increase: nil,
                         decimalsUnverified: false, expired: false, loc: loc,
-                        prefix: "#\(index + 1) "
+                        prefix: "#\(index + 1) ", leg: index
                     ))
                 }
                 if let approval = leg.approval {
@@ -713,22 +723,28 @@ enum SigningLive {
         decimalsUnverified: Bool,
         expired: Bool,
         loc: Loc,
-        prefix: String = ""
+        prefix: String = "",
+        leg: Int? = nil
     ) -> SigningBlock {
         func chip(_ id: String, _ label: String, _ mode: GuardEditorMode, offered: Bool) -> AllowanceChip {
             AllowanceChip(
                 id: id, label: label,
-                // **Disabled, not merely unselected.** An unlimited request
-                // has no finite figure to offer, and a chip that looks
-                // available and refuses is worse than one that is plainly out.
+                // **Disabled, not merely unselected.** A balance nobody could
+                // read, or a request of zero, has nothing to offer, and a chip
+                // that looks available and refuses is worse than one that is
+                // plainly out.
                 state: !offered ? .disabled : (editor.mode == mode ? .selected : .idle)
             )
         }
         let chips = [
-            chip("requested", a(loc, "requested"), .requested, offered: editor.requestedFinite),
+            // An unlimited request opens HERE — the site's own bytes, kept
+            // (Permit2 bundles revert when the wallet re-encodes the approve).
+            chip("requested", a(loc, "requested"), .requested,
+                 offered: editor.requestedFinite || editor.requestedUnlimited),
             chip("balance", a(loc, "balanceCap"), .balance, offered: editor.hasBalanceCap),
             chip("custom", a(loc, "custom"), .custom, offered: true),
-            chip("revoke", a(loc, "revoke"), .revoke, offered: true),
+            // Not on increaseAllowance: "revoke" would sign an increase of 0.
+            chip("revoke", a(loc, "revoke"), .revoke, offered: editor.revokeOffered),
         ]
 
         let value = editor.displayAmountRaw.map { raw in
@@ -737,16 +753,15 @@ enum SigningLive {
         } ?? a(loc, "unlimitedValue")
 
         var notes: [String] = []
-        if !editor.requestedFinite {
-            notes.append(a(loc, "unlimitedDisabled") + "\n" + a(loc, "choosePrompt"))
-        }
         if decimalsUnverified { notes.append(a(loc, "decimalsUnverified")) }
         if expired { notes.append(a(loc, "expired")) }
 
         return .allowance(
             label: prefix + a(loc, "spendingCap"),
             value: value,
-            valueTone: editor.choice != nil ? .neutral : .danger,
+            // Only a chosen, finite cap reads as settled; unlimited kept as
+            // asked reads as the danger it is.
+            valueTone: (editor.choice == nil || editor.choice == .unlimited) ? .danger : .neutral,
             chips: chips,
             note: notes.isEmpty ? nil : notes.joined(separator: "\n"),
             // "increase by 100" must never read as "cap at 100" — and when the
@@ -763,11 +778,14 @@ enum SigningLive {
                 placeholder: "0",
                 error: editor.error.map { error in
                     switch error {
-                    case .invalidAmount: a(loc, "invalidAmount")
-                    case .unlimitedDisabled: a(loc, "unlimitedDisabled")
+                    // A typed "cap" of 10^60 is no cap — an amount the field
+                    // cannot take. Keeping the site's unlimited ask is the
+                    // Requested chip, so "unlimited is disabled" would be false.
+                    case .invalidAmount, .unlimitedDisabled: a(loc, "invalidAmount")
                     }
                 }
-            ) : nil
+            ) : nil,
+            leg: leg
         )
     }
 
@@ -835,13 +853,14 @@ enum SigningLive {
         switch clear.confirm {
         case .sign: s(loc, "signLabel")
         case .confirm: s(loc, "confirmLabel")
-        case .confirmIntent(let intent):
+        case .confirmIntent(let intent, let term):
             switch intent {
             case "send": s(loc, "confirmSend")
             case "swap": s(loc, "confirmSwap")
             case "deposit": s(loc, "confirmDeposit")
             case "withdraw": s(loc, "confirmWithdraw")
-            default: s(loc, "confirmLabel")
+            // The core's word for the rest ("Approve" → 授权), else the neutral verb.
+            default: term.map { s(loc, $0) } ?? s(loc, "confirmLabel")
             }
         }
     }

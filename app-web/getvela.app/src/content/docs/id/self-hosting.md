@@ -1,7 +1,7 @@
 ---
 title: Panduan hosting sendiri
 description: "Semua yang dijalankan Vela untuk Anda, fungsi masing-masing, dan cara menggantinya dengan milik Anda sendiri — relay, indeks kunci publik, data chain, kurs, dan aplikasinya — ditambah satu hal yang tidak bisa Anda ganti dan cara bertahan tanpa getvela.app."
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -80,9 +80,10 @@ offline. Aplikasi yang dikompilasi sendiri bisa memakai ponsel atau kunci keaman
 Vela berkomunikasi langsung dengan keduanya; passkey bawaan ponsel ("Perangkat ini")
 mengharuskan aplikasinya ditandatangani Vela, dan aplikasi Anda tidak.
 
-[Halaman tanda tangan](/id/docs/clear-signing-self-host) bukan jalan masuk tersendiri:
-halaman itu menandatangani permintaan yang dikirim program lain, dan belum ada aplikasi
-Vela yang mengirimkannya.
+[Trusted Signer](/id/docs/clear-signing-self-host) bukan jalan masuk tersendiri: ia
+menandatangani permintaan yang dikirim sebuah aplikasi — aplikasi desktop dan ponsel Vela —
+dan salinan di domain Anda sendiri hanya menandatangani dengan passkey yang dibuat untuk
+domain itu.
 
 <Callout type="warning" title="Siapa pun yang menguasai domain bisa meminta tanda tangan">
 Halaman apa pun yang disajikan dari getvela.app atau salah satu subdomainnya — atau oleh
@@ -323,4 +324,4 @@ Kalau Anda mengganti semua yang di atas, yang berikut ini masih tersisa:
 Dan yang berikut ini bukan milik Vela: basis data selector publik, tunnel milik Apple dan Google untuk menandatangani lewat
 ponsel, dan penyedia RPC mana pun yang Anda pilih.
 
-Berikutnya: [halaman tanda tangan yang bisa Anda jalankan sendiri](/id/docs/clear-signing-self-host).
+Berikutnya: [Trusted Signer, dan cara menjalankan milik Anda sendiri](/id/docs/clear-signing-self-host).

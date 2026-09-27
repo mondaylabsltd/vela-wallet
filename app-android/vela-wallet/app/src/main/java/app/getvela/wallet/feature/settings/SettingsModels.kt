@@ -46,9 +46,6 @@ enum class SettingsOverlay {
     /** The default transaction speed (spec 069): three speeds, each with what it buys. */
     FeeSpeed,
 
-    /** Spec 071: the default "Sign with" — the three places a passkey is, and the Trusted Signer. */
-    SignWith,
-
     /** Spec 071: which Trusted Signer page the wallet opens. */
     SignerPage,
 
@@ -80,6 +77,8 @@ data class CalloutModel(val tone: CalloutTone, val text: String)
 enum class SettingsIcon {
     Contacts, Feedback, Globe, Coins, Hash, Calendar, Clock,
     Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor, Upload,
+    /** Settings → Community: the brands' own monochrome marks. */
+    BrandX, BrandTelegram, BrandDiscord,
 }
 
 /** Row emphasis. `Danger` is the red 退出登录 / 清理数据 family. */
@@ -396,11 +395,81 @@ data class FeedbackModel(
     val placeholder: String,
     val addSteps: String,
     val previewToggle: String,
+    /** Exactly the payload's `environment`, line for line (live: [BugReport.environmentLines]). */
     val previewLines: List<String>,
     val consent: String,
     val send: String,
     val githubLink: String,
+    /** Spec 078 round 3: the steps box behind 「+ 添加重现步骤」. */
+    val stepsPlaceholder: String = "",
+    /** The button's label while the endpoint is answering. */
+    val sending: String = "",
+    /** Filed — the bodies carry `{{number}}`. */
+    val successTitle: String = "",
+    val successBodyNew: String = "",
+    val successBodyDeduped: String = "",
+    val viewIssue: String = "",
+    /** Not filed — the prefilled form is the road that still works. */
+    val fallbackTitle: String = "",
+    val fallbackBody: String = "",
+    val openGithub: String = "",
+    /** Closes the sheet from the filed state. */
+    val done: String = "",
+    /** The fallback's retry (`common.tryAgain`). */
+    val tryAgain: String = "",
+    /** Screenshots (the founder's ask, 2026-09-26) — public on the issue, at most five. */
+    val screenshotsLabel: String = "",
+    val addScreenshots: String = "",
+    /** "Optional · up to 5", shown while none is attached. */
+    val screenshotsHint: String = "",
+    /** The warning that must be visible before 发送 once one is attached. */
+    val screenshotsPublic: String = "",
+    /** TalkBack's label for a tile's ✕; carries `{{index}}` (1-based). */
+    val removeScreenshot: String = "",
+    val screenshotsLimit: String = "",
+    val screenshotUnsupported: String = "",
+    /** Filed, but the images could not be stored. */
+    val screenshotsDropped: String = "",
+    /** Not filed: the form cannot carry the images. */
+    val fallbackScreenshots: String = "",
+    /** TalkBack's label for a tile, which opens the viewer (078 §C); carries `{{index}}` (1-based). */
+    val viewScreenshot: String = "",
+    /** The viewer's ✕, for TalkBack. */
+    val closeViewer: String = "",
+    /** The viewer's visible remove button. */
+    val removeFromViewer: String = "",
+    /** Where the last 发送 stands; the gallery draws [FeedbackStatus.Idle]. */
+    val status: FeedbackStatus = FeedbackStatus.Idle,
+    /** An answer that arrived after the sheet was closed: the settings page's notice. */
+    val notice: FeedbackNoticeModel? = null,
 )
+
+/**
+ * The page's notice for a report whose sheet was closed mid-send: filed →
+ * 感谢反馈，已收到 with 在 GitHub 查看; not filed → 暂时无法在应用内发送 with
+ * 打开 GitHub 表单. [url] is where the action goes.
+ */
+@Immutable
+data class FeedbackNoticeModel(val message: String, val action: String, val url: String)
+
+/**
+ * Spec 078 round 3 (the web's `FeedbackResult` + `sending`): both endings are
+ * outcomes. A report the endpoint could not file still has the prefilled form,
+ * and the sheet offers it rather than apologising.
+ */
+@Immutable
+sealed interface FeedbackStatus {
+    data object Idle : FeedbackStatus
+
+    /** The endpoint is answering: the button turns a spinner and stays at full emphasis. */
+    data object Sending : FeedbackStatus
+
+    /** Filed, as a new issue or a +1 on an open one — the number is the way back to it. */
+    data class Filed(val number: Long, val url: String, val deduped: Boolean, val screenshotsDropped: Int = 0) : FeedbackStatus
+
+    /** Not filed: [url] is the prefilled GitHub form, the person's words already in it. */
+    data class Fallback(val url: String) : FeedbackStatus
+}
 
 /** SR1: the amber "these networks are down" banner and its per-chain fixes. */
 @Immutable
@@ -503,7 +572,8 @@ data class WalletKeysModel(
     val copiedLabel: String,
 )
 
-enum class KeyPillTone { Verified, Synced, Local }
+/** [SignsHere] is the one filled pill — the key this device signs with; the rest are outlined. */
+enum class KeyPillTone { SignsHere, Verified, Synced, Local }
 
 data class KeyPillModel(val text: String, val tone: KeyPillTone)
 
@@ -560,8 +630,7 @@ data class SettingsScreenModel(
     val currencySheet: SelectSheetModel,
     /** Spec 069: the default transaction speed's sheet. */
     val feeSpeedSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
-    /** Spec 071: the default "Sign with" sheet, and the Trusted Signer page's. */
-    val signWithSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
+    /** Spec 071: the Trusted Signer page's sheet. */
     val signerPage: SignerPageModel = SignerPageModel(),
     val numberSheet: SelectSheetModel,
     val dateSheet: SelectSheetModel,

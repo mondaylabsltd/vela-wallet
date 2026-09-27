@@ -22,6 +22,7 @@
   <button id="safetx" type="button">SafeTx typed data (blocked)</button>
   <button id="send" type="button">Send dust</button>
   <button id="approve" type="button">Approve unlimited</button>
+  <button id="approve-254" type="button">Approve 2^254</button>
   <button id="verify" type="button">Verify sign</button>
   <button id="siwe" type="button">SIWE</button>
   <button id="siwe-bad" type="button">SIWE (other domain)</button>
@@ -200,6 +201,9 @@ const keccak256 = (() => {
       show();
     };
     document.getElementById('approve').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + MAX, value: '0x0' }]);
+    // 2^254: past the approval guard's 2^200 but under the registry's 2^255 —
+    // the sheet must say "Unlimited", and a cap chosen must replace it.
+    document.getElementById('approve-254').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + '4' + '0'.repeat(63), value: '0x0' }]);
   
     // Spec 081: the shapes the self-call guard must refuse.
     const selfAddr = () => me ? me() : window.ethereum.selectedAddress;

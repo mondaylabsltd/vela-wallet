@@ -20,6 +20,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Map, Value, json};
 
@@ -46,12 +47,8 @@ pub const KEY_DISPLAY_CURRENCY: &str = "vela.displayCurrency";
 /// The default transaction speed (spec 068, on the desktop since 069). A bare
 /// tier name — `fast` / `standard` / `slow` — judged by the core, never here.
 pub const KEY_FEE_TIER: &str = "vela.feeTier";
-/// The default "Sign with" (spec 071): `auto` or a method name, judged by the
-/// core's `sign_pref`, never here.
-pub const KEY_SIGN_METHOD: &str = "vela.signMethod";
 /// The Trusted Signer's page, when the person chose one; absent is the
 /// official page.
-/// The Trusted Signer page a person named in Settings.
 pub const KEY_TRUSTED_SIGNER_URL: &str = "vela.trustedSignerUrl";
 
 /// The storage failed in a way the core answers with `storage_failed`, never a
@@ -71,6 +68,18 @@ type Result<T> = std::result::Result<T, StorageError>;
 /// the session machine's migration write-back and an onboarding save — and the
 /// file is rewritten whole, so an interleave would lose one of them.
 static LOCK: Mutex<()> = Mutex::new(());
+
+/// How many times this process has rewritten the document. A reader that keeps
+/// an answer derived from it — the logo host, which every row of every column
+/// asks for on every frame — compares this instead of re-reading the file:
+/// a scroll is a frame per display refresh, and each of them was opening and
+/// parsing the whole wallet a hundred times.
+static WRITES: AtomicU64 = AtomicU64::new(0);
+
+/// See [`WRITES`]. Moves whenever `write_all` has run, whatever it wrote.
+pub fn generation() -> u64 {
+    WRITES.load(Ordering::Acquire)
+}
 
 /// Where the file lives.
 ///
@@ -124,10 +133,17 @@ fn write_all(map: Map<String, Value>) -> Result<()> {
     // direct write leaves a truncated account list, and an account list that
     // parses as EMPTY is indistinguishable from being signed out.
     let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, body)
-        .map_err(|error| StorageError(format!("{}: {error}", temporary.display())))?;
-    fs::rename(&temporary, &path)
-        .map_err(|error| StorageError(format!("{}: {error}", path.display())))
+    let written = fs::write(&temporary, body)
+        .map_err(|error| StorageError(format!("{}: {error}", temporary.display())))
+        .and_then(|()| {
+            fs::rename(&temporary, &path)
+                .map_err(|error| StorageError(format!("{}: {error}", path.display())))
+        });
+    // Counted once the file is in place, and counted when it failed too. After
+    // the rename, not before it: a reader that read the old document between
+    // the two would otherwise file it under the new count and keep it.
+    WRITES.fetch_add(1, Ordering::AcqRel);
+    written
 }
 
 fn read_list(key: &str) -> Result<Vec<Value>> {
@@ -745,20 +761,48 @@ pub(crate) mod tests {
                     signer_origin: None,
                 })
                 .collect(),
+            signed_in_with: None,
         }
+    }
+
+    /// Founder, 2026-09-26: the key the account signed in with comes back
+    /// from disk, and the next signature goes to it. A record that dropped it
+    /// on a rewrite would quietly sign with the first key again.
+    #[test]
+    fn the_sign_in_key_comes_back_and_signs() {
+        with_temp_state("sign-in-key-round-trip", || {
+            let mut record = account("cred0", 2);
+            record.signed_in_with = Some(vela_core::app::SignInKey {
+                credential_id: "cred1".to_owned(),
+                method: vela_core::app::KeyMethod::SecurityKey,
+                transports: String::new(),
+                signer_origin: None,
+            });
+            if save_account(&record).is_err() {
+                unreachable!("save");
+            }
+            let loaded = load_accounts().unwrap_or_default();
+            assert_eq!(loaded[0].signed_in_with, record.signed_in_with);
+
+            let context = crate::executor::send::SendContext::new(
+                &loaded[0],
+                crate::ceremony::CeremonyChannel::new().ceremony(0),
+            );
+            assert_eq!(context.pinned_credential.as_deref(), Some("cred1"));
+            assert_eq!(context.key_method, vela_core::app::KeyMethod::SecurityKey);
+        });
     }
 
     /// Spec 075: a key that lives behind a signer page must come back
     /// remembering which one.
     ///
     /// The field is written by the create and the sign-in that minted or
-    /// found the key, and read by `sign_route` to decide where the NEXT
-    /// signature goes. A record that loses it on a rewrite leaves a key
-    /// reachable only through somebody's own deployment being routed to a
-    /// platform sheet that cannot see it — a wallet that has quietly
-    /// forgotten where its key is. Written on its own key, absent when there
-    /// is none, and carried through to the device keys the signing sheet
-    /// routes by.
+    /// found the key, and read to decide where the NEXT signature goes. A
+    /// record that loses it on a rewrite leaves a key reachable only through
+    /// somebody's own deployment being routed to a platform sheet that cannot
+    /// see it — a wallet that has quietly forgotten where its key is. Written
+    /// on its own key, absent when there is none, and carried through to the
+    /// route the signing sheet follows.
     #[test]
     fn a_key_behind_a_page_comes_back_remembering_it() {
         with_temp_state("signer-origin-round-trip", || {
@@ -785,31 +829,16 @@ pub(crate) mod tests {
             );
             assert_eq!(loaded[0].keys[1].signer_origin, None);
 
-            // And through the mirror the signing sheet actually routes by: a
-            // `DeviceKey` that dropped it would send the next signature to a
-            // sheet that cannot reach the key.
+            // And through to the route the signing sheet follows: a record
+            // from before the sign-in key signs where its first key lives.
             let context = crate::executor::send::SendContext::new(
                 &loaded[0],
                 crate::ceremony::CeremonyChannel::new().ceremony(0),
             );
+            context.follow_sign_in("https://sign.getvela.app/");
             assert_eq!(
-                context.device_keys[0].signer_origin.as_deref(),
+                context.trusted_signer.chosen().as_deref(),
                 Some("https://sign.example.test")
-            );
-            assert_eq!(context.device_keys[1].signer_origin, None);
-
-            // `auto` therefore follows the key to its page rather than to the
-            // route the first key's transports would suggest.
-            let route = crate::executor::send::sign_route_of(
-                &context.device_keys,
-                "auto",
-                "https://sign.getvela.app/",
-            );
-            assert_eq!(
-                route,
-                Some(crate::executor::send::Route::TrustedSigner(
-                    "https://sign.example.test".to_owned()
-                ))
             );
         });
     }

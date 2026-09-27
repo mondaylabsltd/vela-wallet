@@ -90,6 +90,13 @@ struct SettingsScreen: View {
 
     @State private var page: SettingsPage
     @State private var overlay: SettingsOverlay
+    /// The report's sender lives HERE, not in its sheet (2026-09-27): a sheet
+    /// closed mid-send used to take the outcome with it, and the person was
+    /// dropped back on this page with no word on whether it went.
+    @State private var feedbackSender = FeedbackSender()
+    /// The outcome of a report whose sheet was closed before it landed.
+    @State private var feedbackToast: FeedbackOutcomeToast.Model?
+    @Environment(\.openURL) private var openURL
     /// The destructive action waiting on its answer — a storage row's 清除, a
     /// network's bin, "reset to defaults" — and what "yes" does. One slot,
     /// because one sheet asks at a time.
@@ -101,6 +108,12 @@ struct SettingsScreen: View {
     /// its fields again from the core's values, not the addresses typed
     /// before the reset.
     @State private var endpointsGeneration = 0
+    /// The size this page is drawn at — watched so the slider that chose it
+    /// can be put back under the finger (`TextScaleAnchor`).
+    @Environment(\.walletTextScale) private var textScale
+    @State private var sliderAnchor = TextScaleAnchor()
+    private static let scrollSpace = "settings-scroll"
+    private static let sliderTarget = "settings-text-scale"
 
     init(
         model: SettingsScreenModel,
@@ -160,13 +173,26 @@ struct SettingsScreen: View {
             IndexDownScreen(model: model.indexDown)
         } else {
             VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        header
-                        if !model.rescue { pageBody }
+                ScrollViewReader { scroll in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            header
+                            if !model.rescue { pageBody }
+                        }
+                        .padding(.horizontal, Tokens.Space.s24)
+                        .padding(.bottom, Tokens.Space.s32)
                     }
-                    .padding(.horizontal, Tokens.Space.s24)
-                    .padding(.bottom, Tokens.Space.s32)
+                    // The viewport the slider's frame is measured in.
+                    .coordinateSpace(.named(Self.scrollSpace))
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                        sliderAnchor.viewport = height
+                    }
+                    // A size was chosen and the page above the slider re-laid
+                    // out at it: scroll so the slider is where it was let go.
+                    .onChange(of: textScale) {
+                        guard let anchor = sliderAnchor.release() else { return }
+                        scroll.scrollTo(Self.sliderTarget, anchor: anchor)
+                    }
                 }
                 // A URL field saves when it loses focus, so there has to be a
                 // way to lose focus. Dragging the page is the one every iOS
@@ -175,6 +201,7 @@ struct SettingsScreen: View {
                 // page never blurred and the core was never told. Measured on
                 // an iPhone: `https://index.invalid`, typed, gone.
                 .scrollDismissesKeyboard(.interactively)
+                .overlay(alignment: .bottom) { feedbackToastView }
                 WalletTabBar(
                     tabs: model.tabs,
                     selected: model.rescue ? .wallet : .settings,
@@ -191,6 +218,13 @@ struct SettingsScreen: View {
                 case .rpcProviders: endpointActions?.onOpenProviders()
                 default: break
                 }
+            }
+            .onChange(of: feedbackSender.state) { _, state in
+                // Only when the sheet is gone: an open sheet says it itself.
+                guard overlay != .feedback,
+                      let toast = FeedbackOutcomeToast.Model.from(state, words: model.feedback)
+                else { return }
+                show(feedbackToast: toast)
             }
             .sheet(item: sheetBinding) { overlay in
                 SettingsSheet(
@@ -243,7 +277,8 @@ struct SettingsScreen: View {
                     },
                     onSaveSignerUrl: onSaveSignerUrl,
                     onResetSignerUrl: onResetSignerUrl,
-                    onOpenLink: onOpenLink
+                    onOpenLink: onOpenLink,
+                    feedbackSender: feedbackSender
                 )
                     .themed(theme.scheme)
             }
@@ -393,7 +428,19 @@ struct SettingsScreen: View {
             // The two appearance controls are not rows: they are the control
             // itself, shown inline under 语言 (ST1).
             if section.appearanceControls {
-                TextScaleSlider(model: model.textScale, onSelect: appearance.onTextScale)
+                TextScaleSlider(
+                    model: model.textScale,
+                    onSelect: appearance.onTextScale.map { choose in
+                        { index in
+                            sliderAnchor.hold()
+                            choose(index)
+                        }
+                    }
+                )
+                .id(Self.sliderTarget)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.scrollSpace)) } action: { frame in
+                    sliderAnchor.frame = frame
+                }
                 SettingsSegmentedControl(model: model.theme, onSelect: { appearance.onTheme?($0) })
             }
         }
@@ -489,6 +536,23 @@ struct SettingsScreen: View {
 
     /// Rows a tap navigates from; everything else opens an overlay.
     private func select(_ id: String) {
+        if let sheet = Self.overlay(forRow: id, hasSignerPage: model.signerPage != nil) {
+            if sheet == .feedback {
+                // A fresh form — unless a report is still on its way, whose
+                // sheet this then reopens on.
+                feedbackSender.reset()
+                feedbackToast = nil
+            }
+            overlay = sheet
+            return
+        }
+        if let url = Self.externalLink(forRow: id) {
+            // Out of the app: the X / Telegram / Discord app takes it when
+            // installed (universal links), Safari otherwise. Absent in the
+            // gallery, where a link is drawn and goes nowhere on purpose.
+            onOpenLink?(url)
+            return
+        }
         switch id {
         case "contacts": onOpenContacts()
         case "networks": page = .networks
@@ -497,17 +561,64 @@ struct SettingsScreen: View {
         case "endpoints": page = .endpoints
         case "storage": page = .storage
         case "about": page = .about
-        case "language": overlay = .language
-        case "currency": overlay = .currency
-        case SettingsFixtures.feeSpeedRow: overlay = .feeSpeed
-        case SettingsFixtures.signWithRow: overlay = .signWith
-        case SettingsFixtures.signerPageRow: if model.signerPage != nil { overlay = .signerPage }
-        case "number-format": overlay = .numberFormat
-        case "date-format": overlay = .dateFormat
-        case "time-format": overlay = .timeFormat
-        case "feedback": overlay = .feedback
         case SettingsLive.ethereumBackupRow: onEthereumBackup?()
         default: break
+        }
+    }
+
+    /// The sheet a row raises, if it raises one. Pure, so a test can hold
+    /// every row to its sheet — the feedback row had a route and no row for
+    /// two specs (2026-09-27).
+    static func overlay(forRow id: String, hasSignerPage: Bool) -> SettingsOverlay? {
+        switch id {
+        case "language": .language
+        case "currency": .currency
+        case SettingsFixtures.feeSpeedRow: .feeSpeed
+        case SettingsFixtures.signerPageRow: hasSignerPage ? .signerPage : nil
+        case "number-format": .numberFormat
+        case "date-format": .dateFormat
+        case "time-format": .timeFormat
+        case SettingsFixtures.feedbackRow: .feedback
+        default: nil
+        }
+    }
+
+    /// Where a row that leaves the app goes — the Community links.
+    static func externalLink(forRow id: String) -> String? {
+        SettingsFixtures.communityLinks.first { $0.id == id }?.url
+    }
+
+    // MARK: - A report's outcome, when its sheet was closed
+
+    @ViewBuilder private var feedbackToastView: some View {
+        if let toast = feedbackToast {
+            FeedbackOutcomeToast(
+                model: toast,
+                closeLabel: model.closeLabel,
+                onAction: {
+                    feedbackToast = nil
+                    if let url = URL(string: toast.url) { openURL(url) }
+                },
+                onClose: { feedbackToast = nil }
+            )
+            .padding(.horizontal, Tokens.Space.s16)
+            .padding(.bottom, Tokens.Space.s12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func show(feedbackToast toast: FeedbackOutcomeToast.Model) {
+        withAnimation(.easeOut(duration: 0.2)) { feedbackToast = toast }
+        (toast.success ? VelaHaptic.success : VelaHaptic.reject).play()
+        UIAccessibility.post(notification: .announcement, argument: toast.title)
+        // A filed report can go quietly; a fallback is the only road left for
+        // that report, so it waits for the person.
+        guard toast.success else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8))
+            if feedbackToast == toast {
+                withAnimation(.easeIn(duration: 0.2)) { feedbackToast = nil }
+            }
         }
     }
 }

@@ -29,6 +29,7 @@ mod passkey_directory;
 mod passkey_icons;
 mod raster;
 mod resident;
+mod scheme_relay;
 mod session;
 mod settings;
 mod signing;
@@ -48,7 +49,7 @@ use gallery::GalleryView;
 use gpui::{
     App, AppContext as _, Bounds, Context, Div, IntoElement, KeyBinding, Menu, MenuItem,
     ParentElement as _, QuitMode, Render, Styled as _, TitlebarOptions, Window, WindowBounds,
-    WindowOptions, actions, div, point, px, size,
+    WindowOptions, actions, div, px, size,
 };
 use onboarding::OnboardingPage;
 use theme::{WINDOW_H, WINDOW_W};
@@ -248,6 +249,10 @@ fn open_window_with<V: gpui::Render + 'static>(
     cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
+            // `VELA_NO_ACTIVATE=1`: the window opens without taking the
+            // keyboard, so a screenshot pass on a machine somebody is using
+            // never types into this app what they meant for another.
+            focus: std::env::var_os("VELA_NO_ACTIVATE").is_none(),
             // The card grid does not reflow below the design size (spec 007
             // edge cases): the design size is the minimum.
             window_min_size: Some(size(px(WINDOW_W), px(WINDOW_H))),
@@ -261,9 +266,13 @@ fn open_window_with<V: gpui::Render + 'static>(
             titlebar: Some(TitlebarOptions {
                 title: Some("Vela Wallet".into()),
                 // Content owns the full canvas, as in the mocks; only the
-                // traffic lights remain, inset to the mock's position.
+                // traffic lights remain, left where AppKit puts them so they
+                // sit exactly as in every other app on this macOS version.
+                // The mock's (20, 20) inset read as too low beside Terminal
+                // and Finder, and gpui grows the native titlebar (the macOS
+                // drag strip) to 2·y + 14 around a custom position.
                 appears_transparent: true,
-                traffic_light_position: Some(point(px(20.), px(20.))),
+                traffic_light_position: None,
             }),
             ..Default::default()
         },
@@ -276,6 +285,54 @@ fn main() {
     // Spec 038: a panic on a worker thread becomes a sheet, not a vanished
     // window. Installed before anything can spawn.
     panic_report::install();
+    // Windows: the in-app browser is a WebView2 CHILD window, and gpui's
+    // default renderer composes the whole window through DirectComposition
+    // with `CreateTargetForHwnd(hwnd, topmost = true)` — its visual sits ABOVE
+    // every child window, so pages loaded and were never seen (Explore "does
+    // not open pages" on Windows, while macOS's WKWebView, a subview over the
+    // layer, did). gpui's own fallback, a flip-model swap chain on the HWND,
+    // composes child windows over the content as Win32 always has. Set before
+    // the first window exists, and only if the person did not choose.
+    #[cfg(windows)]
+    if std::env::var_os("GPUI_DISABLE_DIRECT_COMPOSITION").is_none() {
+        // SAFETY: first thing in `main`, before any thread is spawned.
+        unsafe { std::env::set_var("GPUI_DISABLE_DIRECT_COMPOSITION", "1") };
+    }
+    // Spec 076: the Trusted Signer's answer comes back as a navigation to
+    // `velawallet://sign-result`, because the published page carries
+    // `default-src 'none'` in its hashed bytes and cannot open a socket at all.
+    //
+    // It is an EVENT for a pending request, never a navigation of this app: no
+    // route changes, no state changes, and one that arrives with nothing
+    // waiting is dropped in silence rather than raising an error nobody can
+    // act on.
+    // Windows and Linux do not deliver a URL as an event: the scheme handler
+    // starts the app with it as an ARGUMENT (`"%1"`, `%u`). gpui stores an
+    // `on_open_urls` callback on those platforms but never fires it — only
+    // macOS does — so the argument is read here.
+    //
+    // While the wallet is already running — which is the ordinary case, since
+    // the person pressed Sign in it — that argument lands in a SECOND process,
+    // and the request it answers lives in the first. The second hands it over
+    // the first one's pipe (Windows) or socket (Linux) — `scheme_relay` — and
+    // exits before a window opens; only when no wallet is running is this a
+    // cold start, read here. macOS has no such gap: the Apple Event goes to
+    // the running app.
+    let mut relayed = false;
+    for argument in std::env::args().skip(1) {
+        if argument.starts_with(vela_core::trusted_signer::CALLBACK_URL) {
+            if scheme_relay::forward(&argument) {
+                relayed = true;
+            } else {
+                executor::trusted_signer::deliver_callback(&argument);
+            }
+        }
+    }
+    if relayed {
+        return;
+    }
+    scheme_relay::listen();
+
     // LastWindowClosed instead of gpui's macOS default (keep running): a
     // keep-running single-window app must reopen its window from the Dock
     // icon, and that path is dead on macOS 26 — AppKit's TextInputUI panel
@@ -295,31 +352,7 @@ fn main() {
         }
     });
 
-    // Spec 076: the Trusted Signer's answer comes back as a navigation to
-    // `velawallet://sign-result`, because the published page carries
-    // `default-src 'none'` in its hashed bytes and cannot open a socket at all.
-    //
-    // It is an EVENT for a pending request, never a navigation of this app: no
-    // route changes, no state changes, and one that arrives with nothing
-    // waiting is dropped in silence rather than raising an error nobody can
-    // act on.
-    // Windows and Linux do not deliver a URL as an event: the scheme handler
-    // starts the app with it as an ARGUMENT (`"%1"`, `%u`). gpui stores an
-    // `on_open_urls` callback on those platforms but never fires it — only
-    // macOS does — so the argument is read here.
-    //
-    // This covers a COLD start. While the wallet is already running — which is
-    // the ordinary case, since the person pressed Sign in it — Windows and
-    // Linux start a SECOND process with the URL, and handing it to the first
-    // needs a single-instance channel this app does not have yet. macOS has no
-    // such gap: the Apple Event goes to the running app. Written down rather
-    // than left to be discovered.
-    for argument in std::env::args().skip(1) {
-        if argument.starts_with(vela_core::trusted_signer::CALLBACK_URL) {
-            executor::trusted_signer::deliver_callback(&argument);
-        }
-    }
-
+    // macOS: the same answer as an Apple Event, to the running app.
     app.on_open_urls(|urls| {
         for url in urls {
             executor::trusted_signer::deliver_callback(&url);
@@ -406,6 +439,8 @@ fn main() {
         }
         open_main_window(cx);
 
-        cx.activate(true);
+        if std::env::var_os("VELA_NO_ACTIVATE").is_none() {
+            cx.activate(true);
+        }
     });
 }

@@ -101,7 +101,7 @@
 	.back {
 		display: inline-block;
 		margin-bottom: 28px;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-note));
 		color: var(--text-secondary);
 	}
 	.back:hover {
@@ -115,7 +115,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.84rem;
+		font-size: max(0.84rem, var(--floor-meta));
 		color: var(--text-muted);
 	}
 	.post-header h1 {

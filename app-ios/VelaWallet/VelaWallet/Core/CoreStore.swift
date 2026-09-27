@@ -54,6 +54,11 @@ final class CoreStore<View: Decodable> {
     private let onFault: (Error) -> Void
     private var booted = false
 
+    /// Nothing in flight — see `CoreDriver.isIdle`.
+    var isIdle: Bool { driver.isIdle }
+    /// How many effects are in flight.
+    var inFlight: Int { driver.inFlight }
+
     /// - Parameters:
     ///   - bridge: the uniffi object for this machine.
     ///   - perform: the machine's executor. Must not throw — see `CoreDriver`.

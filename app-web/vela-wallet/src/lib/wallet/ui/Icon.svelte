@@ -4,7 +4,7 @@
 	interface Props {
 		icon: IconDef;
 		/** Token icon size step. */
-		size?: 'xs' | 'sm' | 'base' | 'md' | 'lg' | 'xl';
+		size?: 'xs' | 'sm' | 'base' | 'md' | 'lg' | 'xl' | 'tab';
 		/** Accessible name; decorative (hidden) when omitted. */
 		label?: string;
 	}
@@ -93,5 +93,11 @@
 	.xl {
 		width: var(--icon-xl);
 		height: var(--icon-xl);
+	}
+
+	/* The phone tab bar's glyph, which carries the tab on its own. */
+	.tab {
+		width: var(--icon-tab);
+		height: var(--icon-tab);
 	}
 </style>

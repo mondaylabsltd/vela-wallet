@@ -39,6 +39,56 @@ object VelaTextSize {
      * shrinks the headline on every phone.
      */
     val heroLong: TextUnit = 31.sp
+
+    /**
+     * The first rung of the hero ladder (46/38/31) — the web's `--text-hero`.
+     * Declared once here rather than as a literal at the one place a phone
+     * draws it: the send amount's short figure ([VelaAmountHero]).
+     */
+    val heroWide: TextUnit = 46.sp
+}
+
+/**
+ * The send amount's figure (spec 078; the web's `AmountInput`, the desktop's
+ * `amount_hero_rung`): three rungs of the hero ladder — 46 / 38 / 31, the
+ * same three the Welcome headline steps down — chosen by how much there is to
+ * DRAW: the figure's characters, the prefix's, and half the suffix's (it is
+ * set smaller). Counted, not measured, so all four shells step at the same
+ * character on the same figure. The unit after the figure steps down with it,
+ * a rung of the type scale each (26 / 20 / 17).
+ *
+ * The LINE is the first rung's on every rung, so the block is one height
+ * whatever is typed: as a ratio it shrank at the 9th and 12th character, and
+ * on Max, and everything below it jumped under a reaching finger. Sizes are
+ * `sp`, so the app's text scale (a `Density.fontScale`) applies as it does to
+ * every other hero.
+ */
+object VelaAmountHero {
+    /** The rung for a drawn length: 0 = hero, 1 = compact, 2 = tight. */
+    fun rung(drawn: Double): Int = when {
+        drawn <= 8.0 -> 0
+        drawn <= 11.0 -> 1
+        else -> 2
+    }
+
+    /** Figure chars + prefix chars + suffix chars / 2 — the web's count, exactly. */
+    fun drawn(figure: String, prefix: String?, suffix: String?): Double =
+        figure.length + (prefix?.length ?: 0) + (suffix?.length ?: 0) / 2.0
+
+    fun figure(rung: Int): TextUnit = when (rung) {
+        0 -> VelaTextSize.heroWide
+        1 -> VelaTextSize.hero
+        else -> VelaTextSize.heroLong
+    }
+
+    fun unit(rung: Int): TextUnit = when (rung) {
+        0 -> VelaTextSize.xl3
+        1 -> VelaTextSize.xl2
+        else -> VelaTextSize.xl
+    }
+
+    /** `--text-hero × --leading-tight`, on every rung. */
+    val line: TextUnit = 55.2.sp
 }
 
 /** core.weight — Android needs per-weight font files (see VelaFontFamily). */

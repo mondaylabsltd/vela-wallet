@@ -56,6 +56,10 @@ final class ContactsStore {
 
     private let executor: ContactsExecutor
     private var core: CoreStore<ContactsViewWire>!
+
+    /// No effect in flight: every read and write the machine asked for has
+    /// been answered — `CoreDriver.isIdle`.
+    var isIdle: Bool { core.isIdle }
     /// The address the book is currently scoped to, so a repeated appearance
     /// does not re-announce the same account and reset the machine for nothing.
     private var scopedTo: String??

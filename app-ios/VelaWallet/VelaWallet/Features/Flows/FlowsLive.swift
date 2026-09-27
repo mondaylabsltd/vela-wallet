@@ -91,17 +91,24 @@ enum FlowsLive {
         )]
         for chain in ChainCatalog.chains {
             guard let count = counts[chain.chainId] else { continue }
-            rows.append(ChainRowModel(
-                name: chain.displayName,
-                dot: .color(SettingsLive.mark(chainId: chain.chainId,
-                                              name: chain.displayName).color),
-                count: count,
-                selected: selected == chain.chainId,
-                chainId: chain.chainId
-            ))
+            rows.append(chainRow(chain, count: count, selected: selected))
         }
         return ChainSheetModel(
             title: loc.t("componentsUi.networkFilter.selectChain"), rows: rows
+        )
+    }
+
+    /// One chain's row in either filter: its colour for the dot, its logo
+    /// over it.
+    private static func chainRow(_ chain: ChainMeta, count: Int, selected: Int?) -> ChainRowModel {
+        let mark = SettingsLive.mark(chainId: chain.chainId, name: chain.displayName)
+        return ChainRowModel(
+            name: chain.displayName,
+            dot: .color(mark.color),
+            count: count,
+            selected: selected == chain.chainId,
+            chainId: chain.chainId,
+            logoUrl: mark.logoUrl
         )
     }
 
@@ -132,14 +139,7 @@ enum FlowsLive {
         // Registry order, so the list does not reshuffle as counts change.
         for chain in ChainCatalog.chains {
             guard let count = counts[chain.chainId] else { continue }
-            rows.append(ChainRowModel(
-                name: chain.displayName,
-                dot: .color(SettingsLive.mark(chainId: chain.chainId,
-                                              name: chain.displayName).color),
-                count: count,
-                selected: selected == chain.chainId,
-                chainId: chain.chainId
-            ))
+            rows.append(chainRow(chain, count: count, selected: selected))
         }
         return ChainSheetModel(
             title: loc.t("componentsUi.networkFilter.selectChain"), rows: rows
@@ -485,8 +485,9 @@ enum FlowsLive {
         return live
     }
 
-    /// The card 保存图片 produces: the person's own address, their identicon in
-    /// the middle of a code that encodes it, and the network it is for.
+    /// The card 保存图片 produces: the person's own address, a code that
+    /// encodes it with the network's logo in its middle, and beside the
+    /// address the identicon derived from it.
     ///
     /// This one leaves the app. A card built from the fixture identity is
     /// somebody else's address in a stranger's chat, which is the receive
@@ -504,14 +505,18 @@ enum FlowsLive {
         live.name = name.isEmpty ? model.name : name
         live.lines = AddressText.lines(address)
         live.identiconSeed = address
-        live.modules = QrCode.modules(address)
+        // Level H, not the screen's M: the network's logo sits on the code.
+        live.modules = QrCode.shareModules(address)
         if let chain {
             live.networkNote = loc.t("receive.shareCardNetworkNote",
                                      vars: ["network": chain.displayName])
-            live.networkMark = TokenMarkModel(
-                ticker: chain.nativeSymbol,
-                badgeColor: SettingsLive.mark(chainId: chain.chainId,
-                                              name: chain.displayName).color
+            // The NETWORK's own logo (not its coin's — rule 2 is about coins),
+            // the one the receive screen puts in the middle of its code.
+            live.networkMark = .chain(
+                chainId: chain.chainId,
+                symbol: chain.nativeSymbol,
+                color: SettingsLive.mark(chainId: chain.chainId,
+                                         name: chain.displayName).color
             )
         }
         return live

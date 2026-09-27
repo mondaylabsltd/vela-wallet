@@ -264,6 +264,13 @@ object I18nKeys {
 
     object Common {
         const val CANCEL = "common.cancel"
+
+        /**
+         * An alert's acknowledgement (spec 078 round 2): "知道了" / "Got it".
+         * The send alert's button said "完成" (the receipt's Done), which
+         * reads as finishing the send the alert just refused.
+         */
+        const val GOT_IT = "common.gotIt"
     }
 
     /** Wallet home vocabulary (spec 015, research.md D3 key map — all pre-existing corpus keys). */
@@ -732,6 +739,7 @@ object I18nKeys {
         const val SECTION_APPEARANCE = "settings.sections.appearance"
         const val SECTION_LOCALIZATION = "settings.sections.localization"
         const val SECTION_ADVANCED = "settings.sections.advanced"
+        const val SECTION_COMMUNITY = "settings.sections.community"
 
         // Home rows.
         const val ACCOUNT_SWITCH = "settings.account.switch"
@@ -813,6 +821,8 @@ object I18nKeys {
         const val KEYS_TRANSPORT = "settingsModals.keys.transport"
         const val KEYS_ATTESTATION = "settingsModals.keys.attestation"
         const val KEYS_USER_VERIFIED = "settingsModals.keys.userVerified"
+        /** The key this device signs with (2026-09-26) — 当前登录 / "Signed in". */
+        const val KEYS_SIGNS_HERE = "settingsModals.keys.signsHere"
         const val KEYS_COPY = "componentsUi.signing.copyValue"
         const val KEYS_COPIED = "receive.copied"
         const val BACKUP_EXPLAIN = "settingsModals.backup.explain"
@@ -957,6 +967,31 @@ object I18nKeys {
         const val BUG_CONSENT = "componentsUi.bugReport.consent"
         const val BUG_SEND = "componentsUi.bugReport.send"
         const val BUG_GITHUB = "componentsUi.bugReport.openGithubForm"
+        // Spec 078 round 3: the report is actually sent, and says how it ended.
+        const val BUG_STEPS_PLACEHOLDER = "componentsUi.bugReport.stepsPlaceholder"
+        const val BUG_SENDING = "componentsUi.bugReport.sending"
+        const val BUG_SUCCESS_TITLE = "componentsUi.bugReport.successTitle"
+        const val BUG_SUCCESS_NEW = "componentsUi.bugReport.successBodyNew"
+        const val BUG_SUCCESS_DEDUPED = "componentsUi.bugReport.successBodyDeduped"
+        const val BUG_VIEW_ISSUE = "componentsUi.bugReport.viewIssue"
+        const val BUG_FALLBACK_TITLE = "componentsUi.bugReport.fallbackTitle"
+        const val BUG_FALLBACK_BODY = "componentsUi.bugReport.fallbackBody"
+        const val BUG_OPEN_GITHUB = "componentsUi.bugReport.openGithub"
+        const val BUG_DONE = "componentsUi.bugReport.done"
+        // Screenshots (the founder's ask, 2026-09-26): public on the issue, at most five.
+        const val BUG_SCREENSHOTS_LABEL = "componentsUi.bugReport.screenshotsLabel"
+        const val BUG_ADD_SCREENSHOTS = "componentsUi.bugReport.addScreenshots"
+        const val BUG_SCREENSHOTS_HINT = "componentsUi.bugReport.screenshotsHint"
+        const val BUG_SCREENSHOTS_PUBLIC = "componentsUi.bugReport.screenshotsPublic"
+        const val BUG_REMOVE_SCREENSHOT = "componentsUi.bugReport.removeScreenshot"
+        const val BUG_SCREENSHOTS_LIMIT = "componentsUi.bugReport.screenshotsLimit"
+        const val BUG_SCREENSHOT_UNSUPPORTED = "componentsUi.bugReport.screenshotUnsupported"
+        const val BUG_SCREENSHOTS_DROPPED = "componentsUi.bugReport.screenshotsDropped"
+        const val BUG_FALLBACK_SCREENSHOTS = "componentsUi.bugReport.fallbackScreenshots"
+        // Tap a screenshot to see it large (078 §C).
+        const val BUG_VIEW_SCREENSHOT = "componentsUi.bugReport.viewScreenshot"
+        const val BUG_CLOSE_VIEWER = "componentsUi.bugReport.closeViewer"
+        const val BUG_REMOVE_FROM_VIEWER = "componentsUi.bugReport.removeFromViewer"
 
         // Rescue (SR1–SR5).
         const val RPC_UNAVAILABLE_MULTIPLE = "assets.rpcUnavailableMultiple"

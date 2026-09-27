@@ -447,10 +447,13 @@ pub fn ethereum_backup_check(
 /// registry CONTRACT (Gnosis, then the Ethereum backup), each key named and
 /// its vault identified, falling back to the device's own record — without
 /// sync badges nobody can vouch for — when no chain answers. This is only the
-/// transport. Not cached: it is asked when one page opens.
+/// transport. Not cached: it is asked when one page opens. The row of
+/// `sign_in_credential` (the account's sign-in route; empty for none) comes
+/// back marked as the key this device signs with.
 pub fn wallet_keys(
     address: &str,
     device: &[vela_core::wallet_keys::DeviceKey],
+    sign_in_credential: &str,
 ) -> (
     vela_core::wallet_keys::KeysSource,
     Vec<vela_core::wallet_keys::WalletKeyRow>,
@@ -458,14 +461,14 @@ pub fn wallet_keys(
     use vela_core::wallet_keys::{self as keys, KeysSource, KeysStep};
     let mut answers: Vec<LookupAnswer> = Vec::new();
     for _ in 0..MAX_LOOKUP_ROUNDS {
-        match keys::step(address, device, &answers) {
+        match keys::step(address, device, &answers, sign_in_credential) {
             KeysStep::Ask { requests } => answers.extend(requests.iter().map(perform)),
             KeysStep::Done { source, keys, .. } => return (source, keys),
         }
     }
     // The walk never settled: what the device alone says, asked with no address
     // so that it cannot ask anybody.
-    match keys::step("", device, &[]) {
+    match keys::step("", device, &[], sign_in_credential) {
         KeysStep::Done { keys, .. } => (KeysSource::Device, keys),
         KeysStep::Ask { .. } => (KeysSource::Device, Vec::new()),
     }
@@ -1282,7 +1285,7 @@ mod tests {
             transports: String::new(),
             signer_origin: None,
         }];
-        let (source, keys) = wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", &device);
+        let (source, keys) = wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", &device, "");
         assert_eq!(source, vela_core::wallet_keys::KeysSource::Registry);
         assert_eq!(keys.len(), 3);
         assert_eq!(keys[0].public_key_hex, device[0].public_key_hex);

@@ -65,6 +65,8 @@ import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
+import app.getvela.wallet.feature.send.core.PaymentHandOff
+import app.getvela.wallet.feature.settings.core.FeedbackReporter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
@@ -105,6 +107,20 @@ class AppContainer(private val app: Application) {
      * it, so the core's `scan_resolved` decides what it means.
      */
     val pendingScan = MutableStateFlow<String?>(null)
+
+    /**
+     * Spec 078 round 3: a payment request from outside Send (a `/pay` link, a
+     * code scanned in 探索) reaches Send once — now, if Send is open; parked
+     * for the open otherwise.
+     */
+    val paymentHandOff = PaymentHandOff(pendingSendParams, pendingScan)
+    /**
+     * Spec 078 round 3: the report in flight, on the app's scope — closing the
+     * sheet (or leaving the tab) mid-send loses neither the send nor its answer.
+     */
+    val feedback = FeedbackReporter(
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
+    )
     /** Spec 048: the home's status line opens the matching rescue sheet on the settings page. */
     val pendingSettingsOverlay = MutableStateFlow<SettingsOverlay?>(null)
     /** Spec 048: the add-token 原生币 tab opens the settings' add-network page. */
@@ -335,8 +351,8 @@ class AppContainer(private val app: Application) {
     var trustedSignerTab: TrustedSignerTab? = null
 
     /**
-     * Spec 071: the fourth "Sign with" — one channel per process, one ceremony
-     * at a time. The page is `sign_pref`'s; the words are the corpus'.
+     * Spec 071: the Trusted Signer — one channel per process, one ceremony at a
+     * time. The page is `sign_pref`'s; the words are the corpus'.
      */
     val trustedSigner: TrustedSignerChannel by lazy {
         TrustedSignerChannel(
@@ -398,7 +414,9 @@ class AppContainer(private val app: Application) {
                     SendHapticKind.Error -> Haptics.error(app)
                 }
             },
-            refreshBalances = { wallet.refresh() },
+            // `clear_token_cache`: the token list must be read again, not
+            // throttled away; the new round reaches Send as HoldingsUpdated.
+            refreshBalances = { wallet.refresh(force = true) },
             feedChanged = { wallet.feedReconciled() },
             identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
             currencyCode = { settings.currency.value.code },
@@ -411,8 +429,9 @@ class AppContainer(private val app: Application) {
             },
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
-            signMethod = { settings.signPref.value.method },
             trustedSigner = { trustedSigner },
+            // Spec 078: one source for the picker and the asset list.
+            holdings = wallet.holdings,
         ).also { controller ->
             // Spec 069: the stored default speed, read now and followed after —
             // Settings changing it reaches a send already open.
@@ -561,9 +580,21 @@ class AppContainer(private val app: Application) {
                 name = if (index == 0) walletName else "",
                 transports = "",
                 signerOrigin = pages[key.publicKeyHex.removePrefix("0x").lowercase()].orEmpty(),
+                credentialId = key.credentialId,
             )
         }
     }
+
+    /**
+     * The credential this account signs with — its sign-in route's (the core's
+     * `signInRoute` over the stored record) — or empty for a record from before
+     * the sign-in key. The keys walk marks that key's row (2026-09-26).
+     */
+    suspend fun signInCredentialOf(address: String): String =
+        StoreAccountPort(AccountStore(app)).accountJson(address)
+            ?.let { runCatching { uniffi.vela_core_uniffi.signInRoute(it) }.getOrNull() }
+            ?.let { runCatching { JSONObject(it).optString("credential_id") }.getOrNull() }
+            .orEmpty()
 
     /** The active account's FIRST founding key — the one the registry files its groups under. */
     suspend fun foundingKeyOf(address: String): String? =
@@ -600,7 +631,6 @@ class AppContainer(private val app: Application) {
                 wallet = SignAccountRef(address = address, credential_id = credential),
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
-                defaultMethod = { settings.signPref.value.method },
                 trustedSigner = { trustedSigner },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
@@ -723,7 +753,7 @@ class AppContainer(private val app: Application) {
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             settings.ethereumDataBase().collect { base -> Marks.base = base }
         }
-        // Spec 071: how this device signs by default — read before any sheet can open.
+        // Spec 071: the Trusted Signer page — read before any signature can need it.
         settings.refreshSignPref()
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {

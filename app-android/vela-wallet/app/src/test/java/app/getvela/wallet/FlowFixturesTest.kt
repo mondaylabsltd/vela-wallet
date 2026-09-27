@@ -148,8 +148,8 @@ class FlowFixturesTest {
      * Every semantic variant the core emits has copy. Exhaustive by enum.
      *
      * The Trusted Signer's words live in the SIGNING corpus, not the create one
-     * (spec 075): it is the same option the signing sheet and Settings offer,
-     * and one route reading two ways in three places is how a person stops
+     * (spec 075): the signing sheet and Settings speak of the same route, and
+     * one route reading two ways in three places is how a person stops
      * believing they are the same thing.
      */
     @Test

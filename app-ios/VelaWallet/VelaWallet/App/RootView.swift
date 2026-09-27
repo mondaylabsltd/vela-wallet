@@ -158,6 +158,11 @@ struct RootView: View {
     @State private var backupCheck: (address: String, check: RegistryBackup.Check)?
     /// Which passkeys control that wallet, and for which wallet it was asked.
     @State private var walletKeys: (address: String, result: WalletKeys.Result)?
+    /// Bumped whenever a create or sign-in finishes. Signing in to the SAME
+    /// account with another key changes which key it signs with (and so which
+    /// row the keys list marks) without changing the address the keys walk is
+    /// keyed on.
+    @State private var signInEpoch = 0
     /// What the person is typing. Held locally and echoed to the core, which
     /// owns the value: a field bound straight to a machine loses characters on
     /// the round trip (Android found it on the device).
@@ -317,10 +322,6 @@ struct RootView: View {
         // survives a settings write (data-model §5).
         let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
         _settings = State(initialValue: settingsStore)
-        // How a signature is made where no signing sheet asks (Send): the
-        // stored "Sign with" — and the Trusted Signer, on the page Settings
-        // names (spec 071).
-        spine.signMethod = { [settingsStore] in settingsStore.signPref?.method ?? "auto" }
         // ONE Trusted Signer for the whole app (spec 075). It is a passkey
         // route now, not only a way to sign: onboarding's ceremonies and the
         // money path's signatures go through the same object, which is what
@@ -423,6 +424,12 @@ struct RootView: View {
             fees: feeStore, identity: identity, metadata: metadata, accountStore: store,
             balances: { [weak wallet] in wallet?.balance },
             networks: { [weak settingsStore] in settingsStore?.networkAdmin },
+            // The asset list's own rounds (spec 078): a flow opened before the
+            // dashboard settled for this account waits for its first round —
+            // booting it if nothing has — instead of answering "could not load";
+            // a round that reached nothing is read once more first.
+            holdingsRound: { [weak wallet] address in wallet?.settledRound(for: address) },
+            openHoldings: { [weak wallet] address in wallet?.open(address: address) },
             ports: SendExecutor.Ports(
                 // A send the relay accepted is the tracker's from that moment.
                 // The permission is asked HERE — at the first submit, never at
@@ -821,14 +828,6 @@ struct RootView: View {
                                 onLink: openPolicy
                             )
                             .navigationBarBackButtonHidden()
-                        case .settings:
-                            settingsScreen()
-                                .navigationBarBackButtonHidden()
-                                // The steer is spent on arrival: the screen has
-                                // already seeded its page from it, and leaving
-                                // it set would send the NEXT visit to the same
-                                // place for no reason.
-                                .onAppear { pendingSettingsPage = nil }
                         }
                     }
             }
@@ -840,12 +839,17 @@ struct RootView: View {
             // launch animation already covers that frame and bouncing through a
             // spinner route would make a cold start flicker.
             .onChange(of: session.view.allowedRoute) { _, route in
-                if route == .onboarding { router.path.removeAll() }
+                if route == .onboarding {
+                    router.path.removeAll()
+                    leaveSettings()
+                }
             }
             .onChange(of: onboarding.finished) { _, finished in
                 if finished {
                     router.path.removeAll()
+                    leaveSettings()
                     onboarding.consumeFinished()
+                    signInEpoch += 1
                 }
             }
             // The ONE onboarding sheet. Every app-owned ceremony prompt — the
@@ -972,23 +976,14 @@ struct RootView: View {
                     if value != batchRate { batchRate = value }
                 }
                 .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
-                // Spec 073: cleaned by the core's rule before the machine
-                // sees it; a cleaned figure is written back and sent by the
-                // change that write raises, a refused paste puts back what the
-                // field had.
-                .onChange(of: amountDraft) { old, value in
-                    guard let clean = AmountText.clean(value, previous: old) else {
-                        amountDraft = old
-                        return
-                    }
-                    if clean != value {
-                        amountDraft = clean
-                        return
-                    }
-                    send.setAmount(clean)
-                }
-                .onChange(of: send.view?.amount) { _, value in
-                    if let value, value != amountDraft { amountDraft = value }
+                // The machine's figure, when it changed for its own reasons —
+                // Max, the ⇄ swap, a cleared form. Its LIVE value, not the one
+                // this change was raised with: that one can be older than the
+                // field (every edit reaches the machine in the edit, see
+                // `amountBinding`), and writing it back overwrote keys typed
+                // since. A figure the field just sent is already in the field.
+                .onChange(of: send.view?.amount) { _, _ in
+                    if let live = send.view?.amount, live != amountDraft { amountDraft = live }
                 }
                 // The bridge between the two money machines. The core keeps
                 // them apart on purpose — the signing sheet uses the fee
@@ -1025,13 +1020,14 @@ struct RootView: View {
                     else { return }
                     fees.requote()
                 }
-                // The picker is a READ of what the balance machine had at the
-                // instant the flow opened — and on a cold start that instant
-                // is before the chains have answered. Without this the list is
-                // empty forever, which is what the device showed: not the
-                // fixture's tokens, not the wallet's, nothing at all.
-                .onChange(of: wallet.balance?.tokens.count) { _, _ in
-                    if sendStates.contains(state) { send.refreshTokens() }
+                // Send shows the asset list's holdings, and follows them: every
+                // round the dashboard settles while a journey is open is handed
+                // over (`holdings_updated`, spec 078) — a pull, a poll, a send
+                // confirming. The first round of a cold start is waited for by
+                // `fetch_tokens` itself. The store ignores another account's
+                // round and a closed journey.
+                .onChange(of: wallet.round) { _, round in
+                    if let balance = wallet.balance { send.holdingsUpdated(balance, round: round) }
                 }
                 .task(id: state) {
                     // The activity LIST polls at its own faster cadence while
@@ -1187,8 +1183,9 @@ struct RootView: View {
                         // …and so is the default speed (spec 069): the send
                         // form's folded control shows it from the first open.
                         settings.openFeeTier()
-                        // …and how this device signs (spec 071): every signing
-                        // sheet, and Send, start at it.
+                        // …and which Trusted Signer page this device opens
+                        // (spec 071): an account that signs there opens it
+                        // from Send or a page's sheet, Settings unvisited.
                         settings.openSignPref()
                         // So is the NETWORK list, and for a sharper reason: the
                         // send machine resolves every holding against it, so a
@@ -1211,6 +1208,13 @@ struct RootView: View {
                     .onDisappear { wallet.homePoller.homeVisible(false) }
                 case .contacts:
                     contactsSection
+                case .settings:
+                    settingsScreen()
+                        // The steer is spent on arrival: the screen has
+                        // already seeded its page from it, and leaving it set
+                        // would send the NEXT visit to the same place for no
+                        // reason.
+                        .onAppear { pendingSettingsPage = nil }
                 case .explore:
                     // Spec 053: 探索 is a browser. Its start page is this
                     // person's own favourites, groups and recents, its tab
@@ -1247,7 +1251,8 @@ struct RootView: View {
                         // 无限额, and the slide stayed shut.
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-                        onSignWith: { id in signing?.signWith(id) },
+                        onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
+                        onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
                         onFee: { signing?.feeTapped() },
                         onFeePick: { id in signing?.pickFee(id) },
                         onSpeed: { id in signing?.speed(id) },
@@ -1489,10 +1494,6 @@ struct RootView: View {
             pool: pool,
             preferredTier: { [settings] in settings.feeTier?.tier ?? "fast" },
             numberPreset: { Formats.resolve(Formats.current.number).rawValue },
-            // Every request starts at the stored "Sign with" (spec 071); the
-            // sheet's own pick is that request's alone.
-            preferredSignMethod: { [settings] in settings.signPref?.method ?? "auto" },
-            offeredSignMethods: { [settings] in settings.signPref?.offered ?? ["auto"] },
             ports: SigningController.Ports(
                 respond: respond,
                 trackSubmitted: { [tracker, notifier] hash, ids, chain in
@@ -1521,12 +1522,6 @@ struct RootView: View {
                 }
             )
         )
-        // The spine is shared with Send; it reads THIS request's "Sign with"
-        // choice, and goes back to the stored default the moment the
-        // controller is dropped.
-        userOpSpine.signMethod = { [weak controller, settings] in
-            controller?.signMethod ?? settings.signPref?.method ?? "auto"
-        }
         signing = controller
         controller.open(incoming)
     }
@@ -1599,11 +1594,21 @@ struct RootView: View {
 
     private func selectTab(_ tab: WalletTab) {
         switch tab {
-        case .settings: router.path.append(.settings)
+        case .settings: section = .settings
         case .wallet: section = .wallet
         case .contacts: section = .contacts
         case .explore: section = .explore
         }
+    }
+
+    /// Where a wallet lands after signing out or finishing a create/sign-in.
+    ///
+    /// Settings used to be a pushed route, and clearing the path took it away
+    /// with the rest; as a section it has to be left by hand. Only settings:
+    /// a person who added an account from the browser's switcher goes back to
+    /// the browser, as before.
+    private func leaveSettings() {
+        if section == .settings { section = .wallet }
     }
 
     /// The address book, live (spec 050).
@@ -2345,6 +2350,26 @@ struct RootView: View {
         [.sd1, .sd1b, .sd2, .sd2b, .sd2c, .sd2d, .sd2e, .sd2f, .sd3, .sd3b, .sd3c, .sd4a, .sd4b, .sd4c]
     }
 
+    /// The send amount as its field edits it.
+    ///
+    /// Each edit arrives already cleaned by the core's rule (spec 073,
+    /// `AmountTextField`) and goes to the machine in the same call, so the
+    /// machine's figure is never behind the field's. It went through an
+    /// `onChange` before, which runs a render later: fast keys were lost to a
+    /// write-back of older text (the decimal-comma device test, one run in
+    /// three). Only the person's edits come through here — a figure the
+    /// machine wrote itself is shown, not sent back as if typed, which would
+    /// end the Max it came from.
+    private var amountBinding: Binding<String> {
+        Binding(
+            get: { amountDraft },
+            set: { value in
+                amountDraft = value
+                send.setAmount(value)
+            }
+        )
+    }
+
     /// Open the flow for the signed-in account. Idempotent.
     ///
     /// The account **id** is the founding credential's, and the session view
@@ -2374,6 +2399,24 @@ struct RootView: View {
             displayCode: display.code,
             displayRate: display.rate,
             fiatDecimals: 2
+        )
+    }
+
+    /// What the feedback sheet's preview says about this device — the build,
+    /// the OS, the language in use, and the networks the RPC pool could not
+    /// reach (by name; the routing core's own list, as the web reads it).
+    private var feedbackFacts: SettingsLive.FeedbackFacts {
+        let names = settings.networkAdmin?.networks ?? []
+        return SettingsLive.FeedbackFacts(
+            version: BuildInfo.version,
+            commit: BuildInfo.commit,
+            platform: "iOS \(UIDevice.current.systemVersion)",
+            language: loc.resolvedLanguage,
+            unreachable: pool.failedChains.map { chainId in
+                names.first { $0.chainId == chainId }?.displayName
+                    ?? ChainCatalog.meta(chainId)?.displayName
+                    ?? "chain-\(chainId)"
+            }
         )
     }
 
@@ -2413,12 +2456,8 @@ struct RootView: View {
             // asking got. The judgment is the CORE's; this only carries it.
             sim: trust.trust?.sim,
             simulation: live.simulation,
-            signMethod: live.signMethod,
-            signWithOpen: live.signWithOpen,
             feeOpen: live.feeOpen,
-            signMethods: live.offeredSignMethods(),
-            trustedSignerNotice: live.trustedSignerNotice,
-            parallelSpace: parallelSpace
+            trustedSignerNotice: live.trustedSignerNotice
         )
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
@@ -2500,7 +2539,7 @@ struct RootView: View {
                             saveOutcome = nil
                         }
                     },
-                    sendAmount: sendStates.contains(state) ? $amountDraft : nil,
+                    sendAmount: sendStates.contains(state) ? amountBinding : nil,
                     sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
                     sendRow: splitRows(for: state),
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
@@ -2527,7 +2566,7 @@ struct RootView: View {
                         // from the tab doing nothing.
                         flows.close()
                         pendingSettingsPage = .addNetwork
-                        router.path.append(.settings)
+                        section = .settings
                     },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
@@ -2582,7 +2621,7 @@ struct RootView: View {
     /// A picked photo with no code in it. Its own alert rather than a silent
     /// return: somebody who chose a picture is owed an answer about it.
     private var scanAlert: FlowAlertModel? {
-        scanNotice.map { FlowAlertModel(title: $0.title, message: $0.body) }
+        scanNotice.map { FlowAlertModel(title: $0.title, message: $0.body, dismiss: loc.t("common.gotIt")) }
     }
 
     /// Everything the live scanner needs, as one value.
@@ -2683,9 +2722,7 @@ struct RootView: View {
             loc: loc
         )
         Task {
-            saveOutcome = await ShareCardExport.save(
-                card, scheme: scheme, scale: UIScreen.main.scale
-            )
+            saveOutcome = await ShareCardExport.save(card)
         }
     }
 
@@ -2710,20 +2747,23 @@ struct RootView: View {
     private var sendRefusal: FlowAlertModel? {
         guard let kind = send.alert else { return nil }
         let text = SendLive.alertText(kind, loc: loc)
-        return FlowAlertModel(title: text.title, message: text.body)
+        return FlowAlertModel(title: text.title, message: text.body, dismiss: loc.t("common.gotIt"))
     }
 
     private var saveAlert: FlowAlertModel? {
         switch saveOutcome {
         case .saved:
             FlowAlertModel(title: loc.t("receive.request.savedTitle"),
-                           message: loc.t("receive.request.savedBody"))
+                           message: loc.t("receive.request.savedBody"),
+                           dismiss: loc.t("common.gotIt"))
         case .denied:
             FlowAlertModel(title: loc.t("receive.request.permTitle"),
-                           message: loc.t("receive.request.permBody"))
+                           message: loc.t("receive.request.permBody"),
+                           dismiss: loc.t("common.gotIt"))
         case .failed:
             FlowAlertModel(title: loc.t("addToken.errorTitle"),
-                           message: loc.t("receive.request.shareError"))
+                           message: loc.t("receive.request.shareError"),
+                           dismiss: loc.t("common.gotIt"))
         case nil:
             nil
         }
@@ -2824,11 +2864,7 @@ struct RootView: View {
             // Every tab leaves Settings for its own section — only 钱包
             // answered before (spec 072), so 通讯录 and 探索 took the tap and
             // stayed here.
-            onSelectTab: { tab in
-                guard tab != .settings else { return }
-                selectTab(tab)
-                if !router.path.isEmpty { router.path.removeLast() }
-            },
+            onSelectTab: selectTab,
             // The way out of a signed-in wallet, on the row a person would
             // look for it.
             onSignOut: { session.signOut() },
@@ -2943,7 +2979,8 @@ struct RootView: View {
                     onConfirm: { signing.approve() },
                     onAllowanceChip: { chip in signing.guardPreset(chip) },
                     onAllowanceAmount: { text in signing.guardCustomAmount(text) },
-                    onSignWith: { id in signing.signWith(id) },
+                    onAllowanceLegChip: { leg, chip in signing.guardLegPreset(leg, chip) },
+                    onAllowanceLegAmount: { leg, text in signing.guardLegCustomAmount(leg, text) },
                     onFee: { signing.feeTapped() },
                     onFeePick: { id in signing.pickFee(id) },
                     onSpeed: { id in signing.speed(id) }
@@ -2961,7 +2998,7 @@ struct RootView: View {
             Task { await checkEthereumBackup() }
         }
         .task(id: session.view.address) { await checkEthereumBackup() }
-        .task(id: session.view.address) { await readWalletKeys() }
+        .task(id: "\(session.view.address)#\(signInEpoch)") { await readWalletKeys() }
         .task {
             settings.open()
             // The connected sites are the browser core's to list; reading
@@ -3065,6 +3102,7 @@ struct RootView: View {
                 ?? ChainCatalog.chains.count,
             on: model, loc: loc
         )
+        model = SettingsLive.withFeedback(feedbackFacts, on: model, loc: loc)
         // A partial wipe names what stayed, in the sheet itself (spec 081
         // FR-017, the rule 028 set for the web and Android): the person is
         // still signed in, and the button is still live so they can retry.
@@ -3092,6 +3130,7 @@ struct RootView: View {
         let device = await WalletKeys.deviceKeys(
             of: address, walletName: session.view.activeName, in: sendAccountPort
         )
+        let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
         let reader = WalletKeys(ethCall: { [pool] chainId, to, data in
             let outcome = await pool.call(
                 chainId: chainId, method: "eth_call",
@@ -3101,7 +3140,7 @@ struct RootView: View {
             else { return nil }
             return hex
         })
-        walletKeys = (address, await reader.read(address: address, device: device))
+        walletKeys = (address, await reader.read(address: address, device: device, signInCredential: signingKey))
     }
 
     /// Reads, from the chains themselves, whether this wallet's founding keys
@@ -3264,10 +3303,6 @@ struct RootView: View {
             // The core validates and persists; a pick here is the ONE place
             // the stored default changes (the send screen's is one-shot).
             if ["fast", "standard", "slow"].contains(id) { settings.chooseFeeTier(id) }
-        case .signWith:
-            // The same rule for "Sign with" (spec 071); a name the core does
-            // not offer is ignored by the core.
-            settings.chooseSignMethod(id)
         case .language:
             // `system` is the drawn id; `auto` is what every client STORES.
             let tag = id == "system" ? "auto" : id
@@ -3371,9 +3406,11 @@ struct RootView: View {
 /// A section, not a route: `docs/design/contacts/C1` draws the tab bar with
 /// 通讯录 **selected**, so it is a peer of 钱包 rather than something pushed
 /// over it, and a browser tab is not somewhere a person should be able to
-/// deep-link into before they have a wallet. 设置 is the opposite case — its
-/// drawing has a back affordance — and stays an `AppRoute`.
-enum WalletSection { case wallet, contacts, explore }
+/// deep-link into before they have a wallet. 设置 is a peer for the same
+/// reason — its home draws the tab bar with 设置 selected and no back — and
+/// as a pushed route it was the one tab that slid in from the edge while the
+/// other three swapped in place (founder-found, 2026-09-26).
+enum WalletSection { case wallet, contacts, explore, settings }
 
 /// Where the contacts section is, inside itself (spec 050).
 ///

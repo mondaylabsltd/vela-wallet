@@ -109,7 +109,8 @@
       "credential": "凭证",
       "transport": "传输方式",
       "attestation": "认证声明",
-      "userVerified": "使用时需验证"
+      "userVerified": "使用时需验证",
+      "signsHere": "当前登录"
     }
   }
 }

@@ -77,8 +77,9 @@ actually offline. A self-built app can use a phone
 or security key because Vela talks to them directly; the phone's own passkey
 ("this device") needs the app to be signed by Vela, and yours isn't.
 
-The [signing page](/docs/clear-signing-self-host) is not a way in on its own:
-it signs requests that another program sends it, and no Vela app sends them yet.
+The [Trusted Signer](/docs/clear-signing-self-host) is not a way in on its own:
+it signs requests that an app sends it — the Vela desktop and phone apps — and a
+copy on your own domain signs only with passkeys created for that domain.
 
 <Callout type="warning" title="Whoever controls the domain can ask for a signature">
 Any page served from getvela.app or one of its subdomains — or by whoever
@@ -316,4 +317,4 @@ If you replace everything above, these remain:
 And these are not Vela's: public selector databases, Apple's and Google's
 phone-sign-in tunnels, and whichever RPC providers you choose.
 
-Next: [the signing page you can run yourself](/docs/clear-signing-self-host).
+Next: [the Trusted Signer, and how to run your own](/docs/clear-signing-self-host).

@@ -843,8 +843,17 @@ export interface SendConfirmModel {
 	 * answerable at a glance. Absent on a sweep: several coins, no one mark.
 	 */
 	mark?: TokenMarkModel;
-	/** "120 USDT" / "3 assets". */
+	/**
+	 * "120" (with `amountUnit` "USDT") / "3 assets". A split's total and a
+	 * sweep's count carry no unit of their own and keep the one string.
+	 */
 	amount: string;
+	/**
+	 * The coin, drawn as its own quieter piece beside the figure — the Send
+	 * form hero's proportions (078 round 2). Absent ⇒ `amount` is the whole
+	 * headline.
+	 */
+	amountUnit?: string;
 	/** "≈ $120.00" / "Total ≈ $200.90 · Ethereum". */
 	subline: string;
 	facts: FactRowModel[];

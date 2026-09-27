@@ -3,6 +3,7 @@
 	import { navIcon } from '../icons';
 	import ChainFilterList from './ChainFilterList.svelte';
 	import Icon from './Icon.svelte';
+	import { preloadDestination, warmDestinations } from '../tab-preload';
 	import WalletHeader from './WalletHeader.svelte';
 
 	interface Props {
@@ -15,6 +16,11 @@
 	}
 
 	let { sidebar, onnav, onaccounts, onchainselect }: Props = $props();
+
+	// A live rail only — the gallery draws this with nowhere to go.
+	$effect(() =>
+		onnav ? warmDestinations(sidebar.nav.find((item) => item.selected)?.id) : undefined
+	);
 </script>
 
 <!-- No command bar. The drawn "search or run ⌘K" field ran nothing, and a
@@ -32,6 +38,9 @@
 				class="nav-item"
 				class:selected={item.selected}
 				aria-current={item.selected ? 'page' : undefined}
+				onpointerdown={() => {
+					if (onnav && !item.selected) preloadDestination(item.id);
+				}}
 				onclick={() => onnav?.(item.id)}
 			>
 				<Icon icon={navIcon(item.id, item.selected)} size="lg" />

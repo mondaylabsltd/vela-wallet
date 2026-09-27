@@ -12475,6 +12475,21 @@ public func sha256(data: Data) -> Data  {
 })
 }
 /**
+ * Where an account's signatures go (founder, 2026-09-26): the key it was
+ * created or signed in with, over the route that reached it — `None` for a
+ * record written before that existed, which signs as it always did.
+ * `account_json` is the stored account record. See
+ * `vela_core::app::Account::sign_in_route`.
+ */
+public func signInRoute(accountJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_in_route(
+        FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
+/**
  * What a site's message request asks the account to sign, before the
  * Safe's `SafeMessage` wrap: EIP-191 for `personal_sign` / `eth_sign`, the
  * EIP-712 digest for typed data, picked where each method carries it.
@@ -12715,15 +12730,18 @@ public func verifiedNameStep(chainId: UInt32, registry: String, address: String,
 }
 /**
  * Which passkeys control the wallet at `address` — the Settings keys view
- * (spec 062). See `vela_core::wallet_keys`.
+ * (spec 062). `sign_in_credential` is the account's sign-in route credential
+ * (`sign_in_route`), empty for none: its row is marked `signs_here`. See
+ * `vela_core::wallet_keys`.
  */
-public func walletKeysStep(address: String, deviceKeysJson: String, answersJson: String) -> String  {
+public func walletKeysStep(address: String, deviceKeysJson: String, answersJson: String, signInCredential: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_wallet_keys_step(
         FfiConverterString.lower(address),
         FfiConverterString.lower(deviceKeysJson),
-        FfiConverterString.lower(answersJson),uniffiCallStatus
+        FfiConverterString.lower(answersJson),
+        FfiConverterString.lower(signInCredential),uniffiCallStatus
     )
 })
 }
@@ -12934,6 +12952,24 @@ public func qrMatrix(text: String) -> QrMatrix?  {
     return try!  FfiConverterOptionTypeQrMatrix.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_qr_matrix(
+        FfiConverterString.lower(text),uniffiCallStatus
+    )
+})
+}
+/**
+ * The saved receive share card's code: [`qr_matrix`] at error-correction
+ * level H.
+ *
+ * The card puts the network's logo on a plate in the code's centre (about 7%
+ * of its area) and the picture is recompressed by every chat app it passes
+ * through; level H recovers 30%. A plain address comes out 37 modules across
+ * instead of 29. The web (`encodeShareQr`) and the desktop (`share_card.rs`)
+ * encode the card's code at the same level.
+ */
+public func shareCardQrMatrix(text: String) -> QrMatrix?  {
+    return try!  FfiConverterOptionTypeQrMatrix.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_share_card_qr_matrix(
         FfiConverterString.lower(text),uniffiCallStatus
     )
 })
@@ -13603,6 +13639,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_in_route() != 18541) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_sign_message_hash() != 8880) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13654,7 +13693,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_verified_name_step() != 265) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_wallet_keys_step() != 48208) {
+    if (uniffi_vela_core_uniffi_checksum_func_wallet_keys_step() != 21357) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_webauthn_signing_hash() != 22291) {
@@ -13697,6 +13736,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_qr_matrix() != 12762) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_share_card_qr_matrix() != 49895) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_erc20_encode_balance_of() != 6291) {

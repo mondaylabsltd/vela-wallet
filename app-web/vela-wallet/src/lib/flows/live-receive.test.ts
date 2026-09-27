@@ -111,7 +111,9 @@ describe('the phone token screen (T483)', () => {
 		const t = live.sheet.model;
 		expect(t.symbol).toBe('USDC');
 		expect(t.chain).toBe('BNB Chain');
-		expect(t.balance).toBe('3.847256 USDC');
+		// The asset list's ladder (spec 078): 4 places from 1, half up — the
+		// same digits the home row and Send's token card show for it.
+		expect(t.balance).toBe('3.8473 USDC');
 		const contract = t.facts.find((f) => f.copyValue !== undefined);
 		expect(contract?.copyValue).toBe(USDC_BNB.token_address);
 		expect(contract?.value).not.toBe(USDC_BNB.token_address);

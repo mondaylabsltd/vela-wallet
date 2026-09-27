@@ -414,8 +414,33 @@ for (let i = 1; i < PATHS.length; i++) {
 //   (the Trusted Signer, then −23 as its cross-device channels went). The
 //   corpus is the UNION of both, so the total is neither, and the number below
 //   is the merged corpus's own — not a guess, and not either side's.
-if (PATHS.length !== 1728) fail(`expected 1728 paths (1639 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1639) fail(`expected 1639 leaf paths, got ${leafSet.size}`);
+// 1729 (spec 078, 2026-09-26): + `common.gotIt`. An alert's acknowledgement
+//   ("知道了" / "Got it") had no word of its own: Android and the desktop
+//   borrowed the receipt's "Done", and iOS hard-coded English "OK" in every
+//   language. One leaf under the existing `common` branch: 1728 + 1 = 1729.
+// 1730 (082, 2026-09-26): + `settingsModals.keys.signsHere` — the keys list
+//   marks the key this device signs with ("当前登录" / "Signed in"). One leaf
+//   under the existing `settingsModals.keys` branch: 1729 + 1 = 1730.
+// 1740 (078, 2026-09-26): + ten `componentsUi.bugReport.*` leaves — the
+//   report takes up to five screenshots (label, add, hint, the public-on-
+//   GitHub warning, remove, limit, unsupported, the web drop hint), and says
+//   when they could not be uploaded or carried into the GitHub form. All under
+//   the existing `componentsUi.bugReport` branch: 1730 + 10 = 1740.
+// 1743 (078, 2026-09-27): + `componentsUi.bugReport.{viewScreenshot, closeViewer,
+//   removeFromViewer}` — a screenshot tile opens a preview (founder: "上传的截图要
+//   能点击放大预览"): the tile's a11y label, the viewer's close and its remove
+//   button. Same branch: 1740 + 3 = 1743.
+// 1744 (078, 2026-09-27): + `settings.sections.community` — the settings
+//   group holding the official X / Telegram / Discord links (founder). The
+//   rows are brand names and handles, never translated. 1743 + 1 = 1744.
+// 1773 (078, 2026-09-27): + 29 `componentsUi.signing.{intent*,label*,valueUnlimited}`
+//   leaves — the clear-signing sheet showed descriptor words ("Approve",
+//   "Amount", "Spender", "Unlimited") in English on a Chinese sheet (founder).
+//   The core names each one (`clear_signing::ClearTerm`, whose serialized name
+//   IS the leaf) and the shells translate it; the 19 words the old app already
+//   had are reused, these are the rest. Same branch: 1744 + 29 = 1773.
+if (PATHS.length !== 1773) fail(`expected 1773 paths (1684 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1684) fail(`expected 1684 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
@@ -729,7 +754,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 135,345 for the per-locale halves)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 138,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

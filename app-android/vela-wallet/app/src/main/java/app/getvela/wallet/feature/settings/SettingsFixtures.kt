@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.diagnostics.BugReport
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.wallet.TabsModel
@@ -148,9 +149,9 @@ object SettingsFixtures {
 
     // --- Pages ---------------------------------------------------------------
 
-    // The founder's ruling (2026-09-12, spec 047): the settings home carries no
-    // 通讯录 row (the tab bar has the book) and no 反馈 row (the crash sheet and
-    // About reach the issue tracker). The feedback sheet stays drawn for those.
+    // The founder's ruling (2026-09-12, spec 047): the settings home's first
+    // block carries no 通讯录 row (the tab bar has the book) and no 反馈 row;
+    // 反馈 lives in the last block, beside 关于 (spec 081 FR-016, as the web).
     private fun sections(s: VelaStrings, advancedOpen: Boolean): List<SettingsSectionModel> = listOf(
         SettingsSectionModel(
             label = s.t(I18nKeys.SettingsUi.SECTION_APPEARANCE),
@@ -235,14 +236,7 @@ object SettingsFixtures {
                     subtitle = s.t(I18nKeys.SettingsUi.FEE_SPEED_SUBTITLE),
                     value = s.t(I18nKeys.Flows.GAS_TIER_FAST),
                 ),
-                // Spec 071: how signatures start, next to how sends are priced.
-                SettingsRowModel(
-                    id = SIGN_WITH_ROW,
-                    title = s.t("settings.signing.title"),
-                    icon = SettingsIcon.Zap,
-                    subtitle = s.t("settings.signing.subtitle"),
-                    value = s.t("common.automatic"),
-                ),
+                // Spec 071: which Trusted Signer page opens, next to how sends are priced.
                 SettingsRowModel(
                     id = SIGNER_PAGE_ROW,
                     title = s.t("settings.signing.pageTitle"),
@@ -258,6 +252,21 @@ object SettingsFixtures {
                 ),
             ),
         ),
+        // Community (founder, 2026-09-27): the official accounts, directly above
+        // the last group — the page ends … Advanced → Community → About / Feedback.
+        SettingsSectionModel(
+            label = s.t(I18nKeys.SettingsUi.SECTION_COMMUNITY),
+            rows = CommunityLinks.ALL.map { link ->
+                SettingsRowModel(
+                    id = link.id,
+                    title = link.title,
+                    icon = link.icon,
+                    subtitle = link.handle,
+                    // It leaves the app: the external mark, not a chevron.
+                    trailing = RowTrailing.External,
+                )
+            },
+        ),
         SettingsSectionModel(
             rows = listOf(
                 SettingsRowModel(
@@ -268,6 +277,16 @@ object SettingsFixtures {
                         I18nKeys.SettingsUi.ABOUT_SUBTITLE,
                         mapOf("version" to APP_VERSION),
                     ),
+                ),
+                // Spec 081 FR-016 / 078 round 3 (the web's placement): 反馈 back on
+                // the screen, in the LAST block beside 关于 — the 047 ruling was
+                // about the first block, and a report sheet no row opens is a
+                // report nobody can send.
+                SettingsRowModel(
+                    id = "feedback",
+                    title = s.t(I18nKeys.SettingsUi.FEEDBACK_TITLE),
+                    icon = SettingsIcon.Feedback,
+                    subtitle = s.t(I18nKeys.SettingsUi.FEEDBACK_SUBTITLE),
                 ),
             ),
         ),
@@ -688,8 +707,7 @@ object SettingsFixtures {
     /** The Settings row id of the default speed (spec 069). */
     const val FEE_SPEED_ROW = "fee-speed"
 
-    /** The Settings rows of the default "Sign with" and the Trusted Signer page (spec 071). */
-    const val SIGN_WITH_ROW = "sign-with"
+    /** The Settings row of the Trusted Signer page (spec 071). */
     const val SIGNER_PAGE_ROW = "signer-page"
 
 
@@ -766,6 +784,30 @@ object SettingsFixtures {
         consent = s.t(I18nKeys.SettingsUi.BUG_CONSENT),
         send = s.t(I18nKeys.SettingsUi.BUG_SEND),
         githubLink = s.t(I18nKeys.SettingsUi.BUG_GITHUB),
+        stepsPlaceholder = s.t(I18nKeys.SettingsUi.BUG_STEPS_PLACEHOLDER),
+        sending = s.t(I18nKeys.SettingsUi.BUG_SENDING),
+        successTitle = s.t(I18nKeys.SettingsUi.BUG_SUCCESS_TITLE),
+        // Templates the sheet fills per render: the placeholder is handed back as its own value.
+        successBodyNew = s.t(I18nKeys.SettingsUi.BUG_SUCCESS_NEW, mapOf("number" to "{{number}}")),
+        successBodyDeduped = s.t(I18nKeys.SettingsUi.BUG_SUCCESS_DEDUPED, mapOf("number" to "{{number}}")),
+        viewIssue = s.t(I18nKeys.SettingsUi.BUG_VIEW_ISSUE),
+        fallbackTitle = s.t(I18nKeys.SettingsUi.BUG_FALLBACK_TITLE),
+        fallbackBody = s.t(I18nKeys.SettingsUi.BUG_FALLBACK_BODY),
+        openGithub = s.t(I18nKeys.SettingsUi.BUG_OPEN_GITHUB),
+        done = s.t(I18nKeys.SettingsUi.BUG_DONE),
+        tryAgain = s.t(I18nKeys.SettingsUi.COMMON_TRY_AGAIN),
+        screenshotsLabel = s.t(I18nKeys.SettingsUi.BUG_SCREENSHOTS_LABEL),
+        addScreenshots = s.t(I18nKeys.SettingsUi.BUG_ADD_SCREENSHOTS),
+        screenshotsHint = s.t(I18nKeys.SettingsUi.BUG_SCREENSHOTS_HINT, mapOf("max" to BugReport.MAX_SCREENSHOTS.toString())),
+        screenshotsPublic = s.t(I18nKeys.SettingsUi.BUG_SCREENSHOTS_PUBLIC),
+        removeScreenshot = s.t(I18nKeys.SettingsUi.BUG_REMOVE_SCREENSHOT, mapOf("index" to "{{index}}")),
+        screenshotsLimit = s.t(I18nKeys.SettingsUi.BUG_SCREENSHOTS_LIMIT, mapOf("max" to BugReport.MAX_SCREENSHOTS.toString())),
+        screenshotUnsupported = s.t(I18nKeys.SettingsUi.BUG_SCREENSHOT_UNSUPPORTED),
+        screenshotsDropped = s.t(I18nKeys.SettingsUi.BUG_SCREENSHOTS_DROPPED),
+        fallbackScreenshots = s.t(I18nKeys.SettingsUi.BUG_FALLBACK_SCREENSHOTS),
+        viewScreenshot = s.t(I18nKeys.SettingsUi.BUG_VIEW_SCREENSHOT, mapOf("index" to "{{index}}")),
+        closeViewer = s.t(I18nKeys.SettingsUi.BUG_CLOSE_VIEWER),
+        removeFromViewer = s.t(I18nKeys.SettingsUi.BUG_REMOVE_FROM_VIEWER),
     )
 
     // --- Rescue --------------------------------------------------------------

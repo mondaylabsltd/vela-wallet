@@ -12,7 +12,9 @@
 
 use gpui::SharedString;
 
-use vela_core::app::approval_guard::{GuardAmountError, GuardEditorMode, GuardSurface, GuardView};
+use vela_core::app::approval_guard::{
+    GuardAmountError, GuardChoice, GuardEditorMode, GuardSurface, GuardView,
+};
 use vela_core::app::clear_signing::{
     ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearProvenance, ClearRisk,
     ClearSignField, ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface,
@@ -84,6 +86,108 @@ pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
 pub struct RequestFacts {
     pub to: Option<String>,
     pub data_bytes: usize,
+}
+
+/// The cap the person chose, where the decode still says "Unlimited".
+///
+/// The clear-signing result describes the REQUEST, and an unlimited approve
+/// decodes as "Unlimited" in the danger tone. Once the guard holds a finite
+/// choice for it (a cap, or revoke), that would describe bytes that are no
+/// longer the ones being signed: the approval's warning amount field reads the
+/// cap and stops being a warning, and if it was the only warning the risk
+/// falls to what an approve is anyway — caution (`clear_signing::assess_risk`).
+/// The same rule in every shell.
+#[must_use]
+pub fn capped_approval(clear: &ClearSigningView, guard: &GuardView) -> ClearSigningView {
+    capped(clear.clone(), guard)
+}
+
+/// The core's words in the reader's language. A clear-signing result is
+/// English — a descriptor's intent and labels, the "Unlimited" a threshold
+/// prints — and the core names the ones it recognises (`intent_term`,
+/// `label_term`, `value_term`). Each named word is swapped for this locale's;
+/// anything unnamed stays as the descriptor wrote it. Same rule in every
+/// shell; runs before [`capped_approval`]. The confirm is left alone:
+/// [`confirm_label`] switches on its English intent and falls back to the term.
+#[must_use]
+pub fn localized_terms(clear: &ClearSigningView, s: &SigningStrings) -> ClearSigningView {
+    use vela_core::app::clear_signing::ClearTerm;
+    let word = |term: Option<ClearTerm>, text: &mut String| {
+        if let Some(word) = term.and_then(|term| s.terms.get(&term)) {
+            *text = word.to_string();
+        }
+    };
+    let mut shown = clear.clone();
+    if let Some(result) = shown.result.as_mut() {
+        word(result.intent_term, &mut result.intent);
+        for field in &mut result.fields {
+            word(field.label_term, &mut field.label);
+            word(field.value_term, &mut field.value);
+        }
+    }
+    shown
+}
+
+fn capped(mut shown: ClearSigningView, guard: &GuardView) -> ClearSigningView {
+    let Some(cap) = cap_text(guard) else {
+        return shown;
+    };
+    if let Some(result) = shown.result.as_mut() {
+        for field in &mut result.fields {
+            if field.warning && field.format == "tokenAmount" {
+                field.value = cap.clone();
+                field.warning = false;
+            }
+        }
+        if result.risk == ClearRisk::Danger && !result.fields.iter().any(|f| f.warning) {
+            result.risk = ClearRisk::Caution;
+        }
+    }
+    shown
+}
+
+/// The guard's finite choice on an unlimited request, as the cap row prints it
+/// — the single approval's, or a batch's FIRST leg's: a bundle decodes from
+/// its first leg, so that is the line the decode's "Unlimited" sits on.
+fn cap_text(guard: &GuardView) -> Option<String> {
+    let (detected, editor, meta) = match guard.surface {
+        GuardSurface::ApprovalEditor => (
+            guard.detected.as_ref()?,
+            guard.editor.as_ref()?,
+            &guard.meta,
+        ),
+        GuardSurface::Batch => {
+            let leg = guard.batch.as_ref()?.legs.first()?;
+            (leg.approval.as_ref()?, leg.editor.as_ref()?, &leg.meta)
+        }
+        _ => return None,
+    };
+    if !detected.is_unbounded {
+        return None;
+    }
+    if !matches!(
+        editor.choice,
+        Some(GuardChoice::Amount { .. }) | Some(GuardChoice::Revoke)
+    ) {
+        return None;
+    }
+    let units = editor
+        .display_amount_raw
+        .as_deref()?
+        .parse::<vela_core::app::approval_guard::GuardAmount>()
+        .ok()?;
+    Some(format!(
+        "{} {}",
+        vela_core::app::approval_guard::format_token_amount(
+            units,
+            meta.decimals,
+            4,
+            ",",
+            ".",
+            false,
+        ),
+        meta.symbol
+    ))
 }
 
 /// The sheet's body, dispatched by the core's own `ClearSurface`.
@@ -377,16 +481,12 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
         },
     ];
 
-    // What to send, and where. The shortfall rather than the recommendation
-    // alone: somebody who already has half of it should not be asked for all
-    // of it again. Saturating, because a balance that overtook the
-    // recommendation between the check and this frame is not a negative
-    // amount to send.
-    let shortfall = data
-        .recommended_wei
-        .parse::<u128>()
-        .unwrap_or(0)
-        .saturating_sub(data.current_balance_wei.parse::<u128>().unwrap_or(0));
+    // What to send, and where. The recommendation IS the shortfall already —
+    // `recommendedFundingWei` is the deficit plus the relay's buffer, on the
+    // web and here — so it is shown as it came. Taking the balance off it a
+    // second time asked for too little: a third of the gap, at a threshold of
+    // one and a balance of a half (078 W-05).
+    let shortfall = data.recommended_wei.parse::<u128>().unwrap_or(0);
     out.push(Block::Card {
         title: None,
         rows: vec![
@@ -400,7 +500,7 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
                 s.funding_amount_label.clone(),
                 SharedString::from(format!(
                     "{} {}",
-                    vela_core::app::fee_policy::from_base_units(shortfall, 18),
+                    format_wei_to_eth(shortfall),
                     data.native_symbol
                 )),
                 Tone::Neutral,
@@ -426,20 +526,42 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
     out
 }
 
-/// The never-unlimited spending-cap editor, and what each chip chooses.
+/// `formatWeiToEth`: an amount to send, at the precision a person types —
+/// never the eighteen places a wei figure carries (078 W-05).
+fn format_wei_to_eth(wei: u128) -> String {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a displayed amount, as the web's Number(wei)"
+    )]
+    let eth = wei as f64 / 1e18;
+    if wei == 0 {
+        "0".to_owned()
+    } else if eth < 0.000_001 {
+        "< 0.000001".to_owned()
+    } else if eth < 0.001 {
+        format!("{eth:.6}")
+    } else if eth < 1.0 {
+        format!("{eth:.4}")
+    } else {
+        format!("{eth:.3}")
+    }
+}
+
+/// The spending-cap editor, and what each chip chooses.
 ///
 /// `approval_guard` publishes ten fields and the desktop read exactly one of
 /// them (`confirm_allowed`) until spec 032 phase 30, so an approval could only
 /// ever be REFUSED here: `enforce_no_unlimited` fails closed at the submit
 /// chokepoint and there was no way to pick a cap. Safe, and crippled.
 ///
+/// Since 2026-09-26 an unlimited request opens on its OWN chip — the site's
+/// bytes, kept (Permit2 bundles revert when the wallet re-encodes the
+/// approve) — in the danger tone, with [`guard_warnings`] saying why. The
+/// cap is one chip away: Balance, or Custom for the typed field.
+///
 /// What is deliberately NOT offered: "grant all anyway". The core has the
 /// event, and this shell does not raise it — the founder's rule, and the
 /// drawn scenarios never drew that chip either.
-///
-/// What is missing rather than declined: the custom-amount input. No desktop
-/// scenario draws the field, and a chip that opens nothing is worse than a
-/// chip that is not there.
 #[must_use]
 pub fn guard_editor(
     guard: &GuardView,
@@ -449,14 +571,81 @@ pub fn guard_editor(
         return None;
     }
     let editor = guard.editor.as_ref()?;
+    Some(allowance_editor(
+        editor,
+        &guard.meta,
+        guard.decimals_unverified,
+        guard.expired,
+        guard.increase_total.as_ref(),
+        s,
+    ))
+}
 
+/// One batch leg's cap editor, as [`guard_leg_editors`] hands it out: the card,
+/// what each of its chips chooses, the spender row under it, and the leg the
+/// page dispatches `LegPresetSelected` / `LegCustomAmountChanged` for.
+pub struct LegEditor {
+    pub leg: u32,
+    pub block: Block,
+    pub modes: Vec<GuardEditorMode>,
+    pub spender: Option<Block>,
+    pub custom_text: String,
+}
+
+/// A batch's own cap editors — one per leg the core mounts an editor for (an
+/// unbounded or grant-all approval), the phones' layout: "#n" on the card, the
+/// leg's spender under it. Before this the desktop drew none, so a Permit2
+/// bundle's unlimited leg was said in red and could not be capped.
+#[must_use]
+pub fn guard_leg_editors(guard: &GuardView, s: &SigningStrings) -> Vec<LegEditor> {
+    let Some(batch) = guard
+        .batch
+        .as_ref()
+        .filter(|_| guard.surface == GuardSurface::Batch)
+    else {
+        return Vec::new();
+    };
+    batch
+        .legs
+        .iter()
+        .enumerate()
+        .filter_map(|(index, leg)| {
+            let editor = leg.editor.as_ref().filter(|_| leg.needs_editor)?;
+            let (mut block, modes) = allowance_editor(editor, &leg.meta, false, false, None, s);
+            if let Block::Allowance { label, .. } = &mut block {
+                *label = SharedString::from(format!("#{} {label}", index + 1));
+            }
+            let spender = leg.approval.as_ref().map(|approval| Block::Party {
+                label: s.label_spender.clone(),
+                name: SharedString::from(crate::wallet::live::shorten_address(&approval.spender)),
+                address: Some(SharedString::from(approval.spender.clone())),
+                badge: None,
+            });
+            Some(LegEditor {
+                leg: u32::try_from(index).unwrap_or(u32::MAX),
+                block,
+                modes,
+                spender,
+                custom_text: editor.custom_text.clone(),
+            })
+        })
+        .collect()
+}
+
+fn allowance_editor(
+    editor: &vela_core::app::approval_guard::GuardEditorView,
+    meta: &vela_core::app::approval_guard::GuardTokenMetaView,
+    decimals_unverified: bool,
+    expired: bool,
+    increase_total: Option<&vela_core::app::approval_guard::GuardIncreaseTotalView>,
+    s: &SigningStrings,
+) -> (Block, Vec<GuardEditorMode>) {
     let mut chips = Vec::new();
     let mut modes = Vec::new();
     let mut chip = |label: SharedString, mode: GuardEditorMode, offered: bool| {
         let state = if !offered {
-            // Disabled, not absent: "Requested" greyed out is the wallet
-            // saying the amount the site asked for is the one thing it will
-            // not sign, which is a fact about this request.
+            // Disabled, not absent: a Balance nobody could read, or a
+            // Requested of zero, is a fact about this request.
             ChipState::Disabled
         } else if editor.mode == Some(mode) {
             ChipState::Selected
@@ -469,14 +658,23 @@ pub fn guard_editor(
     chip(
         s.chip_requested.clone(),
         GuardEditorMode::Requested,
-        editor.requested_finite,
+        editor.requested_finite || editor.requested_unlimited,
     );
     chip(
         s.chip_balance.clone(),
         GuardEditorMode::Balance,
         editor.has_balance_cap,
     );
-    chip(s.chip_revoke.clone(), GuardEditorMode::Revoke, true);
+    // The way to the typed cap. An unlimited request used to OPEN on Custom,
+    // so the field was there without a chip; it now opens on Requested, and
+    // a field only reachable by never touching a chip is not reachable.
+    chip(s.chip_custom.clone(), GuardEditorMode::Custom, true);
+    // Not on increaseAllowance: "revoke" there would sign an increase of 0.
+    chip(
+        s.chip_revoke.clone(),
+        GuardEditorMode::Revoke,
+        editor.revoke_offered,
+    );
 
     // The value row: the core's raw base units, formatted by the core's own
     // formatter with this shell's separators. A second formatter would be a
@@ -489,48 +687,40 @@ pub fn guard_editor(
             "{} {}",
             vela_core::app::approval_guard::format_token_amount(
                 units,
-                guard.meta.decimals,
+                meta.decimals,
                 4,
                 ",",
                 ".",
                 false,
             ),
-            guard.meta.symbol
+            meta.symbol
         )),
         // Nothing parses as an amount here only when the request IS unlimited
         // — which is exactly what the row must say.
         None => s.value_unlimited.clone(),
     };
 
-    // Only a chosen, finite cap reads as settled.
-    let value_tone = if editor.choice.is_some() {
-        Tone::Neutral
-    } else {
-        Tone::Danger
+    // Only a chosen, finite cap reads as settled — the site's unlimited ask,
+    // kept, reads as the danger it is.
+    let value_tone = match editor.choice {
+        Some(GuardChoice::Unlimited) | None => Tone::Danger,
+        Some(_) => Tone::Neutral,
     };
 
     let mut notes: Vec<String> = Vec::new();
-    if !editor.requested_finite {
-        // Two sentences, two LINES. The web shell settled this and says why
-        // (`AllowanceEditor.svelte`): joining them with a space produces a
-        // run-on in CJK, where a space is not a sentence break — and the
-        // English corpus string carries no full stop either, so a space reads
-        // as "…for your safety Set a finite amount…" in every locale.
-        notes.push(format!("{}\n{}", s.unlimited_disabled, s.choose_prompt));
-    }
-    if guard.decimals_unverified {
+    if decimals_unverified {
         // An amount capped with decimals nobody verified is a cap at an
         // order of magnitude nobody verified.
         notes.push(s.decimals_unverified.to_string());
     }
-    if guard.expired {
+    if expired {
         notes.push(s.warn_expired.to_string());
     }
 
     // "increase by 100" must never read as "cap at 100" — the core computes
     // the resulting total, including the case where the on-chain read failed
     // and only the increment is known.
-    let resulting_total = guard.increase_total.as_ref().map(|total| {
+    let resulting_total = increase_total.map(|total| {
         let text = match total.total.as_deref() {
             Some(sum) => SharedString::from(sum.to_owned()),
             None => SharedString::from(crate::signing::fill(
@@ -541,7 +731,7 @@ pub fn guard_editor(
         (s.label_resulting_total.clone(), text)
     });
 
-    Some((
+    (
         Block::Allowance {
             label: s.label_spending_cap.clone(),
             value,
@@ -554,18 +744,46 @@ pub fn guard_editor(
             // shows up on screen as though it had been taken.
             custom: (editor.mode == Some(GuardEditorMode::Custom)).then(|| AllowanceInput {
                 value: SharedString::from(editor.custom_text.clone()),
-                symbol: SharedString::from(guard.meta.symbol.clone()),
+                symbol: SharedString::from(meta.symbol.clone()),
                 placeholder: SharedString::from("0"),
                 error: editor.error.map(|error| match error {
-                    GuardAmountError::InvalidAmount => s.invalid_amount.clone(),
-                    // Typing 2^256-1 by hand is still an unlimited approval,
-                    // and it is refused with the same sentence the chip is.
-                    GuardAmountError::UnlimitedDisabled => s.unlimited_disabled.clone(),
+                    // A typed "cap" of 10^60 is no cap — an amount the field
+                    // cannot take. Keeping the site's unlimited ask is the
+                    // Requested chip, so "unlimited is disabled" would be
+                    // false here.
+                    GuardAmountError::InvalidAmount | GuardAmountError::UnlimitedDisabled => {
+                        s.invalid_amount.clone()
+                    }
                 }),
             }),
         },
         modes,
-    ))
+    )
+}
+
+/// The sentence an unlimited approval is never sent without.
+///
+/// The request will go out granting an unbounded allowance as the site asked
+/// — the single approval kept on its Requested chip, or any batch leg left so
+/// (each leg's own card is [`guard_leg_editors`]; this is the sentence under
+/// them). The guard decides; this only says it.
+#[must_use]
+pub fn guard_warnings(guard: &GuardView, s: &SigningStrings) -> Vec<Block> {
+    let unlimited = match guard.surface {
+        GuardSurface::Batch => guard.batch.as_ref().is_some_and(|batch| batch.any_uncapped),
+        _ => guard
+            .editor
+            .as_ref()
+            .is_some_and(|editor| editor.choice == Some(GuardChoice::Unlimited)),
+    };
+    if unlimited {
+        vec![Block::Warning {
+            tone: Tone::Danger,
+            text: s.warn_unlimited.clone(),
+        }]
+    } else {
+        Vec::new()
+    }
 }
 
 /// What the PIPELINE is doing, under whatever the request is.
@@ -628,7 +846,9 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
         // the send flow's, because a wallet should not have two ways of saying
         // "it did not go out and your funds are safe".
         let text = match error.kind {
-            SignErrorKind::UnlimitedApproval => s.error_unlimited.clone(),
+            // Since 2026-09-26 this refusal is the approval screen not having
+            // shown the unlimited approval — a wallet fault, not a policy —
+            // so it gets the plain sentence, not "unlimited is disabled".
             SignErrorKind::UnsupportedChain => s.error_network.clone(),
             // A refusal the person just made needs no sentence telling them
             // they made it, and the sheet is closing anyway.
@@ -1124,15 +1344,18 @@ pub fn confirm_label(clear: &ClearSigningView, s: &SigningStrings) -> SharedStri
         ClearConfirm::Sign => return s.sign_label.clone(),
         ClearConfirm::Confirm => None,
         // The intent travels as a canonical English key; the shell localizes
-        // the ones it has words for and shows the neutral verb for the rest,
-        // which is better than showing an English key to somebody reading
-        // Chinese.
-        ClearConfirm::ConfirmIntent { intent } => match intent.as_str() {
+        // the ones it has words for — its own four, then the core's term —
+        // and shows the neutral verb for the rest, which is better than
+        // showing an English key to somebody reading Chinese.
+        ClearConfirm::ConfirmIntent {
+            intent,
+            intent_term,
+        } => match intent.as_str() {
             "send" => Some(s.confirm_send.clone()),
             "swap" => Some(s.confirm_swap.clone()),
             "deposit" => Some(s.confirm_deposit.clone()),
             "withdraw" => Some(s.confirm_withdraw.clone()),
-            _ => None,
+            _ => intent_term.and_then(|term| s.terms.get(&term).cloned()),
         },
     };
     match action {
@@ -1165,6 +1388,8 @@ mod tests {
             expired: false,
             address: None,
             usd_value: None,
+            label_term: None,
+            value_term: None,
         }
     }
 
@@ -1223,6 +1448,7 @@ mod tests {
             partial: false,
             best_effort: false,
             to_own_token: false,
+            intent_term: None,
         }
     }
 
@@ -1445,6 +1671,7 @@ mod tests {
             editor: Some(editor),
             confirm_allowed: false,
             rewritten_params_json: None,
+            unlimited_consented: false,
             increase_total: None,
             decimals_unverified: false,
             expired: false,
@@ -1466,21 +1693,35 @@ mod tests {
             }),
             display_amount_raw: amount.map(str::to_owned),
             requested_finite,
+            requested_unlimited: false,
             has_balance_cap: true,
+            revoke_offered: true,
             balance_raw: Some("2000000000".to_owned()),
         }
     }
 
-    /// An unlimited request offers a cap and refuses the amount it was asked
-    /// for — the founder's rule, drawn.
+    /// An unlimited request opens on its OWN chip, in the danger tone, with
+    /// the sentence under it — kept as the site asked (2026-09-26), with a cap
+    /// one chip away.
     #[test]
-    fn an_unlimited_request_can_be_capped_but_never_granted() {
+    fn an_unlimited_request_is_kept_as_asked_and_said() {
         let s = strings();
-        let (block, modes) = guard_editor(&guard_view(editor_view(None, false, None)), &s)
+        let mut kept = guard_view(vela_core::app::approval_guard::GuardEditorView {
+            mode: Some(GuardEditorMode::Requested),
+            choice: Some(GuardChoice::Unlimited),
+            requested_unlimited: true,
+            ..editor_view(None, false, None)
+        });
+        kept.unlimited_consented = true;
+        let (block, modes) = guard_editor(&kept, &s)
             .unwrap_or_else(|| unreachable!("the editor surface drew nothing"));
 
         let Block::Allowance {
-            value, chips, note, ..
+            value,
+            value_tone,
+            chips,
+            note,
+            ..
         } = &block
         else {
             unreachable!("the editor is an allowance block")
@@ -1489,22 +1730,229 @@ mod tests {
             *value, s.value_unlimited,
             "an uncapped request reads as what it is"
         );
-        assert_eq!(
-            chips[0].1,
-            ChipState::Disabled,
-            "the requested amount is refused"
-        );
+        assert_eq!(*value_tone, Tone::Danger);
         assert_eq!(modes[0], GuardEditorMode::Requested);
+        assert_eq!(chips[0].1, ChipState::Selected, "the site's ask, kept");
+        assert!(
+            modes.contains(&GuardEditorMode::Custom),
+            "no way to the typed cap once another chip is lit"
+        );
         assert!(
             note.as_ref()
-                .is_some_and(|note| note.contains(s.unlimited_disabled.as_ref())),
-            "the sheet never says WHY the requested chip is dead"
+                .is_none_or(|note| !note.contains(s.unlimited_disabled.as_ref())),
+            "the sheet still says unlimited is disabled"
+        );
+        assert!(
+            guard_warnings(&kept, &s).iter().any(|block| matches!(
+                block,
+                Block::Warning { tone: Tone::Danger, text } if *text == s.warn_unlimited
+            )),
+            "an unlimited approval went out unsaid"
         );
         // Never offered, on this shell, at all.
         assert!(
             !modes.contains(&GuardEditorMode::Grant),
             "a `grant all anyway` chip reached a screen"
         );
+    }
+
+    /// The core names the words; the sheet says them in the reader's
+    /// language, leaves unnamed ones as written, and a chosen cap still
+    /// replaces the translated "Unlimited".
+    #[test]
+    fn named_words_are_translated_and_unnamed_ones_kept() {
+        use vela_core::app::clear_signing::{ClearConfirm, ClearTerm};
+        let mut s = strings();
+        s.terms.insert(ClearTerm::IntentApprove, "授权".into());
+        s.terms.insert(ClearTerm::LabelAmount, "金额".into());
+        s.terms.insert(ClearTerm::ValueUnlimited, "无限额".into());
+        let mut amount = field("Amount", "Unlimited");
+        amount.label_term = Some(ClearTerm::LabelAmount);
+        amount.value_term = Some(ClearTerm::ValueUnlimited);
+        let mut approve = result(vec![amount, field("Referral code", "abc")]);
+        approve.intent = "Approve".to_owned();
+        approve.intent_term = Some(ClearTerm::IntentApprove);
+        let mut clear = view(approve);
+        clear.confirm = ClearConfirm::ConfirmIntent {
+            intent: "Approve".to_owned(),
+            intent_term: Some(ClearTerm::IntentApprove),
+        };
+
+        let shown = localized_terms(&clear, &s);
+        let result = shown.result.clone().unwrap_or_else(|| unreachable!("kept"));
+        assert_eq!(result.intent, "授权");
+        assert_eq!(
+            (
+                result.fields[0].label.as_str(),
+                result.fields[0].value.as_str()
+            ),
+            ("金额", "无限额")
+        );
+        assert_eq!(
+            (
+                result.fields[1].label.as_str(),
+                result.fields[1].value.as_str()
+            ),
+            ("Referral code", "abc")
+        );
+        assert!(
+            confirm_label(&clear, &s).ends_with("授权"),
+            "the slide says the word too"
+        );
+        assert_eq!(
+            shown.confirm, clear.confirm,
+            "the slide switches on the English intent itself"
+        );
+    }
+
+    /// Once a cap is chosen, the decode's "Unlimited" reads the cap and stops
+    /// being the danger; kept as asked, the decode is left alone.
+    #[test]
+    fn a_capped_unlimited_approval_reads_the_cap() {
+        let mut amount = field("Amount", "Unlimited");
+        amount.format = "tokenAmount".to_owned();
+        amount.warning = true;
+        let mut approve = result(vec![amount, field("Spender", "0x1111")]);
+        approve.risk = ClearRisk::Danger;
+        let clear = view(approve);
+
+        let mut capped = guard_view(vela_core::app::approval_guard::GuardEditorView {
+            mode: Some(GuardEditorMode::Balance),
+            choice: Some(GuardChoice::Amount {
+                amount_raw: "1240000000".to_owned(),
+            }),
+            requested_unlimited: true,
+            ..editor_view(None, false, Some("1240000000"))
+        });
+        capped.detected = vela_core::app::approval_guard::detect_calldata_approval(
+            Some("0xdd"),
+            Some(&format!("0x095ea7b3{}{}", "0".repeat(64), "f".repeat(64))),
+        );
+        let shown = capped_approval(&clear, &capped);
+        let result = shown
+            .result
+            .unwrap_or_else(|| unreachable!("the decode is kept"));
+        assert_eq!(result.fields[0].value, "1,240 USDC");
+        assert!(!result.fields[0].warning);
+        assert_eq!(result.fields[1].value, "0x1111");
+        assert_eq!(result.risk, ClearRisk::Caution);
+
+        let mut kept = capped.clone();
+        if let Some(editor) = kept.editor.as_mut() {
+            editor.choice = Some(GuardChoice::Unlimited);
+        }
+        assert_eq!(
+            capped_approval(&clear, &kept),
+            clear,
+            "untouched without a cap"
+        );
+
+        // A bundle decodes from its first leg, so a capped first leg is what
+        // that decode reads too.
+        let mut batch = guard_view(editor_view(None, false, None));
+        batch.surface = GuardSurface::Batch;
+        batch.editor = None;
+        batch.batch = Some(vela_core::app::approval_guard::GuardBatchView {
+            legs: vec![vela_core::app::approval_guard::GuardLegView {
+                to: "0xdd".to_owned(),
+                approval: capped.detected.clone(),
+                meta: capped.meta.clone(),
+                editor: capped.editor.clone(),
+                choice: capped.editor.as_ref().and_then(|e| e.choice.clone()),
+                needs_editor: true,
+                needs_choice: false,
+                grants_broad: false,
+            }],
+            any_uncapped: false,
+            any_to_own_token: false,
+            all_settled: true,
+        });
+        let shown = capped_approval(&clear, &batch)
+            .result
+            .unwrap_or_else(|| unreachable!("the decode is kept"));
+        assert_eq!(shown.fields[0].value, "1,240 USDC");
+    }
+
+    /// A batch's unbounded leg gets its own cap card — "#n", its own chips,
+    /// its spender under it, and the leg the page dispatches for. A leg the
+    /// core mounts no editor for (a transfer, a finite approve) gets none.
+    #[test]
+    fn a_batch_leg_gets_its_own_cap_editor() {
+        let s = strings();
+        let detected = vela_core::app::approval_guard::detect_calldata_approval(
+            Some("0xdd"),
+            Some(&format!(
+                "0x095ea7b3{}{}",
+                format!("{:0>64}", "1111111111111111111111111111111111111111"),
+                "f".repeat(64)
+            )),
+        );
+        let editor = vela_core::app::approval_guard::GuardEditorView {
+            mode: Some(GuardEditorMode::Requested),
+            choice: Some(GuardChoice::Unlimited),
+            requested_unlimited: true,
+            ..editor_view(None, false, None)
+        };
+        let leg = |needs_editor: bool| vela_core::app::approval_guard::GuardLegView {
+            to: "0xdd".to_owned(),
+            approval: needs_editor.then(|| detected.clone()).flatten(),
+            meta: guard_view(editor.clone()).meta,
+            editor: needs_editor.then(|| editor.clone()),
+            choice: None,
+            needs_editor,
+            needs_choice: false,
+            grants_broad: needs_editor,
+        };
+        let mut batch = guard_view(editor.clone());
+        batch.surface = GuardSurface::Batch;
+        batch.editor = None;
+        batch.batch = Some(vela_core::app::approval_guard::GuardBatchView {
+            legs: vec![leg(false), leg(true)],
+            any_uncapped: true,
+            any_to_own_token: false,
+            all_settled: true,
+        });
+
+        let legs = guard_leg_editors(&batch, &s);
+        assert_eq!(legs.len(), 1, "only the leg the core mounts an editor for");
+        let only = &legs[0];
+        assert_eq!(only.leg, 1);
+        assert!(only.modes.contains(&GuardEditorMode::Custom));
+        let Block::Allowance { label, chips, .. } = &only.block else {
+            unreachable!("a leg editor is an allowance card")
+        };
+        assert!(label.starts_with("#2 "), "{label}");
+        assert_eq!(chips[0].1, ChipState::Selected, "kept as asked by default");
+        assert!(matches!(
+            &only.spender,
+            Some(Block::Party { address: Some(address), .. })
+                if address.as_ref() == "0x1111111111111111111111111111111111111111"
+        ));
+        assert!(
+            guard_editor(&batch, &s).is_none(),
+            "the single editor stays off a batch"
+        );
+    }
+
+    /// The sentence under a batch's cards follows the guard's effective
+    /// state.
+    #[test]
+    fn a_batch_left_unlimited_is_said_too() {
+        let s = strings();
+        let mut batch = guard_view(editor_view(None, false, None));
+        batch.surface = GuardSurface::Batch;
+        batch.editor = None;
+        batch.batch = Some(vela_core::app::approval_guard::GuardBatchView {
+            legs: Vec::new(),
+            any_uncapped: true,
+            any_to_own_token: false,
+            all_settled: true,
+        });
+        assert_eq!(guard_warnings(&batch, &s).len(), 1);
+        if let Some(view) = batch.batch.as_mut() {
+            view.any_uncapped = false;
+        }
+        assert!(guard_warnings(&batch, &s).is_empty());
     }
 
     /// A chosen cap is a number, formatted by the core's own formatter.
@@ -1554,7 +2002,9 @@ mod tests {
         assert!(guard_editor(&none, &s).is_none());
     }
 
-    /// The top-up says how much is still missing, and where to send it.
+    /// The top-up says how much is still missing, and where to send it —
+    /// the figure the pre-check computed, which already nets off what the
+    /// account holds.
     #[test]
     fn the_funding_surface_asks_for_the_shortfall_not_the_whole_reserve() {
         let s = strings();
@@ -1567,9 +2017,14 @@ mod tests {
                     chain_id: 100,
                     native_symbol: "xDAI".to_owned(),
                     threshold_wei: "1000000000000000000".to_owned(),
-                    recommended_wei: "2000000000000000000".to_owned(),
-                    // Half of it is already there.
-                    current_balance_wei: "1500000000000000000".to_owned(),
+                    // Half of it is already there: the other half, plus the
+                    // relay's buffer — as the pre-check computes it.
+                    recommended_wei: crate::executor::relay::recommended_funding_wei(
+                        1_000_000_000_000_000_000,
+                        500_000_000_000_000_000,
+                    )
+                    .to_string(),
+                    current_balance_wei: "500000000000000000".to_owned(),
                 },
                 presentation: SignFundingPresentation::Topup,
                 denial_reason: Some("relayer said: sponsorship declined".to_owned()),
@@ -1588,9 +2043,15 @@ mod tests {
         assert!(rows[0].3, "an address is read character by character");
         assert_eq!(
             rows[1].1,
-            SharedString::from("0.5 xDAI"),
-            "somebody who already holds half was asked for all of it again"
+            SharedString::from("0.7500 xDAI"),
+            "the half still missing, with the buffer — not the whole of it, and not less"
         );
+        // At the web's precision, never a wei figure's eighteen places: the
+        // relay's minimum, buffered, over a near-empty account.
+        assert_eq!(format_wei_to_eth(149_999_999_999_976), "0.000150");
+        assert_eq!(format_wei_to_eth(0), "0");
+        assert_eq!(format_wei_to_eth(10), "< 0.000001");
+        assert_eq!(format_wei_to_eth(2_500_000_000_000_000_000), "2.500");
         // The relay's own words stay off the screen (SC-305).
         assert!(
             !drawn.iter().any(|block| matches!(
@@ -1629,10 +2090,13 @@ mod tests {
             ..pristine_sign()
         };
         let drawn = status_blocks(&unlimited, &s);
+        // Since 2026-09-26 this is the approval screen not having shown the
+        // unlimited approval — the plain sentence, never "unlimited is
+        // disabled", which is no longer true.
         assert!(
             drawn.iter().any(|block| matches!(
                 block,
-                Block::Warning { tone: Tone::Danger, text } if *text == s.error_unlimited
+                Block::Warning { tone: Tone::Danger, text } if *text == s.error_generic
             )),
             "the unlimited refusal drew nothing"
         );

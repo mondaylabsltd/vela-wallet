@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.signing
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,7 +24,6 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
 import app.getvela.wallet.feature.signing.components.TrustedSignerWaiting
-import app.getvela.wallet.feature.signing.components.SignWithRow
 import app.getvela.wallet.feature.signing.components.SigningAmount
 import app.getvela.wallet.feature.signing.components.SigningBalances
 import app.getvela.wallet.feature.signing.components.SigningCard
@@ -60,7 +59,9 @@ fun SigningSheet(
     /** Spec 044: the guard's chips and custom amount reach the machine. */
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
-    onSignWith: (String?) -> Unit = {},
+    /** A batch leg's own chips and field — the leg index travels with them. */
+    onLegChip: (Int, String) -> Unit = { _, _ -> },
+    onLegCustomAmount: (Int, String) -> Unit = { _, _ -> },
     onFee: () -> Unit = {},
     onFeePick: (String) -> Unit = {},
     /** Spec 069: the speed control under the fee. */
@@ -70,7 +71,7 @@ fun SigningSheet(
     onTrustedSignerReopen: () -> Unit = {},
     onTrustedSignerCancel: () -> Unit = {},
 ) {
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = onDismiss,
         containerColor = VelaTheme.colors.bgRaised,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -81,7 +82,8 @@ fun SigningSheet(
             onConfirm = onConfirm,
             onChip = onChip,
             onCustomAmount = onCustomAmount,
-            onSignWith = onSignWith,
+            onLegChip = onLegChip,
+            onLegCustomAmount = onLegCustomAmount,
             onFee = onFee,
             onFeePick = onFeePick,
             onToggleSpeed = onToggleSpeed,
@@ -100,8 +102,8 @@ fun SigningSheetContent(
     modifier: Modifier = Modifier,
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
-    /** `null` toggles the list; an id picks a method and closes it. */
-    onSignWith: (String?) -> Unit = {},
+    onLegChip: (Int, String) -> Unit = { _, _ -> },
+    onLegCustomAmount: (Int, String) -> Unit = { _, _ -> },
     /** Issue #262: the fee row's tap and its coin list's pick. */
     onFee: () -> Unit = {},
     onFeePick: (String) -> Unit = {},
@@ -146,11 +148,19 @@ fun SigningSheetContent(
                 is SigningBlock.Swap -> SigningSwapPair(block.pay, block.receive)
                 is SigningBlock.Nft -> SigningNftHero(block.id, block.collection)
                 is SigningBlock.Sentence -> SigningSentence(block.text, block.tone)
-                is SigningBlock.Allowance -> AllowanceEditor(
-                    block.label, block.value, block.valueTone, block.chips,
-                    block.note, block.resultingTotal,
-                    custom = block.custom, onChip = onChip, onCustomAmount = onCustomAmount,
-                )
+                is SigningBlock.Allowance -> {
+                    // A batch leg's card talks to its OWN leg: the single
+                    // approval's events are ignored by the core on a batch,
+                    // which is how these chips were drawn and dead.
+                    val leg = block.leg
+                    AllowanceEditor(
+                        block.label, block.value, block.valueTone, block.chips,
+                        block.note, block.resultingTotal,
+                        custom = block.custom,
+                        onChip = if (leg == null) onChip else { id -> onLegChip(leg, id) },
+                        onCustomAmount = if (leg == null) onCustomAmount else { text -> onLegCustomAmount(leg, text) },
+                    )
+                }
 
                 is SigningBlock.Party ->
                     SigningParty(block.label, block.name, block.address, block.badge)
@@ -185,7 +195,6 @@ fun SigningSheetContent(
             )
         }
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
-        model.signWith?.let { SignWithRow(it, onSignWith) }
         model.trustedSignerNotice?.let { SigningWarning(SigningTone.Caution, it) }
         val waiting = model.trustedSignerWait
         // Three states, in order of precedence: waiting on the Trusted Signer's
@@ -216,7 +225,7 @@ fun SigningSheetContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrustedSignerWaitingSheet(model: TrustedSignerWaitModel, onReopen: () -> Unit, onCancel: () -> Unit) {
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = onCancel,
         containerColor = VelaTheme.colors.bgRaised,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),

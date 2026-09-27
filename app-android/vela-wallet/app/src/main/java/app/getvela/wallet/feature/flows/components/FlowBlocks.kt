@@ -11,13 +11,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
+import app.getvela.wallet.core.designsystem.tokens.VelaAmountHero
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.SolidColor
@@ -33,6 +35,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -242,9 +250,10 @@ fun QrCard(
  * Three standard finder squares plus xorshift32-seeded noise. Identical on
  * every platform and every run, so screenshots diff cleanly. Denser than the
  * spec-015 placeholder because R2 draws the code large, where 21 modules read
- * as a chequerboard rather than a code.
+ * as a chequerboard rather than a code. The gallery's share card (R4) draws
+ * it too.
  */
-private const val QR_MODULES = 29
+internal const val QR_MODULES = 29
 private const val QR_SEED = 0xbeef
 
 private val QR_CELLS: Array<BooleanArray> by lazy {
@@ -271,7 +280,7 @@ private val QR_CELLS: Array<BooleanArray> by lazy {
     }
 }
 
-private fun qrCell(r: Int, c: Int): Boolean = QR_CELLS[r][c]
+internal fun qrCell(r: Int, c: Int): Boolean = QR_CELLS[r][c]
 
 /**
  * SD2's amount (component 8): the number, big and centred, with its fiat
@@ -280,6 +289,14 @@ private fun qrCell(r: Int, c: Int): Boolean = QR_CELLS[r][c]
  * The figure is the largest type on the screen because it is the one thing the
  * person came to decide. The fiat line stays subordinate even when the
  * denominations swap — the amount being ENTERED leads, whichever it is.
+ *
+ * Spec 078 (the web's `AmountInput`, the reference): the figure steps down the
+ * hero ladder by its drawn length ([VelaAmountHero]) on a line that never
+ * changes height; its unit is drawn BESIDE it, never inside it, so the unit is
+ * never the thing that is cut. Past the last rung a drawn figure is cut at its
+ * END with an ellipsis, and a typed one scrolls inside its own field — never
+ * clipped on both sides, never off the screen (founder, 2026-09-26: a Max of
+ * `0.043790209243313861` ran off both edges).
  */
 @Composable
 fun AmountInput(
@@ -296,19 +313,6 @@ fun AmountInput(
             .padding(vertical = VelaSpacing.xl3),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        val heroStyle = TextStyle(
-            color = colors.fgBase,
-            fontFamily = VelaFontFamily,
-            fontWeight = VelaFontWeight.bold,
-            fontSize = VelaTextSize.xl5,
-            lineHeight = VelaLeading.amountHero * VelaTextSize.xl5,
-            textAlign = TextAlign.Center,
-        )
-        // Issue 231: the unit ON the figure — a sign tight before it ("$4.00"),
-        // a ticker or code after it, quieter and smaller ("0.00075 BNB").
-        val units = remember(amount.unitPrefix, amount.unitSuffix, colors.fgMuted) {
-            amountUnits(amount.unitPrefix, amount.unitSuffix, colors.fgMuted)
-        }
         if (onValueChange != null && amount.raw != null) {
             // Local echo (spec 043, device-found): every keystroke goes to the
             // machine, but the field shows what was typed until the machine's
@@ -323,9 +327,11 @@ fun AmountInput(
             // picked contact, the core's own normalisation — resyncs it.
             val sent = remember { ArrayDeque<String>().apply { addLast(amount.raw) } }
             LaunchedEffect(amount.raw) { if (amount.raw !in sent) typed = amount.raw }
-            BasicTextField(
-                value = typed,
-                onValueChange = { next ->
+            AmountFigure(
+                shown = typed,
+                prefix = amount.unitPrefix,
+                suffix = amount.unitSuffix,
+                onEdit = { next ->
                     // Spec 073: cleaned by the core's rule here, before the
                     // machine sees it — a decimal-comma pad's "4,5" is 4.5,
                     // never 4 — and the field holds what was sent on. A paste
@@ -338,24 +344,9 @@ fun AmountInput(
                         onValueChange(clean)
                     }
                 },
-                singleLine = true,
-                textStyle = heroStyle,
-                cursorBrush = SolidColor(colors.accentBase),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                // The unit is drawn, never typed: the field's text stays the bare figure.
-                visualTransformation = units,
-                modifier = Modifier.fillMaxWidth(),
-                decorationBox = { inner ->
-                    Box(contentAlignment = Alignment.Center) {
-                        // The placeholder carries the unit; the empty field draws nothing
-                        // (it drew " XDAI" too, on top of the placeholder's — device-found).
-                        if (typed.isEmpty()) Text(text = units.filter(AnnotatedString("0")).text, style = heroStyle.copy(color = colors.fgSubtle), maxLines = 1)
-                        inner()
-                    }
-                },
             )
         } else {
-            Text(text = units.filter(AnnotatedString(amount.value)).text, style = heroStyle, maxLines = 1)
+            AmountFigure(shown = amount.value, prefix = amount.unitPrefix, suffix = amount.unitSuffix, onEdit = null)
         }
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         if (amount.denomShown) {
@@ -397,32 +388,146 @@ fun AmountInput(
 }
 
 /**
- * The amount's unit as a transformation of what is typed: the sign before the
- * digits, the ticker or code after them (set off by a space, smaller and
- * lighter, as the web draws it). The caret maps through it, so the unit can be
- * neither typed over nor deleted.
+ * The figure and its unit on one baseline: a sign tight before the digits
+ * ("$4.00"), a ticker or code after them, quieter and smaller ("0.00075 BNB")
+ * — issue 231. `onEdit` present ⇒ a field; absent ⇒ drawn text.
+ *
+ * The typed field is exactly as wide as what it holds (measured in the rung's
+ * own type, plus room for the caret) and no wider than the column leaves it
+ * beside its unit, so the group stays centred and a long figure scrolls inside
+ * the field instead of pushing the unit off. A tap on the sign or the ticker
+ * lands in the field, as a tap on the digits does.
  */
-private fun amountUnits(prefix: String?, suffix: String?, unitColor: Color): VisualTransformation {
-    if (prefix.isNullOrEmpty() && suffix.isNullOrEmpty()) return VisualTransformation.None
-    val lead = prefix.orEmpty()
-    val tail = suffix?.let { " $it" }.orEmpty()
-    return VisualTransformation { text ->
-        // Nothing typed: no unit either. The placeholder beside it already says
-        // "0 XDAI"; a unit on the empty field drew a second "XDAI" over it.
-        if (text.isEmpty()) return@VisualTransformation TransformedText(text, OffsetMapping.Identity)
-        val drawn = buildAnnotatedString {
-            withStyle(SpanStyle(color = unitColor)) { append(lead) }
-            append(text)
-            withStyle(SpanStyle(color = unitColor, fontSize = VelaTextSize.xl3, fontWeight = VelaFontWeight.medium)) { append(tail) }
+@Composable
+private fun AmountFigure(
+    shown: String,
+    prefix: String?,
+    suffix: String?,
+    onEdit: ((String) -> Unit)?,
+) {
+    val colors = VelaTheme.colors
+    val placeholder = "0"
+    val drawnText = shown.ifEmpty { placeholder }
+    val rung = VelaAmountHero.rung(VelaAmountHero.drawn(drawnText, prefix, suffix))
+    val figureStyle = TextStyle(
+        color = colors.fgBase,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.bold,
+        fontSize = VelaAmountHero.figure(rung),
+        // The first rung's line on EVERY rung, the glyphs centred in it: the
+        // block keeps one height whatever is typed.
+        lineHeight = VelaAmountHero.line,
+        lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.None),
+    )
+    val unitStyle = figureStyle.copy(color = colors.fgMuted)
+    val suffixStyle = TextStyle(
+        color = colors.fgMuted,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.medium,
+        fontSize = VelaAmountHero.unit(rung),
+        // Its own tight line, lined up on the digits' baseline.
+        lineHeight = VelaAmountHero.unit(rung) * VelaLeading.none,
+    )
+    val density = LocalDensity.current
+    val line = with(density) { VelaAmountHero.line.toDp() }
+    val focus = remember { FocusRequester() }
+    val taps = remember { MutableInteractionSource() }
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(line)
+            .then(if (onEdit != null) Modifier.clickable(interactionSource = taps, indication = null) { focus.requestFocus() } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Measured, not guessed: the unit beside the figure takes its room
+        // first, and the figure is exactly as wide as what it DRAWS — whole
+        // when it fits, else cut with an ellipsis at the room that is left —
+        // so the unit always sits right after the last glyph, never pinned
+        // to the column's edge with a gap in between.
+        val gapPx = with(density) { VelaSpacing.sm.roundToPx() }
+        val slackPx = with(density) { VelaSpacing.xs.roundToPx() }
+        val prefixPx = if (prefix.isNullOrEmpty()) 0 else measurer.measure(prefix, unitStyle, maxLines = 1, softWrap = false).size.width
+        val suffixPx = if (suffix.isNullOrEmpty()) 0 else measurer.measure(suffix, suffixStyle, maxLines = 1, softWrap = false).size.width + gapPx
+        val roomPx = (constraints.maxWidth - prefixPx - suffixPx).coerceAtLeast(0)
+        val wholePx = measurer.measure(drawnText, figureStyle, maxLines = 1, softWrap = false).size.width
+        val drawnPx = if (wholePx <= roomPx) {
+            wholePx
+        } else {
+            val cut = measurer.measure(
+                drawnText,
+                figureStyle,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                softWrap = false,
+                constraints = Constraints(maxWidth = roomPx),
+            )
+            kotlin.math.ceil(cut.getLineRight(0)).toInt().coerceAtMost(roomPx)
         }
-        val length = text.length
-        TransformedText(
-            drawn,
-            object : OffsetMapping {
-                override fun originalToTransformed(offset: Int): Int = offset + lead.length
-                override fun transformedToOriginal(offset: Int): Int = (offset - lead.length).coerceIn(0, length)
-            },
-        )
+        val drawnDp = with(density) { drawnPx.toDp() }
+        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            if (!prefix.isNullOrEmpty()) {
+                Text(text = prefix, style = unitStyle, maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline())
+            }
+            if (onEdit != null) {
+                var focused by remember { mutableStateOf(false) }
+                // Focused: as wide as the whole text plus the caret's room, up
+                // to the room there is — past it the text scrolls to the caret.
+                // At rest: as wide as the figure drawn (plus the same room, so
+                // the unit keeps one distance from the digits in both states).
+                val widthPx = ((if (focused) wholePx else drawnPx) + slackPx).coerceAtMost(roomPx.coerceAtLeast(slackPx))
+                BasicTextField(
+                    value = shown,
+                    onValueChange = onEdit,
+                    singleLine = true,
+                    // At rest the field's own glyphs step aside for the drawn
+                    // figure above them (below); focused, they scroll to the caret.
+                    textStyle = if (focused) figureStyle else figureStyle.copy(color = Color.Transparent),
+                    cursorBrush = SolidColor(colors.accentBase),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier
+                        .width(with(density) { widthPx.toDp() })
+                        .focusRequester(focus)
+                        .onFocusChanged { focused = it.isFocused }
+                        .alignByBaseline(),
+                    decorationBox = { inner ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (shown.isEmpty()) Text(text = placeholder, style = figureStyle.copy(color = colors.fgSubtle), maxLines = 1, softWrap = false)
+                            inner()
+                            // At rest a figure too long for its room is cut at
+                            // its END with an ellipsis, like the drawn one —
+                            // never left scrolled to wherever the caret last
+                            // was, with a glyph sliced at the start (the web's rule).
+                            if (!focused && shown.isNotEmpty()) {
+                                Text(
+                                    text = shown,
+                                    style = figureStyle,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.width(drawnDp),
+                                )
+                            }
+                        }
+                    },
+                )
+            } else {
+                // Cut at the END, inside its own box, with an ellipsis — so the
+                // cut says it is one, and the unit beside it stays whole.
+                Text(
+                    text = drawnText,
+                    style = figureStyle,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.width(drawnDp).alignByBaseline(),
+                )
+            }
+            if (!suffix.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                Text(text = suffix, style = suffixStyle, maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline())
+            }
+        }
     }
 }
 
@@ -1017,57 +1122,64 @@ fun FeeRow(
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(
+        // ONE card (spec 078 round 3, as the web and desktop draw it): the coin
+        // opener fills it, and the refresh is a fixed round icon button at its
+        // trailing edge, vertically centred. Round 2 made the refresh the card's
+        // full height, and at the largest size a two-line card turned it into a
+        // big block. The two keep their own taps: measuring again never opens
+        // the coin sheet.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(VelaRadius.lg))
+                .background(colors.bgRaised),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
                     .clickable(onClick = onOpen)
                     .padding(VelaSpacing.lg),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = fee.label,
-                    color = colors.fgMuted,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.base,
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                TokenIcon(mark = fee.mark, inline = true)
-                Spacer(modifier = Modifier.width(VelaSpacing.sm))
-                Text(
-                    text = fee.value,
-                    color = colors.fgBase,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.base,
-                    maxLines = 1,
-                )
-                Spacer(modifier = Modifier.width(VelaSpacing.sm))
-                Icon(
-                    imageVector = VelaIcons.ChevronRight,
-                    contentDescription = fee.openLabel,
-                    tint = colors.fgMuted,
-                    modifier = Modifier.size(VelaIconSize.sm),
+                // Stacked (a large text size), the value starts under the
+                // label rather than floating mid-card (design review).
+                VelaLabelBesideValue(
+                    stackedValue = Alignment.Start,
+                    label = {
+                        Text(
+                            text = fee.label,
+                            color = colors.fgMuted,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.base,
+                        )
+                    },
+                    value = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TokenIcon(mark = fee.mark, inline = true)
+                            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                            // The amount is the one thing on the row never cut:
+                            // squeezed past one line, it wraps.
+                            Text(
+                                text = fee.value,
+                                color = colors.fgBase,
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.base,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                            Icon(
+                                imageVector = VelaIcons.ChevronRight,
+                                contentDescription = fee.openLabel,
+                                tint = colors.fgMuted,
+                                modifier = Modifier.size(VelaIconSize.sm),
+                            )
+                        }
+                    },
                 )
             }
             if (fee.refreshLabel != null) {
-                Spacer(modifier = Modifier.width(VelaSpacing.md))
-                Box(
-                    modifier = Modifier
-                        .size(VelaSizing.hitTarget)
-                        .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
-                        .clickable(enabled = onRefresh != null) { onRefresh?.invoke() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // Dimmed while a measurement is out — whoever started it —
-                    // so a second tap is never ambiguous.
-                    Icon(
-                        imageVector = VelaIcons.RefreshCw,
-                        contentDescription = fee.refreshLabel,
-                        tint = if (fee.refreshing) colors.fgSubtle else colors.fgMuted,
-                        modifier = Modifier.size(VelaIconSize.sm),
-                    )
-                }
+                FeeRefreshButton(label = fee.refreshLabel, refreshing = fee.refreshing, onRefresh = onRefresh)
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
         }
         if (fee.refreshLabel != null) {
@@ -1081,6 +1193,41 @@ fun FeeRow(
                 modifier = Modifier.padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.xs),
             )
         }
+    }
+}
+
+/**
+ * The fee card's refresh: a fixed round icon button, the same size at every
+ * text size — never a box that stretches with the card. Quiet on purpose (a
+ * fee that is fine is the normal case). While a measurement is out — whoever
+ * started it — the glyph turns, calmly, and a second tap is refused, so "did
+ * that do anything?" is answered on screen (the web's `.turn.spinning`).
+ */
+@Composable
+private fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (() -> Unit)?) {
+    val colors = VelaTheme.colors
+    val turn = rememberInfiniteTransition(label = "fee-refresh")
+    val angle by turn.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 1200, easing = LinearEasing)),
+        label = "fee-refresh-angle",
+    )
+    Box(
+        modifier = Modifier
+            .size(VelaSizing.feeRefresh)
+            .clip(CircleShape)
+            .background(colors.bgSunken)
+            .clickable(enabled = onRefresh != null && !refreshing) { onRefresh?.invoke() }
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = VelaIcons.RefreshCw,
+            contentDescription = null,
+            tint = colors.fgMuted,
+            modifier = Modifier.size(VelaIconSize.sm).rotate(if (refreshing) angle else 0f),
+        )
     }
 }
 
@@ -1110,15 +1257,24 @@ fun FeeSpeedControl(
                 .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = speed.label, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
-            Spacer(modifier = Modifier.weight(1f))
-            Text(text = speed.value, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
-            Spacer(modifier = Modifier.width(VelaSpacing.sm))
-            Icon(
-                imageVector = VelaIcons.ChevronDown,
-                contentDescription = null,
-                tint = colors.fgMuted,
-                modifier = Modifier.size(VelaIconSize.sm).rotate(if (speed.open) 180f else 0f),
+            // Wraps, never truncates (spec 078 round 3): at accessibility sizes
+            // "Geschwindigkeit" and the tier name were cut. The tier takes its
+            // own line under the word when both do not fit.
+            VelaLabelBesideValue(
+                modifier = Modifier.weight(1f),
+                label = { Text(text = speed.label, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base) },
+                value = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = speed.value, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+                        Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                        Icon(
+                            imageVector = VelaIcons.ChevronDown,
+                            contentDescription = null,
+                            tint = colors.fgMuted,
+                            modifier = Modifier.size(VelaIconSize.sm).rotate(if (speed.open) 180f else 0f),
+                        )
+                    }
+                },
             )
         }
         // Folded AND open: the screen must never say "Fast" over a Settings
@@ -1131,6 +1287,12 @@ fun FeeSpeedControl(
             return@Column
         }
         SpeedNote(speed.onceNote)
+        // Two lines, not three (spec 078 round 2): [name ……… fee] over
+        // [what it buys ……… its gas bid]. The third line left a hole under
+        // the name. Chosen = the text colour, semibold, and a ✓ in its own
+        // column — never the accent, which on this screen means "moves money".
+        val lineOne = VelaTextSize.base * VelaLeading.normal
+        val lineOneDp = with(LocalDensity.current) { lineOne.toDp() }
         speed.options.forEach { option ->
             Row(
                 modifier = Modifier
@@ -1144,36 +1306,68 @@ fun FeeSpeedControl(
                 verticalAlignment = Alignment.Top,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The speed's name is never squeezed into a sliver beside a
+                    // long fee: when both do not fit, the fee takes the next
+                    // line, whole (spec 078 round 3).
+                    VelaLabelBesideValue(
+                        gap = VelaSpacing.md,
+                        label = {
+                            Text(
+                                text = option.label,
+                                color = colors.fgBase,
+                                fontFamily = VelaFontFamily,
+                                fontWeight = if (option.selected) VelaFontWeight.semibold else VelaFontWeight.regular,
+                                fontSize = VelaTextSize.base,
+                                lineHeight = lineOne,
+                            )
+                        },
+                        value = {
+                            Text(
+                                text = option.value,
+                                color = colors.fgBase,
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.base,
+                                lineHeight = lineOne,
+                            )
+                        },
+                    )
+                    Row(verticalAlignment = Alignment.Top) {
+                        // The description gives way first: squeezed, it wraps
+                        // under itself — the gas bid is never cut.
                         Text(
-                            text = option.label,
-                            color = if (option.selected) colors.accentBase else colors.fgBase,
+                            text = option.detail,
+                            color = colors.fgSubtle,
                             fontFamily = VelaFontFamily,
-                            fontWeight = if (option.selected) VelaFontWeight.semibold else VelaFontWeight.regular,
-                            fontSize = VelaTextSize.base,
+                            fontSize = VelaTextSize.sm,
+                            lineHeight = VelaTextSize.sm * VelaLeading.normal,
                             modifier = Modifier.weight(1f),
                         )
-                        Text(text = option.value, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
-                    }
-                    if (speed.gasPriceLine) {
-                        // Named, because an unnamed "3,244 wei" under a fee reads
-                        // as a second charge; held open empty while measuring.
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        // Named, because an unnamed "3,244 wei" under a fee
+                        // reads as a second charge. The UI font with tabular
+                        // digits, so the three bids line up — not a monospace
+                        // face for the whole string.
+                        if (speed.gasPriceLine && option.gasPrice != null) {
+                            Spacer(modifier = Modifier.width(VelaSpacing.md))
                             Text(
-                                text = option.gasPrice?.let { "${speed.gasPriceLabel}  $it" } ?: " ",
+                                text = "${speed.gasPriceLabel}  ${option.gasPrice}",
                                 color = colors.fgSubtle,
-                                fontFamily = VelaMonoFontFamily,
+                                fontFamily = VelaFontFamily,
                                 fontSize = VelaTextSize.sm,
+                                lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                                style = TextStyle(fontFeatureSettings = "tnum"),
                                 maxLines = 1,
+                                softWrap = false,
                             )
                         }
                     }
-                    Text(text = option.detail, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
                 }
                 Spacer(modifier = Modifier.width(VelaSpacing.md))
-                Box(modifier = Modifier.size(VelaIconSize.sm)) {
-                    if (option.selected) {
-                        Icon(imageVector = VelaIcons.Check, contentDescription = null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
+                // Its own column, centred on line one.
+                Box(modifier = Modifier.height(lineOneDp), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.size(VelaIconSize.sm)) {
+                        if (option.selected) {
+                            Icon(imageVector = VelaIcons.Check, contentDescription = null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.sm))
+                        }
                     }
                 }
             }

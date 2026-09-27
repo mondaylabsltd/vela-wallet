@@ -201,6 +201,7 @@ mod tests {
                 transports: "usb".to_owned(),
                 signer_origin: None,
             }],
+            signed_in_with: None,
         }
     }
 

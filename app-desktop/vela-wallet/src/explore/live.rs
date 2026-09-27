@@ -44,6 +44,7 @@ pub fn site_of(entry: &BhistEntry) -> SiteModel {
         // English one on a Chinese screen is worse than no line at all
         // (phase 22's rule about showing a key to somebody who reads Chinese).
         meta: None,
+        url: Some(SharedString::from(entry.url.clone())),
     }
 }
 
@@ -75,6 +76,7 @@ pub fn tile_of(site: &ExploreSite) -> SiteModel {
         tint: tint_of(&site.host),
         subtitle: Some(SharedString::from(site.host.clone())),
         meta: None,
+        url: Some(SharedString::from(site.url.clone())),
     }
 }
 
@@ -124,6 +126,7 @@ pub fn tab_models(view: &ExploreView, strings: &ExploreStrings) -> Vec<TabModel>
                 tint: tint_of(&tab.host),
                 subtitle: None,
                 meta: None,
+                url: None,
             }),
             selected: view.selected_tab.as_deref() == Some(tab.id.as_str()),
         })
@@ -218,6 +221,32 @@ mod tests {
         assert!((a.h - tint_of("polymarket.com").h).abs() > f32::EPSILON);
     }
 
+    /// Every row opens its own site (078 E-02): a Recent row where the person
+    /// left off, a pinned site the url it was pinned at, a drawn one its host.
+    #[test]
+    fn a_row_opens_its_own_site() {
+        assert_eq!(
+            site_of(&entry("app.uniswap.org", "Uniswap")).open_url(),
+            "https://app.uniswap.org/app"
+        );
+        let pinned = ExploreSite {
+            origin: "https://polymarket.com".to_owned(),
+            url: "https://polymarket.com/markets".to_owned(),
+            host: "polymarket.com".to_owned(),
+            name: "Polymarket".to_owned(),
+            renamed: false,
+            added_ms: 1.0,
+        };
+        assert_eq!(
+            tile_of(&pinned).open_url(),
+            "https://polymarket.com/markets"
+        );
+        assert_eq!(
+            super::super::fixtures::uniswap().open_url(),
+            format!("https://{}", super::super::fixtures::uniswap().host)
+        );
+    }
+
     /// Nothing visited draws no heading at all.
     #[test]
     fn an_empty_history_draws_no_group() {
@@ -234,8 +263,9 @@ mod menu_tests {
 
     /// The site menu's ORDER is a contract with the page.
     ///
-    /// `page.rs` arms three of these six by position — refresh, disconnect,
-    /// close — because that is how the menu component takes its actions. An
+    /// `page.rs` arms all seven by position (078 E-03: the web's order —
+    /// refresh, share, copy link, favourite, system browser, disconnect,
+    /// close) because that is how the menu component takes its actions. An
     /// item inserted into the drawing would slide every action below it onto
     /// the wrong row, and "Add to favourites" would start revoking a site's
     /// access. Nothing crashes; it would just quietly do the wrong thing, so
@@ -252,13 +282,14 @@ mod menu_tests {
             labels,
             vec![
                 s.refresh.to_string(),
-                s.site_menu.to_string(),
+                s.share.to_string(),
+                s.copy_link.to_string(),
                 s.add_to_favorites.to_string(),
-                s.open_in_new_tab.to_string(),
+                s.open_in_system_browser.to_string(),
                 s.disconnect.to_string(),
-                s.close.to_string(),
+                s.close_page.to_string(),
             ],
-            "the site menu was reordered; page.rs arms items 0, 4 and 5 by position"
+            "the site menu was reordered; page.rs arms every item by position"
         );
     }
 }

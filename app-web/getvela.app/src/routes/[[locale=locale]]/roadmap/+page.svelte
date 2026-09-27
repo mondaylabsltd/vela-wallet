@@ -99,7 +99,7 @@
 	.lede {
 		color: var(--text-secondary);
 		line-height: 1.7;
-		font-size: 0.98rem;
+		font-size: max(0.98rem, var(--floor-read));
 		margin-bottom: 44px;
 	}
 	.lede :global(a) {
@@ -194,13 +194,13 @@
 	}
 	.node p {
 		color: var(--text-secondary);
-		font-size: 0.93rem;
+		font-size: max(0.93rem, var(--floor-read));
 		line-height: 1.65;
 	}
 
 	.badge {
 		display: inline-block;
-		font-size: 0.68rem;
+		font-size: max(0.68rem, var(--floor-label));
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -220,7 +220,7 @@
 		color: var(--text-tertiary);
 	}
 	.when {
-		font-size: 0.78rem;
+		font-size: max(0.78rem, var(--floor-meta));
 		font-weight: 600;
 		color: var(--text-tertiary);
 		font-variant-numeric: tabular-nums;

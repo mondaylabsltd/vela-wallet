@@ -116,16 +116,17 @@ export type SettingsPageId =
 	/** Spec 068 — the stored default transaction speed (desktop page; on the
 	 *  phone the same preference is a row that opens a sheet). */
 	| 'fee-speed'
-	/** Spec 071 — the default "Sign with" and the Trusted Signer's page (desktop
-	 *  page; on the phone, two rows beside the speed, each opening a sheet). */
-	| 'signing'
-
 	/**
 	 * Spec 081 FR-016 — the report, as a desktop panel. The phone opens the
 	 * same body in a sheet; a wide layout has no sheets (founder, 2026-09-05),
 	 * so the nav gains a destination rather than the panel gaining a modal.
 	 */
 	| 'feedback'
+	/**
+	 * The official X / Telegram / Discord links (founder, 2026-09-27): the
+	 * phone's Community group, as a desktop nav destination beside About.
+	 */
+	| 'community'
 	| 'about';
 
 /**
@@ -144,8 +145,7 @@ export type SettingsOverlayId =
 	| 'time-format'
 	/** Spec 068: the stored default transaction speed. */
 	| 'fee-speed'
-	/** Spec 071: the default "Sign with", and the Trusted Signer's page. */
-	| 'sign-with'
+	/** Spec 071: the Trusted Signer's page. */
 	| 'signer-page'
 	/** Spec 075: the tunnel a cross-device pairing goes through. */
 	| 'tunnel-page'
@@ -199,6 +199,12 @@ export interface SettingsRowModel {
 	trailing?: RowTrailing;
 	tone?: RowTone;
 	badge?: StatusPillModel;
+	/**
+	 * A row that LEAVES the app (the Community links): drawn as a link that
+	 * opens this URL in a new tab, with no opener and no referrer, instead of
+	 * a button that raises `onselect`.
+	 */
+	href?: string;
 }
 
 export interface SettingsSectionModel {
@@ -511,11 +517,53 @@ export interface FeedbackModel {
 	send: string;
 	/** The button's own busy label — busy is never disabled (founder's rule). */
 	sending: string;
-	/** Filed: the two bodies carry `{{number}}`. */
-	success: { title: string; bodyNew: string; bodyDeduped: string; view: string };
-	/** The endpoint could not; the prefilled form still can. */
-	fallback: { title: string; body: string; open: string };
+	/**
+	 * Filed: the two bodies carry `{{number}}`. `dropped` is said when the
+	 * report filed but some screenshots could not be stored; `done` closes.
+	 */
+	success: {
+		title: string;
+		bodyNew: string;
+		bodyDeduped: string;
+		view: string;
+		dropped: string;
+		done: string;
+	};
+	/**
+	 * The endpoint could not; the prefilled form still can. `screenshots` is
+	 * the line added when images were attached — the form cannot carry them.
+	 */
+	/**
+	 * The endpoint could not file it: `title` and `body` are separate lines
+	 * (never glued with a dash), `screenshots` a paragraph of its own, and
+	 * `retry` (common.tryAgain) is what the send button reads in this state.
+	 */
+	fallback: { title: string; body: string; open: string; screenshots: string; retry: string };
 	githubLink: string;
+	/**
+	 * Screenshots (078 round 3). Copy only; which images are attached is the
+	 * sheet's own state until Send. `hint` and `limit` are filled with the
+	 * cap; `remove` keeps `{{index}}` (1-based) for each tile.
+	 */
+	screenshots: {
+		label: string;
+		add: string;
+		hint: string;
+		public: string;
+		remove: string;
+		limit: string;
+		unsupported: string;
+		dropHint: string;
+		max: number;
+		/**
+		 * The viewer a tile opens (078 §C): `view` is each tile's a11y label
+		 * and keeps `{{index}}` (1-based); `close` is the ✕; `removeFromViewer`
+		 * the visible button under the picture.
+		 */
+		view: string;
+		close: string;
+		removeFromViewer: string;
+	};
 }
 
 /**
@@ -532,8 +580,12 @@ export interface FeedbackResult {
 	number?: number;
 	url?: string;
 	deduped?: boolean;
+	/** Filed, but this many screenshots could not be stored. */
+	screenshotsDropped?: number;
 	/** Not filed: the prefilled form, with the person's own words in it. */
 	fallbackUrl?: string;
+	/** The send carried screenshots — the fallback says they cannot follow. */
+	withScreenshots?: boolean;
 }
 
 /** SR1: the amber "these networks are down" banner and its per-chain fixes. */
@@ -665,8 +717,6 @@ export interface SettingsHomeModel {
 	timeSheet: SelectSheetModel;
 	/** Spec 068 — the default transaction speed, three rows named by what they buy. */
 	feeSpeedSheet: SelectSheetModel;
-	/** Spec 071 — the default "Sign with", the four this shell offers. */
-	signWithSheet: SelectSheetModel;
 	clearCachesSheet: ConfirmSheetModel;
 	eraseSheet: ConfirmSheetModel;
 	feedback: FeedbackModel;
@@ -769,8 +819,12 @@ export interface WalletKeyRowModel {
 	holder?: string;
 	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
 	fingerprint: string;
-	/** "Verify to use", "Cloud-synced" / "Device-bound" — drawn as pills, the explorer's way. */
-	pills: { text: string; tone: 'verified' | 'synced' | 'local' }[];
+	/**
+	 * "Verify to use", "Cloud-synced" / "Device-bound" — drawn as pills, the
+	 * explorer's way. First, and the only filled one, `signs_here`: the key this
+	 * device signs with (founder, 2026-09-26: it must stand out).
+	 */
+	pills: { text: string; tone: 'signs_here' | 'verified' | 'synced' | 'local' }[];
 	/**
 	 * What the row opens onto: the registry explorer's facts, each copyable.
 	 * Empty when only the device answered — then there is nothing to open.
@@ -821,12 +875,6 @@ export interface SettingsDesktopModel {
 		description: string;
 		rows: FormRowModel[];
 	};
-	/** Spec 071 — the default "Sign with" as the desktop's usual dropdown row. */
-	signing: {
-		title: string;
-		description: string;
-		rows: FormRowModel[];
-	};
 	networks: {
 		title: string;
 		subtitle: string;
@@ -852,6 +900,8 @@ export interface SettingsDesktopModel {
 	eraseSheet: ConfirmSheetModel;
 	/** The report panel (spec 081 FR-016) — the phone's sheet, as a page. */
 	feedback: FeedbackModel;
+	/** The phone's Community group, as a panel: the same three link rows. */
+	community: { title: string; rows: SettingsRowModel[] };
 	about: AboutModel;
 	addNetwork: AddNetworkModel;
 	rpcFix: RpcFixModel;

@@ -62,7 +62,7 @@
 				>
 				<a href="https://x.com/realvelawallet" target="_blank" rel="noopener">X / Twitter</a>
 				<a href="https://t.me/velawallet" target="_blank" rel="noopener">Telegram</a>
-				<a href="https://discord.gg/S6A8RyCk6" target="_blank" rel="noopener">Discord</a>
+				<a href="https://discord.gg/23gWrtaYSa" target="_blank" rel="noopener">Discord</a>
 				<!-- rss.xml is a prerendered endpoint, invisible to the client router —
 				     without a full-page load the URL falls through to blog/[slug] and 404s. -->
 				<a href="/blog/rss.xml" data-sveltekit-reload>RSS</a>
@@ -107,12 +107,12 @@
 	.tagline {
 		margin-top: 14px;
 		color: var(--text-muted);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 	}
 	.copy {
 		margin-top: 14px;
 		color: var(--text-secondary);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 	}
 	.cols {
 		display: flex;
@@ -126,7 +126,7 @@
 		min-width: 110px;
 	}
 	.col h3 {
-		font-size: 0.72rem;
+		font-size: max(0.72rem, var(--floor-label));
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
 		color: var(--text-muted);
@@ -134,7 +134,7 @@
 		margin-bottom: 2px;
 	}
 	.col a {
-		font-size: 0.9rem;
+		font-size: max(0.9rem, var(--floor-note));
 		color: var(--text-secondary);
 		transition: color 0.15s ease;
 	}

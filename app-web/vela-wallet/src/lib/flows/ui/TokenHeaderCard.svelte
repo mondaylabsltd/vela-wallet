@@ -59,12 +59,13 @@
 		color: var(--color-fg-base);
 	}
 
+	/* Wraps, never "…" (078 round 3): at the largest size the balance itself
+	   was cut — "Ethereum · Guthaben 0.0…". The balance phrase is kept in one
+	   piece (`live-send.ts`), so a wrap falls after the network's "·". */
 	.detail {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: break-word;
 	}
 
 	button {

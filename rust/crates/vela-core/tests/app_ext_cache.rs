@@ -32,6 +32,7 @@ fn acct(name: &str, address: &str) -> Account {
         public_key_hex: "04deadbeefcafebabe".to_owned(),
         created_at_iso: "2026-08-05T00:00:00.000Z".to_owned(),
         keys: Vec::new(),
+        signed_in_with: None,
     }
 }
 

@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet.components
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import app.getvela.wallet.core.platform.Clipboard
 import android.content.Context
 import androidx.compose.foundation.background
@@ -9,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,7 +68,7 @@ fun IdenticonViewerSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.bgRaised) {
+    VelaModalSheet(onDismissRequest = onDismiss, containerColor = colors.bgRaised) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

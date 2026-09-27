@@ -109,28 +109,9 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     // one; live replaces it (max(live, cached) is the core's rule — this only
     // chooses what to show meanwhile). The web's `liveBalance`.
     let on_cache = view.display_total_usd.is_none() && view.cached_total_usd.is_some();
-    let status = if view.unreachable {
-        // A first launch with no network: say so, over the skeleton, rather
-        // than show a settled-looking zero (spec 038 finding 15).
-        Some((StatusKind::Warning, s.balance_unreachable.clone()))
-    } else if view.refreshing || on_cache {
-        // A cached figure is a figure being brought up to date — said so, so
-        // yesterday's total never reads as today's.
-        Some((StatusKind::Refreshing, s.balance_stale.clone()))
-    } else {
-        view.notice.map(|notice| {
-            (
-                StatusKind::Warning,
-                match notice {
-                    // Partial and still retrying — the figure is real but not
-                    // final, which is a different thing from wrong.
-                    BalanceNotice::StillUpdating => s.balance_stale.clone(),
-                    BalanceNotice::Unpriced => s.balance_unpriced.clone(),
-                },
-            )
-        })
-    };
 
+    // Hidden says nothing about the figure it is hiding — the web's hidden
+    // hero has no status line (078 H-03).
     if view.hidden {
         return BalanceModel {
             label: s.total_balance.clone(),
@@ -139,7 +120,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             integer: SharedString::from(BALANCE_MASK),
             decimals: None,
             live: None,
-            status,
+            status: None,
         };
     }
 
@@ -153,8 +134,45 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             integer: SharedString::from(""),
             decimals: None,
             live: None,
-            status,
+            // A first launch with no network says so over the skeleton rather
+            // than show a settled-looking zero (spec 038 finding 15) — and a
+            // skeleton says nothing else: it is already "still counting".
+            status: view
+                .unreachable
+                .then(|| (StatusKind::Warning, s.balance_unreachable.clone())),
         };
+    };
+
+    // One status line, most actionable first — the web's `liveBalance` order.
+    // `banner_chain_ids` is already failed MINUS rate-limited (a rate limit
+    // heals on its own), so a chain here really is unreachable and the person
+    // can fix its RPC: the line names it, and opens its editor. Then a figure
+    // being brought up to date — grey, because it is not wrong, only not
+    // final. Then what could not be priced.
+    let status = match view.banner_chain_ids.as_slice() {
+        [chain_id] => Some((
+            StatusKind::Warning,
+            SharedString::from(crate::wallet::fill(
+                &s.rpc_unavailable_single,
+                "name",
+                &crate::executor::custom_tokens::network_name(*chain_id),
+            )),
+        )),
+        [_, _, ..] => Some((
+            StatusKind::Warning,
+            SharedString::from(crate::wallet::fill(
+                &s.rpc_unavailable_multiple,
+                "count",
+                &view.banner_chain_ids.len().to_string(),
+            )),
+        )),
+        [] if view.refreshing || on_cache || view.notice == Some(BalanceNotice::StillUpdating) => {
+            Some((StatusKind::Refreshing, s.balance_stale.clone()))
+        }
+        [] if view.notice == Some(BalanceNotice::Unpriced) => {
+            Some((StatusKind::Warning, s.balance_unpriced.clone()))
+        }
+        [] => None,
     };
 
     let (integer, decimals) = split_fiat(usd, locale, money);
@@ -175,8 +193,142 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
         },
         integer,
         decimals,
-        live: None,
+        // The web's "listening" line under a live zero (078 H-05): a wallet
+        // every chain has answered for, holding nothing, is waiting for its
+        // first deposit — and says so rather than looking empty.
+        live: (usd == 0.0
+            && !view.balance_unknown
+            && !view.balance_partial
+            && view.tokens.is_empty())
+        .then(|| s.live_indicator.clone()),
         status,
+    }
+}
+
+/// SR3, the balance by network (078 H-03) — the web's `liveBalanceDetail`:
+/// the chains still being read (rate-limited, retrying on their own) or
+/// unreachable (with a Retry), the chains that settled, largest first, and the
+/// tokens nothing could price. The same figures the hero sums.
+pub struct BalanceDetail {
+    pub summary: SharedString,
+    pub pending: Vec<DetailChain>,
+    pub done: Vec<DetailChain>,
+    pub unpriced: Vec<DetailChain>,
+}
+
+/// One line of the breakdown: a chain (or an unpriced token on one), what it
+/// says under its name, what it says at the end, and — for an unreachable
+/// chain — the Retry it offers.
+pub struct DetailChain {
+    pub chain_id: u32,
+    pub name: SharedString,
+    /// Under the name; `(text, failed)` — a failed chain says so in red.
+    pub status: Option<(SharedString, bool)>,
+    pub amount: Option<SharedString>,
+    pub retry: bool,
+}
+
+#[must_use]
+pub fn balance_detail(
+    view: &BalanceView,
+    s: &WalletStrings,
+    locale: &str,
+    money: &Money,
+) -> BalanceDetail {
+    let name =
+        |chain_id: u32| SharedString::from(crate::executor::custom_tokens::network_name(chain_id));
+    let mask = || SharedString::from(crate::wallet::fixtures::MASK);
+
+    let mut pending: Vec<DetailChain> = view
+        .rate_limited_chain_ids
+        .iter()
+        .map(|&chain_id| DetailChain {
+            chain_id,
+            name: name(chain_id),
+            status: Some((s.detail_retrying.clone(), false)),
+            amount: None,
+            retry: false,
+        })
+        .collect();
+    for &chain_id in &view.banner_chain_ids {
+        if pending.iter().any(|row| row.chain_id == chain_id) {
+            continue;
+        }
+        pending.push(DetailChain {
+            chain_id,
+            name: name(chain_id),
+            status: Some((s.detail_failed.clone(), true)),
+            amount: None,
+            retry: true,
+        });
+    }
+
+    let mut per_chain: Vec<(u32, f64)> = Vec::new();
+    for token in &view.tokens {
+        let usd = token.balance.parse::<f64>().unwrap_or(f64::NAN) * token.price_usd.unwrap_or(0.0);
+        if !usd.is_finite() {
+            continue;
+        }
+        match per_chain.iter_mut().find(|(id, _)| *id == token.chain_id) {
+            Some((_, sum)) => *sum += usd,
+            None => per_chain.push((token.chain_id, usd)),
+        }
+    }
+    per_chain.retain(|(id, _)| !pending.iter().any(|row| row.chain_id == *id));
+    per_chain.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let done = per_chain
+        .into_iter()
+        .map(|(chain_id, usd)| DetailChain {
+            chain_id,
+            name: name(chain_id),
+            status: None,
+            amount: Some(if view.hidden {
+                mask()
+            } else {
+                SharedString::from(money.text(usd, locale))
+            }),
+            retry: false,
+        })
+        .collect();
+
+    let total = view.display_total_usd.or(view.cached_total_usd);
+    let summary = crate::wallet::fill(
+        &s.detail_total,
+        "amount",
+        &match total {
+            Some(usd) if !view.hidden => money.text(usd, locale),
+            _ => crate::wallet::fixtures::MASK.to_owned(),
+        },
+    );
+
+    let unpriced = view
+        .unpriced_tokens
+        .iter()
+        .map(|token| DetailChain {
+            chain_id: token.chain_id,
+            name: SharedString::from(token.symbol.clone()),
+            status: Some((
+                SharedString::from(format!(
+                    "{} · {}",
+                    crate::executor::custom_tokens::network_name(token.chain_id),
+                    if view.hidden {
+                        crate::wallet::fixtures::MASK.to_owned()
+                    } else {
+                        token_amount_text(&token.balance)
+                    }
+                )),
+                false,
+            )),
+            amount: None,
+            retry: false,
+        })
+        .collect();
+
+    BalanceDetail {
+        summary: SharedString::from(summary),
+        pending,
+        done,
+        unpriced,
     }
 }
 
@@ -187,17 +339,37 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
 /// belongs here rather than in a formatter. Splitting on the LAST `.` is what
 /// keeps a locale whose group separator is `.` from being cut in half.
 fn split_fiat(usd: f64, locale: &str, money: &Money) -> (SharedString, Option<SharedString>) {
-    let formatted = money.text(usd, locale);
-    match formatted.rsplit_once('.') {
-        Some((whole, minor)) if minor.chars().all(|c| c.is_ascii_digit()) => (
-            SharedString::from(whole.to_owned()),
-            Some(SharedString::from(minor.to_owned())),
-        ),
-        // No minor units — a large balance drops them by product rule
-        // (`drop_minor_units_above`), and a currency with zero fraction digits
-        // never had them.
-        _ => (SharedString::from(formatted), None),
+    split_at_mark(
+        &money.text(usd, locale),
+        crate::executor::format_prefs::current()
+            .number
+            .separators()
+            .decimal,
+    )
+}
+
+/// Split a formatted figure at the person's DECIMAL MARK — never at a fixed
+/// `.`. Under `1.234,56` a `.` split drew "1" large and ".234,56" small, and
+/// a comma-decimal balance was never split at all (078 H-07; the web splits by
+/// `numberSeparators().decimal`). What follows the digits — a symbol written
+/// after the figure, "1.234,56 €" — stays with the small part, so nothing is
+/// dropped.
+fn split_at_mark(formatted: &str, mark: &str) -> (SharedString, Option<SharedString>) {
+    if let Some((whole, rest)) = formatted.rsplit_once(mark) {
+        let digits = rest.chars().take_while(char::is_ascii_digit).count();
+        // Minor units are one to three digits; anything else is not a
+        // fraction (a group, when the mark doubles as one elsewhere).
+        if (1..=3).contains(&digits) {
+            return (
+                SharedString::from(whole.to_owned()),
+                Some(SharedString::from(rest.to_owned())),
+            );
+        }
     }
+    // No minor units — a large balance drops them by product rule
+    // (`drop_minor_units_above`), and a currency with zero fraction digits
+    // never had them.
+    (SharedString::from(formatted.to_owned()), None)
 }
 
 #[cfg(test)]
@@ -205,6 +377,38 @@ mod tests {
     use super::*;
     use crate::core_host::CoreHost;
     use vela_core::app::balance_dashboard::{BalanceDashboard, Event as BalanceEvent};
+
+    /// The one token-amount rule, pinned with the core's own vectors
+    /// (`a_max_reads_on_the_balance_lines_ladder`) — the same list web and
+    /// iOS pin — ungrouped, so a balance matches the Max taken from it.
+    #[test]
+    fn token_amounts_read_on_the_one_ladder() {
+        for (exact, shown) in [
+            ("0.043790209243313861", "0.04379"),
+            ("0.0439686", "0.043969"),
+            ("1.22456789123456789", "1.2246"),
+            ("1234.567", "1234.57"),
+            ("2", "2"),
+            ("0", "0"),
+            ("0.9999996", "1"),
+            ("999.99996", "1000"),
+            ("0.0000001234", "0.00000012"),
+            ("5.000000", "5"),
+        ] {
+            assert_eq!(token_amount_text(exact), shown, "{exact}");
+        }
+    }
+
+    /// A ceiling is cut, never rounded up past what the balance covers.
+    #[test]
+    fn a_ceiling_is_cut_down() {
+        assert_eq!(token_amount_text_down("0.0439686"), "0.043968");
+        assert_eq!(token_amount_text_down("1.22456789"), "1.2245");
+        assert_eq!(token_amount_text_down("999.99996"), "999.9999");
+        assert_eq!(token_amount_text_down("1234.567"), "1234.56");
+        assert_eq!(token_amount_text_down("0.0000001234"), "0.00000012");
+        assert_eq!(token_amount_text_down("3"), "3");
+    }
 
     /// A real `BalanceView` with the total substituted.
     ///
@@ -464,10 +668,18 @@ mod tests {
             ],
             Vec::new(),
         );
-        let rows = activity_rows(&view, &strings(), false);
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            false,
+        );
         assert_eq!(rows.len(), 2, "the header is not a row here");
         assert_eq!(rows[0].unit, SharedString::from("POL"));
         assert_eq!(rows[1].unit, SharedString::from("USDT"));
+        // …it rides on the first item of its day, and only there (078 H-04).
+        assert!(rows[0].day.is_some(), "the day opens on its first row");
+        assert_eq!(rows[1].day, None);
     }
 
     /// The sign is the direction's, and the minus is U+2212 — a hyphen does
@@ -485,7 +697,12 @@ mod tests {
             ],
             Vec::new(),
         );
-        let rows = activity_rows(&view, &strings(), false);
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            false,
+        );
         assert_eq!(rows[0].amount, SharedString::from("\u{2212}2"));
         assert!(!rows[0].positive);
         assert_eq!(rows[1].amount, SharedString::from("+120"));
@@ -502,7 +719,12 @@ mod tests {
             }],
             Vec::new(),
         );
-        let rows = activity_rows(&view, &strings(), false);
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            false,
+        );
         assert_eq!(rows[0].amount, SharedString::from("+1.5"));
     }
 
@@ -516,7 +738,12 @@ mod tests {
             }],
             Vec::new(),
         );
-        let rows = activity_rows(&view, &strings(), true);
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            true,
+        );
         assert_eq!(rows[0].unit, SharedString::from("USDT"), "the unit stays");
         assert!(
             !rows[0].amount.contains("120"),
@@ -536,7 +763,13 @@ mod tests {
             Vec::new(),
         );
         assert_eq!(
-            activity_rows(&view, &strings(), false)[0].amount,
+            activity_rows(
+                &view,
+                &strings(),
+                &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+                false
+            )[0]
+            .amount,
             SharedString::from("")
         );
     }
@@ -595,6 +828,88 @@ mod tests {
         let model = balance(&live, &strings(), "en", &Money::default());
         assert_eq!(model.integer, SharedString::from("$40"));
         assert!(model.status.is_none(), "{:?}", model.status.map(|s| s.1));
+    }
+
+    /// The status line in the web's order (078 H-03): an unreachable chain by
+    /// name first, then "still updating" in grey (it is not wrong, only not
+    /// final), then unpriced; a hidden hero says nothing, and a skeleton only
+    /// "unreachable".
+    #[test]
+    fn the_status_line_says_the_most_actionable_thing_first() {
+        let s = strings();
+        let money = Money::default();
+
+        let mut down = view(Some(10.0));
+        down.banner_chain_ids = vec![1];
+        down.notice = Some(BalanceNotice::Unpriced);
+        let model = balance(&down, &s, "en", &money);
+        let Some((StatusKind::Warning, text)) = model.status else {
+            panic!(
+                "an unreachable chain is a warning: {:?}",
+                model.status.map(|s| s.1)
+            );
+        };
+        assert!(
+            text.contains(&crate::executor::custom_tokens::network_name(1)),
+            "the line names the chain: {text}"
+        );
+        down.banner_chain_ids = vec![1, 10];
+        let (_, text) = balance(&down, &s, "en", &money).status.expect("a line");
+        assert!(text.contains('2'), "several are counted: {text}");
+
+        let mut updating = view(Some(10.0));
+        updating.notice = Some(BalanceNotice::StillUpdating);
+        assert!(matches!(
+            balance(&updating, &s, "en", &money).status,
+            Some((StatusKind::Refreshing, _))
+        ));
+
+        let mut unpriced = view(Some(10.0));
+        unpriced.notice = Some(BalanceNotice::Unpriced);
+        assert_eq!(
+            balance(&unpriced, &s, "en", &money).status,
+            Some((StatusKind::Warning, s.balance_unpriced.clone()))
+        );
+
+        let mut hidden = view(Some(10.0));
+        hidden.hidden = true;
+        hidden.banner_chain_ids = vec![1];
+        assert!(balance(&hidden, &s, "en", &money).status.is_none());
+
+        let mut loading = view(None);
+        loading.refreshing = true;
+        assert!(
+            balance(&loading, &s, "en", &money).status.is_none(),
+            "a skeleton is already 'still counting'"
+        );
+        loading.unreachable = true;
+        assert!(matches!(
+            balance(&loading, &s, "en", &money).status,
+            Some((StatusKind::Warning, _))
+        ));
+    }
+
+    /// SR3 splits the chains the way the web's does: rate-limited ones retry
+    /// by themselves, unreachable ones offer Retry, and a chain in either
+    /// list is not also counted as settled.
+    #[test]
+    fn the_breakdown_keeps_a_pending_chain_out_of_the_settled_ones() {
+        let mut v = view(Some(10.0));
+        v.rate_limited_chain_ids = vec![137];
+        v.banner_chain_ids = vec![137, 10];
+        let detail = balance_detail(&v, &strings(), "en", &Money::default());
+        let pending: Vec<(u32, bool)> = detail
+            .pending
+            .iter()
+            .map(|row| (row.chain_id, row.retry))
+            .collect();
+        assert_eq!(pending, vec![(137, false), (10, true)]);
+        assert!(
+            detail
+                .done
+                .iter()
+                .all(|row| row.chain_id != 137 && row.chain_id != 10)
+        );
     }
 
     /// A zero is "live" only once every chain answered: a partial zero, or a
@@ -703,6 +1018,30 @@ mod tests {
         );
     }
 
+    /// The split is at the person's decimal mark, whatever their grouping.
+    #[test]
+    fn the_hero_splits_at_the_decimal_mark_it_was_given() {
+        let split = |text: &str, mark: &str| {
+            let (whole, minor) = split_at_mark(text, mark);
+            (whole.to_string(), minor.map(|m| m.to_string()))
+        };
+        assert_eq!(
+            split("$1,544.50", "."),
+            ("$1,544".into(), Some("50".into()))
+        );
+        assert_eq!(
+            split("1.234,56 €", ","),
+            ("1.234".into(), Some("56 €".into()))
+        );
+        assert_eq!(
+            split("1 234,56 €", ","),
+            ("1 234".into(), Some("56 €".into()))
+        );
+        // A dot-grouped whole number has no minor units to split off.
+        assert_eq!(split("1.234 €", ","), ("1.234 €".into(), None));
+        assert_eq!(split("¥1,235", "."), ("¥1,235".into(), None));
+    }
+
     #[test]
     fn splitting_survives_a_dot_grouped_locale() {
         let (integer, decimals) = split_fiat(1383.28, "de", &Money::default());
@@ -710,8 +1049,12 @@ mod tests {
             integer.contains("1.383") || integer.contains("1,383"),
             "the whole part lost its grouping: {integer}"
         );
+        // The minor units are at most two DIGITS; a symbol written after the
+        // figure rides along with them.
         assert!(
-            decimals.as_ref().is_none_or(|d| d.len() <= 2),
+            decimals
+                .as_ref()
+                .is_none_or(|d| d.chars().take_while(char::is_ascii_digit).count() <= 2),
             "the split took too much: {decimals:?}"
         );
     }
@@ -784,14 +1127,20 @@ mod tests {
             // Unpriced: the chain, never "$0.00 · Monad".
             assert!(mon.sub.contains("Monad"));
             assert!(!mon.sub.contains('$'), "an unpriced holding is not $0.00");
-            // An ERC-20 names its contract; the price row is absent because
-            // there is no price to state.
+            // An ERC-20 names its contract, and keeps it whole for the copy;
+            // the price row says there is none rather than going missing
+            // (the web's `liveAssetDetail`, 078 H-06).
             assert!(
                 mon.facts
                     .iter()
                     .any(|(label, _)| *label == s.label_contract)
             );
-            assert!(!mon.facts.iter().any(|(label, _)| *label == s.label_price));
+            assert!(mon.contract_copy.is_some());
+            assert!(
+                mon.facts
+                    .iter()
+                    .any(|(label, value)| *label == s.label_price && *value == s.no_price)
+            );
             // xDAI's transaction is not MON's.
             assert!(mon.activity.is_empty());
 
@@ -881,7 +1230,7 @@ mod tests {
             // wallet knows about.
             assert_eq!(chains.len(), 3);
             assert_eq!(chains[0].name, s.all_networks);
-            assert_eq!(chains[0].count, 2, "the count is the chains listed");
+            assert_eq!(chains[0].count, 3, "every holding, as the web counts");
             assert!(chains[0].dot.is_none(), "all is not a chain");
             assert!(chains[0].selected);
             assert_eq!(chains[1].name, "Ethereum");
@@ -1183,11 +1532,7 @@ pub fn asset_rows(
                 balance: if view.hidden {
                     SharedString::from(crate::wallet::fixtures::MASK)
                 } else {
-                    SharedString::from(format_token_amount(
-                        amount,
-                        crate::executor::format_prefs::current().number,
-                        false,
-                    ))
+                    SharedString::from(token_amount_text(&token.balance))
                 },
                 fiat: if view.hidden {
                     Fiat::Masked
@@ -1226,7 +1571,10 @@ pub fn chain_rows(
         name: s.all_networks.clone(),
         // The neutral dot: "all" is not a chain and must not wear one's colour.
         dot: None,
-        count: u32::try_from(order.len()).unwrap_or(u32::MAX),
+        // The holdings, as the web counts them (`liveChainRows`:
+        // `view.tokens.length`) — every other row counts holdings too. This
+        // counted the CHAINS, so one wallet read 23 on the web and 16 here.
+        count: u32::try_from(view.tokens.len()).unwrap_or(u32::MAX),
         selected: filter.is_none(),
         chain_id: None,
     }];
@@ -1360,16 +1708,20 @@ pub fn asset_detail(
     let figure = |value: f64| money.text(value, locale);
 
     let mut facts = vec![(s.label_name.clone(), SharedString::from(token.name.clone()))];
-    if let Some(price) = token.price_usd {
-        facts.push((
-            s.label_price.clone(),
-            SharedString::from(crate::wallet::fill(
+    // Price is always a row — "No price" when there is none (the web's
+    // `liveAssetDetail`, 078 H-06): a fact that disappears reads as a panel
+    // that forgot it rather than a token nobody quotes.
+    facts.push((
+        s.label_price.clone(),
+        match token.price_usd {
+            Some(price) => SharedString::from(crate::wallet::fill(
                 &crate::wallet::fill(&s.price_value, "symbol", &token.symbol),
                 "value",
                 &figure(price),
             )),
-        ));
-    }
+            None => s.no_price.clone(),
+        },
+    ));
     facts.push((
         s.label_contract.clone(),
         match token.token_address.as_ref() {
@@ -1398,11 +1750,7 @@ pub fn asset_detail(
         } else {
             SharedString::from(format!(
                 "{} {}",
-                format_token_amount(
-                    amount,
-                    crate::executor::format_prefs::current().number,
-                    false
-                ),
+                token_amount_text(&token.balance),
                 token.symbol
             ))
         },
@@ -1426,6 +1774,7 @@ pub fn asset_detail(
         // record N.
         activity_ids: own.iter().map(|item| item.id.clone()).collect(),
         explorer_url: token_explorer_url(token, view.address.as_deref()).map(SharedString::from),
+        contract_copy: token.token_address.clone().map(SharedString::from),
     })
 }
 
@@ -1469,20 +1818,32 @@ pub(crate) fn badge(chain_id: u32) -> gpui::Hsla {
 
 /// The activity rows the home preview shows.
 ///
-/// **Headers are dropped here, not filtered out of the core.** `FeedView::rows`
-/// interleaves day headers with items because the full Activity screen draws
-/// them; the home preview is a short flat list and the mocks draw no headings in
-/// it. Asking the core for a different shape would move a render decision into
-/// the machine.
+/// `FeedView::rows` interleaves the core's day headers with the items. The
+/// home used to drop them ("the mocks draw no headings") — the web files its
+/// preview under its days (spec 038 #E3, 078 H-04), so a header now rides on
+/// the first item of its day as `day`, and row N is still feed item N.
 #[must_use]
-pub fn activity_rows(view: &FeedView, s: &WalletStrings, hidden: bool) -> Vec<ActivityRowModel> {
-    view.rows
-        .iter()
-        .filter_map(|row| match row {
-            FeedRow::Header { .. } => None,
-            FeedRow::Item { item } => Some(activity_row(view, item, s, hidden)),
-        })
-        .collect()
+pub fn activity_rows(
+    view: &FeedView,
+    s: &WalletStrings,
+    flow: &crate::flows::FlowStrings,
+    hidden: bool,
+) -> Vec<ActivityRowModel> {
+    let mut rows = Vec::new();
+    let mut day = None;
+    for row in &view.rows {
+        match row {
+            FeedRow::Header { day_start_ms, .. } => {
+                day = Some(crate::flows::live::day_label(*day_start_ms, flow));
+            }
+            FeedRow::Item { item } => {
+                let mut model = activity_row(view, item, s, hidden);
+                model.day = day.take();
+                rows.push(model);
+            }
+        }
+    }
+    rows
 }
 
 /// What kind of event a row is.
@@ -1557,6 +1918,7 @@ pub(crate) fn activity_row(
         unit: SharedString::from(item.symbol.clone()),
         positive: incoming,
         badge: badge(item.chain_id),
+        day: None,
     }
 }
 
@@ -1567,6 +1929,66 @@ pub(crate) fn activity_row(
 /// Privacy masks the FIGURE and keeps the unit, on every surface together —
 /// the detail panel is one of them, and reading a second flag is how one ends
 /// up out of step.
+/// A token amount as every balance surface reads it — the asset list rows, a
+/// token's page, the Send picker and card, the confirm and the receipt — ONE
+/// rule on all four shells: the core's ladder (`send::max_figure`, the very
+/// figure `Max` writes — 6 places under 1, 4 under 1000, 2 above, half up), in
+/// the person's decimal mark and UNGROUPED like the field `Max` fills, so a
+/// balance and the Max taken from it read the same digits (web
+/// `tokenAmountText`, iOS `WalletLive.tokenAmountText`).
+#[must_use]
+pub fn token_amount_text(value: &str) -> String {
+    with_decimal_mark(vela_core::app::send::max_figure(value))
+}
+
+/// The same ladder cut DOWN — for a ceiling the person may type back ("you
+/// can send up to", what is left): rounded up, it would be a figure the
+/// balance cannot cover.
+#[must_use]
+pub fn token_amount_text_down(value: &str) -> String {
+    let exact = value.trim();
+    let (int_raw, frac_raw) = exact.split_once('.').unwrap_or((exact, ""));
+    if !int_raw.bytes().all(|b| b.is_ascii_digit()) || !frac_raw.bytes().all(|b| b.is_ascii_digit())
+    {
+        return exact.to_owned();
+    }
+    let int_digits = int_raw.trim_start_matches('0');
+    let places = match int_digits.len() {
+        0 => 6,
+        1..=3 => 4,
+        _ => 2,
+    };
+    let cut: String = frac_raw.chars().take(places).collect();
+    // Below the last place, the half-up rule's two significant digits are
+    // already a cut; anything else is the truncation itself.
+    if int_digits.is_empty() && cut.trim_end_matches('0').is_empty() {
+        return token_amount_text(exact);
+    }
+    let int_part = if int_digits.is_empty() {
+        "0"
+    } else {
+        int_digits
+    };
+    let frac = cut.trim_end_matches('0');
+    with_decimal_mark(if frac.is_empty() {
+        int_part.to_owned()
+    } else {
+        format!("{int_part}.{frac}")
+    })
+}
+
+fn with_decimal_mark(figure: String) -> String {
+    let decimal = crate::executor::format_prefs::current()
+        .number
+        .separators()
+        .decimal;
+    if decimal == "." {
+        figure
+    } else {
+        figure.replace('.', decimal)
+    }
+}
+
 pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> SharedString {
     if hidden {
         return SharedString::from(crate::wallet::fixtures::MASK);

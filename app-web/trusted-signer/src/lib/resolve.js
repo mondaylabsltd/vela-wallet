@@ -20,11 +20,13 @@ window.VelaCS = window.VelaCS || {};
   var abi = ns.abi;
   var reg = ns.registry;
 
-  // Anything at or above 2^128 raw units is past every real token supply, so it
-  // reads as unlimited. Permit2's own "unlimited" (type(uint160).max) is above
-  // this line too — a higher threshold would quietly let it through as a
-  // 22-digit number, which is exactly the kind of number nobody reads.
-  var UNLIMITED_FLOOR = 1n << 128n;
+  // Where "unlimited" starts — the wallet's own two lines
+  // (vela-core `approval_guard::UNLIMITED_CAP_256` / `_160`), so this page and
+  // the app call the same amount unlimited. 2^200 for a uint256 amount: past
+  // every real supply (about 2^128) and below every "max" sentinel (2^255,
+  // 2^256-1). 2^152 for a Permit2 uint160 amount, whose own max is 2^160-1.
+  var UNLIMITED_256 = 1n << 200n;
+  var UNLIMITED_160 = 1n << 152n;
 
 
   var UNREADABLE = new RegExp('[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\ufffd]');
@@ -122,10 +124,11 @@ window.VelaCS = window.VelaCS || {};
 
   // --- amounts ---------------------------------------------------------------
 
-  function tokenAmount(value, tokenAddress, ctx) {
+  /** `bits`: the amount field's width — 160 for Permit2's, otherwise 256. */
+  function tokenAmount(value, tokenAddress, ctx, bits) {
     var known = reg.token(tokenAddress);
     var token = known || { symbol: '?', nameKey: 'value.unknownToken', decimals: 18, tone: '#8a93a5' };
-    var unlimited = value >= UNLIMITED_FLOOR;
+    var unlimited = value >= (bits === 160 ? UNLIMITED_160 : UNLIMITED_256);
     return {
       unlimited: unlimited,
       value: value,
@@ -485,10 +488,15 @@ window.VelaCS = window.VelaCS || {};
     return out;
   }
 
-  // The never-unlimited mandate, under the no-editing rule: this page cannot
-  // rewrite the cap, so an unlimited request is REFUSED here and the person is
-  // pointed back at whoever built it. Offering an editor would mean signing
-  // bytes other than the ones that arrived.
+  // Approvals, under the no-editing rule: this page cannot rewrite the cap —
+  // offering an editor would mean signing bytes other than the ones that
+  // arrived. An UNLIMITED amount is signable as it stands (owner, 2026-09-26:
+  // Permit2 is built on a standing approve(Permit2, MAX), and a smart account's
+  // bundle spends it in the same batch, so capping it breaks the dApp), but it
+  // is drawn as the danger it is, with the cap's absence said in words: the
+  // wallet's own sheet is where a cap is chosen, before the request gets here.
+  // An approve-ALL stays refused — the wallet only grants one on a deliberate
+  // tap, and this page has no such tap.
   function applyApprovalGuard(approval, view, ctx) {
     if (approval.mode === 'all') {
       if (approval.all) {
@@ -513,7 +521,6 @@ window.VelaCS = window.VelaCS || {};
       view.risk = 'danger';
       view.warnings.push({ tone: 'danger', key: 'warn.unlimited', params: { symbol: amount.symbol } });
       view.warnings.push({ tone: 'danger', key: 'warn.unlimitedLocked' });
-      view.refuse = true;
     } else if (approval.mode === 'increase') {
       var current = ctx.currentAllowance || 0n;
       var after = current + amount.value;
@@ -620,6 +627,7 @@ window.VelaCS = window.VelaCS || {};
     while (i + 170 <= body.length) {
       var length = Number(BigInt('0x' + body.slice(i + 106, i + 170)));
       legs.push({
+        operation: parseInt(body.slice(i, i + 2), 16),
         to: '0x' + body.slice(i + 2, i + 42),
         value: BigInt('0x' + body.slice(i + 42, i + 106)),
         data: '0x' + body.slice(i + 170, i + 170 + length * 2),
@@ -746,10 +754,12 @@ window.VelaCS = window.VelaCS || {};
         deadline: formatDate(deadline),
         amount: amountPhrase(amount),
       });
+      // An unlimited permit is signable as it arrived, like the wallet's own
+      // sheet signs one (owner, 2026-09-26): the dApp redeems its own struct,
+      // so a capped signature would only fail on-chain. Red, and said.
       if (amount.unlimited) {
         view.risk = 'danger';
         view.warnings.push({ tone: 'danger', key: 'warn.unlimitedOffline' });
-        view.refuse = true;
       } else {
         view.risk = 'caution';
         view.warnings.push({ tone: 'caution', key: 'warn.offchainNoTrace' });
@@ -764,7 +774,8 @@ window.VelaCS = window.VelaCS || {};
 
     if (primary === 'PermitSingle' || primary === 'PermitTransferFrom') {
       var details = message.details || message.permitted || {};
-      var pAmount = tokenAmount(BigInt(details.amount), details.token, ctx);
+      // PermitSingle's amount is a uint160; PermitTransferFrom's is a uint256.
+      var pAmount = tokenAmount(BigInt(details.amount), details.token, ctx, primary === 'PermitSingle' ? 160 : 256);
       var pSpender = identify(message.spender, ctx);
       view.intentKey = 'intent.permit2';
       view.hero = { kind: 'amount', amount: pAmount, direction: 'allowance' };
@@ -777,9 +788,10 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = pAmount.unlimited
         ? text('sentence.permit2Unlimited', { spender: label(pSpender), symbol: pAmount.symbol })
         : text('sentence.permit2Limited', { spender: label(pSpender), amount: amountPhrase(pAmount) });
+      // Uniswap's own Permit2 signatures are usually for the uint160 maximum;
+      // refusing them here broke swaps the wallet's sheet signs (2026-09-26).
       if (pAmount.unlimited) {
         view.warnings.push({ tone: 'danger', key: 'warn.unlimitedOffline' });
-        view.refuse = true;
       }
       view.tech = techFor('EIP-712 · ' + primary, null, null, {
         params: [
@@ -1148,6 +1160,88 @@ window.VelaCS = window.VelaCS || {};
     return view;
   }
 
+  // --- who controls the account ---------------------------------------------
+  //
+  // The core refuses these before a request ever reaches this page
+  // (`vela-core` `self_call_guard.rs`, spec 081). The page refuses them again,
+  // because the whole point of it is not to trust the app that assembled the
+  // operation: a call from the account to itself that rewrites its owners,
+  // modules, guard or fallback handler hands the account over as completely as
+  // the payload that drained Bybit, and so does any delegatecall.
+
+  var SELF_CALL = {
+    '0x0d582f13': 'addOwnerWithThreshold',
+    '0xf8dc5dd9': 'removeOwner',
+    '0xe318b52b': 'swapOwner',
+    '0x694e80c3': 'changeThreshold',
+    '0x610b5925': 'enableModule',
+    '0xe009cfde': 'disableModule',
+    '0xe19a9dd9': 'setGuard',
+    '0xe068df37': 'setModuleGuard',
+    '0xf08a0323': 'setFallbackHandler',
+    '0xb63e800d': 'setup',
+    '0x6a761202': 'execTransaction',
+    '0x468721a7': 'execTransactionFromModule',
+    '0x5229073f': 'execTransactionFromModule',
+  };
+  var MULTI_SEND_SELECTOR = '0x8d80ff0a';
+  var EXEC_TRANSACTION_SELECTOR = '0x6a761202';
+  var EXEC_TRANSACTION =
+    'execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)';
+  // Past anything legitimate; the cap keeps a crafted payload cheap to read.
+  var MAX_NESTING = 4;
+
+  /**
+   * The function a call would run against the account's control, or null. It
+   * follows `multiSend` and `execTransaction` payloads (a batch hides the same
+   * call one level down), and any delegatecall inside them is refused whatever
+   * its target — the same rule as the core's `inspect_call`.
+   */
+  function takeover(call, account, depth) {
+    if (Number(call.operation) === 1) return 'delegatecall';
+    var data = call.data || '0x';
+    var selector = abi.selectorOf(data);
+    if (!selector) return null; // empty calldata: the fee leg's own shape
+    if (account && String(call.to || '').toLowerCase() === String(account).toLowerCase() && SELF_CALL[selector]) {
+      return SELF_CALL[selector];
+    }
+    if (depth >= MAX_NESTING) return null;
+    var inner = [];
+    if (selector === MULTI_SEND_SELECTOR) {
+      var packed = abi.decode('multiSend(bytes)', data);
+      if (packed) inner = decodeMultiSend(packed[0]);
+    } else if (selector === EXEC_TRANSACTION_SELECTOR) {
+      var exec = abi.decode(EXEC_TRANSACTION, data);
+      if (exec) inner = [{ to: exec[0], data: exec[2], operation: Number(exec[3]) }];
+    }
+    for (var i = 0; i < inner.length; i++) {
+      var found = takeover(inner[i], account, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function refuseTakeover(fn, view) {
+    view.refuse = true;
+    view.risk = 'danger';
+    view.warnings.push(fn === 'delegatecall'
+      ? { tone: 'danger', key: 'refuse.delegateCall' }
+      : { tone: 'danger', key: 'refuse.selfCall', params: { fn: fn } });
+  }
+
+  /** A `SafeTx` is an instruction to a Safe, executable by anyone later. */
+  function isSafeTx(intent) {
+    var params = intent.params || [];
+    for (var i = 0; i < params.length; i++) {
+      var entry = params[i];
+      if (typeof entry === 'string') {
+        try { entry = JSON.parse(entry); } catch (e) { continue; }
+      }
+      if (entry && typeof entry === 'object' && entry.primaryType === 'SafeTx') return true;
+    }
+    return false;
+  }
+
   // --- entry point -----------------------------------------------------------
 
   /**
@@ -1238,6 +1332,25 @@ window.VelaCS = window.VelaCS || {};
       view.risk = 'danger';
       view.sentence = text('sentence.unknownMethod', { method: intent.method });
       view.refuse = true;
+    }
+
+    // Checked last, over whatever the method branches decided, and only ever
+    // adding a refusal: every call of the operation (or of the request when no
+    // operation came), not just the ones the site asked for — an app that
+    // slipped in a leg of its own is exactly what this page is here to catch.
+    var account = (ctx.operation && ctx.operation.userOp && ctx.operation.userOp.sender) ||
+      ctx.account || null;
+    var calls = intent.method === 'eth_sendTransaction' ? [intent.params[0] || {}]
+      : intent.method === 'wallet_sendCalls' ? ((intent.params[0] || {}).calls || [])
+      : [];
+    for (var c = 0; c < calls.length; c++) {
+      var fn = takeover(calls[c], account, 0);
+      if (fn) { refuseTakeover(fn, view); break; }
+    }
+    if (intent.method && intent.method.indexOf('signTypedData') >= 0 && isSafeTx(intent)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.safeTx' });
     }
 
     if (!view.dapp.originVerified && view.dapp.origin) {

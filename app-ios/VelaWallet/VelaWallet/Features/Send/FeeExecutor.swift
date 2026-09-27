@@ -137,9 +137,43 @@ final class FeeExecutor {
     /// The draft is built with a dummy signature, which is what makes the
     /// estimate honest: a verification cost measured without one is a cost the
     /// submitted operation will exceed.
+    ///
+    /// **One simulation per operation** (spec 078): the speed in force and
+    /// every tier preview ask this for the same calls at the same instant —
+    /// nothing in it depends on speed — so they share one flight and, for the
+    /// fee-signals window, one held answer (`RelayClient.sharedSimulation`).
+    /// Only an `estimated` outcome is held; a refusal or an unreachable relay
+    /// is shared with whoever asked at that moment and asked again after.
     private func estimate(_ operation: [String: Any], chainId: Int) async -> String {
         let account = operation["account"] as? String ?? ""
         let deployed = operation["deployed"] as? Bool ?? false
+        let key = Self.operationKey(
+            account: account, deployed: deployed,
+            calls: operation["calls"] as? [[String: Any]] ?? []
+        )
+        return await relay.sharedSimulation(
+            chainId: chainId,
+            key: key,
+            cacheable: { $0.contains("\"estimated\"") },
+            run: { await self.simulate(operation, chainId: chainId, account: account, deployed: deployed) }
+        )
+    }
+
+    /// The operation a simulation is about, as one string: the account, the
+    /// deployment and the calls byte for byte, keys sorted so the same
+    /// operation always spells the same key.
+    static func operationKey(account: String, deployed: Bool, calls: [[String: Any]]) -> String {
+        let object: [String: Any] = [
+            "account": account.lowercased(), "deployed": deployed, "calls": calls,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        else { return "\(account.lowercased()):\(deployed):\(calls.count)" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func simulate(
+        _ operation: [String: Any], chainId: Int, account: String, deployed: Bool
+    ) async -> String {
         let calls = (operation["calls"] as? [[String: Any]] ?? []).map { call in
             UserOpCall(
                 to: call["to"] as? String ?? "",

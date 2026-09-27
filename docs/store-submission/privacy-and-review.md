@@ -30,14 +30,14 @@ Operator / data controller: **MONDAY LABS LTD**, UK.
 | **Transaction content** ⚠️ (calldata: recipients + amounts, signature, receipt logs) | Yes | **Vela Relay — stored ≤14 days** (`lane_do.rs:1400-1412`) | No — pseudonymous | Submit and retry the transaction | Required (functional) |
 | **Token contract addresses held** ⚠️                                      | Yes (one logo GET per token)    | `ethereum-data.getvela.app` (static assets + Cloudflare edge) | No — but the path sequence approximates holdings | Render token logos | Functional |
 | **IP address**                                                           | Yes (implicit in every request) | RPC / Relay / Index / chain-data / rates; Cloudflare as processor | No — relay reads none at all; index keeps a salted 64-bit hash ≤60 s for rate limits | Network connectivity, rate-limiting     | Functional                              |
-| **Diagnostics** (app version, OS version, language, RPC-failure metrics) ⚠️ | Only if user files a bug — **and then only by the user's own browser, not by the app** | github.com (public issue), via a prefilled URL the OS browser opens | No — no address/keys/balances       | Bug fixing                              | Optional, user-initiated, preview shown |
+| **Bug report** (typed description + steps; diagnostics: app version, platform, language, unreachable network names, recent failure summaries; ≤ 5 screenshots) ⚠️ | Only when the user taps Send in Settings → Send feedback — **the app POSTs it** (since 078, 2026-09-27) | `getvela.app/api/bug-report` → a **public** GitHub issue; screenshots stored in Cloudflare R2 until deleted, shown in the issue. Fallback: a prefilled GitHub form in the OS browser | No — addresses/URLs scrubbed on device and on the server; screenshots re-encoded on device (no EXIF/GPS); no account id | Bug fixing | Optional, user-initiated, preview + "screenshots are public" shown |
 | Private keys / seed phrases / tx contents                                | **Never leaves device**         | —                                                     | —                                    | —                                      | Not collected                           |
 | Name / email / phone / gov ID                                            | **Never asked**                 | —                                                     | —                                    | —                                      | Not collected                           |
 | Contacts, browsing history, settings, RPC prefs                          | No — on-device store (`vela.*` keys) | —                                                     | —                                    | —                                      | Not collected                           |
 
 **No tracking anywhere.** No advertising ID, no third-party analytics SDK, no crash reporter, no cross-app tracking — proven from the dependency manifests of all four shells (privacy-evidence.md §4). iOS ships exactly one third-party package (`lottie-ios`); Android's merged manifest contains **no `com.google.android.gms.permission.AD_ID`**.
 
-`NSPrivacyTracking=false` is set in **`app-ios/VelaWallet/VelaWallet/PrivacyInfo.xcprivacy`** (the old `ios/…` path belonged to the Expo tree, where no manifest ever existed). That file **is** on `main` — it landed with PR #309 (`505dc3e2`); an earlier reading of this said otherwise because it was checking a stale local `main`. What still needs doing is reconciling its contents with §1 below: `Linked` must be `true`, and a second `NSPrivacyCollectedDataTypeUserID` entry is needed, because a manifest that disagrees with the nutrition label is itself a rejection reason (privacy-evidence.md §6.3). The same file declares the one required-reason API the archived binary imports (`NSPrivacyAccessedAPICategoryUserDefaults`, reason `CA92.1`), and `.github/workflows/ios-package.yml` re-measures the archive with `nm -u` on every build.
+`NSPrivacyTracking=false` is set in **`app-ios/VelaWallet/VelaWallet/PrivacyInfo.xcprivacy`** (the old `ios/…` path belonged to the Expo tree, where no manifest ever existed). That file **is** on `main` — it landed with PR #309 (`505dc3e2`); an earlier reading of this said otherwise because it was checking a stale local `main`. Its contents match §1 below — Other Financial Info and User ID (Linked), plus, since 2026-09-27, the bug report's Other Diagnostic Data, Customer Support and Photos or Videos (Not Linked) — and must keep matching: a manifest that disagrees with the nutrition label is itself a rejection reason (privacy-evidence.md §6.3). The same file declares the one required-reason API the archived binary imports (`NSPrivacyAccessedAPICategoryUserDefaults`, reason `CA92.1`), and `.github/workflows/ios-package.yml` re-measures the archive with `nm -u` on every build.
 
 Website analytics (cookieless, self-hosted) covers **getvela.app**, not the app — it is **not** part of either app-store data form. It belongs only in the privacy policy (already there).
 
@@ -65,15 +65,18 @@ For every category Apple asks: *Collected? · Linked to the user? · Used for tr
 - ⚠️ **The old rationale here was wrong.** It said "Vela's own servers do not store the wallet address." They do. The relay logs the sender on every accepted submit (`vela-relay-cf/src/admission.rs:203-205`) and stores the full signed UserOperation — sender, calldata with recipients and amounts, signature, and the on-chain receipt logs — for up to **14 days** (`lane_do.rs:1400-1412`, `:1784-1787`). Declaring is now the accurate answer, not the conservative one, and the published privacy policy already says the same thing (`privacy/+page.svelte:110-117`), so a reviewer can check it in two minutes.
 - The remaining judgement is only about the **RPC nodes** (partners or user-directed infrastructure?) — see privacy-evidence.md §6.5 #3. It changes the review-notes wording, not what gets ticked.
 
-**C. Diagnostics → Other Diagnostic Data** ⚠️ *(changed to Not Collected)*
+**C. The in-app bug report — three types, all Collected / NOT Linked / not tracking / App Functionality** ⚠️ *(changed 2026-09-27: both apps now send it; flip these in the release that ships branch 078)*
 
-- Collected: **No** · (Crash Data: **No** — there is no crash reporter.)
-- ⚠️ **No shipped store binary transmits diagnostics.** A repo-wide grep for `api/bug-report` finds **zero call sites** in `rust/`, `app-android/`, `app-ios/`, `app-desktop/`, `app-web/vela-wallet/`. iOS's feedback sheet has **no send action at all** (`SettingsSheet.swift:307-330`); Android builds a prefilled `github.com/…/issues/new` URL and hands it to the **system browser** (`VelaNavHost.kt:1693-1699`) — the app itself sends nothing, and the user reviews the body first. Android's local `VelaLog` is a no-op in release builds (`VelaLog.kt:37`).
-- **If** the in-app reporter is ever wired to `getvela.app/api/bug-report`, flip this to Collected / Not Linked / App Functionality **in that same release** — and re-implement the scrubbing server-side first, because the client that guaranteed "never keys, addresses or balances" was deleted with the Expo tree.
+- **Diagnostics → Other Diagnostic Data:** the report's device lines (app version, platform, language, names of unreachable networks, recent failure summaries on Android).
+- **User Content → Customer Support:** what the person types — what happened, steps to reproduce.
+- **User Content → Photos or Videos:** up to five screenshots the person picks (PhotosPicker / Android Photo Picker, out of process — no photo permission), re-encoded on the device so no EXIF or location leaves it, stored in Cloudflare R2 until deleted and shown in the public issue.
+- Crash Data: **No** — there is no crash reporter.
+- Why **not linked**: the report carries no wallet address, key or account id (addresses and URLs are scrubbed on the device and again on the server), and nothing on the server ties a report to a wallet. Why **not the optional-disclosure exemption**: one of Apple's conditions is that the user's name or account name appears in the submission form; this form is deliberately anonymous.
+- `PrivacyInfo.xcprivacy` declares the same three (Linked=false). Evidence: privacy-evidence.md §3a.
 
 ### Declare these as NOT collected (verify each is "Not Collected" in the form):
 
-Contact Info (name/email/phone/address), Health, Location, Sensitive Info, Contacts, Browsing/Search History, Purchases, Payment Info (credit cards — you have none), Audio/Photos/Video content, Gameplay, and any Advertising/Tracking identifiers.
+Contact Info (name/email/phone/address), Health, Location, Sensitive Info, Contacts, Browsing/Search History, Purchases, Payment Info (credit cards — you have none), Audio, Gameplay, Other User Content, and any Advertising/Tracking identifiers. (Photos or Videos and Customer Support are now declared — §1.C.)
 
 ### Export compliance (separate question, every build)
 
@@ -106,13 +109,17 @@ Contact Info (name/email/phone/address), Health, Location, Sensitive Info, Conta
 | **Financial info → Other financial info** (wallet address + the transactions sent from it) | Yes       | **Yes**                      | **No** — relay stores the operation 1 h–14 d; the address is published on-chain | Required     | App functionality, Account management |
 | **Personal info → User IDs** (wallet address as account id, passkey public key, credential ID) | Yes | **Yes** (published on-chain) | No                                 | Required     | Account management, App functionality |
 | **Personal info → Other info** (user-chosen wallet name and per-key labels)                | Yes       | **Yes** (published on-chain) | No                                 | Required     | Account management, App functionality |
-| ~~**App info & performance → Diagnostics**~~ ⚠️                          | **No**    | —                            | —                                  | —            | — (no shipped binary transmits diagnostics — see §1.C) |
+| **App info & performance → Diagnostics** ⚠️ (bug report device lines)    | Yes       | **No** — see note            | No — the issue is kept             | **Optional** | App functionality (bug fixing)        |
+| **App activity → Other user-generated content** ⚠️ (the typed report)    | Yes       | **No** — see note            | No                                 | **Optional** | App functionality (bug fixing)        |
+| **Photos and videos → Photos** ⚠️ (≤ 5 report screenshots)               | Yes       | **No** — see note            | No — kept in R2 until deleted      | **Optional** | App functionality (bug fixing)        |
+
+- ⚠️ **Bug report (new, 2026-09-27, branch 078):** both apps POST the report to `getvela.app/api/bug-report`, which files a **public** GitHub issue and keeps screenshots in Cloudflare R2. "Shared: No" because Play does not count a transfer the user initiates knowing where it goes: the sheet says the issue and its screenshots are public before Send. Say so in the review notes. No photo permission is requested (the Photo Picker runs out of process). Evidence: privacy-evidence.md §3a.
 
 - ⚠️ **"Shared" is no longer a judgment call — it is Yes.** The index publishes the wallet address, the wallet name, every key label, every public key and every credential ID to **Gnosis Chain, permanently** (`p256-registrar/src/protocol.rs:27,88`; `p256-index-cf/src/chain.rs:465-470`). That is unambiguously public sharing and it covers the address too, not just the public key. Whether address-to-RPC *alone* would count no longer matters, because the on-chain publication already forces the answer. (If `ALCHEMY_API_KEY` is set on the relay or index, Alchemy is an additional recipient — confirm from the secret store, privacy-evidence.md §7 #3.)
 
 ### Data types — declare NOT collected:
 
-Location, Contacts, Calendar, Photos/Videos, Audio (no `RECORD_AUDIO`), SMS/Call logs, Health, **Device or other IDs** (no advertising ID, no device ID — `AD_ID` is absent from the merged manifest), Web browsing history (the in-app browser's history stays on device — `browser_history.rs:11-16`), Installed apps, App activity.
+Location, Contacts, Calendar, Videos, Audio (no `RECORD_AUDIO`), SMS/Call logs, Health, **Device or other IDs** (no advertising ID, no device ID — `AD_ID` is absent from the merged manifest), Web browsing history (the in-app browser's history stays on device — `browser_history.rs:11-16`), Installed apps, App activity other than the typed bug report. (Photos, Diagnostics and Other user-generated content are now declared — see the table above.)
 
 - ⚠️ **Location:** still **Not collected**, but be ready to explain the permission. `ACCESS_FINE_LOCATION` is declared at `maxSdkVersion="30"` and `BLUETOOTH_SCAN` carries `neverForLocation` — both exist only because pre-API-31 BLE scanning required them, for the caBLE "sign in with your phone" passkey flow. No location value is ever read or transmitted. (`AndroidManifest.xml:59-71`)
 - **IP address 【你来定】:** the relay reads **no** client IP at all; the index keeps a salted, 64-bit-truncated hash for a **60-second** rate-limit window and never stores the raw value (`p256-index-cf/src/edge.rs:758-766`, `submitter.rs:630-649`). Cloudflare, as processor, sees it regardless. Google lets you treat purely-ephemeral connection data as not collected. **Recommend: do not declare** as collected, keep the privacy-policy mention.
@@ -174,6 +181,15 @@ PRIVACY: see https://getvela.app/privacy, which describes every server the app
 talks to. The app contains no analytics SDK, no crash reporter and no advertising
 identifier, and never asks for a name, email, phone number or ID.
 
+BUG REPORTS (Settings → Send feedback): optional and sent only when the user taps
+Send. The sheet shows exactly what will be sent — the typed description, a few
+device details (app version, OS, language, unreachable networks) and up to five
+screenshots the user picks with the system photo picker (no photo-library
+permission). Screenshots are re-encoded on the device, so no location or other
+photo metadata leaves it. The report becomes a public issue on our GitHub
+repository; the sheet says screenshots are public before sending. No wallet
+address, key or account identifier is included.
+
 Creating a wallet writes a public record (passkey public keys, credential IDs,
 the wallet address and the name the user chose) to an append-only registry
 contract on Gnosis Chain. That is how the wallet can be recovered on another
@@ -211,6 +227,13 @@ purpose: the standard WebAuthn/caBLE "sign in with your phone" passkey flow,
 where this device shows a QR code and reaches the scanning phone over a Bluetooth
 proximity channel. BLUETOOTH_SCAN carries neverForLocation; no location is ever
 read or transmitted.
+
+Bug reports (Settings → Send feedback) are optional and sent only when the user
+taps Send: the typed description, a few device details and up to five screenshots
+picked with the system Photo Picker (no storage or photo permission). Screenshots
+are re-encoded on the device (no location/EXIF). The report becomes a public
+GitHub issue, which the sheet states before sending; no wallet address, key or
+account id is included.
 
 Privacy policy: https://getvela.app/privacy
 Contact / data deletion: hello@mondaylabs.ltd

@@ -34,14 +34,26 @@ pub enum Tone {
 )]
 pub struct SigningStrings {
     pub panel_title: SharedString,
+    /// Where a dApp transaction lands (078 G-04): the send receipt's own words
+    /// (`componentsTx.receipt.*`), so the two cannot say different things
+    /// about the same moment.
+    pub receipt_confirming: SharedString,
+    pub receipt_confirming_hint: SharedString,
+    pub receipt_submitted: SharedString,
+    pub receipt_confirmed: SharedString,
+    pub receipt_failed: SharedString,
+    pub receipt_failed_hint: SharedString,
+    pub receipt_op_hash: SharedString,
+    pub receipt_tx_hash: SharedString,
+    pub receipt_explorer: SharedString,
+    pub receipt_done: SharedString,
     pub signing_account: SharedString,
     pub advanced_toggle: SharedString,
-    /// "Sign with" and its choices, in the core's order (`SIGN_METHODS`):
-    /// the create flow's own words for where a passkey is, and the Clear
-    /// Signer's name with the line under it (spec 071).
-    pub sign_with: SharedString,
-    pub sign_with_options: Vec<(&'static str, SharedString)>,
-    pub trusted_signer_body: SharedString,
+    /// The words the core names on a clear-signing result (`ClearTerm`):
+    /// descriptor intents, field labels, the threshold's "Unlimited" — each
+    /// the key `componentsUi.signing.<leaf>`. `live::localized_terms` swaps
+    /// them in.
+    pub terms: std::collections::HashMap<vela_core::app::clear_signing::ClearTerm, SharedString>,
     /// The wallet's own key backup, in the person's language.
     pub backup_intent: SharedString,
     pub backup_labels: [SharedString; 3],
@@ -135,9 +147,10 @@ pub struct SigningStrings {
     pub status_submitted: SharedString,
     pub error_generic: SharedString,
     pub error_network: SharedString,
-    pub error_unlimited: SharedString,
     /// Spec 081: the request would have changed who controls the account.
     pub blocked_title: SharedString,
+    /// A refused request's one way out (`componentsUi.signing.close`).
+    pub close: SharedString,
     pub blocked_body: String,
     pub blocked_leg_body: String,
     pub blocked_safe_tx: SharedString,
@@ -235,14 +248,21 @@ impl SigningStrings {
         };
         Self {
             panel_title: s("signatureRequest"),
+            receipt_confirming: loc.t("componentsTx.receipt.confirming"),
+            receipt_confirming_hint: loc.t("componentsTx.receipt.confirmingHint"),
+            receipt_submitted: loc.t("componentsTx.receipt.statusSubmitted"),
+            receipt_confirmed: loc.t("componentsTx.receipt.statusConfirmed"),
+            receipt_failed: loc.t("componentsTx.receipt.statusFailed"),
+            receipt_failed_hint: loc.t("componentsTx.receipt.failedHint"),
+            receipt_op_hash: loc.t("componentsTx.receipt.userOpHash"),
+            receipt_tx_hash: loc.t("componentsTx.receipt.txHash"),
+            receipt_explorer: loc.t("componentsTx.receipt.explorer"),
+            receipt_done: loc.t("componentsTx.receipt.done"),
             signing_account: s("signingAccount"),
             advanced_toggle: s("advancedToggle"),
-            sign_with: s("signWith"),
-            sign_with_options: vela_core::wallet_keys::SIGN_METHODS
-                .iter()
-                .map(|method| (*method, loc.t(sign_method_key(method))))
+            terms: vela_core::app::clear_signing::ClearTerm::all()
+                .map(|term| (term, s(&term.leaf())))
                 .collect(),
-            trusted_signer_body: s("trustedSignerBody"),
             backup_intent: loc.t("settingsModals.backup.intent"),
             backup_labels: [
                 loc.t("settingsModals.backup.registeredAs"),
@@ -336,8 +356,8 @@ impl SigningStrings {
             // safe" — and no raw relay text on a screen (SC-305).
             error_generic: loc.t("send.txErrorGeneric"),
             error_network: loc.t("send.lock.netNotFound"),
-            error_unlimited: a("unlimitedDisabled"),
             blocked_title: s("selfCallBlockedTitle"),
+            close: s("close"),
             blocked_body: loc
                 .t("componentsUi.signing.selfCallBlockedBody")
                 .to_string(),
@@ -434,44 +454,9 @@ pub fn fill(template: &str, vars: &[(&str, &str)]) -> String {
     out
 }
 
-/// The words for one "Sign with" value (contract §5) — shared by the sheet's
-/// picker and Settings, so the two never name one way of signing twice.
-#[must_use]
-pub fn sign_method_key(method: &str) -> &'static str {
-    match method {
-        "platform" => "onboarding.create.methodPlatformTitle",
-        "hybrid" => "onboarding.create.methodHybridTitle",
-        "security_key" => "onboarding.create.methodSecurityKeyTitle",
-        "trusted_signer" => "componentsUi.signing.trustedSignerTitle",
-        _ => "common.automatic",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Every way to sign the core offers has its own words, and none of them
-    /// is the fallback's — a fifth method titled "Automatic" would be a
-    /// picker offering one thing twice.
-    #[test]
-    fn every_offered_method_has_its_own_words() {
-        let loc = Loc::from_env();
-        let s = SigningStrings::resolve(&loc);
-        let ids: Vec<&str> = s.sign_with_options.iter().map(|(id, _)| *id).collect();
-        assert_eq!(ids, vela_core::wallet_keys::SIGN_METHODS);
-        let mut keys: Vec<&str> = ids.iter().map(|id| sign_method_key(id)).collect();
-        keys.sort_unstable();
-        keys.dedup();
-        assert_eq!(keys.len(), ids.len(), "two methods share a title");
-        for (id, title) in &s.sign_with_options {
-            assert_ne!(title.as_ref(), sign_method_key(id), "`{id}` echoed its key");
-        }
-        assert_ne!(
-            s.trusted_signer_body.as_ref(),
-            "componentsUi.signing.trustedSignerBody"
-        );
-    }
 
     #[test]
     fn signing_strings_resolve_without_echo() {
@@ -496,6 +481,28 @@ mod tests {
         }
         assert!(s.summary_send.contains("{{amount}}"));
         assert!(s.byte_size.contains("{{n}}"));
+    }
+
+    /// The landing receipt's words are the send receipt's own keys, outside
+    /// this catalogue's `componentsUi.signing.` prefix — resolved under it
+    /// they came back as the keys themselves (078 G-04, seen on screen).
+    #[test]
+    fn the_landing_receipt_words_resolve() {
+        let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
+        for text in [
+            &s.receipt_confirming,
+            &s.receipt_confirming_hint,
+            &s.receipt_submitted,
+            &s.receipt_confirmed,
+            &s.receipt_failed,
+            &s.receipt_failed_hint,
+            &s.receipt_op_hash,
+            &s.receipt_tx_hash,
+            &s.receipt_explorer,
+            &s.receipt_done,
+        ] {
+            assert!(!text.contains("componentsTx"), "echoed a key: {text}");
+        }
     }
 
     #[test]

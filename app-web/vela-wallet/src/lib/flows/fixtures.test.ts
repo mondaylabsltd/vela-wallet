@@ -322,7 +322,9 @@ describe('fixture canon (zh mock verbatim)', () => {
 		if (sd3.base.kind !== 'send-confirm' || sd3c.base.kind !== 'send-confirm') {
 			throw new Error('expected both confirmations');
 		}
-		expect(sd3.base.model.amount).toBe('120 USDT');
+		// The figure and its coin as two pieces (078 round 2).
+		expect(sd3.base.model.amount).toBe('120');
+		expect(sd3.base.model.amountUnit).toBe('USDT');
 		expect(sd3.base.model.facts).toHaveLength(4);
 		expect(sd3.base.model.breakdown).toBeUndefined();
 

@@ -201,7 +201,7 @@ struct FlowHost: View {
                     set: { if !$0 { onDismissAlert?() } }
                 )
             ) {
-                Button("OK") { onDismissAlert?() }
+                Button(alert?.dismiss ?? "") { onDismissAlert?() }
             } message: {
                 Text(verbatim: alert?.message ?? "")
             }
@@ -495,7 +495,7 @@ private struct FlowSheetHost: View {
                 set: { if !$0 { onDismissAlert?() } }
             )
         ) {
-            Button("OK") { onDismissAlert?() }
+            Button(alert?.dismiss ?? "") { onDismissAlert?() }
         } message: {
             Text(verbatim: alert?.message ?? "")
         }

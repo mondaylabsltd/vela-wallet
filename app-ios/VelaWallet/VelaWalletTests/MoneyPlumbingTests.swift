@@ -56,7 +56,11 @@ final class ScriptedAccounts: UserOpSpine.AccountPort {
     /// ("nothing known", so the ceremony routes as it always did).
     var routesJson: String?
     var accountName: String?
+    /// The stored record `signInRoute` reads — `nil` is no record, which signs
+    /// as a record written before the sign-in key did.
+    var recordJson: String?
 
+    func accountJson(of address: String) async -> String? { recordJson }
     func keys(of address: String) async -> [WalletKeyRecord] { keyList }
     func routing(of address: String) async -> (transports: String, method: KeyMethod) {
         ("internal", .platform)
@@ -527,7 +531,11 @@ struct TxRecordWriteTests {
 /// the wallet's own — nothing at all. A screen with no rows cannot say whether
 /// the shell answered badly or the core refused the answer, so this drives the
 /// real machine with a scripted holding and asks it.
+/// `timeLimit`: the fee quotes here run with no settle deadline (a scripted
+/// relay answers by design), so a quote that never settles is a hang, and this
+/// is what reports it (`Waits.swift`).
 @MainActor
+@Suite(.timeLimit(.minutes(10)))
 struct SendMachineTests {
     private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
 
@@ -583,7 +591,7 @@ struct SendMachineTests {
         let port = ScriptedRelayPort()
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
-        let fees = FeeStore(relay: relay, accounts: accountPort)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
         let held = try balance()
         let nets = try networks()
 
@@ -606,10 +614,9 @@ struct SendMachineTests {
             displayCode: "USD", displayRate: 1, fiatDecimals: 2
         )
 
-        // The fetch is one hop through the effect loop, with no network in it.
-        for _ in 0..<40 where send.view?.tokens.isEmpty ?? true {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        // The fetch is one hop through the effect loop, with no network in it
+        // — waited for by the machine finishing, not by a count of sleeps.
+        await Wait.until({ !(send.view?.tokens.isEmpty ?? true) }, orIdle: { send.isIdle })
         let view = try #require(send.view)
         #expect(view.tokens.count == 1)
         #expect(view.tokens.first?.symbol == "xDAI")
@@ -628,7 +635,7 @@ struct SendMachineTests {
         let port = ScriptedRelayPort()
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
-        let fees = FeeStore(relay: relay, accounts: accountPort)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
         let held = try balance()
         let nets = try networks()
         let pool = RpcPool(store: store, accounts: accounts)
@@ -647,15 +654,11 @@ struct SendMachineTests {
             accountId: "cred-0", address: golden, name: "Parallel One",
             displayCode: "USD", displayRate: 1, fiatDecimals: 2
         )
-        for _ in 0..<40 where send.view?.tokens.isEmpty ?? true {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        await Wait.until({ !(send.view?.tokens.isEmpty ?? true) }, orIdle: { send.isIdle })
         let id = try #require(send.view?.tokens.first?.id)
 
         send.selectToken(id: id)
-        for _ in 0..<40 where send.view?.stage != .enterDetails {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        await Wait.until({ send.view?.stage == .enterDetails }, orIdle: { send.isIdle })
         let view = try #require(send.view)
         #expect(view.stage == .enterDetails)
         #expect(view.selectedToken?.symbol == "xDAI")
@@ -682,7 +685,7 @@ struct SendMachineTests {
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
         let accountPort = ScriptedAccounts()
         let signer = CountingSigner()
-        let fees = FeeStore(relay: relay, accounts: accountPort)
+        let fees = FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil)
         let pool = RpcPool(store: store, accounts: accounts)
 
         let executor = SendExecutor(
@@ -736,7 +739,7 @@ struct SendMachineTests {
         let executor = SendExecutor(
             store: store, relay: relay, pool: pool,
             spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { CountingSigner() }),
-            accounts: accountPort, fees: FeeStore(relay: relay, accounts: accountPort),
+            accounts: accountPort, fees: FeeStore(relay: relay, accounts: accountPort, settleDeadline: nil),
             identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
             metadata: TokenMetadata(store: store, pool: pool),
             accountStore: accounts,
@@ -810,7 +813,7 @@ struct SendMachineTests {
         ])
 
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         let settled = await fees.quote(
             chainId: 100, account: golden, deployed: true, publicKeyAvailable: true,
             calls: [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
@@ -882,9 +885,7 @@ struct SendMachineTests {
         // Wait for the RECORD, not for the entry: the verdict lands in the
         // view first and reaches disk one effect later, and a test that stops
         // at the view would pass while the store still said pending.
-        for _ in 0..<60 where !TxRecords.pending(store: store).isEmpty {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        await Wait.until({ TxRecords.pending(store: store).isEmpty }, orIdle: { tracker.isIdle })
         let entry = try #require(tracker.view?.entries.first, "the pending row was not picked up")
         #expect(entry.userOpHash == "0xcf9f")
         #expect(entry.status == "confirmed")
@@ -921,9 +922,11 @@ struct SendMachineTests {
         )
         let tracker = TrackerStore(executor: executor)
         tracker.boot()
-        for _ in 0..<20 where tracker.view?.entries.isEmpty ?? true {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        // The whole round: the row picked up AND the bundler asked. Waiting
+        // for the row alone (as a count of sleeps did) could assert before the
+        // poll that might have patched the record had even run.
+        await Wait.until({ false }, orIdle: { tracker.isIdle })
+        #expect(tracker.view?.entries.isEmpty == false, "the pending row was not picked up")
 
         #expect(TxRecords.load(store: store).first?["status"] as? String == "pending")
         #expect(!TxRecords.pending(store: store).isEmpty)

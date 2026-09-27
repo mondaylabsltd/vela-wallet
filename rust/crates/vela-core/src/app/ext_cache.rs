@@ -197,6 +197,7 @@ pub enum ExtCacheEffect {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ExtCacheEvent"))]
+#[allow(clippy::large_enum_variant)] // a wire type: the JSON shape is pinned by the generated TS
 pub enum Event {
     /// Wallet state changed (or finished restoring). Replaces the headless
     /// component's latest-ref snapshot: the shell reports the whole current

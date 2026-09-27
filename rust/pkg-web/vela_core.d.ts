@@ -955,6 +955,15 @@ export function safeProxyRuntimeCode(): string;
 export function sha256(data: Uint8Array): Uint8Array;
 
 /**
+ * The route an account's signatures take, as JSON
+ * (`{credential_id, transports, method, signer_origin?}`), or `null` for a
+ * record written before the account named its sign-in key — that one signs as
+ * it always did. `account_json` is the stored account record. See
+ * `vela_core::app::Account::sign_in_route`.
+ */
+export function signInRoute(account_json: string): string | undefined;
+
+/**
  * What a site's message request asks the account to sign, before the
  * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
  */
@@ -1074,8 +1083,10 @@ export function verifiedNameStep(chain_id: number, registry: string, address: st
  * (spec 062). `device_keys_json` is the account record's `keys` array (or a
  * one-element array built from the legacy scalars); the answer is `ask` with
  * `eth_call`s to perform, or `done` with the rows and where they came from.
+ * `sign_in_credential` is the account's sign-in route credential
+ * (`signInRoute`), empty for none: its row is marked `signs_here`.
  */
-export function walletKeysStep(address: string, device_keys_json: string, answers_json: string): string;
+export function walletKeysStep(address: string, device_keys_json: string, answers_json: string, sign_in_credential: string): string;
 
 export function webauthnSigningHash(authenticator_data: Uint8Array, client_data_json: Uint8Array): Uint8Array;
 
@@ -1286,6 +1297,7 @@ export interface InitOutput {
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly signInRoute: (a: number, b: number) => [number, number];
     readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signprefcore_new: () => number;
@@ -1319,7 +1331,7 @@ export interface InitOutput {
     readonly typicalInclusionSeconds: (a: number) => number;
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
-    readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

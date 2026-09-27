@@ -39,13 +39,12 @@ pub struct SettingsStrings {
     pub nav_fee_speed: SharedString,
     pub fee_speed_title: SharedString,
     pub fee_speed_subtitle: SharedString,
-    /// "Sign with" (spec 071): the nav row is the page's title; the sentence
-    /// under it; the choices in the core's order with the Trusted Signer's
-    /// line; and the Trusted Signer page's section.
+    /// The Trusted Signer (spec 071): the nav row is the page's title — and
+    /// the caption of a key that lives behind a page — the sentence under it,
+    /// and the page's section. How a signature is routed is not a setting
+    /// (founder, 2026-09-26), so the page no longer offers a "Sign with".
     pub nav_signing: SharedString,
     pub signing_subtitle: SharedString,
-    pub sign_with_options: Vec<(&'static str, SharedString)>,
-    pub trusted_signer_body: SharedString,
     pub signer_page_title: SharedString,
     pub signer_page_subtitle: SharedString,
     pub signer_page_official: SharedString,
@@ -55,6 +54,50 @@ pub struct SettingsStrings {
     pub signer_page_reset: SharedString,
     pub signer_page_save: SharedString,
     pub nav_about: SharedString,
+    /// The Feedback page (078 S-03): its nav row, and the web's
+    /// `componentsUi.bugReport.*` words for the report itself.
+    pub nav_feedback: SharedString,
+    /// The Community group's label (Settings → Community, 2026-09-27).
+    pub nav_community: SharedString,
+    pub bug_title: SharedString,
+    pub bug_subtitle: SharedString,
+    pub bug_what_placeholder: SharedString,
+    pub bug_add_steps: SharedString,
+    pub bug_steps_placeholder: SharedString,
+    pub bug_preview_toggle: SharedString,
+    pub bug_labels: crate::executor::bug_report::EnvironmentLabels,
+    pub bug_consent: SharedString,
+    pub bug_send: SharedString,
+    pub bug_sending: SharedString,
+    pub bug_success_title: SharedString,
+    /// Both carry `{{number}}`.
+    pub bug_success_new: String,
+    pub bug_success_deduped: String,
+    pub bug_view_issue: SharedString,
+    pub bug_fallback_title: SharedString,
+    pub bug_fallback_body: SharedString,
+    pub bug_open_github: SharedString,
+    pub bug_open_github_form: SharedString,
+    /// The screenshots (078 round 3). `screenshotsHint` and
+    /// `screenshotsLimit` carry `{{max}}`. (`removeScreenshot` is the
+    /// badge's accessibility label on the other shells; gpui draws no
+    /// accessibility tree at this pin, so there is nowhere to put it here.)
+    pub bug_screenshots_label: SharedString,
+    pub bug_add_screenshots: SharedString,
+    pub bug_screenshots_hint: String,
+    pub bug_screenshots_public: SharedString,
+    pub bug_screenshots_limit: String,
+    pub bug_screenshot_unsupported: SharedString,
+    pub bug_drop_hint: SharedString,
+    pub bug_screenshots_dropped: SharedString,
+    pub bug_fallback_screenshots: SharedString,
+    pub bug_done: SharedString,
+    /// The send button in the fallback state (v2 A2): a retry, not "Send".
+    pub bug_try_again: SharedString,
+    /// The screenshot viewer's one button (078 round 3, C3). Its "View
+    /// screenshot {{index}}" and "Close" are accessibility labels on the
+    /// other shells, with nowhere to go on this gpui.
+    pub bug_remove_from_viewer: SharedString,
     // account panel
     /// "Total {{amount}}" — the second half of the summary. The count template
     /// ends in "· ", and the live panel printed that dangling separator with
@@ -62,6 +105,8 @@ pub struct SettingsStrings {
     /// balances nobody had asked the core for.
     pub accounts_total: String,
     pub accounts_count: String,
+    /// The account switcher's title (078 H-01), as the web's dialog names it.
+    pub accounts_title: SharedString,
     pub account_create: SharedString,
     pub account_sign_in: SharedString,
     pub sign_out_button: SharedString,
@@ -83,6 +128,8 @@ pub struct SettingsStrings {
     pub keys_provider_generic: SharedString,
     pub keys_provider_security_key: SharedString,
     pub keys_user_verified: SharedString,
+    /// The key this device signs with — the one it signed in with.
+    pub keys_signs_here: SharedString,
     pub keys_public_key: SharedString,
     pub keys_credential: SharedString,
     pub keys_transport: SharedString,
@@ -184,9 +231,6 @@ pub struct SettingsStrings {
     pub health_https_required: SharedString,
     pub health_offline: SharedString,
     pub health_invalid: SharedString,
-    /// The wizard's retry, for a chain the probe could not reach — never a
-    /// condemnation (the core's invariant ③).
-    pub recheck: SharedString,
     /// Spec 081: the two ways out of an INCOMPATIBLE verdict, which the web
     /// has always offered and desktop did not — a person could type a custom
     /// RPC under a red verdict and have nothing to press.
@@ -210,6 +254,10 @@ pub struct SettingsStrings {
     pub wizard_incompatible: SharedString,
     /// Spec 038 #E1: the probes failed — not a verdict.
     pub wizard_unable_to_verify: SharedString,
+    /// The unverifiable verdict's CTA, and the incompatible one's sentence
+    /// (the web's `retry` / `incompatibleHint`, 078 S-05).
+    pub wizard_retry: SharedString,
+    pub wizard_incompatible_hint: SharedString,
     pub endpoints_reset: SharedString,
     /// Spec 072 (FR-010): the question the reset asks first.
     pub endpoints_reset_title: SharedString,
@@ -237,6 +285,10 @@ pub struct SettingsStrings {
     pub count_sites: String,
     pub storage_clear: SharedString,
     pub storage_clear_all: SharedString,
+    /// The bar's legend (078 S-11).
+    pub storage_legend_user: SharedString,
+    pub storage_legend_caches: SharedString,
+    pub storage_legend_sessions: SharedString,
     pub storage_disconnect_all: SharedString,
     /// "Clear all caches?" — the question before it happens.
     pub storage_clear_title: SharedString,
@@ -293,13 +345,8 @@ impl SettingsStrings {
             nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
             fee_speed_title: s("settings.feeSpeed.title"),
             fee_speed_subtitle: s("settings.feeSpeed.subtitle"),
-            nav_signing: s("settings.signing.title"),
-            signing_subtitle: s("settings.signing.subtitle"),
-            sign_with_options: vela_core::wallet_keys::SIGN_METHODS
-                .iter()
-                .map(|method| (*method, s(crate::signing::sign_method_key(method))))
-                .collect(),
-            trusted_signer_body: s("componentsUi.signing.trustedSignerBody"),
+            nav_signing: s("componentsUi.signing.trustedSignerTitle"),
+            signing_subtitle: s("componentsUi.signing.trustedSignerBody"),
             signer_page_title: s("settings.signing.pageTitle"),
             signer_page_subtitle: s("settings.signing.pageSubtitle"),
             signer_page_official: s("settings.signing.pageOfficial"),
@@ -309,8 +356,48 @@ impl SettingsStrings {
             signer_page_reset: s("settings.signing.pageReset"),
             signer_page_save: s("settings.signing.pageSave"),
             nav_about: s("settings.about.title"),
+            nav_feedback: s("settings.feedback.title"),
+            nav_community: s("settings.sections.community"),
+            bug_title: s("componentsUi.bugReport.title"),
+            bug_subtitle: s("componentsUi.bugReport.subtitle"),
+            bug_what_placeholder: s("componentsUi.bugReport.whatPlaceholder"),
+            bug_add_steps: s("componentsUi.bugReport.addSteps"),
+            bug_steps_placeholder: s("componentsUi.bugReport.stepsPlaceholder"),
+            bug_preview_toggle: s("componentsUi.bugReport.previewToggle"),
+            bug_labels: crate::executor::bug_report::EnvironmentLabels {
+                version: raw("componentsUi.bugReport.previewVersion"),
+                platform: raw("componentsUi.bugReport.previewPlatform"),
+                language: raw("componentsUi.bugReport.previewLanguage"),
+                rpc: raw("componentsUi.bugReport.previewRpc"),
+                failures: raw("componentsUi.bugReport.previewFailures"),
+                none: raw("componentsUi.bugReport.previewNone"),
+            },
+            bug_consent: s("componentsUi.bugReport.consent"),
+            bug_send: s("componentsUi.bugReport.send"),
+            bug_sending: s("componentsUi.bugReport.sending"),
+            bug_success_title: s("componentsUi.bugReport.successTitle"),
+            bug_success_new: raw("componentsUi.bugReport.successBodyNew"),
+            bug_success_deduped: raw("componentsUi.bugReport.successBodyDeduped"),
+            bug_view_issue: s("componentsUi.bugReport.viewIssue"),
+            bug_fallback_title: s("componentsUi.bugReport.fallbackTitle"),
+            bug_fallback_body: s("componentsUi.bugReport.fallbackBody"),
+            bug_open_github: s("componentsUi.bugReport.openGithub"),
+            bug_open_github_form: s("componentsUi.bugReport.openGithubForm"),
+            bug_screenshots_label: s("componentsUi.bugReport.screenshotsLabel"),
+            bug_add_screenshots: s("componentsUi.bugReport.addScreenshots"),
+            bug_screenshots_hint: raw("componentsUi.bugReport.screenshotsHint"),
+            bug_screenshots_public: s("componentsUi.bugReport.screenshotsPublic"),
+            bug_screenshots_limit: raw("componentsUi.bugReport.screenshotsLimit"),
+            bug_screenshot_unsupported: s("componentsUi.bugReport.screenshotUnsupported"),
+            bug_drop_hint: s("componentsUi.bugReport.dropHint"),
+            bug_screenshots_dropped: s("componentsUi.bugReport.screenshotsDropped"),
+            bug_fallback_screenshots: s("componentsUi.bugReport.fallbackScreenshots"),
+            bug_done: s("componentsUi.bugReport.done"),
+            bug_try_again: s("common.tryAgain"),
+            bug_remove_from_viewer: s("componentsUi.bugReport.removeFromViewer"),
             accounts_total: raw("settingsModals.account.total"),
             accounts_count: raw("home.switcherAccountCount"),
+            accounts_title: s("settingsModals.account.modalTitle"),
             account_create: s("settingsModals.account.createNew"),
             account_sign_in: s("settingsModals.account.signInExisting"),
             sign_out_button: s("settings.signOut.button"),
@@ -329,6 +416,7 @@ impl SettingsStrings {
             keys_provider_generic: s("onboarding.create.providerGeneric"),
             keys_provider_security_key: s("onboarding.create.providerSecurityKey"),
             keys_user_verified: s("settingsModals.keys.userVerified"),
+            keys_signs_here: s("settingsModals.keys.signsHere"),
             keys_public_key: s("settingsModals.keys.publicKey"),
             keys_credential: s("settingsModals.keys.credential"),
             keys_transport: s("settingsModals.keys.transport"),
@@ -405,7 +493,6 @@ impl SettingsStrings {
             health_https_required: s("settingsModals.health.httpsRequired"),
             health_offline: s("settingsModals.health.offline"),
             health_invalid: s("settingsModals.health.invalid"),
-            recheck: s("settingsModals.addNetwork.recheck"),
             recheck_with_rpc: s("settingsModals.addNetwork.recheckWithRpc"),
             open_chain_setup_tool: s("settingsModals.addNetwork.openChainSetupTool"),
             wizard_searching: s("settingsModals.addNetwork.searching"),
@@ -415,6 +502,8 @@ impl SettingsStrings {
             wizard_no_rpc: raw("assets.rpcUnavailableSingle"),
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
+            wizard_retry: s("settingsModals.addNetwork.retry"),
+            wizard_incompatible_hint: s("settingsModals.addNetwork.incompatibleHint"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
             endpoints_reset_title: s("settingsModals.endpoints.resetTitle"),
             endpoints_reset_body: s("settingsModals.endpoints.resetBody"),
@@ -440,6 +529,9 @@ impl SettingsStrings {
             count_sites: raw("settings.storage.sitesCount"),
             storage_clear: s("settings.storage.clear"),
             storage_clear_all: s("settings.storage.clearAllCaches"),
+            storage_legend_user: s("settings.storage.legendUserData"),
+            storage_legend_caches: s("settings.storage.legendCaches"),
+            storage_legend_sessions: s("settings.storage.legendSessions"),
             storage_disconnect_all: s("settings.storage.disconnectAll"),
             storage_clear_title: s("settings.storage.clearTitle"),
             storage_clear_body: s("settings.storage.clearBody"),
@@ -538,17 +630,72 @@ mod tests {
         }
     }
 
-    /// The "Sign with" page's words (spec 071), every one of them a key the
-    /// corpus already carries in fifteen languages — and its choices are the
-    /// core's five, in the core's order.
+    /// The report's screenshot words (078 round 3), every one of them in the
+    /// corpus already — and the templates keep their placeholders.
     #[test]
-    fn the_sign_with_words_resolve() {
+    fn the_screenshot_words_resolve() {
         let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
         for (value, key) in [
-            (&s.nav_signing, "settings.signing.title"),
-            (&s.signing_subtitle, "settings.signing.subtitle"),
             (
-                &s.trusted_signer_body,
+                &s.bug_screenshots_label,
+                "componentsUi.bugReport.screenshotsLabel",
+            ),
+            (
+                &s.bug_add_screenshots,
+                "componentsUi.bugReport.addScreenshots",
+            ),
+            (
+                &s.bug_screenshots_public,
+                "componentsUi.bugReport.screenshotsPublic",
+            ),
+            (
+                &s.bug_screenshot_unsupported,
+                "componentsUi.bugReport.screenshotUnsupported",
+            ),
+            (&s.bug_drop_hint, "componentsUi.bugReport.dropHint"),
+            (
+                &s.bug_screenshots_dropped,
+                "componentsUi.bugReport.screenshotsDropped",
+            ),
+            (
+                &s.bug_fallback_screenshots,
+                "componentsUi.bugReport.fallbackScreenshots",
+            ),
+            (&s.bug_done, "componentsUi.bugReport.done"),
+            (&s.bug_try_again, "common.tryAgain"),
+            (&s.nav_community, "settings.sections.community"),
+            (
+                &s.bug_remove_from_viewer,
+                "componentsUi.bugReport.removeFromViewer",
+            ),
+        ] {
+            assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
+            assert!(!value.is_empty(), "`{key}` resolved empty");
+        }
+        assert!(s.bug_screenshots_hint.contains("{{max}}"));
+        assert!(s.bug_screenshots_limit.contains("{{max}}"));
+    }
+
+    /// The keys list's mark for the key this device signs with.
+    #[test]
+    fn the_signs_here_mark_resolves() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        let mark = s.keys_signs_here.to_string();
+        assert!(
+            !mark.is_empty() && mark != "settingsModals.keys.signsHere",
+            "{mark:?}"
+        );
+    }
+
+    /// The Trusted Signer page's words (spec 071), every one of them a key the
+    /// corpus already carries in fifteen languages.
+    #[test]
+    fn the_trusted_signer_words_resolve() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        for (value, key) in [
+            (&s.nav_signing, "componentsUi.signing.trustedSignerTitle"),
+            (
+                &s.signing_subtitle,
                 "componentsUi.signing.trustedSignerBody",
             ),
             (&s.signer_page_title, "settings.signing.pageTitle"),
@@ -563,7 +710,5 @@ mod tests {
             assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
             assert!(!value.is_empty(), "`{key}` resolved empty");
         }
-        let ids: Vec<&str> = s.sign_with_options.iter().map(|(id, _)| *id).collect();
-        assert_eq!(ids, vela_core::wallet_keys::SIGN_METHODS);
     }
 }

@@ -145,13 +145,15 @@ enum SettingsFixtures {
     private static func sections(_ loc: Loc, advancedOpen: Bool) -> [SettingsSectionModel] {
         let k = I18nKeys.SettingsUi.self
         return [
-            // 通讯录 and 反馈 are NOT on this page.
+            // 通讯录 is NOT on this page: the founder's ruling (2026-09-12,
+            // applied on Android in 047 and recorded again in 054's plan) — the
+            // address book has its own tab, and a settings row pointing at it
+            // is a second front door to one room.
             //
-            // The founder's ruling (2026-09-12, applied on Android in 047 and
-            // recorded again in 054's plan): the address book has its own tab
-            // and a settings row pointing at it is a second front door to one
-            // room; the feedback sheet stays drawn and reachable from the
-            // places that raise it, not from a list of preferences.
+            // 反馈 IS, in the last block beside 关于 (spec 081 FR-016, 078
+            // round 3, as Android places it): a report sheet no row opens is a
+            // report nobody can send, and on iOS none did (founder, 2026-09-27:
+            // "设置的关于下面，没有看到反馈按钮").
             SettingsSectionModel(
                 rows: [
                     SettingsRowModel(id: "language", title: loc.t(k.languageTitle), icon: .globe,
@@ -189,11 +191,8 @@ enum SettingsFixtures {
                     SettingsRowModel(id: feeSpeedRow, title: loc.t("settings.advanced.feeSpeedTitle"),
                                      icon: .clock, subtitle: loc.t("settings.advanced.feeSpeedSubtitle"),
                                      value: loc.t("send.gasTier.fast")),
-                    // Spec 071: how this device signs by default, and which
-                    // Trusted Signer page it opens — beside the speed, as every
-                    // client places them.
-                    SettingsRowModel(id: signWithRow, title: loc.t("settings.signing.title"),
-                                     icon: .lock, value: loc.t("common.automatic")),
+                    // Spec 071: which Trusted Signer page this device opens —
+                    // beside the speed, as every client places it.
                     SettingsRowModel(id: signerPageRow, title: loc.t("settings.signing.pageTitle"),
                                      icon: .link2, value: loc.t("settings.signing.pageOfficial")),
                     SettingsRowModel(id: "storage", title: loc.t(k.storageTitle),
@@ -202,12 +201,49 @@ enum SettingsFixtures {
                 label: loc.t(k.sectionAdvanced),
                 collapsible: true
             ),
+            // Community (founder, 2026-09-27: "设置里面再加一下，我们的官方社交
+            // 账号链接"): directly above 关于 / 反馈. Each row leaves the app,
+            // so it wears the external mark, not a chevron.
+            SettingsSectionModel(
+                rows: communityLinks.map { link in
+                    SettingsRowModel(id: link.id, title: link.title, icon: link.glyph,
+                                     subtitle: link.handle, trailing: .external)
+                },
+                label: loc.t(k.sectionCommunity)
+            ),
             SettingsSectionModel(rows: [
                 SettingsRowModel(id: "about", title: loc.t(k.aboutTitle), icon: .info,
                                  value: loc.t(k.aboutSubtitle, vars: ["version": appVersion])),
+                SettingsRowModel(id: feedbackRow, title: loc.t(k.feedbackTitle), icon: .messageSquareText,
+                                 subtitle: loc.t(k.feedbackSubtitle)),
             ]),
         ]
     }
+
+    /// The row that opens the report sheet (ST15).
+    static let feedbackRow = "feedback"
+
+    /// One official account: its row, its brand name (never translated), the
+    /// handle shown under it, and where it goes.
+    struct CommunityLink: Equatable {
+        let id: String
+        let title: String
+        let handle: String
+        let url: String
+        let glyph: LucideGlyph
+    }
+
+    /// The official accounts, exactly as getvela.app's footer publishes them —
+    /// defined ONCE, and pinned by `SettingsCommunityTests`, so the shells
+    /// cannot drift.
+    static let communityLinks: [CommunityLink] = [
+        CommunityLink(id: "community-x", title: "X (Twitter)", handle: "@realvelawallet",
+                      url: "https://x.com/realvelawallet", glyph: .brandX),
+        CommunityLink(id: "community-telegram", title: "Telegram", handle: "@velawallet",
+                      url: "https://t.me/velawallet", glyph: .brandTelegram),
+        CommunityLink(id: "community-discord", title: "Discord", handle: "discord.gg/23gWrtaYSa",
+                      url: "https://discord.gg/23gWrtaYSa", glyph: .brandDiscord),
+    ]
 
     private static func networkRows(_ loc: Loc) -> [SettingsNetworkRowModel] {
         networksCanon.map { network in
@@ -537,27 +573,8 @@ enum SettingsFixtures {
         )
     }
 
-    /// The Settings row ids of the signing preferences (spec 071, 075).
-    static let signWithRow = "sign-with"
+    /// The Settings row id of the Trusted Signer page (spec 071, 075).
     static let signerPageRow = "signer-page"
-
-    /// The default "Sign with" sheet: every value the core offers, in its
-    /// order and in the signing sheet's own words — the Trusted Signer with the
-    /// line on what it does.
-    static func signWithSheet(_ loc: Loc, offered: [String], selected: String) -> SelectSheetModel {
-        SelectSheetModel(
-            title: loc.t("settings.signing.title"),
-            rows: offered.compactMap { id in
-                SigningLive.signMethodTitle(id, loc: loc).map { title in
-                    SelectRowModel(
-                        id: id, label: title, selected: id == selected,
-                        detail: SigningLive.signMethodDetail(id, loc: loc)
-                    )
-                }
-            },
-            subtitle: loc.t("settings.signing.subtitle")
-        )
-    }
 
     private static func currencySheet(_ loc: Loc) -> SelectSheetModel {
         let k = I18nKeys.SettingsUi.self
@@ -613,7 +630,30 @@ enum SettingsFixtures {
             ],
             consent: loc.t(k.bugConsent),
             send: loc.t(k.bugSend),
-            githubLink: loc.t(k.bugGithub)
+            githubLink: loc.t(k.bugGithub),
+            stepsPlaceholder: loc.t(k.bugStepsPlaceholder),
+            sending: loc.t(k.bugSending),
+            successTitle: loc.t(k.bugSuccessTitle),
+            successBodyNew: loc.t(k.bugSuccessBodyNew, vars: ["number": "{{number}}"]),
+            successBodyDeduped: loc.t(k.bugSuccessBodyDeduped, vars: ["number": "{{number}}"]),
+            viewIssue: loc.t(k.bugViewIssue),
+            fallbackTitle: loc.t(k.bugFallbackTitle),
+            fallbackBody: loc.t(k.bugFallbackBody),
+            openGithub: loc.t(k.bugOpenGithub),
+            done: loc.t(k.bugDone),
+            screenshotsLabel: loc.t(k.bugScreenshotsLabel),
+            addScreenshots: loc.t(k.bugAddScreenshots),
+            screenshotsHint: loc.t(k.bugScreenshotsHint, vars: ["max": String(ScreenshotPrep.maxCount)]),
+            screenshotsPublic: loc.t(k.bugScreenshotsPublic),
+            removeScreenshot: loc.t(k.bugRemoveScreenshot, vars: ["index": "{{index}}"]),
+            screenshotsLimit: loc.t(k.bugScreenshotsLimit, vars: ["max": String(ScreenshotPrep.maxCount)]),
+            screenshotUnsupported: loc.t(k.bugScreenshotUnsupported),
+            screenshotsDropped: loc.t(k.bugScreenshotsDropped),
+            fallbackScreenshots: loc.t(k.bugFallbackScreenshots),
+            viewScreenshot: loc.t(k.bugViewScreenshot, vars: ["index": "{{index}}"]),
+            closeViewer: loc.t(k.bugCloseViewer),
+            removeFromViewer: loc.t(k.bugRemoveFromViewer),
+            tryAgain: loc.t(k.commonTryAgain)
         )
     }
 
@@ -805,11 +845,6 @@ enum SettingsFixtures {
             languageSheet: languageSheet(loc, current: "zh"),
             currencySheet: currencySheet(loc),
             feeSpeedSheet: feeSpeedSheet(loc, selected: "fast"),
-            // The machine's own first view: what it offers before anything
-            // was read — never a list kept here.
-            signWithSheet: signWithSheet(
-                loc, offered: SignPrefViewWire.initial?.offered ?? [], selected: "auto"
-            ),
             numberSheet: formatSheet(loc, title: loc.t(k.numberTitle),
                                      subtitle: loc.t(k.numberSubtitle), samples: numberSamples,
                                      notes: [4: loc.t(k.noteIndian)]),

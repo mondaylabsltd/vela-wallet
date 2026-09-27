@@ -135,6 +135,42 @@ describe('holdings on a chain that did not answer', () => {
 		expect(failed).toContain(GNOSIS);
 	});
 
+	// A round a chain did not answer is not a fresh answer to hold: served from
+	// the cache it would report no failures, and the balance machine's retry
+	// would take a launch-time blip for a complete, empty wallet.
+	it('a partial round is never served from the cache as if complete', async () => {
+		down.add(GNOSIS);
+		down.add(BASE);
+		let failed: number[] = [];
+		const blip = await fetchTokens(ADDRESS, { onFailedChains: (ids) => (failed = ids) });
+		expect(blip).toEqual([]);
+		expect(failed).toEqual(expect.arrayContaining([GNOSIS, BASE]));
+
+		// The blip is over; a plain (non-forced) ask reads the chains again.
+		down.clear();
+		balances.set(GNOSIS, ONE);
+		failed = [];
+		const next = await fetchTokens(ADDRESS, { onFailedChains: (ids) => (failed = ids) });
+		expect(chainIdsOf(next)).toEqual([GNOSIS]);
+		expect(failed).toEqual([]);
+
+		// A complete round IS held: the next plain ask is the cache's.
+		balances.set(GNOSIS, 2n * ONE);
+		expect((await fetchTokens(ADDRESS))[0].balance).toBe('1');
+	});
+
+	it('a caller that JOINS a round in flight hears its failures too', async () => {
+		down.add(GNOSIS);
+		let ownerFailed: number[] = [];
+		let joinerFailed: number[] = [];
+		await Promise.all([
+			fetchTokens(ADDRESS, { onFailedChains: (ids) => (ownerFailed = ids) }),
+			fetchTokens(ADDRESS, { onFailedChains: (ids) => (joinerFailed = ids) })
+		]);
+		expect(ownerFailed).toContain(GNOSIS);
+		expect(joinerFailed).toEqual(ownerFailed);
+	});
+
 	it('are already in the first streamed snapshot, so the list never shrinks mid-refresh', async () => {
 		balances.set(GNOSIS, ONE);
 		balances.set(ARBITRUM, ONE);

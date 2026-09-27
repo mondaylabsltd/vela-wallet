@@ -1,5 +1,13 @@
 package app.getvela.wallet.feature.settings.components
 
+import kotlin.math.roundToInt
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -87,46 +95,69 @@ fun VelaSettingsRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
+            // On a row of two or more lines (a subtitle, a value under the
+            // title, a wrapped title) the glyph belongs to the TITLE's line,
+            // not the middle of the block (design review, 078 round 3).
+            var firstLinePx by remember { mutableIntStateOf(0) }
+            var blockPx by remember { mutableIntStateOf(0) }
+            val tall = firstLinePx > 0 && blockPx > firstLinePx * 3 / 2
             if (row.icon != null) {
-                Icon(
-                    imageVector = settingsIcon(row.icon),
-                    contentDescription = null,
-                    tint = if (row.tone == RowTone.Default) colors.fgMuted else tint,
-                    modifier = Modifier.size(VelaIconSize.lg),
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
-            ) {
-                Text(
-                    text = row.title,
-                    color = tint,
-                    fontFamily = VelaFontFamily,
-                    fontWeight = VelaFontWeight.semibold,
-                    fontSize = VelaTextSize.lg,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (row.subtitle != null) {
-                    Text(
-                        text = row.subtitle,
-                        color = colors.fgSubtle,
-                        fontFamily = VelaFontFamily,
-                        fontSize = VelaTextSize.base,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                val firstLine = with(LocalDensity.current) { firstLinePx.toDp() }
+                Box(
+                    modifier = if (tall) Modifier.align(Alignment.Top).height(firstLine) else Modifier,
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = settingsIcon(row.icon),
+                        contentDescription = null,
+                        tint = if (row.tone == RowTone.Default) colors.fgMuted else tint,
+                        modifier = Modifier.size(VelaIconSize.lg),
                     )
                 }
             }
+            // The title is never cut (spec 078 round 3): side by side with the
+            // value when both fit, otherwise the value takes its own line
+            // under the title, and a long title wraps. At the largest size in
+            // es-MX this read "Idi…" beside "Español (México) · Sistema".
+            val titleBlock: @Composable () -> Unit = {
+                Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                    Text(
+                        text = row.title,
+                        color = tint,
+                        fontFamily = VelaFontFamily,
+                        fontWeight = VelaFontWeight.semibold,
+                        fontSize = VelaTextSize.lg,
+                        onTextLayout = { firstLinePx = it.getLineBottom(0).roundToInt() },
+                    )
+                    if (row.subtitle != null) {
+                        Text(
+                            text = row.subtitle,
+                            color = colors.fgSubtle,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.base,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
             if (row.value != null) {
-                Text(
-                    text = row.value,
-                    color = colors.fgMuted,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.base,
-                    maxLines = 1,
+                VelaLabelBesideValue(
+                    modifier = Modifier.weight(1f).onSizeChanged { blockPx = it.height },
+                    gap = VelaSpacing.lg,
+                    stackedValue = Alignment.Start,
+                    label = titleBlock,
+                    value = {
+                        Text(
+                            text = row.value,
+                            color = colors.fgMuted,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.base,
+                        )
+                    },
                 )
+            } else {
+                Box(modifier = Modifier.weight(1f).onSizeChanged { blockPx = it.height }) { titleBlock() }
             }
             when (row.trailing) {
                 RowTrailing.Chevron -> Icon(
@@ -579,21 +610,31 @@ fun VelaKeyValueRow(row: KeyValueRowModel, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
-            Text(
-                text = row.label,
-                color = if (row.external) colors.fgBase else colors.fgMuted,
-                fontFamily = VelaFontFamily,
-                fontWeight = if (row.external) VelaFontWeight.semibold else VelaFontWeight.regular,
-                fontSize = VelaTextSize.base,
+            // The same rule as a settings row: the label whole, the value
+            // beside it or — when both do not fit — under it.
+            VelaLabelBesideValue(
                 modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = row.value,
-                color = if (row.external) colors.fgSubtle else colors.fgBase,
-                fontFamily = if (row.mono) VelaMonoFontFamily else VelaFontFamily,
-                fontSize = VelaTextSize.base,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                gap = VelaSpacing.lg,
+                stackedValue = Alignment.Start,
+                label = {
+                    Text(
+                        text = row.label,
+                        color = if (row.external) colors.fgBase else colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontWeight = if (row.external) VelaFontWeight.semibold else VelaFontWeight.regular,
+                        fontSize = VelaTextSize.base,
+                    )
+                },
+                value = {
+                    Text(
+                        text = row.value,
+                        color = if (row.external) colors.fgSubtle else colors.fgBase,
+                        fontFamily = if (row.mono) VelaMonoFontFamily else VelaFontFamily,
+                        fontSize = VelaTextSize.base,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
             )
             if (row.external) {
                 Icon(

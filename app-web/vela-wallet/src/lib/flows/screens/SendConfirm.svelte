@@ -33,7 +33,17 @@
 				badgeHidden={model.mark.badgeHidden}
 			/>
 		{/if}
-		<p class="amount">{model.amount}</p>
+		<!-- The figure and its coin as two pieces on one baseline (078 round 2),
+		     in the Send form hero's proportions: the coin at 26/46 of the
+		     figure, medium, muted, set off by the hero's gap — "0.45767 xDAI"
+		     reads as the number first. A split's total and a sweep's count are
+		     one string, as before. -->
+		<p class="amount">
+			<span class="figure">{model.amount}</span>
+			{#if model.amountUnit !== undefined}
+				<span class="unit">{model.amountUnit}</span>
+			{/if}
+		</p>
 		<p class="subline">{model.subline}</p>
 	</div>
 
@@ -83,6 +93,11 @@
 	}
 
 	.amount {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: center;
+		max-width: 100%;
 		margin: 0;
 		font-family: var(--font-numeric);
 		font-size: calc(var(--text-4xl) * var(--text-scale, 1));
@@ -90,6 +105,22 @@
 		font-variant-numeric: tabular-nums;
 		line-height: var(--leading-tight);
 		color: var(--color-fg-base);
+	}
+
+	.figure {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	/* The hero's ratio, not a separate size: the form's coin is text-3xl beside
+	   a text-hero figure (26/46), so this one is 26/46 of the figure it sits
+	   beside — and follows the text-size setting with it. */
+	.unit {
+		margin-inline-start: var(--space-sm);
+		font-size: calc(26em / 46);
+		font-weight: var(--weight-medium);
+		line-height: var(--leading-none);
+		color: var(--color-fg-muted);
 	}
 
 	.subline {

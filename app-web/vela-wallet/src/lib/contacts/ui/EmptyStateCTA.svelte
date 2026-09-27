@@ -34,8 +34,11 @@
 		align-items: center;
 	}
 
+	/* Balanced: wrapped at the full width, the centred caption left a stub
+	   under a long line (「……现有通讯 / 录。」). */
 	.wrap :global(.caption) {
 		max-width: calc(var(--layout-maxContentWidth) / 2);
+		text-wrap: balance;
 	}
 
 	.ctas {

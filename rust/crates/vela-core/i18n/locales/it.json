@@ -6,7 +6,8 @@
     "error": "Errore",
     "somethingWrong": "Qualcosa è andato storto",
     "tryAgain": "Riprova",
-    "done": "Fatto"
+    "done": "Fatto",
+    "gotIt": "Ho capito"
   },
   "language": {
     "title": "Lingua",
@@ -25,6 +26,7 @@
       "appearance": "Aspetto",
       "localization": "Lingua e formati",
       "advanced": "Avanzate",
+      "community": "Community",
       "developer": "Sviluppatore"
     },
     "account": {
@@ -36,7 +38,7 @@
     "appearance": {
       "themeLight": "Chiaro",
       "themeDark": "Scuro",
-      "themeAuto": "Come il sistema",
+      "themeAuto": "Sistema",
       "avatarInitials": "Iniziali",
       "avatarIdenticon": "Identicon",
       "themeTitle": "Tema",

@@ -41,6 +41,11 @@ use crate::resident;
 use crate::session;
 use crate::settings::SettingsStrings;
 
+/// The Feedback page — the report, its screenshots and its two outcomes
+/// (078 S-03 and round 3) — kept beside this file rather than in it.
+mod feedback;
+use feedback::FeedbackDraft;
+
 /// How many focus handles the endpoints panel claims before the providers
 /// panel starts. Four fields, one per service.
 const ENDPOINT_FOCUS_COUNT: usize = 4;
@@ -58,11 +63,12 @@ use crate::executor::format_prefs;
 use crate::executor::passkey::WindowHandle;
 use crate::hardware;
 use crate::settings::components::{
-    CalloutTone, ConfirmCopy, callout, chain_mark, check_list, confirm_card, danger_card,
-    dropdown_menu, dropdown_menu_choices, dropdown_menu_picks, dropdown_trigger,
-    editable_url_field, form_row, key_value_row, network_row, rpc_banner, segmented,
-    segmented_picks, settings_nav_row, status_pill, storage_bar, storage_group, storage_group_with,
-    text_scale, text_scale_picks, url_field,
+    CalloutTone, ConfirmCopy, DetailRow, callout, chain_logo_mark, chain_mark, check_list,
+    confirm_sheet, danger_card, dropdown_menu, dropdown_menu_choices, dropdown_menu_details,
+    dropdown_menu_picks, dropdown_trigger, editable_url_field, form_row, key_value_row,
+    network_row, rpc_banner, segmented, segmented_picks, settings_nav_row, status_pill,
+    storage_bar, storage_group, storage_group_with, text_scale, text_scale_slider, url_field,
+    url_field_with,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -73,10 +79,11 @@ use crate::signing::fixtures as signing_fixtures;
 use crate::signing::live as signing_live;
 use crate::signing::trusted_signer as signing_trusted_signer;
 use crate::theme::{
-    self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_HEADER_H, CONTACTS_HERO_AVATAR,
-    CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W, GALLERY_BAR_H, SETTINGS_DIALOG_W,
-    SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W, THIRD_PANEL_W,
-    Theme, ThemeMode, WALLET_PAD_TOP, WALLET_PAD_X,
+    self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_EMPTY_W, CONTACTS_HEADER_H,
+    CONTACTS_HERO_AVATAR, CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W,
+    GALLERY_BAR_H, SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W,
+    THIRD_PANEL_W, Theme, ThemeMode, WALLET_CONTENT_MAX_W, WALLET_PAD_TOP, WALLET_PAD_X,
+    WALLET_ROW_MEASURE,
 };
 use crate::wallet::browser_host::{BROWSER_TAB, BrowserHost};
 use crate::wallet::live as wallet_live;
@@ -109,10 +116,9 @@ use super::WalletStrings;
 use super::components::{
     action_pill, activity_row, asset_row, balance_display, chain_row, empty_state, icon_img,
     identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
-    section_header_row, sidebar_search, skeleton_row, token_icon, token_icon_logos, wallet_header,
+    section_header_row, skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
-use crate::flows::components::mono_field;
 use crate::flows::{
     FlowEntry, FlowPanel, FlowStep, FlowStrings, fixtures as flow_fixtures, live as flows_live,
     panels,
@@ -143,6 +149,12 @@ pub enum PanelId {
 /// ~7px of clearance the 34px strip needs, with a little room to spare.
 const CONTACTS_HEADER_CAPTION_PAD: f32 = 16.;
 
+/// A switcher row's artwork (`size="row"`, `--icon-2xl`).
+const SWITCHER_IDENTICON: f32 = 30.;
+/// The identicon viewer's artwork (`--size-identiconViewer`): big enough to
+/// read as a picture rather than an avatar.
+const VIEWER_IDENTICON: f32 = 160.;
+
 /// What the gallery chip strip adds on top for the same reason. It is not
 /// centred, so this is the clearance itself, less the 8 the bar already had.
 fn gallery_bar_caption_pad(caption: bool) -> f32 {
@@ -160,6 +172,32 @@ pub enum Section {
     /// Spec 023: the settings section — a second-level nav plus one panel,
     /// hosted in the same three-column shell contacts already reuses.
     Settings,
+}
+
+impl Section {
+    /// Whether THIS build has the destination — the web's rule
+    /// (`app-web/.../wallet/destinations.ts`), for the same reason.
+    ///
+    /// Linux has no in-app dApp browser (owner call, 2026-09-24). gpui runs as
+    /// a native Wayland client, and Wayland lets no program place another's
+    /// page inside its window, so the site could only open in a window of its
+    /// own — built, and parked on the local branch `linux-dapp-browser-wip`,
+    /// because a connect or a signature then had to be answered back in this
+    /// one. Three destinations, rather than a fourth that opens a picture.
+    pub const fn available(self) -> bool {
+        !(cfg!(target_os = "linux") && matches!(self, Section::Explore))
+    }
+
+    /// A place this build cannot show — a pinned or restored Explore on
+    /// Linux — opens the wallet instead.
+    #[must_use]
+    pub const fn or_wallet(self) -> Self {
+        if self.available() {
+            self
+        } else {
+            Section::Wallet
+        }
+    }
 }
 
 /// The two anchored menus DC5/DC6 define. Both render through one
@@ -190,6 +228,10 @@ enum Confirm {
     DisconnectAll,
     /// Service endpoints back to Vela's own, what was typed forgotten.
     ResetEndpoints,
+    /// One contact, named — the web asks before either delete (078 C-01).
+    DeleteContact { address: String, name: SharedString },
+    /// One group, named; its contacts stay in the book.
+    DeleteGroup { id: String, name: SharedString },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -219,13 +261,6 @@ enum ContactsMenu {
     /// Spec 034 — right-click on a contact row. Drawn since spec 018, opened
     /// by nothing until now.
     Contact,
-    /// Spec 034 — which contacts this group holds, ticked. The same question
-    /// as `ContactGroups`, asked from the group's screen.
-    GroupMembers,
-    /// Spec 034 — which groups this contact is in, ticked. A menu rather than
-    /// a dialog for the same reason the explore one is: the question is
-    /// "which of these", and the answer is visible on every row.
-    ContactGroups,
     /// Spec 032 phase 41 — "move to a group", listing the person's own
     /// groups. A menu rather than a new picker component: the question is
     /// "which of these", which is what a menu is.
@@ -233,6 +268,18 @@ enum ContactsMenu {
     /// Spec 070 — which network the site on screen is on, ticked; picking
     /// one moves THAT site (`site_chain_picked`) and no other.
     SiteNetwork,
+}
+
+/// The identicon, big, beside the address that drew it (078 H-02, the web's
+/// `IdenticonViewer`).
+#[derive(Clone, Debug)]
+struct IdenticonViewer {
+    /// The seed, verbatim: what the artwork was drawn from.
+    address: String,
+    /// "Copied" is showing for this press. A number and not a flag, so an
+    /// earlier press's timer cannot take down a later press's tick.
+    copied: Option<u64>,
+    presses: u64,
 }
 
 /// What the explore name dialog is asking for.
@@ -254,6 +301,15 @@ enum ExploreAsk {
 struct ExploreForm {
     ask: ExploreAsk,
     text: String,
+}
+
+/// The Explore groups, as the manage sheet lists them (078 W-11).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExploreGroupRow {
+    Favorites,
+    Recent,
+    /// A person's own group, by its place in the core's list.
+    Custom(usize),
 }
 
 /// The frame the viewfinder is showing, and the discipline that keeps its
@@ -292,13 +348,15 @@ struct ShareCardFacts {
     network_note: String,
     network_ticker: String,
     network_tint: gpui::Hsla,
+    /// The chain-data endpoint's logo for the network, fetched at save time.
+    network_logo_url: Option<String>,
     seed: String,
     wordmark: String,
     file_name: String,
 }
 
 impl ShareCardFacts {
-    fn as_card(&self) -> crate::flows::share_card::ShareCard<'_> {
+    fn as_card<'a>(&'a self, logo: Option<&'a [u8]>) -> crate::flows::share_card::ShareCard<'a> {
         crate::flows::share_card::ShareCard {
             headline: &self.headline,
             payload: &self.payload,
@@ -307,6 +365,7 @@ impl ShareCardFacts {
             network_note: &self.network_note,
             network_ticker: &self.network_ticker,
             network_tint: self.network_tint,
+            network_logo: logo,
             seed: &self.seed,
             wordmark: &self.wordmark,
         }
@@ -497,6 +556,44 @@ pub struct WalletPage {
     /// validates the address and clears the found cards on every keystroke, so
     /// a second copy here would be a second opinion about what was typed.
     add_token_focus: gpui::FocusHandle,
+    /// DT3L: the native tab is up (078 F-07) — a network by name or chain ID,
+    /// through the `network_admin` wizard, instead of a contract address.
+    add_token_native: bool,
+    /// DT3L native: the chain this panel just added, and the query it was
+    /// found by. The core resets its wizard on the add; this is what lets the
+    /// panel go on saying "added" instead of going blank.
+    add_net_added: Option<(vela_core::app::network_admin::NetChainInfo, String)>,
+    /// The flow list search (078 X-05): which panel the query was typed on,
+    /// and the query. A different panel on top clears it, as leaving a
+    /// screen on the web drops that screen's query.
+    flow_query: (Option<FlowPanel>, String),
+    flow_query_focus: gpui::FocusHandle,
+    /// What the scanner has to say about the last thing it read (078 F-02),
+    /// the camera's own failure aside.
+    scan_notice: Option<ScanNotice>,
+    /// Payloads the camera reads before this instant are dropped — the web's
+    /// two-second re-arm after an unusable code, so the same poster in frame
+    /// is not refused thirty times a second.
+    scan_quiet_until: Option<std::time::Instant>,
+    /// Why the camera is not running, as the last frame reported it.
+    scan_camera_failure: Option<crate::executor::camera::CameraFailure>,
+    /// A once-a-second redraw is running for a waiting receipt (078 F-04):
+    /// the countdown and the ring move with the clock, not with the core.
+    receipt_ticking: bool,
+    /// A dApp transaction landing in the signing column (078 G-04, spec 077):
+    /// the operation, its chain, and when the column raised it.
+    dapp_landing: Option<DappLanding>,
+    /// The operation a landing was last raised for — dismissed or not. One
+    /// landing per operation: the handoff stays in the view after Done, and
+    /// gating on "is one showing" raised the same receipt again forever (the
+    /// web measured exactly that in its packaged extension).
+    dapp_landed_op: Option<String>,
+    /// The contacts header search (078 X-05 / C-02): the web filters the
+    /// A–Z list as it is typed, in the shell (`letterSections`).
+    contacts_query: String,
+    /// SR3, the balance breakdown the hero's status line opens (078 H-03).
+    balance_detail_open: bool,
+    contacts_query_focus: gpui::FocusHandle,
     /// Spec 032: the send journey's two machines, alive while the flow is
     /// open and discarded with it — a second send starts from a fresh
     /// machine, never a resumed one.
@@ -524,7 +621,11 @@ pub struct WalletPage {
     /// Which key rows are open, by founding position; and the `row:label` of
     /// the value just copied, for the button's "Copied".
     keys_open: std::collections::HashSet<usize>,
-    keys_copied: Option<String>,
+    /// What was copied a moment ago, by key, while its feedback shows —
+    /// a tick, a "Copied", a toast (078 X-06). `copied_press` counts the
+    /// copies, so an older copy's timer never clears a newer one's tick.
+    copied: Option<SharedString>,
+    copied_press: u64,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
     /// The explore name dialog: renaming a tile, or naming a new group.
@@ -532,10 +633,15 @@ pub struct WalletPage {
     /// One dialog for both, as the contacts one is for its two questions —
     /// they ask the same thing and differ only in which event takes the
     /// answer.
+    /// The Explore "Manage groups" sheet is open (078 W-11).
+    explore_groups: bool,
     explore_form: Option<ExploreForm>,
     explore_form_focus: gpui::FocusHandle,
     /// The cap field's focus, kept on the page so typing survives a redraw.
     cap_focus: FocusHandle,
+    /// One cap field per batch leg — two legs in Custom at once must not share
+    /// a focus handle, or typing in one lands in both.
+    leg_cap_focus: std::collections::HashMap<u32, FocusHandle>,
     /// What the open page last called itself, from the bridge's own report.
     /// The star pins with THIS rather than the host, because the host is what
     /// a tile falls back to and a page's title is what a person recognises.
@@ -555,7 +661,28 @@ pub struct WalletPage {
     /// page (or the placeholder). What was typed goes through the core's
     /// `browser_input`, so a word searches and a host gets a scheme.
     address_draft: Option<String>,
+    /// The whole draft is selected (a click into the bar, or ⌘A / Ctrl+A):
+    /// what is typed or pasted next replaces it.
+    address_selected: bool,
     address_focus: gpui::FocusHandle,
+    /// The Wallet column's scroll position, for the bar drawn beside it.
+    /// These columns glide (`ui::smooth_scroll`); `render` steps each of them
+    /// once per frame — see `scrolls`.
+    content_scroll: crate::ui::SmoothScroll,
+    /// The third column's body, and which subject it last scrolled for.
+    panel_scroll: crate::ui::SmoothScroll,
+    panel_scroll_subject: String,
+    /// The sidebar's network list — twenty-odd chains outgrow a short window.
+    networks_scroll: crate::ui::SmoothScroll,
+    /// The settings panel's, for the same bar.
+    settings_scroll: crate::ui::SmoothScroll,
+    /// The text-size slider's pointer state and motion (`ui::step_slider`).
+    text_scale_slider: crate::ui::StepSlider,
+    /// The address book's list, the Explore start page's, and a pick
+    /// dialog's.
+    contacts_scroll: crate::ui::SmoothScroll,
+    explore_scroll: crate::ui::SmoothScroll,
+    pick_scroll: crate::ui::SmoothScroll,
     /// The network menu's rows — `(chain, name, current)` — named when it
     /// opened; `menu_origin` says which site it is about.
     site_networks: Vec<(u32, SharedString, bool)>,
@@ -568,6 +695,8 @@ pub struct WalletPage {
     /// DSD2bL, live: one focus handle per split row, made on first use. A
     /// shared handle would send every keystroke to whichever row drew last.
     split_focuses: Vec<gpui::FocusHandle>,
+    /// One per split row's address field (078 F-06).
+    split_address_focuses: Vec<gpui::FocusHandle>,
     /// DSD2fL is the page's own overlay: the core has no flag for it.
     send_fee_picker: bool,
     /// The scanner's camera, alive only while DS1 is on screen — a capture
@@ -579,6 +708,9 @@ pub struct WalletPage {
     /// `multi_select_mode` turns on when the selection is CONFIRMED, so before
     /// that nothing in the view says whether the ticks are showing.
     send_sweeping: bool,
+    /// The send picker's lit chip. The shell's, as on the web: narrowing a
+    /// list is not a fact about the send.
+    send_class: flows_live::SendClass,
     /// The native window, for the one platform whose passkey dialog is the
     /// OS's; captured once, because a ceremony runs off the main thread and
     /// cannot reach `Window` from there.
@@ -594,6 +726,12 @@ pub struct WalletPage {
     /// shows the page `sign_pref` holds. The core validates it on Save, not
     /// per keystroke: half an address is not an error yet.
     signer_page_draft: Option<String>,
+    /// The Feedback page's report (078 S-03): what the person typed, whether
+    /// the steps box is open, whether the preview is, the send in flight and
+    /// how the last one ended.
+    feedback: FeedbackDraft,
+    /// What moves the balance, watched (078 W-01 / W-02).
+    money_watch: MoneyWatch,
     signer_page_focus: Option<gpui::FocusHandle>,
     /// Spec 075: the tunnel, the same way — typed until Save, and the core
     /// says whether it is one (https/wss only, loopback allowed).
@@ -627,6 +765,12 @@ pub struct WalletPage {
     /// changed it would be a delete and an add wearing one button. So editing
     /// an existing contact keeps it fixed and only the name is a draft.
     contact_form: Option<ContactForm>,
+    /// 添加成员 / 移入分组 — the web's tick list with a Save (078 C-06).
+    pick: Option<PickDialog>,
+    /// The export's format question is up, for the whole book or one group
+    /// (078 C-07).
+    export_scope: Option<ContactExportScope>,
+    pick_query_focus: gpui::FocusHandle,
     /// The contact whose address is being shown as a code, if any.
     contact_qr: Option<(SharedString, SharedString)>,
     /// The group name sheet: `Some((id, name))`, with `None` for a new group.
@@ -691,9 +835,22 @@ pub struct WalletPage {
     switcher_addresses: Option<Vec<String>>,
     /// The switcher row a "remove this wallet" confirmation is open for
     /// (2026-09-23). A position in the ORIGINAL list, as the core removes by.
+    /// Asked inline, under the row, as the web's `AccountsSheetBody` asks it.
     removing_account: Option<usize>,
+    /// 078 H-01 — the account switcher, opened from the sidebar header's
+    /// name, over whichever section is on screen.
+    account_switcher: bool,
+    switcher_scroll: crate::ui::SmoothScroll,
+    /// Each `ui::dialog`'s body scroll, by dialog id (078 X-04).
+    dialog_scrolls: std::collections::HashMap<&'static str, crate::ui::SmoothScroll>,
+    /// 078 H-02 — the identicon viewer, over everything, switcher included.
+    identicon_viewer: Option<IdenticonViewer>,
     /// DC3: the fixture roster is empty.
     contacts_empty: bool,
+    /// The open contact's 最近往来 shows every row, not the first three
+    /// (078 C-04). Forgotten when another contact opens, as the web's `open`
+    /// resets `allActivity`.
+    contact_all_activity: bool,
     /// Open anchored menu: which fixture feeds it, the window-coordinate
     /// anchor point, and which of the card's corners sits on that point.
     menu: Option<(ContactsMenu, Point<Pixels>, Anchor)>,
@@ -748,6 +905,7 @@ struct SendBindings {
     /// would be a second opinion about what a row is.
     recipients: Vec<SendRecipientDraft>,
     split_focuses: Vec<gpui::FocusHandle>,
+    split_address_focuses: Vec<gpui::FocusHandle>,
     /// "Use X for the empty rows": the figure the offer copies, when the
     /// form offers it (`flows_live::split_fill_source`).
     fill_empty: Option<String>,
@@ -796,7 +954,8 @@ impl WalletPage {
             Ok("contacts") => Section::Contacts,
             Ok("explore") => Section::Explore,
             _ => Section::Wallet,
-        };
+        }
+        .or_wallet();
         let mut page = Self::with_section(section, false, window, cx);
         page.identity = Some(identity);
         // Money in flight outlives every screen: the tracker runs from the
@@ -821,6 +980,14 @@ impl WalletPage {
         {
             page.select_tab(tab, window);
         }
+        // `VELA_FEEDBACK_STATE` on the live route too: the signed-in page, in
+        // one Feedback state — or, `autosend`, a REAL send of a report with
+        // `VELA_SCREENSHOT_FILES` attached (078 round 3).
+        if section == Section::Settings
+            && let Ok(state) = std::env::var("VELA_FEEDBACK_STATE")
+        {
+            page.pin_feedback_state(&state);
+        }
         page
     }
 
@@ -842,6 +1009,11 @@ impl WalletPage {
         let mut page = Self::with_section(Section::Settings, false, window, cx);
         if let Some(tab) = GalleryTab::from_settings_env() {
             page.select_tab(tab, window);
+        }
+        // `VELA_FEEDBACK_STATE` opens the Feedback page in one state, for a
+        // screenshot pass that cannot click, drop or paste (078 round 3).
+        if let Ok(state) = std::env::var("VELA_FEEDBACK_STATE") {
+            page.pin_feedback_state(&state);
         }
         page
     }
@@ -946,6 +1118,19 @@ impl WalletPage {
             tx_detail: None,
             asset_detail: None,
             add_token_focus: cx.focus_handle(),
+            add_token_native: false,
+            add_net_added: None,
+            flow_query: (None, String::new()),
+            flow_query_focus: cx.focus_handle(),
+            scan_notice: None,
+            scan_quiet_until: None,
+            scan_camera_failure: None,
+            receipt_ticking: false,
+            dapp_landing: None,
+            dapp_landed_op: None,
+            contacts_query: String::new(),
+            balance_detail_open: false,
+            contacts_query_focus: cx.focus_handle(),
             send_host: None,
             #[cfg(not(target_os = "linux"))]
             signing_host: None,
@@ -962,31 +1147,48 @@ impl WalletPage {
             } else {
                 std::collections::HashSet::new()
             },
-            keys_copied: None,
+            copied: None,
+            copied_press: 0,
             menu_origin: None,
+            explore_groups: false,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
             browser_title: None,
             cap_focus: cx.focus_handle(),
+            leg_cap_focus: std::collections::HashMap::new(),
             browser_host: None,
             browser_consent: None,
             #[cfg(not(target_os = "linux"))]
             dapp_requests_armed: false,
             address_draft: None,
+            address_selected: false,
             address_focus: cx.focus_handle(),
+            content_scroll: crate::ui::SmoothScroll::new(),
+            panel_scroll: crate::ui::SmoothScroll::new(),
+            panel_scroll_subject: String::new(),
+            networks_scroll: crate::ui::SmoothScroll::new(),
+            settings_scroll: crate::ui::SmoothScroll::new(),
+            text_scale_slider: crate::ui::StepSlider::new(),
+            contacts_scroll: crate::ui::SmoothScroll::new(),
+            explore_scroll: crate::ui::SmoothScroll::new(),
+            pick_scroll: crate::ui::SmoothScroll::new(),
             site_networks: Vec::new(),
             browser_url_pinned: false,
             send_amount_focus: cx.focus_handle(),
             send_recipient_focus: cx.focus_handle(),
             send_rate_focus: cx.focus_handle(),
             split_focuses: Vec::new(),
+            split_address_focuses: Vec::new(),
             send_fee_picker: false,
             send_sweeping: false,
+            send_class: flows_live::SendClass::All,
             scan_camera: None,
             scan_preview: ScanPreview::default(),
             window_handle: crate::onboarding::native_window_handle(window),
             endpoint_focuses: Vec::new(),
             signer_page_draft: None,
+            feedback: FeedbackDraft::new(cx),
+            money_watch: MoneyWatch::default(),
             signer_page_focus: None,
             tunnel_focus: None,
             settings_probed_network: None,
@@ -998,6 +1200,9 @@ impl WalletPage {
             field_blurs: Vec::new(),
             import_result: None,
             contact_form: None,
+            pick: None,
+            export_scope: None,
+            pick_query_focus: cx.focus_handle(),
             contact_qr: None,
             group_form: None,
             group_form_focus: cx.focus_handle(),
@@ -1019,7 +1224,12 @@ impl WalletPage {
             inspected_contact: None,
             switcher_addresses: None,
             removing_account: None,
+            account_switcher: false,
+            switcher_scroll: crate::ui::SmoothScroll::new(),
+            dialog_scrolls: std::collections::HashMap::new(),
+            identicon_viewer: None,
             contacts_empty: false,
+            contact_all_activity: false,
             menu: None,
             tab: match section {
                 Section::Wallet | Section::Explore => GalleryTab::D1,
@@ -1034,35 +1244,6 @@ impl WalletPage {
             loc,
             crash: None,
         }
-    }
-
-    /// The way out.
-    ///
-    /// Session state is app-resident and `allowed_route` decides the screen, so
-    /// without this row a signed-in desktop has no path back to Welcome at all
-    /// — the route guard is a one-way door. It renders only for a REAL session:
-    /// the fixture identity (`VELA_PAGE=wallet`) is a design surface with no
-    /// session behind it, and offering to sign out of nothing would be a button
-    /// that cannot work.
-    fn sign_out_row(&self, theme: &Theme, cx: &mut Context<Self>) -> gpui::AnyElement {
-        if self.identity.is_none() {
-            return div().into_any_element();
-        }
-        let hover = theme.bg_sunken;
-        div()
-            .id("sign-out")
-            .mt(px(4.))
-            .px(px(12.))
-            .py(px(8.))
-            .rounded(px(8.))
-            .flex_none()
-            .cursor_pointer()
-            .text_size(theme::text_row_sub())
-            .text_color(theme.fg_muted)
-            .hover(move |style| style.bg(hover).text_color(theme.error_base))
-            .on_click(cx.listener(|_, _, _, cx| session::sign_out(cx)))
-            .child(self.strings.sign_out_button.clone())
-            .into_any_element()
     }
 
     /// The confirmation the core opens, with the warning it decided on.
@@ -1103,18 +1284,15 @@ impl WalletPage {
                 "network",
                 &network,
             ),
-            // "Vela Wallet", as the web's card signs itself.
-            // A token's own code marks the card with the token (the web's
-            // `networkMark: balanceTokenMark(token)`); a network's, the network.
-            network_ticker: match (self.flows.last(), self.receive_token.as_ref()) {
-                (Some(FlowPanel::Dr3), Some(token)) => &token.symbol,
-                _ => &network,
-            }
-            .chars()
-            .take(3)
-            .collect::<String>()
-            .to_uppercase(),
+            // The NETWORK's mark in the code's centre, token or not: the card
+            // says which network may pay, and one card serves every asset on
+            // it (founder, 2026-08-15). The letters only show when the logo
+            // cannot be fetched.
+            network_ticker: network.chars().take(3).collect::<String>().to_uppercase(),
             network_tint: flows_live::chain_tint(self.receive_chain),
+            network_logo_url: crate::marks::chain_logo_url(self.receive_chain)
+                .map(|url| url.to_string()),
+            // "Vela Wallet", as the web's card signs itself.
             seed: identity.address.to_string(),
             wordmark: "Vela Wallet".to_owned(),
             // The address is in the NAME as well as the picture: a folder of
@@ -1130,24 +1308,43 @@ impl WalletPage {
     ///
     /// The picture is built from what the screen is already showing, so the
     /// saved card and the open screen cannot disagree about an address. The
-    /// dialog opens in the home directory for the reason the contacts export
-    /// does: `.` is wherever the binary was launched from, which on a
-    /// double-click is nowhere useful.
+    /// network's logo is part of the card, so it is fetched here — off the
+    /// UI thread, while the dialog is open, with a short timeout after which
+    /// the lettered disc stands in. A card that fails to render writes
+    /// nothing. The dialog opens in the home directory for the reason the
+    /// contacts export does: `.` is wherever the binary was launched from,
+    /// which on a double-click is nowhere useful. `VELA_EXPORT_DIR=<dir>`
+    /// answers the dialog with the card's filename in that folder, as the
+    /// contacts export does.
     fn save_share_card(&mut self, cx: &mut Context<Self>) {
         let Some(model) = self.receive_share_card(cx) else {
             return;
         };
-        let theme = Theme::of(self.theme_mode());
-        let png = crate::flows::share_card::render_png(&model.as_card(), &theme);
-        // Composed BEFORE the dialog: a picture that fails to render must not
-        // ask somebody where to put it first.
-        let Some(png) = png else {
-            return;
-        };
-        let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let target = cx.prompt_for_new_path(&directory, Some(&model.file_name));
+        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+            .map(|dir| std::path::PathBuf::from(dir).join(&model.file_name));
+        let target = pinned.is_none().then(|| {
+            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            cx.prompt_for_new_path(&directory, Some(&model.file_name))
+        });
+        let png = cx.background_executor().spawn(async move {
+            let logo = model
+                .network_logo_url
+                .as_deref()
+                .and_then(crate::flows::share_card::fetch_logo);
+            crate::flows::share_card::render_png(&model.as_card(logo.as_deref()))
+        });
         cx.spawn(async move |_, _| {
-            let Ok(Ok(Some(path))) = target.await else {
+            let path = match (pinned, target) {
+                (Some(path), _) => path,
+                (None, Some(target)) => {
+                    let Ok(Ok(Some(path))) = target.await else {
+                        return;
+                    };
+                    path
+                }
+                (None, None) => return,
+            };
+            let Some(png) = png.await else {
                 return;
             };
             // Best effort, like every other write in this shell: a refused
@@ -1197,7 +1394,6 @@ impl WalletPage {
             }
             _ => !form.text.trim().is_empty(),
         };
-        let hover_accent = theme.accent_hover;
         let focus = self.explore_form_focus.clone();
         // No label: the card's heading is already this field's name, and
         // repeating it verbatim in small caps under itself ("添加到收藏" over
@@ -1209,26 +1405,13 @@ impl WalletPage {
             helper: SharedString::from(""),
             too_long_hint: SharedString::from(""),
         };
-        let cancel = c.cancel.clone();
         let save_label = c.save.clone();
 
-        let card = div()
-            .w(px(400.))
+        let body = div()
             .flex()
             .flex_col()
             .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(title),
-            )
+            .pb(px(16.))
             .child(crate::ui::text_field(
                 "explore-form-name",
                 theme,
@@ -1250,66 +1433,283 @@ impl WalletPage {
                     }
                 },
             ))
-            .child(
-                div()
-                    .flex()
-                    .gap(px(12.))
-                    .child(
-                        div()
-                            .id("explore-form-cancel")
-                            .flex_1()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .border_1()
-                            .border_color(theme.outline_strong)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(cancel)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.explore_form = None;
-                                cx.notify();
-                            })),
-                    )
-                    .child({
-                        let save = div()
-                            .id("explore-form-save")
-                            .flex_1()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(theme::text_row_title())
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child(save_label);
-                        if can_save {
-                            save.cursor_pointer()
-                                .bg(theme.accent)
-                                .hover(move |el| el.bg(hover_accent))
-                                .text_color(theme.fg_inverse)
-                                .on_click(cx.listener(|this, _, _, cx| this.save_explore_form(cx)))
-                        } else {
-                            save.bg(theme.bg_sunken).text_color(theme.fg_subtle)
-                        }
-                    }),
-            );
+            .child(self.form_save(
+                theme,
+                "explore-form-save",
+                save_label,
+                can_save,
+                cx.listener(|this, _, _, cx| this.save_explore_form(cx)),
+            ));
 
         Some(
-            div()
-                .id("explore-form-scrim")
-                .absolute()
-                .inset_0()
+            crate::ui::dialog::dialog(
+                "explore-form",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("explore-form"),
+                Self::closer(cx, |this, _| this.explore_form = None),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// "Manage groups" — the web's `GroupManageSheet` (E3), reached from the
+    /// Favorites heading's Edit and a group's ⋯ (078 W-11). Every group, the
+    /// two system ones first: an eye to hide or show it, and — for the
+    /// person's own groups only — a trash to delete it. The system groups have
+    /// no trash rather than a refused one ("hideable, never deletable"). A
+    /// deleted group's sites stay favourited; the core says so.
+    fn explore_groups_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.explore_groups {
+            return None;
+        }
+        let view = resident::resident::<ExploreSites>(cx).read(cx).view();
+        let e = &self.explore;
+        let (favorites, recent, system_group, new_group_label, manage_groups, site_count) = (
+            e.favorites.clone(),
+            e.recent.clone(),
+            e.system_group.clone(),
+            e.new_group.clone(),
+            e.manage_groups.clone(),
+            e.site_count.clone(),
+        );
+        let count = |n: usize| SharedString::from(site_count.replace("{{n}}", &n.to_string()));
+        let mut rows: Vec<(ExploreGroupRow, SharedString, SharedString, bool)> = vec![
+            (
+                ExploreGroupRow::Favorites,
+                favorites,
+                count(view.favorites.len()),
+                view.favorites_hidden,
+            ),
+            (
+                ExploreGroupRow::Recent,
+                recent,
+                system_group,
+                view.recent_hidden,
+            ),
+        ];
+        for (i, group) in view.groups.iter().enumerate() {
+            rows.push((
+                ExploreGroupRow::Custom(i),
+                SharedString::from(group.name.clone()),
+                count(group.sites.len()),
+                group.hidden,
+            ));
+        }
+
+        let mut list = div().flex().flex_col();
+        for (index, (row, title, meta, hidden)) in rows.into_iter().enumerate() {
+            let toggle = div()
+                .id(("explore-group-toggle", index))
+                .cursor_pointer()
+                .child(icon_img(
+                    &mut self.icons,
+                    if hidden { Icon::EyeOff } else { Icon::Eye },
+                    false,
+                    theme.fg_muted,
+                    18.,
+                ))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.set_explore_group_hidden(row, !hidden, cx);
+                }));
+            let mut line = div()
                 .flex()
                 .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .child(card)
-                .into_any_element(),
+                .gap(px(16.))
+                .py(px(20.))
+                .border_b_1()
+                .border_color(theme.border_card)
+                .child(icon_img(
+                    &mut self.icons,
+                    Icon::GripVertical,
+                    false,
+                    theme.fg_subtle,
+                    18.,
+                ))
+                // Hidden reads as hidden: the words dim, so the eye is a
+                // confirmation rather than the only clue.
+                .child(
+                    div()
+                        .when(hidden, |d| d.opacity(0.4))
+                        .text_size(theme::text_body())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.fg_base)
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .when(hidden, |d| d.opacity(0.4))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(meta),
+                )
+                .child(toggle);
+            if let ExploreGroupRow::Custom(i) = row {
+                line = line.child(
+                    div()
+                        .id(("explore-group-delete", index))
+                        .cursor_pointer()
+                        .child(icon_img(
+                            &mut self.icons,
+                            Icon::Trash2,
+                            false,
+                            theme.fg_muted,
+                            18.,
+                        ))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.delete_explore_group(i, cx);
+                        })),
+                );
+            }
+            list = list.child(line);
+        }
+
+        let new_group = div()
+            .id("explore-groups-new")
+            .flex()
+            .items_center()
+            .gap(px(16.))
+            .py(px(20.))
+            .cursor_pointer()
+            .child(
+                div()
+                    .size(px(40.))
+                    .rounded_full()
+                    .bg(theme.bg_sunken)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::Plus,
+                        false,
+                        theme.fg_subtle,
+                        18.,
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_subtle)
+                    .child(new_group_label),
+            )
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.explore_groups = false;
+                this.explore_form = Some(ExploreForm {
+                    ask: ExploreAsk::NewGroup { then_add: None },
+                    text: String::new(),
+                });
+                window.focus(&this.explore_form_focus, cx);
+                cx.notify();
+            }));
+
+        let body = div()
+            .flex()
+            .flex_col()
+            .pb(px(8.))
+            .child(list)
+            .child(new_group);
+        Some(
+            crate::ui::dialog::dialog(
+                "explore-groups",
+                theme,
+                window,
+                manage_groups,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("explore-groups"),
+                Self::closer(cx, |this, _| this.explore_groups = false),
+            )
+            .into_any_element(),
         )
+    }
+
+    /// Hide or show one group — a system one by its kind, the person's own by
+    /// the core's id, read at the moment of the tap.
+    fn set_explore_group_hidden(
+        &mut self,
+        row: ExploreGroupRow,
+        hidden: bool,
+        cx: &mut Context<Self>,
+    ) {
+        use vela_core::app::explore_sites::{Event as SitesEvent, ExploreSystemGroup};
+        let resident = resident::resident::<ExploreSites>(cx);
+        let event = match row {
+            ExploreGroupRow::Favorites => SitesEvent::SystemGroupHiddenSet {
+                group: ExploreSystemGroup::Favorites,
+                hidden,
+            },
+            ExploreGroupRow::Recent => SitesEvent::SystemGroupHiddenSet {
+                group: ExploreSystemGroup::Recent,
+                hidden,
+            },
+            ExploreGroupRow::Custom(i) => {
+                let Some(id) = resident.read(cx).view().groups.get(i).map(|g| g.id.clone()) else {
+                    return;
+                };
+                SitesEvent::GroupHiddenSet { id, hidden }
+            }
+        };
+        resident.update(cx, |resident, cx| resident.dispatch(event, cx));
+        cx.notify();
+    }
+
+    /// Delete one of the person's own groups. Its sites stay favourited.
+    fn delete_explore_group(&mut self, index: usize, cx: &mut Context<Self>) {
+        let resident = resident::resident::<ExploreSites>(cx);
+        let Some(id) = resident
+            .read(cx)
+            .view()
+            .groups
+            .get(index)
+            .map(|g| g.id.clone())
+        else {
+            return;
+        };
+        resident.update(cx, |resident, cx| {
+            resident.dispatch(
+                vela_core::app::explore_sites::Event::GroupDeleted { id },
+                cx,
+            );
+        });
+        cx.notify();
+    }
+
+    /// A dialog form's one answer (the web's `GroupForm`): the primary button
+    /// at full width, 8 under the field, dimmed until it can act. The ✕ is
+    /// the way out, so there is no Cancel beside it.
+    fn form_save(
+        &self,
+        theme: &Theme,
+        id: &'static str,
+        label: SharedString,
+        can_save: bool,
+        on_save: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+    ) -> gpui::AnyElement {
+        if can_save {
+            crate::flows::components::accent_button(theme, label)
+                .mt(px(8.))
+                .id(id)
+                .cursor_pointer()
+                .on_click(on_save)
+                .into_any_element()
+        } else {
+            crate::flows::components::disabled_accent_button(theme, label)
+                .mt(px(8.))
+                .into_any_element()
+        }
     }
 
     /// Take the typed name and give it to whichever machine asked.
@@ -1405,7 +1805,6 @@ impl WalletPage {
         };
         // A group with no name is a row nobody can tell from another.
         let can_save = !name.trim().is_empty();
-        let hover_accent = theme.accent_hover;
         let focus = self.group_form_focus.clone();
         let strings = crate::ui::NameFieldStrings {
             label: s.group_name_label.clone(),
@@ -1413,26 +1812,13 @@ impl WalletPage {
             helper: SharedString::from(""),
             too_long_hint: SharedString::from(""),
         };
-        let cancel = s.cancel.clone();
         let save_label = s.save.clone();
 
-        let card = div()
-            .w(px(400.))
+        let body = div()
             .flex()
             .flex_col()
             .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(title),
-            )
+            .pb(px(16.))
             .child(crate::ui::text_field(
                 "group-form-name",
                 theme,
@@ -1454,90 +1840,351 @@ impl WalletPage {
                     }
                 },
             ))
-            .child(
-                div()
-                    .flex()
-                    .gap(px(12.))
-                    .child(
-                        div()
-                            .id("group-form-cancel")
-                            .flex_1()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .border_1()
-                            .border_color(theme.outline_strong)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(cancel)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.group_form = None;
-                                cx.notify();
-                            })),
-                    )
-                    .child({
-                        let save = div()
-                            .id("group-form-save")
-                            .flex_1()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(theme::text_row_title())
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child(save_label);
-                        if can_save {
-                            save.cursor_pointer()
-                                .bg(theme.accent)
-                                .hover(move |el| el.bg(hover_accent))
-                                .text_color(theme.fg_inverse)
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    let Some((id, name)) = this.group_form.take() else {
-                                        return;
-                                    };
-                                    resident::resident::<Contacts>(cx).update(
-                                        cx,
-                                        |resident, cx| {
-                                            resident.dispatch(
-                                                ContactEvent::GroupSave {
-                                                    input: ContactGroupInput {
-                                                        id,
-                                                        name: name.trim().to_owned(),
-                                                        color: None,
-                                                        // `None` leaves membership
-                                                        // alone — a rename must not
-                                                        // empty the group.
-                                                        members: None,
-                                                    },
-                                                },
-                                                cx,
-                                            );
-                                        },
-                                    );
-                                    cx.notify();
-                                }))
-                        } else {
-                            save.bg(theme.bg_sunken).text_color(theme.fg_subtle)
-                        }
-                    }),
-            );
+            .child(self.form_save(
+                theme,
+                "group-form-save",
+                save_label,
+                can_save,
+                cx.listener(|this, _, _, cx| {
+                    let Some((id, name)) = this.group_form.take() else {
+                        return;
+                    };
+                    resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            ContactEvent::GroupSave {
+                                input: ContactGroupInput {
+                                    id,
+                                    name: name.trim().to_owned(),
+                                    color: None,
+                                    // `None` leaves membership alone — a
+                                    // rename must not empty the group.
+                                    members: None,
+                                },
+                            },
+                            cx,
+                        );
+                    });
+                    cx.notify();
+                }),
+            ));
 
         Some(
-            div()
-                .id("group-form-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "group-form",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("group-form"),
+                Self::closer(cx, |this, _| this.group_form = None),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// 添加成员 from the open group.
+    fn open_member_pick(&mut self, cx: &mut Context<Self>) {
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let Some(group) = self.group.and_then(|index| view.groups.get(index)) else {
+            return;
+        };
+        self.pick_scroll = crate::ui::SmoothScroll::new();
+        self.pick = Some(PickDialog {
+            subject: PickSubject::Members {
+                group_id: group.id.clone(),
+            },
+            checked: group
+                .members
+                .iter()
+                .map(|member| member.address.to_lowercase())
+                .collect(),
+            query: String::new(),
+        });
+        self.menu = None;
+        cx.notify();
+    }
+
+    /// 移入分组 for one contact.
+    fn open_group_pick(&mut self, address: &str, cx: &mut Context<Self>) {
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let lower = address.to_lowercase();
+        self.pick_scroll = crate::ui::SmoothScroll::new();
+        self.pick = Some(PickDialog {
+            subject: PickSubject::Groups {
+                address: address.to_owned(),
+            },
+            checked: view
+                .groups
+                .iter()
+                .filter(|group| {
+                    group
+                        .members
+                        .iter()
+                        .any(|member| member.address.to_lowercase() == lower)
+                })
+                .map(|group| group.id.clone())
+                .collect(),
+            query: String::new(),
+        });
+        self.menu = None;
+        cx.notify();
+    }
+
+    /// The web's `PickList` in its desktop dialog (078 C-06): every contact
+    /// or every group, the current ones ticked, a search past six rows, and a
+    /// Save that hands the WHOLE ticked set to the core — which is the shape
+    /// both of its events take, and which it normalises.
+    fn pick_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let pick = self.pick.clone()?;
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let s = &self.contacts;
+        let (title, rows): (SharedString, Vec<PickRow>) = match &pick.subject {
+            PickSubject::Members { .. } => (
+                s.add_member.clone(),
+                contacts_live::rows(&view)
+                    .into_iter()
+                    .map(|row| {
+                        let address = row.address_full.to_string();
+                        PickRow {
+                            id: address.to_lowercase(),
+                            name: row.name.clone(),
+                            detail: SharedString::from(crate::wallet::live::shorten_address(
+                                &address,
+                            )),
+                            seed: Some(address),
+                        }
+                    })
+                    .collect(),
+            ),
+            PickSubject::Groups { .. } => (
+                s.move_group.clone(),
+                view.groups
+                    .iter()
+                    .map(|group| PickRow {
+                        id: group.id.clone(),
+                        name: SharedString::from(group.name.clone()),
+                        detail: SharedString::from(crate::wallet::fill(
+                            &s.group_members,
+                            "count",
+                            &group.members.len().to_string(),
+                        )),
+                        seed: None,
+                    })
+                    .collect(),
+            ),
+        };
+        let total = rows.len();
+        let query = pick.query.trim().to_lowercase();
+        let shown: Vec<_> = rows
+            .into_iter()
+            .filter(|row| {
+                query.is_empty()
+                    || format!("{} {}", row.name, row.detail)
+                        .to_lowercase()
+                        .contains(&query)
+            })
+            .collect();
+        let empty = s.group_no_contacts.clone();
+        let placeholder = s.search_placeholder.clone();
+        let save_label = s.save.clone();
+
+        let mut body = div().flex().flex_col().gap(px(8.)).pb(px(16.));
+        if total > 6 {
+            let page = cx.entity().downgrade();
+            let field = crate::flows::panels::AddressField {
+                focus: self.pick_query_focus.clone(),
+                value: pick.query.clone(),
+                placeholder: placeholder.clone(),
+                on_change: Box::new(move |text: String, _: &mut Window, cx: &mut gpui::App| {
+                    let _ = page.update(cx, |this, cx| {
+                        if let Some(pick) = this.pick.as_mut() {
+                            pick.query = text;
+                        }
+                        cx.notify();
+                    });
+                }),
+            };
+            body = body.child(crate::flows::components::flow_search(
+                theme,
+                &mut self.icons,
+                placeholder,
+                Some(field),
+                window,
+            ));
+        }
+        if total == 0 {
+            body = body.child(
+                div()
+                    .py(px(20.))
+                    .text_center()
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_muted)
+                    .child(empty),
+            );
+        } else {
+            let mut list = self.pick_scroll.attach(
+                div()
+                    .id("pick-list")
+                    .flex()
+                    .flex_col()
+                    .max_h(window.viewport_size().height * 0.5),
+                window,
+            );
+            for (
+                index,
+                PickRow {
+                    id,
+                    name,
+                    detail,
+                    seed,
+                },
+            ) in shown.into_iter().enumerate()
+            {
+                let on = pick.checked.contains(&id);
+                let avatar: gpui::AnyElement = match seed {
+                    Some(seed) => crate::wallet::components::identicon_avatar(
+                        &mut self.identicons,
+                        &seed,
+                        30.,
+                    )
+                    .into_any_element(),
+                    None => div()
+                        .size(px(30.))
+                        .flex_none()
+                        .rounded_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(theme.bg_raised)
+                        .child(icon_img(
+                            &mut self.icons,
+                            Icon::UsersRound,
+                            false,
+                            theme.fg_muted,
+                            18.,
+                        ))
+                        .into_any_element(),
+                };
+                let mut tick = div()
+                    .size(px(20.))
+                    .flex_none()
+                    .rounded(px(4.))
+                    .border_1()
+                    .flex()
+                    .items_center()
+                    .justify_center();
+                tick = if on {
+                    tick.border_color(theme.accent)
+                        .bg(theme.accent)
+                        .child(icon_img(
+                            &mut self.icons,
+                            Icon::Check,
+                            false,
+                            gpui::Hsla::from(gpui::rgb(0xffffff)),
+                            14.,
+                        ))
+                } else {
+                    tick.border_color(theme.border_strong)
+                };
+                let raised = theme.bg_raised;
+                list = list.child(
+                    div()
+                        .id(ElementId::from(("pick-row", index)))
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .py(px(8.))
+                        .px(px(4.))
+                        .border_b_1()
+                        .border_color(theme.divider)
+                        .cursor_pointer()
+                        .hover(move |el| el.bg(raised))
+                        .child(avatar)
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .flex()
+                                .flex_col()
+                                .gap(px(2.))
+                                .child(
+                                    div()
+                                        .text_size(theme::text_body())
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(theme.fg_base)
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .child(name),
+                                )
+                                .child(
+                                    div()
+                                        .font_family(theme::font_mono())
+                                        .text_size(theme::text_label())
+                                        .text_color(theme.fg_muted)
+                                        .child(detail),
+                                ),
+                        )
+                        .child(tick)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if let Some(pick) = this.pick.as_mut() {
+                                if let Some(at) = pick.checked.iter().position(|c| *c == id) {
+                                    pick.checked.remove(at);
+                                } else {
+                                    pick.checked.push(id.clone());
+                                }
+                            }
+                            cx.notify();
+                        })),
+                );
+            }
+            body = body.child(list);
+        }
+        body = body.child(self.form_save(
+            theme,
+            "pick-save",
+            save_label,
+            true,
+            cx.listener(|this, _, _, cx| {
+                let Some(pick) = this.pick.take() else {
+                    return;
+                };
+                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                    let event = match pick.subject {
+                        PickSubject::Members { group_id } => ContactEvent::SetGroupMembers {
+                            id: group_id,
+                            members: pick.checked,
+                        },
+                        PickSubject::Groups { address } => ContactEvent::SetContactGroups {
+                            address,
+                            group_ids: pick.checked,
+                        },
+                    };
+                    resident.dispatch(event, cx);
+                });
+                cx.notify();
+            }),
+        ));
+
+        Some(
+            crate::ui::dialog::dialog(
+                "contact-pick",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("contact-pick"),
+                Self::closer(cx, |this, _| this.pick = None),
+            )
+            .into_any_element(),
         )
     }
 
@@ -1555,11 +2202,17 @@ impl WalletPage {
     fn contact_qr_dialog(
         &mut self,
         theme: &Theme,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (name, address) = self.contact_qr.clone()?;
-        let close = self.strings.close_viewer.clone();
-        let hover_accent = theme.accent_hover;
+        let s = &self.contacts;
+        let title = s.action_qr.clone();
+        let copy_label = if self.copied.as_deref() == Some(CONTACT_QR_COPY) {
+            s.copied.clone()
+        } else {
+            s.copy_address.clone()
+        };
 
         // 21 modules for a 42-character address is not a given, so the module
         // size is derived from the code's own width rather than assumed.
@@ -1591,23 +2244,14 @@ impl WalletPage {
             None => div(),
         };
 
-        let card = div()
-            // The card takes its own clicks: without this the scrim's
-            // dismiss fires when somebody clicks the CODE, and — because a
-            // gpui hitbox does not block what is under it unless it says so —
-            // the same click also lands on whatever row the dialog is drawn
-            // over, quietly opening a different contact behind it.
-            .id("contact-qr-card")
-            .occlude()
+        // The web's `ContactQr`: the code, the name at 17 bold, the address in
+        // full in the mono face, and a hairline pill that copies it.
+        let body = div()
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
+            .gap(px(8.))
+            .pb(px(16.))
             .child(crate::wallet::components::identicon_avatar(
                 &mut self.identicons,
                 &address,
@@ -1615,88 +2259,104 @@ impl WalletPage {
             ))
             .child(
                 div()
-                    .text_size(theme::text_panel_title())
+                    .mt(px(8.))
+                    .rounded(px(14.))
+                    .overflow_hidden()
+                    .child(matrix),
+            )
+            .child(
+                div()
+                    .mt(px(8.))
+                    .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::BOLD)
                     .text_color(theme.fg_base)
                     .child(name),
             )
-            .child(div().rounded(px(14.)).overflow_hidden().child(matrix))
             .child(
                 div()
-                    .max_w(px(260.))
+                    .max_w(px(300.))
                     .font_family(theme::font_mono())
                     .text_size(theme::text_label())
                     .text_color(theme.fg_muted)
-                    .child(address),
+                    .text_center()
+                    .child(address.clone()),
             )
             .child(
                 div()
-                    .id("contact-qr-close")
-                    .px(px(20.))
-                    .py(px(10.))
-                    .rounded(px(10.))
-                    .bg(theme.accent)
+                    .id("contact-qr-copy")
+                    .h(px(36.))
+                    .px(px(16.))
+                    .flex()
+                    .items_center()
+                    .rounded_full()
+                    .border_1()
+                    .border_color(theme.border_card)
+                    .bg(theme.bg_raised)
                     .cursor_pointer()
-                    .hover(move |el| el.bg(hover_accent))
+                    .hover(|el| el.opacity(0.92))
                     .text_size(theme::text_row_sub())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_inverse)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.contact_qr = None;
-                        cx.notify();
+                    .text_color(theme.fg_base)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.copy_text(
+                            CONTACT_QR_COPY,
+                            address.to_string(),
+                            CONTACTS_COPY_HOLD,
+                            cx,
+                        );
                     }))
-                    .child(close),
+                    .child(copy_label),
             );
 
         Some(
-            div()
-                .id("contact-qr-scrim")
-                // A scrim that only dims is not a scrim: the page beneath it
-                // still takes the click.
-                .occlude()
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.contact_qr = None;
-                    cx.notify();
-                }))
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "contact-qr",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("contact-qr"),
+                Self::closer(cx, |this, _| this.close_contact_qr()),
+            )
+            .into_any_element(),
         )
     }
 
-    /// The add/edit contact sheet.
-    ///
-    /// 030 recorded "there is no add/edit form sheet on desktop" as a design
-    /// gap. By 031 the app had a dialog idiom (four of them), an editable text
-    /// field and every word this form needs already in the corpus — so what was
-    /// left was composition, not design.
+    fn close_contact_qr(&mut self) {
+        self.contact_qr = None;
+    }
+
+    /// The add/edit contact form — the third column, as the web draws it
+    /// (078 C-05): "a sheet sliding up the bottom of a desktop window is a
+    /// phone control at the wrong size", and a dialog over the list hid the
+    /// list the person was adding to.
     ///
     /// The ADDRESS is the identity the core keys on, so an edit keeps it fixed:
     /// changing it would be a delete and an add wearing one button, and the old
     /// contact would quietly survive.
-    fn contact_form_dialog(
+    fn contact_form_body(
         &mut self,
         theme: &Theme,
         window: &Window,
         cx: &mut Context<Self>,
-    ) -> Option<gpui::AnyElement> {
+    ) -> Option<(SharedString, bool, Div)> {
         let form = self.contact_form.clone()?;
         let s = &self.contacts;
         let title = if form.editing {
-            s.edit_title.clone()
+            if form.unsaved {
+                s.save_to_contacts.clone()
+            } else {
+                s.edit_title.clone()
+            }
         } else {
             s.add_title.clone()
         };
-        // The core refuses a malformed address anyway; this is the same rule
-        // said before the press rather than after it, so the button does not
-        // look available for something it will not do.
-        let can_save = is_evm_address(&form.address);
-        let hover_accent = theme.accent_hover;
+        // The web's gate, both halves: an address the core's `is_address`
+        // accepts, AND a name — a contact nobody named is the history row it
+        // already was.
+        let valid_address = is_evm_address(&form.address);
+        let can_save = valid_address && !form.name.trim().is_empty();
         let name_focus = self.contact_form_name_focus.clone();
         let address_focus = self.contact_form_address_focus.clone();
 
@@ -1710,19 +2370,14 @@ impl WalletPage {
             label: s.address_label.clone(),
             placeholder: s.address_placeholder.clone(),
             helper: SharedString::from(""),
-            too_long_hint: SharedString::from(""),
+            too_long_hint: s.invalid_address.clone(),
         };
 
         let mut card = div()
-            .w(px(400.))
             .flex()
             .flex_col()
             .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
+            .pb(px(16.))
             // Tab, between the two fields this form has. Nothing in this shell
             // bound it, so a person who typed a name and pressed Tab — the
             // reflex every other form on their machine has taught them —
@@ -1763,13 +2418,6 @@ impl WalletPage {
                     cx.stop_propagation();
                 }
             })
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(title),
-            )
             .child(crate::ui::text_field(
                 "contact-form-name",
                 theme,
@@ -1793,22 +2441,37 @@ impl WalletPage {
             ));
 
         if form.editing {
-            // Fixed, and shown as such: this is what the panel is about.
-            card = card.child(mono_field(
-                theme,
-                Some(s.address_label.clone()),
-                SharedString::from(form.address.clone()),
-            ));
+            // Fixed, and shown as such — the web's `.fixed-address`: a small
+            // muted label over the address in the mono face, whole.
+            card = card.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_muted)
+                            .child(s.address_label.clone()),
+                    )
+                    .child(
+                        div()
+                            .font_family(theme::font_mono())
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_base)
+                            .child(SharedString::from(form.address.clone())),
+                    ),
+            );
         } else {
             card = card.child(crate::ui::text_field(
                 "contact-form-address",
                 theme,
                 &address_strings,
                 &form.address,
-                // Red once there is something typed that is not an address —
-                // not while the field is still empty, which is a person who has
-                // not started rather than one who is wrong.
-                !form.address.is_empty() && !can_save,
+                // Red, and saying why, once there is something typed that is
+                // not an address — not while the field is still empty, which
+                // is a person who has not started rather than one who is wrong.
+                !form.address.is_empty() && !valid_address,
                 false,
                 &address_focus,
                 window,
@@ -1826,94 +2489,68 @@ impl WalletPage {
             ));
         }
 
-        let buttons = div()
-            .flex()
-            .gap(px(12.))
-            .child(
-                div()
-                    .id("contact-form-cancel")
-                    .flex_1()
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .border_1()
-                    .border_color(theme.outline_strong)
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_base)
-                    .child(s.cancel.clone())
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.contact_form = None;
-                        cx.notify();
-                    })),
-            )
-            .child({
-                let save = div()
-                    .id("contact-form-save")
-                    .flex_1()
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(theme::text_row_title())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(s.save.clone());
-                if can_save {
-                    save.cursor_pointer()
-                        .bg(theme.accent)
-                        .hover(move |el| el.bg(hover_accent))
-                        .text_color(theme.fg_inverse)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            let Some(form) = this.contact_form.take() else {
-                                return;
-                            };
-                            let now_ms = crate::executor::now_ms();
-                            resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(
-                                    ContactEvent::Save {
-                                        input: ContactSaveInput {
-                                            address: form.address,
-                                            // An empty name CLEARS the name —
-                                            // the core reads `Some("")` that
-                                            // way, and a person who deleted the
-                                            // text meant to.
-                                            name: Some(form.name.trim().to_owned()),
-                                            note: None,
-                                            favorite: None,
-                                            kind: None,
-                                            resolved_name: None,
-                                            resolved_source: None,
-                                        },
-                                        now_ms,
-                                    },
-                                    cx,
-                                );
-                            });
-                            cx.notify();
-                        }))
-                } else {
-                    // Dimmed, not hidden: the button is where it will be, and
-                    // the address field beside it says what is missing.
-                    save.bg(theme.bg_sunken).text_color(theme.fg_subtle)
-                }
-            });
+        let save = self.form_save(
+            theme,
+            "contact-form-save",
+            s.save.clone(),
+            can_save,
+            cx.listener(|this, _, _, cx| {
+                let Some(form) = this.contact_form.take() else {
+                    return;
+                };
+                let now_ms = crate::executor::now_ms();
+                let address = form.address.clone();
+                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(
+                        ContactEvent::Save {
+                            input: ContactSaveInput {
+                                address: form.address,
+                                // An empty name CLEARS the name — the core
+                                // reads `Some("")` that way, and a person who
+                                // deleted the text meant to.
+                                name: Some(form.name.trim().to_owned()),
+                                note: None,
+                                favorite: None,
+                                kind: None,
+                                resolved_name: None,
+                                resolved_source: None,
+                            },
+                            now_ms,
+                        },
+                        cx,
+                    );
+                });
+                // The column that held the form shows what it made, as the
+                // web's does on the desktop.
+                this.open_contact_by_address(&address, cx);
+                cx.notify();
+            }),
+        );
 
-        Some(
-            div()
-                .id("contact-form-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card.child(buttons))
-                .into_any_element(),
-        )
+        Some((title, form.editing, card.child(save)))
+    }
+
+    /// 编辑 on a contact: the form over the core's RECORD, not the row's
+    /// display name — the display of a nameless contact is its short address,
+    /// and saving that back would name them "0x4444…4444".
+    fn open_edit_contact(&mut self, address: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        let Some(contact) = view
+            .contacts
+            .iter()
+            .find(|contact| contact.address.eq_ignore_ascii_case(address))
+        else {
+            return;
+        };
+        self.contact_form = Some(ContactForm {
+            editing: true,
+            address: contact.address.clone(),
+            name: contact.name.clone().unwrap_or_default(),
+            unsaved: contact.source == vela_core::app::contacts::ContactSource::Auto,
+        });
+        self.menu = None;
+        window.focus(&self.contact_form_name_focus, cx);
+        cx.notify();
     }
 
     /// What the last address-book import did.
@@ -1923,298 +2560,246 @@ impl WalletPage {
     /// the CORE's — it applied existing-wins and is the only thing that knows
     /// how many rows were new.
     fn import_result_dialog(
-        &self,
+        &mut self,
         theme: &Theme,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (title, body) = self.import_result.clone()?;
-        let hover_accent = theme.accent_hover;
-        let card = div()
-            .w(px(400.))
+        let done = crate::flows::components::accent_button(theme, self.flow_strings.done.clone())
+            .w_auto()
+            .id("import-result-ok")
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.import_result = None;
+                cx.notify();
+            }));
+        Some(
+            crate::ui::dialog::dialog(
+                "import-result",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(crate::ui::dialog::dialog_body(theme, body))
+                    .child(crate::ui::dialog::dialog_actions().child(done)),
+                &self.dialog_scroll("import-result"),
+                Self::closer(cx, |this, _| this.import_result = None),
+            )
+            .into_any_element(),
+        )
+    }
+
+    fn sign_out_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let view = session::view(cx);
+        let dialog = view.sign_out?;
+        let s = &self.strings;
+
+        // What this takes, when it is more than one wallet, goes first; `keeps`
+        // is true either way — the address returns, the history is still there
+        // — and on a machine holding six it was ALSO how the dialog managed to
+        // say nothing about signing in six times (owner, 2026-09-23).
+        let (body, note) = if dialog.account_count > 1 {
+            (
+                SharedString::from(
+                    s.sign_out_desc_many
+                        .replace("{{count}}", &dialog.account_count.to_string()),
+                ),
+                Some(s.sign_out_keeps.clone()),
+            )
+        } else {
+            (s.sign_out_keeps.clone(), None)
+        };
+        // The destructive label changes with the warning, as the shipping
+        // client does: "Sign Out Anyway" is the acknowledgement.
+        let (confirm, callout) = if dialog.pending_upload_warning {
+            (s.sign_out_anyway.clone(), Some(s.sign_out_warning.clone()))
+        } else {
+            (s.sign_out_title.clone(), None)
+        };
+        let copy = ConfirmCopy {
+            title: SharedString::default(),
+            body,
+            callout,
+            note,
+            confirm,
+            cancel: Some(s.sign_out_cancel.clone()),
+            danger: true,
+        };
+        let title = s.sign_out_title.clone();
+        let sheet = confirm_sheet(
+            theme,
+            copy,
+            cx.listener(|_, _: &gpui::ClickEvent, _, cx| session::sign_out_confirmed(cx)),
+            cx.listener(|_, _: &gpui::ClickEvent, _, cx| session::sign_out_dismissed(cx)),
+        );
+        Some(
+            crate::ui::dialog::dialog(
+                "sign-out",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                sheet,
+                &self.dialog_scroll("sign-out"),
+                Self::closer(cx, |_, cx| session::sign_out_dismissed(cx)),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// 078 H-01 — the account switcher, from the sidebar header: the web's
+    /// `AccountSwitcher` in its desktop dress, a centred dialog. Every account
+    /// on this device, the active one checked, and the two ways to add one.
+    fn account_switcher_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.account_switcher {
+            return None;
+        }
+        let session = session::view(cx);
+        // Signed out under it, or the last one removed: nothing to switch.
+        if session.accounts.is_empty() {
+            self.account_switcher = false;
+            self.removing_account = None;
+            return None;
+        }
+        let title = self.settings.accounts_title.clone();
+        let body = self.accounts_body(theme, &session, true, cx);
+        let close_icon = icon_img(&mut self.icons, Icon::X, false, theme.fg_muted, 18.);
+        Some(
+            crate::ui::dialog::dialog(
+                "account-switcher",
+                theme,
+                window,
+                title,
+                None,
+                close_icon,
+                body,
+                &self.switcher_scroll,
+                cx.listener(|this, _, _, cx| this.close_account_switcher(cx)),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// 078 H-02 — the identicon, big, next to the address that drew it: the
+    /// web's `IdenticonViewer`. The artwork is a fingerprint of the address,
+    /// which only becomes useful once a person has seen the two together
+    /// often enough to recognise one from the other; a 40px avatar in a
+    /// header never teaches that.
+    ///
+    /// As on the web, Escape and Close close it and a click beside the card
+    /// does not: it sits over the switcher, and a stray click there would be
+    /// read as meant for the list.
+    fn identicon_viewer_dialog(
+        &mut self,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let viewer = self.identicon_viewer.clone()?;
+        let s = &self.strings;
+        let title = s.viewer_title.clone();
+        let caption = s.viewer_caption.clone();
+        let close = s.close_viewer.clone();
+        let copy = if viewer.copied.is_some() {
+            s.viewer_copied.clone()
+        } else {
+            s.copy_address.clone()
+        };
+        let body = div()
             .flex()
             .flex_col()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
+            .items_center()
+            .gap(px(12.))
+            .text_center()
             .child(
                 div()
-                    .text_size(theme::text_panel_title())
+                    .mb(px(8.))
+                    .child(crate::wallet::components::identicon_avatar(
+                        &mut self.identicons,
+                        &viewer.address,
+                        VIEWER_IDENTICON,
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_section())
                     .font_weight(gpui::FontWeight::BOLD)
+                    .line_height(gpui::relative(1.2))
                     .text_color(theme.fg_base)
                     .child(title),
             )
             .child(
                 div()
                     .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
+                    .line_height(gpui::relative(1.6))
                     .text_color(theme.fg_muted)
-                    .child(body),
+                    .child(caption),
             )
+            // The whole address, never shortened: a fingerprint you can only
+            // see half of teaches half a habit.
             .child(
                 div()
-                    .id("import-result-ok")
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(theme.accent)
-                    .hover(move |el| el.bg(hover_accent))
-                    .text_size(theme::text_row_title())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_inverse)
-                    .child(self.flow_strings.done.clone())
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.import_result = None;
-                        cx.notify();
-                    })),
-            );
-        Some(
-            div()
-                .id("import-result-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
-        )
-    }
-
-    fn sign_out_dialog(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
-        let view = session::view(cx);
-        let dialog = view.sign_out?;
-        let s = &self.strings;
-
-        let mut card = div()
-            .w(px(400.))
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(s.sign_out_title.clone()),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_muted)
-                    .child(s.sign_out_keeps.clone()),
-            );
-
-        // What this takes, when it is more than one wallet. `keeps` above is
-        // true either way — the address returns, the history is still there —
-        // and on a machine holding six it was ALSO how the dialog managed to
-        // say nothing about signing in six times (owner, 2026-09-23).
-        if dialog.account_count > 1 {
-            card = card.child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_base)
-                    .child(SharedString::from(
-                        s.sign_out_desc_many
-                            .replace("{{count}}", &dialog.account_count.to_string()),
-                    )),
-            );
-        }
-
-        if dialog.pending_upload_warning {
-            card = card.child(
-                div()
+                    .w_full()
                     .p(px(12.))
-                    .rounded(px(10.))
-                    .bg(theme.warning_soft)
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
+                    .rounded(px(12.))
+                    .bg(theme.bg_sunken)
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_label())
+                    .line_height(gpui::relative(1.6))
                     .text_color(theme.fg_base)
-                    .child(s.sign_out_warning.clone()),
-            );
-        }
-
-        // The destructive label changes with the warning, as the shipping
-        // client does: "Sign Out Anyway" is the acknowledgement.
-        let confirm_label = if dialog.pending_upload_warning {
-            s.sign_out_anyway.clone()
-        } else {
-            s.sign_out_title.clone()
-        };
-        let hover_confirm = theme.error_base;
-        let hover_cancel = theme.bg_sunken;
-        card = card.child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(8.))
-                .child(
-                    div()
-                        .id("sign-out-confirm")
-                        .h(px(44.))
-                        .rounded(px(12.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor_pointer()
-                        .bg(theme.error_soft)
-                        .text_size(theme::text_row_title())
-                        .text_color(theme.error_base)
-                        .hover(move |style| style.bg(hover_confirm).text_color(theme.fg_inverse))
-                        .on_click(cx.listener(|_, _, _, cx| session::sign_out_confirmed(cx)))
-                        .child(confirm_label),
-                )
-                .child(
-                    div()
-                        .id("sign-out-cancel")
-                        .h(px(44.))
-                        .rounded(px(12.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor_pointer()
-                        .text_size(theme::text_row_title())
-                        .text_color(theme.fg_base)
-                        .hover(move |style| style.bg(hover_cancel))
-                        .on_click(cx.listener(|_, _, _, cx| session::sign_out_dismissed(cx)))
-                        .child(s.sign_out_cancel.clone()),
-                ),
-        );
-
-        Some(
-            div()
-                .id("sign-out-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.backdrop)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
-        )
-    }
-
-    /// "Remove from this device?" — one wallet leaving, the others staying
-    /// (2026-09-23: 「有时候不想退出所有，只想退出单个」).
-    ///
-    /// Asked, like every other destructive row in this shell: the affordance
-    /// sits in a list whose whole purpose is switching, one press away from a
-    /// row somebody meant to land on. The words are the corpus's own, and the
-    /// wallet's NAME says which row the dialog is about.
-    fn account_remove_dialog(
-        &mut self,
-        theme: &Theme,
-        cx: &mut Context<Self>,
-    ) -> Option<gpui::AnyElement> {
-        let index = self.removing_account?;
-        let view = session::view(cx);
-        let row = view.accounts.get(index)?;
-        let name: SharedString = if row.account.name.is_empty() {
-            row.account.address.clone().into()
-        } else {
-            row.account.name.clone().into()
-        };
-        let s = &self.strings;
-        let hover_confirm = theme.error_base;
-        let hover_cancel = theme.bg_sunken;
-        let card = div()
-            .w(px(400.))
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(name),
+                    .child(SharedString::from(viewer.address.clone())),
             )
             .child(
                 div()
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_muted)
-                    .child(s.account_remove_body.clone()),
-            )
-            .child(
-                div()
+                    .w_full()
+                    .mt(px(8.))
                     .flex()
                     .flex_col()
-                    .gap(px(8.))
+                    .gap(px(12.))
                     .child(
-                        div()
-                            .id("account-remove-confirm")
-                            .h(px(44.))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
+                        crate::flows::components::accent_button(theme, copy)
+                            .id("identicon-viewer-copy")
                             .cursor_pointer()
-                            .bg(theme.error_soft)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.error_base)
-                            .hover(move |style| {
-                                style.bg(hover_confirm).text_color(theme.fg_inverse)
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.removing_account = None;
-                                session::remove_account(index, cx);
-                                cx.notify();
-                            }))
-                            .child(s.account_remove.clone()),
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.copy_viewer_address(cx);
+                            })),
                     )
                     .child(
-                        div()
-                            .id("account-remove-cancel")
-                            .h(px(44.))
+                        crate::flows::components::ghost_button(theme, close)
                             .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
+                            .id("identicon-viewer-close")
                             .cursor_pointer()
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .hover(move |style| style.bg(hover_cancel))
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.removing_account = None;
+                                this.identicon_viewer = None;
                                 cx.notify();
-                            }))
-                            .child(s.sign_out_cancel.clone()),
+                            })),
                     ),
             );
-
         Some(
-            div()
-                .id("account-remove-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.backdrop)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
+            crate::ui::dialog::scrim("identicon-viewer-scrim", theme)
+                .child(
+                    crate::ui::dialog::card(
+                        "identicon-viewer-card",
+                        theme,
+                        crate::ui::dialog::PROMPT_CARD_W,
+                    )
+                    .child(body),
+                )
                 .into_any_element(),
         )
     }
@@ -2231,111 +2816,54 @@ impl WalletPage {
     fn network_remove_dialog(
         &mut self,
         theme: &Theme,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         let (id, name) = self.network_remove.clone()?;
         let s = &self.settings;
-        let hover_confirm = theme.error_base;
-        let hover_cancel = theme.bg_sunken;
-        let card = div()
-            .w(px(400.))
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .p(px(28.))
-            .rounded(px(20.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(
-                div()
-                    .text_size(theme::text_panel_title())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(s.network_remove_title.clone()),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .line_height(px(20.))
-                    .text_color(theme.fg_muted)
-                    // The corpus asks "Remove this custom network?"; the name
-                    // says WHICH, because the dialog covers the row it is about.
-                    .child(SharedString::from(format!(
-                        "{} · {name}",
-                        s.network_remove_body
-                    ))),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .id("network-remove-confirm")
-                            .h(px(44.))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .bg(theme.error_soft)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.error_base)
-                            .hover(move |style| {
-                                style.bg(hover_confirm).text_color(theme.fg_inverse)
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                resident::resident::<NetworkAdmin>(cx).update(
-                                    cx,
-                                    |resident, cx| {
-                                        resident.dispatch(
-                                            NetEvent::DeleteConfirmed { id: id.clone() },
-                                            cx,
-                                        );
-                                    },
-                                );
-                                // The hero was counting that chain a moment ago.
-                                crate::executor::balance_dashboard::refresh(cx);
-                                this.network_remove = None;
-                                this.settings_expanded_network = None;
-                                cx.notify();
-                            }))
-                            .child(s.network_remove_confirm.clone()),
-                    )
-                    .child(
-                        div()
-                            .id("network-remove-cancel")
-                            .h(px(44.))
-                            .rounded(px(12.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .hover(move |style| style.bg(hover_cancel))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.network_remove = None;
-                                cx.notify();
-                            }))
-                            .child(s.network_remove_cancel.clone()),
-                    ),
-            );
-
+        let copy = ConfirmCopy {
+            title: SharedString::default(),
+            // The corpus asks "Remove this custom network?"; the name says
+            // WHICH, because the dialog covers the row it is about.
+            body: SharedString::from(format!("{} · {name}", s.network_remove_body)),
+            callout: None,
+            note: None,
+            confirm: s.network_remove_confirm.clone(),
+            cancel: Some(s.network_remove_cancel.clone()),
+            danger: true,
+        };
+        let title = s.network_remove_title.clone();
+        let sheet = confirm_sheet(
+            theme,
+            copy,
+            cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(NetEvent::DeleteConfirmed { id: id.clone() }, cx);
+                });
+                // The hero was counting that chain a moment ago.
+                crate::executor::balance_dashboard::refresh(cx);
+                this.network_remove = None;
+                this.settings_expanded_network = None;
+                cx.notify();
+            }),
+            cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.network_remove = None;
+                cx.notify();
+            }),
+        );
         Some(
-            div()
-                .id("network-remove-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.backdrop)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "network-remove",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                sheet,
+                &self.dialog_scroll("network-remove"),
+                Self::closer(cx, |this, _| this.network_remove = None),
+            )
+            .into_any_element(),
         )
     }
 
@@ -2347,7 +2875,7 @@ impl WalletPage {
     /// A page built for another account opens where the last one was left —
     /// a switch from Settings stays on Settings.
     pub fn restore_place(&mut self, (section, settings_page): (Section, SettingsPage)) {
-        self.section = section;
+        self.section = section.or_wallet();
         self.settings_page = settings_page;
     }
 
@@ -2559,6 +3087,25 @@ impl WalletPage {
                     resident.dispatch(NetEvent::ResetEndpointsToDefaults, cx);
                 });
             }
+            Confirm::DeleteContact { address, .. } => {
+                let now_ms = crate::executor::now_ms();
+                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(ContactEvent::Delete { address, now_ms }, cx);
+                });
+                // A detail panel open on it was about a row that is gone.
+                if self.panel == PanelId::ContactDetail {
+                    self.panel = PanelId::None;
+                }
+            }
+            Confirm::DeleteGroup { id, .. } => {
+                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(ContactEvent::GroupDelete { id }, cx);
+                });
+                // The group that was open no longer exists; the rail falls
+                // back to the whole book rather than to whichever group slid
+                // into that index.
+                self.group = None;
+            }
         }
         self.confirm = None;
         cx.notify();
@@ -2575,7 +3122,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: s.storage_clear.clone(),
-                cancel: s.cancel.clone(),
+                cancel: Some(s.cancel.clone()),
                 danger: true,
             },
             Confirm::ClearCaches => ConfirmCopy {
@@ -2584,7 +3131,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: s.storage_clear_confirm.clone(),
-                cancel: s.cancel.clone(),
+                cancel: Some(s.cancel.clone()),
                 danger: false,
             },
             Confirm::Disconnect { name, .. } => ConfirmCopy {
@@ -2593,7 +3140,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: self.explore.disconnect.clone(),
-                cancel: s.cancel.clone(),
+                cancel: Some(s.cancel.clone()),
                 danger: true,
             },
             Confirm::DisconnectAll => ConfirmCopy {
@@ -2602,7 +3149,7 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: s.storage_disconnect_all.clone(),
-                cancel: s.cancel.clone(),
+                cancel: Some(s.cancel.clone()),
                 danger: true,
             },
             Confirm::ResetEndpoints => ConfirmCopy {
@@ -2611,38 +3158,156 @@ impl WalletPage {
                 callout: None,
                 note: None,
                 confirm: s.endpoints_reset_confirm.clone(),
-                cancel: s.endpoints_reset_cancel.clone(),
+                cancel: Some(s.endpoints_reset_cancel.clone()),
+                danger: true,
+            },
+            Confirm::DeleteContact { name, .. } => ConfirmCopy {
+                title: self.contacts.delete_title.clone(),
+                body: SharedString::from(crate::wallet::fill(
+                    &self.contacts.delete_body,
+                    "name",
+                    name,
+                )),
+                callout: None,
+                note: None,
+                confirm: self.contacts.delete.clone(),
+                cancel: None,
+                danger: true,
+            },
+            Confirm::DeleteGroup { name, .. } => ConfirmCopy {
+                title: self.contacts.group_delete.clone(),
+                body: SharedString::from(crate::wallet::fill(
+                    &self.contacts.group_delete_body,
+                    "name",
+                    name,
+                )),
+                callout: None,
+                note: None,
+                confirm: self.contacts.delete.clone(),
+                cancel: None,
                 danger: true,
             },
         }
     }
 
     /// The question over the window, when one is pending.
-    fn confirm_dialog(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+    fn confirm_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
         let action = self.confirm.as_ref()?;
-        let card = confirm_card(
+        let mut copy = self.confirm_copy(action);
+        let title = std::mem::take(&mut copy.title);
+        let sheet = confirm_sheet(
             theme,
-            self.confirm_copy(action),
+            copy,
             cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.confirmed(cx)),
             cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                this.confirm = None;
-                this.erase_failed = None;
+                this.dismiss_confirm();
                 cx.notify();
             }),
         );
         Some(
-            div()
-                .id("confirm-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.backdrop)
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "confirm",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                sheet,
+                &self.dialog_scroll("confirm"),
+                Self::closer(cx, |this, _| this.dismiss_confirm()),
+            )
+            .into_any_element(),
         )
+    }
+
+    fn dismiss_confirm(&mut self) {
+        self.confirm = None;
+        self.erase_failed = None;
+    }
+
+    /// The ✕ every dialog carries (`--icon-md`, `fg-muted`).
+    fn dialog_close_icon(&mut self, theme: &Theme) -> gpui::AnyElement {
+        icon_img(&mut self.icons, Icon::X, false, theme.fg_muted, 18.).into_any_element()
+    }
+
+    /// A dialog's close — its ✕ and its scrim — as the page's own change.
+    fn closer<F: Fn(&mut Self, &mut Context<Self>) + 'static>(
+        cx: &mut Context<Self>,
+        close: F,
+    ) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static + use<F> {
+        let page = cx.entity().downgrade();
+        move |_, _, cx| {
+            // Gone only if the page is: nothing left to close.
+            let _ = page.update(cx, |this, cx| {
+                close(this, cx);
+                cx.notify();
+            });
+        }
+    }
+
+    /// A dialog's body scroll, kept per dialog so two stacked ones do not
+    /// share a position.
+    fn dialog_scroll(&mut self, id: &'static str) -> crate::ui::SmoothScroll {
+        self.dialog_scrolls.entry(id).or_default().clone()
+    }
+
+    /// The columns this page builds without the window at hand, stepped once
+    /// per frame at the top of `render` (`ui::smooth_scroll`). Dialogs and the
+    /// pick list step their own, in `attach`.
+    fn scrolls(&self) -> [&crate::ui::SmoothScroll; 6] {
+        [
+            &self.content_scroll,
+            &self.panel_scroll,
+            &self.networks_scroll,
+            &self.settings_scroll,
+            &self.contacts_scroll,
+            &self.explore_scroll,
+        ]
+    }
+
+    /// Escape: the dialog on top goes, and only that one — the same order
+    /// `render` stacks them in, read from the top. False when none was open.
+    fn dismiss_top_dialog(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.identicon_viewer.is_some() {
+            self.identicon_viewer = None;
+        } else if self.account_switcher {
+            self.close_account_switcher(cx);
+        } else if self.confirm.is_some() {
+            self.dismiss_confirm();
+        } else if self.network_remove.is_some() {
+            self.network_remove = None;
+        } else if session::view(cx).sign_out.is_some() {
+            session::sign_out_dismissed(cx);
+        } else if self.group_form.is_some() {
+            self.group_form = None;
+        } else if self.pick.is_some() {
+            self.pick = None;
+        } else if self.export_scope.is_some() {
+            self.export_scope = None;
+        } else if self.explore_form.is_some() {
+            self.explore_form = None;
+        } else if self.explore_groups {
+            self.explore_groups = false;
+        } else if self.contact_qr.is_some() {
+            self.close_contact_qr();
+        } else if self.contact_form.is_some() {
+            self.contact_form = None;
+        } else if self.import_result.is_some() {
+            self.import_result = None;
+        } else if self.balance_detail_open {
+            self.balance_detail_open = false;
+        } else if self.settings_dialog.is_some() {
+            self.close_settings_dialog(cx);
+        } else {
+            return false;
+        }
+        cx.notify();
+        true
     }
 
     /// Close the settings dialog, and forget what the add-network wizard was
@@ -2671,10 +3336,9 @@ impl WalletPage {
 
     fn sidebar(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.strings;
-        let bg = match self.theme_mode() {
-            ThemeMode::Light => theme.bg_sunken,
-            ThemeMode::Dark => theme.bg_base,
-        };
+        // Sunken in both themes, as the web's `.sidebar` is — dark sunken is
+        // below the canvas now (078 X-01), so the old dark exception went.
+        let bg = theme.bg_sunken;
 
         let section = self.section;
         let nav = [
@@ -2696,7 +3360,10 @@ impl WalletPage {
             ),
         ];
         let mut nav_col = div().flex().flex_col().gap(px(2.));
-        for (i, (icon, label, destination)) in nav.into_iter().enumerate() {
+        let nav = nav
+            .into_iter()
+            .filter(|(_, _, destination)| destination.is_none_or(Section::available));
+        for (i, (icon, label, destination)) in nav.enumerate() {
             let row = nav_row(
                 ElementId::from(("nav", i)),
                 theme,
@@ -2720,7 +3387,16 @@ impl WalletPage {
             });
         }
 
-        let mut networks = div().flex().flex_col().gap(px(2.)).flex_1().min_h(px(0.));
+        let mut networks = self.networks_scroll.wire(
+            div()
+                .id("sidebar-networks")
+                .flex()
+                .flex_col()
+                // Row against row, as the web's list items sit: each is
+                // already a 44 hit target (078 H-11).
+                .size_full(),
+            cx.entity_id(),
+        );
         let chain_rows = self.chain_models(cx);
         let live = self.identity.is_some();
         for (i, row) in chain_rows.iter().enumerate() {
@@ -2755,6 +3431,26 @@ impl WalletPage {
             .gap(px(16.))
             .child({
                 let identity = self.identity();
+                // Both halves answer only for a real account: the gallery's
+                // header is a picture, as the web's is.
+                let (on_identicon, on_account): (
+                    Option<crate::wallet::components::HeaderClick>,
+                    Option<crate::wallet::components::HeaderClick>,
+                ) = if live {
+                    let address = identity.address.clone();
+                    (
+                        Some(Box::new(cx.listener(move |this, _, _, cx| {
+                            this.open_identicon_viewer(address.clone(), cx);
+                        }))),
+                        Some(Box::new(cx.listener(|this, _, _, cx| {
+                            this.open_account_switcher(cx);
+                        }))),
+                    )
+                } else {
+                    (None, None)
+                };
+                // 20 under the header before the nav, as the web's `.top`
+                // pads it (078 H-11): the column's gap supplies 16.
                 wallet_header(
                     theme,
                     &mut self.icons,
@@ -2762,25 +3458,39 @@ impl WalletPage {
                     &identity.address,
                     identity.name.clone(),
                     identity.display(),
+                    on_identicon,
+                    on_account,
                 )
+                .mb(px(4.))
             })
             .child(nav_col)
-            .child(div().h(px(1.)).bg(theme.divider))
-            .child(
-                div()
-                    .px(px(12.))
-                    .text_size(theme::text_label())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_subtle)
-                    .child(self.strings.networks_title.clone()),
-            )
-            .child(networks)
-            .child(self.sign_out_row(theme, cx))
-            .child(sidebar_search(
-                theme,
-                &mut self.icons,
-                self.strings.search_placeholder.clone(),
-            ))
+            // The network list is the Wallet's filter, as on the web (spec 028
+            // Phase 9, RULING 2): a section with nothing to filter shows none,
+            // and the rail ends at the nav.
+            .when(self.section == Section::Wallet, |sidebar| {
+                sidebar
+                    .child(div().h(px(1.)).bg(theme.divider))
+                    // 8 from the title to its list (078 H-11); the column's
+                    // gap puts 16 there.
+                    .child(
+                        div()
+                            .px(px(12.))
+                            .mb(px(-8.))
+                            .text_size(theme::text_label())
+                            .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.fg_subtle)
+                            .child(self.strings.networks_title.clone()),
+                    )
+                    .child(
+                        div()
+                            .relative()
+                            .flex_1()
+                            .min_h(px(0.))
+                            .child(networks)
+                            .children(crate::ui::vertical_scrollbar(theme, &self.networks_scroll)),
+                    )
+            })
     }
 
     // -- column 2: content ---------------------------------------------------
@@ -2855,6 +3565,18 @@ impl WalletPage {
         let fresh = self.celebrated_row(&home_tx_ids, cx);
         let mut activity_col = div().flex().flex_col();
         for (i, row) in activity.iter().enumerate() {
+            // The day a group files under (the web's `.day`: 11, subtle,
+            // 4 above and below) — spec 038 #E3, 078 H-04.
+            if let Some(day) = row.day.clone() {
+                activity_col = activity_col.child(
+                    div()
+                        .py(px(4.))
+                        .text_size(theme::text_label())
+                        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
+                        .text_color(theme.fg_subtle)
+                        .child(day),
+                );
+            }
             activity_col = activity_col.child(
                 div()
                     .id(ElementId::from(("activity", i)))
@@ -2883,7 +3605,14 @@ impl WalletPage {
         // wrong opens somebody's ETH panel from their USDC row, and the next
         // thing that panel offers is 转账.
         let asset_indices = self.visible_assets(cx);
-        let mut assets_col = div().flex().flex_col();
+        // Block, not a flex column — and so are the two boxes the column sits
+        // in, below. All three only stack their children, which block layout
+        // does identically; but gpui lays this whole column out again on every
+        // scroll step, and as nested flex columns each level measured every
+        // row again before placing it. On a wallet of 23 holdings that was
+        // 5 ms of a 120 Hz frame's 8.3 (70 ms in a debug build); as blocks it
+        // is 1.3. No vertical margins live in here, so nothing collapses.
+        let mut assets_col = div();
         for (i, row) in assets.iter().enumerate() {
             let index = asset_indices.get(i).copied();
             assets_col = assets_col.child(
@@ -2918,72 +3647,119 @@ impl WalletPage {
             ));
         }
 
+        // A column that scrolls, and a bar that says so. It was
+        // `overflow_hidden`: every holding was laid out and whatever fell
+        // below the window's edge was simply cut, with nothing to reach it by.
+        // The web's column (`WalletDesktop.svelte`): the content is at most
+        // `--layout-maxContentWidth` (800) and sits left, and everything
+        // two-ended — the actions, both section headers, both lists — lives
+        // in one `--layout-rowMeasure` (560), so no row is wider than the eye
+        // can cross. The balance stays outside it: one-ended, and a large one
+        // needs the room. Full-screen, the rows used to run the width of the
+        // monitor with a token's name at one end and its amount at the other.
+        let column = self
+            .content_scroll
+            .wire(div().id("wallet-content").size_full(), cx.entity_id())
+            .child(
+                // Block: see `assets_col`.
+                div()
+                    .max_w(px(WALLET_CONTENT_MAX_W))
+                    .pl(px(WALLET_PAD_X))
+                    .pr(px(32.))
+                    .pb(px(32.))
+                    .child(balance_display(
+                        theme,
+                        &mut self.icons,
+                        &balance,
+                        // Tap-to-hide, spec 025's gesture — the figure IS the control,
+                        // as it is on the phone and on the web. A session is what makes
+                        // it real: the fixture hero has no privacy to keep.
+                        self.identity.is_some().then(|| {
+                            Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                crate::executor::balance_dashboard::dispatch(
+                                    vela_core::app::balance_dashboard::Event::PrivacyToggled,
+                                    cx,
+                                );
+                            })
+                                as crate::wallet::components::BalanceToggle
+                        }),
+                        self.identity.is_some().then(|| {
+                            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.open_balance_status(cx);
+                            }))
+                                as crate::wallet::components::BalanceToggle
+                        }),
+                    ))
+                    .child(
+                        div()
+                            .max_w(px(WALLET_ROW_MEASURE))
+                            .child(pills)
+                            .child(
+                                div()
+                                    .id("section-activity")
+                                    .cursor_pointer()
+                                    .child(section_header(
+                                        theme,
+                                        &mut self.icons,
+                                        s_activity,
+                                        s_all,
+                                    ))
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.enter_flow(FlowEntry::Activity, cx);
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(activity_col)
+                            .child({
+                                // The two halves lead to two different panels: the title names
+                                // the assets list, and the action reads 添加, so it opens the
+                                // add-token panel stacked on it — which is what makes DT3L's
+                                // back chevron lead somewhere.
+                                let (title, action) =
+                                    section_header_parts(theme, &mut self.icons, s_assets, s_add);
+                                section_header_row()
+                                    .child(
+                                        div()
+                                            .id("section-assets")
+                                            .cursor_pointer()
+                                            .child(title)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.enter_flow(FlowEntry::Assets, cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("section-assets-add")
+                                            .cursor_pointer()
+                                            .child(action)
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.enter_flow(FlowEntry::AddToken, cx);
+                                                cx.notify();
+                                            })),
+                                    )
+                            })
+                            .child(assets_col),
+                    ),
+            );
+        // The column scrolls BELOW the window's caption strip, not under it:
+        // that strip is the drag region and carries the window's own
+        // buttons, and a balance scrolled up beneath ✕ was drawn through it.
         div()
             .flex_1()
             .min_w(px(0.))
             .h_full()
-            .overflow_hidden()
-            .px(px(WALLET_PAD_X))
-            .pt(px(WALLET_PAD_TOP))
+            .pt(px(WALLET_PAD_TOP.max(crate::window_frame::CAPTION_H)))
             .flex()
             .flex_col()
-            .child(balance_display(
-                theme,
-                &mut self.icons,
-                &balance,
-                // Tap-to-hide, spec 025's gesture — the figure IS the control,
-                // as it is on the phone and on the web. A session is what makes
-                // it real: the fixture hero has no privacy to keep.
-                self.identity.is_some().then(|| {
-                    Box::new(|_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                        crate::executor::balance_dashboard::dispatch(
-                            vela_core::app::balance_dashboard::Event::PrivacyToggled,
-                            cx,
-                        );
-                    }) as crate::wallet::components::BalanceToggle
-                }),
-            ))
-            .child(pills)
             .child(
                 div()
-                    .id("section-activity")
-                    .cursor_pointer()
-                    .child(section_header(theme, &mut self.icons, s_activity, s_all))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.enter_flow(FlowEntry::Activity, cx);
-                        cx.notify();
-                    })),
+                    .relative()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .child(column)
+                    .children(crate::ui::vertical_scrollbar(theme, &self.content_scroll)),
             )
-            .child(activity_col)
-            .child({
-                // The two halves lead to two different panels: the title names
-                // the assets list, and the action reads 添加, so it opens the
-                // add-token panel stacked on it — which is what makes DT3L's
-                // back chevron lead somewhere.
-                let (title, action) = section_header_parts(theme, &mut self.icons, s_assets, s_add);
-                section_header_row()
-                    .child(
-                        div()
-                            .id("section-assets")
-                            .cursor_pointer()
-                            .child(title)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.enter_flow(FlowEntry::Assets, cx);
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        div()
-                            .id("section-assets-add")
-                            .cursor_pointer()
-                            .child(action)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.enter_flow(FlowEntry::AddToken, cx);
-                                cx.notify();
-                            })),
-                    )
-            })
-            .child(assets_col)
     }
 
     // -- column 2 (contacts): header + group rail + sectioned list -----------
@@ -3016,7 +3792,8 @@ impl WalletPage {
             px(self.contacts_top(window)
                 + CONTACTS_HEADER_H
                 + CONTACTS_BODY_PAD_TOP
-                + CONTACTS_BUTTON_H),
+                // The round ⋯ is 36 (078 C-09).
+                + 36.),
         )
     }
 
@@ -3030,12 +3807,20 @@ impl WalletPage {
                 + CONTACTS_HEADER_H
                 + CONTACTS_BODY_PAD_TOP
                 + CONTACTS_RAIL_ROW_H
+                // The title's 8 above and its 1 rule (078 C-09).
+                + 9.
                 + CONTACTS_RAIL_LABEL_H
                 + CONTACTS_RAIL_ROW_H),
         )
     }
 
-    fn contacts_header(&mut self, theme: &Theme, caption: bool, cx: &mut Context<Self>) -> Div {
+    fn contacts_header(
+        &mut self,
+        theme: &Theme,
+        caption: bool,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let title = self.contacts.title.clone();
         let placeholder = self.contacts.search_placeholder.clone();
         let add = self.contacts.add_contact.clone();
@@ -3052,7 +3837,7 @@ impl WalletPage {
             .flex_1()
             .flex()
             .items_center()
-            .gap(px(16.))
+            .gap(px(8.))
             .px(px(WALLET_PAD_X))
             .when(caption, |el| el.pt(px(CONTACTS_HEADER_CAPTION_PAD)))
             .child(
@@ -3063,39 +3848,37 @@ impl WalletPage {
                     .child(title),
             )
             .child(div().flex_1().min_w(px(0.)))
-            .child(search_field(theme, &mut self.icons, placeholder))
+            .child({
+                let live = self.contacts_search_input(theme, placeholder.clone(), window, cx);
+                search_field(theme, &mut self.icons, placeholder, Some(live))
+            })
             .child(
-                outline_button(
+                crate::contacts::components::header_pill(
                     "contacts-add",
                     theme,
                     &mut self.icons,
-                    Some(Icon::UserRoundPlus),
+                    Icon::UserRoundPlus,
                     add,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
-                    // Only a real session saves anything: the fixture roster is
-                    // a picture, and a picture must not grow a row.
-                    if this.identity.is_none() {
-                        return;
-                    }
-                    this.contact_form = Some(ContactForm::default());
-                    // The address is the first thing to type, so it is the
-                    // first thing focused.
-                    window.focus(&this.contact_form_address_focus, cx);
-                    cx.notify();
+                    this.open_add_contact(window, cx);
                 })),
             )
             .child(
-                icon_button("contacts-more", theme, &mut self.icons, Icon::Ellipsis).on_click(
-                    cx.listener(|this, _, window, cx| {
-                        this.menu = Some((
-                            ContactsMenu::Header,
-                            this.header_menu_anchor(window),
-                            Anchor::TopRight,
-                        ));
-                        cx.notify();
-                    }),
-                ),
+                crate::contacts::components::round_icon_button(
+                    "contacts-more",
+                    theme,
+                    &mut self.icons,
+                    Icon::Ellipsis,
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.menu = Some((
+                        ContactsMenu::Header,
+                        this.header_menu_anchor(window),
+                        Anchor::TopRight,
+                    ));
+                    cx.notify();
+                })),
             );
 
         div()
@@ -3104,13 +3887,36 @@ impl WalletPage {
             .flex()
             .flex_col()
             .child(row)
-            .child(
-                div()
-                    .mx(px(WALLET_PAD_X))
-                    .h(px(1.))
-                    .flex_none()
-                    .bg(theme.divider),
-            )
+            // Edge to edge, as the web's `.head-rule` (078 C-09).
+            .child(div().h(px(1.)).flex_none().bg(theme.divider))
+    }
+
+    /// Nobody in the book (078 C-03): the core's loaded, empty roster — or
+    /// the gallery's DC3, which draws it without one.
+    fn contacts_book_empty(&self, cx: &mut Context<Self>) -> bool {
+        if self.contacts_empty {
+            return true;
+        }
+        if self.identity.is_none() {
+            return false;
+        }
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        view.loaded && view.contacts.is_empty()
+    }
+
+    /// 添加联系人's form, opened on its address — the header's button and the
+    /// empty book's both.
+    fn open_add_contact(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Only a real session saves anything: the fixture roster is a
+        // picture, and a picture must not grow a row.
+        if self.identity.is_none() {
+            return;
+        }
+        self.contact_form = Some(ContactForm::default());
+        // The address is the first thing to type, so it is the first thing
+        // focused.
+        window.focus(&self.contact_form_address_focus, cx);
+        cx.notify();
     }
 
     fn contacts_rail(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -3119,17 +3925,13 @@ impl WalletPage {
         let new_group = self.contacts.group_new.clone();
         // The count beside 全部联系人. A real session counts its own book; the
         // mock's 12 under somebody's four contacts is the same small lie the
-        // group rail told.
+        // group rail told. The WHOLE book, as the web's `allCount`: the search
+        // narrows the list beside it, not what "all" means.
         let total = if self.contacts_empty {
             0
         } else if self.identity.is_some() {
-            u32::try_from(
-                self.contact_sections(cx)
-                    .iter()
-                    .map(|(_, rows)| rows.len())
-                    .sum::<usize>(),
-            )
-            .unwrap_or(u32::MAX)
+            let view = resident::resident::<Contacts>(cx).read(cx).view();
+            u32::try_from(view.contacts.len()).unwrap_or(u32::MAX)
         } else {
             contacts_fixtures::TOTAL_CONTACTS
         };
@@ -3228,9 +4030,13 @@ impl WalletPage {
         if self.identity.is_none() {
             return None;
         }
-        self.contact_sections(cx)
+        // The CORE's order, as `self.contact` is (`open_contact_by_address`).
+        // This read the A–Z sections — searched, at that — so with the panel
+        // on Alice, its copy button copied Bob, and its delete asked to delete
+        // Bob under Alice's name (found verifying 078 C-08).
+        let view = resident::resident::<Contacts>(cx).read(cx).view();
+        contacts_live::rows(&view)
             .into_iter()
-            .flat_map(|(_, rows)| rows)
             .nth(self.contact)
             .map(|row| row.address_full)
     }
@@ -3278,7 +4084,15 @@ impl WalletPage {
             .view()
             .hidden;
         let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
-        contacts_live::detail(&view, self.contact, &feed, &self.strings, hidden)
+        contacts_live::detail(
+            &view,
+            self.contact,
+            &feed,
+            &self.strings,
+            &self.flow_strings,
+            self.contact_all_activity,
+            hidden,
+        )
     }
 
     /// The activity rows: the core's feed for a real session, the mock's
@@ -3296,7 +4110,7 @@ impl WalletPage {
             .view()
             .hidden;
         let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
-        wallet_live::activity_rows(&feed, &self.strings, hidden)
+        wallet_live::activity_rows(&feed, &self.strings, &self.flow_strings, hidden)
     }
 
     /// The core-list indices behind the home's asset strip, in drawn order.
@@ -3338,55 +4152,6 @@ impl WalletPage {
         cx.notify();
     }
 
-    /// Every group, and whether the open contact is in it.
-    ///
-    /// The pair is what the menu draws AND what the next tap sends back, so
-    /// the tick a person sees and the set the core is given cannot disagree.
-    fn contact_group_state(&mut self, cx: &mut Context<Self>) -> Vec<(SharedString, bool)> {
-        let view = resident::resident::<Contacts>(cx).read(cx).view();
-        let Some(address) = contacts_live::rows(&view)
-            .into_iter()
-            .nth(self.contact)
-            .map(|row| row.address_full.to_string().to_lowercase())
-        else {
-            return Vec::new();
-        };
-        view.groups
-            .iter()
-            .map(|group| {
-                (
-                    SharedString::from(group.name.clone()),
-                    group
-                        .members
-                        .iter()
-                        .any(|member| member.address.to_lowercase() == address),
-                )
-            })
-            .collect()
-    }
-
-    /// Every contact, and whether the open group holds it.
-    ///
-    /// The book's own order, so the menu reads like the list behind it.
-    fn group_member_state(&mut self, cx: &mut Context<Self>) -> Vec<(SharedString, bool)> {
-        let view = resident::resident::<Contacts>(cx).read(cx).view();
-        let Some(group) = self.group.and_then(|index| view.groups.get(index)) else {
-            return Vec::new();
-        };
-        let members: Vec<String> = group
-            .members
-            .iter()
-            .map(|member| member.address.to_lowercase())
-            .collect();
-        contacts_live::rows(&view)
-            .into_iter()
-            .map(|row| {
-                let address = row.address_full.to_string().to_lowercase();
-                (row.name.clone(), members.contains(&address))
-            })
-            .collect()
-    }
-
     /// Tell the hero which accounts are on screen — once per opening.
     ///
     /// The core fetches a total for each while the switcher is open and stops
@@ -3411,6 +4176,88 @@ impl WalletPage {
             vela_core::app::balance_dashboard::Event::SwitcherOpened { addresses },
             cx,
         );
+    }
+
+    /// 078 H-01 — the header's name opens the switcher, over whatever
+    /// section is on screen. Its first frame tells the core, as the settings
+    /// panel's does (`sync_switcher`).
+    fn open_account_switcher(&mut self, cx: &mut Context<Self>) {
+        self.account_switcher = true;
+        self.removing_account = None;
+        self.menu = None;
+        self.switcher_scroll = crate::ui::SmoothScroll::new();
+        cx.notify();
+    }
+
+    /// The switcher dialog goes. The core's subscription goes with it unless
+    /// the settings panel it sits over is the same list, still on screen —
+    /// which would otherwise re-announce itself on its next frame, and every
+    /// account's balance would be fetched again for nothing.
+    fn close_account_switcher(&mut self, cx: &mut Context<Self>) {
+        if !self.account_switcher {
+            return;
+        }
+        self.account_switcher = false;
+        self.removing_account = None;
+        if !(self.section == Section::Settings && self.settings_page == SettingsPage::Account) {
+            self.close_switcher(cx);
+        }
+        cx.notify();
+    }
+
+    /// One of the header's dialogs is up (078 H-01, H-02). The sidebar is on
+    /// screen while a site is, so either can open over the browser column —
+    /// and the webview is a NATIVE view that paints over anything gpui draws,
+    /// dialog included. While one is up the page is taken off the screen, not
+    /// closed (spec 070): the scrim covers where it was.
+    #[cfg(not(target_os = "linux"))]
+    fn dialog_over_browser(&self) -> bool {
+        // The site menus drop over the page too, and a native view paints
+        // over them: the ⋯ menu showed a sliver above the page and nothing
+        // else (found verifying 078 E-03). While one is open the page steps
+        // aside, as it does for a dialog, and comes back when it closes.
+        self.account_switcher
+            || self.identicon_viewer.is_some()
+            || matches!(
+                self.menu,
+                Some((ContactsMenu::Site | ContactsMenu::SiteNetwork, _, _))
+            )
+    }
+
+    /// 078 H-02 — every artwork with an address behind it opens this.
+    fn open_identicon_viewer(&mut self, address: String, cx: &mut Context<Self>) {
+        self.identicon_viewer = Some(IdenticonViewer {
+            address,
+            copied: None,
+            presses: 0,
+        });
+        cx.notify();
+    }
+
+    /// "Copy address", then "Copied" for 1.5 s, as the web's viewer does.
+    fn copy_viewer_address(&mut self, cx: &mut Context<Self>) {
+        let Some(viewer) = self.identicon_viewer.as_mut() else {
+            return;
+        };
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(viewer.address.clone()));
+        viewer.presses += 1;
+        let press = viewer.presses;
+        viewer.copied = Some(press);
+        cx.notify();
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(1500))
+                .await;
+            let _ = page.update(cx, |this, cx| {
+                if let Some(viewer) = this.identicon_viewer.as_mut()
+                    && viewer.copied == Some(press)
+                {
+                    viewer.copied = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     /// The switcher left the screen. Idempotent, and called from every path
@@ -3545,6 +4392,7 @@ impl WalletPage {
                 activity: Vec::new(),
                 activity_ids: Vec::new(),
                 explorer_url: None,
+                contract_copy: None,
             })
     }
 
@@ -3596,7 +4444,22 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) -> Vec<(gpui::SharedString, Vec<ContactRowModel>)> {
         if self.identity.is_none() {
-            return contacts_fixtures::sections_model();
+            let query = self.contacts_query.trim().to_lowercase();
+            return contacts_fixtures::sections_model()
+                .into_iter()
+                .map(|(letter, rows)| {
+                    let rows: Vec<ContactRowModel> = rows
+                        .into_iter()
+                        .filter(|row| {
+                            query.is_empty()
+                                || row.name.to_lowercase().contains(&query)
+                                || row.address_full.to_lowercase().contains(&query)
+                        })
+                        .collect();
+                    (letter, rows)
+                })
+                .filter(|(_, rows)| !rows.is_empty())
+                .collect();
         }
         let view = resident::resident::<Contacts>(cx).read(cx).view();
         if !view.loaded {
@@ -3605,7 +4468,61 @@ impl WalletPage {
             // waits (spec 030 FR-008).
             return Vec::new();
         }
-        contacts_live::sections(&view)
+        contacts_live::sections(&view, &self.contacts_query)
+    }
+
+    /// The header search's input and its ✕ (078 X-05 / C-02).
+    fn contacts_search_input(
+        &mut self,
+        theme: &Theme,
+        placeholder: SharedString,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> crate::contacts::components::SearchInput {
+        let page = cx.entity().downgrade();
+        let input = crate::ui::search_input(
+            "contacts-search",
+            theme,
+            &self.contacts_query,
+            placeholder,
+            &self.contacts_query_focus,
+            window,
+            move |text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    this.contacts_query = text;
+                    cx.notify();
+                });
+            },
+        )
+        .into_any_element();
+        let clear = (!self.contacts_query.is_empty()).then(|| {
+            div()
+                .id("contacts-search-clear")
+                .flex_none()
+                .flex()
+                .items_center()
+                .cursor_pointer()
+                .child(icon_img(
+                    &mut self.icons,
+                    Icon::X,
+                    false,
+                    theme.fg_subtle,
+                    14.,
+                ))
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.contacts_query.clear();
+                    // The web's clear leaves the person where they were
+                    // typing, ready for the next name.
+                    this.contacts_query_focus.focus(window, cx);
+                    cx.notify();
+                }))
+                .into_any_element()
+        });
+        crate::contacts::components::SearchInput {
+            input,
+            focused: self.contacts_query_focus.is_focused(window),
+            clear,
+        }
     }
 
     /// DC1: the A–Z sectioned roster.
@@ -3628,17 +4545,31 @@ impl WalletPage {
             }
             _ => None,
         };
-        let mut list = div()
-            .id("contacts-list")
-            .flex_1()
-            .min_w(px(0.))
-            .min_h(px(0.))
-            .overflow_y_scroll()
-            .flex()
-            .flex_col();
+        let mut list = self.contacts_scroll.wire(
+            div()
+                .id("contacts-list")
+                .flex_1()
+                .min_w(px(0.))
+                .min_h(px(0.))
+                .flex()
+                .flex_col(),
+            cx.entity_id(),
+        );
 
+        let sections = self.contact_sections(cx);
+        if sections.is_empty() && !self.contacts_query.trim().is_empty() {
+            // A search that leaves nobody says so, and what it searched for
+            // (`contacts.noResults`), rather than showing an empty column.
+            return list.child(div().pt(px(48.)).child(empty_state(
+                theme,
+                &mut self.icons,
+                Icon::Search,
+                contacts_fixtures::no_results_label(&self.contacts, self.contacts_query.trim()),
+                self.contacts.search_placeholder.clone(),
+            )));
+        }
         let mut index = 0usize;
-        for (letter, rows) in self.contact_sections(cx) {
+        for (letter, rows) in sections {
             list = list.child(section_letter(theme, letter));
             let last = rows.len() - 1;
             for (i, contact) in rows.iter().enumerate() {
@@ -3716,11 +4647,13 @@ impl WalletPage {
         let batch_send = self.contacts.batch_send.clone();
         let add_member = self.contacts.add_member.clone();
 
+        // The web's `.group-head` (078 C-09): gap 8, 20 below; the count in
+        // the subtle colour; a 36 accent pill and the round ⋯.
         let header = div()
             .flex()
             .items_center()
-            .gap(px(12.))
-            .pb(px(12.))
+            .gap(px(8.))
+            .pb(px(20.))
             .child(
                 div()
                     .text_size(theme::text_section())
@@ -3731,27 +4664,31 @@ impl WalletPage {
             .child(
                 div()
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_muted)
+                    .text_color(theme.fg_subtle)
                     .child(members_label),
             )
             .child(div().flex_1().min_w(px(0.)))
             .child(
-                accent_button("group-batch-send", theme, &mut self.icons, None, batch_send)
+                crate::contacts::components::header_cta("group-batch-send", theme, batch_send)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.batch_send_to_group(&batch_targets, cx);
                     })),
             )
             .child(
-                icon_button("group-more", theme, &mut self.icons, Icon::Ellipsis).on_click(
-                    cx.listener(|this, _, window, cx| {
-                        this.menu = Some((
-                            ContactsMenu::Group,
-                            this.group_header_menu_anchor(window),
-                            Anchor::TopRight,
-                        ));
-                        cx.notify();
-                    }),
-                ),
+                crate::contacts::components::round_icon_button(
+                    "group-more",
+                    theme,
+                    &mut self.icons,
+                    Icon::Ellipsis,
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.menu = Some((
+                        ContactsMenu::Group,
+                        this.group_header_menu_anchor(window),
+                        Anchor::TopRight,
+                    ));
+                    cx.notify();
+                })),
             );
 
         let mut column = div().flex_1().min_w(px(0.)).flex().flex_col().child(header);
@@ -3795,13 +4732,8 @@ impl WalletPage {
             // answered from the contact's side.
             .child(
                 ghost_add_row("group-add-member", theme, &mut self.icons, add_member).on_click(
-                    cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
-                        this.menu = Some((
-                            ContactsMenu::GroupMembers,
-                            event.position(),
-                            Anchor::TopLeft,
-                        ));
-                        cx.notify();
+                    cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.open_member_pick(cx);
                     }),
                 ),
             )
@@ -3831,6 +4763,9 @@ impl WalletPage {
         else {
             return false;
         };
+        if self.contact != index || self.panel != PanelId::ContactDetail {
+            self.contact_all_activity = false;
+        }
         self.contact = index;
         self.panel = PanelId::ContactDetail;
         self.menu = None;
@@ -3881,33 +4816,80 @@ impl WalletPage {
         cx.notify();
     }
 
-    /// DC3: the centred empty state with both CTAs.
-    fn contacts_empty_view(&mut self, theme: &Theme) -> Div {
+    /// DC3: the centred empty state with both CTAs — add opens the form,
+    /// import the file picker, as the web's `empty-primary` / `-secondary`.
+    fn contacts_empty_view(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let actions = self.identity.is_some().then(|| {
+            (
+                Box::new(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
+                    this.open_add_contact(window, cx);
+                })) as contacts_components::MenuAction,
+                Box::new(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                    Self::import_contacts(None, cx);
+                })) as contacts_components::MenuAction,
+            )
+        });
         let title = self.contacts.empty.clone();
         let caption = self.contacts.empty_hint.clone();
         let primary = self.contacts.add_contact.clone();
         let secondary = self.contacts.import_file.clone();
+        // Centred on the WORKSPACE, not on the column the rail leaves: the
+        // rail has no fill and no rule, so the eye measures from the
+        // sidebar's edge, and the column's own centre read half a rail
+        // (120) too far right. The trailing spacer mirrors rail + gap; a
+        // narrow window shrinks it first (the group keeps its width), so the
+        // group never runs into the rail. Vertically 2:3 above the middle —
+        // the optical centre, as the receipt (issue 199). The web's `.center`.
         div()
             .flex_1()
             .min_w(px(0.))
             .flex()
-            .items_center()
-            .justify_center()
-            .child(empty_state_cta(
-                theme,
-                &mut self.icons,
-                title,
-                caption,
-                primary,
-                secondary,
-            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(CONTACTS_EMPTY_W))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .child(div().flex_1().flex_grow(2.))
+                    .child(empty_state_cta(
+                        window,
+                        theme,
+                        &mut self.icons,
+                        title,
+                        caption,
+                        (primary, secondary),
+                        actions,
+                    ))
+                    .child(div().flex_1().flex_grow(3.)),
+            )
+            .child(
+                div()
+                    .w(px(CONTACTS_RAIL_W + WALLET_PAD_X))
+                    .min_w(px(0.))
+                    .flex_shrink(1.),
+            )
     }
 
-    fn contacts_content(&mut self, theme: &Theme, caption: bool, cx: &mut Context<Self>) -> Div {
-        let header = self.contacts_header(theme, caption, cx);
+    fn contacts_content(
+        &mut self,
+        theme: &Theme,
+        caption: bool,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let header = self.contacts_header(theme, caption, window, cx);
         let rail = self.contacts_rail(theme, cx);
-        let body: gpui::AnyElement = if self.contacts_empty {
-            self.contacts_empty_view(theme).into_any_element()
+        // Empty first, as the web orders it: a group opened on a book with
+        // nobody in it has nobody to list.
+        let body: gpui::AnyElement = if self.contacts_book_empty(cx) {
+            self.contacts_empty_view(theme, window, cx)
+                .into_any_element()
         } else if let Some(group) = self.group {
             self.contacts_group_view(theme, group, cx)
                 .into_any_element()
@@ -3959,27 +4941,73 @@ impl WalletPage {
         // paste into a send field.
         let copy_address: Option<contacts_components::MenuAction> =
             live_address.clone().map(|address| {
-                Box::new(
-                    move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(address.to_string()));
-                    },
-                ) as contacts_components::MenuAction
+                Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                    this.copy_text(CONTACTS_TOAST, address.to_string(), CONTACTS_COPY_HOLD, cx);
+                })) as contacts_components::MenuAction
             });
         let recent = self.contacts.recent_activity.clone();
         let view_all = self.contacts.view_all_activity.clone();
         let edit = self.contacts.edit.clone();
         let delete = self.contacts.delete_contact.clone();
+        let delete_name = model.name.clone();
         let send = self.contacts.action_send.clone();
         let receive = self.contacts.action_receive.clone();
         let qr = self.contacts.action_qr.clone();
 
-        // DC2 shows membership pills only: the desktop entry point for adding
-        // a group is the contact context menu's 移入分组, so the mobile
-        // `+ 分组` chip stays off this panel (it lives on the component board).
-        let mut chips = div().flex().flex_wrap().gap(px(6.));
+        // The membership chips, and the web's `+` chip after them — 移入分组
+        // from where the groups are shown, not only from a right-click
+        // (078 C-06).
+        let mut chips = div().flex().flex_wrap().gap(px(4.));
         for chip in &model.chips {
             chips = chips.child(group_chip(theme, chip.clone()));
         }
+        if let Some(address) = live_address.clone() {
+            chips = chips.child(
+                div()
+                    .id("contact-add-group")
+                    .cursor_pointer()
+                    .child(add_chip(
+                        theme,
+                        &mut self.icons,
+                        self.contacts.move_group.clone(),
+                    ))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.open_group_pick(&address, cx);
+                    })),
+            );
+        }
+        // Nobody has named this contact: the way to, under the name — "Save to
+        // contacts" over a history suggestion, "Edit" otherwise (the web's
+        // `nameAction`, issue 191).
+        let name_action = live_address.clone().and_then(|address| {
+            let view = resident::resident::<Contacts>(cx).read(cx).view();
+            let contact = view
+                .contacts
+                .iter()
+                .find(|contact| contact.address.eq_ignore_ascii_case(&address))?;
+            if contact.name.as_deref().is_some_and(|name| !name.is_empty()) {
+                return None;
+            }
+            let label = if contact.source == vela_core::app::contacts::ContactSource::Auto {
+                self.contacts.save_to_contacts.clone()
+            } else {
+                self.contacts.edit.clone()
+            };
+            Some((address, label))
+        });
+        let name_action = name_action.map(|(address, label)| {
+            div()
+                .id("contact-name-action")
+                .cursor_pointer()
+                .child(contacts_components::name_action_pill(
+                    theme,
+                    &mut self.icons,
+                    label,
+                ))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.open_edit_contact(&address, window, cx);
+                }))
+        });
 
         let hero = div()
             .flex()
@@ -3996,7 +5024,8 @@ impl WalletPage {
                     .min_w(px(0.))
                     .flex()
                     .flex_col()
-                    .gap(px(6.))
+                    .items_start()
+                    .gap(px(8.))
                     .child(
                         div()
                             .text_size(theme::text_panel_title())
@@ -4006,6 +5035,7 @@ impl WalletPage {
                             .truncate()
                             .child(model.name.clone()),
                     )
+                    .children(name_action)
                     .child(chips),
             );
 
@@ -4022,9 +5052,9 @@ impl WalletPage {
             // right edge of the window. The chips above wrap for the same
             // reason.
             .flex_wrap()
-            .gap(px(10.))
+            .gap(px(8.))
             .child(
-                action_pill(
+                contacts_components::detail_action(
                     "contact-send",
                     theme,
                     &mut self.icons,
@@ -4050,7 +5080,7 @@ impl WalletPage {
                 })),
             )
             .child(
-                action_pill(
+                contacts_components::detail_action(
                     "contact-receive",
                     theme,
                     &mut self.icons,
@@ -4066,12 +5096,17 @@ impl WalletPage {
                 })),
             )
             .child(
-                action_pill("contact-qr", theme, &mut self.icons, Icon::QrCode, qr).on_click(
-                    cx.listener(move |this, _, _, cx| {
-                        this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
-                        cx.notify();
-                    }),
-                ),
+                contacts_components::detail_action(
+                    "contact-qr",
+                    theme,
+                    &mut self.icons,
+                    Icon::QrCode,
+                    qr,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.contact_qr = Some((qr_name.clone(), qr_address.clone()));
+                    cx.notify();
+                })),
             );
 
         let mut activity = div().flex().flex_col().child(
@@ -4084,13 +5119,26 @@ impl WalletPage {
         for row in &model.activity {
             activity = activity.child(activity_row(theme, &mut self.icons, row));
         }
-        activity = activity.child(div().pt(px(10.)).child(text_action(
-            "contact-view-all",
-            theme,
-            &mut self.icons,
-            None,
-            view_all,
-        )));
+        // The web: nothing between us says so; otherwise the link, which
+        // opens the whole history in place (078 C-04).
+        activity = if model.activity_empty {
+            activity.child(
+                div()
+                    .pt(px(8.))
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_muted)
+                    .child(self.contacts.no_activity.clone()),
+            )
+        } else {
+            activity.child(div().pt(px(10.)).child(
+                text_action("contact-view-all", theme, &mut self.icons, None, view_all).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.contact_all_activity = true;
+                        cx.notify();
+                    }),
+                ),
+            ))
+        };
 
         let footer = div()
             .flex()
@@ -4104,11 +5152,7 @@ impl WalletPage {
                 // key the core stores under, so changing it would be a delete
                 // and an add wearing one button, and the old contact would
                 // quietly survive.
-                let editing = live_address.clone().map(|address| ContactForm {
-                    editing: true,
-                    address: address.to_string(),
-                    name: model.name.to_string(),
-                });
+                let editing = live_address.clone();
                 text_action(
                     "contact-edit",
                     theme,
@@ -4117,12 +5161,10 @@ impl WalletPage {
                     edit,
                 )
                 .on_click(cx.listener(move |this, _, window, cx| {
-                    let Some(form) = editing.clone() else {
+                    let Some(address) = editing.clone() else {
                         return;
                     };
-                    this.contact_form = Some(form);
-                    window.focus(&this.contact_form_name_focus, cx);
-                    cx.notify();
+                    this.open_edit_contact(&address, window, cx);
                 }))
             })
             .child(
@@ -4134,18 +5176,11 @@ impl WalletPage {
                         let Some(address) = live_address.clone() else {
                             return;
                         };
-                        let now_ms = crate::executor::now_ms();
-                        resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                            resident.dispatch(
-                                ContactEvent::Delete {
-                                    address: address.to_string(),
-                                    now_ms,
-                                },
-                                cx,
-                            );
+                        // Asked first, as the web asks (078 C-01).
+                        this.confirm = Some(Confirm::DeleteContact {
+                            address: address.to_string(),
+                            name: delete_name.clone(),
                         });
-                        // The panel was about a row that no longer exists.
-                        this.panel = PanelId::None;
                         cx.notify();
                     },
                 )),
@@ -4197,7 +5232,38 @@ impl WalletPage {
         body: Div,
         cx: &mut Context<Self>,
     ) -> Div {
-        let mut heading = div().flex().items_center().gap(px(6.));
+        self.panel_scaffold_foot(theme, title, lead, underline, body, None, cx)
+    }
+
+    /// [`panel_scaffold_with`], with a foot pinned under the scrolling body —
+    /// the web's `.pinned` (078 F-09): on the page's colour, a hairline above
+    /// it where the list ends, padded as the body is.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the scaffold and its one extra slot"
+    )]
+    fn panel_scaffold_foot(
+        &mut self,
+        theme: &Theme,
+        title: SharedString,
+        lead: Option<gpui::AnyElement>,
+        underline: bool,
+        body: Div,
+        foot: Option<Div>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        // The web's `ThirdPanel` (`wallet/ui/ThirdPanel.svelte`): header
+        // 16/24 with a gap of 8 — its top here is the caption strip's
+        // clearance, which the browser does not have — a 36px close with a
+        // 20px icon, and content that SCROLLS, padded 0/24/24. It was
+        // `overflow_hidden`: a long asset history, the signing column's
+        // slider and every long flow were cut off at the bottom.
+        let mut heading = div()
+            .flex_1()
+            .min_w(px(0.))
+            .flex()
+            .items_center()
+            .gap(px(8.));
         if let Some(lead) = lead {
             heading = heading.child(lead);
         }
@@ -4211,10 +5277,10 @@ impl WalletPage {
         let mut bar = div()
             .flex()
             .items_center()
-            .justify_between()
-            .px(px(20.))
+            .gap(px(8.))
+            .px(px(24.))
             .pt(px(SIDEBAR_TOP))
-            .pb(px(8.));
+            .pb(px(16.));
         if underline {
             bar = bar.border_b_1().border_color(theme.divider);
         }
@@ -4231,9 +5297,9 @@ impl WalletPage {
                 bar.child(heading).child(
                     div()
                         .id("panel-close")
-                        .w(px(32.))
-                        .h(px(32.))
-                        .rounded(px(16.))
+                        .flex_none()
+                        .size(px(36.))
+                        .rounded_full()
                         .flex()
                         .items_center()
                         .justify_center()
@@ -4244,6 +5310,13 @@ impl WalletPage {
                             &mut self.icons,
                         ))
                         .on_click(cx.listener(|this, _, _, cx| {
+                            // The contact form's column closes the FORM: the
+                            // detail it was opened over is still there.
+                            if this.section == Section::Contacts && this.contact_form.is_some() {
+                                this.contact_form = None;
+                                cx.notify();
+                                return;
+                            }
                             // Closing the SIGNING column is an answer, and the
                             // core decides which one: a request not yet
                             // submitted is rejected (4001), one already
@@ -4268,15 +5341,57 @@ impl WalletPage {
                         })),
                 ),
             )
-            .child(
+            .child({
+                // A new subject starts at its top: the scroll of the last
+                // asset, flow step or request is not this one's.
+                let subject = format!(
+                    "{:?}{:?}{:?}",
+                    self.panel,
+                    self.flows.last(),
+                    self.asset_detail
+                );
+                if self.panel_scroll_subject != subject {
+                    self.panel_scroll_subject = subject;
+                    self.panel_scroll.set_offset(gpui::point(px(0.), px(0.)));
+                }
+                // With a foot, the body takes its own height and shrinks
+                // (then scrolls) only when it must, so the foot sits under
+                // the content and pins to the bottom once the list overflows
+                // — CSS `sticky`, as the web's `.pinned` is (078 F-09).
+                let with_foot = foot.is_some();
+                // Content-sized, both levels shrinkable flex items: a
+                // `size_full` scroll view has no height to take from a parent
+                // that is itself sized by content, and collapsed to nothing.
                 div()
-                    .flex_1()
+                    .relative()
+                    .when(with_foot, |el| el.flex_initial().flex().flex_col())
+                    .when(!with_foot, |el| el.flex_1())
                     .min_h(px(0.))
-                    .overflow_hidden()
-                    .px(px(20.))
-                    .pb(px(20.))
-                    .child(body),
-            )
+                    .child(
+                        self.panel_scroll
+                            .wire(
+                                div()
+                                    .id("panel-body")
+                                    .when(with_foot, |el| el.w_full().flex_initial().min_h(px(0.)))
+                                    .when(!with_foot, |el| el.size_full()),
+                                cx.entity_id(),
+                            )
+                            .px(px(24.))
+                            .pb(px(24.))
+                            .child(body),
+                    )
+                    .children(crate::ui::vertical_scrollbar(theme, &self.panel_scroll))
+            })
+            .children(foot.map(|foot| {
+                div()
+                    .flex_none()
+                    .px(px(24.))
+                    .pt(px(4.))
+                    .bg(theme.bg_base)
+                    .border_t_1()
+                    .border_color(theme.divider)
+                    .child(foot)
+            }))
     }
 
     /// The flow column: spec 015's panel scaffold plus the back chevron the
@@ -4287,13 +5402,14 @@ impl WalletPage {
         title: SharedString,
         back: Option<SharedString>,
         body: Div,
+        foot: Option<Div>,
         cx: &mut Context<Self>,
     ) -> Div {
         // The root of a flow has nowhere to step back TO — closing the column
         // and stepping back one level are different gestures, and only the
         // close button should offer the first.
         let Some(_label) = back else {
-            return self.panel_scaffold_with(theme, title, None, true, body, cx);
+            return self.panel_scaffold_foot(theme, title, None, true, body, foot, cx);
         };
         let chevron = div()
             .id("flow-back")
@@ -4315,14 +5431,185 @@ impl WalletPage {
             .on_click(cx.listener(|this, _, _, cx| {
                 this.flow_back(cx);
             }));
-        self.panel_scaffold_with(
+        self.panel_scaffold_foot(
             theme,
             title,
             Some(chevron.into_any_element()),
             true,
             body,
+            foot,
             cx,
         )
+    }
+
+    /// DT3L's two tabs, and — on the native one — the network search in the
+    /// field, its suggestions and its CTA (078 F-07, the web's
+    /// `liveAddNetworkTab` handlers). The ERC-20 tab keeps the bindings
+    /// `flow_actions` gave it.
+    fn bind_add_token_tabs(&mut self, actions: &mut panels::PanelActions, cx: &mut Context<Self>) {
+        actions.add_token_tabs = Some((
+            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                if this.add_token_native {
+                    this.add_token_native = false;
+                    this.add_net_added = None;
+                    // A half-finished network search does not wait behind the
+                    // other tab: the web resets it on the same switch.
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        if !resident.view().wizard.query.is_empty() {
+                            resident.dispatch(NetEvent::WizardReset, cx);
+                        }
+                    });
+                    cx.notify();
+                }
+            })) as panels::Click,
+            Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.add_token_native = true;
+                cx.notify();
+            })) as panels::Click,
+        ));
+        if !self.add_token_native {
+            return;
+        }
+
+        let wizard = resident::resident::<NetworkAdmin>(cx)
+            .read(cx)
+            .view()
+            .wizard;
+        let value = match &self.add_net_added {
+            Some((_, query)) => query.clone(),
+            None => wizard.query.clone(),
+        };
+        let page = cx.entity().downgrade();
+        actions.address_field = Some(panels::AddressField {
+            focus: self.add_token_focus.clone(),
+            value,
+            placeholder: self.flow_strings.net_search_placeholder.clone(),
+            on_change: Box::new(
+                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                    // A new search is a new question: the last add's card goes.
+                    let _ = page.update(cx, |this, _| this.add_net_added = None);
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(NetEvent::SearchInput { query: text }, cx);
+                    });
+                },
+            ),
+        });
+        actions.add_token_picks = wizard
+            .suggestions
+            .iter()
+            .map(|entry| {
+                let chain_id = entry.chain_id;
+                Box::new(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                    resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            NetEvent::ChainSelected {
+                                chain_id,
+                                keep_custom_rpc: false,
+                            },
+                            cx,
+                        );
+                    });
+                    cx.notify();
+                })) as panels::Click
+            })
+            .collect();
+        actions.add_to_wallet = Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            // Added on the core's word, not the press: `add_confirmed`
+            // refuses silently unless the wizard is Checked and
+            // compatible, and `last_added_chain_id` moving is the only
+            // sign it did not.
+            let now_iso = crate::executor::now_iso();
+            let added = resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                let view = resident.view();
+                let info = view.wizard.chain_info.clone()?;
+                let query = view.wizard.query.clone();
+                let before = view.last_added_chain_id;
+                resident.dispatch(NetEvent::AddConfirmed { now_iso }, cx);
+                (resident.view().last_added_chain_id != before).then_some((info, query))
+            });
+            if let Some(added) = added {
+                this.add_net_added = Some(added);
+                // A chain nobody has counted yet: the same forced read the
+                // settings dialog makes on its add.
+                crate::executor::balance_dashboard::refresh(cx);
+            }
+            cx.notify();
+        })) as panels::Click);
+    }
+
+    /// Keep the balance following money that moves (078 W-01, W-02): attach
+    /// to the feed and the tracker once per resident, and run a deposit
+    /// watcher exactly while a receive screen is up. Cheap per frame — it
+    /// compares entity ids and a flag.
+    fn watch_money(&mut self, cx: &mut Context<Self>) {
+        if self.identity.is_none() {
+            return;
+        }
+        let feed = resident::resident::<ActivityFeed>(cx);
+        let tracker = resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
+        if self.money_watch.feed != Some(feed.entity_id())
+            || self.money_watch.tracker != Some(tracker.entity_id())
+        {
+            self.money_watch.feed = Some(feed.entity_id());
+            self.money_watch.tracker = Some(tracker.entity_id());
+            self.money_watch.new_item = feed.read(cx).view().new_item_id;
+            self.money_watch.confirmed = confirmed_sends(&tracker.read(cx).view());
+            self.money_watch.subscriptions = vec![
+                // A transfer the scan just found moved the balances too: the
+                // core celebrates only a genuinely new incoming record, never
+                // the first pass, so this fires once per arrival.
+                cx.observe(&feed, |this, feed, cx| {
+                    let id = feed.read(cx).view().new_item_id;
+                    if id.is_some() && id != this.money_watch.new_item {
+                        crate::executor::balance_dashboard::refresh(cx);
+                    }
+                    this.money_watch.new_item = id;
+                }),
+                // Money left: a send whose receipt just landed.
+                cx.observe(&tracker, |this, tracker, cx| {
+                    let now = confirmed_sends(&tracker.read(cx).view());
+                    if now
+                        .iter()
+                        .any(|hash| !this.money_watch.confirmed.contains(hash))
+                    {
+                        crate::executor::balance_dashboard::refresh(cx);
+                    }
+                    this.money_watch.confirmed = now;
+                }),
+            ];
+        }
+
+        // W-01: the watcher lives exactly as long as a receive screen shows —
+        // the core's session is single-shot (five minutes, then done), so a
+        // resident started once at the first visit watched nothing after it.
+        // Each visit is a fresh one; leaving forgets it, and its polling stops
+        // with it.
+        let receiving = self.panel == PanelId::Flow
+            && matches!(
+                self.flows.last(),
+                Some(FlowPanel::Dr1 | FlowPanel::Dr2 | FlowPanel::Dr3)
+            );
+        match (receiving, self.money_watch.receiving.is_some()) {
+            (true, false) => {
+                resident::forget::<ReceiveWatch>(cx);
+                let watch = resident::resident::<ReceiveWatch>(cx);
+                self.money_watch.deposits = 0;
+                self.money_watch.receiving = Some(cx.observe(&watch, |this, watch, cx| {
+                    let landed = watch.read(cx).view().deposits.len();
+                    if landed > this.money_watch.deposits {
+                        // The web's `onDeposit`: the balances and the feed.
+                        crate::executor::balance_dashboard::refresh(cx);
+                        crate::executor::activity_feed::focus_tick(cx);
+                    }
+                    this.money_watch.deposits = landed;
+                }));
+            }
+            (false, true) => {
+                self.money_watch.receiving = None;
+                resident::forget::<ReceiveWatch>(cx);
+            }
+            _ => {}
+        }
     }
 
     /// Open a flow from the wallet home (spec 021 SC-002).
@@ -4342,6 +5629,21 @@ impl WalletPage {
         self.panel = PanelId::Flow;
         self.send_host = None;
         self.send_fee_picker = false;
+        if entry == FlowEntry::AddToken {
+            // Every add starts on ERC-20 with a clean network search, as the
+            // web's panel does on open.
+            self.add_token_native = false;
+            self.add_net_added = None;
+            if self.identity.is_some() {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(NetEvent::WizardReset, cx);
+                });
+                // And a fresh ERC-20 session: the web creates one per open and
+                // disposes it on close, so the last visit's address, its error
+                // and its found card do not greet the next (078 W-10).
+                resident::forget::<ManageTokens>(cx);
+            }
+        }
         if entry == FlowEntry::Send && self.identity.is_some() {
             // A fresh journey starts on the one-token list, whatever the last
             // one ended in.
@@ -4369,6 +5671,9 @@ impl WalletPage {
         let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
         cx.observe(&host, |_, _, cx| cx.notify()).detach();
         self.send_host = Some(host);
+        // Every send starts on 全部: a chip left lit from the last one would
+        // hide tokens with nothing on screen saying why.
+        self.send_class = flows_live::SendClass::All;
     }
 
     /// The display currency, as the send machine's context: its code, the
@@ -4388,6 +5693,15 @@ impl WalletPage {
     }
 
     /// The live send machines' views, when the flow is live.
+    /// The picker's rows narrowed to the sidebar's network and the lit chip —
+    /// on the token picker only. BOTH the drawing and the bindings go through
+    /// this, so a row and the listener it gets are the same token.
+    fn narrow_for_picker(&self, panel: FlowPanel, view: &mut vela_core::app::send::SendView) {
+        if panel == FlowPanel::Dsd1 {
+            flows_live::narrow_send_tokens(view, self.chain_filter, self.send_class);
+        }
+    }
+
     fn send_views(
         &self,
         cx: &Context<Self>,
@@ -4421,8 +5735,15 @@ impl WalletPage {
                 self.panel = PanelId::None;
                 return None;
             }
-            let panel = flows_live::send_panel(&host.read(cx).view, self.send_fee_picker);
+            let view = &host.read(cx).view;
+            let panel = flows_live::send_panel(view, self.send_fee_picker);
             self.flows = panel.stack();
+            // The core's scanner rides on top of whatever the send is on: the
+            // column keeps the form, and `scan_overlay` sees DS1 last and
+            // draws the modal over it (078 F-01).
+            if view.show_scanner {
+                self.flows.push(FlowPanel::Ds1);
+            }
             return Some(panel);
         }
         self.flows.last().copied()
@@ -4462,7 +5783,8 @@ impl WalletPage {
         // What currency every `≈` figure below is drawn in.
         let currency = self.money(cx);
         let host = self.send_host.clone()?;
-        let (view, fee) = self.send_views(cx)?;
+        let (mut view, fee) = self.send_views(cx)?;
+        self.narrow_for_picker(panel, &mut view);
         let contact_addresses = if panel == FlowPanel::Dsd2e {
             flows_live::contact_addresses(&resident::resident::<Contacts>(cx).read(cx).view())
         } else {
@@ -4499,7 +5821,9 @@ impl WalletPage {
             token_ids: flows_live::send_token_ids(&view),
             contact_addresses,
             fee_contracts: flows_live::fee_token_contracts(&fee),
-            amount: view.amount.clone(),
+            // Shown in the person's decimal mark (078 M-04); edits are read
+            // against what was shown and handed on dot-decimal.
+            amount: flows_live::amount_to_input(&view.amount),
             recipient: view.recipient.clone(),
             amount_focus: self.send_amount_focus.clone(),
             recipient_focus: self.send_recipient_focus.clone(),
@@ -4515,6 +5839,12 @@ impl WalletPage {
                     self.split_focuses.push(cx.focus_handle());
                 }
                 self.split_focuses[..view.recipients.len()].to_vec()
+            },
+            split_address_focuses: {
+                while self.split_address_focuses.len() < view.recipients.len() {
+                    self.split_address_focuses.push(cx.focus_handle());
+                }
+                self.split_address_focuses[..view.recipients.len()].to_vec()
             },
             recipients: view.recipients.clone(),
             fill_empty: flows_live::split_fill_source(&view).map(str::to_owned),
@@ -4719,7 +6049,7 @@ impl WalletPage {
                     .bg(theme.accent)
                     .text_size(theme::text_row_title())
                     .text_color(theme.fg_inverse)
-                    .child(self.flow_strings.done.clone())
+                    .child(self.flow_strings.got_it.clone())
                     .on_click(dismiss),
             );
             return Some(scrim("send-alert-scrim").child(card).into_any_element());
@@ -4882,6 +6212,19 @@ impl WalletPage {
                         flow_fixtures::FlowBody::TxDetail,
                     )
             }
+            FlowPanel::Dt3 if self.add_token_native => {
+                let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+                let (added, query) = match &self.add_net_added {
+                    Some((info, query)) => (Some(info), query.as_str()),
+                    None => (None, view.wizard.query.as_str()),
+                };
+                flow_fixtures::FlowBody::AddToken(flows_live::add_network_tab(
+                    &view.wizard,
+                    query,
+                    added,
+                    &self.flow_strings,
+                ))
+            }
             FlowPanel::Dt3 => {
                 let view = resident::resident::<ManageTokens>(cx).read(cx).view();
                 flow_fixtures::FlowBody::AddToken(flows_live::add_token(&view, &self.flow_strings))
@@ -4896,7 +6239,8 @@ impl WalletPage {
             | FlowPanel::Dsd2f
             | FlowPanel::Dsd3
             | FlowPanel::Dsd4 => match self.send_views(cx) {
-                Some((send, fee)) => {
+                Some((mut send, fee)) => {
+                    self.narrow_for_picker(panel, &mut send);
                     let identity = self.identity();
                     let speed = self.send_speed(cx);
                     let inputs = flows_live::SendInputs {
@@ -4911,9 +6255,13 @@ impl WalletPage {
                         speed: speed.as_ref(),
                     };
                     match panel {
-                        FlowPanel::Dsd1 => flow_fixtures::FlowBody::SendPick(
-                            flows_live::send_pick_with(&inputs, self.send_sweeping),
-                        ),
+                        FlowPanel::Dsd1 => {
+                            flow_fixtures::FlowBody::SendPick(flows_live::send_pick_with(
+                                &inputs,
+                                self.send_sweeping,
+                                self.send_class,
+                            ))
+                        }
                         FlowPanel::Dsd2 | FlowPanel::Dsd2b => {
                             flow_fixtures::FlowBody::SendForm(flows_live::send_form(&inputs))
                         }
@@ -5057,7 +6405,10 @@ impl WalletPage {
             advance: bind(FlowStep::SendConfirm, cx).or(bind(FlowStep::SendReceipt, cx)),
             address_field: None,
             add_to_wallet: None,
+            add_token_tabs: None,
+            add_token_picks: Vec::new(),
             open_send_rows: Vec::new(),
+            send_class_chips: Vec::new(),
             sweep_select_all: None,
             send_pick_cta: None,
             amount_field: None,
@@ -5077,8 +6428,12 @@ impl WalletPage {
             notice_dismiss: None,
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
+            split_address_fields: Vec::new(),
+            pick_recipient_rows: Vec::new(),
             remove_recipient_rows: Vec::new(),
             fill_empty: None,
+            search: None,
+            copy: None,
         };
         // DR1L, live: one listener per network row, each remembering WHICH
         // chain it opened. The fixture keeps its single first-row listener,
@@ -5247,6 +6602,15 @@ impl WalletPage {
             match panel {
                 FlowPanel::Dsd1 => {
                     actions.open_send_form = None;
+                    actions.send_class_chips = flows_live::SendClass::CHIPS
+                        .iter()
+                        .map(|&class| -> panels::Click {
+                            Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                                this.send_class = class;
+                                cx.notify();
+                            }))
+                        })
+                        .collect();
                     let sweeping = send.sweeping;
                     let chain_ids = send.token_chain_ids.clone();
                     let pinned = send.multi_chain_id;
@@ -5323,13 +6687,43 @@ impl WalletPage {
                     // been drawn on that card since spec 021 with nothing
                     // behind it. Every edit sends the WHOLE list back, because
                     // `RecipientsChanged` is the event the machine offers.
+                    // …and its own address and book (078 F-06).
+                    for (index, focus) in send.split_address_focuses.iter().enumerate() {
+                        let rows = send.recipients.clone();
+                        actions.split_address_fields.push(panels::AddressField {
+                            focus: focus.clone(),
+                            value: rows
+                                .get(index)
+                                .map(|r| r.address.clone())
+                                .unwrap_or_default(),
+                            placeholder: SharedString::from("0x…"),
+                            on_change: Box::new({
+                                let host = host.clone();
+                                move |address: String, _: &mut Window, cx: &mut gpui::App| {
+                                    let next =
+                                        flows_live::split_address_edited(&rows, index, &address);
+                                    host.update(cx, |host, cx| {
+                                        host.dispatch(
+                                            SendEvent::RecipientsChanged { recipients: next },
+                                            cx,
+                                        );
+                                    });
+                                }
+                            }),
+                        });
+                        if let Some(id) = send.recipients.get(index).map(|r| r.id.clone()) {
+                            actions
+                                .pick_recipient_rows
+                                .push(to_host(SendEvent::OpenContactPicker { target: Some(id) }));
+                        }
+                    }
                     for (index, focus) in send.split_focuses.iter().enumerate() {
                         let rows = send.recipients.clone();
                         actions.split_amount_fields.push(panels::AddressField {
                             focus: focus.clone(),
                             value: rows
                                 .get(index)
-                                .map(|r| r.amount.clone())
+                                .map(|r| flows_live::amount_to_input(&r.amount))
                                 .unwrap_or_default(),
                             placeholder: SharedString::from("0"),
                             on_change: Box::new({
@@ -5481,9 +6875,16 @@ impl WalletPage {
                         })
                         .collect();
                     actions.advance = Some(to_host(SendEvent::Continue));
+                    // The recipient field's scan (078 F-01). The scanner is the
+                    // CORE's state, as on the web: `OpenScanner` raises it and
+                    // `ScanResolved` fills the form and takes it down.
+                    actions.open_scan = Some(to_host(SendEvent::OpenScanner));
                 }
                 FlowPanel::Dsd2e => {
-                    actions.open_scan = None;
+                    // The picker's "scan to fill" row opens the same scanner;
+                    // the scan IS the pick, and the core closes the picker with
+                    // it (issue #270).
+                    actions.open_scan = Some(to_host(SendEvent::OpenScanner));
                     // A pick lands in the field AND closes the sheet. The core
                     // at this branch point leaves the sheet up after
                     // `PickedAddress`; spec 028's core closes it itself, after
@@ -5801,6 +7202,9 @@ impl WalletPage {
                     Icon::ArrowUpRight,
                     s.detail_send.clone(),
                 )
+                // `--size-control-md`: the panel's pair is a size down from
+                // the home's actions (`AssetDetailPanel.svelte`).
+                .h(px(44.))
                 .on_click({
                     // 转账 from a token: the form with THAT token chosen.
                     let token = token.clone();
@@ -5824,6 +7228,7 @@ impl WalletPage {
                     Icon::ArrowDownLeft,
                     s.detail_receive.clone(),
                 )
+                .h(px(44.))
                 .on_click({
                     // 收款 from a token: its own code, no picker in between —
                     // the token already names its chain.
@@ -5839,49 +7244,99 @@ impl WalletPage {
                 }),
             );
 
-        let mut facts = div().flex().flex_col();
-        for (i, (label, value)) in model.facts.iter().cloned().enumerate() {
-            let mut row = div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .py(px(12.))
-                .child(
+        // A hairline above the first fact and under every one (the web's
+        // `.facts` / `.fact`), and the Contract's copy — the whole address
+        // for the clipboard, its two ends for reading (078 H-06).
+        let mut facts = div()
+            .flex()
+            .flex_col()
+            .border_t_1()
+            .border_color(theme.border_card);
+        let copied = self.copied.as_deref() == Some("asset-contract");
+        for (label, value) in model.facts.iter().cloned() {
+            let copy = (label == s.label_contract)
+                .then(|| model.contract_copy.clone())
+                .flatten();
+            let mut value_side = div().flex().items_center().gap(px(4.)).child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(theme.fg_base)
+                    .child(value),
+            );
+            if let Some(address) = copy {
+                value_side = value_side.child(
                     div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(label),
-                )
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(theme.fg_base)
-                        .child(value),
+                        .id("asset-contract-copy")
+                        .size(px(20.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .child(icon_img(
+                            &mut self.icons,
+                            if copied { Icon::Check } else { Icon::Copy },
+                            false,
+                            if copied {
+                                theme.success_base
+                            } else {
+                                theme.fg_subtle
+                            },
+                            14.,
+                        ))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.copy_text(
+                                "asset-contract",
+                                address.to_string(),
+                                std::time::Duration::from_millis(150),
+                                cx,
+                            );
+                        })),
                 );
-            if i > 0 {
-                row = row.border_t_1().border_color(theme.divider);
             }
-            facts = facts.child(row);
+            facts = facts.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(12.))
+                    .py(px(12.))
+                    // The web's line: 13 at `leading-normal`. gpui's default
+                    // leading made each fact ~4px taller than the web's.
+                    .line_height(gpui::relative(1.4))
+                    .border_b_1()
+                    .border_color(theme.border_card)
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_muted)
+                            .child(label),
+                    )
+                    .child(value_side),
+            );
         }
 
-        // No explorer for this chain: no link rather than a wrong one.
-        let explorer = model.explorer_url.clone().map(|url| {
-            div()
-                .id("detail-explorer")
-                .flex()
-                .items_center()
-                .gap(px(4.))
+        // No explorer for this chain: the same words in the system's
+        // unavailable look (the web's disabled button, spec 081 #18) — never a
+        // link to a wrong page, and not a gap where the link was either.
+        let explorer_line = div()
+            .id("detail-explorer")
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_muted)
+            .child(s.view_on_explorer.clone())
+            .child(crate::wallet::components::chevron_icon(
+                theme,
+                &mut self.icons,
+            ));
+        let explorer = Some(match model.explorer_url.clone() {
+            Some(url) => explorer_line
                 .cursor_pointer()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_muted)
                 .hover(|el| el.text_color(theme.fg_base))
-                .child(s.view_on_explorer.clone())
-                .child(crate::wallet::components::chevron_icon(
-                    theme,
-                    &mut self.icons,
-                ))
-                .on_click(move |_, _, cx| cx.open_url(&url))
+                .on_click(move |_, _, cx| cx.open_url(&url)),
+            None => explorer_line.opacity(theme::OPACITY_DISABLED),
         });
 
         let mut tx = div().flex().flex_col().child(
@@ -6125,7 +7580,7 @@ impl WalletPage {
         let s_clone = fixtures::balance_variants(&self.strings);
         let mut balances = div().flex().flex_col().gap(px(16.));
         for model in &s_clone {
-            balances = balances.child(balance_display(theme, &mut self.icons, model, None));
+            balances = balances.child(balance_display(theme, &mut self.icons, model, None, None));
         }
 
         let mut rows = div().flex().flex_col();
@@ -6207,7 +7662,7 @@ impl WalletPage {
     /// The contacts component board (data-model.md §Component boards). Every
     /// new component and its variants, plus the identicon board over the 8+1
     /// canon seeds and the placeholder.
-    fn contacts_components_tab(&mut self, theme: &Theme) -> Stateful<Div> {
+    fn contacts_components_tab(&mut self, theme: &Theme, window: &Window) -> Stateful<Div> {
         let s_all = self.contacts.all_contacts.clone();
         let s_groups = self.contacts.section_groups.clone();
         let s_new_group = self.contacts.group_new.clone();
@@ -6282,7 +7737,7 @@ impl WalletPage {
             RailState::Default,
         ));
 
-        let search = search_field(theme, &mut self.icons, s_search);
+        let search = search_field(theme, &mut self.icons, s_search, None);
 
         let dropdown = menu_card(
             theme,
@@ -6347,12 +7802,13 @@ impl WalletPage {
             .flex()
             .gap(px(16.))
             .child(empty_state_cta(
+                window,
                 theme,
                 &mut self.icons,
                 s_empty,
                 s_empty_hint,
-                s_add_contact,
-                s_import,
+                (s_add_contact, s_import),
+                None,
             ))
             .child(empty_state(
                 theme,
@@ -6498,12 +7954,12 @@ impl WalletPage {
 
     // -- spec 023: the settings section --------------------------------------
 
-    /// Column 2 of the settings section: the 216px second-level nav.
+    /// Column 2 of the settings section: the second-level nav
+    /// (`theme::settings_nav_w`).
     ///
     /// The same column the contacts group rail occupies, doing the same job one
-    /// section over — which is why it reuses the width rather than inventing a
-    /// second one.
-    fn settings_nav(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+    /// section over — 24 wider, for the Discord invite (`SETTINGS_NAV_W`).
+    fn settings_nav(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let title = self.settings.title.clone();
         let current = self.settings_page;
         let mut col = div().flex().flex_col().gap(px(2.)).child(
@@ -6523,8 +7979,58 @@ impl WalletPage {
                 .text_color(theme.fg_base)
                 .child(title),
         );
+        // A label's room: the column, less its padding, the row's own, the
+        // icon and the gap after it (`settings_nav_row`).
+        let room = px(theme::settings_nav_w() - 2. * SIDEBAR_PAD - 24. - 16. - 12.);
         for (i, page) in SettingsPage::ALL.into_iter().enumerate() {
+            // Community (2026-09-27): the official accounts, directly above
+            // the group that ends the column — About, then Send feedback, as
+            // the phones end theirs. Each row leaves the app for its link;
+            // none of them is a panel.
+            if page == SettingsPage::About {
+                col = col.child(crate::settings::components::nav_group_label(
+                    theme,
+                    self.settings.nav_community.clone(),
+                ));
+                // The handle's room, from the row's own geometry.
+                let handle_room = px(crate::settings::components::community_handle_room(
+                    theme::settings_nav_w(),
+                    crate::executor::appearance_prefs::text_factor(),
+                ));
+                for (n, link) in settings_fixtures::COMMUNITY_LINKS.iter().enumerate() {
+                    let url = link.url;
+                    let fits = crate::wallet::components::text_width(
+                        window,
+                        link.handle,
+                        theme::text_label(),
+                    ) <= handle_room;
+                    let handle = match link.handle.rsplit_once('/') {
+                        Some((head, tail)) if !fits => vec![
+                            SharedString::from(format!("{head}/")),
+                            SharedString::from(tail),
+                        ],
+                        _ => vec![SharedString::from(link.handle)],
+                    };
+                    col = col.child(
+                        crate::settings::components::community_row(
+                            ElementId::from(("settings-community", n)),
+                            theme,
+                            &mut self.icons,
+                            link.icon,
+                            SharedString::from(link.name),
+                            handle,
+                        )
+                        .on_click(move |_, _, cx| crate::executor::opener::open(url, cx)),
+                    );
+                }
+                col = col.child(div().h(px(12.)));
+            }
             let label = page.label(&self.settings);
+            // Wraps unless one of its words is wider than the row itself.
+            let size = theme::text_row_sub();
+            let wrap = label
+                .split_whitespace()
+                .all(|word| crate::wallet::components::text_width(window, word, size) <= room);
             let row = settings_nav_row(
                 ElementId::from(("settings-nav", i)),
                 theme,
@@ -6532,6 +8038,7 @@ impl WalletPage {
                 page.icon(),
                 label,
                 page == current,
+                wrap,
             );
             col = col.child(row.on_click(cx.listener(move |this, _, _, cx| {
                 if page != SettingsPage::Account {
@@ -6563,16 +8070,20 @@ impl WalletPage {
             .border_color(theme.divider)
             .p(px(SIDEBAR_PAD))
             .pt(px(SIDEBAR_TOP))
-            .child(col)
+            // Scrolls rather than runs off the window: fourteen rows and a
+            // caption fit at the standard size, and not every text size.
+            .child(
+                div()
+                    .id("settings-nav-scroll")
+                    .flex_1()
+                    .min_h(px(0.))
+                    .overflow_y_scroll()
+                    .child(col),
+            )
     }
 
     /// Column 3: the panel the nav selected.
-    fn settings_panel(
-        &mut self,
-        theme: &Theme,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
+    fn settings_panel(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let (title, description) = match self.settings_page {
             SettingsPage::Account => (self.settings.nav_account.clone(), None),
             SettingsPage::Appearance => (self.settings.nav_appearance.clone(), None),
@@ -6597,6 +8108,11 @@ impl WalletPage {
             SettingsPage::Storage => (
                 self.settings.nav_storage.clone(),
                 Some(self.settings.storage_subtitle.clone()),
+            ),
+            // Filed, the invitation to describe a problem has been answered.
+            SettingsPage::Feedback => (
+                self.settings.bug_title.clone(),
+                (!self.feedback.filed()).then(|| self.settings.bug_subtitle.clone()),
             ),
             SettingsPage::About => (self.settings.nav_about.clone(), None),
         };
@@ -6626,11 +8142,22 @@ impl WalletPage {
                             .text_color(theme.fg_base)
                             .child(title),
                     );
+                // fg-muted (coordinator, 2026-09-27): fg-subtle measured
+                // 3.39:1. Balanced, and never opening a line with a closing
+                // mark, so no word or 「。」 is left alone on the last line.
                 if let Some(description) = description {
+                    let size = theme::text_row_sub();
+                    let width = crate::wallet::components::even_wrap_width(
+                        window,
+                        &description,
+                        size,
+                        px(SETTINGS_PANEL_W),
+                    );
                     titles = titles.child(
                         div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
+                            .max_w(width)
+                            .text_size(size)
+                            .text_color(theme.fg_muted)
                             .child(description),
                     );
                 }
@@ -6685,6 +8212,7 @@ impl WalletPage {
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
             SettingsPage::Signing => self.settings_signing(theme, window, cx),
             SettingsPage::Storage => self.settings_storage(theme, cx),
+            SettingsPage::Feedback => self.settings_feedback(theme, window, cx),
             SettingsPage::About => self.settings_about(theme, cx),
         };
 
@@ -6708,11 +8236,9 @@ impl WalletPage {
         let action = self.settings.rpc_fix_action.clone();
         let banner = match live_chips {
             Some(chips) if !chips.is_empty() => {
-                let text = SharedString::from(crate::wallet::fill(
-                    &self.settings.rpc_unavailable_multiple,
-                    "count",
-                    &chips.len().to_string(),
-                ));
+                let names: Vec<SharedString> =
+                    chips.iter().map(|(_, _, name)| name.clone()).collect();
+                let text = settings_fixtures::unavailable_text(&self.settings, &names);
                 let chips = chips
                     .into_iter()
                     .enumerate()
@@ -6756,67 +8282,114 @@ impl WalletPage {
             None => None,
         };
 
-        div()
-            .id("settings-panel")
-            .flex_1()
-            .min_w(px(0.))
-            .h_full()
-            .overflow_y_scroll()
+        let filed_report = self.settings_page == SettingsPage::Feedback && self.feedback.filed();
+        let panel = self
+            .settings_scroll
+            .wire(div().id("settings-panel").size_full(), cx.entity_id())
             // Left-aligned against the nav column, exactly as the wallet's own
             // content column is. The padding is the panel's, the cap is the
             // content's: a settings form stretched to a 2000px window is a
             // different screen from the one that was designed.
             .px(px(SETTINGS_PANEL_PAD_X))
-            .pt(px(WALLET_PAD_TOP))
             .pb(px(48.))
+            // The web body's 1.4 under everything a row does not set itself
+            // (078 S-08): gpui's ~1.6 stood every settings row taller.
+            .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
             .child(
                 div()
                     .max_w(px(SETTINGS_PANEL_W))
+                    // The filed report's thank-you takes the panel's whole
+                    // visible height, so it can sit at the optical centre
+                    // without a guessed header height (078 v2 A7).
+                    .when(filed_report, |el| el.min_h_full().flex().flex_col())
                     .child(head)
                     .when_some(banner, |el, banner| {
-                        el.child(div().pb(px(24.)).child(banner))
+                        el.child(div().max_w(px(560.)).pb(px(24.)).child(banner))
                     })
                     .child(body),
+            );
+        // Scrolls below the caption strip, as the Wallet column does: a
+        // network row scrolled up under the window's buttons put its caret
+        // through ─.
+        div()
+            .flex_1()
+            .min_w(px(0.))
+            .h_full()
+            .pt(px(WALLET_PAD_TOP.max(crate::window_frame::CAPTION_H)))
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .child(panel)
+                    .children(crate::ui::vertical_scrollbar(theme, &self.settings_scroll)),
             )
     }
 
     /// DST1 — the accounts, the way out, and the one irreversible button.
     /// DST1, live: every account this person has, with the active one marked.
     ///
-    /// Clicking another row switches to it. `SwitchAccount` has existed since
-    /// 019 with nothing to trigger it — "an event with no control is dead
-    /// code", as `session.rs` put it about this very event — and the control
-    /// was drawn all along.
+    /// The list is the switcher's (`accounts_body`), as the web's settings
+    /// page draws the same `AccountsSheetBody` its switcher dialog does.
     fn settings_account_live(
         &mut self,
         theme: &Theme,
         session: &vela_core::app::session::SessionView,
         cx: &mut Context<Self>,
     ) -> Div {
-        let accounts_count = self.settings.accounts_count.clone();
-        let accounts_total = self.settings.accounts_total.clone();
-        self.sync_switcher(session, cx);
         self.ensure_backup_check(cx);
         let s = &self.settings;
-        // The COUNT is real; the total beside it is not stated at all, because
-        // the switcher's cached per-account totals are a `balance_dashboard`
-        // read this panel does not do. A figure that covers one account and is
-        // labelled "total" would be worse than no figure.
-        // Opening this panel IS the switcher opening: the core refreshes every
-        // listed account's total while it is up and answers in
-        // `switcher.balances`. Nobody ever told it, so this panel could only
-        // say how MANY accounts there were — and its sentence ended on a
-        // dangling "·" waiting for the half this adds.
-        let summary_count = crate::wallet::fill(
-            &accounts_count,
-            "count",
-            &session.accounts.len().to_string(),
-        );
         let sign_out = s.sign_out_button.clone();
         let sign_out_desc = s.sign_out_desc.clone();
         let erase_title = s.erase_title.clone();
         let erase_subtitle = s.erase_subtitle.clone();
         let erase_confirm = s.erase_confirm.clone();
+        div()
+            .flex()
+            .flex_col()
+            .child(self.accounts_body(theme, session, false, cx))
+            .child(self.settings_account_footer(
+                theme,
+                sign_out,
+                sign_out_desc,
+                erase_title,
+                erase_subtitle,
+                erase_confirm,
+                cx,
+            ))
+    }
+
+    /// The web's `AccountsSheetBody` (078 H-01): a summary, one row per
+    /// account, and the two ways to add one. Drawn by the header's switcher
+    /// dialog and by Settings → Account, as the web draws the one component in
+    /// both — `in_dialog` is the switcher, whose every answer also closes it.
+    ///
+    /// Clicking another row switches to it. `SwitchAccount` has existed since
+    /// 019 with nothing to trigger it — "an event with no control is dead
+    /// code", as `session.rs` put it about this very event — and the control
+    /// was drawn all along.
+    fn accounts_body(
+        &mut self,
+        theme: &Theme,
+        session: &vela_core::app::session::SessionView,
+        in_dialog: bool,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let accounts_count = self.settings.accounts_count.clone();
+        let accounts_total = self.settings.accounts_total.clone();
+        // Drawing this list IS the switcher opening: the core refreshes every
+        // listed account's total while it is up and answers in
+        // `switcher.balances`. Nobody ever told it, so the panel could only
+        // say how MANY accounts there were — and its sentence ended on a
+        // dangling "·" waiting for the half this adds.
+        self.sync_switcher(session, cx);
+        let summary_count = crate::wallet::fill(
+            &accounts_count,
+            "count",
+            &session.accounts.len().to_string(),
+        );
 
         let switcher = resident::resident::<BalanceDashboard>(cx)
             .read(cx)
@@ -6847,6 +8420,36 @@ impl WalletPage {
                 &settings_live::account_total(known_total, Some(&currency), &self.locale),
             )
         ));
+        // Two copies of this list can be on screen at once — the dialog over
+        // the settings panel — so each names its own rows.
+        let (art_id, row_id, remove_id, confirm_id, cancel_id) = if in_dialog {
+            (
+                "switcher-art",
+                "switcher-account",
+                "switcher-remove",
+                "switcher-remove-confirm",
+                "switcher-remove-cancel",
+            )
+        } else {
+            (
+                "settings-art",
+                "settings-account",
+                "settings-remove",
+                "settings-remove-confirm",
+                "settings-remove-cancel",
+            )
+        };
+        // The inline question belongs to the surface on top: with the dialog
+        // up, the panel behind it does not ask as well.
+        let asking = if in_dialog == self.account_switcher {
+            self.removing_account
+        } else {
+            None
+        };
+        let remove_label = self.strings.account_remove.clone();
+        let remove_body = self.strings.account_remove_body.clone();
+        let cancel_label = self.strings.sign_out_cancel.clone();
+
         let mut list = div().flex().flex_col();
         for row in &session.accounts {
             let active = row.index == session.active_index;
@@ -6859,98 +8462,195 @@ impl WalletPage {
                 .find(|entry| entry.address.eq_ignore_ascii_case(&row.account.address))
                 .map(|entry| {
                     // In the chosen currency, like every other total this
-                    // shell prints. The comment here used to justify dollars
-                    // by saying a converted figure "would be the one place in
-                    // the app that guessed" — true when nothing else
-                    // converted, and obsolete since `Money` made the rule
-                    // explicit: it converts only when the endpoint priced the
-                    // code, and draws USD when it could not. No guess.
-                    gpui::SharedString::from(settings_live::account_total(
-                        entry.usd,
-                        Some(&currency),
-                        &self.locale,
-                    ))
+                    // shell prints: `Money` converts only when the endpoint
+                    // priced the code, and draws USD when it could not.
+                    settings_live::account_total(entry.usd, Some(&currency), &self.locale)
                 });
             // The core's own index, not the loop's: it survives a display
             // reorder, which is exactly what invariant ⑦ is about.
             let index = row.index;
             let address = row.account.address.clone();
             let display = crate::wallet::live::shorten_address(&address);
-            let mut card = div()
-                .id(ElementId::from(("settings-account", index)))
+
+            // The artwork sits BESIDE the row's button, as on the web: it
+            // opens the identicon viewer on this account's address, and
+            // answers a different question from the row.
+            let artwork = div()
+                .id(ElementId::from((art_id, index)))
+                .flex_none()
+                .rounded_full()
+                .cursor_pointer()
+                .active(|el| el.opacity(0.85))
+                .child(crate::wallet::components::identicon_avatar(
+                    &mut self.identicons,
+                    &address,
+                    SWITCHER_IDENTICON,
+                ))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.open_identicon_viewer(address.clone(), cx);
+                }));
+
+            let name_colour = if active { theme.accent } else { theme.fg_base };
+            // A button's line, as the web's account rows (078 S-10).
+            let mut pick = div()
+                .id(ElementId::from((row_id, index)))
+                .flex_1()
+                .min_w(px(0.))
                 .flex()
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
-                .child(crate::wallet::components::identicon_avatar(
-                    &mut self.identicons,
-                    &address,
-                    40.,
-                ))
+                .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
                 .child(
                     div()
                         .flex_1()
                         .min_w(px(0.))
                         .flex()
                         .flex_col()
+                        .gap(px(2.))
                         .child(
                             div()
                                 .text_size(theme::text_row_title())
-                                .text_color(theme.fg_base)
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(name_colour)
+                                .truncate()
                                 .child(gpui::SharedString::from(row.account.name.clone())),
                         )
                         .child(
                             div()
                                 .font_family(theme::font_mono())
-                                .text_size(theme::text_row_sub())
+                                .text_size(theme::text_label())
                                 .text_color(theme.fg_subtle)
                                 .child(gpui::SharedString::from(display)),
                         ),
-                );
-            if let Some(total) = total {
-                card = card.child(
+                )
+                .children(total.map(|total| {
                     div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(total),
-                );
-            }
+                        .flex_none()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(total)
+                }));
             if active {
-                card = card.child(icon_img(
+                pick = pick.child(icon_img(
                     &mut self.icons,
                     Icon::Check,
                     false,
                     theme.accent,
                     18.,
                 ));
-            } else {
-                // Only the OTHER rows are a switch. Clicking the one you are
-                // already on should do nothing, not re-run a switch.
-                card = card
+            }
+            // In the dialog every row answers, and every answer closes it —
+            // the one you are on included, which is how the web's does it. On
+            // the settings page only the OTHER rows are a switch: clicking the
+            // one you are already on should do nothing, not re-run a switch.
+            if in_dialog || !active {
+                pick = pick
                     .cursor_pointer()
-                    .hover(|el| el.bg(theme.bg_sunken))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        session::switch_account(index, cx);
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if !active {
+                            session::switch_account(index, cx);
+                        }
+                        if in_dialog {
+                            this.close_account_switcher(cx);
+                        }
                         cx.notify();
                     }));
             }
+
             // Taking ONE wallet off this device (2026-09-23). Its own click
             // target, so it cannot be hit by somebody aiming at the row.
-            card = card.child(
+            let remove = div()
+                .id(ElementId::from((remove_id, index)))
+                .flex_none()
+                .p(px(2.))
+                .rounded(px(6.))
+                .cursor_pointer()
+                .hover(|el| el.bg(theme.bg_sunken))
+                .child(icon_img(
+                    &mut self.icons,
+                    Icon::X,
+                    false,
+                    theme.fg_subtle,
+                    18.,
+                ))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.removing_account = Some(index);
+                    cx.notify();
+                }));
+
+            list = list.child(
                 div()
-                    .id(("switcher-remove", index as u64))
-                    .px(px(6.))
-                    .cursor_pointer()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .hover(|el| el.text_color(theme.fg_base))
-                    .child(self.strings.account_remove.clone())
-                    .on_click(cx.listener(move |page, _, _, cx| {
-                        page.removing_account = Some(index);
-                        cx.notify();
-                    })),
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .border_b_1()
+                    .border_color(theme.divider)
+                    .child(artwork)
+                    .child(pick)
+                    .child(remove),
             );
-            list = list.child(card).child(div().h(px(1.)).bg(theme.divider));
+
+            // Asked before it happens, under the row it is about: the
+            // affordance sits in a list whose whole purpose is switching, one
+            // press from a row somebody meant to land on.
+            if asking == Some(index) {
+                list = list.child(
+                    div()
+                        .pt(px(8.))
+                        .pb(px(12.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .child(
+                            div()
+                                .text_size(theme::text_label())
+                                .text_color(theme.fg_muted)
+                                .child(remove_body.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .gap(px(4.))
+                                .child(
+                                    crate::flows::components::danger_button(
+                                        theme,
+                                        remove_label.clone(),
+                                    )
+                                    .id(ElementId::from((confirm_id, index)))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        move |this, _, _, cx| {
+                                            this.removing_account = None;
+                                            session::remove_account(index, cx);
+                                            // The list under the switcher just
+                                            // changed: leaving it open would put
+                                            // the next row where the pointer is.
+                                            if in_dialog {
+                                                this.close_account_switcher(cx);
+                                            }
+                                            cx.notify();
+                                        },
+                                    )),
+                                )
+                                .child(
+                                    crate::flows::components::ghost_button(
+                                        theme,
+                                        cancel_label.clone(),
+                                    )
+                                    .rounded(px(12.))
+                                    .id(ElementId::from((cancel_id, index)))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            this.removing_account = None;
+                                            cx.notify();
+                                        },
+                                    )),
+                                ),
+                        ),
+                );
+            }
         }
 
         div()
@@ -6968,15 +8668,6 @@ impl WalletPage {
             // the session says an account is being added, and a new account
             // established — or "back" — returns here.
             .child(self.account_buttons(theme, true, cx))
-            .child(self.settings_account_footer(
-                theme,
-                sign_out,
-                sign_out_desc,
-                erase_title,
-                erase_subtitle,
-                erase_confirm,
-                cx,
-            ))
     }
 
     fn settings_account(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -7023,10 +8714,12 @@ impl WalletPage {
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
+                .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
+                // The live rows' 30, as the web's `row` identicon.
                 .child(crate::wallet::components::identicon_avatar(
                     &mut self.identicons,
                     &seed,
-                    40.,
+                    SWITCHER_IDENTICON,
                 ))
                 .child(
                     div()
@@ -7134,8 +8827,8 @@ impl WalletPage {
             return;
         }
         // `VELA_SIGN_PROBE=1` (debug builds): raise the wallet's own signing column
-        // once, with its "Sign with" list open, so the column can be LOOKED at —
-        // there is no way to click this app from a shell. A zero-value call to
+        // once, so the column can be LOOKED at — there is no way to click this
+        // app from a shell. A zero-value call to
         // itself on Gnosis; nothing is signed unless somebody slides.
         #[cfg(all(debug_assertions, not(target_os = "linux")))]
         if std::env::var("VELA_SIGN_PROBE").as_deref() == Ok("1") {
@@ -7148,14 +8841,11 @@ impl WalletPage {
                 },
                 cx,
             );
-            if let Some(host) = self.signing_host.clone() {
-                host.update(cx, |host, cx| host.sign_with(None, cx));
-            }
         }
         self.backup_for = Some(account.address.clone());
         self.backup_check = None;
         self.keys_check = None;
-        self.keys_copied = None;
+        self.copied = None;
         // The record's key list in founding order; a legacy record is one key.
         let device: Vec<vela_core::wallet_keys::DeviceKey> = if account.keys.is_empty() {
             vec![vela_core::wallet_keys::DeviceKey {
@@ -7179,13 +8869,21 @@ impl WalletPage {
                 .collect()
         };
         let keys_address = account.address.clone();
+        let sign_in_credential = account
+            .sign_in_route()
+            .map(|route| route.credential_id)
+            .unwrap_or_default();
         cx.spawn(async move |page, cx| {
             let asked = keys_address.clone();
             let answer = cx
                 .background_executor()
-                .spawn(
-                    async move { crate::executor::registry::wallet_keys(&keys_address, &device) },
-                )
+                .spawn(async move {
+                    crate::executor::registry::wallet_keys(
+                        &keys_address,
+                        &device,
+                        &sign_in_credential,
+                    )
+                })
                 .await;
             page.update(cx, |page, cx| {
                 if page.backup_for.as_deref() == Some(asked.as_str()) {
@@ -7196,6 +8894,16 @@ impl WalletPage {
             .ok();
         })
         .detach();
+        self.ask_ethereum_backup(cx);
+    }
+
+    /// The backup half of the check, alone — what "Could not check" asks
+    /// again, without taking the key list back to its skeleton.
+    fn ask_ethereum_backup(&mut self, cx: &mut Context<Self>) {
+        let Some(account) = money::active_account() else {
+            return;
+        };
+        self.backup_check = None;
         let address = account.address.clone();
         let key = account.keys.first().map_or_else(
             || account.public_key_hex.clone(),
@@ -7230,21 +8938,34 @@ impl WalletPage {
     fn backup_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         use vela_core::registry_backup::BackupState;
         let s = &self.settings;
-        let (subtitle, colour, call) = match &self.backup_check {
-            None => (s.backup_checking.clone(), theme.fg_subtle, None),
-            Some((BackupState::BackedUp, _)) => (s.backup_backed_up.clone(), theme.success, None),
+        // The web's four states (`ethereumBackupRow`): what the row says, in
+        // which colour, and what — if anything — pressing it does.
+        let (subtitle, colour, call, retry) = match &self.backup_check {
+            None => (s.backup_checking.clone(), theme.fg_subtle, None, false),
+            Some((BackupState::BackedUp, _)) => {
+                (s.backup_backed_up.clone(), theme.success, None, false)
+            }
             Some((BackupState::NotBackedUp, call)) => (
                 s.backup_not_backed_up.clone(),
-                theme.fg_subtle,
+                theme.warning_base,
                 call.clone(),
+                false,
             ),
-            Some((BackupState::CouldNotCheck, _)) => {
-                (s.backup_could_not_check.clone(), theme.fg_subtle, None)
-            }
+            // Pressable, and what it does is ask again — the state a person is
+            // most likely to press, and the only one where "nothing happened"
+            // was the whole experience.
+            Some((BackupState::CouldNotCheck, _)) => (
+                s.backup_could_not_check.clone(),
+                theme.fg_subtle,
+                None,
+                true,
+            ),
             Some((BackupState::Unavailable | BackupState::NotRegistered, _)) => return None,
         };
+        let backed_up = matches!(&self.backup_check, Some((BackupState::BackedUp, _)));
         let title = s.backup_title.clone();
-        let actionable = call.is_some();
+        let actionable = call.is_some() || retry;
+        let accent = theme.accent;
         let mut row = div()
             .id("settings-ethereum-backup")
             .flex()
@@ -7268,13 +8989,27 @@ impl WalletPage {
             )
             .child(
                 div()
+                    .flex_1()
+                    .min_w(px(0.))
                     .flex()
                     .flex_col()
                     .gap(px(2.))
                     .child(
                         div()
+                            // An id, so the element keeps the group's hover
+                            // between frames: a text's colour is fixed at
+                            // layout, before the group's hitbox exists, and
+                            // without its own state it never saw the hover.
+                            .id("backup-row-title")
                             .text_size(theme::text_row_title())
                             .text_color(theme.fg_base)
+                            // The web: the title takes the accent while the
+                            // row is a button, and only then.
+                            .when(actionable, |title| {
+                                title.group_hover("backup-row", move |style| {
+                                    style.text_color(accent)
+                                })
+                            })
                             .child(title),
                     )
                     .child(
@@ -7284,12 +9019,30 @@ impl WalletPage {
                             .child(subtitle),
                     ),
             );
+        // What the row's end says it will do: ask again, go on, or — done.
+        let trailing = if retry {
+            Some((Icon::RefreshCw, theme.fg_muted))
+        } else if actionable {
+            Some((Icon::ChevronRight, theme.fg_muted))
+        } else if backed_up {
+            Some((Icon::Check, theme.success))
+        } else {
+            None
+        };
+        if let Some((icon, tint)) = trailing {
+            row = row.child(icon_img(&mut self.icons, icon, false, tint, 14.));
+        }
         if actionable {
             row = row
+                .group("backup-row")
                 .cursor_pointer()
                 .on_click(cx.listener(move |page, _, _, cx| {
                     if let Some(call) = call.clone() {
                         page.open_backup_signing(call, cx);
+                    } else {
+                        // Could not check: ask the chain again.
+                        page.ask_ethereum_backup(cx);
+                        cx.notify();
                     }
                 }));
         }
@@ -7320,6 +9073,7 @@ impl WalletPage {
         // label on the line naming which page.
         let trusted_signer = trusted_signer_words(s);
         let user_verified = s.keys_user_verified.clone();
+        let signs_here = s.keys_signs_here.clone();
         let labels = (
             s.keys_public_key.clone(),
             s.keys_credential.clone(),
@@ -7434,6 +9188,7 @@ impl WalletPage {
                     }
                     let mut meta = div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .gap(px(6.))
                         .text_size(theme::text_row_sub())
@@ -7444,10 +9199,13 @@ impl WalletPage {
                             .child("·")
                             .child(div().font_family(theme::font_mono()).child(fingerprint));
                     }
+                    // The name keeps room to be read: in a long language the
+                    // pills wrap onto more lines rather than squeezing it to a
+                    // letter per line (ru, found 2026-09-26).
                     row = row.child(
                         div()
                             .flex_1()
-                            .min_w(px(0.))
+                            .min_w(px(180.))
                             .flex()
                             .flex_col()
                             .gap(px(2.))
@@ -7459,6 +9217,44 @@ impl WalletPage {
                             )
                             .child(meta),
                     );
+                    let mut badges = div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .justify_end()
+                        .gap(px(8.))
+                        .min_w(px(0.));
+                    // The key this device signs with stands out from every
+                    // other row (founder, 2026-09-26): filled, first, ticked —
+                    // the explorer's pills beside it are only outlined.
+                    if key.signs_here {
+                        badges = badges.child(
+                            div()
+                                .id("settings-key-signs-here")
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .px(px(8.))
+                                .py(px(2.))
+                                .rounded_full()
+                                .bg(theme.success_soft)
+                                // Same height as the outlined pills beside it.
+                                .border_1()
+                                .border_color(theme.success_soft)
+                                .text_size(theme::text_row_sub())
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme.success_base)
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::Check,
+                                    false,
+                                    theme.success_base,
+                                    12.,
+                                ))
+                                .child(signs_here.clone()),
+                        );
+                    }
                     // The registry explorer's pills; one nobody can vouch for is not drawn.
                     let mut pills: Vec<(gpui::SharedString, gpui::Hsla)> = Vec::new();
                     if key.user_verified == Some(true) {
@@ -7472,7 +9268,7 @@ impl WalletPage {
                         });
                     }
                     for (text, colour) in pills {
-                        row = row.child(
+                        badges = badges.child(
                             div()
                                 .flex_none()
                                 .px(px(8.))
@@ -7485,6 +9281,7 @@ impl WalletPage {
                                 .child(text),
                         );
                     }
+                    row = row.child(badges);
 
                     // What the row opens onto: the explorer's facts, the two a
                     // person pastes elsewhere copyable. Nothing to open when only
@@ -7599,7 +9396,8 @@ impl WalletPage {
                                 .child(shown);
                             if copyable {
                                 let copy_id = format!("{index}:{slot}");
-                                let done = self.keys_copied.as_deref() == Some(copy_id.as_str());
+                                let copy_id = format!("key:{copy_id}");
+                                let done = self.copied.as_deref() == Some(copy_id.as_str());
                                 line = line.child(
                                     div()
                                         .id(("settings-key-copy", index * 8 + slot))
@@ -7618,11 +9416,14 @@ impl WalletPage {
                                             copy_label.clone()
                                         })
                                         .on_click(cx.listener(move |page, _, _, cx| {
-                                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                            // `KeysBlock`: "Copied" for 1.2 s, then
+                                            // the button is a button again.
+                                            page.copy_text(
+                                                copy_id.clone(),
                                                 value.clone(),
-                                            ));
-                                            page.keys_copied = Some(copy_id.clone());
-                                            cx.notify();
+                                                std::time::Duration::from_millis(1200),
+                                                cx,
+                                            );
                                         })),
                                 );
                             }
@@ -7686,47 +9487,39 @@ impl WalletPage {
     /// "Create a new account" / "Sign in to an existing account". Live, they
     /// open onboarding over this wallet; on the design surfaces they are the
     /// mock's picture.
+    /// Create, or sign in to one you already have — the web's `Button`
+    /// pair, side by side at their labels' width (`layout="inline"`,
+    /// padding-inline 32), not the 40px rows the settings panel drew.
     fn account_buttons(&mut self, theme: &Theme, live: bool, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
-        let hover_accent = theme.accent_hover;
-        let hover_outline = theme.bg_sunken;
-        let create = div()
+        // At their labels' width, but allowed to give way: two English
+        // labels at padding 32 already fill the 472px a dialog leaves, and
+        // a longer locale wraps inside its button rather than running out of
+        // the card.
+        let create = crate::flows::components::accent_button(theme, s.account_create.clone())
+            .w_auto()
+            .flex_initial()
+            .min_w(px(0.))
+            .px(px(32.))
             .id("settings-create-account")
-            .h(px(CONTACTS_BUTTON_H))
-            .px(px(32.))
+            .cursor_pointer();
+        let sign_in = crate::flows::components::ghost_button(theme, s.account_sign_in.clone())
             .rounded(px(12.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .bg(theme.accent)
-            .hover(move |el| el.bg(hover_accent))
-            .text_size(theme::text_row_title())
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(theme.fg_inverse)
-            .child(s.account_create.clone());
-        let sign_in = div()
+            .w_auto()
+            .flex_initial()
+            .min_w(px(0.))
+            .px(px(32.))
             .id("settings-sign-in-account")
-            .h(px(CONTACTS_BUTTON_H))
-            .px(px(32.))
-            .rounded(px(12.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .border_1()
-            .border_color(theme.outline_strong)
-            .hover(move |el| el.bg(hover_outline))
-            .text_size(theme::text_row_title())
-            .text_color(theme.fg_base)
-            .child(s.account_sign_in.clone());
+            .cursor_pointer();
         let (create, sign_in) = if live {
             (
                 create.on_click(cx.listener(|this, _, _, cx| {
+                    this.close_account_switcher(cx);
                     this.close_switcher(cx);
                     session::add_account(session::AddAccount::Create, cx);
                 })),
                 sign_in.on_click(cx.listener(|this, _, _, cx| {
+                    this.close_account_switcher(cx);
                     this.close_switcher(cx);
                     session::add_account(session::AddAccount::SignIn, cx);
                 })),
@@ -7896,12 +9689,16 @@ impl WalletPage {
                 cx.notify();
             }))
             .child(trigger)
-            .when_some(menu, |el, menu| el.child(deferred(menu).with_priority(1)));
+            .when_some(menu, |el, menu| {
+                el.child(Self::settings_menu_layer(menu, cx))
+            });
 
-        let scale_control = text_scale_picks(
+        let scale_control = text_scale_slider(
             theme,
+            &self.text_scale_slider,
             vela_core::prefs::TEXT_SCALE_LEVELS.len(),
             settings_live::text_scale_index(prefs.text_scale),
+            cx.reduce_motion(),
             {
                 let page = page.clone();
                 move |index, window, cx| {
@@ -7942,10 +9739,9 @@ impl WalletPage {
     /// What the 货币 row shows — the core's committed currency for a real
     /// session, the mock's literal for the design surfaces.
     ///
-    /// Gated on `identity` for the same reason `sign_out_row` is: `VELA_PAGE=
-    /// settings` and the gallery are design surfaces with no session behind
-    /// them, and a fixture screen quietly reading live state is how a gallery
-    /// stops being reviewable.
+    /// Gated on `identity`: `VELA_PAGE=settings` and the gallery are design
+    /// surfaces with no session behind them, and a fixture screen quietly
+    /// reading live state is how a gallery stops being reviewable.
     /// The currency this screen's money is drawn in.
     ///
     /// Signed out there is no committed pair and nothing to convert, so it is
@@ -8108,7 +9904,9 @@ impl WalletPage {
                 // paints in child order, so an open menu drawn inside row 2 was
                 // painted over by rows 3 and 4 — the date and time triggers sat
                 // on top of it and swallowed one of its options.
-                .when_some(menu, |el, menu| el.child(deferred(menu).with_priority(1)));
+                .when_some(menu, |el, menu| {
+                    el.child(Self::settings_menu_layer(menu, cx))
+                });
             col = col.child(form_row(theme, label, control));
         }
         col
@@ -8156,6 +9954,7 @@ impl WalletPage {
                 ElementId::from(("settings-network", i)),
                 theme,
                 &mut self.icons,
+                n.chain_id,
                 n.letter.clone(),
                 n.color,
                 n.name.clone(),
@@ -8362,11 +10161,12 @@ impl WalletPage {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
+        // 24 from the description to the first provider, 32 between
+        // providers, as the web's panel (078 S-11).
         let mut col = div().flex().flex_col().gap(px(32.)).child(
             div()
-                .pb(px(8.))
+                .mb(px(-8.))
                 .text_size(theme::text_row_sub())
-                .line_height(px(20.))
                 .text_color(theme.fg_muted)
                 .child(self.settings.providers_desc.clone()),
         );
@@ -8405,7 +10205,8 @@ impl WalletPage {
                                     div()
                                         .flex_1()
                                         .min_w(px(0.))
-                                        .text_size(theme::text_panel_title())
+                                        // `--text-xl`, as the web's `h3`.
+                                        .text_size(theme::text_section())
                                         .font_weight(gpui::FontWeight::BOLD)
                                         .text_color(theme.fg_base)
                                         .child(settings_live::provider_name(id)),
@@ -8521,7 +10322,7 @@ impl WalletPage {
                         .gap(px(8.))
                         .child(
                             div()
-                                .text_size(theme::text_panel_title())
+                                .text_size(theme::text_section())
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(theme.fg_base)
                                 .child(p.name),
@@ -8547,6 +10348,19 @@ impl WalletPage {
                         .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
                         .child(support),
+                );
+            } else {
+                // A provider with nothing set up: where to get a key, under
+                // the card, as the web's `.link` (078 T067).
+                card = card.child(
+                    div()
+                        .pt(px(8.))
+                        .text_size(theme::text_label())
+                        .text_color(theme.info_base)
+                        .child(SharedString::from(format!(
+                            "{} →",
+                            self.settings.provider_get_key
+                        ))),
                 );
             }
             col = col.child(card);
@@ -8712,155 +10526,121 @@ impl WalletPage {
     /// the line on what it buys, the stored one ticked. Choosing one commits
     /// and persists at once — `fee_tier_pref` — and a send already open
     /// follows it until the person picks a speed on that send.
+    /// The default speed (spec 068) — one row, as the web's desktop draws
+    /// it (078 S-04): the label, and a dropdown showing the tier in force whose
+    /// choices each say what they are for. Choosing commits and persists at
+    /// once (`fee_tier_pref`).
     fn settings_fee_speed(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         use vela_core::app::fee_policy::FeeTier;
         use vela_core::app::fee_tier_pref::{Event as FeeTierPrefEvent, FeeTierPref};
         let view = resident::resident::<FeeTierPref>(cx).read(cx).view();
         let s = &self.flow_strings;
-        let mut list = div()
+        let rows: Vec<DetailRow> = view
+            .offered
+            .iter()
+            .map(|tier| {
+                let (name, hint) = match tier {
+                    FeeTier::Standard => (
+                        s.gas_tier_standard.clone(),
+                        s.gas_tier_hint_standard.clone(),
+                    ),
+                    FeeTier::Slow => (s.gas_tier_slow.clone(), s.gas_tier_hint_slow.clone()),
+                    FeeTier::Fast | FeeTier::Rapid => {
+                        (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone())
+                    }
+                };
+                (name, Some(hint), *tier == view.tier)
+            })
+            .collect();
+        let value = rows
+            .iter()
+            .find(|(_, _, selected)| *selected)
+            .or(rows.first())
+            .map(|(name, _, _)| name.clone())
+            .unwrap_or_default();
+        let offered = view.offered.clone();
+        let page = cx.entity();
+        let menu = (self.settings_open_dropdown == Some("fee-speed")).then(|| {
+            dropdown_menu_details(theme, &mut self.icons, &rows, 340., move |index, _, cx| {
+                if let Some(tier) = offered.get(index).copied() {
+                    resident::resident::<FeeTierPref>(cx).update(cx, |pref, cx| {
+                        pref.dispatch(FeeTierPrefEvent::UserChose { tier }, cx);
+                    });
+                }
+                page.update(cx, |this, cx| {
+                    this.settings_open_dropdown = None;
+                    cx.notify();
+                });
+            })
+        });
+        let label = self.settings.nav_fee_speed.clone();
+        let control = self.settings_dropdown_control("fee-speed", theme, value, menu, cx);
+        // The web's panel measure, as the "Sign with" page keeps.
+        div()
             .flex()
             .flex_col()
-            .gap(px(4.))
-            .p(px(4.))
-            .rounded(px(12.))
-            .bg(theme.bg_sunken);
-        for (index, tier) in view.offered.iter().copied().enumerate() {
-            let (name, hint) = match tier {
-                FeeTier::Standard => (
-                    s.gas_tier_standard.clone(),
-                    s.gas_tier_hint_standard.clone(),
-                ),
-                FeeTier::Slow => (s.gas_tier_slow.clone(), s.gas_tier_hint_slow.clone()),
-                FeeTier::Fast | FeeTier::Rapid => {
-                    (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone())
-                }
-            };
-            let selected = tier == view.tier;
-            list = list.child(
-                div()
-                    .id(ElementId::from(("settings-fee-speed", index)))
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .px(px(12.))
-                    .py(px(10.))
-                    .rounded(px(10.))
-                    .cursor_pointer()
-                    .when(selected, |row| row.bg(theme.bg_raised))
-                    .hover(|row| row.bg(theme.bg_raised))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        resident::resident::<FeeTierPref>(cx).update(cx, |pref, cx| {
-                            pref.dispatch(FeeTierPrefEvent::UserChose { tier }, cx);
-                        });
-                        cx.notify();
-                    }))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .gap(px(2.))
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_title())
-                                    .text_color(if selected {
-                                        theme.accent
-                                    } else {
-                                        theme.fg_base
-                                    })
-                                    .child(name),
-                            )
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_sub())
-                                    .text_color(theme.fg_subtle)
-                                    .child(hint),
-                            ),
-                    )
-                    .child(div().w(px(16.)).children(selected.then(|| {
-                        icon_img(&mut self.icons, Icon::Check, false, theme.accent, 16.)
-                    }))),
-            );
-        }
-        div().flex().flex_col().max_w(px(560.)).child(list)
+            .max_w(px(560.))
+            .child(form_row(theme, label, control))
     }
 
-    /// How this device signs by default (spec 071): the five ways in the
-    /// core's order, the stored one ticked — choosing commits and persists at
-    /// once (`sign_pref`) — and the Trusted Signer's page under them. Every
-    /// signing sheet STARTS at the choice; none writes back to it.
+    /// A settings dropdown's cell: its trigger, toggling the menu, and the
+    /// menu itself drawn over the rows after it (`deferred`, as the
+    /// localization rows do).
+    fn settings_dropdown_control(
+        &mut self,
+        id: &'static str,
+        theme: &Theme,
+        value: SharedString,
+        menu: Option<Div>,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let trigger = dropdown_trigger(theme, &mut self.icons, value);
+        div()
+            .id(SharedString::from(format!("settings-dropdown-{id}")))
+            .relative()
+            .w_full()
+            .cursor_pointer()
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.settings_open_dropdown = if this.settings_open_dropdown == Some(id) {
+                    None
+                } else {
+                    Some(id)
+                };
+                cx.notify();
+            }))
+            .child(trigger)
+            .when_some(menu, |el, menu| {
+                el.child(Self::settings_menu_layer(menu, cx))
+            })
+    }
+
+    /// An open settings menu, drawn over the rows after it (`deferred`) and
+    /// dismissed the way the web's `Dropdown` is. It keeps the clicks that
+    /// land on it (`occlude`): it opens over its own trigger, so a click on
+    /// its first row — often the one already chosen — also reached the
+    /// trigger underneath and toggled the menu straight back open. A press
+    /// anywhere else closes it without choosing, as Esc does (the root's key
+    /// handler).
+    fn settings_menu_layer(
+        menu: impl gpui::InteractiveElement + IntoElement + 'static,
+        cx: &mut Context<Self>,
+    ) -> gpui::Deferred {
+        deferred(menu.occlude().on_mouse_down_out(cx.listener(
+            |this, _: &MouseDownEvent, _, cx| {
+                this.settings_open_dropdown = None;
+                cx.notify();
+            },
+        )))
+        .with_priority(1)
+    }
+
+    /// The Trusted Signer's page (spec 071) — where a wallet created or
+    /// signed into through the Trusted Signer signs. How a signature is
+    /// routed is not a setting: the account signs with the key it signed in
+    /// with (founder, 2026-09-26).
     fn settings_signing(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
         let view = resident::resident::<SignPref>(cx).read(cx).view();
-        let s = &self.settings;
-        let mut list = div()
-            .flex()
-            .flex_col()
-            .gap(px(4.))
-            .p(px(4.))
-            .rounded(px(12.))
-            .bg(theme.bg_sunken);
-        for (index, method) in view.offered.iter().enumerate() {
-            let name = s
-                .sign_with_options
-                .iter()
-                .find(|(id, _)| id == method)
-                .map_or_else(
-                    || SharedString::from(method.clone()),
-                    |(_, title)| title.clone(),
-                );
-            // The one choice that is not a place a passkey is says what it is.
-            let line = (method == vela_core::trusted_signer::METHOD)
-                .then(|| s.trusted_signer_body.clone());
-            let selected = *method == view.method;
-            let chosen = method.clone();
-            list = list.child(
-                div()
-                    .id(ElementId::from(("settings-sign-with", index)))
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .px(px(12.))
-                    .py(px(10.))
-                    .rounded(px(10.))
-                    .cursor_pointer()
-                    .when(selected, |row| row.bg(theme.bg_raised))
-                    .hover(|row| row.bg(theme.bg_raised))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        let method = chosen.clone();
-                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
-                            pref.dispatch(SignPrefEvent::MethodChosen { method }, cx);
-                        });
-                        cx.notify();
-                    }))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .gap(px(2.))
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_title())
-                                    .text_color(if selected {
-                                        theme.accent
-                                    } else {
-                                        theme.fg_base
-                                    })
-                                    .child(name),
-                            )
-                            .children(line.map(|line| {
-                                div()
-                                    .text_size(theme::text_row_sub())
-                                    .text_color(theme.fg_subtle)
-                                    .child(line)
-                            })),
-                    )
-                    .child(div().w(px(16.)).children(selected.then(|| {
-                        icon_img(&mut self.icons, Icon::Check, false, theme.accent, 16.)
-                    }))),
-            );
-        }
 
         // The page. Its badge is where it is — "Official", or the host a
         // person chose — and the field holds what they are typing until Save
@@ -9009,7 +10789,6 @@ impl WalletPage {
             .flex_col()
             .gap(px(32.))
             .max_w(px(560.))
-            .child(list)
             .child(section.child(actions))
     }
 
@@ -9051,9 +10830,10 @@ impl WalletPage {
                     .items_baseline()
                     .gap(px(8.))
                     .pb(px(16.))
+                    // `--text-4xl` (078 S-11): the size, not the headline.
                     .child(
                         div()
-                            .text_size(theme::text_balance_hero())
+                            .text_size(theme::text_amount_detail())
                             .font_weight(gpui::FontWeight::BOLD)
                             .text_color(theme.fg_base)
                             .child(amount),
@@ -9072,7 +10852,30 @@ impl WalletPage {
                             .child(summary),
                     ),
             )
-            .child(storage_bar(theme, &segments));
+            .child(storage_bar(theme, &segments))
+            // What the three colours are (078 S-11): the web's legend, a dot
+            // and a word each, 16 apart, 8 under the bar.
+            .child({
+                let words = [
+                    self.settings.storage_legend_user.clone(),
+                    self.settings.storage_legend_caches.clone(),
+                    self.settings.storage_legend_sessions.clone(),
+                ];
+                let mut legend = div().flex().gap(px(16.)).pt(px(8.)).pb(px(8.));
+                for ((_, color), word) in segments.iter().zip(words) {
+                    legend = legend.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(div().size(px(8.)).rounded_full().bg(gpui::rgb(*color)))
+                            .child(word),
+                    );
+                }
+                legend
+            });
 
         let Some(report) = report else {
             // The design surfaces: the mock's three groups, drawn and inert.
@@ -9083,6 +10886,7 @@ impl WalletPage {
                     col = col.child(
                         div()
                             .pt(px(16.))
+                            .text_center()
                             .text_size(theme::text_row_sub())
                             .text_color(theme.info_base)
                             .child(action),
@@ -9135,8 +10939,10 @@ impl WalletPage {
                             cx.notify();
                         },
                     ))),
+                    // Centred under its group, as the web's (078 S-11).
                     div()
                         .pt(px(16.))
+                        .text_center()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.info_base)
                         .child(clear_all),
@@ -9284,14 +11090,26 @@ impl WalletPage {
             .flex()
             .flex_col()
             .child(
+                // The web's `.hero` (078 S-12): padded 24 above and below,
+                // the mark in a 56 raised disc, the tagline over the version.
                 div()
                     .flex()
                     .items_center()
                     .gap(px(16.))
-                    .pb(px(24.))
+                    .py(px(24.))
                     // DST8 draws the mark beside the tagline; without it the
                     // panel opens on two lines of grey text and no brand.
-                    .child(crate::ui::vela_mark(theme, px(44.)))
+                    .child(
+                        div()
+                            .flex_none()
+                            .size(px(56.))
+                            .rounded_full()
+                            .bg(theme.bg_raised)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(crate::ui::vela_mark(theme, px(36.))),
+                    )
                     .child(
                         div()
                             .flex()
@@ -9314,7 +11132,8 @@ impl WalletPage {
             )
             .child(
                 div()
-                    .pb(px(4.))
+                    .pt(px(24.))
+                    .pb(px(8.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_subtle)
                     .child(s.about_section_technical.clone()),
@@ -9353,7 +11172,7 @@ impl WalletPage {
         col = col.child(
             div()
                 .pt(px(24.))
-                .pb(px(4.))
+                .pb(px(8.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
                 .child(self.settings.about_section_links.clone()),
@@ -9372,6 +11191,7 @@ impl WalletPage {
         col.child(
             div()
                 .pt(px(24.))
+                .text_center()
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(self.settings.about_footer.clone()),
@@ -9392,21 +11212,47 @@ impl WalletPage {
             // is none until somebody picks one. The mock's "Zora · 链 ID 7777777"
             // sat over a live wizard that had resolved nothing, which is the
             // dialog telling somebody it already knows what they are adding.
-            SettingsDialog::AddNetwork if self.identity.is_some() => (
-                s.add_network.clone(),
-                resident::resident::<NetworkAdmin>(cx)
+            //
+            // While searching it says what to type, as the web's does; once a
+            // chain is chosen it names it (078 S-05).
+            SettingsDialog::AddNetwork if self.identity.is_some() => {
+                use vela_core::app::network_admin::NetWizardPhase;
+                let wizard = resident::resident::<NetworkAdmin>(cx)
                     .read(cx)
                     .view()
-                    .wizard
-                    .chain_info
-                    .map(|info| {
-                        gpui::SharedString::from(format!(
-                            "{} · {}",
-                            info.name,
-                            settings_fixtures::chain_meta(s, u64::from(info.chain_id))
-                        ))
-                    }),
-            ),
+                    .wizard;
+                let searching = matches!(
+                    wizard.phase,
+                    NetWizardPhase::Idle | NetWizardPhase::Searching | NetWizardPhase::Suggested
+                );
+                let resolving = matches!(
+                    wizard.phase,
+                    NetWizardPhase::Resolving | NetWizardPhase::Checking
+                );
+                let subtitle = if searching {
+                    s.add_network_desc.clone()
+                } else {
+                    // No chain behind a refusal (already added, not found):
+                    // the web keeps its instruction there, not "Searching…".
+                    wizard.chain_info.map_or_else(
+                        || {
+                            if resolving {
+                                s.wizard_searching.clone()
+                            } else {
+                                s.add_network_desc.clone()
+                            }
+                        },
+                        |info| {
+                            gpui::SharedString::from(format!(
+                                "{} · {}",
+                                info.name,
+                                settings_fixtures::chain_meta(s, u64::from(info.chain_id))
+                            ))
+                        },
+                    )
+                };
+                (s.add_network.clone(), Some(subtitle))
+            }
             SettingsDialog::AddNetwork => (
                 s.add_network.clone(),
                 Some(gpui::SharedString::from(format!(
@@ -9432,192 +11278,413 @@ impl WalletPage {
             SettingsDialog::EraseDevice => self.settings_erase_body(theme, cx),
         };
 
-        let mut header = div()
-            .flex()
-            .items_start()
-            .justify_between()
-            .gap(px(12.))
-            .child({
-                let mut titles = div().flex().flex_col().gap(px(6.)).child(
-                    div()
-                        .text_size(theme::text_panel_title())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .child(title),
-                );
-                if let Some(subtitle) = subtitle {
-                    titles = titles.child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(subtitle),
-                    );
-                }
-                titles
-            });
-        header = header.child(
-            div()
-                .id("settings-dialog-close")
-                .size(px(32.))
-                .flex_none()
-                .rounded_full()
-                .bg(theme.bg_sunken)
-                .flex()
-                .items_center()
-                .justify_center()
-                .cursor_pointer()
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.close_settings_dialog(cx);
-                    cx.notify();
-                }))
-                .child(icon_img(
-                    &mut self.icons,
-                    Icon::X,
-                    false,
-                    theme.fg_muted,
-                    18.,
-                )),
-        );
-
-        // The body scrolls, the header does not — the same shape `hardware.rs`
-        // gives the wallet picker, and for the same reason.
-        //
-        // The card had no height cap and nothing to scroll: its height was
-        // whatever its content was. At the window's 1280x800 minimum the
-        // add-network verdict already reached within a few points of both
-        // window edges in English, and German — one of fifteen locales, at the
-        // smallest of six text scales — was tighter still. One more checklist
-        // row, one step up in text scale, or a longer language and the CTA sits
-        // below the window with no way to reach it.
-        //
-        // Measured off the window rather than a constant, because the constant
-        // would be wrong on every other window size: the card keeps 48px of
-        // breathing room top and bottom, and the header, the two 28px paddings
-        // and the 20px gap come off before the body gets what is left.
-        let chrome = 28. + 32. + 20. + 28.;
-        let body_max = (f32::from(window.viewport_size().height) - 96. - chrome).max(200.);
-        let card = div()
-            .w(px(SETTINGS_DIALOG_W))
-            .flex()
-            .flex_col()
-            .gap(px(20.))
-            .p(px(28.))
-            .rounded(px(16.))
-            .bg(theme.bg_raised)
-            .border_1()
-            .border_color(theme.border_card)
-            .child(header)
-            .child(
-                div()
-                    .id("settings-dialog-body")
-                    .w_full()
-                    .max_h(px(body_max))
-                    .min_h(px(0.))
-                    .overflow_y_scroll()
-                    .child(body),
-            );
-
+        // The body scrolls, the header does not, and the card stops at 80% of
+        // the window (`ui::dialog`). It once had no cap and nothing to scroll:
+        // at the 1280x800 minimum the add-network verdict reached within a few
+        // points of both window edges in English, and one more checklist row,
+        // one step up in text scale or a longer language put the CTA below
+        // the window with no way to reach it.
         Some(
-            div()
-                .id("settings-dialog-scrim")
-                .absolute()
-                .inset_0()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(theme.bg_base.opacity(0.55))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                // The wheel stops at the modal too. Once the body became a
-                // scroll region, a notch over the dialog scrolled the settings
-                // list behind the scrim as well — measured at ~7,700 changed
-                // background pixels for one notch, with rows visibly moving
-                // under a dialog that is supposed to have taken over. The body
-                // is a child and handles the event first; this only stops what
-                // is left from reaching the page.
-                .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-                .child(card)
-                .into_any_element(),
+            crate::ui::dialog::dialog(
+                "settings-dialog",
+                theme,
+                window,
+                title,
+                subtitle,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("settings-dialog"),
+                Self::closer(cx, |this, cx| this.close_settings_dialog(cx)),
+            )
+            .into_any_element(),
         )
     }
 
     /// DST4b's body, live: type a chain, see its verdict, add it.
     ///
-    /// 030 proved the pipeline end to end by dispatching the events by hand
-    /// (SC-001: Zora 12→13, still there after a relaunch). What it could not do
-    /// was let a person type — the search box was a placeholder. This is that
-    /// box.
+    /// Two states, as the web's `AddNetworkPanel` has them (078 S-05): the
+    /// search and its results, or the chosen chain — its row, its verdict and
+    /// what can be done about it. They never coexist; the custom RPC belongs
+    /// to a chain, so it is asked only once there is one.
     fn settings_add_network_live(
         &mut self,
         theme: &Theme,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
+        use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
+        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
+        let wizard = view.wizard.clone();
+        if matches!(
+            wizard.phase,
+            NetWizardPhase::Idle | NetWizardPhase::Searching | NetWizardPhase::Suggested
+        ) {
+            return self.add_network_search(theme, &wizard, window, cx);
+        }
+
         let s = &self.settings;
-        let description = s.add_network_desc.clone();
-        let search_placeholder = s.search_placeholder.clone();
         let custom_title = s.custom_rpc_title.clone();
         let custom_placeholder = s.custom_rpc_placeholder.clone();
         let checks_title = s.compatibility_check.clone();
-        let cta = s.add_network.clone();
-        let retry = s.recheck.clone();
         let hover_accent = theme.accent_hover;
+        let chain_id = wizard.chain_info.as_ref().map(|info| info.chain_id);
 
-        let view = resident::resident::<NetworkAdmin>(cx).read(cx).view();
-        let wizard = view.wizard.clone();
-        let search_focus = self.endpoint_focus(WIZARD_SEARCH_FOCUS, cx);
-        let rpc_focus = self.endpoint_focus(WIZARD_RPC_FOCUS, cx);
+        // The verdict, in the web's words: what the candidate row says under
+        // its name, its pill, and which of the tail's parts appear.
+        struct Verdict {
+            meta: SharedString,
+            pill: (Tone, SharedString),
+            checks: Option<Vec<(SharedString, bool)>>,
+            callout: Option<SharedString>,
+            custom_rpc: bool,
+            primary: Option<SharedString>,
+            setup_tool: bool,
+            recheck: bool,
+        }
+        let checking = || Verdict {
+            meta: s.wizard_checking.clone(),
+            pill: (Tone::Neutral, s.compatibility_check.clone()),
+            checks: None,
+            callout: None,
+            custom_rpc: false,
+            primary: None,
+            setup_tool: false,
+            recheck: false,
+        };
+        let verdict = match wizard.phase {
+            NetWizardPhase::Checked => match wizard.compat.as_ref() {
+                Some(compat) if compat.rpc_failure.is_none() && compat.compatible => Verdict {
+                    meta: compat.best_rpc_latency_ms.map_or_else(
+                        || settings_fixtures::chain_meta(s, u64::from(compat.chain_id)),
+                        // Whole milliseconds: the probe's own timer is a
+                        // float, and "775.3942999999999ms" is noise.
+                        |ms| {
+                            SharedString::from(crate::wallet::fill(
+                                &s.best_rpc,
+                                "latencyMs",
+                                &format!("{ms:.0}"),
+                            ))
+                        },
+                    ),
+                    pill: (Tone::Ok, s.compatible.clone()),
+                    checks: settings_live::compat_checks(compat, s),
+                    // Spec 081 FR-009: works, and a wallet with more than one
+                    // passkey still cannot be made here — both true.
+                    callout: (!compat.multi_key_ready).then(|| s.single_key_only.clone()),
+                    custom_rpc: true,
+                    // `can_add` is the core's whole judgement; the button
+                    // appears only when it says yes.
+                    primary: wizard.can_add.then(|| s.add_network.clone()),
+                    setup_tool: false,
+                    recheck: false,
+                },
+                Some(compat) if compat.rpc_failure.is_none() => Verdict {
+                    meta: s.compatibility_check.clone(),
+                    pill: (Tone::Error, s.wizard_incompatible.clone()),
+                    checks: settings_live::compat_checks(compat, s),
+                    callout: Some(s.wizard_incompatible_hint.clone()),
+                    custom_rpc: false,
+                    primary: None,
+                    setup_tool: true,
+                    recheck: true,
+                },
+                // The probes never reached a verdict — "unable to verify",
+                // never "incompatible" (the core's invariant ③).
+                _ => Verdict {
+                    meta: s.compatibility_check.clone(),
+                    pill: (Tone::Warn, s.wizard_unable_to_verify.clone()),
+                    checks: None,
+                    callout: None,
+                    custom_rpc: true,
+                    primary: Some(s.wizard_retry.clone()),
+                    setup_tool: false,
+                    recheck: true,
+                },
+            },
+            // The wizard stopped: why, in a warning, and the way on. A probe
+            // that failed is "unable to verify" and gets no setup tool; a chain
+            // that is already here, unknown, or endpoint-less says so.
+            NetWizardPhase::Error => {
+                let refusal =
+                    settings_live::wizard_notice(&wizard, s).and_then(|notice| match notice {
+                        settings_live::WizardNotice::Refusal(text) => Some(text),
+                        settings_live::WizardNotice::Progress(_) => None,
+                    });
+                let incompatible =
+                    matches!(wizard.error, Some(NetWizardErrorKind::NotCompatible { .. }));
+                Verdict {
+                    callout: Some(if incompatible {
+                        s.wizard_incompatible_hint.clone()
+                    } else {
+                        refusal.unwrap_or_else(|| s.wizard_unable_to_verify.clone())
+                    }),
+                    setup_tool: incompatible,
+                    recheck: chain_id.is_some(),
+                    ..checking()
+                }
+            }
+            _ => checking(),
+        };
+        let error = wizard.phase == NetWizardPhase::Error;
 
-        let mut col = div()
-            .flex()
-            .flex_col()
-            .gap(px(20.))
-            .child(
+        let mut col = div().flex().flex_col().gap(px(16.));
+
+        // The candidate: the web's row — mark, name at 17 bold, the line under
+        // it, and the verdict's pill. An error with no chain has none.
+        if let Some(info) = wizard.chain_info.as_ref().filter(|_| !error) {
+            let badge = pill(verdict.pill.0, verdict.pill.1.clone());
+            col = col.child(
                 div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(description),
-            )
-            .child(editable_url_field(
-                ElementId::from("wizard-search"),
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .child(chain_logo_mark(
+                        u64::from(info.chain_id),
+                        crate::settings::model::lettermark(&info.name),
+                        crate::settings::model::chain_tint(u64::from(info.chain_id))
+                            .unwrap_or(0x8A_8F_98),
+                        32.,
+                    ))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_section())
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(theme.fg_base)
+                                    .child(SharedString::from(info.name.clone())),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_subtle)
+                                    .child(verdict.meta.clone()),
+                            ),
+                    )
+                    // Its own width, always: a long line beside it shrinks,
+                    // the verdict does not.
+                    .child(div().flex_none().child(status_pill(theme, &badge))),
+            );
+        }
+        if let Some(checks) = verdict.checks.as_ref() {
+            col = col.child(check_list(theme, &mut self.icons, checks_title, checks));
+        }
+        // Under the list, which it explains (spec 081 FR-009).
+        if let Some(text) = verdict.callout.clone() {
+            col = col.child(crate::settings::components::callout(
                 theme,
+                &mut self.icons,
+                crate::settings::components::CalloutTone::Warning,
+                text,
+            ));
+        }
+        if verdict.custom_rpc {
+            let rpc_focus = self.endpoint_focus(WIZARD_RPC_FOCUS, cx);
+            col = col.child(editable_url_field(
+                ElementId::from("wizard-rpc"),
+                theme,
+                Some(custom_title),
+                &wizard.custom_rpc,
+                custom_placeholder,
                 None,
-                &wizard.query,
-                search_placeholder,
                 None,
                 None,
-                None,
-                &search_focus,
+                &rpc_focus,
                 window,
                 move |text: String, _window: &mut Window, cx: &mut gpui::App| {
                     resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                        resident.dispatch(NetEvent::SearchInput { query: text }, cx);
+                        resident.dispatch(NetEvent::CustomRpcEdited { value: text }, cx);
                     });
                 },
-                // The search runs as it is typed; there is nothing to commit.
+                // A draft the wizard's own button commits.
                 |_, _| {},
             ));
-
-        // The suggestions the index answered with. Each one is a click that
-        // resolves and checks that chain — which is the whole pipeline 030
-        // proved and could not reach from the keyboard.
-        for (i, entry) in wizard.suggestions.iter().take(6).enumerate() {
-            let chain_id = entry.chain_id;
-            let selected = wizard
-                .chain_info
-                .as_ref()
-                .is_some_and(|c| c.chain_id == chain_id);
+        }
+        let recheck = move |cx: &mut gpui::App| {
+            // A re-check KEEPS the typed RPC: it is often the reason to ask
+            // again.
+            if let Some(chain_id) = chain_id {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(
+                        NetEvent::ChainSelected {
+                            chain_id,
+                            keep_custom_rpc: true,
+                        },
+                        cx,
+                    );
+                });
+            }
+        };
+        if let Some(primary) = verdict.primary.clone() {
+            let adds = wizard.phase == NetWizardPhase::Checked && wizard.can_add;
             col = col.child(
+                div()
+                    .id("settings-add-network-confirm")
+                    .h(px(theme::DIALOG_BUTTON_H))
+                    .rounded(px(12.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .bg(theme.accent)
+                    .hover(move |el| el.bg(hover_accent))
+                    .text_size(theme::text_button())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_inverse)
+                    .child(primary)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if !adds {
+                            // Retry: ask the same chain again.
+                            recheck(cx);
+                            cx.notify();
+                            return;
+                        }
+                        let now_iso = crate::executor::now_iso();
+                        // Close on the core's word, not on the click. Every
+                        // gate in `add_confirmed` refuses by returning
+                        // `done()`, so a dialog that closed itself would say
+                        // "added" over a chain that was not.
+                        let added =
+                            resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                                let before = resident.view().last_added_chain_id;
+                                resident.dispatch(NetEvent::AddConfirmed { now_iso }, cx);
+                                resident.view().last_added_chain_id != before
+                            });
+                        if added {
+                            this.close_settings_dialog(cx);
+                            // A chain nobody has counted yet: the same forced
+                            // read the web makes at the same moment.
+                            crate::executor::balance_dashboard::refresh(cx);
+                        }
+                        cx.notify();
+                    })),
+            );
+        }
+        // Where a chain this wallet refuses can be made ready — an outline
+        // button, never the accent: it is not the action somebody came for.
+        if verdict.setup_tool {
+            col = col.child(
+                div()
+                    .id("wizard-chain-setup-tool")
+                    .h(px(theme::DIALOG_BUTTON_H))
+                    .rounded(px(12.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .border_1()
+                    .border_color(theme.outline_strong)
+                    .text_size(theme::text_button())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(self.settings.open_chain_setup_tool.clone())
+                    .on_click(|_, _, cx| {
+                        cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL);
+                    }),
+            );
+        }
+        // The web's re-check: a link in the info colour with its refresh.
+        if verdict.recheck {
+            col = col.child(
+                div()
+                    .id("wizard-recheck-rpc")
+                    .h(px(44.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .gap(px(8.))
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.info_base)
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::RefreshCw,
+                        false,
+                        theme.info_base,
+                        14.,
+                    ))
+                    .child(self.settings.recheck_with_rpc.clone())
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        recheck(cx);
+                        cx.notify();
+                    })),
+            );
+        }
+        col
+    }
+
+    /// The search half: the field with its icon, and the index's answers as
+    /// the web's `NetworkRow`s — mark, name, "Chain N" in the mono face, a
+    /// chevron — each a click that resolves and checks that chain.
+    fn add_network_search(
+        &mut self,
+        theme: &Theme,
+        wizard: &vela_core::app::network_admin::NetWizardView,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let s = &self.settings;
+        let placeholder = s.search_placeholder.clone();
+        let search_focus = self.endpoint_focus(WIZARD_SEARCH_FOCUS, cx);
+        let input = crate::ui::search_input(
+            "wizard-search",
+            theme,
+            &wizard.query,
+            placeholder,
+            &search_focus,
+            window,
+            move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(NetEvent::SearchInput { query: text }, cx);
+                });
+            },
+        );
+        let focused = search_focus.is_focused(window);
+        let field = div()
+            .h(px(44.))
+            .px(px(12.))
+            .rounded(px(12.))
+            .bg(theme.bg_sunken)
+            .border_1()
+            .border_color(if focused {
+                theme.fg_muted
+            } else {
+                theme.divider
+            })
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::Search,
+                false,
+                theme.fg_subtle,
+                18.,
+            ))
+            .child(div().flex_1().min_w(px(0.)).child(input));
+
+        let mut results = div().flex().flex_col();
+        for (i, entry) in wizard.suggestions.iter().enumerate() {
+            let chain_id = entry.chain_id;
+            let meta = settings_fixtures::chain_meta(&self.settings, u64::from(chain_id));
+            results = results.child(
                 div()
                     .id(ElementId::from(("wizard-suggestion", i)))
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .p(px(8.))
-                    .rounded(px(10.))
+                    .py(px(12.))
+                    .border_b_1()
+                    .border_color(theme.divider)
                     .cursor_pointer()
-                    .when(selected, |el| el.bg(theme.bg_sunken))
-                    .hover(|el| el.bg(theme.bg_sunken))
-                    .child(chain_mark(
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
                         crate::settings::model::lettermark(&entry.name),
                         crate::settings::model::chain_tint(u64::from(chain_id))
                             .unwrap_or(0x8A_8F_98),
@@ -9627,25 +11694,38 @@ impl WalletPage {
                         div()
                             .flex_1()
                             .min_w(px(0.))
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(gpui::SharedString::from(entry.name.clone())),
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme.fg_base)
+                                    .child(SharedString::from(entry.name.clone())),
+                            )
+                            .child(
+                                div()
+                                    .font_family(theme::font_mono())
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.fg_subtle)
+                                    .child(meta),
+                            ),
                     )
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(gpui::SharedString::from(chain_id.to_string())),
-                    )
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::ChevronRight,
+                        false,
+                        theme.fg_subtle,
+                        14.,
+                    ))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
                             resident.dispatch(
                                 NetEvent::ChainSelected {
                                     chain_id,
                                     // A fresh pick throws away a custom RPC
-                                    // typed for a DIFFERENT chain. Keeping it
-                                    // would check chain A against chain B's
-                                    // endpoint.
+                                    // typed for a DIFFERENT chain.
                                     keep_custom_rpc: false,
                                 },
                                 cx,
@@ -9655,243 +11735,12 @@ impl WalletPage {
                     })),
             );
         }
-
-        // What the wizard is doing, or why it stopped. Everything below this
-        // line — the check list, the RPC field, the CTA — draws only once the
-        // core has a verdict, so without it the dialog answers a click with
-        // nothing at all. (The 032 phase 6 rule, applied to somebody else's
-        // screen: the core computed a refusal; the screen must say it.)
-        if let Some(notice) = settings_live::wizard_notice(&wizard, &self.settings) {
-            col = col.child(match notice {
-                settings_live::WizardNotice::Progress(body) => div()
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .child(crate::ui::spinner(theme.fg_subtle, px(14.), px(2.)))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(body),
-                    ),
-                settings_live::WizardNotice::Refusal(body) => div()
-                    .p(px(12.))
-                    .rounded(px(12.))
-                    .bg(theme.error_soft)
-                    .border_1()
-                    .border_color(theme.error_base)
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
-                    .child(body),
-            });
-        }
-
-        if let Some(compat) = wizard.compat.as_ref() {
-            match settings_live::compat_checks(compat, &self.settings) {
-                Some(checks) => {
-                    // The VERDICT, before the list that explains it. The core
-                    // reaches one and the live dialog never said it: every
-                    // other client shows this pill, and after spec 081 gave the
-                    // checklist a crossed row, a desktop reader saw a red cross
-                    // and a warning with nothing anywhere saying the chain
-                    // works. `settings.compatible` had been loaded and unused.
-                    let badge = settings_fixtures::pill(
-                        if compat.compatible {
-                            settings_fixtures::Tone::Ok
-                        } else {
-                            settings_fixtures::Tone::Error
-                        },
-                        if compat.compatible {
-                            self.settings.compatible.clone()
-                        } else {
-                            self.settings.wizard_incompatible.clone()
-                        },
-                    );
-                    col = col.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .child(status_pill(theme, &badge)),
-                    );
-                    col = col.child(check_list(theme, &mut self.icons, checks_title, &checks));
-                    // Spec 081 FR-009. The core can say "this chain works" and
-                    // "a wallet with more than one key cannot be created here"
-                    // at the same time; both are true, and the second one is
-                    // the sentence a person with several passkeys needs.
-                    if compat.compatible && !compat.multi_key_ready {
-                        col = col.child(crate::settings::components::callout(
-                            theme,
-                            &mut self.icons,
-                            crate::settings::components::CalloutTone::Warning,
-                            self.settings.single_key_only.clone(),
-                        ));
-                    }
-                    // Spec 081: an INCOMPATIBLE verdict needs somewhere to go.
-                    // The web has offered both of these since it was wired;
-                    // desktop drew the red rows, then the custom-RPC field,
-                    // and then nothing — so a person could type the RPC that
-                    // would have changed the answer and have no way to ask
-                    // again. The re-check keeps what they typed, for the same
-                    // reason the retry below does.
-                    if !compat.compatible {
-                        let chain_id = compat.chain_id;
-                        col = col.child(
-                            div()
-                                .id("wizard-recheck-rpc")
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .h(px(CONTACTS_BUTTON_H))
-                                .rounded(px(12.))
-                                .cursor_pointer()
-                                .border_1()
-                                .border_color(theme.outline_strong)
-                                .text_size(theme::text_row_title())
-                                .text_color(theme.fg_base)
-                                .child(self.settings.recheck_with_rpc.clone())
-                                .on_click(cx.listener(move |_, _, _, cx| {
-                                    resident::resident::<NetworkAdmin>(cx).update(
-                                        cx,
-                                        |resident, cx| {
-                                            resident.dispatch(
-                                                NetEvent::ChainSelected {
-                                                    chain_id,
-                                                    keep_custom_rpc: true,
-                                                },
-                                                cx,
-                                            );
-                                        },
-                                    );
-                                    cx.notify();
-                                })),
-                        );
-                        col = col.child(
-                            div()
-                                .id("wizard-chain-setup-tool")
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.info_base)
-                                .child(self.settings.open_chain_setup_tool.clone())
-                                .on_click(|_, _, cx| {
-                                    cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL);
-                                }),
-                        );
-                    }
-                }
-                // The probe could not reach a verdict. A retry, never a
-                // condemnation — the core's invariant ③, and the difference
-                // between "this chain does not work" and "we could not ask".
-                None => {
-                    let chain_id = compat.chain_id;
-                    col = col.child(
-                        div()
-                            .id("wizard-retry")
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .h(px(CONTACTS_BUTTON_H))
-                            .rounded(px(12.))
-                            .cursor_pointer()
-                            .border_1()
-                            .border_color(theme.outline_strong)
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            .child(retry)
-                            .on_click(cx.listener(move |_, _, _, cx| {
-                                resident::resident::<NetworkAdmin>(cx).update(
-                                    cx,
-                                    |resident, cx| {
-                                        resident.dispatch(
-                                            NetEvent::ChainSelected {
-                                                chain_id,
-                                                // A recheck KEEPS the typed RPC:
-                                                // it is often the reason to recheck.
-                                                keep_custom_rpc: true,
-                                            },
-                                            cx,
-                                        );
-                                    },
-                                );
-                                cx.notify();
-                            })),
-                    );
-                }
-            }
-        }
-
-        col = col.child(editable_url_field(
-            ElementId::from("wizard-rpc"),
-            theme,
-            Some(custom_title),
-            &wizard.custom_rpc,
-            custom_placeholder,
-            None,
-            None,
-            None,
-            &rpc_focus,
-            window,
-            move |text: String, _window: &mut Window, cx: &mut gpui::App| {
-                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(NetEvent::CustomRpcEdited { value: text }, cx);
-                });
-            },
-            // A draft the wizard's own Add button commits.
-            |_, _| {},
-        ));
-
-        // The CTA renders only when the core says it may. `can_add` is its
-        // whole judgement — resolved, checked, compatible, not already added —
-        // and re-deriving any part of it here would be a second opinion about
-        // whether a chain is safe to add.
-        if wizard.can_add {
-            col = col.child(
-                div()
-                    .id("settings-add-network-confirm")
-                    .h(px(CONTACTS_BUTTON_H))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(theme.accent)
-                    .hover(move |el| el.bg(hover_accent))
-                    .text_size(theme::text_row_title())
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(theme.fg_inverse)
-                    .child(cta)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        let now_iso = crate::executor::now_iso();
-                        // Close on the core's word, not on the click. Every
-                        // gate in `add_confirmed` — not loaded, not Checked,
-                        // not compatible — refuses by returning `done()`, so a
-                        // dialog that closes itself would be the phase 6
-                        // pattern in its worst form: the person's press
-                        // disappears the screen and nothing was added. If the
-                        // core did not record it, the dialog stays up with its
-                        // state, and the notice above says why.
-                        let added =
-                            resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                                let before = resident.view().last_added_chain_id;
-                                resident.dispatch(NetEvent::AddConfirmed { now_iso }, cx);
-                                resident.view().last_added_chain_id != before
-                            });
-                        if added {
-                            this.close_settings_dialog(cx);
-                            // A chain the person just added is a chain nobody
-                            // has counted yet. The web forces the same read at
-                            // the same moment; without it the new network sits
-                            // in the list contributing nothing until something
-                            // else happens to refresh.
-                            crate::executor::balance_dashboard::refresh(cx);
-                        }
-                        cx.notify();
-                    })),
-            );
-        }
-        col
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .child(field)
+            .child(results)
     }
 
     /// DST4b's body: the chosen chain, its verdict, and the CTA.
@@ -9910,44 +11759,13 @@ impl WalletPage {
         let cta = s.add_network.clone();
         let hover_accent = theme.accent_hover;
 
-        let search_placeholder = s.search_placeholder.clone();
-        let description = s.add_network_desc.clone();
-
+        // The verdict alone, 16 apart (078 T063): the web draws the search OR
+        // the candidate — the live dialog already did — and this mock drew a
+        // search box above a verdict it had already reached.
         div()
             .flex()
             .flex_col()
-            .gap(px(20.))
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(description),
-            )
-            .child(
-                div()
-                    .h(px(44.))
-                    .px(px(12.))
-                    .rounded(px(10.))
-                    .bg(theme.bg_sunken)
-                    .border_1()
-                    .border_color(theme.divider)
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(icon_img(
-                        &mut self.icons,
-                        Icon::Search,
-                        false,
-                        theme.fg_subtle,
-                        16.,
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(search_placeholder),
-                    ),
-            )
+            .gap(px(16.))
             .child(
                 div()
                     .flex()
@@ -9963,7 +11781,7 @@ impl WalletPage {
                             .gap(px(2.))
                             .child(
                                 div()
-                                    .text_size(theme::text_panel_title())
+                                    .text_size(theme::text_section())
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(theme.fg_base)
                                     .child("Zora"),
@@ -9978,10 +11796,11 @@ impl WalletPage {
                     .child(status_pill(theme, &badge)),
             )
             .child(check_list(theme, &mut self.icons, checks_title, &checks))
-            .child(url_field(
+            .child(url_field_with(
                 theme,
                 Some(custom_title),
                 custom_placeholder,
+                theme.fg_subtle,
                 None,
                 None,
                 None,
@@ -9990,7 +11809,7 @@ impl WalletPage {
             .child(
                 div()
                     .id("settings-add-network-confirm")
-                    .h(px(CONTACTS_BUTTON_H))
+                    .h(px(theme::DIALOG_BUTTON_H))
                     .rounded(px(12.))
                     .flex()
                     .items_center()
@@ -9998,7 +11817,7 @@ impl WalletPage {
                     .cursor_pointer()
                     .bg(theme.accent)
                     .hover(move |el| el.bg(hover_accent))
-                    .text_size(theme::text_row_title())
+                    .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
                     .child(cta),
@@ -10048,10 +11867,20 @@ impl WalletPage {
                     .border_1()
                     .border_color(theme.divider)
                     .hover(move |el| el.border_color(hover))
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
                     .on_click(move |_, _, cx| cx.open_url(url))
-                    .child(provider),
+                    .child(provider)
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::ExternalLink,
+                        false,
+                        theme.fg_subtle,
+                        12.,
+                    )),
             );
         }
 
@@ -10069,7 +11898,7 @@ impl WalletPage {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(chain_mark(letter, colour, 32.))
+                    .child(chain_logo_mark(u64::from(chain_id), letter, colour, 32.))
                     .child(
                         div()
                             .flex_1()
@@ -10079,7 +11908,7 @@ impl WalletPage {
                             .gap(px(2.))
                             .child(
                                 div()
-                                    .text_size(theme::text_panel_title())
+                                    .text_size(theme::text_section())
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(theme.fg_base)
                                     .child(gpui::SharedString::from(name)),
@@ -10087,7 +11916,7 @@ impl WalletPage {
                             .child(
                                 div()
                                     .font_family(theme::font_mono())
-                                    .text_size(theme::text_row_sub())
+                                    .text_size(theme::text_label())
                                     .text_color(theme.fg_subtle)
                                     .child(meta),
                             ),
@@ -10106,15 +11935,22 @@ impl WalletPage {
             // sometimes saves is worse than no button.
             .child(
                 div()
-                    .text_size(theme::text_label())
-                    .text_color(theme.fg_subtle)
-                    .child(providers_hint),
+                    .flex()
+                    .flex_col()
+                    .gap(px(24.))
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(providers_hint),
+                    )
+                    .child(chips),
             )
-            .child(chips)
             .child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.info_base)
+                    .underline()
                     .child(report),
             )
     }
@@ -10139,6 +11975,9 @@ impl WalletPage {
         for (name, _) in settings_fixtures::RPC_PROVIDER_LINKS {
             chips = chips.child(
                 div()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
                     .px(px(12.))
                     .py(px(8.))
                     .rounded(px(8.))
@@ -10147,7 +11986,14 @@ impl WalletPage {
                     .border_color(theme.divider)
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
-                    .child(name),
+                    .child(name)
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::ExternalLink,
+                        false,
+                        theme.fg_subtle,
+                        12.,
+                    )),
             );
         }
 
@@ -10170,7 +12016,7 @@ impl WalletPage {
                             .gap(px(2.))
                             .child(
                                 div()
-                                    .text_size(theme::text_panel_title())
+                                    .text_size(theme::text_section())
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(theme.fg_base)
                                     .child(n.name),
@@ -10178,7 +12024,7 @@ impl WalletPage {
                             .child(
                                 div()
                                     .font_family(theme::font_mono())
-                                    .text_size(theme::text_row_sub())
+                                    .text_size(theme::text_label())
                                     .text_color(theme.fg_subtle)
                                     .child(meta),
                             ),
@@ -10203,7 +12049,7 @@ impl WalletPage {
             .child(
                 div()
                     .id("settings-fix-rpc-save")
-                    .h(px(CONTACTS_BUTTON_H))
+                    .h(px(theme::DIALOG_BUTTON_H))
                     .rounded(px(12.))
                     .flex()
                     .items_center()
@@ -10211,22 +12057,29 @@ impl WalletPage {
                     .cursor_pointer()
                     .bg(theme.accent)
                     .hover(move |el| el.bg(hover_accent))
-                    .text_size(theme::text_row_title())
+                    .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
                     .child(cta),
             )
             .child(
                 div()
-                    .text_size(theme::text_label())
-                    .text_color(theme.fg_subtle)
-                    .child(providers_hint),
+                    .flex()
+                    .flex_col()
+                    .gap(px(24.))
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(providers_hint),
+                    )
+                    .child(chips),
             )
-            .child(chips)
             .child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.info_base)
+                    .underline()
                     .child(report),
             )
     }
@@ -10266,14 +12119,14 @@ impl WalletPage {
         body.child(
             div()
                 .id("settings-erase-confirm")
-                .h(px(CONTACTS_BUTTON_H))
+                .h(px(theme::DIALOG_BUTTON_H))
                 .rounded(px(12.))
                 .flex()
                 .items_center()
                 .justify_center()
                 .cursor_pointer()
                 .bg(theme.error_base)
-                .text_size(theme::text_row_title())
+                .text_size(theme::text_button())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_inverse)
                 .on_click(cx.listener(|this, _, _, cx| this.erase_device(cx)))
@@ -10282,7 +12135,7 @@ impl WalletPage {
         .child(
             div()
                 .id("settings-erase-cancel")
-                .h(px(CONTACTS_BUTTON_H))
+                .h(px(theme::DIALOG_BUTTON_H))
                 .rounded(px(12.))
                 .flex()
                 .items_center()
@@ -10290,7 +12143,7 @@ impl WalletPage {
                 .cursor_pointer()
                 .border_1()
                 .border_color(theme.outline_strong)
-                .text_size(theme::text_row_title())
+                .text_size(theme::text_button())
                 .text_color(theme.fg_base)
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.close_settings_dialog(cx);
@@ -10544,7 +12397,8 @@ impl WalletPage {
                 });
         // The two trailing affordances open different things, so the page — not
         // the component — carries their listeners.
-        let star = explore_components::toolbar_control(
+        // Filled in the accent on a page already pinned (078 E-04).
+        let star = explore_components::toolbar_control_with(
             theme,
             &mut self.icons,
             Icon::Star,
@@ -10553,6 +12407,8 @@ impl WalletPage {
             } else {
                 theme.fg_base
             },
+            favorite_origin.is_some(),
+            true,
         );
         let dots = explore_components::toolbar_control(
             theme,
@@ -10601,32 +12457,7 @@ impl WalletPage {
                             cx.notify();
                             return;
                         }
-                        #[cfg(not(target_os = "linux"))]
-                        if let Some(url) = crate::webview::current_url() {
-                            // The page's own title when it has reported one;
-                            // the host otherwise. The core keeps whichever
-                            // arrives until somebody renames the tile.
-                            let title = this
-                                .browser_title
-                                .clone()
-                                .or_else(crate::webview::host)
-                                .unwrap_or_default();
-                            resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(
-                                    vela_core::app::explore_sites::Event::FavoriteAdded {
-                                        url,
-                                        // The page's own title arrives with the
-                                        // next meta report; the host is what is
-                                        // certainly true right now, and the core
-                                        // lets a later title replace it while
-                                        // nobody has renamed the tile.
-                                        title: (!title.is_empty()).then_some(title),
-                                        now_ms: crate::executor::now_ms(),
-                                    },
-                                    cx,
-                                );
-                            });
-                        }
+                        this.pin_current_page(cx);
                         cx.notify();
                     })),
             )
@@ -10677,12 +12508,63 @@ impl WalletPage {
             secure,
             placeholder: self.explore.search_placeholder.clone(),
             draft: self.address_draft.clone().map(SharedString::from),
+            selected: self.address_selected,
+            notice: (self.copied.as_deref() == Some(EXPLORE_COPY))
+                .then(|| self.explore.copied.clone()),
         };
-        let field = explore_components::address_field(theme, &mut self.icons, &bar);
         // Editable once somebody is signed in: a click takes the page's URL
         // into the field, Enter goes wherever the core's `browser_input` says
-        // the text means — a URL, or a search for it.
-        let address: gpui::AnyElement = if self.identity.is_some() {
+        // the text means — a URL, or a search for it. While typing, the text
+        // is the shared editor (caret, selection, IME), like every well.
+        let live_address = self.identity.is_some();
+        let address_change: crate::ui::editor::OnChange = {
+            let page = cx.entity().downgrade();
+            std::rc::Rc::new(move |text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    if this.address_draft.is_some() {
+                        this.address_draft = Some(text);
+                        cx.notify();
+                    }
+                });
+            })
+        };
+        let typing = match (&self.address_draft, live_address) {
+            (Some(draft), true) => {
+                crate::ui::editor::sync(&self.address_focus, draft);
+                let size = theme::text_row_sub();
+                Some(
+                    crate::ui::editor::editor(
+                        &self.address_focus,
+                        self.explore.search_placeholder.clone(),
+                        crate::ui::editor::EditorStyle {
+                            family: theme::font_ui().into(),
+                            placeholder_family: theme::font_ui().into(),
+                            weight: gpui::FontWeight::NORMAL,
+                            size,
+                            line_height: size * 1.45,
+                            color: theme.fg_base,
+                            placeholder: theme.fg_subtle,
+                            caret: theme.accent,
+                            selection: theme.accent.opacity(0.28),
+                        },
+                        crate::ui::editor::Wrap::None,
+                        std::rc::Rc::clone(&address_change),
+                    )
+                    .into_any_element(),
+                )
+            }
+            _ => None,
+        };
+        let field = explore_components::address_field(theme, &mut self.icons, &bar, typing);
+        let address: gpui::AnyElement = if live_address {
+            let editor_click =
+                crate::ui::editor::mouse_down(&self.address_focus, address_change.clone());
+            let editor_keys = crate::ui::editor::key_down(
+                &self.address_focus,
+                crate::ui::editor::Wrap::None,
+                false,
+                address_change,
+            );
             div()
                 .id("address-bar")
                 .track_focus(&self.address_focus)
@@ -10694,11 +12576,16 @@ impl WalletPage {
                 .overflow_hidden()
                 .cursor_text()
                 .child(field)
+                .when(self.address_draft.is_some(), |el| {
+                    el.on_mouse_down(MouseButton::Left, editor_click)
+                })
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
                     this.edit_address(window, cx);
                 }))
-                .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                    this.address_key(event, cx);
+                .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
+                    if !this.address_key(event, cx) {
+                        editor_keys(event, window, cx);
+                    }
                 }))
                 .into_any_element()
         } else {
@@ -10736,15 +12623,19 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             {
                 let home = self.browser_home.clone();
+                let covered = self.dialog_over_browser();
                 self.arm_dapp_requests(cx);
                 gpui::canvas(
                     |_, _, _| (),
-                    move |bounds, (), window, _| {
+                    move |bounds, (), window, cx| {
                         // Placed from the PAINT pass of the element that owns
                         // this rectangle, so the webview follows the column
                         // through a resize and through the signing panel
-                        // opening beside it.
-                        crate::webview::place(bounds, window, &home);
+                        // opening beside it. Not while a dialog is up over it:
+                        // render took it off the screen for that.
+                        if !covered {
+                            crate::webview::place(bounds, window, &home, cx);
+                        }
                     },
                 )
                 .size_full()
@@ -10836,6 +12727,35 @@ impl WalletPage {
             )
     }
 
+    /// Pin the page that is loaded — read from the WEBVIEW, never from the
+    /// address bar's text: what is pinned has to be the document that is
+    /// actually open. The star and the site menu's "Add to favorites" both.
+    fn pin_current_page(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(url) = crate::webview::current_url() {
+            // The page's own title when it has reported one; the host
+            // otherwise. The core keeps whichever arrives until somebody
+            // renames the tile.
+            let title = self
+                .browser_title
+                .clone()
+                .or_else(crate::webview::host)
+                .unwrap_or_default();
+            resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+                resident.dispatch(
+                    vela_core::app::explore_sites::Event::FavoriteAdded {
+                        url,
+                        title: (!title.is_empty()).then_some(title),
+                        now_ms: crate::executor::now_ms(),
+                    },
+                    cx,
+                );
+            });
+        }
+        #[cfg(target_os = "linux")]
+        let _ = cx;
+    }
+
     /// The address bar takes the keyboard: it starts from the page that is
     /// open, so editing a URL is editing THAT URL, not retyping it.
     fn edit_address(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -10848,49 +12768,54 @@ impl WalletPage {
             };
             #[cfg(target_os = "linux")]
             let current: Option<String> = None;
-            self.address_draft = Some(current.unwrap_or_default());
+            let current = current.unwrap_or_default();
+            // As a browser does: the URL taken into the field is selected, so
+            // typing replaces it and a paste lands in its place.
+            crate::ui::editor::sync(&self.address_focus, &current);
+            if !current.is_empty() {
+                crate::ui::editor::select_all(&self.address_focus);
+            }
+            self.address_selected = false;
+            self.address_draft = Some(current);
         }
         window.focus(&self.address_focus, cx);
         cx.notify();
     }
 
-    /// One key in the address bar. Enter goes where the core's
-    /// `browser_input` says the text means: a URL as typed, a bare host with
-    /// a scheme, anything else a search — the same rule on every client.
-    fn address_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
-        let Some(draft) = self.address_draft.as_mut() else {
-            return;
-        };
-        let ks = &event.keystroke;
-        match ks.key.as_str() {
+    /// The address bar's own two keys; everything else is the editor's.
+    /// Enter goes where the core's `browser_input` says the text means: a URL
+    /// as typed, a bare host with a scheme, anything else a search — the same
+    /// rule on every client. Escape stops typing and leaves the column.
+    /// `true` when the key was one of the two.
+    fn address_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
+        // While the IME composes, Enter commits and Esc cancels ITS text —
+        // never "go" or "stop typing".
+        if self.address_draft.is_none() || crate::ui::editor::is_composing(&self.address_focus) {
+            return false;
+        }
+        match event.keystroke.key.as_str() {
             "enter" => {
                 cx.stop_propagation();
+                self.address_selected = false;
                 let typed = self.address_draft.take().unwrap_or_default();
+                // A pasted URL is one line, and so is what is sent.
+                let typed = typed.trim().to_owned();
                 if let Some(url) = vela_core::app::dapp_rpc::browser_input(&typed) {
                     self.open_typed_url(url, cx);
                 }
+                cx.notify();
+                true
             }
             "escape" => {
                 // One layer only: the typing stops, the column stays.
                 cx.stop_propagation();
+                self.address_selected = false;
                 self.address_draft = None;
+                cx.notify();
+                true
             }
-            "backspace" => {
-                draft.pop();
-            }
-            "v" if ks.modifiers.platform || ks.modifiers.control => {
-                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                    // A pasted URL is one line; a newline in it is the end.
-                    draft.push_str(text.lines().next().unwrap_or_default().trim());
-                }
-            }
-            _ if ks.modifiers.platform || ks.modifiers.control || ks.modifiers.alt => return,
-            _ => match &ks.key_char {
-                Some(ch) if !ch.chars().any(char::is_control) => draft.push_str(ch),
-                _ => return,
-            },
+            _ => false,
         }
-        cx.notify();
     }
 
     /// Open what the address bar resolved to, in the page on screen — as a
@@ -11184,6 +13109,15 @@ impl WalletPage {
     /// Is the column taken by a request that is still open? A column that
     /// has answered — showing a receipt, an error — is not: its request is
     /// over, and the next one may take its place.
+    /// No signing column is open. Always so on Linux, which has none to open:
+    /// `signing_host` exists only where the dApp browser does.
+    fn no_signing_host(&self) -> bool {
+        #[cfg(not(target_os = "linux"))]
+        return self.signing_host.is_none();
+        #[cfg(target_os = "linux")]
+        return true;
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn signing_busy(&self, cx: &gpui::App) -> bool {
         self.signing_host.as_ref().is_some_and(|host| {
@@ -11226,6 +13160,12 @@ impl WalletPage {
         .detach();
         self.signing_host = Some(host.clone());
         self.panel = PanelId::Signing;
+        // A new request is what the column is about now.
+        self.dapp_landing = None;
+        // A new request opens closed: the last one's decision to look at the
+        // bytes is not this one's.
+        self.signing_advanced_open = false;
+        crate::signing::components::reset_slide();
         // The same question, once, for a request the core answered before
         // any observation fires — a refusal on arrival.
         self.signing_host_changed(&host, tab.as_deref(), cx);
@@ -11242,6 +13182,19 @@ impl WalletPage {
     ) {
         let answers = host.update(cx, |host, _| host.take_answers());
         let closed = host.read(cx).closed;
+        // The transaction was handed to the tracker: it is landing HERE (the
+        // web's `watchLanding`). Raised once per operation.
+        if self.signing_host.as_ref() == Some(host)
+            && let Some(handoff) = host.read(cx).view.tracker_handoff.clone()
+            && self.dapp_landed_op.as_deref() != Some(handoff.user_op_hash.as_str())
+        {
+            self.dapp_landed_op = Some(handoff.user_op_hash.clone());
+            self.dapp_landing = Some(DappLanding {
+                op_hash: handoff.user_op_hash,
+                chain_id: handoff.chain_id,
+                raised_at_ms: crate::executor::now_ms(),
+            });
+        }
         // WHETHER there is a column is the core's answer, not this file's —
         // and only for the column on screen: a column already replaced (its
         // request over) must not close the one that took its place.
@@ -11251,7 +13204,9 @@ impl WalletPage {
                 // machines — a decoded intent must never outlive the request
                 // it decoded.
                 self.signing_host = None;
-                if self.panel == PanelId::Signing {
+                // …unless its transaction is landing: the column stays for
+                // the receipt until the person is done with it.
+                if self.panel == PanelId::Signing && self.dapp_landing.is_none() {
                     self.panel = PanelId::None;
                 }
             } else {
@@ -11263,23 +13218,87 @@ impl WalletPage {
                 self.answer_dapp_signing(tab, answer.id, answer.payload, answer.user_op_hash, cx);
             }
         }
-        // A new request opens closed: the last one's decision to look at the
-        // bytes is not this one's.
-        self.signing_host = Some(host.clone());
-        self.panel = PanelId::Signing;
+        // Nothing after this may reopen the column. A merge (145de4f7) left
+        // `signing_host = Some(host); panel = Signing` here — the old ending
+        // of `open_signing_request` — which put back the host the branch
+        // above had just dropped: every Close (the Ethereum backup's first)
+        // reopened the column it closed.
         cx.notify();
     }
 
     /// DE1/DE2's start page.
-    fn explore_start(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
-        let mut column = div()
-            .id("explore-start")
-            .flex_1()
-            .min_h(px(0.))
-            .overflow_y_scroll()
-            .p(px(32.))
+    /// The web's `ExploreEmpty`: the 56 mark, the title at 20 bold, the
+    /// caption, and a 52-high outline pill. The web's pill flips its gallery
+    /// to a demo page; there is no curated list to browse here, so it does
+    /// what the caption asks first — puts the cursor in the address bar.
+    fn explore_empty(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        let e = &self.explore;
+        div()
             .flex()
-            .flex_col();
+            .flex_col()
+            .items_center()
+            .gap(px(12.))
+            .py(px(48.))
+            .text_center()
+            // The web's BrandMark 56 is the artwork's TIGHT size; this mark
+            // draws it inside a 420/260 box (`ui::logo`), so a 90 box is a 56
+            // sail, and the box's extra air comes off so the gaps stay the
+            // web's.
+            .child(
+                div()
+                    .my(px(-17.))
+                    .child(crate::ui::vela_mark(theme, px(90.))),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .child(e.start_title.clone()),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_body())
+                    .text_color(theme.fg_muted)
+                    .child(e.start_hint.clone()),
+            )
+            .child(
+                div()
+                    .id("explore-start-cta")
+                    .mt(px(12.))
+                    .h(px(52.))
+                    .px(px(32.))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(theme.border_strong)
+                    .flex()
+                    .items_center()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(e.start_cta.clone())
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.edit_address(window, cx);
+                    })),
+            )
+    }
+
+    fn explore_start(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
+        let mut column = self.explore_scroll.wire(
+            // The web's `.start` (078 E-05): padded 32 and capped at 800 —
+            // a start page stretched across a wide window put "Edit" a
+            // screen away from the tiles it edits.
+            div()
+                .id("explore-start")
+                .flex_1()
+                .min_h(px(0.))
+                .max_w(px(800.))
+                .p(px(32.))
+                .flex()
+                .flex_col(),
+            cx.entity_id(),
+        );
 
         // The person's own grid once they are signed in; the drawn one before
         // that, which is what the gallery reviews. Same fork as Recent.
@@ -11294,6 +13313,20 @@ impl WalletPage {
         } else {
             explore_fixtures::favorites()
         };
+        // Nothing pinned, nothing visited, no groups: the web's start page
+        // (078 E-01) — the mark, what this is for, and a way to begin —
+        // instead of a lone "Favorites" over an add tile and nothing else.
+        if live_grid
+            && favorites.is_empty()
+            && explore_live::custom_groups(&explore_view).is_empty()
+            && resident::resident::<BrowserHistory>(cx)
+                .read(cx)
+                .view()
+                .entries
+                .is_empty()
+        {
+            return column.child(self.explore_empty(theme, cx));
+        }
         // What each tile opens and what its menu acts on — the ORIGIN, which
         // is the site's identity, kept beside the row so a click and a
         // right-click cannot disagree about which site they mean.
@@ -11312,14 +13345,37 @@ impl WalletPage {
                 })
                 .collect()
         };
-        column = column.child(section_header(
+        // The heading's Edit opens "Manage groups" (078 W-11) — live only; the
+        // drawn page has no machine behind it. A HIDDEN Favorites keeps this
+        // heading and loses its tiles: the sheet that brings it back is
+        // reached from here, and hiding the one way back would strand it.
+        let (title_half, edit_half) = section_header_parts(
             theme,
             &mut self.icons,
             self.explore.favorites.clone(),
             self.explore.edit.clone(),
-        ));
+        );
+        let edit_half = if live_grid {
+            edit_half
+                .id("explore-favorites-edit")
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.explore_groups = true;
+                    cx.notify();
+                }))
+                .into_any_element()
+        } else {
+            edit_half.into_any_element()
+        };
+        column = column.child(section_header_row().child(title_half).child(edit_half));
 
-        let mut grid = div().flex().flex_wrap().gap(px(12.)).py(px(12.));
+        // The web's 8-up grid (078 E-05): 8 across, 20 down.
+        let mut grid = div()
+            .flex()
+            .flex_wrap()
+            .gap_x(px(8.))
+            .gap_y(px(20.))
+            .py(px(12.));
         for (i, site) in favorites.iter().enumerate() {
             grid = grid.child(
                 explore_components::site_tile(ElementId::from(("tile", i)), theme, site)
@@ -11371,7 +13427,9 @@ impl WalletPage {
                 })),
             );
         }
-        column = column.child(grid);
+        if !(live_grid && explore_view.favorites_hidden) {
+            column = column.child(grid);
+        }
 
         // Recent is the core's; everything below it is still drawn, because
         // nothing in `vela-core` owns favourites or custom groups yet. The
@@ -11379,7 +13437,9 @@ impl WalletPage {
         // shown beside it — two "Recent" headings, one of them invented, is
         // the fixture leaking that phases 22, 26 and 27 each had to close.
         let history = resident::resident::<BrowserHistory>(cx).read(cx).view();
-        let live_recent = explore_live::recent_group(&history.entries, &self.explore);
+        // A hidden Recent draws nothing (078 W-11); it comes back from the sheet.
+        let live_recent = explore_live::recent_group(&history.entries, &self.explore)
+            .filter(|_| !(live_grid && explore_view.recent_hidden));
         // …and so are the person's own groups. The drawn ones (交易 / 预测市场)
         // are mock CONTENT, not chrome: they go the moment there is a real
         // book to show, exactly as the drawn Recent does.
@@ -11394,7 +13454,7 @@ impl WalletPage {
             .filter(|group| !(live_grid && group.id != "recent"))
             .chain(live_groups)
             .collect::<Vec<_>>();
-        for group in live_recent.into_iter().chain(groups) {
+        for (group_index, group) in live_recent.into_iter().chain(groups).enumerate() {
             let action = match group.action {
                 explore_fixtures::GroupAction::Clear => self.explore.clear.clone(),
                 explore_fixtures::GroupAction::Edit => self.explore.edit.clone(),
@@ -11418,15 +13478,34 @@ impl WalletPage {
                         cx.notify();
                     }))
                     .into_any_element()
+            } else if live_grid && matches!(group.action, GroupAction::Menu) {
+                // A live group's ⋯ is "Manage groups" (078 W-11), as the web's
+                // header action is. A drawn group's stays inert.
+                action_half
+                    .id(("explore-group-menu", group_index))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.explore_groups = true;
+                        cx.notify();
+                    }))
+                    .into_any_element()
             } else {
                 action_half.into_any_element()
             };
             column = column.child(section_header_row().child(title_half).child(action_half));
-            let mut rows = div().flex().flex_col();
+            // Two to a line, 32 apart, as the web's `.rows` (078 E-05).
+            let mut cells: Vec<gpui::AnyElement> = Vec::new();
             for (i, site) in group.sites.iter().enumerate() {
-                rows = rows.child(
+                cells.push(
                     explore_components::site_row(
-                        ElementId::from((group.id, i)),
+                        // By the group's place on the page, not its kind: every
+                        // custom group is "custom", and row 0 of each one
+                        // shared an id — gpui then treats them as one element
+                        // (078 E-02).
+                        ElementId::NamedInteger(
+                            SharedString::from(format!("explore-group-{group_index}")),
+                            i as u64,
+                        ),
                         theme,
                         &mut self.identicons,
                         site,
@@ -11447,27 +13526,36 @@ impl WalletPage {
                         })
                     })
                     .on_click({
-                        // Where the person left off, verbatim — that is what
-                        // the core stores the whole URL for. A row that opened
-                        // the origin instead would send somebody back to a
-                        // front page they had already navigated away from.
-                        let url = site.host.to_string();
+                        // The row's OWN site (078 E-02). A Recent row opens
+                        // where the person left off, verbatim — that is what
+                        // the core stores the whole URL for; a custom group's
+                        // row opens the url its site was pinned at. It used to
+                        // look every row up in the HISTORY by host, and a
+                        // pinned site nobody had visited yet found nothing —
+                        // yet the column still switched to the browser, onto
+                        // whatever page was loaded last.
+                        let url = site.open_url();
                         cx.listener(move |this, _, _, cx| {
-                            if let Some(entry) = resident::resident::<BrowserHistory>(cx)
-                                .read(cx)
-                                .view()
-                                .entries
-                                .iter()
-                                .find(|entry| entry.host == url)
-                            {
-                                this.browser_home = entry.url.clone();
-                                #[cfg(not(target_os = "linux"))]
-                                crate::webview::navigate(&entry.url);
-                            }
+                            this.browser_home = url.clone();
+                            #[cfg(not(target_os = "linux"))]
+                            crate::webview::navigate(&url);
                             this.browsing = true;
                             cx.notify();
                         })
-                    }),
+                    })
+                    .into_any_element(),
+                );
+            }
+            let mut rows = div().flex().flex_col();
+            let mut cells = cells.into_iter();
+            while let Some(left) = cells.next() {
+                let right = cells.next();
+                rows = rows.child(
+                    div()
+                        .flex()
+                        .gap(px(32.))
+                        .child(div().flex_1().min_w(px(0.)).child(left))
+                        .child(div().flex_1().min_w(px(0.)).children(right)),
                 );
             }
             column = column.child(rows);
@@ -11828,54 +13916,86 @@ impl WalletPage {
     /// The request, as text. Empty when there is no live request — the drawn
     /// boards have no payload of their own, and inventing one would put bytes
     /// on screen that nobody is being asked to sign.
-    fn signing_raw_rows(&self, cx: &mut Context<Self>) -> Vec<(SharedString, SharedString)> {
+    /// The technical details (078 G-05), the web's `techModel` with the
+    /// desktop's fuller raw layers: the contract's name for the collapsed
+    /// row, WHO is being called — name, address, where to look it up — and
+    /// the request itself, method and, for a transaction, each call's
+    /// destination and calldata; for a message or typed data, the payload.
+    fn signing_tech(&self, cx: &mut Context<Self>) -> Option<SigningTech> {
         // Linux has no in-app browser, so no dApp request ever reaches this
-        // shell there and `signing_host` does not exist — the same cut
-        // `connection_body` makes a few hundred lines down.
+        // shell there and `signing_host` does not exist.
         #[cfg(target_os = "linux")]
         {
             let _ = cx;
-            return Vec::new();
+            None
         }
         #[cfg(not(target_os = "linux"))]
         {
-            let Some(host) = self.signing_host.as_ref() else {
-                return Vec::new();
-            };
-            let host = host.read(cx);
+            let host = self.signing_host.as_ref()?.read(cx);
             let (method, params) = host.raw.clone();
+            let result = host.clear_view.result.as_ref();
+            let summary = result
+                .and_then(|result| result.contract_name.clone())
+                .map(SharedString::from);
+            let party = result.and_then(|result| {
+                let address = result.contract_address.clone()?;
+                let name = result
+                    .contract_name
+                    .clone()
+                    .unwrap_or_else(|| crate::wallet::live::shorten_address(&address));
+                let explorer = crate::executor::custom_tokens::explorer_base(host.chain_id)
+                    .map(|base| format!("{}/address/{address}", base.trim_end_matches('/')));
+                Some((
+                    SharedString::from(name),
+                    SharedString::from(address),
+                    explorer,
+                ))
+            });
             let mut rows = vec![(
                 self.signing.tech_function.clone(),
                 SharedString::from(method.clone()),
+                false,
             )];
             match crate::executor::sign_request::calls_of(&method, &params) {
-                // A transaction: each leg's destination and its calldata, which is
-                // what a person compares against the summary above.
                 Some(calls) => {
+                    let single = calls.len() == 1;
                     for (i, call) in calls.iter().enumerate() {
-                        let label = if calls.len() > 1 {
-                            SharedString::from(format!(
-                                "{} {}",
-                                self.signing.label_interacting,
-                                i + 1
-                            ))
-                        } else {
-                            self.signing.label_interacting.clone()
-                        };
-                        rows.push((label, SharedString::from(call.to.clone())));
+                        // One call to the party already named above is said
+                        // once, not twice.
+                        let named = single
+                            && party.as_ref().is_some_and(|(_, address, _)| {
+                                address.eq_ignore_ascii_case(&call.to)
+                            });
+                        if !named {
+                            let label = if single {
+                                self.signing.label_interacting.clone()
+                            } else {
+                                SharedString::from(format!(
+                                    "{} {}",
+                                    self.signing.label_interacting,
+                                    i + 1
+                                ))
+                            };
+                            rows.push((label, SharedString::from(call.to.clone()), false));
+                        }
                         rows.push((
                             self.signing.tech_raw_data.clone(),
                             SharedString::from(call.data.clone()),
+                            true,
                         ));
                     }
                 }
-                // A message or typed data: the payload itself.
                 None => rows.push((
                     self.signing.tech_raw_data.clone(),
                     SharedString::from(params),
+                    true,
                 )),
             }
-            rows
+            Some(SigningTech {
+                summary,
+                party,
+                rows,
+            })
         }
     }
 
@@ -11899,6 +14019,21 @@ impl WalletPage {
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
             let fee = host.fee_view();
+            // WHO signs, as the core has it — the account the site was shown
+            // (078 W-07). The mock's own wallet stood here, so every sheet
+            // named "大表哥" whichever wallet was about to sign.
+            if let Some(address) = host
+                .view
+                .request
+                .as_ref()
+                .and_then(|request| request.signer_address.clone())
+            {
+                model.signer_name = money::account_by_address(&address).map_or_else(
+                    || crate::wallet::live::shorten_address(&address).into(),
+                    |account| account.name.into(),
+                );
+                model.signer_seed = address.into();
+            }
             // The gas account cannot pay: the sheet SWAPS to the top-up and
             // shows nothing else. Not stacked, not appended — the core calls
             // this surface "the in-sheet funding swap (BUG-1: never a stacked
@@ -11932,7 +14067,13 @@ impl WalletPage {
                 // header for every surface the live builder had nothing for —
                 // which was four of the core's six, resolution included. A drawn
                 // swap under a true header is the worst thing this column can say.
-                model.blocks = signing_live::blocks(&host.clear_view, &host.facts, &self.signing);
+                // …reading the cap the person chose, not the request's
+                // "Unlimited", once there is one.
+                let clear = signing_live::capped_approval(
+                    &signing_live::localized_terms(&host.clear_view, &self.signing),
+                    &host.guard_view,
+                );
+                model.blocks = signing_live::blocks(&clear, &host.facts, &self.signing);
                 // What the chain says it would MOVE, under what the site says
                 // it would do. Last, because it is the answer to everything
                 // above it — and the one part of this sheet a site cannot
@@ -11949,13 +14090,25 @@ impl WalletPage {
                 // The cap editor, from the guard. Placed before the pipeline's
                 // status so the decision comes above what the wallet is doing
                 // about it — and drawn at all only on the surface the core calls
-                // the editor, never over a permit (which cannot be capped) or a
-                // batch (whose per-leg editors are still owed).
+                // the editor, never over a permit (which cannot be capped); a
+                // batch's cards are its legs' own, below.
                 if let Some((editor, _)) =
                     signing_live::guard_editor(&host.guard_view, &self.signing)
                 {
                     model.blocks.push(editor);
                 }
+                // …a batch's own, one card per leg the core mounts an editor
+                // for, each with its spender under it…
+                for leg in signing_live::guard_leg_editors(&host.guard_view, &self.signing) {
+                    model.blocks.push(leg.block);
+                    model.blocks.extend(leg.spender);
+                }
+                // …and, when it will go out unlimited as the site asked, the
+                // sentence that says so.
+                model.blocks.extend(signing_live::guard_warnings(
+                    &host.guard_view,
+                    &self.signing,
+                ));
                 model
                     .blocks
                     .extend(signing_live::status_blocks(&host.view, &self.signing));
@@ -12098,35 +14251,56 @@ impl WalletPage {
             .gap(px(16.))
             .child(signing_components::header(theme, &model));
 
-        // What is typed in the cap field, from the core. Read before the
-        // block loop borrows `self`.
+        // The allowance cards that are controls, in the order the blocks list
+        // them: the single approval's, then each batch leg's. Each carries its
+        // own chips' modes, the leg its events belong to (`None` = the single
+        // approval) and what is typed in its cap field, from the core — read
+        // before the block loop borrows `self`. The mock gets none and draws
+        // exactly what the gallery has always drawn.
         #[cfg(not(target_os = "linux"))]
-        let cap_text: String = self
+        let controls: Vec<AllowanceControl> = self
             .signing_host
             .as_ref()
-            .and_then(|host| host.read(cx).guard_view.editor.clone())
-            .map(|editor| editor.custom_text)
+            .map(|host| {
+                let guard = &host.read(cx).guard_view;
+                let single = signing_live::guard_editor(guard, &self.signing).map(|(_, modes)| {
+                    AllowanceControl {
+                        modes,
+                        leg: None,
+                        custom_text: guard
+                            .editor
+                            .as_ref()
+                            .map(|e| e.custom_text.clone())
+                            .unwrap_or_default(),
+                    }
+                });
+                single
+                    .into_iter()
+                    .chain(
+                        signing_live::guard_leg_editors(guard, &self.signing)
+                            .into_iter()
+                            .map(|leg| AllowanceControl {
+                                modes: leg.modes,
+                                leg: Some(leg.leg),
+                                custom_text: leg.custom_text,
+                            }),
+                    )
+                    .collect()
+            })
             .unwrap_or_default();
         #[cfg(target_os = "linux")]
-        let cap_text = String::new();
-
-        // The allowance chips are a control when a machine is behind them.
-        // One dispatch per chip, in the order the block lists them; the mock
-        // gets none and draws exactly what the gallery has always drawn.
-        #[cfg(not(target_os = "linux"))]
-        let chip_modes: Vec<vela_core::app::approval_guard::GuardEditorMode> = self
-            .signing_host
-            .as_ref()
-            .and_then(|host| signing_live::guard_editor(&host.read(cx).guard_view, &self.signing))
-            .map(|(_, modes)| modes)
-            .unwrap_or_default();
-        #[cfg(target_os = "linux")]
-        let chip_modes: Vec<vela_core::app::approval_guard::GuardEditorMode> = Vec::new();
+        let controls: Vec<AllowanceControl> = Vec::new();
+        let mut controls = controls.into_iter();
 
         for item in &model.blocks {
-            let armed =
-                matches!(item, signing_fixtures::Block::Allowance { .. }) && !chip_modes.is_empty();
-            if armed {
+            let control = matches!(item, signing_fixtures::Block::Allowance { .. })
+                .then(|| controls.next())
+                .flatten()
+                .filter(|control| !control.modes.is_empty());
+            if let Some(control) = control {
+                let leg = control.leg;
+                let cap_text = control.custom_text;
+                let chip_modes = control.modes;
                 // The cap field, live: the value is the CORE's `custom_text`,
                 // so a keystroke it rejected never appears as though it had
                 // been taken, and every keystroke goes back to the machine
@@ -12148,8 +14322,16 @@ impl WalletPage {
                 .then(|| {
                     let host = self.signing_host.clone();
                     let previous = cap_text.clone();
+                    let focus = match leg {
+                        None => self.cap_focus.clone(),
+                        Some(index) => self
+                            .leg_cap_focus
+                            .entry(index)
+                            .or_insert_with(|| cx.focus_handle())
+                            .clone(),
+                    };
                     panels::AddressField {
-                        focus: self.cap_focus.clone(),
+                        focus,
                         value: cap_text.clone(),
                         placeholder: SharedString::from("0"),
                         on_change: Box::new(
@@ -12160,14 +14342,14 @@ impl WalletPage {
                                     return;
                                 };
                                 if let Some(host) = host.as_ref() {
-                                    host.update(cx, |host, cx| {
-                                        host.dispatch_guard(
-                                        vela_core::app::approval_guard::Event::CustomAmountChanged {
-                                            text,
-                                        },
-                                        cx,
-                                    );
-                                    });
+                                    // A batch leg's field talks to its OWN
+                                    // leg: the core ignores the single
+                                    // approval's event on a batch.
+                                    let event = match leg {
+                                        None => vela_core::app::approval_guard::Event::CustomAmountChanged { text },
+                                        Some(index) => vela_core::app::approval_guard::Event::LegCustomAmountChanged { index, text },
+                                    };
+                                    host.update(cx, |host, cx| host.dispatch_guard(event, cx));
                                 }
                             },
                         ),
@@ -12181,14 +14363,11 @@ impl WalletPage {
                             Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                                 #[cfg(not(target_os = "linux"))]
                                 if let Some(host) = page.signing_host.as_ref() {
-                                    host.update(cx, |host, cx| {
-                                        host.dispatch_guard(
-                                            vela_core::app::approval_guard::Event::PresetSelected {
-                                                mode,
-                                            },
-                                            cx,
-                                        );
-                                    });
+                                    let event = match leg {
+                                        None => vela_core::app::approval_guard::Event::PresetSelected { mode },
+                                        Some(index) => vela_core::app::approval_guard::Event::LegPresetSelected { index, mode },
+                                    };
+                                    host.update(cx, |host, cx| host.dispatch_guard(event, cx));
                                 }
                                 cx.notify();
                             })) as crate::flows::panels::Click,
@@ -12214,21 +14393,32 @@ impl WalletPage {
         // second decoding of it: the method, and for a transaction each call's
         // destination and calldata; for a message or typed data, the payload.
         // A person checking a summary against the bytes needs the bytes.
-        let open = self.signing_advanced_open;
-        let raw_rows = self.signing_raw_rows(cx);
-        column = column.child(row_divider(theme)).child(
-            div()
+        let open = self.signing_advanced_open && !refused;
+        // A refused request shows no bytes (the web's `live.ts` hides the
+        // request data when blocked): they describe a transaction that will
+        // never be signed, and reading them only invites "so why can't I?".
+        let tech = if refused { None } else { self.signing_tech(cx) };
+        if let Some(tech) = tech {
+            // The web's `TechDetails`: the toggle says what it folds — "
+            // Advanced · <contract>" — and, open, the whole section is one
+            // sunken card: the party, then the raw layers in mono 13.
+            let title = match &tech.summary {
+                Some(summary) => {
+                    SharedString::from(format!("{} · {summary}", self.signing.advanced_toggle))
+                }
+                None => self.signing.advanced_toggle.clone(),
+            };
+            let toggle = div()
                 .id("signing-advanced")
-                .py(px(10.))
+                .py(px(12.))
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .when(!raw_rows.is_empty(), |el| {
-                    el.cursor_pointer().on_click(cx.listener(|this, _, _, cx| {
-                        this.signing_advanced_open = !this.signing_advanced_open;
-                        cx.notify();
-                    }))
-                })
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.signing_advanced_open = !this.signing_advanced_open;
+                    cx.notify();
+                }))
                 .child(icon_img(
                     &mut self.icons,
                     if open {
@@ -12238,23 +14428,100 @@ impl WalletPage {
                     },
                     false,
                     theme.fg_muted,
-                    12.,
+                    14.,
                 ))
                 .child(
                     div()
-                        .text_size(theme::text_row_sub())
+                        .flex_1()
+                        .min_w(px(0.))
+                        .text_size(theme::text_body())
                         .text_color(theme.fg_muted)
-                        .child(self.signing.advanced_toggle.clone()),
-                ),
-        );
-        if open {
-            for (label, value) in raw_rows {
-                column = column.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.))
-                        .pb(px(10.))
+                        .child(title),
+                );
+            let mut section = div().flex().flex_col().child(toggle);
+            if open {
+                section = section.px(px(16.)).rounded(px(16.)).bg(theme.bg_sunken);
+                let mut panel = div().flex().flex_col().gap(px(8.)).pb(px(12.));
+                if let Some((name, address, explorer)) = tech.party.clone() {
+                    let copy_address = address.to_string();
+                    let mut tools = div().flex().items_center().gap(px(8.)).child(
+                        div()
+                            .id("signing-tech-copy")
+                            .cursor_pointer()
+                            .child(icon_img(
+                                &mut self.icons,
+                                Icon::Copy,
+                                false,
+                                theme.fg_muted,
+                                14.,
+                            ))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.copy_text(
+                                    SIGNING_TECH_COPY,
+                                    copy_address.clone(),
+                                    CONTACTS_COPY_HOLD,
+                                    cx,
+                                );
+                            })),
+                    );
+                    if let Some(url) = explorer {
+                        tools = tools.child(
+                            div()
+                                .id("signing-tech-explorer")
+                                .cursor_pointer()
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::ExternalLink,
+                                    false,
+                                    theme.fg_muted,
+                                    14.,
+                                ))
+                                .on_click(move |_, _, cx| cx.open_url(&url)),
+                        );
+                    }
+                    let copied = self.copied.as_deref() == Some(SIGNING_TECH_COPY);
+                    panel = panel.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .py(px(8.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.))
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(2.))
+                                    .child(
+                                        div()
+                                            .text_size(theme::text_label())
+                                            .text_color(theme.fg_subtle)
+                                            .child(SharedString::from(format!(
+                                                "{} · {name}",
+                                                self.signing.label_interacting
+                                            ))),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_family(theme::font_mono())
+                                            .text_size(theme::text_body())
+                                            .text_color(theme.fg_base)
+                                            .child(address),
+                                    ),
+                            )
+                            .child(if copied {
+                                div()
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.success)
+                                    .child(self.contacts.copied.clone())
+                            } else {
+                                tools
+                            }),
+                    );
+                }
+                for (label, value, raw) in tech.rows {
+                    panel = panel
                         .child(
                             div()
                                 .text_size(theme::text_label())
@@ -12264,12 +14531,15 @@ impl WalletPage {
                         .child(
                             div()
                                 .font_family(theme::font_mono())
-                                .text_size(theme::text_label())
-                                .text_color(theme.fg_base)
+                                .text_size(theme::text_body())
+                                .line_height(theme::text_body() * 1.7)
+                                .text_color(if raw { theme.fg_muted } else { theme.fg_base })
                                 .child(value),
-                        ),
-                );
+                        );
+                }
+                section = section.child(panel);
             }
+            column = column.child(row_divider(theme)).child(section);
         }
         let (on_fee, on_fee_pick) = self.fee_actions(cx);
         if let Some(fee) =
@@ -12319,7 +14589,6 @@ impl WalletPage {
                 model.signer_name.clone(),
                 &model.signer_seed,
             ))
-            .children(self.sign_with_row(theme, cx))
             .children((!model.confirm_label.is_empty()).then(|| {
                 signing_components::slide_to_confirm(
                     theme,
@@ -12329,133 +14598,34 @@ impl WalletPage {
                     confirm_action,
                 )
             }));
-        column
-    }
-
-    /// "Sign with · Automatic ⌄" — WHERE the passkey that signs this request
-    /// is (founder, 2026-09-19: creating and signing in let a person choose;
-    /// signing took the first key's stored route), or the Trusted Signer's page
-    /// (spec 071). Per request — the host lives for one, and starts at the
-    /// default Settings keeps. Which key the choice pins is the core's
-    /// (`sign_route`). Opens in place: a dialog over the signing column is a
-    /// modal under a modal.
-    #[cfg(not(target_os = "linux"))]
-    fn sign_with_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
-        let (method, open) = {
-            let host = self.signing_host.as_ref()?.read(cx);
-            (host.sign_method.clone(), host.sign_with_open)
-        };
-        let options = self.signing.sign_with_options.clone();
-        let value = options
-            .iter()
-            .find(|(id, _)| *id == method)
-            .map_or_else(|| options[0].1.clone(), |(_, title)| title.clone());
-        fn pick(
-            id: Option<&'static str>,
-            cx: &mut Context<WalletPage>,
-        ) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static {
-            cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
-                if let Some(host) = page.signing_host.clone() {
-                    host.update(cx, |host, cx| {
-                        host.sign_with(id, cx);
-                        cx.notify();
-                    });
-                }
-                cx.notify();
-            })
-        }
-        let mut block = div().flex().flex_col().gap(px(8.)).child(
-            div()
-                .id("signing-sign-with")
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .cursor_pointer()
-                .on_click(pick(None, cx))
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(self.signing.sign_with.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_base)
-                        .child(value),
-                )
-                .child(icon_img(
-                    &mut self.icons,
-                    if open {
-                        Icon::ChevronUp
-                    } else {
-                        Icon::ChevronDown
-                    },
-                    false,
-                    theme.fg_muted,
-                    14.,
-                )),
-        );
-        if open {
-            let mut list = div()
-                .flex()
-                .flex_col()
-                .p(px(4.))
-                .rounded(px(12.))
-                .bg(theme.bg_sunken);
-            for (index, (id, title)) in options.into_iter().enumerate() {
-                let selected = id == method;
-                let mut words = div().flex_1().flex().flex_col().gap(px(2.)).child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(if selected {
-                            theme.fg_base
-                        } else {
-                            theme.fg_muted
-                        })
-                        .child(title),
-                );
-                // The one choice that is not a place a passkey is says what
-                // it is — the create flow's lines only describe making a key.
-                if id == vela_core::trusted_signer::METHOD {
-                    words = words.child(
-                        div()
-                            .text_size(theme::text_label())
-                            .text_color(theme.fg_subtle)
-                            .child(self.signing.trusted_signer_body.clone()),
-                    );
-                }
-                let mut option = div()
-                    .id(("signing-sign-with-option", index))
-                    .flex()
-                    .items_center()
-                    .px(px(16.))
-                    .py(px(10.))
-                    .rounded(px(8.))
+        // A refused request's one way out (the web's `dismissOnly`): Close,
+        // full width, the same dismissal as the ✕. It had none — the confirm
+        // is absent, rightly, and nothing stood in its place.
+        if refused {
+            column = column.child(
+                div()
+                    .id("signing-refused-close")
                     .cursor_pointer()
-                    .hover(|el| el.bg(theme.bg_raised))
-                    .on_click(pick(Some(id), cx))
-                    .child(words);
-                if selected {
-                    option = option.child(icon_img(
-                        &mut self.icons,
-                        Icon::Check,
-                        false,
-                        theme.accent,
-                        14.,
-                    ));
-                }
-                list = list.child(option);
-            }
-            block = block.child(list);
+                    .child(crate::flows::components::ghost_button(
+                        theme,
+                        self.signing.close.clone(),
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        #[cfg(not(target_os = "linux"))]
+                        if let Some(host) = this.signing_host.clone() {
+                            host.update(cx, |host, cx| {
+                                host.dispatch_sign(
+                                    vela_core::app::sign_request::Event::SwipeDismissed,
+                                    cx,
+                                );
+                            });
+                        }
+                        this.panel = PanelId::None;
+                        cx.notify();
+                    })),
+            );
         }
-        Some(block)
-    }
-
-    #[cfg(target_os = "linux")]
-    fn sign_with_row(&mut self, _theme: &Theme, _cx: &mut Context<Self>) -> Option<Div> {
-        None
+        column
     }
 
     /// The fee row's tap, and one listener per fee coin in the relay's order
@@ -12513,14 +14683,56 @@ impl WalletPage {
             .min_h(px(0.))
             .flex()
             .child(self.sidebar(theme, cx));
+        // The backup row's answer is about the visit it was asked on: leaving
+        // the Account page forgets it, so coming back asks the chain again, as
+        // the web's page does each time it meets an account (078 S-02).
+        if !(self.section == Section::Settings && self.settings_page == SettingsPage::Account) {
+            self.backup_for = None;
+        }
         columns = match self.section {
             Section::Wallet => columns.child(self.content(theme, cx)),
-            Section::Contacts => columns.child(self.contacts_content(theme, caption, cx)),
+            Section::Contacts => columns.child(self.contacts_content(theme, caption, window, cx)),
             Section::Explore => columns.child(self.explore_content(theme, cx)),
             Section::Settings => columns
-                .child(self.settings_nav(theme, cx))
+                .child(self.settings_nav(theme, window, cx))
                 .child(self.settings_panel(theme, window, cx)),
         };
+        // The contact form takes the third column over whatever it was about
+        // (078 C-05); closing it gives the column back.
+        let form = if self.section == Section::Contacts {
+            self.contact_form_body(theme, window, cx)
+        } else {
+            None
+        };
+        if let Some((title, editing, body)) = form {
+            // An edit came from a detail it can step back to; an add has
+            // nothing behind it but the close.
+            let back = editing.then(|| {
+                div()
+                    .id("contact-form-back")
+                    .w(px(28.))
+                    .h(px(28.))
+                    .rounded(px(14.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(|el| el.bg(theme.bg_sunken))
+                    .child(crate::wallet::components::icon_img(
+                        &mut self.icons,
+                        Icon::ChevronLeft,
+                        false,
+                        theme.fg_muted,
+                        16.,
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.contact_form = None;
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            });
+            return columns.child(self.panel_scaffold_with(theme, title, back, false, body, cx));
+        }
         columns = match self.panel {
             PanelId::None => columns,
             PanelId::Receive => {
@@ -12544,8 +14756,16 @@ impl WalletPage {
                 let title = self.explore.connection_title.clone();
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
+            PanelId::Signing if self.dapp_landing.is_some() && self.no_signing_host() => {
+                let body = self.dapp_receipt_body(theme, window, cx);
+                let title = self.signing.panel_title.clone();
+                columns.child(self.panel_scaffold(theme, title, body, cx))
+            }
             PanelId::Signing => {
-                let body = self.signing_body(theme, window, cx);
+                // The web body's 1.4 (078 G-06), as the flow column's.
+                let body = self
+                    .signing_body(theme, window, cx)
+                    .line_height(gpui::relative(crate::wallet::components::LINE_BODY));
                 let title = self.signing.panel_title.clone();
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
@@ -12575,6 +14795,15 @@ impl WalletPage {
                     // wallet holding ETH and xDAI. The web's rule, same
                     // reason (`flows/live-send.ts`).
                     let title = match (&send, panel) {
+                        // A sweep is several coins: "Send tokens", never the
+                        // first pick's "Send ETH" (the web's `multiSendTitle`).
+                        (Some(_), FlowPanel::Dsd1 | FlowPanel::Dsd2 | FlowPanel::Dsd2b)
+                            if self
+                                .send_views(cx)
+                                .is_some_and(|(view, _)| view.multi_select_mode) =>
+                        {
+                            self.flow_strings.multi_send_title.clone()
+                        }
                         (Some(_), FlowPanel::Dsd2 | FlowPanel::Dsd2b) => self
                             .send_views(cx)
                             .and_then(|(view, _)| view.selected_token)
@@ -12600,7 +14829,7 @@ impl WalletPage {
                     };
                     let focus = self.add_token_focus.clone();
                     let placeholder = self.flow_strings.token_address_label.clone();
-                    let actions = Self::flow_actions(
+                    let mut actions = Self::flow_actions(
                         panel,
                         self.identity.is_some(),
                         tx_ids,
@@ -12610,7 +14839,15 @@ impl WalletPage {
                         send,
                         cx,
                     );
-                    let rendered = panels::render(
+                    actions.search = Some(self.flow_search_field(panel, cx));
+                    if panel == FlowPanel::Dt3 && self.identity.is_some() {
+                        self.bind_add_token_tabs(&mut actions, cx);
+                    }
+                    if panel == FlowPanel::Dsd4 {
+                        self.tick_receipt(cx);
+                    }
+                    actions.copy = Some(self.flow_copy_action(cx));
+                    let (rendered, foot) = panels::render_parts(
                         &body,
                         theme,
                         &mut self.icons,
@@ -12622,11 +14859,507 @@ impl WalletPage {
                     // level deep: closing the whole column is not the same
                     // gesture as stepping back one.
                     let back = (self.flows.len() > 1).then(|| self.flow_strings.back.clone());
-                    columns.child(self.flow_scaffold(theme, title, back, rendered, cx))
+                    // The web body's 1.4 under everything the panel does not
+                    // set itself (078 F-11): gpui's ~1.6 default made every
+                    // flow screen taller than the web's, row by row.
+                    let rendered =
+                        rendered.line_height(gpui::relative(crate::wallet::components::LINE_BODY));
+                    let foot = foot.map(|foot| {
+                        foot.line_height(gpui::relative(crate::wallet::components::LINE_BODY))
+                    });
+                    columns.child(self.flow_scaffold(theme, title, back, rendered, foot, cx))
                 }
             },
         };
         columns
+    }
+
+    /// The hero's status line, pressed (078 H-03) — the web's `openRescue`:
+    /// an unreachable chain opens ITS RPC editor, the first of them when
+    /// several are down; anything else opens the breakdown.
+    fn open_balance_status(&mut self, cx: &mut Context<Self>) {
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        match view.banner_chain_ids.first() {
+            Some(&chain_id) => {
+                self.settings_fix_chain = Some(chain_id);
+                self.settings_dialog = Some(SettingsDialog::FixRpc);
+            }
+            None => self.balance_detail_open = true,
+        }
+        cx.notify();
+    }
+
+    /// SR3, the balance by network (`settings/ui/BalanceDetailBody.svelte`)
+    /// in the desktop's dialog.
+    fn balance_detail_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.balance_detail_open || self.identity.is_none() {
+            return None;
+        }
+        let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
+        let money = self.money(cx);
+        let detail = wallet_live::balance_detail(&view, &self.strings, &self.locale, &money);
+        let s = &self.strings;
+        let section = |text: SharedString| {
+            div()
+                .mt(px(16.))
+                .mb(px(4.))
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_base)
+                .child(text)
+        };
+        let row = |line: &wallet_live::DetailChain, retry: Option<gpui::AnyElement>| {
+            let name = crate::executor::custom_tokens::network_name(line.chain_id);
+            let mut text = div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .flex_1()
+                .min_w(px(0.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(line.name.clone()),
+                );
+            if let Some((status, failed)) = &line.status {
+                text = text.child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(if *failed {
+                            theme.error_base
+                        } else {
+                            theme.fg_subtle
+                        })
+                        .child(status.clone()),
+                );
+            }
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .py(px(12.))
+                .border_b_1()
+                .border_color(theme.border_card)
+                .child(chain_logo_mark(
+                    u64::from(line.chain_id),
+                    crate::settings::model::lettermark(&name),
+                    crate::settings::model::chain_tint(u64::from(line.chain_id))
+                        .unwrap_or(0x8A_8F_98),
+                    32.,
+                ))
+                .child(text)
+                .children(line.amount.clone().map(|amount| {
+                    div()
+                        .text_size(theme::text_row_title())
+                        .text_color(theme.fg_base)
+                        .child(amount)
+                }))
+                .children(retry)
+        };
+
+        let mut body = div().flex().flex_col().child(
+            div()
+                .mb(px(16.))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(detail.summary.clone()),
+        );
+        body = body.child(section(s.detail_networks_label.clone())).child(
+            div()
+                .mb(px(8.))
+                .text_size(theme::text_label())
+                .line_height(gpui::relative(1.4))
+                .text_color(theme.fg_subtle)
+                .child(s.detail_networks_note.clone()),
+        );
+        for line in &detail.pending {
+            let retry = line.retry.then(|| {
+                let chain_id = line.chain_id;
+                div()
+                    .id(("balance-detail-retry", line.chain_id as usize))
+                    .flex_none()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.info_base)
+                    .child(s.detail_retry.clone())
+                    .on_click(cx.listener(move |_, _: &gpui::ClickEvent, _, cx| {
+                        // As the RPC editor's Done does: clear the chain's
+                        // failure and force one read — the core's own retry
+                        // is throttled like any other fetch.
+                        crate::executor::balance_dashboard::dispatch(
+                            vela_core::app::balance_dashboard::Event::FixChainResolved { chain_id },
+                            cx,
+                        );
+                        crate::executor::balance_dashboard::refresh(cx);
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            });
+            body = body.child(row(line, retry));
+        }
+        body = body.child(section(s.detail_updated.clone()));
+        for line in &detail.done {
+            body = body.child(row(line, None));
+        }
+        if !detail.unpriced.is_empty() {
+            body = body.child(section(s.balance_unpriced.clone()));
+            for line in &detail.unpriced {
+                body = body.child(row(line, None));
+            }
+        }
+        let title = s.detail_title.clone();
+        Some(
+            crate::ui::dialog::dialog(
+                "balance-detail",
+                theme,
+                window,
+                title,
+                None,
+                self.dialog_close_icon(theme),
+                body.pb(px(8.)),
+                &self.dialog_scroll("balance-detail"),
+                Self::closer(cx, |this, _| this.balance_detail_open = false),
+            )
+            .into_any_element(),
+        )
+    }
+
+    /// Copy `text`, and show that it was copied — under `key` — for `hold`
+    /// (078 X-06). The web's holds: a tick 150 ms, a key row's "Copied"
+    /// 1.2 s, the contacts toast 1.5 s.
+    fn copy_text(
+        &mut self,
+        key: impl Into<SharedString>,
+        text: String,
+        hold: std::time::Duration,
+        cx: &mut Context<Self>,
+    ) {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        self.copied = Some(key.into());
+        self.copied_press += 1;
+        let press = self.copied_press;
+        cx.notify();
+        cx.spawn(async move |page, cx| {
+            cx.background_executor().timer(hold).await;
+            let _ = page.update(cx, |this, cx| {
+                if this.copied_press == press {
+                    this.copied = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// The flow panels' copy buttons: a tick for 150 ms (`ReceiveList`,
+    /// `TxDetail` — long enough to register, short enough that three copies
+    /// in a row never leave two ticks standing).
+    fn flow_copy_action(&self, cx: &mut Context<Self>) -> panels::CopyAction {
+        let page = cx.entity().downgrade();
+        panels::CopyAction {
+            copied: self.copied.clone(),
+            on_copy: std::rc::Rc::new(move |key, text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    this.copy_text(
+                        key,
+                        text.to_string(),
+                        std::time::Duration::from_millis(150),
+                        cx,
+                    );
+                });
+            }),
+        }
+    }
+
+    /// The contacts route's "Copied" toast: centred 32 above the bottom, a
+    /// pill in the ink colour, while a contact's address is on the clipboard
+    /// from the list or the detail panel.
+    fn contacts_toast(&self, theme: &Theme) -> Option<Div> {
+        if self.section != Section::Contacts || self.copied.as_deref() != Some(CONTACTS_TOAST) {
+            return None;
+        }
+        Some(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .bottom(px(32.))
+                .flex()
+                .justify_center()
+                .child(
+                    div()
+                        .px(px(16.))
+                        .py(px(8.))
+                        .rounded_full()
+                        .bg(theme.fg_base)
+                        .text_color(theme.bg_base)
+                        .text_size(theme::text_label())
+                        .shadow(crate::ui::dialog::shadow_lg())
+                        .child(self.contacts.copied.clone()),
+                ),
+        )
+    }
+
+    /// Keep a submitted receipt counting: redraw once a second while the send
+    /// sits on its receipt with the relay holding the op — "~9s remaining" is
+    /// a number a person reads, and it has to change (the web's `setInterval`).
+    /// Stops by itself once the receipt settles or the panel goes.
+    fn tick_receipt(&mut self, cx: &mut Context<Self>) {
+        fn waiting(this: &WalletPage, cx: &gpui::App) -> bool {
+            this.flows.last() == Some(&FlowPanel::Dsd4)
+                && this.send_host.as_ref().is_some_and(|host| {
+                    host.read(cx).view.receipt.as_ref().is_some_and(|receipt| {
+                        receipt.status == vela_core::app::send::SendReceiptStatus::Submitted
+                    })
+                })
+        }
+        if self.receipt_ticking || !waiting(self, cx) {
+            return;
+        }
+        self.receipt_ticking = true;
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(1))
+                    .await;
+                let go_on = page
+                    .update(cx, |this, cx| {
+                        let go_on = waiting(this, cx);
+                        if go_on {
+                            cx.notify();
+                        } else {
+                            this.receipt_ticking = false;
+                        }
+                        go_on
+                    })
+                    .unwrap_or(false);
+                if !go_on {
+                    return;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// The landing receipt (the web's `DappReceipt` over `StatusHero`): where
+    /// a dApp transaction stands, read from the tracker the signing host
+    /// already handed it to — submitting until the tracker has it, submitted
+    /// with the ring, confirmed with its transaction hash and explorer, or
+    /// failed. Nothing here answers the request: the site was answered before
+    /// this was drawn, so Done closes a surface, never a conversation.
+    fn dapp_receipt_body(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
+        use crate::flows::fixtures::ReceiptStage;
+        use vela_core::app::tx_tracker::TrackStatus;
+        let Some(landing) = self.dapp_landing.clone() else {
+            return div();
+        };
+        let entry = resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
+            .read(cx)
+            .view()
+            .entries
+            .into_iter()
+            .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(&landing.op_hash));
+        let s = &self.signing;
+        // `Unreachable` is NOT a failure: the wallet could not ask, which is
+        // not the chain saying no, and a cross for it would be a verdict this
+        // wallet does not have.
+        let (stage, title, captions, hash, explorer) = match entry.as_ref() {
+            None => (
+                ReceiptStage::Submitting,
+                s.receipt_confirming.clone(),
+                vec![],
+                None,
+                None,
+            ),
+            Some(entry) => match (entry.status, entry.tx_hash.clone()) {
+                (TrackStatus::Confirmed, Some(tx)) => {
+                    let url = crate::executor::custom_tokens::explorer_base(landing.chain_id)
+                        .map(|base| SharedString::from(format!("{base}/tx/{tx}")));
+                    (
+                        ReceiptStage::Confirmed,
+                        s.receipt_confirmed.clone(),
+                        vec![],
+                        Some((s.receipt_tx_hash.clone(), tx)),
+                        url.map(|url| (s.receipt_explorer.clone(), url)),
+                    )
+                }
+                (TrackStatus::Dropped | TrackStatus::Rejected, _) => (
+                    ReceiptStage::Failed,
+                    s.receipt_failed.clone(),
+                    vec![s.receipt_failed_hint.clone()],
+                    Some((s.receipt_op_hash.clone(), landing.op_hash.clone())),
+                    None,
+                ),
+                _ => (
+                    ReceiptStage::Submitted,
+                    s.receipt_submitted.clone(),
+                    vec![s.receipt_confirming_hint.clone()],
+                    // The OPERATION hash: there is no transaction until it
+                    // lands, and labelling one as the other sends a person to
+                    // search an explorer for nothing.
+                    Some((s.receipt_op_hash.clone(), landing.op_hash.clone())),
+                    None,
+                ),
+            },
+        };
+        let progress = match stage {
+            ReceiptStage::Submitted => {
+                let since = entry
+                    .as_ref()
+                    .and_then(|entry| entry.submitted_at_ms)
+                    .unwrap_or(landing.raised_at_ms);
+                let elapsed = ((crate::executor::now_ms() - since) / 1000.).max(0.) as u64;
+                vela_core::app::network_admin::typical_inclusion_s(landing.chain_id)
+                    .and_then(|typical| flows_live::ring_progress(elapsed, u64::from(typical)))
+            }
+            ReceiptStage::Confirmed => Some(1.),
+            _ => None,
+        };
+        if stage == ReceiptStage::Submitted {
+            self.tick_landing(cx);
+        }
+
+        let hero = panels::status_hero(theme, &mut self.icons, stage, progress, &title, &captions);
+        // Centred in the column, as the web's `.receipt` (`min-height: 100%;
+        // justify-content: center`): the column's height less its header.
+        let mut body = div()
+            .min_h(px((f32::from(window.viewport_size().height) - 120.).max(0.)))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(8.))
+            .p(px(16.))
+            .child(hero);
+        if let Some((label, value)) = hash {
+            // A click copies the whole hash and answers with a tick for 1.5 s
+            // where the hash was (`DappReceipt`'s own affordance).
+            let copied = self.copied.as_deref() == Some("dapp-receipt-hash");
+            let short = if value.len() > 20 {
+                format!("{}…{}", &value[..10], &value[value.len() - 8..])
+            } else {
+                value.clone()
+            };
+            body = body.child(
+                div()
+                    .id("dapp-receipt-hash")
+                    .flex()
+                    .items_baseline()
+                    .gap(px(4.))
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .child(div().text_color(theme.fg_muted).child(label))
+                    .child(
+                        div()
+                            .font_family(theme::font_mono())
+                            .text_color(if copied {
+                                theme.success_base
+                            } else {
+                                theme.fg_base
+                            })
+                            .child(SharedString::from(if copied {
+                                "✓".to_owned()
+                            } else {
+                                short
+                            })),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.copy_text(
+                            "dapp-receipt-hash",
+                            value.clone(),
+                            std::time::Duration::from_millis(1500),
+                            cx,
+                        );
+                    })),
+            );
+        }
+        if let Some((label, url)) = explorer {
+            body = body.child(
+                div()
+                    .id("dapp-receipt-explorer")
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.accent)
+                    .child(label)
+                    .on_click(move |_, _, cx| cx.open_url(&url)),
+            );
+        }
+        body.child(
+            div().mt(px(8.)).w_full().child(
+                // `<Button variant="primary">` — the default pill shape.
+                crate::flows::components::accent_button(theme, self.signing.receipt_done.clone())
+                    .rounded_full()
+                    .id("dapp-receipt-done")
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.dapp_landing = None;
+                        if this.panel == PanelId::Signing && this.no_signing_host() {
+                            this.panel = PanelId::None;
+                        }
+                        cx.notify();
+                    })),
+            ),
+        )
+    }
+
+    /// Keep a landing receipt's ring moving: redraw once a second while it
+    /// waits (the web's `nowMs` tick). Stops by itself.
+    fn tick_landing(&mut self, cx: &mut Context<Self>) {
+        if self.receipt_ticking {
+            return;
+        }
+        self.receipt_ticking = true;
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(1))
+                    .await;
+                let go_on = page
+                    .update(cx, |this, cx| {
+                        let go_on = this.dapp_landing.is_some() && this.panel == PanelId::Signing;
+                        if go_on {
+                            cx.notify();
+                        } else {
+                            this.receipt_ticking = false;
+                        }
+                        go_on
+                    })
+                    .unwrap_or(false);
+                if !go_on {
+                    return;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// The query under the flow panel on top, as the field the panel draws.
+    fn flow_search_field(
+        &mut self,
+        panel: FlowPanel,
+        cx: &mut Context<Self>,
+    ) -> panels::AddressField {
+        if self.flow_query.0 != Some(panel) {
+            self.flow_query = (Some(panel), String::new());
+        }
+        let page = cx.entity().downgrade();
+        panels::AddressField {
+            focus: self.flow_query_focus.clone(),
+            value: self.flow_query.1.clone(),
+            placeholder: SharedString::default(),
+            on_change: Box::new(move |text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    this.flow_query.1 = text;
+                    cx.notify();
+                });
+            }),
+        }
     }
 
     /// The anchored menu overlay (DC5/DC6). Appended last in the page root and
@@ -12734,7 +15467,20 @@ impl WalletPage {
         let close: panels::Click = Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
             this.close_scanner(cx);
         }));
-        let card = panels::scan_modal(&model, theme, &mut self.icons, tools, Some(close), preview);
+        let notice = self.scan_notice_text();
+        let no_camera = self.scan_camera_failure.is_some();
+        let width = (f32::from(window.viewport_size().width) * 0.9).min(440.);
+        let card = panels::scan_modal(
+            &model,
+            theme,
+            &mut self.icons,
+            tools,
+            Some(close),
+            preview,
+            notice,
+            no_camera,
+            width,
+        );
         Some(
             div()
                 .id("scan-scrim")
@@ -12762,6 +15508,22 @@ impl WalletPage {
         )
     }
 
+    /// The sentence under the viewfinder when the hint is not true — the
+    /// web's `scanNotice`, in its order: a code that was read and cannot be
+    /// used, a picture with no code, then why the camera is not there.
+    fn scan_notice_text(&self) -> Option<SharedString> {
+        use crate::executor::camera::CameraFailure;
+        let s = &self.flow_strings;
+        match (self.scan_notice, self.scan_camera_failure) {
+            (Some(ScanNotice::Unusable), _) => Some(s.scan_invalid.clone()),
+            (Some(ScanNotice::NothingFound), _) => Some(s.scan_no_qr.clone()),
+            (None, Some(CameraFailure::Denied)) => Some(s.scan_permission.clone()),
+            (None, Some(CameraFailure::Absent)) => Some(s.scan_no_camera.clone()),
+            (None, Some(CameraFailure::Unavailable)) => Some(s.scan_unavailable.clone()),
+            (None, None) => None,
+        }
+    }
+
     /// Close the scanner — and ONLY the scanner.
     ///
     /// The X, Escape and a click on the dimmed window all land here. The
@@ -12771,6 +15533,11 @@ impl WalletPage {
     /// form away with it and left its `send_host` behind.) The camera stops on
     /// the next frame, when `scan_overlay` sees DS1 is no longer on top.
     fn close_scanner(&mut self, cx: &mut Context<Self>) {
+        // Inside a live send the scanner is the core's; it takes it down, or
+        // the next frame's stack would put it straight back.
+        if let Some(host) = self.send_host.clone() {
+            host.update(cx, |host, cx| host.dispatch(SendEvent::CloseScanner, cx));
+        }
         self.flows.retain(|panel| *panel != FlowPanel::Ds1);
         if self.flows.is_empty() {
             self.panel = PanelId::None;
@@ -12785,6 +15552,9 @@ impl WalletPage {
     /// stack (`VELA_FLOW=DS1`) where no click happened.
     fn pump_camera(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.scan_camera.is_none() {
+            // A scanner just opened: what the last one said is not true of it.
+            self.scan_notice = None;
+            self.scan_quiet_until = None;
             self.scan_camera = Some(crate::executor::camera::start());
             // The camera has its own thread and no way to reach this window;
             // this asks for a repaint at roughly the rate a preview needs one,
@@ -12817,11 +15587,19 @@ impl WalletPage {
         // A code the camera saw. Taken once, so one QR held up to the lens
         // starts one send.
         if let Some(text) = session.take_payload() {
-            self.stop_camera(window);
-            self.scan_resolved(text, cx);
-            return;
+            let quiet = self
+                .scan_quiet_until
+                .is_some_and(|until| std::time::Instant::now() < until);
+            if !quiet && self.scan_resolved(text, cx) {
+                self.stop_camera(window);
+                return;
+            }
         }
-        let (frame, _failed) = session.snapshot();
+        let Some(session) = self.scan_camera.as_ref() else {
+            return;
+        };
+        let (frame, failure) = session.snapshot();
+        self.scan_camera_failure = failure;
         let Some(frame) = frame else {
             return;
         };
@@ -12869,11 +15647,17 @@ impl WalletPage {
         // no screenshot pass and no headless run can ever reach the far side
         // of a scan.
         if let Ok(path) = std::env::var("VELA_SCAN_FILE") {
-            if let Ok(bytes) = std::fs::read(&path)
-                && let Some(text) = crate::executor::qr::decode_first(&bytes)
+            self.scan_notice = None;
+            match std::fs::read(&path)
+                .ok()
+                .and_then(|bytes| crate::executor::qr::decode_first(&bytes))
             {
-                self.scan_resolved(text, cx);
+                Some(text) => {
+                    self.scan_resolved(text, cx);
+                }
+                None => self.scan_notice = Some(ScanNotice::NothingFound),
             }
+            cx.notify();
             return;
         }
         let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
@@ -12892,22 +15676,44 @@ impl WalletPage {
             let Ok(bytes) = std::fs::read(&path) else {
                 return;
             };
-            let Some(text) = crate::executor::qr::decode_first(&bytes) else {
-                // No code in that picture. The modal stays up: a person who
-                // picked the wrong file wants to pick another one, not to be
-                // returned to the wallet.
-                return;
-            };
-            page.update(cx, |this, cx| this.scan_resolved(text, cx))
-                .ok();
+            let found = crate::executor::qr::decode_first(&bytes);
+            page.update(cx, |this, cx| match found {
+                Some(text) => {
+                    this.scan_resolved(text, cx);
+                }
+                // No code in that picture. The modal stays up and says so: a
+                // person who picked the wrong file wants to pick another one,
+                // not to be returned to the wallet — and not to wonder whether
+                // the button did anything.
+                None => {
+                    this.scan_notice = Some(ScanNotice::NothingFound);
+                    cx.notify();
+                }
+            })
+            .ok();
         })
         .detach();
     }
 
     /// What a scanned string does, in the two places a scan can happen.
-    fn scan_resolved(&mut self, text: String, cx: &mut Context<Self>) {
+    ///
+    /// Returns whether the scan was acted on. `false` is a code that is not a
+    /// payment, read outside a send: the scanner stays up and says "Invalid
+    /// QR" (078 F-02) — it used to close without a word.
+    fn scan_resolved(&mut self, text: String, cx: &mut Context<Self>) -> bool {
         use vela_core::app::send::SendScan;
         let request = crate::flows::eip681::parse(&text);
+        if self.send_host.is_none()
+            && request.is_none()
+            && !crate::flows::eip681::is_hex_address(text.trim())
+        {
+            self.scan_notice = Some(ScanNotice::Unusable);
+            self.scan_quiet_until =
+                Some(std::time::Instant::now() + std::time::Duration::from_secs(2));
+            cx.notify();
+            return false;
+        }
+        self.scan_notice = None;
         self.flows.retain(|panel| *panel != FlowPanel::Ds1);
 
         // Inside a live send the CORE rules on it — the shell only tokenizes.
@@ -12929,7 +15735,7 @@ impl WalletPage {
             }
             self.panel = PanelId::Flow;
             cx.notify();
-            return;
+            return true;
         }
 
         // From the home there is no session yet. A request that names a chain
@@ -12953,11 +15759,9 @@ impl WalletPage {
             None => {
                 let address = text.trim().to_owned();
                 if !crate::flows::eip681::is_hex_address(&address) {
-                    // Not a payment and not an address: nothing to open. The
-                    // scanner closes rather than starting a send to a string.
-                    self.panel = PanelId::None;
-                    cx.notify();
-                    return;
+                    // Refused above, before the scanner came down; kept so a
+                    // string can never start a send.
+                    return false;
                 }
                 (
                     SendOpenParams {
@@ -12975,6 +15779,7 @@ impl WalletPage {
         self.panel = PanelId::Flow;
         self.open_send(params, cx);
         cx.notify();
+        true
     }
 
     /// Read an address-book backup and hand it to the core.
@@ -12982,21 +15787,34 @@ impl WalletPage {
     /// The shell reads and PARSES; the core applies existing-wins and counts
     /// what happened. Which of those two halves is which is the reason
     /// `ImportParsed` takes already-parsed rows rather than a file.
-    fn import_contacts(cx: &mut Context<Self>) {
-        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: false,
-            prompt: None,
+    fn import_contacts(into_group: Option<String>, cx: &mut Context<Self>) {
+        // `VELA_IMPORT_FILE=<path>` answers the picker — the `VELA_SCAN_FILE`
+        // seam, for the same reason: a system file dialog is a window no
+        // verification pass can drive.
+        let pinned = std::env::var_os("VELA_IMPORT_FILE").map(std::path::PathBuf::from);
+        let paths = pinned.is_none().then(|| {
+            cx.prompt_for_paths(gpui::PathPromptOptions {
+                files: true,
+                directories: false,
+                multiple: false,
+                prompt: None,
+            })
         });
         cx.spawn(async move |page, cx| {
-            let Ok(Ok(Some(paths))) = paths.await else {
-                // Cancelled, or the platform declined. Nothing to report: the
-                // person closed a dialog.
-                return;
-            };
-            let Some(path) = paths.into_iter().next() else {
-                return;
+            let path = match (pinned, paths) {
+                (Some(path), _) => path,
+                (None, Some(paths)) => {
+                    let Ok(Ok(Some(paths))) = paths.await else {
+                        // Cancelled, or the platform declined. Nothing to
+                        // report: the person closed a dialog.
+                        return;
+                    };
+                    let Some(path) = paths.into_iter().next() else {
+                        return;
+                    };
+                    path
+                }
+                (None, None) => return,
             };
             let filename = path
                 .file_name()
@@ -13024,9 +15842,9 @@ impl WalletPage {
                         ContactEvent::ImportFile {
                             content,
                             filename,
-                            // 导入到本组 has no file path of its own yet; the
-                            // header's import is the whole book.
-                            into_group: None,
+                            // 导入到本组 names its group; the header's and the
+                            // empty book's import are the whole book.
+                            into_group: into_group.clone(),
                             now_ms,
                         },
                         cx,
@@ -13046,9 +15864,8 @@ impl WalletPage {
                     // The COUNTS are the core's — it applied existing-wins and
                     // knows what actually happened. An import that reports
                     // nothing is a feature that looks broken.
-                    (None, Some(report)) => (
-                        this.contacts.import_done_title.clone(),
-                        SharedString::from(crate::wallet::fill(
+                    (None, Some(report)) => {
+                        let mut body = crate::wallet::fill(
                             &crate::wallet::fill(
                                 &this.contacts.import_done_body,
                                 "added",
@@ -13056,8 +15873,22 @@ impl WalletPage {
                             ),
                             "skipped",
                             &report.skipped.to_string(),
-                        )),
-                    ),
+                        );
+                        // Rows dropped for a malformed address are said, as
+                        // the web's `importReport` says them.
+                        if report.invalid > 0 {
+                            body.push(' ');
+                            body.push_str(&crate::wallet::fill(
+                                &this.contacts.import_done_invalid,
+                                "invalid",
+                                &report.invalid.to_string(),
+                            ));
+                        }
+                        (
+                            this.contacts.import_done_title.clone(),
+                            SharedString::from(body),
+                        )
+                    }
                     // Neither: `ImportFile` fails closed until the ledger is
                     // loaded, so nothing was read and nothing was written.
                     // Drawing no dialog here would be this whole sweep's own
@@ -13076,53 +15907,61 @@ impl WalletPage {
         .detach();
     }
 
-    /// Write the whole address book where the person points.
-    ///
-    /// The extension decides the format, because that is the choice the save
-    /// dialog already asked them to make — a `.csv` that contains JSON is a
-    /// file nothing opens. The BYTES are the core's: one serializer, so a
-    /// backup taken on the desktop restores on the web.
-    fn export_contacts(cx: &mut Context<Self>) {
+    /// Write the book — or one group of it — where the person points, in
+    /// the format they chose (078 C-07). The web asks CSV or JSON first and
+    /// saves under the core's own filename; the save dialog here opens on that
+    /// name. The BYTES are the core's: one serializer, so a backup taken on
+    /// the desktop restores on the web.
+    fn export_contacts(
+        scope: ContactExportScope,
+        format: ContactFileFormat,
+        cx: &mut Context<Self>,
+    ) {
+        let exported_at_iso = crate::executor::now_iso();
+        let file = resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
+            resident.dispatch(
+                ContactEvent::ExportRequested {
+                    scope,
+                    format,
+                    exported_at_iso,
+                },
+                cx,
+            );
+            resident.view().export
+        });
+        // The core produced nothing to hand over. Never write an empty file
+        // over the path somebody chose.
+        let Some(file) = file else {
+            return;
+        };
+        // `VELA_EXPORT_DIR=<dir>` answers the save dialog with the core's
+        // filename in that folder — the `VELA_IMPORT_FILE` seam, the other
+        // way.
+        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+            .map(|dir| std::path::PathBuf::from(dir).join(&file.filename));
         // The save dialog opens where a person keeps their files, not where
-        // this app keeps its state. `.` would open wherever the binary was
-        // launched from, which on a double-click is nowhere useful.
-        let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let target = cx.prompt_for_new_path(&directory, Some("vela-contacts.json"));
+        // this app keeps its state.
+        let target = pinned.is_none().then(|| {
+            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            cx.prompt_for_new_path(&directory, Some(&file.filename))
+        });
         cx.spawn(async move |page, cx| {
-            let Ok(Ok(Some(path))) = target.await else {
-                return;
-            };
-            let format = if path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("csv"))
-            {
-                ContactFileFormat::Csv
-            } else {
-                ContactFileFormat::Json
-            };
-            let exported_at_iso = crate::executor::now_iso();
-            page.update(cx, |_, cx| {
-                let file = resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                    resident.dispatch(
-                        ContactEvent::ExportRequested {
-                            scope: ContactExportScope::All,
-                            format,
-                            exported_at_iso,
-                        },
-                        cx,
-                    );
-                    resident.view().export
-                });
-                let Some(file) = file else {
-                    // The core produced nothing to hand over. Never write an
-                    // empty file over the path somebody chose.
-                    return;
-                };
-                if let Err(error) = std::fs::write(&path, &file.content) {
-                    eprintln!("[vela-wallet] contacts export: {}: {error}", path.display());
-                    // The one-shot stays in the view: nothing was handed over.
-                    return;
+            let path = match (pinned, target) {
+                (Some(path), _) => path,
+                (None, Some(target)) => {
+                    let Ok(Ok(Some(path))) = target.await else {
+                        return;
+                    };
+                    path
                 }
+                (None, None) => return,
+            };
+            if let Err(error) = std::fs::write(&path, &file.content) {
+                eprintln!("[vela-wallet] contacts export: {}: {error}", path.display());
+                // The one-shot stays in the view: nothing was handed over.
+                return;
+            }
+            page.update(cx, |_, cx| {
                 resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
                     resident.dispatch(ContactEvent::ExportTaken, cx);
                 });
@@ -13130,6 +15969,78 @@ impl WalletPage {
             .ok();
         })
         .detach();
+    }
+
+    /// The export's one question — the web's `export` sheet: the body line,
+    /// then CSV and JSON side by side.
+    fn export_format_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let scope = self.export_scope.clone()?;
+        let s = &self.contacts;
+        let pick = |format: ContactFileFormat, scope: ContactExportScope| {
+            move |this: &mut Self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>| {
+                this.export_scope = None;
+                Self::export_contacts(scope.clone(), format, cx);
+                cx.notify();
+            }
+        };
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .pb(px(16.))
+            .child(
+                div()
+                    .text_size(theme::text_body())
+                    .line_height(theme::line_height_body())
+                    .text_color(theme.fg_muted)
+                    .child(s.export_body.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .id("export-csv")
+                            .flex_1()
+                            .cursor_pointer()
+                            .child(crate::flows::components::secondary_button(
+                                theme,
+                                SharedString::from("CSV"),
+                            ))
+                            .on_click(cx.listener(pick(ContactFileFormat::Csv, scope.clone()))),
+                    )
+                    .child(
+                        div()
+                            .id("export-json")
+                            .flex_1()
+                            .cursor_pointer()
+                            .child(crate::flows::components::accent_button(
+                                theme,
+                                SharedString::from("JSON"),
+                            ))
+                            .on_click(cx.listener(pick(ContactFileFormat::Json, scope))),
+                    ),
+            );
+        Some(
+            crate::ui::dialog::dialog(
+                "contacts-export",
+                theme,
+                window,
+                s.export_title.clone(),
+                None,
+                self.dialog_close_icon(theme),
+                body,
+                &self.dialog_scroll("contacts-export"),
+                Self::closer(cx, |this, _| this.export_scope = None),
+            )
+            .into_any_element(),
+        )
     }
 
     /// What each row of an open menu does, positionally.
@@ -13158,6 +16069,7 @@ impl WalletPage {
                 let Some((id, name, _)) = self.group_models(cx).get(index).cloned() else {
                     return Vec::new();
                 };
+                let group_name = name.clone();
                 let rename = (id.clone(), name);
                 vec![
                     // 重命名分组 — the same dialog 新建分组 opens, with the id
@@ -13171,20 +16083,32 @@ impl WalletPage {
                             cx.notify();
                         })) as contacts_components::MenuAction,
                     ),
-                    // 导入到本组 / 导出本组 still need a per-group file path the
-                    // core has no event for; the whole-book pair is wired.
-                    None,
-                    None,
+                    // 导入到本组 — the file's contacts, into THIS group
+                    // (`ImportFile { into_group }`, the web's `importGroup`).
+                    Some({
+                        let id = id.to_string();
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            Self::import_contacts(Some(id.clone()), cx);
+                            cx.notify();
+                        })) as contacts_components::MenuAction
+                    }),
+                    // 导出本组 — the format question, for this group.
+                    Some({
+                        let id = id.to_string();
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            this.export_scope = Some(ContactExportScope::Group { id: id.clone() });
+                            cx.notify();
+                        })) as contacts_components::MenuAction
+                    }),
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                            resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                resident
-                                    .dispatch(ContactEvent::GroupDelete { id: id.to_string() }, cx);
+                            // Asked first, as the web asks (078 C-01).
+                            this.confirm = Some(Confirm::DeleteGroup {
+                                id: id.to_string(),
+                                name: group_name.clone(),
                             });
-                            // The group that was open no longer exists; the
-                            // rail falls back to the whole book rather than to
-                            // whichever group slid into that index.
-                            this.group = None;
                             this.menu = None;
                             cx.notify();
                         })) as contacts_components::MenuAction,
@@ -13196,69 +16120,92 @@ impl WalletPage {
                 Some(Box::new(cx.listener(
                     |this, _: &gpui::ClickEvent, _, cx: &mut Context<Self>| {
                         this.menu = None;
-                        Self::import_contacts(cx);
+                        Self::import_contacts(None, cx);
                     },
                 )) as contacts_components::MenuAction),
                 Some(Box::new(cx.listener(
                     |this, _: &gpui::ClickEvent, _, cx: &mut Context<Self>| {
                         this.menu = None;
-                        Self::export_contacts(cx);
+                        this.export_scope = Some(ContactExportScope::All);
+                        cx.notify();
                     },
                 )) as contacts_components::MenuAction),
             ],
-            // The site menu, in the order it is drawn: refresh, share, add to
-            // favourites, open in a new tab, disconnect, close.
-            //
-            // Three of the six have a machine (or a webview) behind them; the
-            // other three are favourites and tabs, which nothing in
-            // `vela-core` owns yet. `None` leaves an item drawn and inert
-            // rather than armed and lying — the same rule the allowance chips
-            // follow.
-            ContactsMenu::Site => vec![
-                Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    this.menu = None;
-                    #[cfg(not(target_os = "linux"))]
-                    crate::webview::reload();
-                    cx.notify();
-                })) as contacts_components::MenuAction),
-                None,
-                None,
-                None,
-                // Disconnect is the CORE's: the site on screen, by name — its
-                // grant goes, and every open page of it hears
-                // `accountsChanged []` and `disconnect`.
-                Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    this.menu = None;
-                    let origin = this
-                        .browser_host
-                        .as_ref()
-                        .and_then(|host| host.read(cx).tab().and_then(|tab| tab.origin.clone()));
-                    if let Some(origin) = origin {
-                        this.revoke_site(origin, cx);
-                    }
-                    cx.notify();
-                })) as contacts_components::MenuAction),
-                // Close closes the PAGE — the tab on screen, as the phones'
-                // "Close page" does. Its requests are settled by the core
-                // when its document goes; merely leaving Explore settles
-                // nothing.
-                Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    this.menu = None;
-                    this.panel = PanelId::None;
-                    let selected = resident::resident::<ExploreSites>(cx)
-                        .read(cx)
-                        .view()
-                        .selected_tab;
-                    match selected {
-                        Some(id) => this.close_browser_tab(&id, cx),
-                        None => {
-                            this.browsing = false;
-                            this.close_browser_page(cx);
+            // The site menu, in the web's order (078 E-03): refresh, share,
+            // copy link, add to favourites, open in the system browser,
+            // disconnect, close. All seven act. There is no share sheet a
+            // gpui window can raise, so Share hands the link over the one way
+            // this machine shares everything — the clipboard — and says so.
+            ContactsMenu::Site => {
+                #[cfg(not(target_os = "linux"))]
+                let url = crate::webview::current_url().filter(|url| url != "about:blank");
+                #[cfg(target_os = "linux")]
+                let url: Option<String> = None;
+                let copy = |url: Option<String>| {
+                    url.map(|url| {
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            this.copy_text(EXPLORE_COPY, url.clone(), CONTACTS_COPY_HOLD, cx);
+                        })) as contacts_components::MenuAction
+                    })
+                };
+                vec![
+                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        #[cfg(not(target_os = "linux"))]
+                        crate::webview::reload();
+                        cx.notify();
+                    })) as contacts_components::MenuAction),
+                    copy(url.clone()),
+                    copy(url.clone()),
+                    // Pins the page that is loaded — the star's own act.
+                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        this.pin_current_page(cx);
+                        cx.notify();
+                    })) as contacts_components::MenuAction),
+                    url.clone().map(|url| {
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.menu = None;
+                            cx.open_url(&url);
+                            cx.notify();
+                        })) as contacts_components::MenuAction
+                    }),
+                    // Disconnect is the CORE's: the site on screen, by name — its
+                    // grant goes, and every open page of it hears
+                    // `accountsChanged []` and `disconnect`.
+                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        let origin = this.browser_host.as_ref().and_then(|host| {
+                            host.read(cx).tab().and_then(|tab| tab.origin.clone())
+                        });
+                        if let Some(origin) = origin {
+                            this.revoke_site(origin, cx);
                         }
-                    }
-                    cx.notify();
-                })) as contacts_components::MenuAction),
-            ],
+                        cx.notify();
+                    })) as contacts_components::MenuAction),
+                    // Close closes the PAGE — the tab on screen, as the phones'
+                    // "Close page" does. Its requests are settled by the core
+                    // when its document goes; merely leaving Explore settles
+                    // nothing.
+                    Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.menu = None;
+                        this.panel = PanelId::None;
+                        let selected = resident::resident::<ExploreSites>(cx)
+                            .read(cx)
+                            .view()
+                            .selected_tab;
+                        match selected {
+                            Some(id) => this.close_browser_tab(&id, cx),
+                            None => {
+                                this.browsing = false;
+                                this.close_browser_page(cx);
+                            }
+                        }
+                        cx.notify();
+                    })) as contacts_components::MenuAction),
+                ]
+            }
             // "Move to a group": the person's own groups, newest last, with
             // "new group" at the top. The index is the position in the SAME
             // list the menu was built from — read again here rather than
@@ -13278,6 +16225,11 @@ impl WalletPage {
                 let copy_me = address.clone();
                 let edit_address = address.clone();
                 let delete_address = address.clone();
+                let delete_label = SharedString::from(if name.is_empty() {
+                    address.clone()
+                } else {
+                    name.clone()
+                });
                 vec![
                     // 转账 — the send flow, opened with this person in the
                     // recipient field. The core takes the prefill; the shell
@@ -13310,8 +16262,7 @@ impl WalletPage {
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
-                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy_me.clone()));
-                            cx.notify();
+                            this.copy_text(CONTACTS_TOAST, copy_me.clone(), CONTACTS_COPY_HOLD, cx);
                         })) as contacts_components::MenuAction,
                     ),
                     // 编辑 — the same sheet 新建联系人 opens, with the address
@@ -13320,142 +16271,28 @@ impl WalletPage {
                     // button.
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, window, cx| {
-                            this.menu = None;
-                            this.contact_form = Some(ContactForm {
-                                address: edit_address.clone(),
-                                name: name.clone(),
-                                editing: true,
-                            });
-                            window.focus(&this.contact_form_name_focus, cx);
-                            cx.notify();
+                            this.open_edit_contact(&edit_address, window, cx);
                         })) as contacts_components::MenuAction,
                     ),
-                    // 移入分组 — the picker this shell has been pointing at
-                    // since spec 018 (DC2's comment) and never opened.
-                    Some(
-                        Box::new(cx.listener(move |this, event: &gpui::ClickEvent, _, cx| {
-                            this.menu = Some((
-                                ContactsMenu::ContactGroups,
-                                event.position(),
-                                Anchor::TopLeft,
-                            ));
-                            cx.notify();
-                        })) as contacts_components::MenuAction,
-                    ),
+                    // 移入分组 — the tick list, as the web's `group-pick`.
+                    Some({
+                        let address = address.clone();
+                        Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                            this.open_group_pick(&address, cx);
+                        })) as contacts_components::MenuAction
+                    }),
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
-                            resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(
-                                    ContactEvent::Delete {
-                                        address: delete_address.clone(),
-                                        now_ms: crate::executor::now_ms(),
-                                    },
-                                    cx,
-                                );
+                            // Asked first, as the web asks (078 C-01).
+                            this.confirm = Some(Confirm::DeleteContact {
+                                address: delete_address.clone(),
+                                name: delete_label.clone(),
                             });
                             cx.notify();
                         })) as contacts_components::MenuAction,
                     ),
                 ]
-            }
-
-            // One tap per group: the whole membership goes back, with this one
-            // flipped. The core normalises the set — a shell that sent "add"
-            // and "remove" separately would be inventing two events where the
-            // machine offers one.
-            ContactsMenu::ContactGroups => {
-                let view = resident::resident::<Contacts>(cx).read(cx).view();
-                let Some(row) = contacts_live::rows(&view).into_iter().nth(self.contact) else {
-                    return Vec::new();
-                };
-                let address = row.address_full.to_string();
-                let lower = address.to_lowercase();
-                let groups: Vec<(String, bool)> = view
-                    .groups
-                    .iter()
-                    .map(|group| {
-                        (
-                            group.id.clone(),
-                            group
-                                .members
-                                .iter()
-                                .any(|member| member.address.to_lowercase() == lower),
-                        )
-                    })
-                    .collect();
-                groups
-                    .iter()
-                    .map(|(id, _member)| {
-                        let address = address.clone();
-                        let id = id.clone();
-                        let groups = groups.clone();
-                        Some(
-                            Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.menu = None;
-                                let group_ids = contacts_live::set_after_toggle(&groups, &id);
-                                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                    resident.dispatch(
-                                        ContactEvent::SetContactGroups {
-                                            address: address.clone(),
-                                            group_ids,
-                                        },
-                                        cx,
-                                    );
-                                });
-                                cx.notify();
-                            })) as contacts_components::MenuAction,
-                        )
-                    })
-                    .collect()
-            }
-
-            // The same toggle from the group's side. One tap sends the whole
-            // membership back — `SetGroupMembers` carries the set, and the
-            // core normalises it.
-            ContactsMenu::GroupMembers => {
-                let view = resident::resident::<Contacts>(cx).read(cx).view();
-                let Some(group) = self.group.and_then(|index| view.groups.get(index)) else {
-                    return Vec::new();
-                };
-                let id = group.id.clone();
-                let members: Vec<String> = group
-                    .members
-                    .iter()
-                    .map(|member| member.address.to_lowercase())
-                    .collect();
-                let current: Vec<(String, bool)> = contacts_live::rows(&view)
-                    .into_iter()
-                    .map(|row| {
-                        let address = row.address_full.to_string();
-                        let member = members.contains(&address.to_lowercase());
-                        (address, member)
-                    })
-                    .collect();
-                current
-                    .iter()
-                    .map(|(address, _)| {
-                        let id = id.clone();
-                        let address = address.clone();
-                        let current = current.clone();
-                        Some(
-                            Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.menu = None;
-                                let members = contacts_live::set_after_toggle(&current, &address);
-                                resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
-                                    resident.dispatch(
-                                        ContactEvent::SetGroupMembers {
-                                            id: id.clone(),
-                                            members,
-                                        },
-                                        cx,
-                                    );
-                                });
-                                cx.notify();
-                            })) as contacts_components::MenuAction,
-                        )
-                    })
-                    .collect()
             }
 
             // One row per network, in the order the menu drew them. The site
@@ -13708,12 +16545,6 @@ impl WalletPage {
                     .collect::<Vec<_>>(),
             ),
             ContactsMenu::Contact => contacts_fixtures::contact_context(&self.contacts),
-            ContactsMenu::ContactGroups => {
-                contacts_fixtures::contact_group_pick(&self.contact_group_state(cx))
-            }
-            ContactsMenu::GroupMembers => {
-                contacts_fixtures::group_member_pick(&self.group_member_state(cx))
-            }
         };
         let actions = self.menu_actions(kind, cx);
         let card = menu_card(theme, &mut self.icons, &model, actions);
@@ -13742,7 +16573,26 @@ impl WalletPage {
 
 impl Render for WalletPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        for scroll in self.scrolls() {
+            scroll.step(window);
+        }
         self.watch_field_blurs(window, cx);
+        self.watch_money(cx);
+        // An identicon somewhere was pressed (078 H-02): open the viewer on
+        // its address. The artwork raised the request; the viewer lives here.
+        if let Some(address) = cx
+            .try_global::<crate::wallet::components::IdenticonRequest>()
+            .and_then(|request| request.0.clone())
+        {
+            cx.set_global(crate::wallet::components::IdenticonRequest(None));
+            self.open_identicon_viewer(address, cx);
+        }
+        // The 10 s Activity poll runs while the Activity can be seen: the
+        // wallet section, in a window on screen (078 W-09).
+        crate::executor::activity_feed::set_visible(
+            self.identity.is_some() && self.section == Section::Wallet,
+            crate::onboarding::native_window_handle(window),
+        );
         let theme = Theme::of(self.theme_mode());
         // A survived panic (spec 038): the failure sheet, "Something went
         // wrong", with the report behind the disclosure.
@@ -13774,12 +16624,15 @@ impl Render for WalletPage {
         // in the middle of. Only closing the tab or the page going away
         // settles its requests.
         #[cfg(not(target_os = "linux"))]
-        if !(self.section == Section::Explore && self.browsing && self.identity.is_some()) {
+        if !(self.section == Section::Explore && self.browsing && self.identity.is_some())
+            || self.dialog_over_browser()
+        {
             crate::webview::hide();
         }
         // Typing stops when the address bar loses the keyboard.
         if self.address_draft.is_some() && !self.address_focus.is_focused(window) {
             self.address_draft = None;
+            self.address_selected = false;
         }
 
         // The column was closed under a live send: its machines go with it.
@@ -13792,9 +16645,9 @@ impl Render for WalletPage {
             let bar = self.gallery_bar(&theme, caption, cx);
             let content: gpui::AnyElement = match self.tab {
                 GalleryTab::Components => self.components_tab(&theme).into_any_element(),
-                GalleryTab::ContactsComponents => {
-                    self.contacts_components_tab(&theme).into_any_element()
-                }
+                GalleryTab::ContactsComponents => self
+                    .contacts_components_tab(&theme, window)
+                    .into_any_element(),
                 GalleryTab::Identicons => self.identicons_tab(&theme).into_any_element(),
                 // The bar already cleared the caption row for the page.
                 _ => self
@@ -13827,16 +16680,22 @@ impl Render for WalletPage {
         let send_prompt = self.send_prompts(&theme, window, cx);
         let trusted_signer_prompt = self.trusted_signer_prompt(&theme, cx);
         let menu = self.menu_overlay(&theme, cx);
-        let sign_out = self.sign_out_dialog(&theme, cx);
-        let network_remove = self.network_remove_dialog(&theme, cx);
-        let account_remove = self.account_remove_dialog(&theme, cx);
-        let confirm = self.confirm_dialog(&theme, cx);
+        let sign_out = self.sign_out_dialog(&theme, window, cx);
+        let network_remove = self.network_remove_dialog(&theme, window, cx);
+        let account_switcher = self.account_switcher_dialog(&theme, window, cx);
+        let identicon_viewer = self.identicon_viewer_dialog(&theme, cx);
+        let feedback_viewer = self.feedback_viewer(&theme, window, cx);
+        let feedback_toast = self.feedback_toast(&theme, window, cx);
+        let confirm = self.confirm_dialog(&theme, window, cx);
         let settings_dialog = self.settings_dialog_overlay(&theme, window, cx);
-        let import_result = self.import_result_dialog(&theme, cx);
-        let contact_form = self.contact_form_dialog(&theme, window, cx);
+        let import_result = self.import_result_dialog(&theme, window, cx);
         let group_form = self.group_form_dialog(&theme, window, cx);
+        let pick = self.pick_dialog(&theme, window, cx);
+        let export_format = self.export_format_dialog(&theme, window, cx);
         let explore_form = self.explore_form_dialog(&theme, window, cx);
-        let contact_qr = self.contact_qr_dialog(&theme, cx);
+        let explore_groups = self.explore_groups_dialog(&theme, window, cx);
+        let contact_qr = self.contact_qr_dialog(&theme, window, cx);
+        let balance_detail = self.balance_detail_dialog(&theme, window, cx);
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
@@ -13850,6 +16709,13 @@ impl Render for WalletPage {
         // Above the columns and below every dialog: a celebration must not
         // land on top of a question somebody is being asked.
         if let Some(toast) = toast {
+            root = root.child(toast);
+        }
+        if let Some(toast) = self.contacts_toast(&theme) {
+            root = root.child(toast);
+        }
+        // A report that ended while the person was elsewhere (078 round 3).
+        if let Some(toast) = feedback_toast {
             root = root.child(toast);
         }
         // The cable's dialogs and the core's alert, over the send flow.
@@ -13868,18 +16734,27 @@ impl Render for WalletPage {
         if let Some(settings_dialog) = settings_dialog {
             root = root.child(settings_dialog);
         }
+        if let Some(balance_detail) = balance_detail {
+            root = root.child(balance_detail);
+        }
         // The import's answer, over the menu it was started from.
         if let Some(import_result) = import_result {
             root = root.child(import_result);
         }
-        if let Some(contact_form) = contact_form {
-            root = root.child(contact_form);
+        if let Some(pick) = pick {
+            root = root.child(pick);
+        }
+        if let Some(export_format) = export_format {
+            root = root.child(export_format);
         }
         if let Some(contact_qr) = contact_qr {
             root = root.child(contact_qr);
         }
         if let Some(explore_form) = explore_form {
             root = root.child(explore_form);
+        }
+        if let Some(explore_groups) = explore_groups {
+            root = root.child(explore_groups);
         }
         if let Some(group_form) = group_form {
             root = root.child(group_form);
@@ -13890,11 +16765,21 @@ impl Render for WalletPage {
         if let Some(network_remove) = network_remove {
             root = root.child(network_remove);
         }
-        if let Some(account_remove) = account_remove {
-            root = root.child(account_remove);
-        }
         if let Some(confirm) = confirm {
             root = root.child(confirm);
+        }
+        if let Some(account_switcher) = account_switcher {
+            root = root.child(account_switcher);
+        }
+        // Over everything, the switcher included: its rows' artwork opens it,
+        // and a viewer under the surface that opened it is a click that did
+        // nothing.
+        if let Some(identicon_viewer) = identicon_viewer {
+            root = root.child(identicon_viewer);
+        }
+        // The report's screenshot viewer, over the page it was opened from.
+        if let Some(feedback_viewer) = feedback_viewer {
+            root = root.child(feedback_viewer);
         }
         if let Some(prompt) = &self.crash {
             let entity = cx.entity();
@@ -13929,30 +16814,20 @@ impl Render for WalletPage {
         }
         let root = root
             .track_focus(&self.focus_handle)
+            // ⌘V / Ctrl+V with an image on the clipboard, while the Feedback
+            // form is up: heard here, before any field, so it attaches the
+            // image whether or not a field has the caret (078 round 3).
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if this.feedback_capture_key(event, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
-                // Esc peels one layer at a time: the sign-out dialog first (it
-                // is on top), then the anchored menu, then the third column
-                // (desktop SPEC keyboard map).
-                if ks.key == "escape" && session::view(cx).sign_out.is_some() {
-                    session::sign_out_dismissed(cx);
-                    cx.notify();
-                    return;
-                }
-                if ks.key == "escape" && this.network_remove.is_some() {
-                    this.network_remove = None;
-                    cx.notify();
-                    return;
-                }
-                if ks.key == "escape" && this.confirm.is_some() {
-                    this.confirm = None;
-                    this.erase_failed = None;
-                    cx.notify();
-                    return;
-                }
-                if ks.key == "escape" && this.settings_dialog.is_some() {
-                    this.close_settings_dialog(cx);
-                    cx.notify();
+                // Esc peels one layer at a time: the dialog on top first, then
+                // the anchored menu or an open settings dropdown, then the
+                // third column (desktop SPEC keyboard map).
+                if ks.key == "escape" && this.dismiss_top_dialog(cx) {
                     return;
                 }
                 if ks.key == "escape" && this.flows.last() == Some(&FlowPanel::Ds1) {
@@ -13963,7 +16838,24 @@ impl Render for WalletPage {
                     if this.menu.is_some() {
                         this.menu = None;
                         cx.notify();
+                    } else if this.settings_open_dropdown.is_some() {
+                        this.settings_open_dropdown = None;
+                        cx.notify();
                     } else if this.panel != PanelId::None {
+                        // Escape is the ✕: a signing column tells its core,
+                        // as the web's `onclose` does, or the dApp's request
+                        // hangs and every later one is refused as busy.
+                        #[cfg(not(target_os = "linux"))]
+                        if this.panel == PanelId::Signing
+                            && let Some(host) = this.signing_host.clone()
+                        {
+                            host.update(cx, |host, cx| {
+                                host.dispatch_sign(
+                                    vela_core::app::sign_request::Event::SwipeDismissed,
+                                    cx,
+                                );
+                            });
+                        }
                         this.panel = PanelId::None;
                         cx.notify();
                     }
@@ -13988,6 +16880,44 @@ impl Render for WalletPage {
         window_frame(root, &theme, window)
     }
 }
+
+/// A dApp transaction landing in the signing column (078 G-04).
+#[derive(Clone, Debug)]
+struct DappLanding {
+    op_hash: String,
+    chain_id: u32,
+    raised_at_ms: f64,
+}
+
+/// What the scanner read that it cannot act on (078 F-02).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScanNotice {
+    /// A code was read and is not a payment or an address.
+    Unusable,
+    /// A picked picture had no code in it.
+    NothingFound,
+}
+
+/// The contacts route's copies (078 X-06): the toast's key, and the QR
+/// dialog's pill's; the web holds both 1.5 s.
+const CONTACTS_TOAST: &str = "contacts-toast";
+/// The sends the tracker holds as confirmed, by their op hash.
+fn confirmed_sends(
+    view: &vela_core::app::tx_tracker::TrackView,
+) -> std::collections::HashSet<String> {
+    view.entries
+        .iter()
+        .filter(|entry| entry.status == vela_core::app::tx_tracker::TrackStatus::Confirmed)
+        .map(|entry| entry.user_op_hash.clone())
+        .collect()
+}
+
+/// The site menu's copy, said in the address bar (078 E-03).
+const EXPLORE_COPY: &str = "explore-copy";
+/// The technical details' address copy (078 G-05).
+const SIGNING_TECH_COPY: &str = "signing-tech-copy";
+const CONTACT_QR_COPY: &str = "contact-qr";
+const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis(1500);
 
 /// The Ethereum key backup, as a request for the SHARED signing sheet.
 ///
@@ -14028,19 +16958,10 @@ fn page_host(url: &str) -> String {
         .to_owned()
 }
 
-/// The Trusted Signer's caption, taken out of the list the "Sign with" sheet and
-/// the Settings page both draw from.
-///
-/// Not a key of its own: the corpus's paths are pinned, and one way of signing
-/// named twice is the drift spec 075 was raised over. The core always offers
-/// the route (`wallet_keys::SIGN_METHODS`), which
-/// `settings::tests::the_sign_with_words_resolve` pins, so the search finds it.
+/// The Trusted Signer's caption: the title its Settings page wears, so one
+/// route is never named two ways — the drift spec 075 was raised over.
 fn trusted_signer_words(s: &SettingsStrings) -> SharedString {
-    s.sign_with_options
-        .iter()
-        .find(|(method, _)| *method == vela_core::trusted_signer::METHOD)
-        .map(|(_, words)| words.clone())
-        .unwrap_or_default()
+    s.nav_signing.clone()
 }
 
 /// Who is holding a key, for the line under its name in the keys list.
@@ -14091,6 +17012,20 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 mod tests {
     use super::*;
 
+    /// **Linux has three destinations, as the web does** (owner call,
+    /// 2026-09-24): no in-app browser, so no Explore — not in the sidebar, and
+    /// not through a pinned or restored place. Everywhere else, four.
+    #[test]
+    fn explore_is_a_destination_only_where_there_is_a_browser() {
+        let linux = cfg!(target_os = "linux");
+        assert_eq!(Section::Explore.available(), !linux);
+        assert_eq!(Section::Explore.or_wallet() == Section::Wallet, linux);
+        for section in [Section::Wallet, Section::Contacts, Section::Settings] {
+            assert!(section.available());
+            assert_eq!(section.or_wallet(), section);
+        }
+    }
+
     /// **A key minted on a Trusted Signer page is captioned as the page, and says
     /// which page** (spec 075, the Android device pass of 2026-09-22).
     ///
@@ -14100,8 +17035,8 @@ mod tests {
     /// cannot reach. The row is built here from the account record's own keys,
     /// so the whole chain is walked: a `DeviceKey` carrying the origin the
     /// record stored, through the core's row builder, to the two lines a person
-    /// reads. And the caption is the "Sign with" sheet's own words, so the keys
-    /// list and the picker never name one route two ways.
+    /// reads. And the caption is the Trusted Signer page's own title, so the
+    /// keys list and Settings never name one route two ways.
     #[test]
     fn a_key_behind_a_page_is_captioned_as_the_trusted_signer() {
         let loc = Loc::from_env();
@@ -14114,16 +17049,7 @@ mod tests {
         let trusted_signer = super::trusted_signer_words(&s);
         assert!(
             !trusted_signer.is_empty(),
-            "the Trusted Signer's caption went missing from the sheet's list"
-        );
-        assert_eq!(
-            Some(trusted_signer.clone()),
-            SigningStrings::resolve(&loc)
-                .sign_with_options
-                .iter()
-                .find(|(method, _)| *method == vela_core::trusted_signer::METHOD)
-                .map(|(_, words)| words.clone()),
-            "the keys list and the sheet disagree about what this route is called"
+            "the Trusted Signer's caption went missing"
         );
 
         // As `ensure_backup_check` builds them: one key behind a page, one on
@@ -14145,7 +17071,7 @@ mod tests {
                 signer_origin: None,
             },
         ];
-        let rows = match vela_core::wallet_keys::step("", &device, &[]) {
+        let rows = match vela_core::wallet_keys::step("", &device, &[], "") {
             vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
             vela_core::wallet_keys::KeysStep::Ask { .. } => {
                 unreachable!("asked with no address, so nobody can be asked")
@@ -14336,12 +17262,15 @@ mod tests {
     /// learned one knows the other.
     #[test]
     fn settings_nav_covers_every_panel() {
-        assert_eq!(SettingsPage::ALL.len(), 10);
+        assert_eq!(SettingsPage::ALL.len(), 11);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
         assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
         // "Sign with" beside the speed (spec 071).
         assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
+        // Community, About, then Send feedback — the phones' order
+        // (2026-09-27); Community is drawn above About.
         assert_eq!(SettingsPage::ALL[9], SettingsPage::About);
+        assert_eq!(SettingsPage::ALL[10], SettingsPage::Feedback);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips
@@ -14405,6 +17334,67 @@ fn is_evm_address(value: &str) -> bool {
         .is_some_and(|body| body.len() == 40 && body.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
+/// The machines whose news moves money on screen, observed (078 W-01, W-02)
+/// — the web's `confirmed: () => balance.refresh(true)` on the tracker, its
+/// feed's refresh on a genuinely new incoming record, and the deposit
+/// watcher's `onDeposit`. The executors that notice these things run without
+/// the app, so the page listens to the machines' views instead.
+#[derive(Default)]
+struct MoneyWatch {
+    /// The feed and tracker entities the subscriptions below are about: a
+    /// resident rebuilt (a switch, a cleared store) is a new entity, and is
+    /// observed again.
+    feed: Option<gpui::EntityId>,
+    tracker: Option<gpui::EntityId>,
+    /// The feed's celebrated record, as last seen.
+    new_item: Option<String>,
+    /// Sends already seen confirmed — seeded on attach, so a restored list of
+    /// old confirmations is not news.
+    confirmed: std::collections::HashSet<String>,
+    subscriptions: Vec<gpui::Subscription>,
+    /// A receive screen is up and its watcher is running (W-01).
+    receiving: Option<gpui::Subscription>,
+    /// Deposits the running watcher has reported.
+    deposits: usize,
+}
+
+/// The signing column's technical details (078 G-05).
+struct SigningTech {
+    /// The contract's name, beside the toggle while it is folded.
+    summary: Option<SharedString>,
+    /// Who is being called: name, address, the explorer page for it.
+    party: Option<(SharedString, SharedString, Option<String>)>,
+    /// (label, value, raw) — a raw value is drawn in the muted colour.
+    rows: Vec<(SharedString, SharedString, bool)>,
+}
+
+/// What a pick list is choosing, and for whom.
+#[derive(Clone)]
+enum PickSubject {
+    /// 添加成员: which contacts this group holds.
+    Members { group_id: String },
+    /// 移入分组: which groups hold this contact.
+    Groups { address: String },
+}
+
+/// One row of a pick list. `seed` is the address behind a contact's
+/// identicon; a group has none and wears the users tile.
+struct PickRow {
+    id: String,
+    name: SharedString,
+    detail: SharedString,
+    seed: Option<String>,
+}
+
+/// The tick list's draft: the ids ticked NOW, which the core hears only on
+/// Save — a dismissed list changes nothing, as the web's.
+#[derive(Clone)]
+struct PickDialog {
+    subject: PickSubject,
+    checked: Vec<String>,
+    query: String,
+}
+
 /// The add/edit contact sheet's draft.
 #[derive(Clone, Default)]
 struct ContactForm {
@@ -14412,4 +17402,17 @@ struct ContactForm {
     editing: bool,
     address: String,
     name: String,
+    /// The row is the core's history suggestion (`ContactSource::Auto`):
+    /// saving is what makes it a contact, and the title says so.
+    unsaved: bool,
+}
+
+/// One allowance card that is a control on the live sheet: what each of its
+/// chips chooses, the batch leg its events belong to (`None` = the single
+/// approval), and what is typed in its cap field — the core's text.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+struct AllowanceControl {
+    modes: Vec<vela_core::app::approval_guard::GuardEditorMode>,
+    leg: Option<u32>,
+    custom_text: String,
 }

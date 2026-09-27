@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.contacts.components
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,7 +56,7 @@ fun ContactFormSheet(
     onSave: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = colors.bgRaised,

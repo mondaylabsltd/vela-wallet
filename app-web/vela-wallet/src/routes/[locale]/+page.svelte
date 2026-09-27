@@ -34,7 +34,7 @@
 	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
 	import IntroCarousel from '$lib/ui/intro/IntroCarousel.svelte';
 	import AddMethodPicker from '$lib/ui/onboarding/v2/AddMethodPicker.svelte';
-	import Sheet from '$lib/ui/onboarding/Sheet.svelte';
+	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import SocialMeta from '$lib/ui/SocialMeta.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import { markIntroSeen, shouldShowIntro } from '$lib/intro/gate';
@@ -278,12 +278,17 @@
 	     phone or a security key is reachable by name, not only through
 	     whatever the browser's own sheet defaults to (spec 038 SC-428;
 	     founder: 弹框 on phone web and desktop web alike). -->
-	<Sheet label={strings('onboarding.login.header')} onClose={() => (methodsOpen = false)}>
+	<BottomSheet
+		title={strings('onboarding.login.header')}
+		hideTitle
+		variant="prompt"
+		onclose={() => (methodsOpen = false)}
+	>
 		<div class="methodsSheet">
 			<h2 class="methodsTitle">{strings('onboarding.login.header')}</h2>
 			<AddMethodPicker open={true} {strings} onPick={(method) => void signIn(method)} />
 		</div>
-	</Sheet>
+	</BottomSheet>
 {/if}
 
 <!-- Spec 075: signing in can run on the Trusted Signer's page — here is where
@@ -382,27 +387,42 @@
 		color: var(--color-fg-base);
 		font-size: var(--text-heroCompact);
 		font-weight: var(--weight-bold);
-		/* The design breaks the headline across two lines. The break lives in
-		   the corpus as a newline rather than as markup, so each locale picks
-		   its own — a Chinese line length is not a German one. */
+		/* The design breaks the headline across two lines — three where a
+		   locale's sentence fits no two-line split (fr, id, ja, ru). The break
+		   lives in the corpus as a newline rather than as markup, so each
+		   locale picks its own — a Chinese line length is not a German one. */
 		white-space: pre-line;
 		line-height: var(--leading-tight);
 		letter-spacing: -0.02em;
 	}
 
 	/* A locale whose headline is too wide for its rung drops one step down the
-	   ladder — 46 → 38 → 31 — rather than wrapping into a third line the design
-	   has no room for. Which locales those are is not guessed here: the corpus
+	   ladder — 46 → 38 → 31 — rather than wrapping into a line it did not
+	   author. Which locales those are is not guessed here: the corpus
 	   carries `heroTitleFit` beside the string it describes. */
 	.headline.long {
 		font-size: var(--text-heroTight);
 	}
 
+	/* Two sentences that overrun the column by a word or two. Wrapped greedily
+	   they leave that word alone on the last line («… never goes to / Vela.»,
+	   «…ことはあ / りません。»); balanced, the lines come out near-even — the
+	   desktop does the same with `balanced_wrap_width`. Japanese breaks at
+	   phrase boundaries and Korean between words, as the site's headings do. */
 	.sub {
 		margin: 0;
 		color: var(--color-fg-muted);
 		font-size: var(--text-lg);
 		line-height: var(--leading-normal);
+		text-wrap: balance;
+	}
+
+	:global(html[lang='ja']) .sub {
+		word-break: auto-phrase;
+	}
+
+	:global(html[lang='ko']) .sub {
+		word-break: keep-all;
 	}
 
 	.actions {
@@ -411,7 +431,7 @@
 		gap: var(--space-lg);
 	}
 
-	/* No padding of its own any more: `Sheet` pads its content, and this rule
+	/* No padding of its own any more: `BottomSheet` pads its content, and this rule
 	   was the workaround that proved it should. */
 
 	.methodsTitle {

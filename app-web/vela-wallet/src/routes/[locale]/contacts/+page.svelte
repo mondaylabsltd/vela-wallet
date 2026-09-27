@@ -30,7 +30,7 @@
 	import PickList from '$lib/contacts/ui/PickList.svelte';
 	import SheetOrDialog from '$lib/contacts/ui/SheetOrDialog.svelte';
 	import type { ContactFormCopy, GroupFormCopy } from '$lib/contacts/forms';
-	import { createContactsSession, type ContactsSession } from '$lib/contacts/core/contacts';
+	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import { addMenu, groupMenuMobile } from '$lib/contacts/fixtures';
 	import {
 		buildContactsDesktopLive,
@@ -44,8 +44,6 @@
 	import type { ContactsUiEvent } from '$lib/contacts/ui-events';
 	import type { ContactExportScope } from '$lib/core/generated/ContactExportScope';
 	import type { ContactFileFormat } from '$lib/core/generated/ContactFileFormat';
-	import type { ContactsView } from '$lib/core/generated/ContactsView';
-	import { loadCore } from '$lib/core/client';
 	import { flowHandoffQuery, type FlowHandoff } from '$lib/flows/contact-handoff';
 	import { pickTextFile, saveTextFile } from '$lib/services/file-io';
 	import { preferences } from '$lib/services/preferences.svelte';
@@ -81,12 +79,13 @@
 	const wide = new MediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`, false);
 
 	// --- The machine -------------------------------------------------------
+	//
+	// The app's one address book (`contacts-book.svelte.ts`): read at sign-in
+	// and kept across routes, so arriving here after the first read never
+	// shows an unread frame. This page only reads it and speaks to it.
 
-	let view = $state<ContactsView | null>(null);
-	let contacts: ContactsSession | null = null;
-	let disposed = false;
-	/** The account the core was last told about — a switch re-reads the book. */
-	let toldAddress: string | null = null;
+	const view = $derived(contactsBook.view);
+	const contacts = contactsBook;
 
 	onMount(() => {
 		void session.boot();
@@ -95,24 +94,12 @@
 		// wallet home draws, pointed at the same account below.
 		void feed.boot();
 		preferences.boot();
-		void (async () => {
-			await loadCore();
-			if (disposed) return;
-			contacts = createContactsSession({
-				onView: (next) => (view = next),
-				onError: (error) => console.error('[contacts] core fault:', error)
-			});
-			// Hydrate: reads the three stores and the local send history. The
-			// address is the session's, when it already has one; the effect
-			// below tells the core the moment it does.
-			toldAddress = signedIn ? sessionView.address : null;
-			contacts.start({ type: 'account_switched', my_address: toldAddress });
-		})();
-		return () => {
-			disposed = true;
-			contacts?.dispose();
-			contacts = null;
-		};
+		// The book is read for the signed-in account by the effect below — at
+		// once when the wallet page already read it, as the first read after a
+		// reload that landed here. What a visit still refreshes is the send
+		// history the suggestions come from (a send may have landed since),
+		// which re-reads that alone and never unloads the book.
+		contactsBook.dispatch({ type: 'history_changed' });
 	});
 
 	$effect(() => {
@@ -124,11 +111,9 @@
 		void balance.setAccount(sessionView.address);
 		void feed.setAccount(sessionView.address);
 		// The core's own account boundary: history-derived suggestions must
-		// never cross books (contacts.rs `AccountSwitched`).
-		if (contacts !== null && sessionView.address !== toldAddress) {
-			toldAddress = sessionView.address;
-			contacts.dispatch({ type: 'account_switched', my_address: toldAddress });
-		}
+		// never cross books (contacts.rs `AccountSwitched`). Told only when the
+		// account changes — the book does that bookkeeping.
+		void contactsBook.setAccount(sessionView.address);
 	});
 
 	// --- Render state ------------------------------------------------------
@@ -265,7 +250,7 @@
 		const file = view?.export;
 		if (file === undefined || file === null) return;
 		void saveTextFile(file.filename, file.content, file.mime).then(() =>
-			contacts?.dispatch({ type: 'export_taken' })
+			contacts.dispatch({ type: 'export_taken' })
 		);
 	});
 
@@ -274,7 +259,7 @@
 		if (file === null) return;
 		// The core sniffs the format, parses, and rules (existing-wins; a bad
 		// file is refused before any write). The report lands in the view.
-		contacts?.dispatch({
+		contacts.dispatch({
 			type: 'import_file',
 			content: file.text,
 			filename: file.name,
@@ -285,7 +270,7 @@
 
 	function exportBook(format: ContactFileFormat): void {
 		if (sheet.kind !== 'export') return;
-		contacts?.dispatch({
+		contacts.dispatch({
 			type: 'export_requested',
 			scope: sheet.scope,
 			format,
@@ -360,7 +345,7 @@
 	}
 
 	function deleteContact(address: string): void {
-		contacts?.dispatch({ type: 'delete', address, now_ms: Date.now() });
+		contacts.dispatch({ type: 'delete', address, now_ms: Date.now() });
 		sheet = { kind: 'none' };
 		if (ui.selectedAddress === address) {
 			ui = { ...ui, screen: 'list', selectedAddress: undefined };
@@ -368,7 +353,7 @@
 	}
 
 	function deleteGroup(id: string): void {
-		contacts?.dispatch({ type: 'group_delete', id });
+		contacts.dispatch({ type: 'group_delete', id });
 		sheet = { kind: 'none' };
 		if (ui.selectedGroupId === id) {
 			ui = { ...ui, screen: 'list', selectedGroupId: undefined };
@@ -481,7 +466,7 @@
 				// back onto a saved-but-unnamed contact as `resolved_name`) and
 				// classify it. Deduped and cached per address by the core. The
 				// classification chain is mainnet until a send flow (026) names one.
-				contacts?.dispatch({ type: 'inspect_recipient', chain_id: 1, address: event.address });
+				contacts.dispatch({ type: 'inspect_recipient', chain_id: 1, address: event.address });
 				return;
 			case 'back':
 				ui = { ...ui, screen: 'list', selectedAddress: undefined, selectedGroupId: undefined };
@@ -549,7 +534,7 @@
 	}
 
 	function saveContact(draft: { name: string; address: string }): void {
-		contacts?.dispatch({
+		contacts.dispatch({
 			type: 'save',
 			input: {
 				address: draft.address,
@@ -577,7 +562,7 @@
 	}
 
 	function saveGroup(name: string): void {
-		contacts?.dispatch({
+		contacts.dispatch({
 			type: 'group_save',
 			input: { id: null, name, color: null, members: null }
 		});
@@ -586,7 +571,7 @@
 
 	function renameGroup(name: string): void {
 		if (sheet.kind !== 'group-rename') return;
-		contacts?.dispatch({
+		contacts.dispatch({
 			type: 'group_save',
 			input: { id: sheet.id, name, color: null, members: null }
 		});
@@ -596,14 +581,14 @@
 	/** 添加成员's answer: the whole membership, ticked. The core normalises. */
 	function saveMembers(addresses: string[]): void {
 		if (sheet.kind !== 'member-pick') return;
-		contacts?.dispatch({ type: 'set_group_members', id: sheet.id, members: addresses });
+		contacts.dispatch({ type: 'set_group_members', id: sheet.id, members: addresses });
 		sheet = { kind: 'none' };
 	}
 
 	/** 移入分组's answer: which groups hold this contact. */
 	function saveGroups(groupIds: string[]): void {
 		if (sheet.kind !== 'group-pick') return;
-		contacts?.dispatch({
+		contacts.dispatch({
 			type: 'set_contact_groups',
 			address: sheet.address,
 			group_ids: groupIds
@@ -612,7 +597,7 @@
 	}
 
 	function acknowledgeReport(): void {
-		contacts?.dispatch({ type: 'import_acknowledged' });
+		contacts.dispatch({ type: 'import_acknowledged' });
 	}
 
 	function closeSheet(): void {

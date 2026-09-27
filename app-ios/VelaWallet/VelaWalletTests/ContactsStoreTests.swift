@@ -41,18 +41,15 @@ struct ContactsStoreTests {
         )
     }
 
-    /// The effect loop resolves on the main actor across `Task` boundaries, so
-    /// a test has to let those turns run. Polling a condition beats a fixed
-    /// sleep: it is faster when the loop is quick and it does not go flaky when
-    /// the machine is busy.
-    private func settle(
-        until condition: @escaping () -> Bool,
-        turns: Int = 200
-    ) async {
-        for _ in 0..<turns {
-            if condition() { return }
-            await Task.yield()
-        }
+    /// Until `condition` holds, or `store`'s machine has nothing left in
+    /// flight that could make it hold (`Waits.swift`).
+    ///
+    /// It was 200 `Task.yield()`s, which is a clock by another name: a yield
+    /// is free when the main actor is idle, so 200 of them pass in
+    /// microseconds while the executor's work — storage, off the main actor —
+    /// waits for a CPU on a busy machine.
+    private func settle(_ store: ContactsStore, until condition: () -> Bool) async {
+        await Wait.until(condition, orIdle: { store.isIdle })
     }
 
     /// Open the book and it is loaded, from storage, through the core.
@@ -62,7 +59,7 @@ struct ContactsStoreTests {
 
         let store = ContactsStore(store: VelaStore(defaults: defaults))
         store.open(myAddress: alice)
-        await settle(until: { store.isLoaded })
+        await settle(store, until: { store.isLoaded })
 
         #expect(store.isLoaded, "the core never became loaded")
         #expect(store.view?.contacts.count == 2)
@@ -80,10 +77,10 @@ struct ContactsStoreTests {
 
         let store = ContactsStore(store: VelaStore(defaults: defaults))
         store.open(myAddress: alice)
-        await settle(until: { store.isLoaded })
+        await settle(store, until: { store.isLoaded })
 
         store.delete(address: bob)
-        await settle(until: { store.view?.contacts.count == 1 })
+        await settle(store, until: { store.view?.contacts.count == 1 })
         #expect(store.contact(at: bob) == nil, "the row is still in the view")
 
         // The bytes, not just the model.
@@ -95,7 +92,7 @@ struct ContactsStoreTests {
         // "I watched it vanish" is not evidence that it will still be gone
         // tomorrow. Settling on the view and then reading the shelf would have
         // recorded a passing test for an app that persisted nothing.
-        await settle(until: { defaults.string(forKey: VelaStore.Key.contactsDismissed) != nil })
+        await settle(store, until: { defaults.string(forKey: VelaStore.Key.contactsDismissed) != nil })
         let raw = defaults.string(forKey: VelaStore.Key.contactsDismissed) ?? ""
         let dismissed = (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any]
         #expect(dismissed?[bob] != nil, "no tombstone written; stored: \(raw)")
@@ -103,7 +100,7 @@ struct ContactsStoreTests {
         // Relaunch.
         let reopened = ContactsStore(store: VelaStore(defaults: defaults))
         reopened.open(myAddress: alice)
-        await settle(until: { reopened.isLoaded })
+        await settle(reopened, until: { reopened.isLoaded })
         #expect(reopened.contact(at: bob) == nil, "Bob came back from the dead")
         #expect(reopened.contact(at: alice) != nil)
     }
@@ -119,12 +116,12 @@ struct ContactsStoreTests {
 
         let store = ContactsStore(store: VelaStore(defaults: defaults))
         store.open(myAddress: alice)
-        await settle(until: { store.isLoaded })
+        await settle(store, until: { store.isLoaded })
         #expect(store.view?.contacts.count == 2)
 
         // A different wallet signs in. The core drops everything and re-reads.
         store.open(myAddress: "0x0000000000000000000000000000000000000001")
-        await settle(until: { store.isLoaded && store.view?.contacts.count == 2 })
+        await settle(store, until: { store.isLoaded && store.view?.contacts.count == 2 })
         #expect(store.isLoaded)
     }
 
@@ -137,10 +134,10 @@ struct ContactsStoreTests {
 
         let store = ContactsStore(store: VelaStore(defaults: defaults))
         store.open(myAddress: alice)
-        await settle(until: { store.isLoaded })
+        await settle(store, until: { store.isLoaded })
 
         store.delete(address: bob)
-        await settle(until: { defaults.string(forKey: VelaStore.Key.contactsDismissed) != nil })
+        await settle(store, until: { defaults.string(forKey: VelaStore.Key.contactsDismissed) != nil })
 
         // Leaving and coming back with the same account changes nothing.
         store.open(myAddress: alice)
@@ -163,19 +160,19 @@ struct ContactsStoreTests {
 
         let store = ContactsStore(store: VelaStore(defaults: defaults))
         store.open(myAddress: alice)
-        await settle(until: { store.isLoaded && store.view?.groups.count == 1 })
+        await settle(store, until: { store.isLoaded && store.view?.groups.count == 1 })
         #expect(store.group(id: "grp_1")?.members.count == 2)
 
         store.deleteGroup(id: "grp_1")
-        await settle(until: { store.view?.groups.isEmpty == true })
+        await settle(store, until: { store.view?.groups.isEmpty == true })
         #expect(store.view?.groups.isEmpty == true)
         #expect(store.view?.contacts.count == 2, "the members went with the group")
 
         // And it stays gone.
-        await settle(until: { defaults.string(forKey: VelaStore.Key.contactGroups) == "[]" })
+        await settle(store, until: { defaults.string(forKey: VelaStore.Key.contactGroups) == "[]" })
         let reopened = ContactsStore(store: VelaStore(defaults: defaults))
         reopened.open(myAddress: alice)
-        await settle(until: { reopened.isLoaded })
+        await settle(reopened, until: { reopened.isLoaded })
         #expect(reopened.view?.groups.isEmpty == true)
         #expect(reopened.view?.contacts.count == 2)
     }
@@ -187,7 +184,7 @@ struct ContactsStoreTests {
 
         let store = ContactsStore(store: VelaStore(defaults: defaults))
         store.open(myAddress: nil)
-        await settle(until: { store.isLoaded })
+        await settle(store, until: { store.isLoaded })
         #expect(store.isLoaded)
     }
 }

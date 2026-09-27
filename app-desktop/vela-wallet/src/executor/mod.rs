@@ -35,6 +35,7 @@ pub mod balance_dashboard;
 pub mod balances;
 pub mod batch;
 pub mod browser_history;
+pub mod bug_report;
 pub mod camera;
 pub mod chain;
 pub mod chain_tokens;
@@ -54,6 +55,8 @@ pub mod gpui_http;
 pub mod identity;
 pub mod manage_tokens;
 pub mod network_admin;
+/// A URL handed to the platform's opener, or to a verification log.
+pub mod opener;
 pub mod passkey;
 pub mod payment_request;
 #[cfg(target_os = "macos")]
@@ -65,6 +68,8 @@ pub mod qr;
 pub mod receive_watch;
 pub mod registry;
 pub mod relay;
+/// A bug report's screenshots: decoded, upright, scaled, re-encoded bare (078).
+pub mod screenshot_prep;
 pub mod send;
 pub mod sign_pref;
 /// The signing panel's seven operations.
@@ -73,6 +78,7 @@ pub mod sign_request;
 /// Spec 076: is the Trusted Signer's page the page it is supposed to be?
 pub mod signer_integrity;
 pub mod sim;
+pub mod single_flight;
 pub mod storage;
 pub mod token_trust;
 pub mod tracker;

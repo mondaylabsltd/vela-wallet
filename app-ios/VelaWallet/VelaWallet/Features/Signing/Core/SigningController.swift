@@ -93,28 +93,6 @@ final class SigningController {
     /// container may drop this controller.
     private(set) var closed = false
 
-    /// "Sign with": WHERE the passkey that signs this request is — or the
-    /// Trusted Signer (spec 071), which is where the request is CHECKED. Each
-    /// request starts at the stored default (`sign_pref`), and this controller
-    /// lives for one request, so a pick cannot outlive the question it was
-    /// made for. `auto` is the wallet's stored route.
-    private(set) var signMethod = "auto"
-    private(set) var signWithOpen = false
-
-    /// `nil` toggles the list; an id the core offers picks a method and
-    /// closes it. The pick is this request's; the default is Settings'.
-    func signWith(_ id: String?) {
-        guard let id else {
-            signWithOpen.toggle()
-            return
-        }
-        if offeredSignMethods().contains(id) {
-            signMethod = id
-            trustedSignerNotice = nil
-        }
-        signWithOpen = false
-    }
-
     /// How the last Trusted Signer ceremony for this request ended without a
     /// signature. The core heard a cancelled ceremony and kept the request
     /// open; this is the sentence that says why, until the next slide.
@@ -206,8 +184,6 @@ final class SigningController {
         pool: RpcPool,
         preferredTier: @escaping () -> String = { "fast" },
         numberPreset: @escaping () -> String = { "comma_dot" },
-        preferredSignMethod: @escaping () -> String = { "auto" },
-        offeredSignMethods: @escaping () -> [String] = { ["auto"] },
         ports: Ports
     ) {
         self.wallet = wallet
@@ -216,8 +192,6 @@ final class SigningController {
         self.ports = ports
         self.preferredTier = preferredTier
         self.numberPreset = numberPreset
-        self.preferredSignMethod = preferredSignMethod
-        self.offeredSignMethods = offeredSignMethods
         self.fees = FeeStore(
             relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool)
         )
@@ -287,8 +261,6 @@ final class SigningController {
         // Each request starts at the stored defaults: a pick is one-shot.
         fees.resetSpeed()
         fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
-        let preferred = preferredSignMethod()
-        signMethod = offeredSignMethods().contains(preferred) ? preferred : "auto"
         trustedSignerNotice = nil
 
         // The world first. A machine told nothing refuses a request that names
@@ -390,9 +362,6 @@ final class SigningController {
     /// speed control picks another. The number preset writes each gas bid.
     private let preferredTier: () -> String
     private let numberPreset: () -> String
-    /// The stored "Sign with" and every value the core offers (spec 071).
-    private let preferredSignMethod: () -> String
-    let offeredSignMethods: () -> [String]
 
     private func requestQuote(chainId: Int) {
         guard !feeCalls.isEmpty else { return }
@@ -401,9 +370,16 @@ final class SigningController {
             guard let deployed = await relay.isDeployed(chainId: chainId, address: wallet.address)
             else { return }
             // HOW FAST is the speed core's to say: the store asks at its tier.
+            // WHICH COIN is the fee machine's until the person taps one (spec
+            // 078): it pays in a coin that can, and the approve carries the
+            // fee view's `fee_token` — the very coin it picked — beside the
+            // amount from the same estimate (`approveOpts`), so what the slide
+            // shows is what is signed. A tap re-asks with the pick turned off
+            // (`FeeStore.chooseFeeToken`).
             fees.ask(
                 chainId: chainId, account: wallet.address, deployed: deployed,
-                publicKeyAvailable: true, calls: feeCalls, feeToken: nil
+                publicKeyAvailable: true, calls: feeCalls, feeToken: nil,
+                autoFeeToken: true
             )
         }
     }
@@ -461,6 +437,17 @@ final class SigningController {
 
     func guardCustomAmount(_ text: String) {
         dispatch(guardCore, ["type": "custom_amount_changed", "text": text])
+    }
+
+    /// One batch leg's chip and field. The core ignores `preset_selected` /
+    /// `custom_amount_changed` on a batch — they are the SINGLE approval's —
+    /// so a leg card that sent them drew chips that did nothing.
+    func guardLegPreset(_ index: Int, _ mode: String) {
+        dispatch(guardCore, ["type": "leg_preset_selected", "index": index, "mode": mode])
+    }
+
+    func guardLegCustomAmount(_ index: Int, _ text: String) {
+        dispatch(guardCore, ["type": "leg_custom_amount_changed", "index": index, "text": text])
     }
 
     /// The BOOLEAN card's two deliberate answers — `setApprovalForAll`, a DAI
@@ -585,6 +572,9 @@ final class SigningController {
             "fee_collector": NSNull(),
             "params_override_json": guardView.rewrittenParamsJson as Any? ?? NSNull(),
             "intent": clear.result?.intent as Any? ?? NSNull(),
+            // The guard showed an unbounded amount and it was kept as the site
+            // asked — the submit guard's only waiver, copied, never decided.
+            "unlimited_approved": guardView.unlimitedConsented,
         ]
     }
 

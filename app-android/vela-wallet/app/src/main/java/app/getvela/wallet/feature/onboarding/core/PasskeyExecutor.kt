@@ -413,12 +413,12 @@ class PasskeyExecutor(
         // every device: the key's own PIN/fingerprint, no GMS, no domain
         // association, no OEM sheet. It prompts to plug the key in when it is
         // not present.
-        if ((removable(transports) || method == KeyMethod.SecurityKey) && usbSecurityKey != null) {
+        if (presentedKeyPath(transports, method) && usbSecurityKey != null) {
             VelaLog.event("passkey.assert", "asking (app-owned usb ctap)", "cred" to VelaLog.shortId(credentialIdHex))
             return usbSecurityKey.assert(challenge, credentialIdHex)
         }
 
-        if (credentialIdHex != null && removable(transports) && securityKey != null) {
+        if (credentialIdHex != null && onlyPresented(transports) && securityKey != null) {
             return assertThroughGms(challenge, credentialIdHex, attachment = "cross-platform")
         }
 
@@ -427,23 +427,7 @@ class PasskeyExecutor(
             "Credential Manager is unavailable on this device",
         )
 
-        val request = JSONObject().apply {
-            put("challenge", toBase64url(challenge))
-            put("rpId", relyingPartyId)
-            put("userVerification", "required")
-            if (credentialIdHex != null) {
-                val descriptor = JSONObject()
-                    .put("type", PUBLIC_KEY)
-                    .put("id", base64urlOfHex(credentialIdHex))
-                val hints = transports.split(',')
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-                if (hints.isNotEmpty()) {
-                    descriptor.put("transports", JSONArray(hints))
-                }
-                put("allowCredentials", JSONArray().put(descriptor))
-            }
-        }
+        val request = assertionRequest(challenge, relyingPartyId, credentialIdHex, transports)
 
         val options = listOf(GetPublicKeyCredentialOption(request.toString()))
         VelaLog.event(
@@ -451,7 +435,7 @@ class PasskeyExecutor(
             if (credentialIdHex == null) "asking (any credential)" else "asking (pinned)",
             "cred" to VelaLog.shortId(credentialIdHex),
             "transports" to transports.ifEmpty { "unknown" },
-            "removable" to removable(transports),
+            "removable" to onlyPresented(transports),
         )
         val response = if (credentialIdHex == null) {
             try {
@@ -498,7 +482,7 @@ class PasskeyExecutor(
             }
         } else {
             settleAfterMint(credentialIdHex)
-            getPinned(credentialManager, options, removable(transports))
+            getPinned(credentialManager, options, onlyPresented(transports))
         }
 
         val credential = response.credential as? PublicKeyCredential
@@ -720,18 +704,6 @@ class PasskeyExecutor(
         }
     }
 
-    /**
-     * Does this credential live on something the person has to present — a USB
-     * stick, an NFC card — rather than in a vault this phone can consult?
-     *
-     * Unknown transports answer `false`: the settle-race retry is harmless for
-     * a credential that turns out to be removable (it costs one extra attempt),
-     * while skipping it for one that turns out to be local would bring back the
-     * sheet it exists to prevent.
-     */
-    private fun removable(transports: String): Boolean =
-        transports.split(',').map { it.trim() }.any { it == "usb" || it == "nfc" || it == "ble" }
-
     fun random(bytes: Int): ByteArray = ByteArray(bytes).also(secureRandom::nextBytes)
 
     /**
@@ -812,7 +784,6 @@ class PasskeyExecutor(
     private companion object {
         const val RELYING_PARTY = "getvela.app"
         const val RELYING_PARTY_NAME = "Vela Wallet"
-        const val PUBLIC_KEY = "public-key"
         const val ES256 = -7
         const val CHALLENGE_BYTES = 32
 
@@ -998,6 +969,57 @@ private fun describe(error: Throwable): String =
 // WebAuthn JSON is base64url everywhere; the core is hex everywhere. Both
 // conversions go through vela-core, so a padding or alphabet difference cannot
 // appear on one client only.
+
+private const val PUBLIC_KEY = "public-key"
+
+/**
+ * Does this credential live ONLY on something the person has to present — a
+ * USB stick, an NFC card — rather than anywhere a vault this phone can consult?
+ *
+ * A list that also names `internal` or `hybrid` does not: a signing route names
+ * the method's own transports AND where the sign-in found the key (2026-09-26),
+ * so "This device" answered by a phone reads `internal,usb,nfc,ble,hybrid`.
+ * Credential Manager reaches that key with every hint and offers the security
+ * key's sheet itself; the app-owned USB path would ask a phone passkey to be
+ * plugged in — the dead end of 2026-08-26.
+ *
+ * Unknown transports answer `false`: the settle-race retry is harmless for a
+ * credential that turns out to be removable (it costs one extra attempt), while
+ * skipping it for one that turns out to be local would bring back the sheet it
+ * exists to prevent.
+ */
+internal fun onlyPresented(transports: String): Boolean {
+    val hints = transports.split(',').map { it.trim() }
+    return hints.any { it == "usb" || it == "nfc" || it == "ble" } && hints.none { it == "internal" || it == "hybrid" }
+}
+
+/** A pinned ceremony that takes the app-owned USB path: the method says security key, or the key is only ever presented. */
+internal fun presentedKeyPath(transports: String, method: KeyMethod): Boolean =
+    method == KeyMethod.SecurityKey || onlyPresented(transports)
+
+/**
+ * The request Credential Manager is asked, pinned to [credentialIdHex] when
+ * there is one. [transports] go into its one allow-list entry exactly as given
+ * — the route's list, never re-derived from the method.
+ */
+internal fun assertionRequest(challenge: ByteArray, rpId: String, credentialIdHex: String?, transports: String): JSONObject =
+    JSONObject().apply {
+        put("challenge", toBase64url(challenge))
+        put("rpId", rpId)
+        put("userVerification", "required")
+        if (credentialIdHex != null) {
+            val descriptor = JSONObject()
+                .put("type", PUBLIC_KEY)
+                .put("id", base64urlOfHex(credentialIdHex))
+            val hints = transports.split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (hints.isNotEmpty()) {
+                descriptor.put("transports", JSONArray(hints))
+            }
+            put("allowCredentials", JSONArray().put(descriptor))
+        }
+    }
 
 internal fun hexOfBase64url(value: String): String = toHex(fromBase64url(value), false)
 

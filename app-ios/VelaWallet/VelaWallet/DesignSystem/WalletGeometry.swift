@@ -68,6 +68,9 @@ enum WalletGeometry {
     static let chainSheetHeight: CGFloat = 420
     static let chainRowHeight: CGFloat = 44
     static let chainDot: CGFloat = 10
+    /// The slot a chain row's logo fills, with the dot centred in it, so rows
+    /// with and without a logo keep their names on one line.
+    static let chainLogo: CGFloat = 20
     /// QR placeholder: 21×21 module grid (data-model.md) on an always-white
     /// card. Inks are mode-invariant (web: color-fixed shadowInk / onAccent).
     static let qrModules = 21

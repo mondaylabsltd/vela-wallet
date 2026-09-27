@@ -1,10 +1,14 @@
 ---
-title: Hosting sendiri halaman tanda tangan
-description: "Halaman dan ekstensi Chrome tanpa dependensi yang mendekode transaksi sendiri lalu menandatanganinya dengan passkey Anda — cara menjalankan salinan Anda sendiri, dan salinan mana yang bisa menandatangani untuk dompet Anda."
-source: c81389ef7aa2
+title: Trusted Signer
+description: "Halaman satu file di sign.getvela.app yang mendekode permintaan dan menandatanganinya dengan passkey Anda secara mandiri — apa yang diperiksanya, aplikasi mana yang memakainya, dan cara mem-build ulang atau menjalankan salinan Anda sendiri."
+source: fcfb268d3492
 ---
 
-# Hosting sendiri halaman tanda tangan
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+# Trusted Signer
 
 Vela mendekode setiap transaksi sebelum Anda menyetujuinya, dan dekode itu dikerjakan
 dengan jujur — tetapi dikerjakan oleh aplikasi yang sama yang menyusun transaksinya.
@@ -12,90 +16,113 @@ Kalau aplikasi itu, atau jalur yang membawanya sampai ke Anda, dimanipulasi, apl
 bisa menampilkan satu hal dan menandatangani hal lain. Persis itulah yang terjadi pada
 [Bybit](/id/docs/bybit-attack).
 
-Halaman tanda tangan ada untuk memisahkan keduanya: transaksinya datang dari satu tempat,
-sedangkan pemeriksaan dan tanda tangannya terjadi di tempat yang Anda kendalikan.
+Trusted Signer ada untuk memisahkan keduanya: aplikasi hanya menyerahkan permintaannya,
+sedangkan pemeriksaan dan tanda tangannya terjadi di halaman terpisah — halaman yang bisa
+Anda baca dari awal sampai akhir, build ulang hingga sama persis byte demi byte, atau
+jalankan sendiri.
 
+## Di mana ia berjalan
 
-Saat menerima permintaan tanda tangan, halaman ini tidak memercayai ringkasan yang ikut
-datang bersamanya. Halaman ini mendekode calldata mentah sendiri, menghitung digest-nya
-sendiri, menunjukkan kepada Anda apa yang benar-benar akan diotorisasi tanda tangan itu,
-dan baru setelah itu meminta passkey Anda.
+Halaman resminya disajikan dari **sign.getvela.app**. Aplikasi desktop (macOS, Windows,
+Linux), iPhone, dan Android bisa mengirim permintaan ke sana: aplikasi membuka halaman itu
+di tab browser dengan permintaannya di dalam tautan, Anda memeriksanya lalu menandatangani
+dengan passkey Anda di sana, dan halaman itu mengembalikan tanda tangannya ke aplikasi
+lewat tautan `velawallet://`. Dompet web tidak bisa memakainya.
 
-Karena tidak ada langkah build, file yang Anda baca adalah file yang dijalankan. Anda bisa
-membandingkan (diff) folder itu dengan repositorinya dan tahu persis apa yang Anda
-sajikan.
+Fitur ini opsional dan harus Anda pilih sendiri. Anda memilihnya sebagai cara
+menandatangani saat membuat dompet atau masuk, dan sejak itu setiap tanda tangan untuk
+dompet itu di perangkat itu melewatinya. Ia juga bisa membuat kunci dompet. Di
+`sign.getvela.app`, ia memakai passkey `getvela.app` yang sama dengan aplikasi.
 
-## Salinan mana yang bisa menandatangani untuk dompet Anda
-
-Sebuah passkey terikat pada domain tempat passkey itu dibuat. Kunci Vela Anda terdaftar
-di bawah `getvela.app`, dan browser hanya akan menawarkannya ke halaman yang relying
-party-nya adalah `getvela.app`. Satu aturan itulah yang menentukan cara menjalankan
-salinan sendiri mana yang berguna bagi Anda.
-
-**Sebagai halaman di domain Anda sendiri, atau di localhost.** Kalau disajikan lewat
-HTTPS (atau dari localhost), relying party halaman itu adalah nama host-nya sendiri —
-jadi halaman itu bisa menandatangani dengan kunci yang terdaftar di bawah nama host
-_tersebut_, bukan dengan kunci yang terdaftar di bawah `getvela.app`. Karena itu, cara
-ini cocok untuk mencoba seluruh prosesnya dari awal sampai akhir, menjalankan alur
-desktop, dan menandatangani untuk dompet yang kuncinya dibuat di domain Anda sendiri.
-Cara ini bukan cara untuk menandatangani bagi dompet `getvela.app` yang sudah ada.
-
-```sh
-cd app-web/trusted-signer
-python3 -m http.server 8080   # → http://localhost:8080
-```
-
-Semua path di aplikasi ini relatif, jadi subdirektori di host yang sudah ada juga bisa
-dipakai, dan membuka `index.html` langsung dari disk (`file://`) bisa untuk melihat-lihat
-— tanpa origin, tidak ada relying party dan tidak ada yang bisa ditandatangani.
+<Callout type="info" title="Yang sudah diuji sejauh ini">
+Uji menyeluruh dari awal sampai akhir terhadap halaman yang sudah dipublikasikan yang
+tercatat: Android, dan Windows 11 (membuat dompet dan masuk). Aplikasi macOS, Linux, dan
+iPhone memakai sambungan yang sama; belum ada satu pun yang punya catatan uji menyeluruh.
+</Callout>
 
 ## Apa yang dilakukannya sebelum menandatangani
 
-- **Mendekode transaksinya sendiri.** Apa yang dilakukan panggilan itu, kepada siapa, dan
+- **Mendekode permintaannya sendiri.** Apa yang dilakukan panggilan itu, kepada siapa, dan
   berapa jumlahnya, langsung dari calldata — termasuk panggilan yang bersarang di dalam
   sebuah batch.
 - **Hanya menandatangani digest yang dihitungnya sendiri.** Digest EIP-191, EIP-712,
-  SafeOp, dan SafeMessage dihitung di halaman itu dan dicocokkan dengan `vela-core`, kode
-  yang sama dengan yang dipakai dompet. Digest yang tidak bisa dihitungnya berarti
-  penolakan, bukan tanda tangan.
+  SafeOp, dan SafeMessage dihitung di halaman itu, tidak pernah diambil dari peminta;
+  pengujian mencocokkan digest SafeOp dan SafeMessage dengan `vela-core`, kode yang
+  dipakai dompet, dan aplikasi menolak tanda tangan atas digest apa pun selain yang
+  dihitungnya sendiri.
 - **Memeriksa bahwa transaksinya memang yang diminta.** Panggilan yang diminta situs itu
-  harus benar-benar ada di dalam operasi yang ditandatangani.
-- **Menolak persetujuan di tingkat "tanpa batas".** Bukan peringatan — penolakan, disertai
-  petunjuk apa yang sebaiknya dilakukan.
-- **Mengatakan kalau tidak bisa membaca sesuatu,** alih-alih menampilkan ringkasan ramah
-  yang tidak bisa dipertanggungjawabkannya.
-- **Menampilkan alamat dan identicon akun,** dan tidak menampilkan nama penerima yang
-  diberikan oleh pihak yang meminta tanda tangan. Apa pun yang dikendalikan peminta akan
-  dibuang atau diberi label sebagai milik peminta.
+  harus benar-benar ada di dalam operasi yang ditandatangani; kalau tidak, halaman itu
+  menolak.
+- **Mengatakan kalau sebuah persetujuan tanpa batas.** Halaman ini tidak bisa mengubah
+  jumlah — ia menandatangani byte yang tiba atau tidak sama sekali — jadi persetujuan atau
+  permit tanpa batas (2^200 atau lebih, 2^152 untuk Permit2 — batas yang sama dengan di aplikasi) ditampilkan merah dengan alasan itu
+  dan bisa ditandatangani apa adanya; batas on-chain dipilih di layar persetujuan dompet itu
+  sendiri, sebelum permintaannya sampai ke sini. Persetujuan untuk seluruh koleksi NFT
+  ditolak.
+- **Menolak apa yang tidak bisa dipertanggungjawabkannya:** `eth_sign`, metode yang tidak
+  dikenalnya, token yang dikirim ke kontrak token itu sendiri, operasi yang tidak bisa
+  dibacanya, dan proses masuk yang challenge-nya diberikan oleh peminta.
+- **Menolak apa pun yang akan menyerahkan akun Anda,** dengan aturan yang sama
+  seperti di aplikasi: panggilan dari akun Anda ke salah satu fungsinya sendiri
+  untuk pemilik, modul, guard, atau fallback, termasuk di dalam batch;
+  `delegatecall`, kecuali ke kontrak MultiSend milik Safe yang menggabungkan
+  panggilan-panggilan dalam satu operasi; dan tanda tangan `SafeTx`. Halaman ini
+  memeriksa setiap panggilan dalam operasi yang disusun aplikasi, bukan hanya
+  panggilan yang diminta situs.
+- **Menampilkan alamat akun dan identicon yang dihitung di halaman itu.** Penerima dan
+  kontrak tidak pernah diberi nama berdasarkan permintaan — hanya tabel milik halaman itu
+  sendiri yang sudah ditinjau yang bisa menamai sebuah kontrak. Nama akun itu sendiri, yang
+  dikirim aplikasi supaya Anda bisa memilih passkey yang tepat, ditampilkan di samping
+  alamatnya.
+- **Meminta verifikasi pengguna** (sidik jari, wajah, atau PIN Anda) di setiap tanda
+  tangan.
 
 ## Apa yang sengaja tidak dimilikinya
 
 - **Tanpa editor.** Permintaannya sudah tetap saat tiba: Anda menandatanganinya atau
   tidak. Pemilih biaya atau editor allowance akan menulis ulang calldata, dan justru itu
   penyakit yang hendak dicegah halaman ini.
-- **Tanpa pembuatan kunci.** Halaman tanda tangan tidak bisa membuat passkey. Membuat
-  passkey berarti membuat akun yang berbeda.
-- **Tanpa data dari jaringan.** Tidak ada yang ditampilkan atau ditandatanganinya yang
-  diambil dari luar. Satu-satunya yang dimuatnya adalah logo token, sebagai gambar, dari
-  server data chain milik Vela; kalau gagal, sebuah huruf menggantikannya.
+- **Tanpa akses jaringan.** Halaman ini satu file yang kebijakan keamanan kontennya
+  (`default-src 'none'`) ada di dalam byte-nya sendiri, jadi ia tidak bisa mengambil apa
+  pun, membuka koneksi, atau memuat gambar. Satu-satunya yang keluar darinya adalah
+  jawabannya, saat ia mengikuti tautan callback di dalam permintaan (`velawallet://` kalau
+  yang meminta adalah aplikasi Vela). Logo token digambar sebagai huruf.
 
-## Bagaimana permintaan sampai ke sana
+## Apa yang diperiksa aplikasi sebagai balasannya
 
-| Peminta                                      | Saluran                                                                    |
-| -------------------------------------------- | -------------------------------------------------------------------------- |
-| Halaman di browser yang sama                 | `postMessage`                                                              |
-| Halaman di browser yang sama, ke ekstensi    | Port ekstensi                                                              |
-| Aplikasi desktop di komputer yang sama       | Fragmen URL + callback loopback (demo di `samples/`; aplikasi desktop Vela belum memakainya) |
-| Ponsel atau komputer lain                    | Bluetooth LE (protokolnya sudah diimplementasikan; radionya belum diuji di perangkat keras sungguhan) |
+Aplikasi juga tidak memercayai halaman itu. Aplikasi hanya menerima tanda tangan kalau
+challenge yang ditandatangani adalah digest **yang dihitung aplikasi**, verifikasi
+pengguna sudah dilakukan, kuncinya adalah salah satu kunci dompet Anda, dan tanda tangan
+P-256 terverifikasi dengan kunci itu.
 
-Format data, digest, dan tabel asal setiap item di layar ada di `PROTOCOL.md` di samping
-kodenya.
+## Setiap versi yang dipublikasikan bisa diperiksa
 
-## Posisinya
+Setiap versi di-build dari `app-web/trusted-signer/src/` menjadi satu file, secara
+reproducible — Bun dan Node menghasilkan byte yang sama — dan dipublikasikan di alamatnya
+sendiri, `sign.getvela.app/b/<sha256>/sign.html`, berdampingan dengan setiap versi
+sebelumnya. Daftarnya ada di `sign.getvela.app/index.json`.
 
-Begitu aplikasi bisa menyerahkan permintaannya ke halaman ini, cara pakai yang dituju
-sederhana: sejak hari akun Anda menyimpan uang yang tidak rela Anda hilangkan, setiap
-tanda tangan melewati halaman yang kodenya Anda muat sendiri. Bukan hanya untuk jumlah
-besar — persetujuan kecil pun bisa menyerahkan cukup banyak untuk mengosongkan akun.
-Sampai saat itu, halaman ini adalah cara untuk membaca dan menguji persis bagaimana
-pendapat kedua itu akan bekerja.
+```sh
+cd app-web/trusted-signer
+node samples/build-single.mjs --check   # rebuilds a version listed in dist/
+curl -sL https://sign.getvela.app/b/<sha256>/sign.html | shasum -a 256
+```
+
+Saat dijalankan, aplikasi desktop mengambil versi terpublikasi yang akan dibukanya,
+menghitung hash-nya, dan membandingkannya dengan versi-versi yang tertanam di dalam
+aplikasi. Hasilnya hanya dicatat di log, dan halaman yang tidak cocok tetap dibuka.
+Aplikasi ponsel belum memeriksanya.
+
+## Menjalankan salinan Anda sendiri
+
+Pengaturan menyimpan alamat halaman yang dibuka aplikasi Anda, jadi Anda bisa
+mengarahkannya ke deployment Anda sendiri: alamat HTTPS apa pun, atau `localhost` untuk
+pengujian. Build dengan `bun samples/build-single.mjs` (atau `node`) lalu salin `dist/`
+ke host Anda.
+
+Salinan di domain Anda sendiri menandatangani dengan passkey yang dibuat untuk domain
+**itu**, bukan dengan passkey `getvela.app` — jadi ini cara untuk membuat dan memakai
+dompet yang kuncinya berada di bawah domain Anda, bukan cara untuk menandatangani bagi
+dompet `getvela.app` yang sudah ada. Semua kunci sebuah dompet berbagi satu domain.
+
+Kode, beserta skrip yang mem-build dan memeriksanya, ada di `app-web/trusted-signer/`.

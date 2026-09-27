@@ -1,11 +1,10 @@
 /**
  * Constructs the `contacts` core and wires it to the web shell (spec 024).
  *
- * Route-scoped factory with `dispose()` (research D8): the address book is
- * the contacts route's concern; when 026's send flow needs recipient
- * suggestions it constructs its own session — the core is cheap, and a
- * global ledger would be state nobody owns. Pattern:
- * `$lib/onboarding/core/sessions.ts`.
+ * The factory. The app holds ONE session, `contacts-book.svelte.ts`, read at
+ * sign-in and shared by the contacts page and the send picker (founder,
+ * 2026-09-26: a session per visit made 通讯录 flash unread on every visit).
+ * Research D8's route scope is retired; build through the book.
  */
 
 import { ContactsCore } from '$lib/core/client';

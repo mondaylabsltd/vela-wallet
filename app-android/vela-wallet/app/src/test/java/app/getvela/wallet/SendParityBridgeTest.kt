@@ -125,7 +125,8 @@ class SendParityBridgeTest {
         assertTrue(tokenMode.denomEnabled)
         // Token units: the ticker follows the figure.
         assertNull(tokenMode.unitPrefix)
-        assertEquals("XDAI", tokenMode.unitSuffix)
+        // The core spells a built-in chain's own coin the registry's way.
+        assertEquals("xDAI", tokenMode.unitSuffix)
 
         send.toggleFiatInput()
         val fiat = send.settle { it.amount_fiat_code != null }
@@ -157,7 +158,7 @@ class SendParityBridgeTest {
         assertTrue(live.amount!!.denomShown)
         assertFalse(live.amount!!.denomEnabled)
         assertEquals(
-            strings.t(I18nKeys.Flows.DENOM_TOGGLE_NO_RATE, mapOf("code" to "EUR", "symbol" to "XDAI")),
+            strings.t(I18nKeys.Flows.DENOM_TOGGLE_NO_RATE, mapOf("code" to "EUR", "symbol" to "xDAI")),
             live.warning,
         )
     }

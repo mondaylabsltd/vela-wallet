@@ -239,6 +239,34 @@ pub struct NetBuiltinChain {
     pub typical_inclusion_s: u16,
 }
 
+/// How the wallet writes a built-in chain's own coin — the registry's
+/// `native_symbol` — or `None` for a chain it does not ship.
+///
+/// Chain documents disagree on the casing (Gnosis's says "XDAI"; this
+/// registry, the fee row and the site say "xDAI"), and a shell that took
+/// the document's spelling for the asset list printed one coin two ways on
+/// one screen. Every list of holdings is normalised to this at the door
+/// ([`display_native_symbol`]).
+#[must_use]
+pub fn builtin_native_symbol(chain_id: u32) -> Option<&'static str> {
+    BUILTIN_CHAINS
+        .iter()
+        .find(|chain| chain.chain_id == chain_id)
+        .map(|chain| chain.native_symbol)
+}
+
+/// A holding's symbol as the wallet writes it: a built-in chain's own coin
+/// (no contract) takes the registry spelling; everything else is left as
+/// read. Only the CASE is ever changed — a native row whose symbol is some
+/// other word entirely (a custom network's coin on a reused id) keeps it.
+#[must_use]
+pub fn display_native_symbol(chain_id: u32, token_address: Option<&str>, symbol: &str) -> String {
+    match (token_address, builtin_native_symbol(chain_id)) {
+        (None, Some(canonical)) if canonical.eq_ignore_ascii_case(symbol) => canonical.to_owned(),
+        _ => symbol.to_owned(),
+    }
+}
+
 pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
     NetBuiltinChain {
         id: "ethereum",

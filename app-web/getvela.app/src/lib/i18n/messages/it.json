@@ -59,7 +59,7 @@
 				"passkeys": "Come funzionano le passkey",
 				"signers": "Firmatari e chiavi di sicurezza",
 				"clear-signing": "Firma leggibile",
-				"clear-signing-self-host": "Ospita tu la pagina di firma",
+				"clear-signing-self-host": "Trusted Signer",
 				"self-hosting": "Guida al self-hosting",
 				"bybit-attack": "L'attacco a Bybit",
 				"recovery": "Recupero e accesso",
@@ -229,7 +229,7 @@
 				},
 				{
 					"feature": "Verifica aggiuntiva",
-					"vela": "Una pagina di firma indipendente, pronta ma non ancora collegata alle app",
+					"vela": "Il Trusted Signer: una pagina indipendente che decodifica e firma per conto proprio, se lo scegli",
 					"metamask": "Avvisi di rischio di terze parti",
 					"base": "—"
 				},
@@ -355,8 +355,8 @@
 				"body": "Oggi alcune app ignorano in parte Impostazioni → Endpoint dei servizi: l'app iPhone del tutto, l'app web quando crei un wallet o accedi, e Android quando cerca i nomi degli indirizzi. Tutte dovrebbero rispettare queste impostazioni."
 			},
 			{
-				"title": "La pagina di firma indipendente, collegata",
-				"body": "La pagina di firma che decodifica e firma una richiesta per conto proprio è pronta. Il prossimo passo: far sì che le app le passino le loro richieste, così ogni firma viene controllata da un programma che hai caricato tu."
+				"title": "Un controllo del Trusted Signer che rifiuta",
+				"body": "L'app desktop confronta già la pagina di firma con le versioni che porta con sé, ma una discrepanza la registra soltanto nel log. Il prossimo passo: rifiutare una pagina che non corrisponde, e controllarla anche sui telefoni."
 			},
 			{
 				"title": "Copertura più ampia della firma leggibile",
@@ -368,6 +368,10 @@
 			}
 		],
 		"shipped": [
+			{
+				"title": "Trusted Signer",
+				"body": "Una pagina di firma indipendente su sign.getvela.app che decodifica e firma una richiesta per conto proprio, con ogni versione indirizzata per contenuto e riproducibile. Le app desktop, iPhone e Android possono usarla come modo di firmare."
+			},
 			{
 				"title": "Le tue chiavi on-chain, con un backup su Ethereum",
 				"body": "Accedi direttamente dal registro on-chain quando l'indice non risponde, vedi tutte le chiavi con cui è stato creato il tuo wallet e copia il record su Ethereum."
@@ -402,7 +406,7 @@
 			},
 			{
 				"title": "Firma leggibile (ERC-7730)",
-				"body": "Le transazioni mostrano cosa fanno — importo, destinatario, intento — invece di esadecimale grezzo, e un'approvazione di livello «illimitato» non si può inviare finché non la riduci."
+				"body": "Le transazioni mostrano cosa fanno — importo, destinatario, intento — invece di esadecimale grezzo, e un'approvazione di livello «illimitato» viene mostrata in rosso, con un limite proposto."
 			},
 			{
 				"title": "Nasce Vela",
@@ -487,9 +491,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "a9482909de80",
+		"home": "9d4250ccd810",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

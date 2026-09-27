@@ -305,7 +305,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		panelTitle: m.panelTitle
 	}),
 
-	// -- cs5–cs8: the approval family, under the never-unlimited mandate --
+	// -- cs5–cs8: the approval family — unlimited kept as asked, and said --
 	cs5: (m) => ({
 		dapp: D.oneinch,
 		network: NETWORK,
@@ -317,14 +317,14 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				value: m.valueUnlimited,
 				valueTone: 'danger',
 				chips: [
-					// Permanently disabled, not merely unselected: an unlimited
-					// request is the one thing this wallet will not sign as asked.
-					chip('requested', m.chipRequested, 'disabled'),
+					// The site's own ask, preselected (2026-09-26): Permit2 bundles
+					// revert when the wallet re-encodes the approve. A cap is one
+					// chip away.
+					chip('requested', m.chipRequested, 'selected'),
 					chip('balance', m.chipBalance, 'idle'),
 					chip('custom', m.chipCustom, 'idle'),
 					chip('revoke', m.chipRevoke, 'idle')
-				],
-				note: `${m.unlimitedDisabled}\n${m.choosePrompt}`
+				]
 			},
 			{
 				kind: 'party',
@@ -339,8 +339,8 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 		techOpen: false,
 		fee: onchainFee(m),
 		signer: signer(m),
-		// Nothing to slide until a finite amount exists.
-		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: false },
+		// Unlimited, seen and said — signable as asked.
+		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
 		panelTitle: m.panelTitle
 	}),
 
@@ -355,7 +355,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				value: '1,240 USDC',
 				valueTone: 'neutral',
 				chips: [
-					chip('requested', m.chipRequested, 'disabled'),
+					chip('requested', m.chipRequested, 'idle'),
 					chip('balance', m.chipBalance, 'selected'),
 					chip('custom', m.chipCustom, 'idle'),
 					chip('revoke', m.chipRevoke, 'idle')
@@ -429,7 +429,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				value: m.valueRevoke,
 				valueTone: 'neutral',
 				chips: [
-					chip('requested', m.chipRequested, 'disabled'),
+					chip('requested', m.chipRequested, 'idle'),
 					chip('balance', m.chipBalance, 'idle'),
 					chip('custom', m.chipCustom, 'idle'),
 					chip('revoke', m.chipRevoke, 'selected')
@@ -1221,10 +1221,10 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 
 	// -- cs34 / cs35: the cap being TYPED (spec 032 phase 39) --
 	//
-	// cs5 is where this starts: an unlimited request with its Requested chip
-	// dead. These are what the card becomes once somebody picks Custom — the
+	// cs5 is where this starts: an unlimited request, kept on its Requested
+	// chip. These are what the card becomes once somebody picks Custom — the
 	// field under the chips, the big number above counting what has been
-	// typed, and the slide shut until the core says the amount is finite.
+	// typed, and the slide shut while the typed amount is not one.
 	cs34: (m) => ({
 		dapp: D.oneinch,
 		network: NETWORK,
@@ -1236,7 +1236,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				value: '500 USDC',
 				valueTone: 'neutral',
 				chips: [
-					chip('requested', m.chipRequested, 'disabled'),
+					chip('requested', m.chipRequested, 'idle'),
 					chip('balance', m.chipBalance, 'idle'),
 					chip('custom', m.chipCustom, 'selected'),
 					chip('revoke', m.chipRevoke, 'idle')
@@ -1273,7 +1273,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				value: m.valueUnlimited,
 				valueTone: 'danger',
 				chips: [
-					chip('requested', m.chipRequested, 'disabled'),
+					chip('requested', m.chipRequested, 'idle'),
 					chip('balance', m.chipBalance, 'idle'),
 					chip('custom', m.chipCustom, 'selected'),
 					chip('revoke', m.chipRevoke, 'idle')
@@ -1283,8 +1283,7 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 					symbol: 'USDC',
 					placeholder: '0',
 					error: m.invalidAmount
-				},
-				note: `${m.unlimitedDisabled}\n${m.choosePrompt}`
+				}
 			},
 			{
 				kind: 'party',

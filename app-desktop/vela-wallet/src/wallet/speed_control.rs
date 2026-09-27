@@ -70,6 +70,8 @@ struct QuoteAsk {
     tier: FeeTier,
     calls: Vec<FeeCall>,
     fee_token: Option<String>,
+    /// Nobody chose the fee coin: the fee machine picks one that can pay.
+    auto_fee_token: bool,
 }
 
 impl QuoteAsk {
@@ -89,6 +91,7 @@ impl QuoteAsk {
             tier: self.tier,
             calls: self.calls.clone(),
             fee_token: self.fee_token.clone(),
+            auto_fee_token: self.auto_fee_token,
         }
     }
 }
@@ -366,6 +369,7 @@ pub fn ask<H: SpeedHost>(
     public_key_available: bool,
     calls: Vec<FeeCall>,
     fee_token: Option<String>,
+    auto_fee_token: bool,
     cx: &mut Context<H>,
 ) {
     let tier = host.speed_control().tier();
@@ -376,6 +380,7 @@ pub fn ask<H: SpeedHost>(
         tier,
         calls,
         fee_token,
+        auto_fee_token,
     };
     ask_in_force(host, ask, cx);
 }
@@ -444,10 +449,19 @@ pub fn choose_fee_token<H: SpeedHost>(
     let Some(ask) = host.speed_control().fee.ask.clone() else {
         return;
     };
-    if ask.fee_token == fee_token {
+    if ask.fee_token == fee_token && !ask.auto_fee_token {
         return;
     }
-    ask_in_force(host, QuoteAsk { fee_token, ..ask }, cx);
+    // A chip tap is the person's choice: priced as picked from here on.
+    ask_in_force(
+        host,
+        QuoteAsk {
+            fee_token,
+            auto_fee_token: false,
+            ..ask
+        },
+        cx,
+    );
 }
 
 // -- the speed core ------------------------------------------------------------
@@ -677,6 +691,7 @@ mod tests {
                 data: "0x".to_owned(),
             }],
             fee_token: None,
+            auto_fee_token: true,
         }
     }
 

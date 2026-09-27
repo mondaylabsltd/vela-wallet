@@ -59,7 +59,7 @@
 				"passkeys": "Cómo funcionan las passkeys",
 				"signers": "Firmantes y llaves de seguridad",
 				"clear-signing": "Firma legible",
-				"clear-signing-self-host": "Aloja tú mismo la página de firma",
+				"clear-signing-self-host": "Trusted Signer",
 				"self-hosting": "Guía de autoalojamiento",
 				"bybit-attack": "El ataque a Bybit",
 				"recovery": "Recuperación e inicio de sesión",
@@ -229,7 +229,7 @@
 				},
 				{
 					"feature": "Revisión adicional",
-					"vela": "Una página de firma independiente, ya construida pero todavía no conectada a las apps",
+					"vela": "El Trusted Signer: una página independiente que decodifica y firma por su cuenta, si lo eliges",
 					"metamask": "Alertas de riesgo de terceros",
 					"base": "—"
 				},
@@ -355,8 +355,8 @@
 				"body": "Hoy algunas apps ignoran partes de Ajustes → Endpoints de servicio: la app de iPhone por completo, la app web al crear una wallet o iniciar sesión, y Android al buscar nombres. Todas deberían respetarlo."
 			},
 			{
-				"title": "La página de firma independiente, conectada",
-				"body": "La página de firma que decodifica y firma una solicitud por su cuenta ya está construida. Lo siguiente: que las apps le pasen sus solicitudes, para que un programa que cargaste tú mismo revise cada firma."
+				"title": "Una revisión del Trusted Signer que rechace",
+				"body": "La app de escritorio ya compara la página de firma con las versiones que trae integradas, pero solo registra una discrepancia en el log. Lo siguiente: rechazar una página que no coincida, y hacer esta revisión también en los celulares."
 			},
 			{
 				"title": "Más cobertura de firma legible",
@@ -368,6 +368,10 @@
 			}
 		],
 		"shipped": [
+			{
+				"title": "Trusted Signer",
+				"body": "Una página de firma independiente en sign.getvela.app que decodifica una solicitud y la firma por su cuenta, con cada versión direccionada por contenido y reproducible. Las apps de escritorio, iPhone y Android pueden usarla como tu forma de firmar."
+			},
 			{
 				"title": "Tus llaves on-chain, con respaldo en Ethereum",
 				"body": "Iniciar sesión directamente desde el registro on-chain cuando el índice no está disponible, ver cada llave con la que se creó tu wallet y copiar esos datos a Ethereum."
@@ -402,7 +406,7 @@
 			},
 			{
 				"title": "Firma legible (ERC-7730)",
-				"body": "Las transacciones muestran lo que hacen (monto, destinatario, intención) en vez de hexadecimal crudo, y una aprobación de nivel «ilimitado» no se puede enviar hasta que la reduzcas."
+				"body": "Las transacciones muestran lo que hacen (monto, destinatario, intención) en vez de hexadecimal crudo, y una aprobación de nivel «ilimitado» se muestra en rojo, con la opción de ponerle un tope."
 			},
 			{
 				"title": "Nace Vela",
@@ -487,9 +491,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "a9482909de80",
+		"home": "9d4250ccd810",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

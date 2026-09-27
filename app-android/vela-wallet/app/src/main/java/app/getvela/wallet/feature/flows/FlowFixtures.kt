@@ -897,7 +897,8 @@ object FlowFixtures {
             SendFormMode.Single -> SendConfirmModel(
                 header = header,
                 mark = TokenMarkModel("USDT", WalletFixtures.ChainColors.ethereum),
-                amount = "120 USDT",
+                amount = "120",
+                amountUnit = "USDT",
                 subline = "≈ $120.00",
                 facts = facts,
                 cta = s.t(I18nKeys.Flows.CONFIRM_SEND),

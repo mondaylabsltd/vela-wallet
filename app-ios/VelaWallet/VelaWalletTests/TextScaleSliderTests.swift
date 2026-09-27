@@ -3,20 +3,21 @@
 //  VelaWalletTests
 //
 //  The text-size slider (the founder: 没有滑动的感觉): where a finger's x
-//  lands among the six stops, and the one detent each new stop plays. A
-//  simulator cannot vibrate, so what is pinned is the call — through
-//  `VelaHaptic.recording`.
+//  lands among the six stops, the one detent each new stop plays, and how
+//  far the thumb lifts under a finger or a pointer. A simulator cannot
+//  vibrate, so what is pinned is the call — through `VelaHaptic.recording`.
 //
 
 import CoreGraphics
+import SwiftUI
 import Testing
 @testable import VelaWallet
 
 @MainActor
 struct TextScaleSliderTests {
 
-    /// Six stops, as `TextScaleLevel` has; a 300pt track with the 20pt thumb's
-    /// radius kept clear at each end — stops at 10, 66, 122, 178, 234, 290.
+    /// Six stops, as `TextScaleLevel` has; a 300pt track with the stops kept
+    /// 10pt in from each end — stops at 10, 66, 122, 178, 234, 290.
     private let steps = TextScaleLevel.allCases.count
     private let width: CGFloat = 300
     private let inset: CGFloat = 10
@@ -116,5 +117,132 @@ struct TextScaleSliderTests {
         }
         #expect(played.isEmpty)
         #expect(committed == nil)
+    }
+
+    // MARK: - The thumb answers the finger (the desktop's slider, 2026-09)
+
+    /// The inset IS the room the drawing has: at every lift the thumb and its
+    /// ring fit inside the track on the end stops, and a lifted thumb has a
+    /// ring that shows around it.
+    @Test func theThumbAndItsRingAreWholeOnEitherEndStop() {
+        for lift in [TextScaleLift.rest, .hover, .pressed] {
+            #expect(lift.ring / 2 <= TextScaleSlider.inset, "the \(lift) ring is cut off at the track's ends")
+            #expect(lift.thumb / 2 <= TextScaleSlider.inset, "the \(lift) thumb is cut off at the track's ends")
+        }
+        #expect(TextScaleLift.rest.ringOpacity == 0)
+        #expect(TextScaleLift.rest.thumb < TextScaleLift.hover.thumb)
+        #expect(TextScaleLift.hover.thumb < TextScaleLift.pressed.thumb)
+        #expect(TextScaleLift.hover.ring > TextScaleLift.hover.thumb)
+        #expect(TextScaleLift.pressed.ring > TextScaleLift.hover.ring)
+        #expect(TextScaleLift.pressed.ringOpacity > TextScaleLift.hover.ringOpacity)
+    }
+
+    /// A finger landing lifts the thumb before the tap or the pan has said
+    /// anything; lifting it puts the thumb back, storing and playing nothing.
+    @Test func aFingerLiftsTheThumbTheMomentItLands() {
+        var drag = TextScaleDrag()
+        let played = VelaHaptic.recording {
+            #expect(drag.lift == .rest)
+            drag.press(true)
+            #expect(drag.lift == .pressed)
+            drag.press(false)
+            #expect(drag.release(committed: 2) == nil)
+        }
+        #expect(drag.lift == .rest)
+        #expect(played.isEmpty)
+    }
+
+    /// A tap is down, move, release, up — pressed until the finger is gone.
+    @Test func aTapStaysPressedUntilTheFingerLifts() {
+        var drag = TextScaleDrag()
+        drag.press(true)
+        drag.move(to: stop(234), committed: 1)
+        #expect(drag.lift == .pressed)
+        #expect(drag.release(committed: 1) == 4)
+        #expect(drag.lift == .pressed, "the thumb settled before the finger lifted")
+        drag.press(false)
+        #expect(drag.lift == .rest)
+    }
+
+    /// A drag is pressed until BOTH the finger and the pan have let go: the
+    /// two reports arrive in either order, and neither alone settles it.
+    @Test func aDragStaysPressedUntilThePanAndTheFingerHaveLetGo() {
+        var fingerFirst = TextScaleDrag()
+        fingerFirst.press(true)
+        fingerFirst.move(to: stop(122), committed: 0)
+        fingerFirst.press(false)
+        #expect(fingerFirst.lift == .pressed, "the thumb settled mid-drag")
+        #expect(fingerFirst.release(committed: 0) == 2)
+        #expect(fingerFirst.lift == .rest)
+
+        var panFirst = TextScaleDrag()
+        panFirst.press(true)
+        panFirst.move(to: stop(122), committed: 0)
+        _ = panFirst.release(committed: 0)
+        #expect(panFirst.lift == .pressed)
+        panFirst.press(false)
+        #expect(panFirst.lift == .rest)
+    }
+
+    /// A vertical swipe that starts on the slider: the page's scroll takes the
+    /// touch, the press ends, and nothing moved.
+    @Test func theScrollTakingTheTouchSettlesTheThumb() {
+        var drag = TextScaleDrag()
+        drag.press(true)
+        drag.press(false)
+        #expect(drag.lift == .rest)
+        #expect(drag.shown == nil)
+    }
+
+    /// Under a pointer the thumb lifts a little and the tick a click
+    /// would land on is marked — not the one the thumb is on, and not while
+    /// pressed.
+    @Test func aPointerMarksTheStopAClickWouldLandOn() {
+        var drag = TextScaleDrag()
+        drag.hover(over: stop(234))
+        #expect(drag.lift == .hover)
+        #expect(drag.aimed(committed: 2) == 4)
+        drag.hover(over: stop(122))
+        #expect(drag.aimed(committed: 2) == nil, "the thumb's own stop was marked")
+        drag.hover(over: stop(290))
+        drag.press(true)
+        #expect(drag.lift == .pressed)
+        #expect(drag.aimed(committed: 2) == nil, "a stop was marked under a pressed thumb")
+        drag.press(false)
+        #expect(drag.aimed(committed: 2) == 5)
+        drag.hover(over: nil)
+        #expect(drag.lift == .rest)
+        #expect(drag.aimed(committed: 2) == nil)
+    }
+
+    // MARK: - Where the slider is left
+
+    /// The anchor `scrollTo` is given puts the slider's top back where it was
+    /// when the size was chosen: `anchor.y × (viewport − height)` is that top.
+    @Test func theSliderIsPutBackWhereItWasLetGo() throws {
+        let viewport: CGFloat = 700, height: CGFloat = 68
+        for top: CGFloat in [0, 120, 316, 632] {
+            let anchor = try #require(TextScaleAnchor.anchor(top: top, height: height, viewport: viewport))
+            #expect(abs(anchor.y * (viewport - height) - top) < 0.001, "a slider let go at \(top) was put back elsewhere")
+        }
+        // Half behind the tab bar, or half above the page: back whole.
+        #expect(TextScaleAnchor.anchor(top: 680, height: height, viewport: viewport)?.y == 1)
+        #expect(TextScaleAnchor.anchor(top: -30, height: height, viewport: viewport)?.y == 0)
+        // A viewport the slider does not fit in has no answer.
+        #expect(TextScaleAnchor.anchor(top: 0, height: height, viewport: 60) == nil)
+    }
+
+    /// It answers once per choice, and only for a choice: a size that changed
+    /// some other way leaves the scroll alone.
+    @Test func theAnchorIsHeldByAChoiceAndSpentOnce() {
+        let anchor = TextScaleAnchor()
+        anchor.viewport = 700
+        anchor.frame = CGRect(x: 24, y: 316, width: 354, height: 68)
+        #expect(anchor.release() == nil, "a size nobody chose on the slider moved the page")
+        anchor.hold()
+        // The page re-lays out before the scroll is put back.
+        anchor.frame = CGRect(x: 24, y: 546, width: 354, height: 68)
+        #expect(anchor.release() == UnitPoint(x: 0.5, y: 0.5))
+        #expect(anchor.release() == nil, "one choice put the page back twice")
     }
 }

@@ -64,6 +64,10 @@ struct BalanceViewWire: Decodable, Equatable {
     /// Some chains answered and some did not. The total is a floor, not a sum,
     /// and the screen has to say so rather than quietly under-reporting.
     let balancePartial: Bool
+    /// Nothing could be read and nothing is known: the first fetch failed with
+    /// no cache behind it. Optional so a view written before the field (a test
+    /// fixture, an older core) still decodes; `nil` reads as "not unreachable".
+    var unreachable: Bool? = nil
     let notice: BalanceNoticeWire?
     /// The person tapped to hide the figure. A display state the core owns so
     /// it survives a relaunch.

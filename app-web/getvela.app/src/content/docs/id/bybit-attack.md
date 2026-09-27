@@ -1,7 +1,7 @@
 ---
 title: Serangan Bybit, dan jalur yang dipakainya
 description: "Pada Februari 2025 Bybit kehilangan sekitar $1,5 miliar. Yang jebol bukan kontrak Safe — melainkan antarmukanya. Halaman ini menjelaskan jalurnya, dan bagian mana dari desain Vela yang menutupnya."
-source: 14ae76da6694
+source: d8217ceb16b2
 ---
 
 # Serangan Bybit, dan jalur yang dipakainya
@@ -81,14 +81,17 @@ seperti payload Bybit — modul yang sudah diaktifkan kemudian bisa menjalankan
 pada `Safe{Wallet}`, hasil dekodenya pun akan menjadi milik penyerang — untuk itulah
 poin berikutnya.
 
-**Jalur independen yang bisa memeriksa antarmuka.** Vela sudah membuat
-[halaman tanda tangan](/id/docs/clear-signing-self-host) tanpa langkah build dan tanpa
-dependensi, yang mendekode permintaan dan melakukan tanda tangan WebAuthn secara mandiri —
-satu folder berisi file statis yang bisa Anda baca dari awal sampai akhir, sajikan
-sendiri, atau muat sebagai ekstensi browser. Tujuannya menjadi pendapat kedua yang tidak
-berbagi rantai pasok (supply chain) dengan aplikasi utama. *Status: sudah dibuat dan
-diuji; belum dipublikasikan, dan belum ada aplikasi Vela yang mengirim permintaan ke
-sana.* Halaman ini akan menyatakannya dengan jelas saat hal itu berubah.
+**Jalur independen yang bisa memeriksa antarmuka.**
+[Trusted Signer](/id/docs/clear-signing-self-host) milik Vela adalah halaman satu file di
+sign.getvela.app yang mendekode permintaan dan melakukan tanda tangan WebAuthn secara
+mandiri — halaman yang bisa Anda baca dari awal sampai akhir, build ulang hingga sama persis
+byte demi byte, atau sajikan sendiri. Ia adalah pendapat kedua yang tidak berbagi rantai
+pasok (supply chain) dengan aplikasi utama: aplikasi hanya menyerahkan permintaannya, dan
+halaman itu sendiri yang menghitung apa yang ditandatangani. *Status: sudah dipublikasikan;
+aplikasi desktop, iPhone, dan Android memakainya di perangkat tempat Anda memilihnya saat
+membuat dompet atau masuk. Aplikasi desktop membandingkan halaman itu dengan versi-versi yang
+dibawanya, tetapi hanya mencatat ketidakcocokan di log, dan aplikasi ponsel belum
+memeriksanya.*
 
 **Kami tidak punya peran admin yang bisa direbut.** Akun Vela adalah
 [Safe v1.4.1 yang tidak dimodifikasi](/id/docs/account-contract), dan Vela tidak memegang

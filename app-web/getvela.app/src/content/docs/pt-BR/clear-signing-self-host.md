@@ -1,10 +1,14 @@
 ---
-title: Hospedar a página de assinatura
-description: "A página sem dependências e a extensão do Chrome que decodificam uma transação por conta própria e a assinam com a sua passkey — como rodar a sua própria cópia, e qual cópia consegue assinar pela sua carteira."
-source: c81389ef7aa2
+title: Trusted Signer
+description: "Uma página de arquivo único em sign.getvela.app que decodifica uma solicitação e a assina com a sua passkey por conta própria — o que ela confere, quais apps a usam e como recompilá-la ou rodar a sua própria cópia."
+source: fcfb268d3492
 ---
 
-# Hospedar a página de assinatura
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+# Trusted Signer
 
 A Vela decodifica cada transação antes de você aprová-la, e essa decodificação é um
 trabalho honesto — mas é um trabalho feito pelo mesmo app que montou a transação. Se
@@ -12,92 +16,111 @@ o app, ou o caminho pelo qual ele chega até você, for adulterado, ele pode mos
 uma coisa e assinar outra. Foi exatamente o que aconteceu com a
 [Bybit](/pt-BR/docs/bybit-attack).
 
-A página de assinatura existe para dividir isso em dois: a transação vem de um lugar,
-e a conferência e a assinatura acontecem num lugar que você controla.
+O Trusted Signer existe para dividir isso em dois: o app só entrega a solicitação, e
+a conferência e a assinatura acontecem numa página separada — uma que você pode ler
+do começo ao fim, recompilar byte a byte ou rodar você mesmo.
 
+## Onde roda
 
-Uma pasta — `app-web/clearsigning` no repositório — que é ao mesmo tempo uma página
-web e uma extensão do Chrome. HTML, CSS e JavaScript puros: nenhum framework, nenhum
-bundler, nenhuma etapa de build, nenhuma dependência e nenhum dado buscado de um
-servidor — a única requisição que ela faz é pelos logos decorativos dos tokens.
+A página oficial é servida em **sign.getvela.app**. Os apps de desktop (macOS,
+Windows, Linux), iPhone e Android podem enviar uma solicitação a ela: o app abre a
+página numa aba do navegador com a solicitação no link, você confere e assina com a
+sua passkey ali mesmo, e a página devolve a assinatura ao app por um link
+`velawallet://`. A carteira web não consegue usá-lo.
 
-Diante de uma solicitação de assinatura, ela não confia no resumo que veio junto. Ela
-decodifica a calldata crua por conta própria, calcula o próprio digest, mostra o que
-a assinatura vai autorizar de fato e só então chama a sua passkey.
+É opcional. Você o escolhe como a sua forma de assinar ao criar uma carteira ou
+fazer login, e a partir daí toda assinatura dessa carteira nesse aparelho passa por
+ele. Ele também pode criar as chaves da carteira. Em `sign.getvela.app`, ele usa as
+mesmas passkeys de `getvela.app` que os apps.
 
-Como não há etapa de build, os arquivos que você lê são os arquivos que rodam. Você
-pode comparar a pasta com o repositório e saber exatamente o que está servindo.
+<Callout type="info" title="O que já foi testado">
+Execuções de ponta a ponta registradas com a página publicada: Android e Windows 11
+(criar uma carteira e fazer login). Os apps de macOS, Linux e iPhone usam a mesma
+integração; nenhum deles tem ainda uma execução completa registrada.
+</Callout>
 
-## Qual cópia consegue assinar pela sua carteira
+## O que ele faz antes de assinar
 
-Uma passkey fica vinculada ao domínio em que foi criada. As suas chaves da Vela são
-registradas sob `getvela.app`, e um navegador só as oferece a uma página cuja
-relying party (a parte confiável, no vocabulário do WebAuthn) seja `getvela.app`.
-Essa única regra decide qual forma de rodar a sua própria cópia é útil para você.
+- **Decodifica a solicitação por conta própria.** O que a chamada faz, para quem e
+  de quanto, a partir da calldata — inclusive chamadas aninhadas dentro de um lote.
+- **Só assina um digest que ele mesmo calculou.** Os digests EIP-191, EIP-712,
+  SafeOp e SafeMessage são calculados na página, nunca recebidos de quem faz a
+  solicitação; testes conferem os digests SafeOp e SafeMessage com o `vela-core`, o
+  código que a carteira usa, e o app recusa uma assinatura sobre qualquer digest
+  diferente do que ele mesmo calculou.
+- **Confere se a transação é a que foi solicitada.** A chamada que o site pediu
+  precisa estar de fato dentro da operação que está sendo assinada, ou a página
+  recusa.
+- **Diz quando uma aprovação é ilimitada.** Ele não consegue mudar um valor — ou
+  assina os bytes que chegaram, ou nada —, então uma aprovação ou um permit ilimitado
+  (2^200 ou mais, 2^152 para Permit2 — o mesmo limite dos apps) aparece em vermelho com esse motivo e pode ser
+  assinado como está; um limite on-chain é escolhido na própria tela de aprovação da
+  carteira, antes de a solicitação chegar aqui. Uma aprovação para uma coleção
+  inteira de NFTs é recusada.
+- **Recusa o que não pode sustentar:** `eth_sign`, um método que ele não conhece, um
+  token enviado ao contrato do próprio token, uma operação que ele não consegue ler e
+  um login cujo desafio (challenge) foi fornecido por quem fez a solicitação.
+- **Recusa o que entregaria a sua conta,** pela mesma regra que os apps aplicam:
+  uma chamada da sua conta a uma das próprias funções de proprietários, módulos,
+  guard ou fallback, inclusive dentro de um lote; um `delegatecall`, exceto para o
+  contrato MultiSend da Safe, que agrupa as chamadas de uma operação; e uma
+  assinatura `SafeTx`. Ele verifica cada chamada da operação montada pelo app, não
+  só as que o site pediu.
+- **Mostra o endereço da conta e um identicon calculado na página.** Destinatários e
+  contratos nunca recebem nome a partir da solicitação — só a tabela revisada da
+  própria página pode dar nome a um contrato. O nome da própria conta, que o app
+  envia para você escolher a passkey certa, aparece ao lado do endereço dela.
+- **Pede verificação do usuário** (sua digital, seu rosto ou seu PIN) em toda
+  assinatura.
 
-**Como página no seu próprio domínio, ou no localhost.** Servida por HTTPS (ou a
-partir do localhost), a relying party da página é o próprio hostname dela — então
-ela consegue assinar com chaves registradas sob _aquele_ hostname, não com chaves
-registradas sob `getvela.app`. Isso a torna a forma certa de experimentar toda a
-cerimônia de ponta a ponta, de rodar o fluxo de desktop e de assinar por uma carteira
-cuja chave foi criada no seu próprio domínio. Não é uma forma de assinar por uma
-carteira existente do `getvela.app`.
-
-```sh
-cd app-web/trusted-signer
-python3 -m http.server 8080   # → http://localhost:8080
-```
-
-Todos os caminhos no app são relativos, então um subdiretório num host existente
-também funciona, e abrir o `index.html` direto do disco (`file://`) serve para dar
-uma olhada — sem origem, não há relying party e nada pode ser assinado.
-
-## O que ela faz antes de assinar
-
-- **Ela mesma decodifica a transação.** O que a chamada faz, para quem e de quanto,
-  a partir da calldata — inclusive chamadas aninhadas dentro de um lote.
-- **Ela só assina um digest que ela mesma calculou.** Os digests EIP-191, EIP-712,
-  SafeOp e SafeMessage são calculados na página e conferidos com o `vela-core`, o
-  mesmo código que a carteira usa. Um digest que ela não consegue calcular é uma
-  recusa, não uma assinatura.
-- **Ela confere se a transação é a que foi solicitada.** A chamada que o site pediu
-  precisa estar de fato dentro da operação que está sendo assinada.
-- **Ela recusa uma aprovação no nível “ilimitado”.** Não é um aviso — é uma recusa,
-  com uma indicação do que fazer no lugar.
-- **Ela diz quando não consegue ler algo,** em vez de mostrar um resumo amigável que
-  não pode sustentar.
-- **Ela mostra o endereço e o identicon da conta,** e não mostra um nome de
-  destinatário fornecido por quem pediu a assinatura. Tudo o que o solicitante
-  controla é descartado ou identificado como vindo dele.
-
-## O que ela deliberadamente não tem
+## O que ele deliberadamente não tem
 
 - **Nenhum editor.** A solicitação fica fixa quando chega: você assina ou não
   assina. Um seletor de taxa ou um editor de limite reescreveriam a calldata, que é
   justamente a doença que esta página existe para evitar.
-- **Nenhuma criação de chave.** A página de assinatura não consegue criar uma
-  passkey. Criar uma seria criar outra conta.
-- **Nenhum dado da rede.** Nada do que ela mostra ou assina é buscado. A única coisa
-  que ela carrega são os logos dos tokens, como imagens, do servidor de dados de chain
-  da Vela; se falharem, uma letra ocupa o lugar deles.
+- **Nenhum acesso à rede.** A página é um único arquivo cuja política de segurança de
+  conteúdo (`default-src 'none'`) está dentro dos próprios bytes, então ela não
+  consegue buscar nada, abrir uma conexão nem carregar uma imagem. A única coisa que
+  sai dela é a resposta, quando ela segue o link de callback da solicitação
+  (`velawallet://` quando quem pediu foi um app da Vela). Os logos dos tokens são
+  desenhados como letras.
 
-## Como uma solicitação chega até ela
+## O que o app confere em troca
 
-| Solicitante                                   | Canal                                                                      |
-| --------------------------------------------- | -------------------------------------------------------------------------- |
-| Uma página no mesmo navegador                 | `postMessage`                                                              |
-| Uma página no mesmo navegador, para a extensão | Porta da extensão                                                         |
-| Um app de desktop na mesma máquina            | Fragmento de URL + callback de loopback (demonstração em `samples/`; o app de desktop da Vela ainda não usa isso) |
-| Um celular ou outro computador                | Bluetooth LE (protocolo implementado; o rádio ainda não foi testado em hardware real) |
+O app também não confia na página. Ele só aceita uma assinatura quando o desafio
+assinado é o digest **que o app calculou**, a verificação do usuário foi feita, a
+chave é uma das chaves da sua carteira e a assinatura P-256 é válida para essa chave.
 
-O formato das mensagens, os digests e uma tabela de onde vem cada item da tela estão
-em `PROTOCOL.md`, ao lado do código.
+## Cada versão publicada, verificável
 
-## Onde ela se encaixa
+Cada versão é compilada a partir de `app-web/trusted-signer/src/` num único arquivo,
+de forma reproduzível — Bun e Node produzem os mesmos bytes — e publicada no seu
+próprio endereço, `sign.getvela.app/b/<sha256>/sign.html`, ao lado de todas as
+versões anteriores. A lista fica em `sign.getvela.app/index.json`.
 
-Quando os apps puderem entregar suas solicitações a ela, o uso previsto é simples: a
-partir do dia em que a conta guardar um dinheiro que você não gostaria de perder,
-toda assinatura passa por uma página cujo código você mesmo carregou. Não só para
-valores altos — uma aprovação pequena pode entregar o suficiente para esvaziar uma
-conta. Até lá, a página é uma forma de ler e testar exatamente como essa segunda
-opinião vai funcionar.
+```sh
+cd app-web/trusted-signer
+node samples/build-single.mjs --check   # rebuilds a version listed in dist/
+curl -sL https://sign.getvela.app/b/<sha256>/sign.html | shasum -a 256
+```
+
+Ao iniciar, o app de desktop baixa a versão publicada que vai abrir, calcula o hash
+dela e o compara com as versões embutidas nele. O resultado só vai para o log, e uma
+página que não corresponde é aberta mesmo assim. Os apps de celular ainda não fazem
+essa conferência.
+
+## Rode a sua própria cópia
+
+As Configurações guardam o endereço da página que os seus apps abrem, então você pode
+apontá-lo para a sua própria implantação: qualquer endereço HTTPS, ou `localhost`
+para testes. Compile com `bun samples/build-single.mjs` (ou `node`) e copie `dist/`
+para o seu host.
+
+Uma cópia no seu próprio domínio assina com passkeys criadas para **aquele** domínio,
+não com as passkeys de `getvela.app` — então é uma forma de criar e usar uma carteira
+cujas chaves ficam sob o seu domínio, não uma forma de assinar por uma carteira
+existente do `getvela.app`. Todas as chaves de uma carteira compartilham um mesmo
+domínio.
+
+O código, e os scripts que o compilam e o conferem, estão em
+`app-web/trusted-signer/`.

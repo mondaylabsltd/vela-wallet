@@ -109,7 +109,7 @@ window.VelaCS.i18n.register('en', {
   'sentence.unknownMethod': 'The wallet does not know this method ({method}), so it will not sign.',
 
   'warn.unlimited': 'Unlimited — this contract can spend every {symbol} you have.',
-  'warn.unlimitedLocked': 'The cap cannot be edited here: a signing intent is fixed by the time it reaches this page, so it is sign or refuse. Go back to the requester and ask for a finite amount.',
+  'warn.unlimitedLocked': 'The cap cannot be edited here: a signing intent is fixed by the time it reaches this page, so it is sign or refuse. To cap it, refuse here and choose a cap on the wallet\'s own approval screen.',
   'warn.unlimitedOffline': 'Unlimited off-chain approval — an off-chain signature cannot rewrite the cap. Accept or refuse.',
   'warn.approveAll': 'Every NFT you hold in this collection, now and later, can be taken at any time.',
   'warn.approveAllLocked': 'This function is all-or-nothing, and this page cannot rewrite the request. To narrow it, go back to the requester.',
@@ -166,6 +166,9 @@ window.VelaCS.i18n.register('en', {
 
   'refuse.opMismatch': 'The operation does not contain the call the site asked for — it was altered during assembly. Not signing.',
   'refuse.opUnreadable': "This operation's calldata cannot be read, so what is on screen cannot be tied to what would be signed. Not signing.",
+  'refuse.selfCall': 'This asks your account to call {fn} on itself, which would change who controls it. Vela never needs that. Not signing.',
+  'refuse.delegateCall': 'This runs another contract’s code as your account (a delegatecall), the technique used to drain Bybit. Not signing.',
+  'refuse.safeTx': 'This asks your key to sign a Safe transaction (SafeTx), an instruction a Safe can carry out later. No site needs that from Vela. Not signing.',
   'warn.nonCanonicalModule': "This operation names an EntryPoint or 4337 module that is not Vela's — signing it endorses a different set of contracts.",
   'ui.digest': 'Signed digest · {kind}',
   'ui.digestUnwrapped': 'not wrapped in SafeMessage — an EOA-style signature a Safe will not accept',

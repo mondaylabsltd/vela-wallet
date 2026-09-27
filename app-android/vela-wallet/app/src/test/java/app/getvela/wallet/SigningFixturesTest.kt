@@ -131,16 +131,17 @@ class SigningFixturesTest {
         }
     }
 
-    /** The never-unlimited mandate (spec 022 §4). */
+    /** Unlimited kept as asked, and said (spec 022 §4, 2026-09-26 ruling). */
     @Test
-    fun unlimitedApprovalCannotBeConfirmedAsRequested() {
+    fun unlimitedApprovalIsKeptAsRequestedAndSaid() {
         val model = SigningFixtures.build(SigningScreenState.CS5, zhStrings())
-        assertFalse("cs5 must not be confirmable", model.confirmEnabled)
+        assertTrue("cs5 must be confirmable as asked", model.confirmEnabled)
         val editor = model.blocks.filterIsInstance<SigningBlock.Allowance>().single()
         assertEquals(
-            AllowanceChip.ChipState.Disabled,
+            AllowanceChip.ChipState.Selected,
             editor.chips.single { it.id == "requested" }.state,
         )
+        assertTrue(model.blocks.any { it is SigningBlock.Warning && it.tone == SigningTone.Danger })
     }
 
     @Test
@@ -150,9 +151,9 @@ class SigningFixturesTest {
             val model = SigningFixtures.build(state, zh)
             assertTrue("$state should be confirmable", model.confirmEnabled)
             val editor = model.blocks.filterIsInstance<SigningBlock.Allowance>().single()
-            // The REQUEST was still unlimited, so its chip stays disabled.
+            // The site's ask is still one tap back — the person picked a cap.
             assertEquals(
-                AllowanceChip.ChipState.Disabled,
+                AllowanceChip.ChipState.Idle,
                 editor.chips.single { it.id == "requested" }.state,
             )
         }

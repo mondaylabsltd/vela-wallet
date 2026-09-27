@@ -65,13 +65,15 @@ class SendMachineTest {
     @After
     fun stop() = scope.cancel()
 
-    private fun seedAccount() {
+    /** [signedInWith]: the key the account signed in with (2026-09-26); `null` = a record from before. */
+    private fun seedAccount(signedInWith: JSONObject? = null) {
         val keyset = fixtureAccounts()
         val keys = JSONArray()
         keyset.forEach { keys.put(JSONObject().put("credential_id", it.credentialIdHex).put("public_key_hex", it.publicKeyHex).put("name", it.name).put("transports", "internal")) }
         val account = JSONObject()
             .put("id", keyset.first().credentialIdHex).put("name", "Parallel space").put("address", safe)
             .put("public_key_hex", keyset.first().publicKeyHex).put("created_at_iso", "2026-09-12T00:00:00Z").put("keys", keys)
+        if (signedInWith != null) account.put("signed_in_with", signedInWith)
         store.values["vela.accounts"] = JSONArray().put(account).toString()
         store.values["vela.activeAccountIndex"] = "0"
     }
@@ -104,10 +106,14 @@ class SendMachineTest {
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
     }
 
+    /** Where each ceremony went: the pinned credential, its transports, its method. */
+    private val routes = java.util.concurrent.CopyOnWriteArrayList<Triple<String?, String, KeyMethod>>()
+
     private val fixtureSigner = object : UserOpSigner {
         override suspend fun sign(challenge: ByteArray, credentialIdHex: String?, transports: String, method: KeyMethod): Assertion {
             signs += 1
             events += "sign"
+            routes += Triple(credentialIdHex, transports, method)
             val signed = fixtureAssert(challenge, listOfNotNull(credentialIdHex), 0u)
             return Assertion(signed.credentialIdHex, signed.signatureDerHex, signed.authenticatorDataHex, signed.clientDataJsonHex, null, "platform")
         }
@@ -163,6 +169,8 @@ class SendMachineTest {
         assertEquals(SendReceiptStatus.Submitted, receipt.receipt!!.status)
         assertEquals("0xhash", receipt.user_op_hash)
         assertEquals("signed exactly once", 1, signs)
+        // A record from before the sign-in key: the first key, over its stored route.
+        assertEquals(listOf(Triple(fixtureAccounts().first().credentialIdHex, "internal", KeyMethod.Platform)), routes)
         assertEquals(1, port.calls.count { it.endsWith("eth_sendUserOperation") })
         // The stored default (the factory Fast, here) priced the quote, and the
         // same tier is named on the wire beside the fee it priced (spec 069).
@@ -184,6 +192,31 @@ class SendMachineTest {
         trace.cancel()
     }
 
+    /**
+     * Founder, 2026-09-26: the person's own send signs with the key the account
+     * signed in with, over the route that reached it — its SECOND key, reached
+     * from a phone by scanning a code. There is no picker to say otherwise.
+     */
+    @Test
+    fun `a send signs with the key the account signed in with, over its route`() = runBlocking {
+        val second = fixtureAccounts()[1].credentialIdHex
+        seedAccount(signedInWith = JSONObject().put("credential_id", second).put("method", "hybrid")); scriptRelay()
+        val c = controller()
+        c.open(SendAccountRef(id = safe, address = safe, name = "Parallel space"), SendDisplayContext(code = "USD", rate = null, fiat_decimals = 2))
+        val picked = withTimeout(10_000) { c.send.first { it.tokens.isNotEmpty() } }
+        c.selectToken(SendLive.tokenId(picked.tokens.single()))
+        withTimeout(10_000) { c.send.first { it.stage == SendStage.EnterDetails } }
+        c.setRecipient(recipient)
+        c.setAmount("0.001")
+        withTimeout(10_000) { c.send.first { it.can_continue } }
+        c.continueTapped()
+        withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.fee != null && it.can_confirm } }
+        c.slideConfirm()
+        val receipt = withTimeout(30_000) { c.send.first { it.stage == SendStage.Receipt && it.receipt != null } }
+        assertEquals(SendReceiptStatus.Submitted, receipt.receipt!!.status)
+        assertEquals(listOf(Triple<String?, String, KeyMethod>(second, "hybrid,internal", KeyMethod.Hybrid)), routes)
+    }
+
     @Test
     fun `a relay rejection is the core's failure, and nothing was persisted`() = runBlocking {
         seedAccount(); scriptRelay()
@@ -196,7 +229,14 @@ class SendMachineTest {
         c.setRecipient(recipient); c.setAmount("0.001")
         withTimeout(10_000) { c.send.first { it.can_continue } }
         c.continueTapped()
-        withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.can_confirm } }
+        try {
+            withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.can_confirm } }
+        } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+            // Which way it stopped: the core's own refusal (an estimate that
+            // outran its 15 s budget says `estimate_failed{timeout}`), or a
+            // wait that never settled (no alert, the fee view still busy).
+            throw AssertionError("DIAG never reached confirm: alert=${c.alert.value} || send=${c.send.value} || fee=${c.fee.value}", timeout)
+        }
         c.slideConfirm()
         val failed = withTimeout(30_000) { c.send.first { it.tx_error != null || it.receipt != null } }
         assertNotNull("the relay refused; the core must say so", failed.tx_error)

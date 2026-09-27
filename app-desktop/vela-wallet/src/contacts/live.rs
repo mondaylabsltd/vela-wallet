@@ -41,27 +41,6 @@ fn display_name(contact: &Contact) -> SharedString {
         )
 }
 
-/// The set one tap produces: everything currently in it, with the tapped key
-/// flipped.
-///
-/// Both directions of group membership go through this. The core offers ONE
-/// event for each — `SetContactGroups` (which groups hold this contact) and
-/// `SetGroupMembers` (which contacts this group holds) — and both carry the
-/// WHOLE set, so "add" and "remove" are the same call with a different answer.
-///
-/// Written here rather than inline in the menus because the thing that goes
-/// wrong is silent: a toggle that rebuilt the set from the tapped key alone
-/// would empty every OTHER membership, and the menu is covering the rows that
-/// would have shown it.
-#[must_use]
-pub fn set_after_toggle(current: &[(String, bool)], tapped: &str) -> Vec<String> {
-    current
-        .iter()
-        .filter(|(key, member)| if key == tapped { !member } else { *member })
-        .map(|(key, _)| key.clone())
-        .collect()
-}
-
 /// One group's members — DC4.
 ///
 /// `None` when the index names no group: the rail can change under an open
@@ -109,11 +88,38 @@ pub fn detail(
     index: usize,
     feed: &vela_core::app::activity_feed::FeedView,
     wallet: &crate::wallet::WalletStrings,
+    flow: &crate::flows::FlowStrings,
+    all: bool,
     hidden: bool,
 ) -> Option<ContactDetailModel> {
     let contact = rows(view).into_iter().nth(index)?;
     let address = contact.address_full.to_string();
     let lower = address.to_lowercase();
+    // What this person and I have actually exchanged, from the same feed the
+    // home draws. Matched on the counterparty, which is the only thing that
+    // makes a row "theirs".
+    let items: Vec<_> = feed
+        .rows
+        .iter()
+        .filter_map(|row| match row {
+            vela_core::app::activity_feed::FeedRow::Item { item }
+                if item
+                    .counterparty
+                    .as_ref()
+                    .is_some_and(|other| other.to_lowercase() == lower) =>
+            {
+                Some(item)
+            }
+            _ => None,
+        })
+        .collect();
+    let activity_empty = items.is_empty();
+    // The web's three, until "view all activity" asks for the rest (078 C-04).
+    let shown = if all {
+        items.len()
+    } else {
+        RECENT_ACTIVITY_ROWS
+    };
     Some(ContactDetailModel {
         name: contact.name.clone(),
         // The ADDRESS, not the name: two contacts a person named the same must
@@ -132,28 +138,28 @@ pub fn detail(
             .map(|group| SharedString::from(group.name.clone()))
             .collect(),
         address_full: contact.address_full,
-        // What this person and I have actually exchanged, from the same feed
-        // the home draws. Matched on the counterparty, which is the only thing
-        // that makes a row "theirs".
-        activity: feed
-            .rows
-            .iter()
-            .filter_map(|row| match row {
-                vela_core::app::activity_feed::FeedRow::Item { item }
-                    if item
-                        .counterparty
-                        .as_ref()
-                        .is_some_and(|other| other.to_lowercase() == lower) =>
-                {
-                    Some(crate::wallet::live::activity_row(
-                        feed, item, wallet, hidden,
-                    ))
-                }
-                _ => None,
+        activity: items
+            .into_iter()
+            .take(shown)
+            .map(|item| {
+                let mut row = crate::wallet::live::activity_row(feed, item, wallet, hidden);
+                // On this person's own page "to Alice" is noise: the web's
+                // subtitle is the network and the day (`contactActivityRow`).
+                row.subtitle = SharedString::from(format!(
+                    "{} · {}",
+                    crate::flows::live::chain_name(item.chain_id),
+                    crate::flows::live::day_label(item.day_start_ms, flow),
+                ));
+                row
             })
             .collect(),
+        activity_empty,
     })
 }
+
+/// How many of a contact's rows 最近往来 shows before "view all" (the web's
+/// `RECENT_ACTIVITY_ROWS`).
+pub const RECENT_ACTIVITY_ROWS: usize = 3;
 
 /// The group rail: the person's own groups, with how many people are in each.
 ///
@@ -237,25 +243,42 @@ fn row(contact: &Contact, letter: SharedString) -> ContactRowModel {
 /// The run-length grouping this used to do also had a bug the core does not:
 /// two non-adjacent contacts under one letter became two sections.
 #[must_use]
-pub fn sections(view: &ContactsView) -> Vec<(SharedString, Vec<ContactRowModel>)> {
+pub fn sections(view: &ContactsView, query: &str) -> Vec<(SharedString, Vec<ContactRowModel>)> {
     let by_address: HashMap<String, &Contact> = view
         .contacts
         .iter()
         .map(|contact| (contact.address.to_lowercase(), contact))
         .collect();
+    let query = query.trim().to_lowercase();
     view.sections
         .iter()
         .map(|section| {
             let letter = SharedString::from(section.letter.clone());
-            let rows = section
+            let rows: Vec<ContactRowModel> = section
                 .addresses
                 .iter()
                 .filter_map(|address| by_address.get(&address.to_lowercase()).copied())
+                .filter(|contact| matches_query(contact, &query))
                 .map(|contact| row(contact, letter.clone()))
                 .collect();
             (letter, rows)
         })
+        // A letter with nobody left under it is a heading over nothing.
+        .filter(|(_, rows)| !rows.is_empty())
         .collect()
+}
+
+/// The web's contacts search (`letterSections`): what the row is called, the
+/// name a resolver gave it, or the address — ignoring case. `query` is
+/// already trimmed and lower-cased; empty keeps everyone.
+fn matches_query(contact: &Contact, query: &str) -> bool {
+    query.is_empty()
+        || display_name(contact).to_lowercase().contains(query)
+        || contact
+            .resolved_name
+            .as_deref()
+            .is_some_and(|name| name.to_lowercase().contains(query))
+        || contact.address.to_lowercase().contains(query)
 }
 
 #[cfg(test)]
@@ -293,36 +316,6 @@ mod tests {
             export: None,
             recipient: None,
         }
-    }
-
-    /// Ticking one group leaves the others exactly as they were.
-    ///
-    /// The menu covers the chips that would show the damage, so a toggle that
-    /// dropped the other memberships would be invisible until the person
-    /// closed it — and by then the core has already been told.
-    #[test]
-    fn ticking_one_group_does_not_empty_the_others() {
-        let groups = vec![
-            ("family".to_owned(), true),
-            ("payroll".to_owned(), false),
-            ("friends".to_owned(), true),
-        ];
-
-        // Joining one: the two it was already in survive.
-        let joined = set_after_toggle(&groups, "payroll");
-        assert_eq!(joined, vec!["family", "payroll", "friends"]);
-
-        // Leaving one: only that one goes.
-        let left = set_after_toggle(&groups, "family");
-        assert_eq!(left, vec!["friends"]);
-
-        // Leaving the last one is an empty set, not "leave it alone" — the
-        // core reads the set it is given.
-        let one = vec![("family".to_owned(), true)];
-        assert!(set_after_toggle(&one, "family").is_empty());
-
-        // A group nobody tapped changes nothing.
-        assert_eq!(set_after_toggle(&groups, "nope"), vec!["family", "friends"]);
     }
 
     /// A contact saved without a name shows the identity the core resolved for
@@ -372,7 +365,7 @@ mod tests {
             None,
         )]);
         assert_eq!(rows(&view)[0].section, SharedString::from("A"));
-        assert_eq!(sections(&view)[0].0, SharedString::from("A"));
+        assert_eq!(sections(&view, "")[0].0, SharedString::from("A"));
     }
 
     /// The run-length grouping this file used to do produced TWO `A` sections
@@ -396,13 +389,13 @@ mod tests {
                 None,
             ),
         ]);
-        let letters: Vec<_> = sections(&view).into_iter().map(|(l, _)| l).collect();
+        let letters: Vec<_> = sections(&view, "").into_iter().map(|(l, _)| l).collect();
         assert_eq!(
             letters,
             vec![SharedString::from("A"), SharedString::from("B")]
         );
         assert_eq!(
-            sections(&view)[0].1.len(),
+            sections(&view, "")[0].1.len(),
             2,
             "Ada and Amy share their letter"
         );
@@ -486,10 +479,11 @@ mod tests {
             ..host.view()
         };
         let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+        let flow = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
 
         // Row 1 is the cousin, and the panel must be about the cousin.
-        let cousin =
-            detail(&book, 1, &feed, &wallet, false).unwrap_or_else(|| unreachable!("row 1 exists"));
+        let cousin = detail(&book, 1, &feed, &wallet, &flow, false, false)
+            .unwrap_or_else(|| unreachable!("row 1 exists"));
         assert_eq!(cousin.name, "Cousin");
         assert_eq!(
             cousin.address_full,
@@ -503,14 +497,17 @@ mod tests {
         assert_eq!(cousin.activity.len(), 1);
 
         // Alice is in no group and has nothing with me.
-        let alice =
-            detail(&book, 0, &feed, &wallet, false).unwrap_or_else(|| unreachable!("row 0 exists"));
+        let alice = detail(&book, 0, &feed, &wallet, &flow, false, false)
+            .unwrap_or_else(|| unreachable!("row 0 exists"));
         assert_eq!(alice.name, "Alice");
         assert!(alice.chips.is_empty());
         assert!(alice.activity.is_empty());
+        // ...and the section says so rather than offering "all" of nothing.
+        assert!(alice.activity_empty);
+        assert!(!cousin.activity_empty);
 
         // The roster moved: no panel rather than the wrong one.
-        assert!(detail(&book, 9, &feed, &wallet, false).is_none());
+        assert!(detail(&book, 9, &feed, &wallet, &flow, false, false).is_none());
 
         // And a group's members are that group's.
         let (name, members) =
@@ -519,6 +516,59 @@ mod tests {
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].name, "Cousin");
         assert!(group_members(&book, 5).is_none());
+    }
+
+    /// 最近往来 shows the web's three until "view all" asks for the rest, and
+    /// each row says where and when rather than "to <this person>" (078 C-04).
+    #[test]
+    fn recent_activity_is_three_rows_until_all_is_asked_for() {
+        use vela_core::app::activity_feed::{
+            ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem, FeedRow, FeedView,
+        };
+        let book = view(vec![contact(
+            "0xBBB0000000000000000000000000000000000002",
+            Some("Cousin"),
+            None,
+        )]);
+        let mut host = crate::core_host::CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let item = |id: usize| FeedRow::Item {
+            item: FeedItem {
+                id: format!("t{id}"),
+                direction: FeedDirection::In,
+                counterparty: Some("0xbbb0000000000000000000000000000000000002".to_owned()),
+                alias: None,
+                value: Some("1".to_owned()),
+                symbol: "xDAI".to_owned(),
+                decimals: Some(18),
+                usd_value: 1.0,
+                chain_id: 100,
+                timestamp: 1_788_500_000.0,
+                day_start_ms: 0.0,
+                tx_hash: None,
+                batch: None,
+            },
+        };
+        let feed = FeedView {
+            rows: (0..5).map(item).collect(),
+            ..host.view()
+        };
+        let loc = crate::loc::Loc::from_env();
+        let wallet = crate::wallet::WalletStrings::resolve(&loc);
+        let flow = crate::flows::FlowStrings::resolve(&loc);
+
+        let recent = detail(&book, 0, &feed, &wallet, &flow, false, false)
+            .unwrap_or_else(|| unreachable!("row 0 exists"));
+        assert_eq!(recent.activity.len(), RECENT_ACTIVITY_ROWS);
+        assert!(!recent.activity_empty);
+        let subtitle = recent.activity[0].subtitle.to_string();
+        assert!(subtitle.starts_with("Gnosis · "), "{subtitle}");
+
+        let all = detail(&book, 0, &feed, &wallet, &flow, true, false)
+            .unwrap_or_else(|| unreachable!("row 0 exists"));
+        assert_eq!(all.activity.len(), 5);
     }
 
     /// The rail lists the person's own groups, with the id each row needs.
@@ -572,7 +622,7 @@ mod tests {
             contact("0x2", Some("Zack"), None),
             contact("0x3", Some("Ada"), None),
         ]);
-        let sections = sections(&rows);
+        let sections = sections(&rows, "");
         assert_eq!(sections.len(), 2);
         assert_eq!(
             sections[0].0,
@@ -600,5 +650,41 @@ mod tests {
             None,
         )]));
         assert_eq!(rows[0].section, SharedString::from("#"));
+    }
+
+    /// The search keeps a row by its name, its resolved name or its address,
+    /// in any case, and drops a letter nobody is left under (078 X-05).
+    #[test]
+    fn a_search_narrows_by_name_resolved_name_or_address() {
+        let view = view(vec![
+            contact(
+                "0xaaaa000000000000000000000000000000000001",
+                Some("Alice"),
+                None,
+            ),
+            contact(
+                "0xbbbb000000000000000000000000000000000002",
+                None,
+                Some("bob.eth"),
+            ),
+            contact(
+                "0xcccc000000000000000000000000000000000003",
+                Some("Carol"),
+                None,
+            ),
+        ]);
+        let names = |query: &str| -> Vec<String> {
+            sections(&view, query)
+                .into_iter()
+                .flat_map(|(_, rows)| rows)
+                .map(|row| row.name.to_string())
+                .collect()
+        };
+        assert_eq!(names("").len(), 3);
+        assert_eq!(names("  ALI "), vec!["Alice"]);
+        assert_eq!(names("BOB.E"), vec!["bob.eth"]);
+        assert_eq!(names("0xCCCC"), vec!["Carol"]);
+        assert!(names("zzz").is_empty());
+        assert!(sections(&view, "zzz").is_empty(), "no empty letters");
     }
 }

@@ -1,10 +1,14 @@
 ---
-title: Signaturseite selbst hosten
-description: "Die abhängigkeitsfreie Seite und Chrome-Erweiterung, die eine Transaktion selbst dekodiert und mit deinem Passkey signiert – wie du eine eigene Kopie betreibst und welche Kopie für deine Wallet signieren kann."
-source: c81389ef7aa2
+title: Trusted Signer
+description: "Eine Seite aus einer einzigen Datei unter sign.getvela.app, die eine Anfrage selbst dekodiert und mit deinem Passkey signiert – was sie prüft, welche Apps sie nutzen und wie du sie nachbaust oder eine eigene Kopie betreibst."
+source: fcfb268d3492
 ---
 
-# Signaturseite selbst hosten
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+# Trusted Signer
 
 Vela dekodiert jede Transaktion, bevor du sie freigibst, und diese Dekodierung ist
 ehrliche Arbeit – aber es ist Arbeit derselben App, die die Transaktion gebaut hat.
@@ -12,91 +16,117 @@ Wird die App oder der Weg, auf dem sie zu dir kommt, manipuliert, kann sie dir d
 zeigen und das andere signieren. Genau das ist [Bybit](/de/docs/bybit-attack)
 passiert.
 
-Die Signaturseite gibt es, um das in zwei Teile zu trennen: Die Transaktion kommt von
-einem Ort, und die Prüfung und die Signatur passieren an einem Ort, den du
-kontrollierst.
+Den Trusted Signer gibt es, um das in zwei Teile zu trennen: Die App übergibt nur die
+Anfrage, und die Prüfung und die Signatur passieren auf einer eigenen Seite – einer,
+die du von vorn bis hinten lesen, Byte für Byte nachbauen oder selbst betreiben kannst.
 
+## Wo er läuft
 
-Bekommt sie eine Signaturanfrage, traut sie der mitgelieferten Zusammenfassung nicht.
-Sie dekodiert die rohe Calldata selbst, berechnet ihren eigenen Digest, zeigt dir, was
-die Signatur tatsächlich autorisieren wird, und fragt erst dann deinen Passkey.
+Die offizielle Seite wird von **sign.getvela.app** ausgeliefert. Die Desktop-App (macOS,
+Windows, Linux), die iPhone- und die Android-App können ihr eine Anfrage schicken: Die App
+öffnet die Seite in einem Browser-Tab, mit der Anfrage im Link, du prüfst sie dort und
+signierst mit deinem Passkey, und die Seite gibt die Signatur über einen
+`velawallet://`-Link an die App zurück. Die Web-Wallet kann ihn nicht nutzen.
 
-Weil es keinen Build-Schritt gibt, sind die Dateien, die du liest, die Dateien, die
-laufen. Du kannst den Ordner mit dem Repository vergleichen und weißt, was du
-auslieferst.
+Er ist nur aktiv, wenn du ihn wählst: Du legst ihn als deine Art zu signieren fest, wenn
+du eine Wallet erstellst oder dich anmeldest, und von da an läuft jede Signatur für diese
+Wallet auf diesem Gerät über ihn. Er kann auch die Schlüssel der Wallet erstellen. Auf
+`sign.getvela.app` nutzt er dieselben `getvela.app`-Passkeys wie die Apps.
 
-## Welche Kopie für deine Wallet signieren kann
+<Callout type="info" title="Bisher getestet">
+Aufgezeichnete Durchläufe von Anfang bis Ende gegen die veröffentlichte Seite: Android und
+Windows 11 (eine Wallet erstellen und sich anmelden). Die Apps für macOS, Linux und iPhone
+sind auf dieselbe Weise angebunden; für keine davon gibt es bisher einen aufgezeichneten
+vollständigen Durchlauf.
+</Callout>
 
-Ein Passkey ist an die Domain gebunden, auf der er erstellt wurde. Deine
-Vela-Schlüssel sind unter `getvela.app` registriert, und ein Browser bietet sie nur
-einer Seite an, deren Relying Party `getvela.app` ist. Diese eine Regel entscheidet,
-welche Art, deine eigene Kopie zu betreiben, dir etwas nützt.
+## Was er tut, bevor er signiert
 
-**Als Seite auf deiner eigenen Domain oder auf localhost.** Über HTTPS (oder von
-localhost) ausgeliefert, ist die Relying Party der Seite ihr eigener Hostname – sie kann
-also mit Schlüsseln signieren, die unter _diesem_ Hostnamen registriert sind, nicht mit
-Schlüsseln unter `getvela.app`. Das macht sie zum richtigen Weg, die ganze Zeremonie
-durchgängig auszuprobieren, den Desktop-Ablauf zu testen und für eine Wallet zu
-signieren, deren Schlüssel auf deiner eigenen Domain erstellt wurde. Für eine
-bestehende `getvela.app`-Wallet kann sie so nicht signieren.
+- **Er dekodiert die Anfrage selbst.** Was der Aufruf tut, an wen und über welchen
+  Betrag, aus der Calldata – einschließlich Aufrufen, die in einem Batch verschachtelt
+  sind.
+- **Er signiert nur einen Digest, den er selbst berechnet hat.** EIP-191-, EIP-712-,
+  SafeOp- und SafeMessage-Digests werden in der Seite berechnet und nie vom Anfragenden
+  übernommen; Tests gleichen die SafeOp- und SafeMessage-Digests mit `vela-core` ab, dem
+  Code, den die Wallet nutzt, und die App lehnt eine Signatur über jeden anderen Digest
+  ab als den, den sie selbst berechnet hat.
+- **Er prüft, dass die Transaktion die angeforderte ist.** Der Aufruf, den die Website
+  angefordert hat, muss tatsächlich in der Operation stecken, die signiert wird, sonst
+  lehnt die Seite ab.
+- **Er sagt, wenn eine Freigabe unbegrenzt ist.** Einen Betrag kann er nicht ändern –
+  er signiert die Bytes, die angekommen sind, oder gar nichts –, deshalb wird eine
+  unbegrenzte Freigabe oder ein unbegrenztes Permit (2^200 oder mehr, 2^152 bei Permit2 – dieselbe Grenze wie in den Apps)
+  rot und mit genau dieser Begründung angezeigt und kann unverändert signiert werden;
+  eine On-Chain-Obergrenze wählst du auf dem eigenen Freigabebildschirm der Wallet,
+  bevor die Anfrage hier ankommt. Eine Freigabe für eine ganze NFT-Sammlung wird
+  abgelehnt.
+- **Er lehnt ab, wofür er nicht geradestehen kann:** `eth_sign`, eine Methode, die er
+  nicht kennt, einen Token, der an seinen eigenen Vertrag gesendet wird, eine
+  Operation, die er nicht lesen kann, und eine Anmeldung, deren Challenge der
+  Anfragende mitgeliefert hat.
+- **Er lehnt ab, was dein Konto aus der Hand geben würde,** nach derselben Regel
+  wie die Apps: einen Aufruf deines Kontos an eine seiner eigenen Funktionen für
+  Owner, Module, Guard oder Fallback, auch innerhalb eines Batches; einen
+  `delegatecall`, außer in den MultiSend-Vertrag von Safe, der die Aufrufe einer
+  Operation bündelt; und eine `SafeTx`-Signatur. Er prüft jeden Aufruf in der
+  Operation, die die App zusammengestellt hat, nicht nur die Aufrufe, um die die
+  Seite gebeten hat.
+- **Er zeigt die Adresse des Kontos und ein in der Seite berechnetes Identicon.**
+  Empfänger und Verträge werden nie anhand der Anfrage benannt – nur die eigene,
+  geprüfte Tabelle der Seite kann einen Vertrag benennen. Der eigene Name des Kontos,
+  den die App mitschickt, damit du den richtigen Passkey wählen kannst, steht neben
+  seiner Adresse.
+- **Er verlangt bei jeder Signatur eine Nutzerverifizierung** (deinen Fingerabdruck,
+  dein Gesicht oder deine PIN).
 
-```sh
-cd app-web/trusted-signer
-python3 -m http.server 8080   # → http://localhost:8080
-```
-
-Alle Pfade in der App sind relativ, deshalb funktioniert auch ein Unterverzeichnis auf
-einem bestehenden Host, und `index.html` direkt von der Festplatte zu öffnen
-(`file://`) reicht zum Umsehen – ohne Origin gibt es keine Relying Party, und nichts
-lässt sich signieren.
-
-## Was sie tut, bevor sie signiert
-
-- **Sie dekodiert die Transaktion selbst.** Was der Aufruf tut, an wen und über
-  welchen Betrag, aus der Calldata – einschließlich Aufrufen, die in einem Batch
-  verschachtelt sind.
-- **Sie signiert nur einen Digest, den sie selbst berechnet hat.** EIP-191-, EIP-712-,
-  SafeOp- und SafeMessage-Digests werden in der Seite berechnet und mit `vela-core`
-  abgeglichen, demselben Code, den die Wallet nutzt. Ein Digest, den sie nicht
-  berechnen kann, führt zur Ablehnung, nicht zu einer Signatur.
-- **Sie prüft, dass die Transaktion die angeforderte ist.** Der Aufruf, den die Website
-  angefordert hat, muss tatsächlich in der Operation stecken, die signiert wird.
-- **Sie lehnt eine Freigabe in „unbegrenzter“ Höhe ab.** Keine Warnung – eine
-  Ablehnung, mit einem Hinweis, was du stattdessen tun kannst.
-- **Sie sagt, wenn sie etwas nicht lesen kann,** statt eine freundliche
-  Zusammenfassung zu zeigen, für die sie nicht geradestehen kann.
-- **Sie zeigt die Adresse und das Identicon des Kontos** und zeigt keinen
-  Empfängernamen, den der Anfragende mitgeliefert hat. Alles, was der Anfragende
-  kontrolliert, wird entweder verworfen oder als seine Angabe gekennzeichnet.
-
-## Was sie absichtlich nicht hat
+## Was er absichtlich nicht hat
 
 - **Keine Editoren.** Die Anfrage steht fest, wenn sie ankommt: Du signierst sie oder
   nicht. Eine Gebührenauswahl oder ein Editor für Freigabelimits würde die Calldata
   umschreiben – genau das Übel, das diese Seite verhindern soll.
-- **Keine Schlüsselerstellung.** Die Signaturseite kann keinen Passkey erstellen. Einen
-  zu erstellen hieße, ein anderes Konto zu erstellen.
-- **Keine Daten aus dem Netz.** Nichts, was sie anzeigt oder signiert, wird abgerufen.
-  Das Einzige, was sie lädt, sind Token-Logos als Bilder vom Chain-Daten-Server von
-  Vela; schlägt das fehl, tritt ein Buchstabe an ihre Stelle.
+- **Keinen Netzwerkzugriff.** Die Seite ist eine einzige Datei, deren Content Security
+  Policy (`default-src 'none'`) in ihren eigenen Bytes steckt; sie kann also nichts
+  abrufen, keine Verbindung öffnen und kein Bild laden. Das Einzige, was sie verlässt,
+  ist ihre Antwort, wenn sie dem Callback-Link in der Anfrage folgt (`velawallet://`,
+  wenn eine Vela-App angefragt hat). Token-Logos werden als Buchstaben gezeichnet.
 
-## Wie eine Anfrage zu ihr gelangt
+## Was die App im Gegenzug prüft
 
-| Anfragender                                  | Kanal                                                                      |
-| -------------------------------------------- | -------------------------------------------------------------------------- |
-| Eine Seite im selben Browser                 | `postMessage`                                                              |
-| Eine Seite im selben Browser, an die Erweiterung | Erweiterungs-Port                                                      |
-| Eine Desktop-App auf demselben Rechner       | URL-Fragment + Loopback-Callback (Demo in `samples/`; die Vela-Desktop-App nutzt das noch nicht) |
-| Ein Handy oder ein anderer Computer          | Bluetooth LE (Protokoll implementiert; Funkverbindung noch nicht auf echter Hardware getestet) |
+Auch die App vertraut der Seite nicht. Sie akzeptiert eine Signatur nur, wenn die
+signierte Challenge der Digest ist, **den die App berechnet hat**, die
+Nutzerverifizierung stattgefunden hat, der Schlüssel einer der Schlüssel deiner Wallet
+ist und die P-256-Signatur mit diesem Schlüssel gültig ist.
 
-Das Übertragungsformat, die Digests und eine Tabelle, woher jedes Element auf dem
-Bildschirm stammt, stehen in `PROTOCOL.md` neben dem Code.
+## Jede veröffentlichte Version, überprüfbar
 
-## Wo sie hingehört
+Jede Version wird aus `app-web/trusted-signer/src/` reproduzierbar zu einer einzigen
+Datei gebaut – Bun und Node erzeugen dieselben Bytes – und unter ihrer eigenen Adresse
+veröffentlicht, `sign.getvela.app/b/<sha256>/sign.html`, neben jeder früheren Version.
+Die Liste steht unter `sign.getvela.app/index.json`.
 
-Sobald die Apps ihre Anfragen an sie übergeben können, ist die vorgesehene Nutzung
-einfach: Ab dem Tag, an dem das Konto Geld hält, dessen Verlust dich schmerzen würde,
-geht jede Signatur über eine Seite, deren Code du selbst geladen hast. Nicht nur bei
-großen Beträgen – eine kleine Freigabe kann genug aus der Hand geben, um ein Konto zu
-leeren. Bis dahin ist die Seite eine Möglichkeit, genau nachzulesen und auszuprobieren,
-wie diese zweite Meinung funktionieren wird.
+```sh
+cd app-web/trusted-signer
+node samples/build-single.mjs --check   # rebuilds a version listed in dist/
+curl -sL https://sign.getvela.app/b/<sha256>/sign.html | shasum -a 256
+```
+
+Beim Start ruft die Desktop-App die veröffentlichte Version ab, die sie öffnen wird,
+berechnet ihren Hash und vergleicht ihn mit den Versionen, die in sie eingebaut sind.
+Das Ergebnis wird nur protokolliert, und eine Seite, die nicht übereinstimmt, wird
+trotzdem geöffnet. Die Handy-Apps prüfen das noch nicht.
+
+## Eine eigene Kopie betreiben
+
+In den Einstellungen steht die Adresse der Seite, die deine Apps öffnen, sodass du sie
+auf deine eigene Bereitstellung verweisen lassen kannst: jede HTTPS-Adresse oder
+`localhost` zum Testen. Baue sie mit `bun samples/build-single.mjs` (oder `node`) und
+kopiere `dist/` auf deinen Host.
+
+Eine Kopie auf deiner eigenen Domain signiert mit Passkeys, die für **diese** Domain
+erstellt wurden, nicht mit den `getvela.app`-Passkeys – sie ist also ein Weg, eine
+Wallet zu erstellen und zu nutzen, deren Schlüssel unter deiner Domain liegen, und kein
+Weg, für eine bestehende `getvela.app`-Wallet zu signieren. Alle Schlüssel einer Wallet
+gehören zu ein und derselben Domain.
+
+Der Code und die Skripte, die ihn bauen und prüfen, liegen in
+`app-web/trusted-signer/`.

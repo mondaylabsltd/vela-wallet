@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -80,7 +80,7 @@ fun UsbPinDialog(
     // still overflows a short screen stays reachable.
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = { onSubmit(null) },
         sheetState = sheetState,
         containerColor = colors.bgRaised,
@@ -228,7 +228,7 @@ fun UsbWalletPicker(
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
 
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = { onPick(null) },
         containerColor = colors.bgRaised,
     ) {
@@ -293,7 +293,7 @@ fun UsbTouchIndicator(kind: String, product: String) {
         else -> strings.t(I18nKeys.Create.TOUCH_BODY, mapOf("product" to product))
     }
 
-    ModalBottomSheet(
+    VelaModalSheet(
         // A blinking key is answered with a finger, not a swipe — but a sheet
         // that literally cannot be dismissed traps a person whose key went
         // away, so dismissal is allowed and simply lets the exchange time out.

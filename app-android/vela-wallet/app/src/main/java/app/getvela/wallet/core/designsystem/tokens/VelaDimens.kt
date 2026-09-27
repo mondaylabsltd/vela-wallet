@@ -52,6 +52,35 @@ object VelaSizing {
     val doneCheck: Dp = 34.dp
     val scanFabSize: Dp = 56.dp
 
+    /**
+     * The mobile tab bar (spec 078 round 2): icons only — the labels
+     * truncated in es/pt/de/it ("Configuración", "Einstellungen") — so the
+     * glyph is larger than the old icon-over-label pair's, centred in a bar
+     * this tall (without the system inset). The labels live on as each tab's
+     * accessible name.
+     */
+    val tabIcon: Dp = 28.dp
+    val tabBar: Dp = 56.dp
+
+    /**
+     * The fee card's refresh: a round icon button INSIDE the card, this size
+     * at every text size (spec 078 round 3 — the web's and desktop's shape).
+     */
+    val feeRefresh: Dp = 40.dp
+
+    /** A settings sheet's ✕: a plain glyph in a 48dp target, in its own column beside the title. */
+    val sheetClose: Dp = 48.dp
+
+    /** The report's screenshot tile (spec 078 round 3): square, the three shells alike. */
+    val screenshotTile: Dp = 72.dp
+
+    /** The empty add-screenshots target's height, before a large text size grows it. */
+    val screenshotAdd: Dp = 56.dp
+
+    /** A tile's ✕: the visible disc, and the hit area around it. */
+    val screenshotRemove: Dp = 22.dp
+    val screenshotRemoveHit: Dp = 44.dp
+
     // sizing.control.* comes from the design-system brief (not present in the DTCG
     // export — do not add to the drift test until the export grows it).
     val controlSm: Dp = 36.dp

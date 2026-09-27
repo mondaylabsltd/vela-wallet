@@ -30,7 +30,22 @@ const CORPUS_BYTES: usize = 990_499;
 /// strings went with them, which put `ja` + `en` back at 128,800 — under the
 /// original figure. A budget at twice the measurement would not fire until the
 /// corpus DOUBLED, which is not a warning, so it goes back to where it warns.
-const SC005_BUDGET: usize = 135_345;
+///
+/// 2026-09-27 (078): the in-app report learned to carry screenshots — ten new
+/// sentences and four rewritten ones, +1,783 bytes of `ja` + `en` JSON — and the
+/// runtime route measured 136,702, over a line it had cleared by 426 bytes. The
+/// words are what the founder asked for, so the line moves to just above the new
+/// measurement (~1 KB of room), which keeps it a warning rather than a ceiling
+/// nobody hears. Moving it is the owner's call; this is the reviewed proposal.
+///
+/// 2026-09-27 (078, later): the signing sheet's descriptor words — "Approve",
+/// "Amount", "Spender", "Unlimited" and the rest — were English on a Chinese
+/// sheet; the founder asked for them translated. 29 new words (19 more reused
+/// from the old app's keys) put the runtime route at 137,801, 101 bytes over.
+/// Same rule as the morning's move: the words were asked for, so the line goes
+/// to ~1 KB above the new measurement and stays a warning. Approved by the
+/// owner the same day: 「同意呀，i18n_residency 可以增加预算」.
+const SC005_BUDGET: usize = 138_800;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {

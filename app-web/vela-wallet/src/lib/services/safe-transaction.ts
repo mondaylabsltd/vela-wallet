@@ -1160,8 +1160,37 @@ const _rawGasSignalsCache = new Map<
 	{ at: number; wantTip: boolean; signals: RawGasSignals }
 >();
 const _rawGasSignalsRequests = new Map<string, Promise<RawGasSignals>>();
-const _rawBundlerQuoteCache = new Map<string, { at: number; quote: RawBundlerQuote }>();
-const _rawBundlerQuoteRequests = new Map<string, Promise<RawBundlerQuote | null>>();
+/**
+ * The relay's gas quote, held as ONE answer per chain: `pimlico_getUserOperationGasPrice`
+ * returns slow, standard and fast together, so every tier's session reads its
+ * row from the same response (`fee_policy::FEE_SIGNALS_CACHE_TTL_MS`) — the
+ * speed picker's three rows cost one request, not three that land one after
+ * another. Only rows that may be held (`bundlerQuoteCacheable`) are kept.
+ */
+const _rawBundlerQuoteCache = new Map<
+	number,
+	{ at: number; rows: Partial<Record<string, RawBundlerQuote>> }
+>();
+const _rawBundlerQuoteRequests = new Map<
+	number,
+	Promise<Partial<Record<string, RawBundlerQuote>> | null>
+>();
+/**
+ * The relay's simulation of one EXACT operation (`fee_policy`'s
+ * `EstimateUserOpGas`), keyed `${chainId}:…` by chain, account, deployment, the
+ * initCode signer and the calls byte for byte. Nothing a simulation measures
+ * depends on the speed, so the session in force and every tier preview ask the
+ * identical question — and now get the one answer, at the same moment
+ * (`fee_policy::SIMULATION_CACHE_TTL_MS`, which is the fee-signal window).
+ * Only an `estimated` answer is held; a refusal is shared while in flight and
+ * then asked again. Dropped with the fee signals (`invalidateFeeSignals`) — a
+ * submit, a refresh, a failed quote.
+ */
+const _simulationCache = new Map<string, { at: number; outcome: UserOpGasSimulation }>();
+const _simulationRequests = new Map<string, Promise<UserOpGasSimulation>>();
+/** The quote's inner-call measurements (`measure_inner_calls`), shared the same way. */
+const _innerGasCache = new Map<string, { at: number; gas: bigint }>();
+const _innerGasRequests = new Map<string, Promise<bigint | null>>();
 /** Bumped by every invalidate, so a read that was already in flight when the
  *  person asked for a fresh one cannot land its older answer in the cache. */
 const _feeSignalsEpoch = new Map<number, number>();
@@ -1175,13 +1204,22 @@ const _feeSignalsEpoch = new Map<number, number>();
 export function invalidateFeeSignals(chainId: number): void {
 	_feeSignalsEpoch.set(chainId, (_feeSignalsEpoch.get(chainId) ?? 0) + 1);
 	_rawGasSignalsCache.delete(chainId);
-	for (const key of [..._rawGasSignalsRequests.keys(), ..._rawBundlerQuoteCache.keys()]) {
-		if (!key.startsWith(`${chainId}:`)) continue;
+	_rawBundlerQuoteCache.delete(chainId);
+	_rawBundlerQuoteRequests.delete(chainId);
+	const prefix = `${chainId}:`;
+	for (const key of [
+		..._rawGasSignalsRequests.keys(),
+		..._simulationCache.keys(),
+		..._simulationRequests.keys(),
+		..._innerGasCache.keys(),
+		..._innerGasRequests.keys()
+	]) {
+		if (!key.startsWith(prefix)) continue;
 		_rawGasSignalsRequests.delete(key);
-		_rawBundlerQuoteCache.delete(key);
-	}
-	for (const key of [..._rawBundlerQuoteRequests.keys()]) {
-		if (key.startsWith(`${chainId}:`)) _rawBundlerQuoteRequests.delete(key);
+		_simulationCache.delete(key);
+		_simulationRequests.delete(key);
+		_innerGasCache.delete(key);
+		_innerGasRequests.delete(key);
 	}
 }
 
@@ -1191,6 +1229,11 @@ export function _resetFeeSignalsCache(): void {
 	_rawGasSignalsRequests.clear();
 	_rawBundlerQuoteCache.clear();
 	_rawBundlerQuoteRequests.clear();
+	_simulationCache.clear();
+	_simulationRequests.clear();
+	_innerGasCache.clear();
+	_innerGasRequests.clear();
+	_deployedRequests.clear();
 	_feeSignalsEpoch.clear();
 }
 
@@ -1306,34 +1349,95 @@ export async function fetchRawBundlerQuote(
 	tier: GasTier
 ): Promise<RawBundlerQuote | null> {
 	if (gasQuoteShouldZero(chainId)) return readRawBundlerQuote(chainId, tier);
-	const key = `${chainId}:${tier}`;
-	const cached = _rawBundlerQuoteCache.get(key);
-	if (cached && Date.now() - cached.at < feeSignalsCacheTtlMs()) return { ...cached.quote };
-	const pending = _rawBundlerQuoteRequests.get(key);
-	if (pending) return pending.then((quote) => (quote ? { ...quote } : null));
+	const cached = _rawBundlerQuoteCache.get(chainId);
+	const held = cached && Date.now() - cached.at < feeSignalsCacheTtlMs() ? cached.rows[tier] : null;
+	if (held) return { ...held };
+	const rows = await sharedBundlerQuoteRows(chainId);
+	const row = rows?.[tier];
+	return row ? { ...row } : null;
+}
+
+/**
+ * One `pimlico_getUserOperationGasPrice` per chain at a time, every tier's row
+ * parsed from it; concurrent asks — the session in force and the speed
+ * previews, a prewarm and the quote a pick starts — share the one call.
+ */
+function sharedBundlerQuoteRows(
+	chainId: number
+): Promise<Partial<Record<string, RawBundlerQuote>> | null> {
+	const pending = _rawBundlerQuoteRequests.get(chainId);
+	if (pending) return pending;
 	const epoch = _feeSignalsEpoch.get(chainId) ?? 0;
-	const request = readRawBundlerQuote(chainId, tier)
-		.then((quote) => {
-			// Never a null quote, nor a zero one the core rejects as degenerate
+	const request = readRawBundlerQuoteRows(chainId)
+		.then((rows) => {
+			// Never a missing answer, nor a zero row the core rejects as degenerate
 			// (`accept_bundler_quote`): "the relay did not answer" is not a
 			// measurement, and pinning it would hold the fallback label for 15 s.
 			// The seam is re-checked because it may have been armed while this
 			// was in flight.
-			if (
-				quote &&
-				bundlerQuoteCacheable(quote.maxFeePerGas) &&
-				!gasQuoteShouldZero(chainId) &&
-				(_feeSignalsEpoch.get(chainId) ?? 0) === epoch
-			) {
-				_rawBundlerQuoteCache.set(key, { at: Date.now(), quote });
+			if (rows && !gasQuoteShouldZero(chainId) && (_feeSignalsEpoch.get(chainId) ?? 0) === epoch) {
+				const keep: Partial<Record<string, RawBundlerQuote>> = {};
+				for (const [tier, quote] of Object.entries(rows)) {
+					if (quote && bundlerQuoteCacheable(quote.maxFeePerGas)) keep[tier] = quote;
+				}
+				if (Object.keys(keep).length > 0) {
+					_rawBundlerQuoteCache.set(chainId, { at: Date.now(), rows: keep });
+				}
 			}
-			return quote ? { ...quote } : null;
+			return rows;
 		})
 		.finally(() => {
-			if (_rawBundlerQuoteRequests.get(key) === request) _rawBundlerQuoteRequests.delete(key);
+			if (_rawBundlerQuoteRequests.get(chainId) === request)
+				_rawBundlerQuoteRequests.delete(chainId);
 		});
-	_rawBundlerQuoteRequests.set(key, request);
+	_rawBundlerQuoteRequests.set(chainId, request);
 	return request;
+}
+
+/** One relay row as it arrived, unjudged — `null` when it carries no cap at all. */
+function parseRawBundlerRow(row: {
+	maxFeePerGas?: string;
+	maxPriorityFeePerGas?: string;
+	networkFeePerGas?: string;
+	relayerFeePerGas?: string;
+}): RawBundlerQuote | null {
+	if (!row?.maxFeePerGas) return null;
+	const decimal = (value: unknown): string | null =>
+		typeof value === 'string' ? parseHexUInt64(value).toString() : null;
+	return {
+		maxFeePerGas: parseHexUInt64(row.maxFeePerGas).toString(),
+		maxPriorityFeePerGas: decimal(row.maxPriorityFeePerGas),
+		networkFeePerGas: decimal(row.networkFeePerGas),
+		relayerFeePerGas: decimal(row.relayerFeePerGas)
+	};
+}
+
+/** The whole relay answer, every tier it published; `null` = no answer. */
+async function readRawBundlerQuoteRows(
+	chainId: number
+): Promise<Partial<Record<string, RawBundlerQuote>> | null> {
+	let resp;
+	try {
+		resp = await rpcCall('pimlico_getUserOperationGasPrice', [], chainId);
+	} catch (err) {
+		console.log(
+			'[Gas] Bundler gas-price quote unavailable:',
+			err instanceof Error ? err.message : String(err)
+		);
+		return null;
+	}
+	const result = resp.result as Record<string, Parameters<typeof parseRawBundlerRow>[0]> | null;
+	if (resp.error || !result || typeof result !== 'object') return null;
+	const rows: Partial<Record<string, RawBundlerQuote>> = {};
+	for (const [tier, row] of Object.entries(result)) {
+		try {
+			const parsed = parseRawBundlerRow(row);
+			if (parsed) rows[tier] = parsed;
+		} catch {
+			// One malformed row does not take the other tiers down with it.
+		}
+	}
+	return rows;
 }
 
 async function readRawBundlerQuote(
@@ -1415,6 +1519,42 @@ export async function simulateUserOpGas(params: {
 	account: string;
 	deployed: boolean;
 	/** The core's calls. `value` is hex (0x optional), `data` is 0x-hex. */
+	calls: { to: string; value: string; data: string }[];
+	publicKeyHex?: WalletSigner;
+}): Promise<UserOpGasSimulation> {
+	const { chainId, account, deployed, calls, publicKeyHex } = params;
+	// The exact question: the chain, the Safe, whether it carries initCode and
+	// whose keys build it, and the calls byte for byte (see `_simulationCache`).
+	const key = `${chainId}:${JSON.stringify([
+		account.toLowerCase(),
+		deployed,
+		publicKeyHex === undefined ? null : keyHexesOf(publicKeyHex),
+		calls
+	])}`;
+	const cached = _simulationCache.get(key);
+	if (cached && Date.now() - cached.at < feeSignalsCacheTtlMs()) return { ...cached.outcome };
+	const pending = _simulationRequests.get(key);
+	if (pending) return pending.then((outcome) => ({ ...outcome }));
+	const epoch = _feeSignalsEpoch.get(chainId) ?? 0;
+	const request = runUserOpGasSimulation(params)
+		.then((outcome) => {
+			if (outcome.kind === 'estimated' && (_feeSignalsEpoch.get(chainId) ?? 0) === epoch) {
+				_simulationCache.set(key, { at: Date.now(), outcome });
+			}
+			return { ...outcome };
+		})
+		.finally(() => {
+			if (_simulationRequests.get(key) === request) _simulationRequests.delete(key);
+		});
+	_simulationRequests.set(key, request);
+	return request;
+}
+
+/** The simulation itself, unshared — {@link simulateUserOpGas} is the door. */
+async function runUserOpGasSimulation(params: {
+	chainId: number;
+	account: string;
+	deployed: boolean;
 	calls: { to: string; value: string; data: string }[];
 	publicKeyHex?: WalletSigner;
 }): Promise<UserOpGasSimulation> {
@@ -1761,6 +1901,40 @@ export async function measureCallGas(
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * {@link measureCallGas} for a fee QUOTE: the session in force and every speed
+ * preview measure the same calls, so one read answers them all, held for the
+ * simulation's window (see `_simulationCache`) — only a measurement, never a
+ * miss. The submit keeps calling `measureCallGas` itself: the op it signs is
+ * measured fresh.
+ */
+export function measureCallGasForQuote(
+	chainId: number,
+	from: string,
+	to: string,
+	valueHex: string,
+	dataHex: string
+): Promise<bigint | null> {
+	const key = `${chainId}:${JSON.stringify([from.toLowerCase(), to.toLowerCase(), valueHex, dataHex])}`;
+	const cached = _innerGasCache.get(key);
+	if (cached && Date.now() - cached.at < feeSignalsCacheTtlMs()) return Promise.resolve(cached.gas);
+	const pending = _innerGasRequests.get(key);
+	if (pending) return pending;
+	const epoch = _feeSignalsEpoch.get(chainId) ?? 0;
+	const request = measureCallGas(chainId, from, to, valueHex, dataHex)
+		.then((gas) => {
+			if (gas !== null && (_feeSignalsEpoch.get(chainId) ?? 0) === epoch) {
+				_innerGasCache.set(key, { at: Date.now(), gas });
+			}
+			return gas;
+		})
+		.finally(() => {
+			if (_innerGasRequests.get(key) === request) _innerGasRequests.delete(key);
+		});
+	_innerGasRequests.set(key, request);
+	return request;
 }
 
 export function isPlainTransferCall(c: { data: Uint8Array }): boolean {
@@ -2695,11 +2869,27 @@ function buildDummySignature(): Uint8Array {
 
 // Cache: once deployed, a contract stays deployed (irreversible)
 const _deployedCache = new Map<string, true>();
+/**
+ * Reads in flight, shared: the picker's prewarm, the quote a pick starts and
+ * every speed preview ask the same `eth_getCode` within a second of each
+ * other. An undeployed answer is still never HELD — only shared while out —
+ * because the first send deploys the Safe.
+ */
+const _deployedRequests = new Map<string, Promise<boolean>>();
 
-async function isDeployed(address: string, chainId: number): Promise<boolean> {
+function isDeployed(address: string, chainId: number): Promise<boolean> {
 	const key = `${chainId}:${address.toLowerCase()}`;
-	if (_deployedCache.has(key)) return true;
+	if (_deployedCache.has(key)) return Promise.resolve(true);
+	const pending = _deployedRequests.get(key);
+	if (pending) return pending;
+	const request = readIsDeployed(address, chainId, key).finally(() => {
+		if (_deployedRequests.get(key) === request) _deployedRequests.delete(key);
+	});
+	_deployedRequests.set(key, request);
+	return request;
+}
 
+async function readIsDeployed(address: string, chainId: number, key: string): Promise<boolean> {
 	// Deployment status is CORRECTNESS-CRITICAL: it decides whether the UserOp carries
 	// initCode. Guessing "deployed" on a transient RPC failure ships an op with EMPTY
 	// initCode for a fresh account → bundler rejects with "AA20 account not deployed"

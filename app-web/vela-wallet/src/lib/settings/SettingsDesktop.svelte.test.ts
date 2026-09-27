@@ -181,3 +181,60 @@ describe('rows that go somewhere, go there', () => {
 		]);
 	});
 });
+
+// 078: the official accounts, one click from Settings; the last group is
+// About, then Send feedback — the same on all four shells.
+describe('Community and the report, on the desktop', () => {
+	it('the nav ends Community → About → Send feedback', async () => {
+		const view = await drawn();
+		const labels = [...view.root.querySelectorAll('nav.settings-nav button')].map((b) =>
+			b.textContent?.trim()
+		);
+		expect(labels.slice(-3)).toEqual([
+			String(m.sections.community),
+			String(m.about.title),
+			String(m.feedback.title)
+		]);
+	});
+
+	it('Community opens a panel of three links, each leaving in a new tab', async () => {
+		const view = await drawn();
+		await view.click(view.nav(String(m.sections.community)));
+		expect(view.root.querySelector('.panel h1')?.textContent?.trim()).toBe(
+			String(m.sections.community)
+		);
+		const links = [...view.root.querySelectorAll<HTMLAnchorElement>('.community a')];
+		expect(links.map((a) => a.getAttribute('href'))).toEqual([
+			'https://x.com/realvelawallet',
+			'https://t.me/velawallet',
+			'https://discord.gg/23gWrtaYSa'
+		]);
+		for (const link of links) {
+			expect(link.getAttribute('target')).toBe('_blank');
+			expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+		}
+		expect(links[0].textContent).toContain('@realvelawallet');
+	});
+
+	it('tells the route when the report panel is on screen, and when it is not', async () => {
+		const seen: boolean[] = [];
+		const screen = render(SettingsDesktop, {
+			props: {
+				model: buildDesktopState('dst1', m, IDENTICON),
+				onfeedbackopen: (open: boolean) => seen.push(open)
+			}
+		});
+		await tick();
+		const nav = (label: string) =>
+			[...screen.container.querySelectorAll('nav.settings-nav button')].find(
+				(b) => b.textContent?.trim() === label
+			) as HTMLButtonElement;
+		nav(String(m.feedback.title)).click();
+		await tick();
+		nav(String(m.about.title)).click();
+		await tick();
+		expect(seen.filter((v, i) => i === 0 || v !== seen[i - 1])).toEqual([false, true, false]);
+		screen.unmount();
+		expect(seen.at(-1)).toBe(false);
+	});
+});

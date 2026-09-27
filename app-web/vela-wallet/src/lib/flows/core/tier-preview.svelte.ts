@@ -82,6 +82,7 @@ export class TierPreview {
 			request.chainId,
 			request.account,
 			request.feeToken,
+			request.autoFeeToken ?? false,
 			request.publicKeyHex ?? null,
 			request.tier ?? null,
 			request.calls

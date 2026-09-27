@@ -146,6 +146,8 @@ pub mod signer {
             client_data_json_hex: minted.client_data_json_hex,
             authenticator_attachment: fixtures::AUTHENTICATOR_ATTACHMENT.to_owned(),
             transports: fixtures::TRANSPORTS.to_owned(),
+            // A platform passkey stand-in, never a Trusted Signer page (075).
+            signer_origin: None,
         })
     }
 
@@ -167,6 +169,7 @@ pub mod signer {
             client_data_json_hex: signed.client_data_json_hex,
             user_id_hex: None,
             authenticator_attachment: fixtures::AUTHENTICATOR_ATTACHMENT.to_owned(),
+            signer_origin: None,
         })
     }
 }

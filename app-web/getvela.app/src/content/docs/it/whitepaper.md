@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Come funziona Vela e di cosa devi — e non devi — fidarti per usarlo: l'account, le chiavi, la commissione, il modello delle minacce, il recupero e cosa succede se Vela sparisce."
-source: 60d297b650ac
+source: 227acd1acf3d
 ---
 
 <script>
@@ -175,9 +175,11 @@ ultima risorsa, con un database pubblico di selettori, etichettato come best
 effort. Tutto il resto riceve un avviso esplicito di firma alla cieca. Un
 descrittore scaricato non viene mai etichettato come verificato: quella parola se
 la guadagna solo uno integrato nell'app, o uno scaricato identico a quello.
-Un'approvazione on-chain di livello «illimitato» (2^200 o più) non si può inviare
-finché non la riduci; un'approvazione finita ma elevata e i permit firmati vengono
-mostrati con un avviso, ma non bloccati. Dettagli:
+Un'approvazione on-chain di livello «illimitato» (2^200 o più) viene mostrata in
+rosso con un limite proposto; se non la limiti, viene inviata esattamente come l'ha
+costruita la dApp. Un'approvazione finita ma elevata viene mostrata con un avviso;
+i permit firmati non si possono limitare, quindi si firmano così come richiesti o si
+rifiutano. Dettagli:
 [firma leggibile](/it/docs/clear-signing).
 
 ### Reti
@@ -264,9 +266,12 @@ che Vela non è una seconda parte in grado di farlo.
   possibilità di compilare da te l'estensione o le app dal codice sorgente (i
   pacchetti di release hanno checksum SHA-256 e attestazioni di provenienza della
   build GitHub che nominano il commit e l'esecuzione del workflow; il programma di
-  installazione per Windows continua a non avere una firma del codice). Una pagina
-  di firma indipendente che non condivide il codice dell'app è pronta ma non ancora
-  collegata.
+  installazione per Windows continua a non avere una firma del codice). Il
+  [Trusted Signer](/it/docs/clear-signing-self-host), una pagina di firma
+  indipendente che non condivide il codice dell'app, può essere scelto come modo di
+  firmare nelle app desktop, iPhone e Android; il controllo di integrità dell'app
+  desktop si limita a registrare nel log una pagina che non corrisponde, e le app per
+  telefono non fanno ancora questo controllo.
 - **Qualsiasi cosa servita dal dominio** — qualsiasi pagina su getvela.app o sui
   suoi sottodomini, compreso uno script che carica, potrebbe chiedere firme alle
   passkey di Vela, e la richiesta mostra solo «getvela.app». Per questo il sito

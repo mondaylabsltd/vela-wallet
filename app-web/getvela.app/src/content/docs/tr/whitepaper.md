@@ -1,7 +1,7 @@
 ---
 title: Teknik doküman
 description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
-source: 60d297b650ac
+source: 227acd1acf3d
 ---
 
 <script>
@@ -167,8 +167,10 @@ standart token biçimleriyle eşleştirilenler — ve son çare olarak, "elden g
 kalan her şey açık bir kör imzalama uyarısı alır. Alınan bir tanımlayıcı asla
 doğrulanmış olarak etiketlenmez; bu sözü yalnızca uygulamaya yerleşik olan ya da alınıp
 onunla birebir aynı çıkan bir tanımlayıcı hak eder. "Sınırsız" düzeydeki (2^200 ya da
-daha fazla) zincir üstü bir onay, siz onu düşürene kadar gönderilemez; büyük ama sınırlı
-bir onay ve imzalı izinler (permit) bir uyarıyla gösterilir ama engellenmez.
+daha fazla) zincir üstü bir onay kırmızıyla gösterilir ve bir üst sınır önerilir; siz
+üst sınır koymadıkça dApp'in oluşturduğu haliyle aynen gönderilir. Büyük ama sınırlı
+bir onay bir uyarıyla gösterilir; imzalı izinlere (permit) üst sınır konamaz, bu yüzden
+istendiği gibi imzalanır ya da reddedilir.
 Ayrıntılar:
 [açık imzalama](/tr/docs/clear-signing).
 
@@ -252,8 +254,11 @@ olmamasıdır.
   (notarized) macOS derlemeleri ve uzantıyı ya da uygulamaları kaynak koddan kendiniz
   derlemeniz (sürüm paketleri SHA-256 sağlama toplamları ve commit ile iş akışı
   çalışmasını adlandıran GitHub derleme kökeni attestation'larını taşır; Windows
-  yükleyicisi hâlâ kod imzalı değil). Uygulamanın
-  kodunu paylaşmayan bağımsız bir imza sayfası hazır ama henüz bağlanmadı.
+  yükleyicisi hâlâ kod imzalı değil). Uygulamanın kodunu paylaşmayan bağımsız bir imza
+  sayfası olan [Trusted Signer](/tr/docs/clear-signing-self-host), masaüstü, iPhone ve
+  Android uygulamalarında imzalama yönteminiz olarak seçilebilir; masaüstünün bütünlük
+  kontrolü eşleşmeyen bir sayfayı yalnızca günlüğe yazar, telefon uygulamaları ise henüz
+  kontrol etmiyor.
 - **Alan adından sunulan her şey** — getvela.app ya da alt alan adlarındaki herhangi bir
   sayfa, yüklediği bir betik dahil, Vela geçiş anahtarlarından imza isteyebilir ve istem
   yalnızca "getvela.app"i gösterir. Bu yüzden web sitesi kendi sayfalarının geçiş

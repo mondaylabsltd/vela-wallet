@@ -7,9 +7,10 @@
 //! from next door. What is here is what those did not already cover.
 
 use gpui::IntoElement as _;
+use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Div, Hsla, InteractiveElement as _, ParentElement, SharedString,
+    Div, ElementId, Hsla, InteractiveElement as _, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, div, px,
 };
 use qrcode::{Color as QrColorModule, QrCode};
@@ -17,7 +18,7 @@ use qrcode::{Color as QrColorModule, QrCode};
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{icon_img, identicon_avatar, token_icon_logos};
+use crate::wallet::components::{icon_img, openable_identicon, token_icon_logos};
 
 use super::fixtures::{
     FactLead, FactRow, FeeRow, FeeSpeedModel, FeeSpeedOption, FilterChip, NetworkRow,
@@ -50,50 +51,158 @@ pub const QR_CARD: f32 = 344.;
 /// Both actions sit on the row rather than behind it. The point of the panel is
 /// that ONE address serves every network, so the fastest path is to copy it
 /// from whichever line you looked at, without opening anything.
-pub fn network_row(theme: &Theme, icons: &mut IconCache, row: &NetworkRow) -> Div {
+/// R1's network row (`flows/ui/NetworkRow.svelte`): the chain, the address on
+/// it, and the two things a person does with an address — copy it, or show it.
+/// `copy` is the copy button's state and click (the tick holds 150 ms); `qr`
+/// opens that network's code. `None` draws the glyph inert.
+pub fn network_row(
+    theme: &Theme,
+    icons: &mut IconCache,
+    row: &NetworkRow,
+    index: usize,
+    copy: Option<CopyButton>,
+    qr: Option<super::panels::Click>,
+) -> Div {
+    let copied = copy.as_ref().is_some_and(|copy| copy.copied);
+    let copy_glyph = icon_img(
+        icons,
+        if copied { Icon::Check } else { Icon::Copy },
+        false,
+        if copied {
+            theme.success_base
+        } else {
+            theme.fg_muted
+        },
+        18.,
+    )
+    .into_any_element();
+    let qr_glyph = icon_img(icons, Icon::QrCode, false, theme.fg_muted, 18.).into_any_element();
     div()
         .flex()
         .items_center()
         .gap(px(12.))
-        .py(px(10.))
-        .child(
-            div()
-                .w(px(CHAIN_BADGE))
-                .h(px(CHAIN_BADGE))
-                .rounded(px(CHAIN_BADGE / 2.))
-                .bg(row.badge)
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::text_row_sub())
-                .font_weight(gpui::FontWeight::BOLD)
-                // The chain colours are brand fills, dark enough for white in
-                // both appearances — so the mode-invariant white.
-                .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
-                .child(row.code.clone()),
-        )
+        // The web's `NetworkRow` measure (078 F-11): `--space-lg` above and
+        // below.
+        .py(px(12.))
+        .child(network_mark(row))
         .child(
             div()
                 .flex_1()
                 .min_w(px(0.))
                 .flex()
                 .flex_col()
+                .gap(px(2.))
                 .child(
                     div()
                         .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.fg_base)
                         .child(row.name.clone()),
                 )
                 .child(
                     div()
                         .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
+                        .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
+                        .truncate()
                         .child(row.address.clone()),
                 ),
         )
-        .child(icon_img(icons, Icon::Copy, false, theme.fg_muted, 16.))
-        .child(icon_img(icons, Icon::QrCode, false, theme.fg_muted, 16.))
+        .child(row_button(
+            theme,
+            ElementId::from(("network-copy", index)),
+            copy_glyph,
+            copy.map(|copy| copy.on_click),
+        ))
+        .child(row_button(
+            theme,
+            ElementId::from(("network-qr", index)),
+            qr_glyph,
+            qr,
+        ))
+}
+
+/// The row's chain: its logo, over the lettermark that shows while the logo
+/// loads, when it cannot, and on a drawn row that has none (issue 201's rule 1
+/// — never a blank circle).
+///
+/// A fallback, not an underlay: a logo with transparent pixels would let the
+/// letters show through it.
+fn network_mark(row: &NetworkRow) -> gpui::AnyElement {
+    let (code, badge) = (row.code.clone(), row.badge);
+    let lettermark = move || {
+        div()
+            .size(px(CHAIN_BADGE))
+            .flex_none()
+            .rounded(px(CHAIN_BADGE / 2.))
+            .bg(badge)
+            .flex()
+            .items_center()
+            .justify_center()
+            // `--text-xs`, as the web's `NetworkRow` letters it (078 F-11).
+            .text_size(theme::text_glyph())
+            .font_weight(gpui::FontWeight::BOLD)
+            // The chain colours are brand fills, dark enough for white in
+            // both appearances — so the mode-invariant white.
+            .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
+            .child(code.clone())
+            .into_any_element()
+    };
+    let Some(url) = row.logos.logo_urls.first().cloned() else {
+        return lettermark();
+    };
+    div()
+        .size(px(CHAIN_BADGE))
+        .flex_none()
+        .child(
+            gpui::img(url)
+                .size_full()
+                .rounded(px(CHAIN_BADGE / 2.))
+                .with_loading(lettermark.clone())
+                .with_fallback(lettermark),
+        )
+        .into_any_element()
+}
+
+/// A copy button's state and its click, as the page bound it: `copied` while
+/// the tick shows.
+pub struct CopyButton {
+    pub copied: bool,
+    pub on_click: super::panels::Click,
+}
+
+/// A 36 round glyph button on a row (`--size-control-sm`), raised on hover.
+/// Its click is the row's own: it stops there, so a row that also opens
+/// something on a click is not opened by the button inside it.
+fn row_button(
+    theme: &Theme,
+    id: ElementId,
+    glyph: impl gpui::IntoElement,
+    on_click: Option<super::panels::Click>,
+) -> gpui::AnyElement {
+    let button = div()
+        .size(px(36.))
+        .flex_none()
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(glyph);
+    match on_click {
+        Some(on_click) => {
+            let raised = theme.bg_raised;
+            button
+                .id(id)
+                .cursor_pointer()
+                .hover(move |el| el.bg(raised))
+                .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    on_click(event, window, cx);
+                })
+                .into_any_element()
+        }
+        None => button.into_any_element(),
+    }
 }
 
 /// The token mark inside a line of text.
@@ -195,6 +304,7 @@ pub fn fact_row(
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     fact: &FactRow,
+    copy: Option<CopyButton>,
 ) -> Div {
     let mut value_side = div().flex().items_center().gap(px(6.)).min_w(px(0.));
 
@@ -202,7 +312,7 @@ pub fn fact_row(
         FactLead::None => value_side,
         FactLead::Token(mark) => value_side.child(inline_mark(theme, mark)),
         FactLead::Identicon(seed) => {
-            value_side.child(identicon_avatar(identicons, seed.as_ref(), 20.))
+            value_side.child(openable_identicon(identicons, seed.as_ref(), 20.))
         }
     };
 
@@ -213,18 +323,56 @@ pub fn fact_row(
     } else {
         div().text_size(theme::text_row_sub())
     };
-    value_side = value_side.child(value.text_color(theme.fg_base).child(fact.value.clone()));
+    // `.value`: 13 medium (078 T065).
+    value_side = value_side.child(
+        value
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(theme.fg_base)
+            .child(fact.value.clone()),
+    );
 
-    if fact.copyable {
-        value_side = value_side.child(icon_img(icons, Icon::Copy, false, theme.fg_subtle, 13.));
+    // `FactRow.svelte`: a 20 box with a 14 glyph in `fg-subtle`, a tick in
+    // the success colour for 150 ms after it copies.
+    if fact.copy.is_some() {
+        let copied = copy.as_ref().is_some_and(|copy| copy.copied);
+        let glyph = icon_img(
+            icons,
+            if copied { Icon::Check } else { Icon::Copy },
+            false,
+            if copied {
+                theme.success_base
+            } else {
+                theme.fg_subtle
+            },
+            14.,
+        );
+        let button = div()
+            .size(px(20.))
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(glyph);
+        value_side = value_side.child(match copy {
+            Some(copy) => button
+                .id(ElementId::Name(SharedString::from(format!(
+                    "fact-copy-{}",
+                    fact.label
+                ))))
+                .cursor_pointer()
+                .on_click(copy.on_click)
+                .into_any_element(),
+            None => button.into_any_element(),
+        });
     }
 
+    // `.fact`: padded 12, as the web's (078 T065).
     let row = div()
         .flex()
         .items_center()
         .justify_between()
         .gap(px(12.))
-        .py(px(10.))
+        .py(px(12.))
         .child(
             div()
                 .text_size(theme::text_row_sub())
@@ -238,7 +386,7 @@ pub fn fact_row(
         // fact about the value, not a warning about it.
         Some(note) => div().flex().flex_col().child(row.pb(px(2.))).child(
             div()
-                .pb(px(10.))
+                .pb(px(12.))
                 .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(note.clone()),
@@ -263,29 +411,82 @@ pub fn status_chip(theme: &Theme, chip: &StatusChip) -> Div {
         .py(px(2.))
         .rounded(px(999.))
         .bg(bg)
-        .text_size(theme::text_label())
+        // `--text-xs` semibold (078 F-11).
+        .text_size(theme::text_glyph())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(fg)
         .child(chip.text.clone())
 }
 
-/// The filled search field. Filtering is live and animation-free by design.
-pub fn flow_search(theme: &Theme, icons: &mut IconCache, placeholder: SharedString) -> Div {
-    div()
+/// The filled search field — the web's `flows/ui/SearchField.svelte`: 52 high
+/// (`--size-control-lg`), padding 12, gap 8, radius 12 on `bg-raised`, an 18
+/// glyph in `fg-subtle`, 13 text, and while focused the one hairline edge in
+/// `fg-muted` every field wears (`[data-field]:focus-within`).
+///
+/// Filtering is live and animation-free by design; the panel does it. `field`
+/// is the input the page owns — `None` (the gallery) draws the placeholder.
+pub fn flow_search(
+    theme: &Theme,
+    icons: &mut IconCache,
+    placeholder: SharedString,
+    field: Option<super::panels::AddressField>,
+    window: &gpui::Window,
+) -> Div {
+    let focused = field.as_ref().is_some_and(|f| f.focus.is_focused(window));
+    let well = div()
         .flex()
+        .flex_none()
         .items_center()
         .gap(px(8.))
-        .h(px(40.))
+        .h(px(52.))
         .px(px(12.))
         .rounded(px(12.))
-        .bg(theme.bg_sunken)
-        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 15.))
-        .child(
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(if focused {
+            theme.fg_muted
+        } else {
+            gpui::transparent_black()
+        })
+        .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 18.));
+    match field {
+        Some(field) => well.child(crate::ui::search_input(
+            "flow-search",
+            theme,
+            &field.value,
+            placeholder,
+            &field.focus,
+            window,
+            field.on_change,
+        )),
+        None => well.child(
             div()
                 .flex_1()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
                 .child(placeholder),
-        )
+        ),
+    }
+}
+
+/// The web's live filter (`query.trim().toLowerCase()` in each screen's
+/// `shown`): nothing typed keeps every row; otherwise a row stays when what it
+/// is called contains the query, ignoring case.
+pub fn search_matches(query: &str, haystack: &str) -> bool {
+    let query = query.trim().to_lowercase();
+    query.is_empty() || haystack.to_lowercase().contains(&query)
+}
+
+/// The line a search that hides every row leaves (13 `fg-subtle`, centred,
+/// 24 above and below).
+pub fn search_empty(theme: &Theme, text: SharedString) -> Div {
+    div()
+        .py(px(24.))
+        .flex()
+        .justify_center()
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_subtle)
+        .child(text)
 }
 
 /// The token-class filter chips.
@@ -293,55 +494,72 @@ pub fn flow_search(theme: &Theme, icons: &mut IconCache, placeholder: SharedStri
 /// Distinct from a segmented toggle on purpose. That control divides ONE space
 /// into named halves and fills its width; this is a row of independent
 /// narrowings that hugs its labels.
-pub fn filter_chips(theme: &Theme, chips: &[FilterChip]) -> Div {
+///
+/// `clicks` pairs with `chips` by position; a chip without one is drawn and
+/// inert (the mock). They were inert everywhere until 2026-09-24: 全部 was
+/// lit for good and the other three did nothing when pressed.
+pub fn filter_chips(theme: &Theme, chips: &[FilterChip], clicks: Vec<super::panels::Click>) -> Div {
     // No wrap WITHIN the strip: a second line of chips pushes the list down
     // and changes the panel's shape depending on how long a locale's words
-    // are. The strip keeps its own width (`flex_initial`, not `flex_1`) so
-    // the row above can wrap the network pill below it instead of letting the
-    // pill overlap the last chip; `min_w`/`overflow_hidden` still clip as a
-    // last resort, for the locale whose three chips alone are wider than the
-    // column.
+    // are. `min_w`/`overflow_hidden` clip as a last resort, for the locale
+    // whose chips alone are wider than the column.
     let mut row = div()
         .flex()
         .gap(px(6.))
         .flex_initial()
         .min_w(px(0.))
         .overflow_hidden();
-    for chip in chips {
-        row = row.child(
+    let mut clicks = clicks.into_iter();
+    for (i, chip) in chips.iter().enumerate() {
+        row = row.child(super::panels::clickable(
+            gpui::ElementId::from(("flow-filter-chip", i)),
+            clicks.next(),
+            // The web's chip (078 F-10): raised, padded 4/12, 11 medium on
+            // a button's line — the sunken 5-padded chip stood taller than
+            // the web's and read as a well rather than a control.
             div()
                 .px(px(12.))
-                .py(px(5.))
+                .py(px(4.))
                 .rounded(px(999.))
                 // The selected chip inverts rather than taking the accent:
                 // accent means "moves money", and narrowing a list does not.
                 .bg(if chip.selected {
                     theme.fg_base
                 } else {
-                    theme.bg_sunken
+                    theme.bg_raised
                 })
                 .text_size(theme::text_label())
+                .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
+                .font_weight(if chip.selected {
+                    gpui::FontWeight::SEMIBOLD
+                } else {
+                    gpui::FontWeight::MEDIUM
+                })
                 .text_color(if chip.selected {
                     theme.bg_base
                 } else {
                     theme.fg_muted
                 })
                 .child(chip.label.clone()),
-        );
+        ));
     }
     row
 }
 
 /// The two-segment toggle — the ONE segmented control in the product.
+///
+/// `clicks` makes each half a press (left, right); `None` draws the mock's
+/// inert control.
 pub fn segmented_toggle(
     theme: &Theme,
+    id: &'static str,
     left: SharedString,
     right: SharedString,
     left_on: bool,
+    clicks: Option<(super::panels::Click, super::panels::Click)>,
 ) -> Div {
     let seg = |label: SharedString, on: bool| {
         let base = div()
-            .flex_1()
             .py(px(8.))
             .rounded(px(10.))
             .flex()
@@ -352,24 +570,119 @@ pub fn segmented_toggle(
             .text_color(if on { theme.fg_base } else { theme.fg_muted })
             .child(label)
     };
+    let (on_left, on_right) = match clicks {
+        Some((left, right)) => (Some(left), Some(right)),
+        None => (None, None),
+    };
     div()
         .flex()
         .gap(px(2.))
         .p(px(2.))
         .rounded(px(12.))
         .bg(theme.bg_sunken)
-        .child(seg(left, left_on))
-        .child(seg(right, !left_on))
+        .child(
+            super::panels::clickable(
+                gpui::ElementId::from((id, 0usize)),
+                on_left,
+                seg(left, left_on),
+            )
+            .flex_1(),
+        )
+        .child(
+            super::panels::clickable(
+                gpui::ElementId::from((id, 1usize)),
+                on_right,
+                seg(right, !left_on),
+            )
+            .flex_1(),
+        )
 }
 
 /// The monospace field. Addresses are compared character by character by the
 /// people pasting them, which is the whole reason for the face.
+/// A split row's payee by name (the web's `RecipientCard .who`): the name
+/// 13 medium in the UI face over its short address, 10 mono muted.
+fn recipient_who(theme: &Theme, name: SharedString, address: SharedString) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(theme.fg_base)
+                .child(name),
+        )
+        .child(
+            div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_glyph())
+                .text_color(theme.fg_muted)
+                .child(address),
+        )
+}
+
+/// One pill of a [`ghost_pill_row`].
+pub struct GhostPill {
+    pub id: ElementId,
+    pub icon: Icon,
+    pub label: SharedString,
+    /// Done (a template saved): the pill turns to the success ink.
+    pub done: bool,
+    pub action: Option<super::panels::Click>,
+}
+
+/// The web's `GhostPillRow` (078 T062): hairline pills that share the row,
+/// each a 14 glyph and an 11 medium label, the raised colour on hover.
+pub fn ghost_pill_row(theme: &Theme, icons: &mut IconCache, pills: Vec<GhostPill>) -> Div {
+    let mut row = div().flex().flex_wrap().gap(px(4.));
+    for pill in pills {
+        let ink = if pill.done {
+            theme.success_base
+        } else {
+            theme.fg_base
+        };
+        let hover = theme.bg_raised;
+        let mut body = div()
+            .id(pill.id)
+            .flex_1()
+            .min_h(px(36.))
+            .p(px(8.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(px(4.))
+            .rounded_full()
+            .border_1()
+            .border_color(if pill.done {
+                theme.success_base
+            } else {
+                theme.border_strong
+            })
+            .cursor_pointer()
+            .hover(move |el| el.bg(hover))
+            .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
+            .text_size(theme::text_label())
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(ink)
+            .whitespace_nowrap()
+            .child(icon_img(icons, pill.icon, false, ink, 14.))
+            .child(pill.label);
+        if let Some(action) = pill.action {
+            body = body.on_click(move |event, window, cx| action(event, window, cx));
+        }
+        row = row.child(body);
+    }
+    row
+}
+
 pub fn mono_field(theme: &Theme, label: Option<SharedString>, value: SharedString) -> Div {
+    // The web's `MonoField` (078 F-11): an 11 label over a raised field.
     let mut col = div().flex().flex_col().gap(px(6.));
     if let Some(label) = label {
         col = col.child(
             div()
-                .text_size(theme::text_row_sub())
+                .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(label),
         );
@@ -378,7 +691,7 @@ pub fn mono_field(theme: &Theme, label: Option<SharedString>, value: SharedStrin
         div()
             .p(px(12.))
             .rounded(px(12.))
-            .bg(theme.bg_sunken)
+            .bg(theme.bg_raised)
             .font_family(theme::font_mono())
             .text_size(theme::text_mono_address())
             .text_color(theme.fg_base)
@@ -403,37 +716,34 @@ pub fn address_card(
 ) -> gpui::Stateful<Div> {
     div()
         .id("receive-address-card")
+        // No well (078 F-11): the web's `AddressCard` is a row on the page —
+        // the name 15 semibold, the address in mono 11 on 1.4 beneath it.
         .flex()
         .items_center()
         .gap(px(12.))
-        .p(px(12.))
-        .rounded(px(14.))
-        .bg(theme.bg_sunken)
-        .child(identicon_avatar(identicons, seed, 36.))
+        .py(px(12.))
+        .child(openable_identicon(identicons, seed, 36.))
         .child(
             div()
                 .flex_1()
                 .min_w(px(0.))
                 .flex()
                 .flex_col()
+                .gap(px(2.))
                 .child(
                     div()
                         .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.fg_base)
                         .child(name),
                 )
                 .child(
                     div()
                         .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
+                        .text_size(theme::text_label())
+                        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
                         .text_color(theme.fg_muted)
-                        .child(lines.0),
-                )
-                .child(
-                    div()
-                        .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
-                        .text_color(theme.fg_muted)
+                        .child(lines.0)
                         .child(lines.1),
                 ),
         )
@@ -622,7 +932,9 @@ pub fn fee_row(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
         .gap(px(8.))
         .p(px(12.))
         .rounded(px(12.))
-        .bg(theme.bg_sunken)
+        // The web's raised surface: the fee sits on the same card colour as
+        // the token and the recipient above it.
+        .bg(theme.bg_raised)
         .child(
             div()
                 .flex_1()
@@ -653,9 +965,10 @@ pub fn fee_refresh_icon(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> D
         .flex()
         .items_center()
         .justify_center()
-        .size(px(32.))
-        .rounded(px(10.))
-        .bg(theme.bg_sunken)
+        .size(px(36.))
+        .mr(px(4.))
+        .rounded_full()
+        .hover(|el| el.bg(theme.bg_sunken))
         .child(icon_img(
             icons,
             Icon::RefreshCw,
@@ -686,19 +999,20 @@ pub fn fee_speed_summary(theme: &Theme, icons: &mut IconCache, speed: &FeeSpeedM
     div()
         .flex()
         .items_center()
+        // The web's folded row (078 F-11): 11, padded 4/12.
         .gap(px(8.))
         .px(px(12.))
-        .py(px(6.))
+        .py(px(4.))
         .child(
             div()
-                .text_size(theme::text_row_sub())
+                .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(speed.label.clone()),
         )
         .child(
             div()
                 .flex_1()
-                .text_size(theme::text_row_sub())
+                .text_size(theme::text_label())
                 .text_color(theme.fg_base)
                 .flex()
                 .justify_end()
@@ -728,65 +1042,68 @@ pub fn fee_speed_note(theme: &Theme, text: &SharedString) -> Div {
         .child(text.clone())
 }
 
-/// One option, opened: its name and its own fee on the first line, its gas
-/// bid under the fee, and what the speed buys under both.
+/// One option, opened, on TWO lines: its name and its own fee; then what the
+/// speed buys and its gas bid. It was three — the bid alone on line two, the
+/// description on line three — which left a hole under every name.
+///
+/// Selected reads in the text colour, semibold, with a text-colour tick: the
+/// accent is for moving money and submitting, not for a choice (the design
+/// rule the web's row already follows).
 pub fn fee_speed_option(
     theme: &Theme,
     icons: &mut IconCache,
     speed: &FeeSpeedModel,
     option: &FeeSpeedOption,
 ) -> Div {
-    let mut body = div().flex().flex_col().gap(px(2.)).flex_1().min_w(px(0.));
-    body = body.child(
-        div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .child(
-                div()
-                    .flex_1()
-                    .text_size(theme::text_row_sub())
-                    .text_color(if option.selected {
-                        theme.accent
-                    } else {
-                        theme.fg_base
-                    })
-                    .child(option.label.clone()),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
-                    .child(option.value.clone()),
-            ),
-    );
-    if speed.gas_price_line {
-        // Named, because an unnamed "3,244 wei" under a fee reads as a second
-        // charge; held open empty while the set is measuring, so the option
-        // does not lose a line and regain it.
-        body = body.child(
+    let first = div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .child(
             div()
-                .flex()
-                .justify_end()
-                .gap(px(6.))
-                .min_h(px(14.))
-                .text_size(theme::text_label())
-                .text_color(theme.fg_subtle)
-                .children(option.gas_price.as_ref().map(|gas| {
-                    div()
-                        .flex()
-                        .gap(px(6.))
-                        .child(speed.gas_price_label.clone())
-                        .child(div().font_family(theme::font_mono()).child(gas.clone()))
-                })),
+                .flex_1()
+                .min_w(px(0.))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .when(option.selected, |label| {
+                    label.font_weight(gpui::FontWeight::SEMIBOLD)
+                })
+                .child(option.label.clone()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(option.value.clone()),
         );
-    }
-    body = body.child(
+    // Named, because an unnamed "3,244 wei" under a fee reads as a second
+    // charge; held open empty while the set is measuring, so the row does not
+    // lose its width and regain it. The UI face throughout — a monospace bid
+    // beside proportional text read as a different kind of thing.
+    let bid = speed.gas_price_line.then(|| {
         div()
-            .text_size(theme::text_label())
-            .text_color(theme.fg_subtle)
-            .child(option.detail.clone()),
-    );
+            .flex_none()
+            .flex()
+            .gap(px(6.))
+            .min_h(px(14.))
+            .children(option.gas_price.as_ref().map(|gas| {
+                div()
+                    .flex()
+                    .gap(px(6.))
+                    .child(speed.gas_price_label.clone())
+                    .child(gas.clone())
+            }))
+    });
+    let second = div()
+        .flex()
+        .items_start()
+        .gap(px(8.))
+        .text_size(theme::text_label())
+        .text_color(theme.fg_subtle)
+        // The description wraps under itself; the bid is never the one cut.
+        .child(div().flex_1().min_w(px(0.)).child(option.detail.clone()))
+        .children(bid);
     div()
         .flex()
         .items_start()
@@ -795,12 +1112,21 @@ pub fn fee_speed_option(
         .py(px(8.))
         .rounded(px(10.))
         .when(option.selected, |row| row.bg(theme.bg_sunken))
-        .child(body)
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .flex_1()
+                .min_w(px(0.))
+                .child(first)
+                .child(second),
+        )
         .child(
             div().w(px(14.)).pt(px(2.)).children(
                 option
                     .selected
-                    .then(|| icon_img(icons, Icon::Check, false, theme.accent, 14.)),
+                    .then(|| icon_img(icons, Icon::Check, false, theme.fg_base, 14.)),
             ),
         )
 }
@@ -813,6 +1139,9 @@ pub fn fee_speed_option(
 /// gallery gets, and what this screen was on the desktop until spec 033.
 pub struct RecipientRowActions {
     pub amount: Option<crate::flows::panels::AddressField>,
+    /// The row's address, typed (078 F-06) — and the book for this row.
+    pub address: Option<crate::flows::panels::AddressField>,
+    pub pick: Option<crate::flows::panels::Click>,
     pub remove: Option<crate::flows::panels::Click>,
 }
 
@@ -825,34 +1154,130 @@ pub fn recipient_card(
     row: RecipientRowActions,
     window: &gpui::Window,
 ) -> Div {
-    let RecipientRowActions { amount, remove } = row;
+    let RecipientRowActions {
+        amount,
+        address,
+        pick,
+        remove,
+    } = row;
+    // Live, the row is also where the person is typed (the web's
+    // `RecipientCard`, spec 028 Phase 10): a well holding the address, with
+    // the book's door beside it. The drawn card keeps its name line.
+    let who: gpui::AnyElement = match address {
+        // At rest a filled row reads as the drawn card does — the address's
+        // two ends — and a click puts the whole of it back in hand (the web's
+        // `.reading` over the input): forty clipped hex strings in boxes is a
+        // form, not a payroll.
+        Some(field) if !field.value.is_empty() && !field.focus.is_focused(window) => {
+            let focus = field.focus.clone();
+            // A name the book knows over the address it stands for, as the
+            // drawn card (078 T066); an unnamed row is its address.
+            let text = match &recipient.address {
+                Some(address) => recipient_who(theme, recipient.name.clone(), address.clone()),
+                None => div()
+                    .font_family(theme::font_mono())
+                    .text_size(theme::text_mono_address())
+                    .text_color(theme.fg_base)
+                    .child(gpui::SharedString::from(
+                        crate::wallet::live::shorten_address(&field.value),
+                    )),
+            };
+            let mut reading = div().flex().items_center().gap(px(4.)).child(
+                div()
+                    .id(gpui::ElementId::from(("split-reading", index)))
+                    .cursor_text()
+                    .child(text)
+                    .on_click(move |_, window, cx| focus.focus(window, cx)),
+            );
+            if let Some(pick) = pick {
+                reading = reading.child(crate::flows::panels::clickable(
+                    gpui::ElementId::from(("split-pick", index)),
+                    Some(pick),
+                    div().p(px(4.)).rounded_full().child(icon_img(
+                        icons,
+                        Icon::NavContacts,
+                        false,
+                        theme.fg_muted,
+                        14.,
+                    )),
+                ));
+            }
+            reading.into_any_element()
+        }
+        Some(field) => {
+            let mut well = div()
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .px(px(8.))
+                .rounded(px(8.))
+                .bg(theme.bg_base)
+                .border_1()
+                .border_color(if field.focus.is_focused(window) {
+                    theme.fg_muted
+                } else {
+                    theme.border_card
+                })
+                .child(crate::ui::bare_text_field(
+                    gpui::ElementId::from(("split-address", index)),
+                    theme,
+                    &field.value,
+                    field.placeholder.clone(),
+                    &field.focus,
+                    window,
+                    field.on_change,
+                ));
+            if let Some(pick) = pick {
+                well = well.child(crate::flows::panels::clickable(
+                    gpui::ElementId::from(("split-pick", index)),
+                    Some(pick),
+                    div().p(px(4.)).rounded_full().child(icon_img(
+                        icons,
+                        Icon::NavContacts,
+                        false,
+                        theme.fg_muted,
+                        14.,
+                    )),
+                ));
+            }
+            well.into_any_element()
+        }
+        None => match &recipient.address {
+            Some(address) => {
+                recipient_who(theme, recipient.name.clone(), address.clone()).into_any_element()
+            }
+            None => div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_mono_address())
+                .text_color(theme.fg_base)
+                .child(recipient.name.clone())
+                .into_any_element(),
+        },
+    };
+    // A raised card padded 12, as the web's `RecipientCard` (078 F-11); its
+    // wells are the page colour inside it.
     let card = div()
         .flex()
         .items_center()
-        .gap(px(10.))
-        .p(px(10.))
+        .gap(px(12.))
+        .p(px(12.))
         .rounded(px(12.))
-        .bg(theme.bg_sunken)
-        .child(identicon_avatar(identicons, recipient.seed.as_ref(), 28.))
+        .bg(theme.bg_raised)
+        .child(openable_identicon(identicons, recipient.seed.as_ref(), 28.))
         .child(
             div()
                 .flex_1()
                 .min_w(px(0.))
                 .flex()
                 .flex_col()
+                .gap(px(2.))
                 .child(
                     div()
                         .text_size(theme::text_label())
                         .text_color(theme.fg_subtle)
                         .child(recipient.ordinal.clone()),
                 )
-                .child(
-                    div()
-                        .font_family(theme::font_mono())
-                        .text_size(theme::text_mono_address())
-                        .text_color(theme.fg_base)
-                        .child(recipient.name.clone()),
-                ),
+                .child(who),
         )
         .child(match amount {
             // Live: this row's own amount, typed. A split whose rows cannot be
@@ -924,8 +1349,9 @@ pub fn token_header_card(
         .items_center()
         .gap(px(12.))
         .p(px(12.))
-        .rounded(px(14.))
-        .bg(theme.bg_sunken)
+        .rounded(px(12.))
+        // The web's `TokenHeaderCard`: a raised card, the Max chip sunken on it.
+        .bg(theme.bg_raised)
         .child(token_icon_logos(
             theme,
             mark.ticker.as_ref(),
@@ -941,13 +1367,19 @@ pub fn token_header_card(
                 .child(
                     div()
                         .text_size(theme::text_row_title())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.fg_base)
                         .child(symbol),
                 )
+                .gap(px(2.))
                 .child(
+                    // `--text-sm`, as the web's `TokenHeaderCard` detail.
                     div()
-                        .text_size(theme::text_row_sub())
+                        .text_size(theme::text_label())
                         .text_color(theme.fg_muted)
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .text_ellipsis()
                         .child(detail),
                 ),
         );
@@ -964,48 +1396,103 @@ pub fn max_chip(theme: &Theme, max: SharedString) -> Div {
         .px(px(12.))
         .py(px(4.))
         .rounded(px(999.))
-        .bg(theme.bg_raised)
+        .bg(theme.bg_sunken)
         .text_size(theme::text_row_sub())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_base)
         .child(max)
 }
 
-/// A full-width outline button — every CTA in the flows except the confirm.
-pub fn ghost_button(theme: &Theme, label: SharedString) -> Div {
+/// The web's `Button` (`ui/Button.svelte`), one shape for every CTA: at
+/// least 52 high (`--size-control-lg`), padding 8/24, 17 semibold
+/// (`--text-xl`), hover at 0.92. The desktop's buttons were 37 high and 13
+/// regular, the largest single reason the flows read as a rough copy.
+fn button_base(label: SharedString) -> Div {
+    button_face(label).hover(|el| el.opacity(0.92))
+}
+
+/// The CTA's shape and type without its hover — gpui takes ONE hover style
+/// per element, so a button that must not react is built without it rather
+/// than given a second.
+fn button_face(label: SharedString) -> Div {
     div()
         .w_full()
-        .py(px(10.))
-        .rounded(px(999.))
-        .border_1()
-        .border_color(theme.border_card)
+        .min_h(px(52.))
+        .px(px(24.))
+        .py(px(8.))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(theme::text_row_sub())
-        .text_color(theme.fg_base)
+        .text_size(theme::text_button())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
         .child(label)
 }
 
-/// The accent CTA. Exactly one per journey (DSD3L's confirm) — in this product
-/// the accent means "this moves the money".
+/// `secondary`, pill-shaped: a hairline in `--color-border-strong` and muted
+/// text — the outline every secondary action wears.
+pub fn ghost_button(theme: &Theme, label: SharedString) -> Div {
+    button_base(label)
+        .rounded(px(999.))
+        .border_1()
+        .border_color(theme.border_strong)
+        .text_color(theme.fg_muted)
+}
+
+/// `secondary`, `rounded`: the outline at the web's 12 radius — the "cancel"
+/// under a confirm sheet's answer, which the web does not draw as a pill.
+pub fn secondary_button(theme: &Theme, label: SharedString) -> Div {
+    ghost_button(theme, label).rounded(px(12.))
+}
+
+/// The accent CTA that cannot act yet: the same fill at
+/// `--opacity-disabled`, with no hover to lift it. The caller withholds the
+/// click and the pointer. (It took the finished button once, and stacking a
+/// second hover on it panics a debug build.)
+///
+/// The fill fades and the label stays white (078 T062): CSS fades the button
+/// as ONE layer, so its white label lands white on the page, where gpui's
+/// element opacity faded the label on its own into a pink smear.
+pub fn disabled_accent_button(theme: &Theme, label: SharedString) -> Div {
+    accent_fill(button_face(label), theme).bg(theme.accent.opacity(theme::OPACITY_DISABLED))
+}
+
+/// `primary`, `rounded`: the accent CTA. In this product the accent means
+/// "this moves the money" — and "done", on a receipt that has landed.
 pub fn accent_button(theme: &Theme, label: SharedString) -> Div {
-    div()
-        .w_full()
-        .py(px(12.))
+    accent_fill(button_base(label), theme)
+}
+
+fn accent_fill(button: Div, theme: &Theme) -> Div {
+    button
         .rounded(px(12.))
         .bg(theme.accent)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(theme::text_row_sub())
-        .font_weight(gpui::FontWeight::BOLD)
         .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
-        .child(label)
+}
+
+/// `danger`: filled with the error colour — delete a transaction, a contact,
+/// a group. Only where the web draws one.
+pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
+    button_base(label)
+        .rounded(px(12.))
+        .bg(theme.error_base)
+        .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The web's filter: trimmed, case-blind, a substring of what the row is
+    /// called; nothing typed keeps everything (078 X-05).
+    #[test]
+    fn a_search_matches_the_way_the_web_filters() {
+        assert!(search_matches("", "USDC Ethereum"));
+        assert!(search_matches("   ", "USDC Ethereum"));
+        assert!(search_matches(" usdc ", "USDC Ethereum"));
+        assert!(search_matches("ETHER", "USDC Ethereum"));
+        assert!(search_matches("c eth", "USDC Ethereum"));
+        assert!(!search_matches("gnosis", "USDC Ethereum"));
+    }
 
     /// The card encodes a payload that a camera could actually read back.
     ///

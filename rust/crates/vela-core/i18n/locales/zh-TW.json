@@ -6,7 +6,8 @@
     "error": "錯誤",
     "somethingWrong": "發生錯誤",
     "tryAgain": "重試",
-    "done": "完成"
+    "done": "完成",
+    "gotIt": "知道了"
   },
   "language": {
     "title": "語言",
@@ -25,6 +26,7 @@
       "appearance": "外觀",
       "localization": "在地化",
       "advanced": "進階",
+      "community": "社群",
       "developer": "開發者"
     },
     "account": {

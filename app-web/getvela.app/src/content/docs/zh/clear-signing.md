@@ -1,7 +1,7 @@
 ---
 title: 清晰签名
 description: 在你批准之前，Vela 会把交易解码成人话——意图、金额、地址和风险——而不是一堆看不懂的十六进制。遇到解不开的调用，它会警告你，而不是假装看懂。
-source: 7232328b724e
+source: 29a66a1584f1
 ---
 
 <script>
@@ -56,13 +56,19 @@ Vela 按这个顺序寻找描述符：
 - **危险** —— 真正有风险的那些，比如**无限额度的代币授权**。
 - 质押、存入这类日常操作，风险等级更低。
 
-<Callout type="warning" title="“无限”级别的链上授权无法提交">
+<Callout type="warning" title="“无限”授权会以红色显示，并提供上限选项">
 链上的无限额度授权，是资金日后被掏空最常见的方式之一。当 dApp 请求“无限”级别的授权
 （<code>approve</code>、<code>increaseAllowance</code> 或 Permit2 的 <code>approve</code>，金额达到
-2^200 及以上，Permit2 为 2^152——也就是 dApp 表示“无限”时用的数值）时，你必须先把它改成具体金额、
-你的余额或撤销，Vela 才会提交；提交前的最后一道检查直接读原始 calldata，有没有描述符都有效。它拦不住
-的是：<strong>金额很大但有限的授权</strong>（哪怕远超你的余额）、<strong>签名式授权</strong>
-（EIP-2612 和 Permit2 签名），以及 NFT 的 <code>setApprovalForAll</code>——这些都会显示警示，由你决定。
+2^200 及以上，Permit2 为 2^152——也就是 dApp 表示“无限”时用的数值）时，Vela 会以红色显示它，
+并提供上限选项：具体金额、你的余额（能读到时），或者撤销（<code>increaseAllowance</code> 除外）。
+除非你选了其中一项，否则它会按 dApp 构造的原样发出：Permit2 的设计依赖一笔常驻授权，
+智能账户的批量交易会在同一笔交易里花掉这笔额度，上限低于这笔花费就会让整个批量失败。
+批量交易里的每一笔无限授权，在所有 App 里都能单独设上限（具体金额或撤销）。
+提交前的最后一道检查直接读原始 calldata，所以授权界面没有展示过的无限授权发不出去。
+<strong>金额很大但有限的授权</strong>（哪怕远超你的余额）会显示警示。<strong>签名式授权</strong>
+（EIP-2612 和 Permit2 签名）无法设上限——dApp 提交的是它自己那份——所以只能原样签或拒绝：
+无限的以红色显示，有限的显示警示。对整个 NFT 合集的 <code>setApprovalForAll</code> 授权请求，
+App 里目前还不能批准。
 </Callout>
 
 ## 当 Vela 解不开一个调用

@@ -242,15 +242,49 @@ class WalletLiveTest {
         assertEquals(SectionMode.Empty, settled.assetsSection.mode)
     }
 
-    /** Amounts are truncated, never rounded: a rounded-up balance is money nobody has. */
+    /**
+     * Spec 078: a row is written on the ONE token-amount rule every shell and
+     * every Send screen uses — the core's ladder, half up (6 places under 1,
+     * 4 under 1000, 2 above) — so the balance here and the balance beside the
+     * token on Send are the same number. It used to be cut at six places here
+     * while other shells rounded.
+     */
     @Test
-    fun `a long balance is cut, not rounded up`() {
+    fun `a long balance is written on the one token-amount ladder`() {
         val view = BalanceView(
             display_total_usd = 1.0,
-            tokens = listOf(token("POL", "0.1234569999", price = 1.0)),
+            tokens = listOf(token("POL", "0.1234569999", price = 1.0), token("XDAI", "12.3456789", price = 1.0)),
         )
 
-        assertEquals("0.123456 POL", home(view).assetRows[0].balance)
+        val rows = home(view).assetRows.associate { it.ticker to it.balance }
+        assertEquals("0.123457 POL", rows["POL"])
+        assertEquals("12.3457 XDAI", rows["XDAI"])
+    }
+
+    /**
+     * Spec 078 round 2: every fiat figure rounds HALF UP to two places — the
+     * hero, the rows. Both used to cut (the rows through the `BigDecimal(double)`
+     * constructor, which printed 12.34 as 12.33), so the founder's home read
+     * CN¥63.23 over rows that added up to 63.21.
+     */
+    @Test
+    fun `the hero and the rows round money half up, never cut`() {
+        val view = BalanceView(
+            display_total_usd = 12.346,
+            tokens = listOf(
+                token("POL", "1", price = 12.346),
+                token("XDAI", "1", price = 12.34, chainId = 100),
+                token("ETH", "1", price = 0.004, chainId = 1),
+            ),
+        )
+        val home = home(view)
+        // Cut, both read 12.34.
+        assertEquals("35", home.balance.decimals)
+        val fiat = home.assetRows.associate { it.ticker to it.fiat }
+        assertEquals(AssetFiatModel.Value("$12.35"), fiat["POL"])
+        // 12.34 is 12.3399… in binary: rounded, never cut to 12.33.
+        assertEquals(AssetFiatModel.Value("$12.34"), fiat["XDAI"])
+        assertEquals(AssetFiatModel.Value("$0.00"), fiat["ETH"])
     }
 
     /** Hidden hides the figure and nothing else. */

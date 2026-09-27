@@ -723,25 +723,30 @@ class SettingsLiveTest {
     }
 
     /**
-     * Spec 071/075: how this device signs by default — five routes in the
-     * picker (auto and the four places a passkey can be), the Trusted Signer
-     * page row, and the tunnel row beside it.
+     * Spec 071/075, and the founder's 2026-09-26 ruling: Settings keeps the
+     * Trusted Signer page and nothing else about signing — there is no default
+     * "Sign with", because the account signs with the key it signed in with.
      */
     @Test
-    fun `the sign-with sheet offers five routes and the tunnel row sits beside the page row`() {
+    fun `settings keeps the Trusted Signer page and no default sign-with`() {
         val view = app.getvela.wallet.feature.settings.core.SignPrefView()
         val model = SettingsLive.withSignPref(base(), view, strings)
+        val rows = model.sections.flatMap { it.rows }
 
-        assertEquals(
-            listOf("auto", "platform", "hybrid", "security_key", "trusted_signer"),
-            model.signWithSheet.rows.map { it.id },
+        assertFalse(
+            "no row says \"${strings.t("settings.signing.title")}\"",
+            rows.any { it.title == strings.t("settings.signing.title") || it.subtitle == strings.t("settings.signing.subtitle") },
         )
-        val clear = model.signWithSheet.rows.single { it.id == "trusted_signer" }
-        assertEquals(strings.t("componentsUi.signing.trustedSignerTitle"), clear.label)
-        assertEquals(strings.t("componentsUi.signing.trustedSignerBody"), clear.detail)
 
-        fun rowValue(id: String) = model.sections.flatMap { it.rows }.single { it.id == id }.value
+        fun rowValue(id: String) = rows.single { it.id == id }.value
         assertEquals(strings.t("settings.signing.pageOfficial"), rowValue(SettingsFixtures.SIGNER_PAGE_ROW))
+        assertEquals(strings.t("settings.signing.pageTitle"), rows.single { it.id == SettingsFixtures.SIGNER_PAGE_ROW }.title)
+        val chosen = SettingsLive.withSignPref(
+            base(),
+            view.copy(signer_url = "https://sign.example.test/", signer_url_is_default = false),
+            strings,
+        )
+        assertEquals("sign.example.test", chosen.sections.flatMap { it.rows }.single { it.id == SettingsFixtures.SIGNER_PAGE_ROW }.value)
         // The pairing service is gone with the channel (owner, 2026-09-23):
         // no row, no sheet, and nothing in the advanced block that names one.
         val ids = model.sections.flatMap { it.rows }.map { it.id }

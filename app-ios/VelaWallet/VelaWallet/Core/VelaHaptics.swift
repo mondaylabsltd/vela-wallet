@@ -9,16 +9,17 @@
 //  phones and a device pass can be scripted against the same vocabulary.
 //
 //  - `press`    a button under the finger (the founder's rule: press =
-//               deformation + haptic)
+//               deformation + haptic), and a tab that switches the
+//               destination (founder, 2026-09-26)
 //  - `detent`   a step crossed: a slider stop, a picker snapping, the signing
 //               slider's threshold
 //  - `select`   a selection that TAKES EFFECT: a switch, a filter, a network /
 //               fee-token / account pick, a favourite, a copy
 //  - `success` / `reject`  an outcome the core decided
 //
-//  **Never** for scrolling, a row tap that navigates, a tab switch, Back, a
-//  sheet opening or closing, typing, animation, or a value the app changed by
-//  itself. One per gesture.
+//  **Never** for scrolling, a row tap that navigates, re-tapping the tab in
+//  force, Back, a sheet opening or closing, typing, animation, or a value the
+//  app changed by itself. One per gesture.
 //
 //  Before 058 iOS had four ungoverned call sites and no vocabulary; the policy
 //  existed only in the Kotlin file's own doc comment, which is why 057 recorded
@@ -100,6 +101,41 @@ extension VelaHaptic {
 @MainActor
 func velaCopy(_ value: String, haptic: Bool = true) {
     guard !value.isEmpty else { return }
-    UIPasteboard.general.string = value
+    VelaClipboard.write(value)
     if haptic { VelaHaptic.select.play() }
+}
+
+/// Where a copy lands: the system pasteboard — or, inside a test's
+/// `recording` block, a list the test reads.
+@MainActor
+enum VelaClipboard {
+    static func write(_ value: String) {
+        #if DEBUG
+        if recorded != nil {
+            recorded?.append(value)
+            return
+        }
+        #endif
+        UIPasteboard.general.string = value
+    }
+
+    #if DEBUG
+    /// The test seam, `VelaHaptic.recording`'s twin.
+    ///
+    /// `UIPasteboard.general` is a synchronous XPC round trip to the
+    /// simulator's pasteboard daemon, on the main thread. On a loaded machine
+    /// that daemon stopped answering and one unit test held the main actor —
+    /// and with it every `@MainActor` test in the suite — for ten minutes
+    /// (2026-09-28, a spindump of the stalled run). What a copy test pins is
+    /// what was copied, not whether the daemon is awake.
+    private(set) static var recorded: [String]?
+
+    /// Runs `body` and returns every value it copied, in order.
+    static func recording(_ body: () throws -> Void) rethrows -> [String] {
+        recorded = []
+        defer { recorded = nil }
+        try body()
+        return recorded ?? []
+    }
+    #endif
 }

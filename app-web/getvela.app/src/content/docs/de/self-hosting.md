@@ -1,7 +1,7 @@
 ---
 title: Anleitung zum Selbsthosten
 description: "Alles, was Vela für dich betreibt, was jedes Teil tut und wie du es durch dein eigenes ersetzt – das Relay, den Public-Key-Index, Chain-Daten, Wechselkurse und die Apps –, dazu das eine, was sich nicht ersetzen lässt, und wie du ohne getvela.app auskommst."
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -84,9 +84,10 @@ gebaute App kann ein Handy oder einen Sicherheitsschlüssel nutzen, weil Vela di
 ihnen spricht; der eigene Passkey des Handys („Dieses Gerät“) setzt voraus, dass die
 App von Vela signiert ist, und deine ist es nicht.
 
-Die [Signaturseite](/de/docs/clear-signing-self-host) ist für sich allein kein
-Zugang: Sie signiert Anfragen, die ihr ein anderes Programm schickt, und noch keine
-Vela-App schickt welche.
+Der [Trusted Signer](/de/docs/clear-signing-self-host) ist für sich allein kein
+Zugang: Er signiert Anfragen, die ihm eine App schickt – die Desktop- und Handy-Apps
+von Vela –, und eine Kopie auf deiner eigenen Domain signiert nur mit Passkeys, die
+für diese Domain erstellt wurden.
 
 <Callout type="warning" title="Wer die Domain kontrolliert, kann eine Signatur anfordern">
 Jede Seite, die von getvela.app oder einer ihrer Subdomains ausgeliefert wird – oder
@@ -331,4 +332,4 @@ Wenn du alles oben Genannte ersetzt, bleibt Folgendes:
 Und diese gehören nicht zu Vela: öffentliche Selektor-Datenbanken, die Tunnel von Apple
 und Google für die Anmeldung per Handy und die RPC-Anbieter, die du wählst.
 
-Weiter: [die Signaturseite, die du selbst betreiben kannst](/de/docs/clear-signing-self-host).
+Weiter: [der Trusted Signer und wie du deinen eigenen betreibst](/de/docs/clear-signing-self-host).

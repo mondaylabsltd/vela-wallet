@@ -1,7 +1,7 @@
 ---
 title: Assinatura legível
 description: "A Vela decodifica as transações em linguagem clara antes de você aprovar — intenção, valores, endereços e risco — em vez de um hexadecimal opaco. Quando não consegue decodificar uma chamada, ela avisa em vez de fingir que entendeu."
-source: 7232328b724e
+source: 29a66a1584f1
 ---
 
 <script>
@@ -70,18 +70,27 @@ se destaquem:
   token**.
 - Risco menor para ações rotineiras, como staking ou depósito.
 
-<Callout type="warning" title="Aprovações on-chain “ilimitadas” não podem ser enviadas">
+<Callout type="warning" title="Uma aprovação “ilimitada” aparece em vermelho, com a opção de limitá-la">
 Uma aprovação on-chain de valor ilimitado é uma das formas mais comuns de os fundos
 serem esvaziados mais tarde. Quando um dApp pede uma (<code>approve</code>,
 <code>increaseAllowance</code> ou o <code>approve</code> do Permit2) no nível
 “ilimitado” — 2^200 ou mais (2^152 no Permit2), que é o que os dApps usam para
-“ilimitado” —, a Vela não a envia até que você a mude para um valor específico, para
-o seu saldo ou para uma revogação; uma última verificação antes do envio lê a
-calldata crua, então funciona com ou sem descritor. O que ela não bloqueia: uma
-<strong>aprovação finita alta</strong> (mesmo muito acima do seu saldo),
-<strong>permits assinados</strong> (assinaturas EIP-2612 e Permit2) e o
-<code>setApprovalForAll</code> de NFTs — cada um aparece com um alerta, e a decisão é
-sua.
+“ilimitado” —, a Vela a mostra em vermelho e oferece um limite: um valor específico,
+o seu saldo (quando dá para lê-lo) ou — exceto no <code>increaseAllowance</code> —
+uma revogação. A menos que você escolha um deles, ela é enviada exatamente como o
+dApp a montou: o Permit2 foi projetado em torno de uma aprovação permanente, e o lote
+de uma conta inteligente gasta essa permissão na mesma transação, então um limite
+abaixo desse gasto faz o lote inteiro falhar. Dentro de um lote, cada aprovação
+ilimitada pode receber o seu próprio limite do mesmo jeito (um valor ou uma
+revogação).
+Uma última verificação antes do envio lê a
+calldata crua, então uma aprovação ilimitada que a tela de aprovação nunca mostrou
+não tem como sair. Uma <strong>aprovação finita alta</strong> (mesmo muito acima do
+seu saldo) aparece com um alerta. <strong>Permits assinados</strong> (assinaturas
+EIP-2612 e Permit2) não podem ser limitados — o dApp envia a própria cópia —, então
+são assinados como foram pedidos ou recusados: um ilimitado aparece em vermelho, um
+limitado, com um alerta. Um pedido para conceder um <code>setApprovalForAll</code> de
+NFT sobre uma coleção inteira ainda não pode ser aprovado nos apps.
 </Callout>
 
 ## Quando a Vela não consegue decodificar uma chamada

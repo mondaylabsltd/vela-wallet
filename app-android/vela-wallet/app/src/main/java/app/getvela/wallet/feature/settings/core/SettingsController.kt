@@ -192,15 +192,14 @@ class SettingsController(
     fun chooseFeeTier(tier: app.getvela.wallet.feature.send.core.FeeTier) =
         feeTierHost.dispatch(FeeTierPrefEvent.UserChose(tier), FeeTierPrefEvent.serializer())
 
-    // -- how this device signs by default (spec 071) ---------------------------
+    // -- which Trusted Signer page this device opens (spec 071) ----------------
 
     private val signPrefExecutor = SignPrefExecutor(store)
 
     private val signPrefHost = CoreHost(
         bridge = SignPrefCore().asBridge(),
         scope = scope,
-        // `auto` and the official page, uncommitted: what signing did before
-        // there was a choice.
+        // The official page, until the stored one is read.
         initial = SignPrefView(),
         serializer = SignPrefView.serializer(),
         perform = JsonShell.perform(SignPrefOperation.serializer(), SignPrefShellResult.serializer(), signPrefExecutor::perform),
@@ -213,14 +212,10 @@ class SettingsController(
         onFault = { error -> VelaLog.failure("settings.signPref.fault", "core fault", error) },
     )
 
-    /** The default "Sign with" and the Trusted Signer page — Settings shows them, every signature starts at them. */
+    /** The Trusted Signer page — Settings shows it, the Trusted Signer opens it. */
     val signPref: StateFlow<SignPrefView> = signPrefHost.view
 
     fun refreshSignPref() = signPrefHost.dispatch(SignPrefEvent.Refresh, SignPrefEvent.serializer())
-
-    /** Settings only: a signing sheet's pick is one request's. */
-    fun chooseSignMethod(method: String) =
-        signPrefHost.dispatch(SignPrefEvent.MethodChosen(method), SignPrefEvent.serializer())
 
     fun submitSignerUrl(text: String) =
         signPrefHost.dispatch(SignPrefEvent.SignerUrlSubmitted(text), SignPrefEvent.serializer())

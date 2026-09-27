@@ -38,6 +38,11 @@ pub struct ContactsStrings {
     /// an import that reports nothing is a feature that looks broken.
     pub import_done_title: SharedString,
     pub import_done_body: String,
+    /// The import report's tail when rows were dropped: `{{invalid}}`.
+    pub import_done_invalid: String,
+    /// The format question every export asks first (078 C-07).
+    pub export_title: SharedString,
+    pub export_body: SharedString,
     pub import_fail_title: SharedString,
     pub import_fail_body: SharedString,
     /// The add/edit sheet. 030 called this "blocked on drawn UI that does not
@@ -45,11 +50,15 @@ pub struct ContactsStrings {
     /// idiom and a text field to put them in.
     pub add_title: SharedString,
     pub edit_title: SharedString,
+    /// The form's title over a history-suggested row nobody has saved yet
+    /// (the web's `saveToContacts`, issue 191).
+    pub save_to_contacts: SharedString,
+    /// Under an address field that holds something that is not one.
+    pub invalid_address: SharedString,
     pub name_label: SharedString,
     pub name_placeholder: SharedString,
     pub address_placeholder: SharedString,
     pub save: SharedString,
-    pub cancel: SharedString,
     pub group_name_label: SharedString,
     pub group_name_placeholder: SharedString,
     pub export_all: SharedString,
@@ -57,9 +66,19 @@ pub struct ContactsStrings {
     pub export_group: SharedString,
     pub group_rename: SharedString,
     pub group_delete: SharedString,
+    /// The delete questions (078 C-01): `{{name}}` is filled at the site.
+    pub group_delete_body: String,
+    pub delete_title: SharedString,
+    pub delete_body: String,
     pub move_group: SharedString,
+    /// A group's line in 移入分组: template carrying `{{count}}`.
+    pub group_members: String,
+    /// A pick list with nothing to pick from (078 C-06).
+    pub group_no_contacts: SharedString,
     pub recent_activity: SharedString,
     pub view_all_activity: SharedString,
+    /// 最近往来 with nothing in it (078 C-04) — the web's `noActivity`.
+    pub no_activity: SharedString,
     pub delete_contact: SharedString,
     pub delete: SharedString,
     pub edit: SharedString,
@@ -71,6 +90,8 @@ pub struct ContactsStrings {
     pub action_send: SharedString,
     pub action_receive: SharedString,
     pub copy_address: SharedString,
+    /// What the copy button says once it has (078 X-04, the QR dialog).
+    pub copied: SharedString,
     pub label_sent: SharedString,
     pub label_received: SharedString,
     pub yesterday: SharedString,
@@ -98,15 +119,19 @@ impl ContactsStrings {
             import_all: s("contacts.importAll"),
             import_done_title: s("contacts.importDoneTitle"),
             import_done_body: raw("contacts.importDoneBody"),
+            import_done_invalid: raw("contacts.importDoneInvalid"),
+            export_title: s("contacts.exportTitle"),
+            export_body: s("contacts.exportBody"),
             import_fail_title: s("contacts.importFailTitle"),
             import_fail_body: s("contacts.importFailBody"),
             add_title: s("contacts.addTitle"),
             edit_title: s("contacts.editTitle"),
+            save_to_contacts: s("contacts.saveToContacts"),
+            invalid_address: s("contacts.invalidAddress"),
             name_label: s("contacts.nameLabel"),
             name_placeholder: s("contacts.namePlaceholder"),
             address_placeholder: s("contacts.addressPlaceholder"),
             save: s("contacts.save"),
-            cancel: s("contacts.cancel"),
             group_name_label: s("contacts.groupNameLabel"),
             group_name_placeholder: s("contacts.groupNamePlaceholder"),
             export_all: s("contacts.exportAll"),
@@ -114,9 +139,15 @@ impl ContactsStrings {
             export_group: s("contacts.exportGroup"),
             group_rename: s("contacts.groupRename"),
             group_delete: s("contacts.groupDelete"),
+            group_delete_body: s("contacts.groupDeleteBody").to_string(),
+            delete_title: s("contacts.deleteTitle"),
+            delete_body: s("contacts.deleteBody").to_string(),
             move_group: s("contacts.moveGroup"),
+            group_members: raw("contacts.groupMembers"),
+            group_no_contacts: s("contacts.groupNoContacts"),
             recent_activity: s("contacts.recentActivity"),
             view_all_activity: s("contacts.viewAllActivity"),
+            no_activity: s("history.emptyTitle"),
             delete_contact: s("contacts.deleteContact"),
             delete: s("contacts.delete"),
             edit: s("contacts.edit"),
@@ -126,6 +157,7 @@ impl ContactsStrings {
             action_send: s("componentsUi.dock.send"),
             action_receive: s("componentsUi.dock.receive"),
             copy_address: s("componentsUi.identiconViewer.copyAddress"),
+            copied: s("componentsUi.identiconViewer.copied"),
             label_sent: s("history.labelSent"),
             label_received: s("history.labelReceived"),
             yesterday: s("componentsUi.dayGroup.yesterday"),
@@ -164,7 +196,6 @@ mod tests {
             (s.edit_title.as_ref(), "contacts.editTitle"),
             (s.name_label.as_ref(), "contacts.nameLabel"),
             (s.save.as_ref(), "contacts.save"),
-            (s.cancel.as_ref(), "contacts.cancel"),
             (s.group_name_label.as_ref(), "contacts.groupNameLabel"),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");

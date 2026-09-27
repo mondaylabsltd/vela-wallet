@@ -11,7 +11,15 @@ import type { SendTxRecord } from "./SendTxRecord";
  * transports, caches (including `prefetchForSend` warming), the passkey
  * ceremony inside `SubmitUserOp`, and every wording regex.
  */
-export type SendOperation = { "type": "fetch_tokens", address: string, } | { "type": "clear_token_cache", address: string, } | { "type": "resolve_token_metadata", chain_id: number, address: string, } | { "type": "add_network", chain_id: number, } | { "type": "estimate_fee", chain_id: number, account: string, tx: FeeCall | null, batch: Array<FeeCall> | null, gas_fee_token: string | null, public_key_hex: string | null, } | { "type": "probe_treasury", chain_id: number, } | { "type": "load_account_credential", account_id: string, } | { "type": "submit_user_op", chain_id: number, account: string, public_key_hex: string, calls: Array<FeeCall>, max_fee_per_gas: string | null, gas_fee_token: string | null, 
+export type SendOperation = { "type": "fetch_tokens", address: string, } | { "type": "clear_token_cache", address: string, } | { "type": "resolve_token_metadata", chain_id: number, address: string, } | { "type": "add_network", chain_id: number, } | { "type": "estimate_fee", chain_id: number, account: string, tx: FeeCall | null, batch: Array<FeeCall> | null, gas_fee_token: string | null, public_key_hex: string | null, 
+/**
+ * Nobody has chosen the fee coin on this form: the shell passes it
+ * on as `fee_policy`'s `auto_fee_token`, the fee machine pays in a
+ * coin that can, and the estimate's `fee_asset` says which. Every
+ * reader downstream — Max, the balance gates, the submit — takes
+ * the coin from that estimate, never from `gas_fee_token`.
+ */
+auto_fee_token: boolean, } | { "type": "probe_treasury", chain_id: number, } | { "type": "prewarm_fees", account: string, chain_ids: Array<number>, } | { "type": "load_account_credential", account_id: string, } | { "type": "submit_user_op", chain_id: number, account: string, public_key_hex: string, calls: Array<FeeCall>, max_fee_per_gas: string | null, gas_fee_token: string | null, 
 /**
  * Present ⇔ in-band: sign EXACTLY this (invariant ①).
  */

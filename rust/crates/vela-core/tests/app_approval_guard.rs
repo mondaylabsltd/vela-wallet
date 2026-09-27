@@ -454,6 +454,36 @@ fn rewriting_to_an_unbounded_amount_errors() {
     );
 }
 
+/// "Keep it as asked" is an identity on an unbounded request — the exact
+/// bytes, Permit2's uint160 sentinel included — and meaningless (refused) on
+/// a finite amount or a boolean grant.
+#[test]
+fn keeping_unlimited_is_an_identity_rewrite() {
+    let params = tx_params(USDC, &approve_calldata(SPENDER, max_u256()));
+    let d = detect(TX, &params);
+    let out = rewrite_approval_params(TX, &params, &d, &GuardChoice::Unlimited).expect("keep");
+    assert_eq!(out_data(&out), approve_calldata(SPENDER, max_u256()));
+
+    let permit2 = tx_params(PERMIT2, &permit2_calldata(USDC, SPENDER, max_u160()));
+    let d = detect(TX, &permit2);
+    let out = rewrite_approval_params(TX, &permit2, &d, &GuardChoice::Unlimited).expect("keep");
+    assert_eq!(out_data(&out), permit2_calldata(USDC, SPENDER, max_u160()));
+
+    let finite = tx_params(USDC, &approve_calldata(SPENDER, U256::from(100u64)));
+    let d = detect(TX, &finite);
+    assert_eq!(
+        rewrite_approval_params(TX, &finite, &d, &GuardChoice::Unlimited),
+        Err(GuardRewriteError::InvalidChoiceAmount)
+    );
+
+    let nft = tx_params(USDC, &set_approval_for_all_calldata(SPENDER, true));
+    let d = detect(TX, &nft);
+    assert_eq!(
+        rewrite_approval_params(TX, &nft, &d, &GuardChoice::Unlimited),
+        Err(GuardRewriteError::AmountForBooleanShape)
+    );
+}
+
 #[test]
 fn rewrite_does_not_mutate_the_input_params() {
     let params = tx_params(USDC, &approve_calldata(SPENDER, max_u256()));
@@ -727,10 +757,12 @@ fn usdc_meta() -> Res {
     }
 }
 
-/// Invariant ④ — an unbounded request starts with NO choice; confirm stays
-/// disabled until the user picks a finite cap or revoke.
+/// Invariant ④ (2026-09-26 ruling) — an unbounded request is kept AS ASKED
+/// by default: Requested is preselected, the choice is `Unlimited`, nothing
+/// is re-encoded, and the view reports the consent the submit guard needs.
+/// Re-encoding it by default is what reverted Permit2 bundles.
 #[test]
-fn unbounded_request_starts_with_no_choice_and_gates_confirm() {
+fn unbounded_request_is_kept_as_asked_by_default() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(approval_event(
         TX,
@@ -753,11 +785,98 @@ fn unbounded_request_starts_with_no_choice_and_gates_confirm() {
     let view = sut.view();
     assert_eq!(view.surface, GuardSurface::ApprovalEditor);
     let editor = view.editor.expect("editor");
-    assert_eq!(editor.mode, Some(GuardEditorMode::Custom));
-    assert_eq!(editor.choice, None);
+    assert_eq!(editor.mode, Some(GuardEditorMode::Requested));
+    assert_eq!(editor.choice, Some(GuardChoice::Unlimited));
     assert!(!editor.requested_finite);
-    assert!(!view.confirm_allowed, "no finite choice yet");
+    assert!(editor.requested_unlimited);
+    assert_eq!(
+        editor.display_amount_raw, None,
+        "the value row says Unlimited, never 2^256-1 in token units"
+    );
+    assert_eq!(
+        editor.custom_text, "",
+        "no finite number to seed the cap with"
+    );
+    assert!(view.confirm_allowed, "kept as asked needs no extra tap");
+    assert!(view.unlimited_consented);
+    assert_eq!(
+        view.rewritten_params_json, None,
+        "the site's own bytes go out — nothing re-encoded"
+    );
+}
+
+/// A cap is one chip away, and choosing it withdraws the consent: the
+/// capped re-encode is what gets submitted, and it carries no unbounded word.
+#[test]
+fn capping_an_unbounded_request_withdraws_the_consent() {
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, max_u256())),
+    ));
+    sut.resolve(usdc_meta());
+    sut.resolve(Res::BalanceRead {
+        balance: Some("1234000000".to_owned()),
+    });
+    sut.dispatch(Event::PresetSelected {
+        mode: GuardEditorMode::Balance,
+    });
+    let view = sut.view();
+    assert!(!view.unlimited_consented);
+    let rewritten: Value =
+        serde_json::from_str(&view.rewritten_params_json.expect("rewritten")).expect("json");
+    assert!(enforce_no_unlimited(TX, Some(&rewritten)).is_ok());
+
+    // …and back: Requested keeps the site's ask again.
+    sut.dispatch(Event::PresetSelected {
+        mode: GuardEditorMode::Requested,
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.editor.as_ref().and_then(|e| e.choice.clone()),
+        Some(GuardChoice::Unlimited)
+    );
+    assert!(view.unlimited_consented);
     assert_eq!(view.rewritten_params_json, None);
+}
+
+/// Typing a cap is choosing one — the keystroke moves the editor off the
+/// preselected Requested chip, so the number on screen is the choice.
+#[test]
+fn typing_a_cap_selects_custom() {
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, max_u256())),
+    ));
+    sut.resolve(usdc_meta());
+    sut.dispatch(Event::CustomAmountChanged {
+        text: "25".to_owned(),
+    });
+    let view = sut.view();
+    let editor = view.editor.expect("editor");
+    assert_eq!(editor.mode, Some(GuardEditorMode::Custom));
+    assert_eq!(
+        editor.choice,
+        Some(GuardChoice::Amount {
+            amount_raw: "25000000".to_owned()
+        })
+    );
+    assert!(!view.unlimited_consented);
+}
+
+/// A FINITE request never derives the unlimited choice or the consent.
+#[test]
+fn finite_request_never_reports_unlimited_consent() {
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, U256::from(500_000_000u64))),
+    ));
+    let view = sut.view();
+    let editor = view.editor.expect("editor");
+    assert!(!editor.requested_unlimited);
+    assert!(!view.unlimited_consented);
 }
 
 /// A finite, reasonable request is pre-accepted (mode `requested`).
@@ -923,7 +1042,7 @@ fn balance_read_failure_degrades_to_no_preset() {
     });
     assert_eq!(
         sut.view().editor.expect("editor").mode,
-        Some(GuardEditorMode::Custom)
+        Some(GuardEditorMode::Requested)
     );
 }
 
@@ -1076,8 +1195,12 @@ fn increase_total_read_failure_still_warns_additive() {
     assert_eq!(total.total, None, "honest unknown");
 }
 
+/// `increaseAllowance` offers no Revoke: only the increment can be
+/// re-encoded, so "revoke" would sign an increase of 0 and leave the existing
+/// allowance where it was — while the resulting-total row said 0. Shown
+/// must be signed; the chip is withheld and a press on it does nothing.
 #[test]
-fn increase_revoke_totals_zero() {
+fn increase_allowance_offers_no_revoke() {
     let mut sut = Sut::new();
     sut.dispatch(approval_event(
         TX,
@@ -1090,11 +1213,49 @@ fn increase_revoke_totals_zero() {
     sut.resolve(Res::AllowanceRead {
         allowance: Some("250000000".to_owned()),
     });
+    assert!(!sut.view().editor.expect("editor").revoke_offered);
     sut.dispatch(Event::PresetSelected {
         mode: GuardEditorMode::Revoke,
     });
-    let total = sut.view().increase_total.expect("total");
-    assert_eq!(total.total.as_deref(), Some("0"), "revoke zeroes outright");
+    let view = sut.view();
+    assert_eq!(
+        view.editor.as_ref().and_then(|e| e.mode),
+        Some(GuardEditorMode::Requested),
+        "the withheld chip changed nothing"
+    );
+    let total = view.increase_total.expect("total");
+    assert_eq!(total.total.as_deref(), Some("350000000"));
+}
+
+/// Every other amount card offers Revoke, and the boolean card answers the
+/// same chip — the one row the shells draw for both, which is what made the
+/// NFT card's 撤销 do nothing.
+#[test]
+fn revoke_is_offered_where_it_really_revokes() {
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, max_u256())),
+    ));
+    assert!(sut.view().editor.expect("editor").revoke_offered);
+
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &set_approval_for_all_calldata(SPENDER, true)),
+    ));
+    sut.dispatch(Event::PresetSelected {
+        mode: GuardEditorMode::Revoke,
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.editor.as_ref().and_then(|e| e.choice.clone()),
+        Some(GuardChoice::Revoke)
+    );
+    assert!(view.confirm_allowed);
+    let rewritten: Value =
+        serde_json::from_str(&view.rewritten_params_json.expect("rewritten")).expect("json");
+    assert!(redetect_data(&out_data(&rewritten)).is_reducing);
 }
 
 /// Invariant ⑨ — unverified decimals are explicitly flagged, with the
@@ -1251,10 +1412,12 @@ fn transfer_call() -> Value {
     json!({ "to": USDC, "data": transfer, "value": "0x0" })
 }
 
-/// Every granting batch leg must be capped/revoked (or its grant deliberately
-/// chosen) before the bundle can be confirmed — mirrors the single-tx rule.
+/// An unbounded batch leg is kept AS ASKED by default — the atomic bundle's
+/// next leg spends against it, so re-encoding it would revert the whole
+/// batch. It still flags the danger banner and reports the consent; a cap
+/// stays one chip away and re-encodes only that leg.
 #[test]
-fn batch_gates_every_granting_leg() {
+fn batch_keeps_unbounded_legs_as_asked_until_capped() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(batch_event(vec![
         transfer_call(),
@@ -1275,8 +1438,8 @@ fn batch_gates_every_granting_leg() {
     let needs: Vec<bool> = batch.legs.iter().map(|l| l.needs_choice).collect();
     assert_eq!(
         needs,
-        vec![false, true, false],
-        "only the unbounded leg blocks"
+        vec![false, false, false],
+        "kept as asked settles the unbounded leg"
     );
     assert!(batch.legs[1].needs_editor);
     // Only the leg that MOUNTS a card carries an editor — a finite leg can
@@ -1284,14 +1447,16 @@ fn batch_gates_every_granting_leg() {
     assert!(batch.legs[0].editor.is_none(), "non-approval leg");
     assert!(batch.legs[2].editor.is_none(), "finite leg");
     let editor = batch.legs[1].editor.clone().expect("leg 1 editor");
-    assert_eq!(
-        editor.mode,
-        Some(GuardEditorMode::Custom),
-        "unbounded starts blank"
-    );
-    assert_eq!(editor.choice, None);
+    assert_eq!(editor.mode, Some(GuardEditorMode::Requested));
+    assert_eq!(editor.choice, Some(GuardChoice::Unlimited));
+    assert!(batch.legs[1].grants_broad, "still unlimited — and said so");
     assert!(batch.any_uncapped);
-    assert!(!view.confirm_allowed);
+    assert!(view.confirm_allowed);
+    assert!(view.unlimited_consented);
+    assert_eq!(
+        view.rewritten_params_json, None,
+        "the bundle goes out byte-identical"
+    );
 
     // The leg's own editor decides — the shell types, the core derives.
     sut.resolve(usdc_meta());
@@ -1301,6 +1466,10 @@ fn batch_gates_every_granting_leg() {
     });
     let view = sut.view();
     assert!(view.confirm_allowed, "every granting leg settled");
+    assert!(
+        !view.unlimited_consented,
+        "nothing unbounded left to consent to"
+    );
     let batch = view.batch.expect("batch");
     assert!(!batch.any_uncapped, "banner reflects the EFFECTIVE state");
 
@@ -1356,8 +1525,40 @@ fn batch_boolean_leg_requires_an_explicit_choice() {
     assert!(batch.any_uncapped, "…and the banner says so");
 }
 
+/// The consent is one flag for the whole bundle, so it must not outlive a
+/// cap that failed to land: a leg the person capped but whose re-encode
+/// failed would go out with the site's unbounded bytes. No consent then —
+/// the submit guard refuses the bundle (fail closed).
+#[test]
+fn a_cap_that_failed_to_land_withdraws_the_bundles_consent() {
+    let mut sut = Sut::new();
+    // 63 hex digits of amount: detected (≥ 2^200) but one nibble short of a
+    // word, so the re-encode refuses it.
+    let short = format!("0x095ea7b3{}{}", addr_word(SPENDER), "f".repeat(63));
+    sut.dispatch(batch_event(vec![
+        json!({ "to": USDC, "data": approve_calldata(SPENDER, max_u256()), "value": "0x0" }),
+        json!({ "to": USDC, "data": short, "value": "0x0" }),
+    ]));
+    assert!(sut.view().unlimited_consented, "both kept as asked");
+    sut.dispatch(Event::LegPresetSelected {
+        index: 1,
+        mode: GuardEditorMode::Revoke,
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.batch.as_ref().and_then(|b| b.legs[1].choice.clone()),
+        Some(GuardChoice::Revoke)
+    );
+    assert!(
+        !view.unlimited_consented,
+        "leg 0's consent must not carry leg 1's failed cap out unbounded"
+    );
+}
+
 /// Fail-closed: a leg's custom amount at or above the cap derives NO choice —
-/// the leg stays unsettled instead of smuggling an unlimited grant through.
+/// the leg stays unsettled instead of passing a typed "cap" that is none.
+/// (Keeping the site's unlimited ask is the Requested chip, which reports
+/// its consent; a typed 2^200 reports nothing.)
 #[test]
 fn batch_leg_rejects_an_unbounded_custom_amount() {
     let mut sut = Sut::new();
@@ -1377,6 +1578,7 @@ fn batch_leg_rejects_an_unbounded_custom_amount() {
     assert_eq!(editor.error, Some(GuardAmountError::UnlimitedDisabled));
     assert_eq!(batch.legs[0].choice, None);
     assert!(batch.legs[0].needs_choice);
+    assert!(!view.unlimited_consented);
     assert_eq!(view.rewritten_params_json, None);
 }
 

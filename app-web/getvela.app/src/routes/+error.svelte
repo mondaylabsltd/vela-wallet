@@ -50,7 +50,7 @@
 	.code {
 		font-family: var(--font-mono);
 		color: var(--text-tertiary);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		letter-spacing: 0.08em;
 	}
 	h1 {
@@ -81,7 +81,7 @@
 		padding: 11px 22px;
 		border-radius: 10px;
 		font-weight: 600;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-note));
 		text-decoration: none;
 	}
 </style>

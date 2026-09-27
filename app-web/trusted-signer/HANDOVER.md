@@ -1,11 +1,18 @@
 # 交接：可信签名器页面
 
-> ## ⚠️ 2026-09-23：跨设备通道已全部撤回
+> ## ⚠️ 现状（2026-09-27）：App 只走一条通道
 >
-> 隧道和 BLE 都砍了，Web 钱包也不再支持可信签名器。只剩「同机 App ↔ 本页的回环
-> WebSocket」一条通道。下面凡是提到隧道、BLE、六位对码、`secure.js` 的，都是历史
-> 记录 —— 对应的文件已经删除，对应的命令跑不起来。理由见
+> 桌面、iPhone、Android 都把请求放进 URL 片段（`sign.html?ch=url#i=…`）打开本页，
+> 本页把回答交给 `velawallet://sign-result`（076，「现在就是纯 custom schema」）。
+> 回环 WebSocket 不再有 App 使用 —— 发布页的 `default-src 'none'` 在被哈希的字节里，
+> 连不出去；`?ch=ws` 的代码留着给测试。隧道、BLE、扩展端口在 2026-09-23 砍掉，
+> Web 钱包不支持可信签名器。下面凡是提到隧道、BLE、六位对码、`secure.js` 的，都是
+> 历史记录 —— 对应的文件已经删除，对应的命令跑不起来。理由见
 > `specs/075-clear-signer-channel/spec.md`「What the owner cut」。
+>
+> 已上线：`sign.getvela.app`，每个版本在 `b/<sha256>/sign.html`，清单在 `index.json`；
+> App 内置的已知哈希在 vela-core `trusted_signer/integrity.rs` 的 `BUILD_ALLOWED`
+> （新版本放最前面）。部署 = 把 `dist/` 拷上去。
 
 给下一个接手的人（或下一次对话）。读完这一页就能继续干活。
 
@@ -20,7 +27,7 @@
 075 起它还是**一条 passkey 通道**，和「这台设备 / 手机或平板 / USB 安全密钥」平级
 （创始人，2026-09-22）：钱包的创建、登录、证明流程也能走它 —— 四种**钥匙仪式**
 （`vela_createPasskey` / `vela_signIn` / `vela_proof` / `vela_memberProof`），各有自己的卡。
-一个会话可以承载多个请求；跨设备走隧道或 BLE。
+一个会话可以承载多个请求（App 走的 URL 片段通道一次只有一个）。
 
 一句话目标：**所见即所签，不容有沙子。** 屏幕上每一样东西都要能说清来源，
 凡是请求方能改又被当成事实展示的，一律拿掉或明确标注。
@@ -34,15 +41,20 @@ export SB=<任意可写目录>   # 需要 tls-serve.py / cert.pem / key.pem，�
 
 bun samples/safeop-test.mjs        #  9/9  摘要对拍 vela-core 的 wasm
 bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
-bun samples/hostile-test.mjs       # 35/35 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
+bun samples/hostile-test.mjs       # 32/32 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
 bun samples/channels-test.mjs      # 19/19 各通道 + 真 WebAuthn + 交易 + 篡改拒签
 bun samples/ceremony-test.mjs      # 47/47 四种仪式 + 多请求会话
-bun samples/slider-test.mjs        # 14/14 真触摸拖动滑块：签名与创建，以及答复要交去别处就拖不动
+bun samples/slider-test.mjs        # 19/19 真触摸拖动滑块：签名与创建，以及答复要交去别处就拖不动
 bun samples/single-file-test.mjs   # 12/12 发布出去的单文件页：CSP 实测、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签
+bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
+bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
 ```
 
-> 数字是 2026-09-24 实测的。`secure-vectors.mjs`、`ble-loopback.mjs`、
+> 数字是 2026-09-27 实测的（desktop-demo 仍是 09-24 的数）。浏览器套件要用 `bun` 跑：
+> 用 `node` 时 `test-kit` 等页面服务器那一步的 `fetch` 不认自签证书，会报「page server never came up」。
+>
+> `secure-vectors.mjs`、`ble-loopback.mjs`、
 > `mock-tunnel-test.mjs` 随隧道和 BLE 一起删了，不要再照旧文档去找。
 >
 > `ceremony-test.mjs` 曾经**一直是红的而没人知道**：`0801564b` 把仪式校验从
@@ -92,11 +104,9 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
 | `lib/digest.js` `lib/safeop.js` | 摘要 | 只签**自己算出来的**；算不出就拒签 |
 | `lib/signer.js` | 签名意图的 passkey 断言 | **没有创建能力**：签名意图走到的只有 `sign()` |
 | `lib/ceremony.js` | 钥匙仪式：挑战码推导、成员挑战码的获取与核对、创建、断言 | 只签**自己生成或自己核对过**的挑战码；创建只由 resolve 放行的 `vela_createPasskey` 调用 |
-| `lib/transport/secure.js` | BLE 与隧道共用的 ECDH/HKDF/AES-GCM 会话 | 与 vela-core 的 `trusted_signer::secure` 逐字节一致（向量） |
-| `lib/transport/ble.js` `tunnel.js` | BLE 分帧 / 隧道房间 | 隧道：`rk` 对不上就拒绝并离开；比对码画在每张卡上 |
 | `lib/identicon*.js` | 头像 | 与 vela-core 逐字节一致 |
 | `lib/fee.js` | 费用 | 从 calldata 里的**费用腿**读，不接受成品字符串 |
-| `lib/intake.js` | 六条通道归一成**会话** | 只有浏览器背书的通道才 `originVerified: true`；通道事实覆盖请求方 context 里的同名字段 |
+| `lib/intake.js` | 三条通道（URL 片段、postMessage、回环 WebSocket）归一成**会话** | 只有浏览器背书的通道才 `originVerified: true`；通道事实覆盖请求方 context 里的同名字段 |
 | `lib/logos.js` | 远端 logo | 纯装饰，只进 `<img>`，失败静默退回 |
 
 规范：[PROTOCOL.md](PROTOCOL.md)（通道线格式、摘要、**第 9 节的来源对照表**）。
@@ -105,7 +115,10 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
 ## 已经完成
 
 - 33 个场景全部由外部意图渲染（`samples/intents.json`，页面零内嵌数据）
-- 六级降级阶梯、never-unlimited 拒签、烧毁拦截、SIWE 域名比对、嵌套 calldata 拆解
+- 六级降级阶梯、烧毁拦截、SIWE 域名比对、嵌套 calldata 拆解
+- 无限额授权与 permit：标红、可原样签（2026-09-26 裁决，取代 never-unlimited 拒签）；对整个 NFT 合集的授权仍拒签
+- 接管拦截（2026-09-27）：账户对自己调用改所有者 / 模块 / guard / fallback 的函数、任何 delegatecall、
+  EIP-712 `SafeTx` 一律拒签，查的是**操作里的每一条腿**（`samples/takeover-test.mjs`，与 vela-core `self_call_guard.rs` 同一规则）
 - i18n（zh/en）、深浅色跟随系统
 - 摘要：EIP-191 / EIP-712 / **SafeOp / SafeMessage**，全部对拍通过
 - 交易绑定检查：站点请求的调用必须真在被签的操作里，否则拒签
@@ -120,6 +133,9 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
   两个替身钱包（`samples/test-kit.mjs`）、网页钱包替身 `samples/wallet-sim.html`
 
 ## 还没做
+
+> 第 1、2、6、7 条随隧道与 BLE 一起作废（2026-09-23）；第 4 条已完成（`sign.getvela.app`）；
+> 第 8 条已完成（vela-core `trusted_signer::verify` 与 `trusted_signer/ceremony.rs` 的 `verify`）。
 
 1. **BLE 真机射频**。协议与中心端就绪，`samples/ble-peripheral.mjs` 是参考实现。
    Chrome 的 `BluetoothEmulation` 是实验域，走到设备选择器就停（不发
@@ -143,7 +159,9 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
 ## 创始人已经拍板的规矩（别自作主张改）
 
 1. **意图到达即定死** —— 只能签或不签。没有费币选择器，也没有额度编辑器
-   （编辑器会重写 calldata，正是本页要防的病）。无限额授权 = 拒签并指路。
+   （编辑器会重写 calldata，正是本页要防的病）。~~无限额授权 = 拒签并指路。~~ ——
+   **2026-09-26 改为**：无限额授权与 permit 标红、可原样签（Permit2 与批量交易依赖原样额度）；
+   上限在请求到达本页之前、在钱包自己的授权界面上设。
 2. **rpId**：web 用 hostname（`*.getvela.app` 折成 `getvela.app`），扩展硬编码。
 3. ~~**签名页永远不创建 passkey**~~ —— **已被创始人推翻（2026-09-22）**：钱包的创建流程
    请求时，本页创建 passkey —— 作为**它自己的请求**（`vela_createPasskey`，自己的卡），
@@ -157,9 +175,9 @@ intake.js（会话）→ 请求 → resolve.js → 视图模型 → render.js �
    改不了钱的去向，且地址与 identicon 就在旁边）。
 5. **费用从 calldata 的费用腿读出**，法币只接受**汇率**、本地相乘并显示汇率。
    Vela 走带内费用，4337 的 gas 字段通常全是零。
-6. 桌面 App 与同机浏览器**不要用 BLE**（控制器扫不到自己）；同机走回环 WebSocket
-   （桌面正从 URL + 回环回调迁过来）。
-7. ~~没有服务器，没有隧道，跨设备走 BLE~~ —— **已被创始人推翻（2026-09-22）**：跨设备走
+6. ~~桌面 App 与同机浏览器不要用 BLE；同机走回环 WebSocket~~ —— 现在 App 全走 URL 片段 +
+   `velawallet://sign-result`（076）。
+7. （历史，2026-09-23 又撤回：隧道与 BLE 都砍了）~~没有服务器，没有隧道，跨设备走 BLE~~ —— **已被创始人推翻（2026-09-22）**：跨设备走
    **隧道**（WebSocket，Rust 写，Docker 与 Cloudflare Worker）或 **BLE**。隧道是瞎的，只转发
    两端加密好的字节；页面凭 `rk` 拒绝冒充的钱包，人凭六位码拒绝冒充的页面。
 

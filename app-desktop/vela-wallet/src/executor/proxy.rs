@@ -352,13 +352,38 @@ pub fn with_candidates_for<T>(
     with_candidates(timeout, call)
 }
 
+/// One agent per way out and timeout, kept for the life of the process.
+///
+/// A `ureq` agent IS its connection pool. This built a fresh one for every
+/// request, so nothing was ever reused: each RPC call, index fetch and rate
+/// read paid DNS, TCP and a TLS handshake of its own — three of them per
+/// chain on a balance read, where the browser beside it keeps its sockets
+/// alive (the 078 loading audit). Agents are cheap handles over a shared
+/// pool, so the cache hands out clones.
 fn agent_over(proxy: Option<&Proxy>, timeout: Duration) -> Agent {
-    let mut config = Agent::config_builder().timeout_global(Some(timeout));
+    static AGENTS: OnceLock<Mutex<std::collections::HashMap<String, Agent>>> = OnceLock::new();
+    let key = format!("{proxy:?}|{}", timeout.as_millis());
+    let agents = AGENTS.get_or_init(Mutex::default);
+    if let Ok(agents) = agents.lock()
+        && let Some(agent) = agents.get(&key)
+    {
+        return agent.clone();
+    }
+    let mut config = Agent::config_builder()
+        .timeout_global(Some(timeout))
+        // A balance read talks to two dozen chains' endpoints at once; the
+        // default ten idle sockets would drop most of them between calls.
+        .max_idle_connections(128)
+        .max_idle_connections_per_host(8);
     // `None` here means `ureq`'s own answer stands, which for a `Direct`
     // candidate must be "no proxy" even if the environment names one — that
     // is the whole point of the candidate.
     config = config.proxy(proxy.cloned());
-    config.build().new_agent()
+    let agent = config.build().new_agent();
+    if let Ok(mut agents) = agents.lock() {
+        agents.insert(key, agent.clone());
+    }
+    agent
 }
 
 /// The same proxy, with the target hostname resolved at the far end.

@@ -135,8 +135,8 @@ struct ContactsScreen: View {
                 set: { if !$0 { onAcknowledge() } }
             )
         ) {
-            // The same system word the flow host's alerts use.
-            Button("OK") { onAcknowledge() }
+            // The same acknowledgement the flow host's alerts use.
+            Button(model.notice?.dismiss ?? "") { onAcknowledge() }
         } message: {
             Text(verbatim: model.notice?.message ?? "")
         }

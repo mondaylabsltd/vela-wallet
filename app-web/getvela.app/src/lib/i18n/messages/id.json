@@ -59,7 +59,7 @@
 				"passkeys": "Cara kerja passkey",
 				"signers": "Kunci penanda tangan & kunci keamanan",
 				"clear-signing": "Clear signing",
-				"clear-signing-self-host": "Hosting sendiri halaman tanda tangan",
+				"clear-signing-self-host": "Trusted Signer",
 				"self-hosting": "Panduan hosting sendiri",
 				"bybit-attack": "Serangan Bybit",
 				"recovery": "Pemulihan & masuk",
@@ -229,7 +229,7 @@
 				},
 				{
 					"feature": "Pemeriksaan tambahan",
-					"vela": "Halaman tanda tangan independen, sudah dibuat tetapi belum terhubung ke aplikasi",
+					"vela": "Trusted Signer: halaman independen yang mendekode dan menandatangani secara mandiri, jika Anda memilihnya",
 					"metamask": "Peringatan risiko dari pihak ketiga",
 					"base": "—"
 				},
@@ -355,8 +355,8 @@
 				"body": "Saat ini sebagian aplikasi mengabaikan sebagian isi Pengaturan → Endpoint Layanan — aplikasi iPhone sepenuhnya, aplikasi web saat membuat dompet atau masuk, dan Android saat mencari nama. Semuanya seharusnya mengikuti pengaturan itu."
 			},
 			{
-				"title": "Halaman tanda tangan independen, tersambung",
-				"body": "Halaman tanda tangan yang mendekode dan menandatangani permintaan secara mandiri sudah dibuat. Berikutnya: aplikasi bisa menyerahkan permintaannya ke halaman itu, sehingga setiap tanda tangan diperiksa oleh program yang Anda muat sendiri."
+				"title": "Pemeriksaan Trusted Signer yang menolak",
+				"body": "Aplikasi desktop sudah membandingkan halaman tanda tangan dengan versi-versi yang dibawanya, tetapi hanya mencatat ketidakcocokan di log. Berikutnya: menolak halaman yang tidak cocok, dan memeriksanya juga di ponsel."
 			},
 			{
 				"title": "Cakupan clear signing yang lebih luas",
@@ -368,6 +368,10 @@
 			}
 		],
 		"shipped": [
+			{
+				"title": "Trusted Signer",
+				"body": "Halaman tanda tangan independen di sign.getvela.app yang mendekode permintaan dan menandatanganinya secara mandiri, dengan setiap versi beralamat berdasarkan isinya dan bisa direproduksi. Aplikasi desktop, iPhone, dan Android bisa memakainya sebagai cara Anda menandatangani."
+			},
 			{
 				"title": "Kunci Anda on-chain, dengan cadangan di Ethereum",
 				"body": "Masuk langsung dari registri on-chain saat indeks tidak bisa dijangkau, lihat setiap kunci yang dipakai saat dompet Anda dibuat, dan salin catatannya ke Ethereum."
@@ -402,7 +406,7 @@
 			},
 			{
 				"title": "Clear signing (ERC-7730)",
-				"body": "Transaksi menampilkan apa yang dilakukannya — jumlah, penerima, maksud — alih-alih hex mentah, dan persetujuan token di tingkat “tanpa batas” tidak bisa dikirim sampai Anda menurunkannya."
+				"body": "Transaksi menampilkan apa yang dilakukannya — jumlah, penerima, maksud — alih-alih hex mentah, dan persetujuan token di tingkat “tanpa batas” ditampilkan merah, dengan pilihan untuk membatasinya."
 			},
 			{
 				"title": "Vela lahir",
@@ -487,9 +491,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "a9482909de80",
+		"home": "9d4250ccd810",
 		"about": "44b20f016140",
-		"roadmap": "ec62c4af0a9f",
+		"roadmap": "e6bd90fbb95d",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

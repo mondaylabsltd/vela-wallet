@@ -155,6 +155,9 @@ enum QrPattern {
 struct AmountInputView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
+    /// The hero rung's line, following Dynamic Type exactly as the figure's
+    /// `.largeTitle`-relative font does, so the fixed line never clips it.
+    @ScaledMetric(relativeTo: .largeTitle) private var heroLine = WalletFlowGeometry.amountHeroLine
 
     let amount: AmountFieldModel
     var onDenom: () -> Void = {}
@@ -199,63 +202,164 @@ struct AmountInputView: View {
         .padding(.vertical, Tokens.Space.s24)
     }
 
+    /// What the figure reads right now: the field's own text while it is
+    /// typed into (the ladder must follow the keystroke, not the core's echo),
+    /// the drawn value otherwise.
+    private var shown: String {
+        if let text, !amount.locked { return text.wrappedValue }
+        return amount.value
+    }
+
     /// The figure, wearing its unit (issue 231): "4.00" alone could be dollars
     /// or coins. A currency symbol leads at the figure's own size; a ticker or
     /// a code follows, smaller and quieter, so the number still reads first.
-    /// With no unit this is exactly the drawn figure.
-    @ViewBuilder private var figure: some View {
-        if amount.unitPrefix == nil && amount.unitSuffix == nil {
-            entry
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s0) {
-                if let prefix = amount.unitPrefix {
-                    // Set exactly as the digits beside it are: the live field
-                    // takes the role's font directly, the drawn figure the role.
-                    if text != nil && !amount.locked {
-                        Text(verbatim: prefix)
-                            .font(Typography.amountHero.scaled(textScale).font)
-                            .foregroundStyle(theme.fgMuted)
-                    } else {
-                        Text(verbatim: prefix)
-                            .typeRole(Typography.amountHero.scaled(textScale))
-                            .foregroundStyle(theme.fgMuted)
-                    }
-                }
-                // Hugging its digits, so the unit sits against them rather
-                // than at the far edge of a full-width field.
-                entry.fixedSize(horizontal: true, vertical: false)
-                if let suffix = amount.unitSuffix {
-                    Text(verbatim: suffix)
-                        .typeRole(Typography.amountHeroDecimals.scaled(textScale))
-                        .foregroundStyle(theme.fgMuted)
-                        .lineLimit(1)
-                        .padding(.leading, Tokens.Space.s8)
-                }
+    ///
+    /// **On the hero ladder** (spec 078, the web's `AmountInput`): 46 / 38 / 31
+    /// by drawn length, the unit stepping down with the digits, on the hero
+    /// rung's line whatever is drawn. The units never give way — the digits
+    /// do: a read-only figure past the last rung is cut at its END with "…",
+    /// a typed one scrolls inside its own field. The old figure hugged its
+    /// digits with `fixedSize`, which also meant it could never shrink, so a
+    /// Max of `0.043790209243313861` ran off both sides of the screen.
+    private var figure: some View {
+        let rung = AmountRung.of(
+            figure: shown.isEmpty ? Self.placeholder : shown,
+            prefix: amount.unitPrefix, suffix: amount.unitSuffix
+        )
+        let digits = rung.figure.scaled(textScale)
+        let editable = text != nil && !amount.locked
+        return HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s0) {
+            if let prefix = amount.unitPrefix {
+                Text(verbatim: prefix)
+                    .typeRole(digits)
+                    .foregroundStyle(theme.fgMuted)
+                    .lineLimit(1)
+                    .fixedSize()
             }
-            // The unit is drawn for the eye; the field's label names it.
-            .frame(maxWidth: .infinity)
+            entry(digits)
+            if let suffix = amount.unitSuffix {
+                Text(verbatim: suffix)
+                    .typeRole(rung.unit.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(
+                        .leading,
+                        editable ? Tokens.Space.s8 - WalletFlowGeometry.amountCaretSlack : Tokens.Space.s8
+                    )
+            }
+        }
+        .frame(height: heroLine * textScale)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// What an empty field shows.
+    private static let placeholder = "0"
+
+    @ViewBuilder private func entry(_ role: TypeRole) -> some View {
+        if let text, !amount.locked {
+            // As wide as what is in it, and never wider than what is left
+            // beside the units: a hidden mirror of the text sets the width
+            // (the web's `.sizer`), the field fills it and scrolls past it.
+            MirrorWidth {
+                Text(verbatim: text.wrappedValue.isEmpty ? Self.placeholder : text.wrappedValue)
+                    .typeRole(role)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.trailing, WalletFlowGeometry.amountCaretSlack)
+                    .hidden()
+                    .accessibilityHidden(true)
+                // `typeRole` is a `Text` extension (the sanctioned styling
+                // seam); the field takes the same role's font directly. Each
+                // edit is cleaned inside the edit (`AmountTextField` says why
+                // a `TextField` cleaned in `onChange` dropped keys).
+                AmountTextField(
+                    text: text,
+                    placeholder: Self.placeholder,
+                    font: role.uiFont,
+                    color: theme.fgBase,
+                    identifier: "send.amount"
+                )
+            }
+        } else {
+            Text(verbatim: amount.value)
+                .typeRole(role)
+                .foregroundStyle(theme.fgBase)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+}
+
+/// Which rung of the hero ladder a figure is drawn on — the web's
+/// `AmountInput` `size` and the desktop's `amount_hero_rung`, counted the same
+/// way: the figure's characters, the prefix's, and HALF the suffix's (it is set
+/// smaller). Up to 8 drawn → hero, up to 11 → compact, beyond → tight.
+enum AmountRung: Equatable {
+    case hero, compact, tight
+
+    static func of(figure: String, prefix: String?, suffix: String?) -> AmountRung {
+        let drawn = Double(figure.count + (prefix?.count ?? 0)) + Double(suffix?.count ?? 0) / 2
+        if drawn <= WalletFlowGeometry.amountHeroMaxDrawn { return .hero }
+        if drawn <= WalletFlowGeometry.amountCompactMaxDrawn { return .compact }
+        return .tight
+    }
+
+    /// The digits' role on this rung.
+    var figure: TypeRole {
+        switch self {
+        case .hero: Typography.amountEntry
+        case .compact: Typography.amountEntryCompact
+        case .tight: Typography.amountEntryTight
         }
     }
 
-    @ViewBuilder private var entry: some View {
-        if let text, !amount.locked {
-            // `typeRole` is a `Text` extension (the sanctioned styling
-            // seam); a `TextField` takes the same role's font directly.
-            TextField("0", text: text)
-                .font(Typography.amountHero.scaled(textScale).font)
-                .foregroundStyle(theme.fgBase)
-                .multilineTextAlignment(.center)
-                .keyboardType(.decimalPad)
-                .minimumScaleFactor(WalletGeometry.heroMinScale)
-                .lineLimit(1)
-                .accessibilityIdentifier("send.amount")
-        } else {
-            Text(verbatim: amount.value)
-                .typeRole(Typography.amountHero.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
-                .minimumScaleFactor(WalletGeometry.heroMinScale)
-                .lineLimit(1)
+    /// The unit's role on this rung — a step of the type scale below.
+    var unit: TypeRole {
+        switch self {
+        case .hero: Typography.amountUnit
+        case .compact: Typography.amountUnitCompact
+        case .tight: Typography.amountUnitTight
         }
+    }
+}
+
+/// Sizes its SECOND subview (a field) to the width its FIRST (a hidden mirror
+/// of the same text) wants, capped at what the parent offers.
+///
+/// A `TextField` takes every point it is offered, and `fixedSize` pins it to
+/// its content with no ceiling — the trap that ran an 18-decimal Max off the
+/// screen. This is the ceiling: hugging while it fits, the field's own width
+/// once it does not, where the text scrolls to its caret.
+struct MirrorWidth: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let mirror = subviews.first else { return .zero }
+        let ideal = mirror.sizeThatFits(.unspecified)
+        let width = min(ideal.width, proposal.width ?? ideal.width)
+        let field = subviews.dropFirst().first?
+            .sizeThatFits(ProposedViewSize(width: width, height: proposal.height)) ?? .zero
+        return CGSize(width: width, height: max(ideal.height, field.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews {
+            subview.place(
+                at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading,
+                proposal: ProposedViewSize(width: bounds.width, height: bounds.height)
+            )
+        }
+    }
+
+    /// Both children on one baseline: the field's, which is the text's.
+    func explicitAlignment(
+        of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+        subviews: Subviews, cache: inout ()
+    ) -> CGFloat? {
+        guard let field = subviews.dropFirst().first else { return nil }
+        let size = field.sizeThatFits(ProposedViewSize(width: bounds.width, height: bounds.height))
+        let top = bounds.midY - size.height / 2
+        return field.dimensions(in: ProposedViewSize(width: bounds.width, height: bounds.height))[guide]
+            + top
     }
 }
 
@@ -656,23 +760,32 @@ struct FeeRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
-            HStack(spacing: Tokens.Space.s8) {
+            // ONE card (round 3): the figure and, inside it at the trailing
+            // edge, a fixed round refresh button — as the web and the desktop
+            // draw it. Round 2's full-height block beside the card grew into a
+            // slab at the largest text size.
+            HStack(alignment: .center, spacing: Tokens.Space.s8) {
                 Button(action: onOpen) {
-                    HStack(spacing: Tokens.Space.s8) {
+                    // Label and value side by side while both fit whole; the
+                    // label on its own line and the value under it otherwise.
+                    // It used to break the label inside a word
+                    // ("Netzwerkg / ebühr") and cut the value to "0.00421…".
+                    TitleAndValue {
                         Text(verbatim: fee.label)
                             .typeRole(Typography.body.scaled(textScale))
                             .foregroundStyle(theme.fgMuted)
-                        Spacer(minLength: Tokens.Space.s8)
-                        InlineTokenMark(mark: fee.mark)
-                        Text(verbatim: fee.value)
-                            .typeRole(Typography.body.scaled(textScale))
-                            .foregroundStyle(theme.fgBase)
-                            .lineLimit(1)
-                        LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
-                            .foregroundStyle(theme.fgMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(alignment: .center, spacing: Tokens.Space.s8) {
+                            InlineTokenMark(mark: fee.mark)
+                            Text(verbatim: fee.value)
+                                .typeRole(Typography.body.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                                .fixedSize(horizontal: false, vertical: true)
+                            LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
+                                .foregroundStyle(theme.fgMuted)
+                        }
                     }
-                    .padding(Tokens.Space.s12)
-                    .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+                    .padding(.vertical, Tokens.Space.s12)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -683,8 +796,12 @@ struct FeeRowView: View {
                         // it — so a second tap is never ambiguous.
                         LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
                             .foregroundStyle(fee.refreshing ? theme.fgSubtle : theme.fgMuted)
-                            .padding(Tokens.Space.s12)
-                            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+                            .frame(width: WalletFlowGeometry.feeRefreshButton,
+                                   height: WalletFlowGeometry.feeRefreshButton)
+                            .background(Circle().fill(theme.bgSunken))
+                            // The target is a little larger than the circle.
+                            .frame(width: WalletFlowGeometry.feeRefreshTarget,
+                                   height: WalletFlowGeometry.feeRefreshTarget)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -692,6 +809,9 @@ struct FeeRowView: View {
                     .accessibilityLabel(refreshLabel)
                 }
             }
+            .padding(.leading, Tokens.Space.s12)
+            .padding(.trailing, fee.refreshLabel == nil ? Tokens.Space.s12 : Tokens.Space.s4)
+            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
             if fee.refreshLabel != nil {
                 // Calm and muted: an old figure is not a fault. Always the
                 // line's full height, so nothing jumps when it appears.
@@ -723,18 +843,22 @@ struct FeeSpeedControlView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
             Button(action: onToggle) {
-                HStack(spacing: Tokens.Space.s8) {
+                // Side by side while both fit whole; stacked otherwise — the
+                // header read "Geschw…" at an accessibility size (round 3).
+                TitleAndValue {
                     Text(verbatim: speed.label)
                         .typeRole(Typography.body.scaled(textScale))
                         .foregroundStyle(theme.fgSubtle)
-                    Spacer(minLength: Tokens.Space.s8)
-                    Text(verbatim: speed.value)
-                        .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
-                        .lineLimit(1)
-                    LucideIcon(.chevronDown, size: LucideIconSize.smallChevron)
-                        .foregroundStyle(theme.fgMuted)
-                        .rotationEffect(.degrees(speed.open ? 180 : 0))
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: Tokens.Space.s8) {
+                        Text(verbatim: speed.value)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .fixedSize(horizontal: false, vertical: true)
+                        LucideIcon(.chevronDown, size: LucideIconSize.smallChevron)
+                            .foregroundStyle(theme.fgMuted)
+                            .rotationEffect(.degrees(speed.open ? 180 : 0))
+                    }
                 }
                 .padding(.horizontal, Tokens.Space.s12)
                 .padding(.vertical, Tokens.Space.s8)
@@ -764,39 +888,66 @@ struct FeeSpeedControlView: View {
         Text(verbatim: text)
             .typeRole(Typography.flowCaption.scaled(textScale))
             .foregroundStyle(theme.fgSubtle)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Tokens.Space.s12)
     }
 
+    /// One speed, on TWO lines (round 2, all four shells): name … fee, then
+    /// what it buys … its gas bid. The bid used to sit alone on a middle line
+    /// with the description under it, which left a hole under the name.
+    ///
+    /// The description wraps under itself when the pair does not fit; the bid
+    /// never truncates. The bid is the UI font with fixed-width DIGITS — a
+    /// monospace face for the whole string (Menlo) read as a different voice.
+    /// A chosen row says so in weight and a ✓ in ink, not accent: accent is
+    /// for moving money and submitting only.
     private func row(_ option: FeeSpeedOptionModel) -> some View {
-        HStack(alignment: .top, spacing: Tokens.Space.s8) {
+        let name = (option.selected ? Typography.bodyStrong : Typography.body).scaled(textScale)
+        return HStack(alignment: .top, spacing: Tokens.Space.s8) {
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                HStack(spacing: Tokens.Space.s8) {
+                // The name and its fee side by side while both fit whole; the
+                // fee under the name otherwise — "Stand…" at an accessibility
+                // size said nothing (round 3).
+                TitleAndValue {
                     Text(verbatim: option.label)
-                        .typeRole((option.selected ? Typography.actionLabel : Typography.body).scaled(textScale))
-                        .foregroundStyle(option.selected ? theme.accentBase : theme.fgBase)
-                    Spacer(minLength: Tokens.Space.s8)
+                        .typeRole(name)
+                        .foregroundStyle(theme.fgBase)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(verbatim: option.value)
                         .typeRole(Typography.body.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                if speed.gasPriceLine {
+                // The reason wraps in its own column; the bid never gives way.
+                // Below six of the reason's own characters that column would
+                // stack the sentence into a tower, so the bid drops under it
+                // instead, whole, on the fee's right edge (the web's rule).
+                ReasonAndFigure(
+                    minReasonWidth: Typography.flowCaption.scaled(textScale).size
+                        * ReasonAndFigure.minReasonChars
+                ) {
+                    Text(verbatim: option.detail)
+                        .typeRole(Typography.flowCaption.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
                     // Named, because an unnamed "3,244 wei" under a fee reads
-                    // as a second charge; held open empty while measuring.
-                    HStack {
-                        Spacer(minLength: 0)
-                        Text(verbatim: option.gasPrice.map { "\(speed.gasPriceLabel)  \($0)" } ?? " ")
-                            .typeRole(Typography.monoSmall.scaled(textScale))
+                    // as a second charge. Nothing while this tier measures.
+                    if speed.gasPriceLine, let bid = option.gasPrice {
+                        Text(verbatim: "\(speed.gasPriceLabel)  \(bid)")
+                            .monospacedDigit()
+                            .typeRole(Typography.flowCaption.scaled(textScale))
                             .foregroundStyle(theme.fgSubtle)
                             .lineLimit(1)
+                            // Only where even a line of its own is too narrow
+                            // (an accessibility text size): smaller, never cut,
+                            // never off the screen.
+                            .minimumScaleFactor(WalletGeometry.heroMinScale)
                     }
                 }
-                Text(verbatim: option.detail)
-                    .typeRole(Typography.flowCaption.scaled(textScale))
-                    .foregroundStyle(theme.fgSubtle)
             }
+            // Its own column, centred on line 1 whatever the text size.
             LucideIcon(.check, size: LucideIconSize.checkmark)
-                .foregroundStyle(theme.accentBase)
+                .foregroundStyle(theme.fgBase)
+                .frame(height: name.uiFont.lineHeight)
                 .opacity(option.selected ? 1 : 0)
         }
         .padding(.horizontal, Tokens.Space.s12)
@@ -806,5 +957,83 @@ struct FeeSpeedControlView: View {
                 .fill(option.selected ? theme.bgRaised : Color.clear)
         )
         .contentShape(Rectangle())
+    }
+}
+
+/// A speed row's line 2: a reason that wraps, and a figure that does not.
+///
+/// Side by side while the reason keeps a column of at least `minReasonWidth`
+/// (six of its own characters — the web's `flex: 1 1 6em`); below that the
+/// figure drops to a line of its own under the reason, trailing-aligned, so a
+/// narrow phone at a large text size never gets a one-word tower or a figure
+/// pushed off the screen. The reason is never cut in either shape. Both pieces
+/// are the same caption type, so top-aligned they share a baseline.
+struct ReasonAndFigure: Layout {
+    /// How many of the reason's own characters its column may not go below.
+    static let minReasonChars: CGFloat = 6
+
+    let minReasonWidth: CGFloat
+    var columnGap: CGFloat = Tokens.Space.s8
+    var rowGap: CGFloat = Tokens.Space.s2
+
+    private struct Plan {
+        let size: CGSize
+        let reason: CGRect
+        let figure: CGRect?
+    }
+
+    private func plan(width proposed: CGFloat?, subviews: Subviews) -> Plan {
+        guard let reason = subviews.first else { return Plan(size: .zero, reason: .zero, figure: nil) }
+        let figure = subviews.count > 1 ? subviews[1] : nil
+        guard let figure else {
+            let size = reason.sizeThatFits(ProposedViewSize(width: proposed, height: nil))
+            return Plan(size: size, reason: CGRect(origin: .zero, size: size), figure: nil)
+        }
+        let ideal = figure.sizeThatFits(.unspecified)
+        guard let width = proposed else {
+            // Unconstrained: one line, side by side.
+            let reasonSize = reason.sizeThatFits(.unspecified)
+            let total = CGSize(width: reasonSize.width + columnGap + ideal.width,
+                               height: max(reasonSize.height, ideal.height))
+            return Plan(size: total, reason: CGRect(origin: .zero, size: reasonSize),
+                        figure: CGRect(x: reasonSize.width + columnGap, y: 0,
+                                       width: ideal.width, height: ideal.height))
+        }
+        let room = width - ideal.width - columnGap
+        if room >= minReasonWidth {
+            let reasonSize = reason.sizeThatFits(ProposedViewSize(width: room, height: nil))
+            return Plan(
+                size: CGSize(width: width, height: max(reasonSize.height, ideal.height)),
+                reason: CGRect(origin: .zero, size: CGSize(width: room, height: reasonSize.height)),
+                figure: CGRect(x: width - ideal.width, y: 0, width: ideal.width, height: ideal.height)
+            )
+        }
+        let reasonSize = reason.sizeThatFits(ProposedViewSize(width: width, height: nil))
+        let figureWidth = min(ideal.width, width)
+        let figureSize = figure.sizeThatFits(ProposedViewSize(width: figureWidth, height: nil))
+        let top = reasonSize.height + rowGap
+        return Plan(
+            size: CGSize(width: width, height: top + figureSize.height),
+            reason: CGRect(origin: .zero, size: CGSize(width: width, height: reasonSize.height)),
+            figure: CGRect(x: width - figureWidth, y: top, width: figureWidth, height: figureSize.height)
+        )
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        plan(width: proposal.width, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let laid = plan(width: bounds.width, subviews: subviews)
+        subviews.first?.place(
+            at: CGPoint(x: bounds.minX + laid.reason.minX, y: bounds.minY + laid.reason.minY),
+            proposal: ProposedViewSize(laid.reason.size)
+        )
+        if let frame = laid.figure, subviews.count > 1 {
+            subviews[1].place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(frame.size)
+            )
+        }
     }
 }

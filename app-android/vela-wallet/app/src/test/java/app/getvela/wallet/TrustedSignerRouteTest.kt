@@ -5,15 +5,12 @@ import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.StoreAccountPort
 import app.getvela.wallet.feature.send.core.UserOpSpine
-import app.getvela.wallet.feature.signing.core.SigningController
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.vela_core_uniffi.WalletKeyRecord
-import uniffi.vela_core_uniffi.signRoute
 
 /**
  * Spec 075: a key that lives behind a Trusted Signer page signs through it.
@@ -23,9 +20,10 @@ import uniffi.vela_core_uniffi.signRoute
  * - the account record round-trips `signer_origin` — a rewrite that dropped it
  *   would make the key forget where it lives, and the wallet would ask the
  *   system's passkey sheet for a credential no provider on this phone holds;
- * - `UserOpSpine.routeFor` consults the core for EVERY choice including
- *   `auto`, so such a key is routed to its own page rather than to a sheet
- *   that has never heard of it.
+ * - for a record that names no sign-in key (written before 2026-09-26),
+ *   `UserOpSpine.routeFor` asks the core's `signRoute` for `auto`, so such a
+ *   key is routed to its own page rather than to a sheet that has never heard
+ *   of it.
  */
 class TrustedSignerRouteTest {
 
@@ -57,11 +55,10 @@ class TrustedSignerRouteTest {
         return StoreAccountPort(accounts)
     }
 
-    private fun spine(port: StoreAccountPort, method: String) = UserOpSpine(
+    private fun spine(port: StoreAccountPort) = UserOpSpine(
         relay = RelayClient(FakeRelayPort(), builtinBase = { "https://builtin.test" }, retryDelayMs = 0),
         accounts = port,
         signer = { error("no ceremony in this test") },
-        signMethod = { method },
     )
 
     @Test
@@ -92,10 +89,10 @@ class TrustedSignerRouteTest {
     }
 
     @Test
-    fun `auto follows a key that lives behind a page, to that page`() {
+    fun `a record without a sign-in key follows a key that lives behind a page, to that page`() {
         val port = portWith(origin)
         val route = runBlocking {
-            spine(port, "auto").routeFor(address, WalletKeyRecord(credential, publicKey))
+            spine(port).routeFor(address, WalletKeyRecord(credential, publicKey))
         }
         assertEquals(KeyMethod.TrustedSigner, route.method)
         assertEquals(origin, route.signerOrigin)
@@ -103,54 +100,12 @@ class TrustedSignerRouteTest {
     }
 
     @Test
-    fun `auto leaves an ordinary key on the route it always had`() {
+    fun `a record without a sign-in key leaves an ordinary key on the route it always had`() {
         val port = portWith(null)
         val route = runBlocking {
-            spine(port, "auto").routeFor(address, WalletKeyRecord(credential, publicKey))
+            spine(port).routeFor(address, WalletKeyRecord(credential, publicKey))
         }
         assertEquals(KeyMethod.Platform, route.method)
         assertEquals("", route.signerOrigin)
-    }
-
-    @Test
-    fun `the Trusted Signer chosen by hand opens the person's own page when no key names one`() {
-        val port = portWith(null)
-        val route = runBlocking {
-            spine(port, "trusted_signer").routeFor(address, WalletKeyRecord(credential, publicKey))
-        }
-        assertEquals(KeyMethod.TrustedSigner, route.method)
-        // Empty: the Settings page, not some other key's.
-        assertEquals("", route.signerOrigin)
-    }
-
-    @Test
-    fun `a key behind somebody else's page is not routed to the platform sheet`() {
-        // The core's rule (contract §1.2): a key minted on a self-hosted page
-        // is reachable only through that page, the way a security key's key is
-        // only in that key. Asking for "this device" must not send the
-        // ceremony to a provider that cannot possibly hold it.
-        val keys = JSONArray().put(
-            JSONObject()
-                .put("credential_id", credential)
-                .put("transports", "internal")
-                .put("signer_origin", origin),
-        ).toString()
-        val picked = JSONObject(signRoute(keys, "platform") ?: error("the core routes this key"))
-        assertEquals("trusted_signer", picked.getString("method"))
-        assertEquals(origin, picked.getString("signer_origin"))
-    }
-
-    @Test
-    fun `the signing sheet's five routes are the core's, in the core's order`() {
-        assertEquals(
-            listOf("auto", "platform", "hybrid", "security_key", "trusted_signer"),
-            SigningController.SIGN_METHODS,
-        )
-        assertTrue(
-            "every named route but `auto` is a KeyMethod the shell can run",
-            SigningController.SIGN_METHODS.drop(1).all { wire ->
-                KeyMethod.entries.any { it.wire == wire }
-            },
-        )
     }
 }

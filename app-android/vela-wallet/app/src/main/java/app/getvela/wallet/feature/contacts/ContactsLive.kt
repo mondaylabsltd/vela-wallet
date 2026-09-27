@@ -113,7 +113,15 @@ object ContactsLive {
          */
         emptyState: ContactsEmptyModel? = fallback.empty,
     ): ContactsHomeModel {
-        if (!view.loaded) return fallback.copy(sections = emptyList(), groups = emptyList())
+        if (!view.loaded) {
+            return fallback.copy(
+                search = fallback.search.copy(query = query),
+                sections = emptyList(),
+                groups = emptyList(),
+                empty = null,
+                pending = true,
+            )
+        }
         val sections = letterSections(view, query)
         val total = sections.sumOf { it.contacts.size }
         return fallback.copy(

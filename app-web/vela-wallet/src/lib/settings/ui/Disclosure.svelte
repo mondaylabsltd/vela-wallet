@@ -1,9 +1,13 @@
 <script lang="ts">
 	/**
-	 * ST15's "将要发送的内容" — a collapsible mono block. It defaults OPEN,
+	 * ST15's "将要发送的内容" — a collapsible block. It defaults OPEN,
 	 * because the point of the disclosure is that somebody can see what is
 	 * about to leave their device before they press send, and a closed box
 	 * would be a promise instead of a showing.
+	 *
+	 * Feedback v2 (A4) took the box away: a quiet muted header with its
+	 * chevron, and the caller's rows beneath in the UI face — no sunken
+	 * panel, no monospace. The rows own their colours.
 	 */
 	import { untrack, type Snippet } from 'svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -35,30 +39,31 @@
 </section>
 
 <style>
-	.disclosure {
-		border-radius: var(--radius-lg);
-		background: var(--color-bg-sunken);
-		border: var(--border-hairline) solid var(--color-border-base);
-		overflow: hidden;
-	}
-
 	button {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		gap: var(--space-sm);
 		width: 100%;
-		padding: var(--space-lg);
+		min-height: var(--size-control-sm);
+		padding: 0;
 		border: none;
 		background: none;
 		font-family: var(--font-ui);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		text-align: start;
 		color: var(--color-fg-muted);
 		cursor: pointer;
 	}
 
+	/* The chevron follows the words at their size. */
 	.chevron {
 		display: flex;
 		transition: transform var(--motion-duration-fast) ease-out;
+	}
+
+	.chevron :global(svg) {
+		width: 1.25em;
+		height: 1.25em;
 	}
 
 	.chevron.up {
@@ -66,11 +71,8 @@
 	}
 
 	.body {
-		padding: 0 var(--space-lg) var(--space-lg);
-		font-family: var(--font-mono);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		line-height: var(--leading-relaxed);
-		color: var(--color-fg-subtle);
+		padding-top: var(--space-sm);
+		font-family: var(--font-ui);
 	}
 
 	@media (prefers-reduced-motion: reduce) {

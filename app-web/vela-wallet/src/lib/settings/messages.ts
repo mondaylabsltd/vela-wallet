@@ -21,6 +21,8 @@ export interface SettingsMessages {
 		appearance: string;
 		localization: string;
 		advanced: string;
+		/** The official X / Telegram / Discord links (founder, 2026-09-27). */
+		community: string;
 	};
 	account: { switch: string; contactsSubtitle: string };
 	contacts: string;
@@ -88,20 +90,11 @@ export interface SettingsMessages {
 		slowHint: string;
 	};
 	/**
-	 * Spec 071: the default "Sign with" and the Trusted Signer's page, beside
-	 * the speed. The method names are the signing sheet's own (the create
-	 * flow's for where a passkey is, `common.automatic`, the Trusted Signer's
-	 * title) — one set of words, so Settings and the sheet cannot call the
-	 * same choice two different things.
+	 * Spec 071: the Trusted Signer — its title, which names a key that lives
+	 * behind its page, and its page.
 	 */
 	signing: {
-		title: string;
-		subtitle: string;
 		methods: {
-			auto: string;
-			platform: string;
-			hybrid: string;
-			security_key: string;
 			trusted_signer: string;
 		};
 		/** The Trusted Signer's one line, under its name. */
@@ -323,6 +316,28 @@ export interface SettingsMessages {
 		fallbackBody: string;
 		openGithub: string;
 		openGithubForm: string;
+		/** Screenshots (078 round 3). `{{max}}` = 5, `{{index}}` 1-based. */
+		screenshotsLabel: string;
+		addScreenshots: string;
+		screenshotsHint: string;
+		screenshotsPublic: string;
+		removeScreenshot: string;
+		screenshotsLimit: string;
+		screenshotUnsupported: string;
+		/** Web only: the section is a drop target and paste adds images. */
+		dropHint: string;
+		/** Filed, but some images could not be stored. */
+		screenshotsDropped: string;
+		/** Fell back: the GitHub form cannot carry the images. */
+		fallbackScreenshots: string;
+		done: string;
+		/**
+		 * The screenshot viewer (078 §C): a tile's a11y label (`{{index}}`,
+		 * 1-based), the viewer's ✕, and its visible remove button.
+		 */
+		viewScreenshot: string;
+		closeViewer: string;
+		removeFromViewer: string;
 	};
 	rescue: {
 		/** Templates with `{{name}}` / `{{count}}`. */
@@ -377,6 +392,8 @@ export interface SettingsMessages {
 		transport: string;
 		attestation: string;
 		userVerified: string;
+		/** The key this device signs with — the one it signed in with. */
+		signsHere: string;
 		copy: string;
 		copied: string;
 	};
@@ -436,6 +453,7 @@ export const SETTINGS_KEYS = [
 	'settings.sections.appearance',
 	'settings.sections.localization',
 	'settings.sections.advanced',
+	'settings.sections.community',
 	'settings.account.switch',
 	'settings.account.contactsSubtitle',
 	'settings.feedback.title',
@@ -483,11 +501,6 @@ export const SETTINGS_KEYS = [
 	'send.gasTierHintFast',
 	'send.gasTierHintStandard',
 	'send.gasTierHintSlow',
-	'settings.signing.title',
-	'settings.signing.subtitle',
-	'onboarding.create.methodPlatformTitle',
-	'onboarding.create.methodHybridTitle',
-	'onboarding.create.methodSecurityKeyTitle',
 	'componentsUi.signing.trustedSignerTitle',
 	'componentsUi.signing.trustedSignerBody',
 	'settings.signing.pageTitle',
@@ -520,6 +533,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.keys.transport',
 	'settingsModals.keys.attestation',
 	'settingsModals.keys.userVerified',
+	'settingsModals.keys.signsHere',
 	'settingsModals.backup.explain',
 	'componentsUi.signing.copyValue',
 	'receive.copied',
@@ -665,6 +679,20 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.fallbackBody',
 	'componentsUi.bugReport.openGithub',
 	'componentsUi.bugReport.openGithubForm',
+	'componentsUi.bugReport.screenshotsLabel',
+	'componentsUi.bugReport.addScreenshots',
+	'componentsUi.bugReport.screenshotsHint',
+	'componentsUi.bugReport.screenshotsPublic',
+	'componentsUi.bugReport.removeScreenshot',
+	'componentsUi.bugReport.screenshotsLimit',
+	'componentsUi.bugReport.screenshotUnsupported',
+	'componentsUi.bugReport.dropHint',
+	'componentsUi.bugReport.screenshotsDropped',
+	'componentsUi.bugReport.fallbackScreenshots',
+	'componentsUi.bugReport.done',
+	'componentsUi.bugReport.viewScreenshot',
+	'componentsUi.bugReport.closeViewer',
+	'componentsUi.bugReport.removeFromViewer',
 	'assets.rpcUnavailableSingle',
 	'assets.rpcUnavailableMultiple',
 	'assets.rpcFix',

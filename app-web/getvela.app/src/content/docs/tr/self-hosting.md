@@ -1,7 +1,7 @@
 ---
 title: Kendi sunucunuzda barındırma kılavuzu
 description: "Vela'nın sizin için çalıştırdığı her şey, her parçanın ne yaptığı ve onu kendinizinkiyle nasıl değiştireceğiniz — relay, açık anahtar dizini, zincir verisi, döviz kurları ve uygulamalar — ayrıca değiştiremeyeceğiniz tek şey ve getvela.app olmadan nasıl idare edeceğiniz."
-source: 3617d6d07f71
+source: f37e59b617dc
 ---
 
 <script>
@@ -84,9 +84,10 @@ kullanabilir, çünkü Vela onlarla doğrudan konuşur; telefonun kendi geçiş 
 cihaz") ise uygulamanın Vela tarafından imzalanmış olmasını gerektirir, sizinki öyle
 değil.
 
-[İmza sayfası](/tr/docs/clear-signing-self-host) tek başına bir giriş yolu değildir:
-başka bir programın kendisine gönderdiği istekleri imzalar ve henüz hiçbir Vela
-uygulaması ona istek göndermiyor.
+[Trusted Signer](/tr/docs/clear-signing-self-host) tek başına bir giriş yolu değildir:
+bir uygulamanın — Vela masaüstü ve telefon uygulamalarının — kendisine gönderdiği
+istekleri imzalar ve kendi alan adınızdaki bir kopya yalnızca o alan adı için
+oluşturulmuş geçiş anahtarlarıyla imzalar.
 
 <Callout type="warning" title="Alan adını kontrol eden, imza isteyebilir">
 getvela.app'ten ya da alt alan adlarından birinden sunulan her sayfa — ya da gelecekte
@@ -327,4 +328,4 @@ Yukarıdakilerin hepsini değiştirseniz de şunlar kalır:
 Şunlar ise Vela'nın değil: herkese açık seçici veritabanları, Apple'ın ve Google'ın
 telefonla giriş tünelleri ve seçtiğiniz RPC sağlayıcıları.
 
-Sırada: [kendiniz çalıştırabileceğiniz imza sayfası](/tr/docs/clear-signing-self-host).
+Sırada: [Trusted Signer ve kendi kopyanızı nasıl çalıştıracağınız](/tr/docs/clear-signing-self-host).

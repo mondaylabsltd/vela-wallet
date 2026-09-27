@@ -5,10 +5,12 @@
  * plug into in 027 — so what is exercised here is the sheet, the four cores
  * behind it and the answer that goes back, without a transport in the way.
  *
- * The property that matters most: an unlimited approval cannot be signed by
- * sliding. The core detects it, the guard offers no cap, the slider stays shut
- * — and rejecting answers the requester with 4001, because dismissal IS the
- * refusal (the 022 contract draws no reject button).
+ * The property that matters most: an unlimited approval is never signed
+ * unseen. The core detects it, the guard keeps the site's ask on its own chip
+ * and says the danger (Permit2 bundles revert when the wallet re-encodes the
+ * approve — the 2026-09-26 ruling), a cap is one chip away — and rejecting
+ * answers the requester with 4001, because dismissal IS the refusal (the 022
+ * contract draws no reject button).
  */
 import { expect, test } from '@playwright/test';
 import { en } from './live-helpers';
@@ -97,7 +99,7 @@ async function fire(
 	);
 }
 
-test('an unlimited approval cannot be slid: the chip is dead and the slider stays shut', async ({
+test('an unlimited approval is kept as asked and said in danger; a cap is one chip away', async ({
 	page
 }) => {
 	await openWallet(page);
@@ -114,20 +116,27 @@ test('an unlimited approval cannot be slid: the chip is dead and the slider stay
 	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
 	await expect(slider).toBeVisible({ timeout: 25_000 });
 
-	// The guard's verdict, on screen: the requested cap reads "Unlimited" and
-	// its own chip cannot be chosen.
+	// The guard's verdict, on screen (2026-09-26): the cap reads "Unlimited",
+	// the site's own chip is the one chosen — Permit2 bundles revert when the
+	// wallet re-encodes the approve — and the danger is said in words.
 	await expect(
 		page.getByText(en('componentsUi.signingApprove.unlimitedValue')).first()
 	).toBeVisible();
 	const requestedChip = page.getByRole('button', {
 		name: en('componentsUi.signingApprove.requested')
 	});
-	await expect(requestedChip).toBeDisabled();
+	await expect(requestedChip).toBeEnabled();
+	await expect(requestedChip).toHaveAttribute('aria-pressed', 'true');
+	const warning = page.getByText(en('componentsUi.signing.unlimitedWarning'));
+	await expect(warning).toBeVisible();
 
-	// And the slider is shut — the mandate is a gate, not a warning.
-	await expect(slider).toBeDisabled();
-	// Nothing invented in the copy: the decode warning names the real length.
-	await expect(page.getByText(/\(\d+ bytes\)/)).toBeVisible();
+	// A typed cap takes over: the site's chip lets go and the warning goes.
+	await page.getByRole('button', { name: en('componentsUi.signingApprove.custom') }).click();
+	await page.getByRole('textbox').last().fill('5');
+	await expect(requestedChip).toHaveAttribute('aria-pressed', 'false');
+	await expect(warning).toHaveCount(0);
+	// The cap reads in tokens, never in base units ("5000000" is not 5 USDC).
+	await expect(page.getByText(/^5 /).first()).toBeVisible();
 });
 
 test('rejecting answers the requester with 4001 — dismissal IS the refusal', async ({ page }) => {

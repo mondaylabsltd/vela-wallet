@@ -6,7 +6,8 @@
     "error": "Ошибка",
     "somethingWrong": "Что-то пошло не так",
     "tryAgain": "Повторить",
-    "done": "Готово"
+    "done": "Готово",
+    "gotIt": "Понятно"
   },
   "language": {
     "title": "Язык",
@@ -25,6 +26,7 @@
       "appearance": "Оформление",
       "localization": "Регион и форматы",
       "advanced": "Дополнительно",
+      "community": "Сообщество",
       "developer": "Для разработчиков"
     },
     "account": {
@@ -36,7 +38,7 @@
     "appearance": {
       "themeLight": "Светлая",
       "themeDark": "Тёмная",
-      "themeAuto": "Как в системе",
+      "themeAuto": "Авто",
       "avatarInitials": "Инициалы",
       "avatarIdenticon": "Идентикон",
       "themeTitle": "Тема",

@@ -544,12 +544,12 @@
 		letter-spacing: -0.01em;
 	}
 	.systems {
-		font-size: 0.8rem;
+		font-size: max(0.8rem, var(--floor-meta));
 		color: var(--text-tertiary);
 	}
 	.meta p {
 		color: var(--text-secondary);
-		font-size: 0.92rem;
+		font-size: max(0.92rem, var(--floor-read));
 		line-height: 1.65;
 		max-width: 52ch;
 	}
@@ -565,7 +565,7 @@
 		display: inline-block;
 		padding: 11px 22px;
 		border-radius: 10px;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-note));
 		font-weight: 600;
 		white-space: nowrap;
 		transition: all 0.15s;
@@ -583,7 +583,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		color: var(--text-tertiary);
 		white-space: nowrap;
 	}
@@ -595,7 +595,7 @@
 		display: inline-block;
 		padding: 2px 8px;
 		border-radius: 999px;
-		font-size: 0.66rem;
+		font-size: max(0.66rem, var(--floor-label));
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -620,7 +620,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		font-size: 0.82rem;
+		font-size: max(0.82rem, var(--floor-note));
 		color: var(--text-secondary);
 		text-decoration: underline;
 		text-underline-offset: 3px;
@@ -727,7 +727,9 @@
 		height: 17px;
 	}
 	.get-sub {
-		font-size: 0.72rem;
+		/* Label floor, not meta: two of these sit side by side on one line
+		   (.deb / .rpm) and do not wrap, so at 14px they pushed the page wide. */
+		font-size: max(0.72rem, var(--floor-label));
 		opacity: 0.8;
 		white-space: nowrap;
 	}
@@ -740,7 +742,7 @@
 		margin: 16px 0 0;
 		display: grid;
 		gap: 7px;
-		font-size: 0.78rem;
+		font-size: max(0.78rem, var(--floor-meta));
 	}
 	.builds div {
 		display: flex;
@@ -774,13 +776,13 @@
 		color: var(--text-tertiary);
 	}
 	.version {
-		font-size: 0.78rem;
+		font-size: max(0.78rem, var(--floor-meta));
 		color: var(--text-tertiary);
 		font-variant-numeric: tabular-nums;
 	}
 	.caveat,
 	.unavailable {
-		font-size: 0.8rem;
+		font-size: max(0.8rem, var(--floor-note));
 		line-height: 1.6;
 		color: var(--text-tertiary);
 		max-width: 62ch;
@@ -799,7 +801,7 @@
 
 	.steps {
 		margin-top: 16px;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		line-height: 1.65;
 		color: var(--text-secondary);
 		max-width: 62ch;
@@ -815,7 +817,7 @@
 	.note {
 		margin-top: 28px;
 		color: var(--text-muted);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		line-height: 1.7;
 		max-width: 62ch;
 	}

@@ -220,6 +220,13 @@ pub struct FlowStrings {
     pub scan_hint: SharedString,
     pub scan_from_gallery: SharedString,
     pub scan_flip: SharedString,
+    /// What the scanner says instead of its hint when the hint is not true
+    /// (078 F-02, the web's `scanNotice`).
+    pub scan_invalid: SharedString,
+    pub scan_no_qr: SharedString,
+    pub scan_permission: SharedString,
+    pub scan_no_camera: SharedString,
+    pub scan_unavailable: SharedString,
 
     // Activity.
     pub history_title: SharedString,
@@ -281,6 +288,17 @@ pub struct FlowStrings {
     pub add_network_btn: SharedString,
     pub add_token_error_title: SharedString,
     pub add_token_error_save: SharedString,
+    /// DT3L live, as the web's `liveAddToken` / `liveAddNetworkTab` word it
+    /// (078 F-07).
+    pub invalid_contract: SharedString,
+    pub token_added: SharedString,
+    /// Template carrying `{{query}}`.
+    pub net_picker_empty: String,
+    pub network_added: SharedString,
+    pub not_compatible: SharedString,
+    pub error_not_compatible: SharedString,
+    pub deploy_contracts: SharedString,
+    pub unable_to_verify: SharedString,
 
     // Send.
     /// The plain verb, not the "Send {{symbol}}" template — DSD4L's bar keeps
@@ -288,6 +306,8 @@ pub struct FlowStrings {
     pub send_action: SharedString,
     pub select_token_title: SharedString,
     pub send_search: SharedString,
+    /// What a token search that hides every row says (078 X-05).
+    pub no_matching_tokens: SharedString,
     pub filter_all: SharedString,
     pub filter_stable: SharedString,
     pub filter_gas: SharedString,
@@ -332,6 +352,7 @@ pub struct FlowStrings {
 
     // Send · batch import.
     pub batch_title: SharedString,
+    pub batch_unit_caption: SharedString,
     pub batch_unit_fiat: String,
     pub batch_unit_token: String,
     pub batch_import_file: SharedString,
@@ -381,10 +402,21 @@ pub struct FlowStrings {
     /// Spec 038 #D3: the two lines beside the usual-time sentence.
     pub tx_slow_confirm: SharedString,
     pub tx_elapsed: String,
+    /// Template carrying `{{remaining}}`: inside the chain's usual time the
+    /// receipt counts DOWN (078 F-04, the web's `etaLines`).
+    pub tx_remaining: String,
+    /// SD2d, the sweep form (078 F-05): "{{n}} tokens · {{chain}}", and the
+    /// note under its one recipient.
+    pub multi_send_summary: String,
+    pub multi_send_same_recipient: SharedString,
     pub recipient_count_other: String,
     pub tx_close_background: SharedString,
     pub tx_hash: SharedString,
     pub done: SharedString,
+    /// An alert's acknowledgement ("知道了" / "Got it"). The send alert used to
+    /// borrow the receipt's "Done", which is the end of a payment, not "I read
+    /// this".
+    pub got_it: SharedString,
 
     // Send · live (spec 032). The receipt's other three states, the two error
     // wordings the core chooses between, and the recipient trust line.
@@ -454,6 +486,10 @@ pub struct FlowStrings {
     pub lock_token_title: SharedString,
     pub lock_token_body: SharedString,
     pub lock_add_network: SharedString,
+    /// The same button while the add is out — it checks the chain's
+    /// compatibility, and for seconds; a press that looks untaken invites a
+    /// second (078 W-04).
+    pub lock_adding_network: SharedString,
     pub lock_net_not_found: SharedString,
     pub lock_net_not_compatible: SharedString,
     pub lock_net_add_error: SharedString,
@@ -526,6 +562,11 @@ impl FlowStrings {
             scan_hint: s("componentsUi.scanner.hint"),
             scan_from_gallery: s("componentsUi.scanner.fromGallery"),
             scan_flip: s("componentsUi.scanner.flipCamera"),
+            scan_invalid: s("home.invalidQrTitle"),
+            scan_no_qr: s("componentsUi.scanner.noQrFoundMsg"),
+            scan_permission: s("componentsUi.scanner.permissionText"),
+            scan_no_camera: s("componentsUi.scanner.noCamera"),
+            scan_unavailable: s("componentsUi.scanner.cameraUnavailable"),
 
             history_title: s("history.navTitle"),
             history_empty_filter: s("history.emptyFilter"),
@@ -577,10 +618,19 @@ impl FlowStrings {
             add_network_btn: s("addToken.addNetworkBtn"),
             add_token_error_title: s("addToken.errorTitle"),
             add_token_error_save: s("addToken.errorSaveToken"),
+            invalid_contract: s("addToken.invalidAddress"),
+            token_added: s("addToken.tokenAdded"),
+            net_picker_empty: raw("addToken.netPickerEmpty"),
+            network_added: s("addToken.networkAdded"),
+            not_compatible: s("addToken.notCompatible"),
+            error_not_compatible: s("addToken.errorNotCompatible"),
+            deploy_contracts: s("addToken.deployContracts"),
+            unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
 
             send_action: s("componentsUi.dock.send"),
             select_token_title: s("send.selectTokenTitle"),
             send_search: s("send.searchPlaceholder"),
+            no_matching_tokens: s("send.noMatchingTokens"),
             filter_all: s("history.filterAll"),
             filter_stable: s("send.filterStable"),
             filter_gas: s("send.filterGas"),
@@ -617,6 +667,7 @@ impl FlowStrings {
             group_members: raw("contacts.groupMembers"),
 
             batch_title: s("send.batchTitle"),
+            batch_unit_caption: s("send.batchUnitCaption"),
             batch_unit_fiat: raw("send.batchUnitFiat"),
             batch_unit_token: raw("send.batchUnitToken"),
             batch_import_file: s("send.batchImportFile"),
@@ -652,10 +703,14 @@ impl FlowStrings {
             tx_typical_time: raw("send.txTypicalTime"),
             tx_slow_confirm: s("send.txSlowConfirm"),
             tx_elapsed: raw("send.txElapsed"),
+            tx_remaining: raw("send.txRemaining"),
+            multi_send_summary: raw("send.multiSendSummary"),
+            multi_send_same_recipient: s("send.multiSendSameRecipient"),
             recipient_count_other: raw("send.recipientCount_other"),
             tx_close_background: s("send.txCloseBackground"),
             tx_hash: s("componentsTx.receipt.txHash"),
             done: s("componentsTx.receipt.done"),
+            got_it: s("common.gotIt"),
 
             tx_confirmed_title: raw("send.txConfirmedTitle"),
             tx_submitting: s("send.txSubmitting"),
@@ -703,6 +758,7 @@ impl FlowStrings {
             lock_token_title: s("send.lock.tokenTitle"),
             lock_token_body: s("send.lock.tokenBody"),
             lock_add_network: s("send.lock.addNetwork"),
+            lock_adding_network: s("addToken.checkingCompat"),
             lock_net_not_found: s("send.lock.netNotFound"),
             lock_net_not_compatible: s("send.lock.netNotCompatible"),
             lock_net_add_error: s("send.lock.netAddError"),
@@ -753,6 +809,18 @@ mod tests {
             (s.native_alias_title.as_ref(), "addToken.nativeAliasTitle"),
             (s.bad_amount.as_ref(), "send.badAmount"),
             (s.batch_dup.as_ref(), "send.batchDup"),
+            (s.no_matching_tokens.as_ref(), "send.noMatchingTokens"),
+            (s.scan_invalid.as_ref(), "home.invalidQrTitle"),
+            (s.scan_no_qr.as_ref(), "componentsUi.scanner.noQrFoundMsg"),
+            (
+                s.scan_permission.as_ref(),
+                "componentsUi.scanner.permissionText",
+            ),
+            (s.scan_no_camera.as_ref(), "componentsUi.scanner.noCamera"),
+            (
+                s.scan_unavailable.as_ref(),
+                "componentsUi.scanner.cameraUnavailable",
+            ),
             (
                 s.scan_from_gallery.as_ref(),
                 "componentsUi.scanner.fromGallery",

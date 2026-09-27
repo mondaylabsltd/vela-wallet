@@ -241,16 +241,15 @@ object SigningFixtures {
                     SigningBlock.Intent(sg("intentApprove"), SigningTone.Danger),
                     SigningBlock.Allowance(
                         ap("spendingCap"), ap("unlimitedValue"), SigningTone.Danger,
-                        // Permanently disabled, not merely unselected: an
-                        // unlimited request is the one thing this wallet will
-                        // not sign as asked.
+                        // The site's own ask, preselected (2026-09-26): Permit2
+                        // bundles revert when the wallet re-encodes the
+                        // approve. A cap is one chip away.
                         listOf(
-                            chip("requested", ap("requested"), AllowanceChip.ChipState.Disabled),
+                            chip("requested", ap("requested"), AllowanceChip.ChipState.Selected),
                             chip("balance", ap("balanceCap"), AllowanceChip.ChipState.Idle),
                             chip("custom", ap("custom"), AllowanceChip.ChipState.Idle),
                             chip("revoke", ap("revoke"), AllowanceChip.ChipState.Idle),
                         ),
-                        note = "${ap("unlimitedDisabled")}\n${ap("choosePrompt")}",
                     ),
                     SigningBlock.Party(
                         sg("spenderLabel"), "1inch Router", Addr.ONEINCH_ROUTER, verified,
@@ -258,8 +257,8 @@ object SigningFixtures {
                     SigningBlock.Warning(SigningTone.Danger, sg("unlimitedWarning")),
                 ),
                 confirmAction = sg("intentApprove"),
-                // Nothing to slide until a finite amount exists.
-                confirmEnabled = false,
+                // Unlimited, seen and said — signable as asked.
+                confirmEnabled = true,
             )
 
             SigningScreenState.CS6 -> model(
@@ -269,7 +268,7 @@ object SigningFixtures {
                     SigningBlock.Allowance(
                         ap("spendingCap"), "1,240 USDC", SigningTone.Neutral,
                         listOf(
-                            chip("requested", ap("requested"), AllowanceChip.ChipState.Disabled),
+                            chip("requested", ap("requested"), AllowanceChip.ChipState.Idle),
                             chip("balance", ap("balanceCap"), AllowanceChip.ChipState.Selected),
                             chip("custom", ap("custom"), AllowanceChip.ChipState.Idle),
                             chip("revoke", ap("revoke"), AllowanceChip.ChipState.Idle),
@@ -319,7 +318,7 @@ object SigningFixtures {
                     SigningBlock.Allowance(
                         ap("spendingCap"), ap("revokeValue"), SigningTone.Neutral,
                         listOf(
-                            chip("requested", ap("requested"), AllowanceChip.ChipState.Disabled),
+                            chip("requested", ap("requested"), AllowanceChip.ChipState.Idle),
                             chip("balance", ap("balanceCap"), AllowanceChip.ChipState.Idle),
                             chip("custom", ap("custom"), AllowanceChip.ChipState.Idle),
                             chip("revoke", ap("revoke"), AllowanceChip.ChipState.Selected),

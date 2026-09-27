@@ -41,6 +41,10 @@ final class TrackerStore {
 
     private var core: CoreStore<TrackViewWire>!
     private let executor: TrackerExecutor
+
+    /// No effect in flight — `CoreDriver.isIdle`. The foreground tick is not
+    /// one: between ticks the machine is waiting on nothing.
+    var isIdle: Bool { core.isIdle }
     /// The foreground tick. Alive only while something is pending.
     private var ticker: Task<Void, Never>?
     private var graceTask: UIBackgroundTaskIdentifier = .invalid

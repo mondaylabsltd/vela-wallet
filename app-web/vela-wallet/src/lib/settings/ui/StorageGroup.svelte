@@ -66,14 +66,13 @@
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
 	}
 
+	/* Wraps, never "…" (078 round 3: "dApp-Berechtigungen und -Sitzungen"). */
 	.name {
 		flex: 1;
 		min-width: 0;
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		color: var(--color-fg-base);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
 	}
 
 	.meta {

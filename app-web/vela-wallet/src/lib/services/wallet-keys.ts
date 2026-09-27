@@ -12,6 +12,7 @@
  * a wallet that was just created is exactly the thing a cache would get wrong.
  */
 import { loadCore, walletKeysStep } from '$lib/core/client';
+import { signInRoute } from '$lib/core/kernels';
 import type { Account } from '$lib/core/generated/Account';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 import { runWalk } from './core-walk';
@@ -45,6 +46,12 @@ export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced' | 'kind' | 'sy
 	 * wallet cannot reach.
 	 */
 	signer_origin?: string | null;
+	/**
+	 * The key this device signs with — the one the account signed in with
+	 * (founder, 2026-09-26). Exactly one row, or none for a record from before
+	 * the sign-in key.
+	 */
+	signs_here: boolean;
 }
 
 export interface WalletKeys {
@@ -73,10 +80,14 @@ interface KeysDone {
  * anywhere else — the registry contract stores no origin — so a key behind a
  * Trusted Signer page is drawn as a passkey on some device unless this list says
  * otherwise. A legacy record predates the field and has none.
+ *
+ * `credential_id` is how the walk finds the row of the key this device signs
+ * with; a legacy record's one credential is its `id`.
  */
-export function deviceKeys(account: Pick<Account, 'name' | 'public_key_hex' | 'keys'>) {
+export function deviceKeys(account: Pick<Account, 'id' | 'name' | 'public_key_hex' | 'keys'>) {
 	if (account.keys.length > 0) {
 		return account.keys.map((key) => ({
+			credential_id: key.credential_id,
 			public_key_hex: key.public_key_hex,
 			name: key.name,
 			transports: key.transports,
@@ -85,6 +96,7 @@ export function deviceKeys(account: Pick<Account, 'name' | 'public_key_hex' | 'k
 	}
 	return [
 		{
+			credential_id: account.id,
 			public_key_hex: account.public_key_hex,
 			name: account.name,
 			transports: '',
@@ -93,21 +105,23 @@ export function deviceKeys(account: Pick<Account, 'name' | 'public_key_hex' | 'k
 	];
 }
 
-/** The keys that control `account`. Never throws; the worst answer is the device's own. */
-export async function readWalletKeys(
-	account: Pick<Account, 'address' | 'name' | 'public_key_hex' | 'keys'>
-): Promise<WalletKeys> {
+/**
+ * The keys that control `account`, the one it signed in with marked. Never
+ * throws; the worst answer is the device's own.
+ */
+export async function readWalletKeys(account: Account): Promise<WalletKeys> {
 	const device = deviceKeys(account);
 	const fallback: WalletKeys = { source: 'device', chainId: null, keys: [] };
 	try {
 		await loadCore();
 		const json = JSON.stringify(device);
+		const signIn = signInRoute(account)?.credential_id ?? '';
 		const done = await runWalk<KeysDone>((answers) =>
-			walletKeysStep(account.address, json, answers)
+			walletKeysStep(account.address, json, answers, signIn)
 		);
 		if (done !== null) return { source: done.source, chainId: done.chain_id, keys: done.keys };
 		// The walk gave up mid-way (round cap): ask it what the device alone says.
-		const alone = JSON.parse(walletKeysStep('', json, '[]')) as KeysDone;
+		const alone = JSON.parse(walletKeysStep('', json, '[]', signIn)) as KeysDone;
 		return { source: 'device', chainId: null, keys: alone.keys };
 	} catch {
 		return fallback;

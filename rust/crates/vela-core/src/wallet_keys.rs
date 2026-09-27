@@ -39,7 +39,8 @@ use crate::{passkey, primitives};
 /// the retired client wrote camelCase at the same web origin.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct DeviceKey {
-    /// Only [`sign_route`] reads it; the keys view matches by public key.
+    /// [`sign_route`] pins it, and [`step`] finds the sign-in key's public key
+    /// by it; the keys view itself matches rows by public key.
     #[serde(default, alias = "credentialId")]
     pub credential_id: String,
     #[serde(default, alias = "publicKeyHex")]
@@ -106,6 +107,12 @@ pub struct WalletKeyRow {
     /// The authenticator verified the person at registration (UV). `None` when
     /// nobody can vouch for it.
     pub user_verified: Option<bool>,
+    /// The key this device signs with — the one the account was created or
+    /// last signed in with here (founder, 2026-09-26: the keys list must show
+    /// which one). `false` on every row of a record from before the sign-in
+    /// key was kept: that one signs as it always did, with no single key.
+    #[serde(default)]
+    pub signs_here: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -180,6 +187,7 @@ fn device_rows(device: &[DeviceKey]) -> Vec<WalletKeyRow> {
             credential_id: String::new(),
             attestation_hex: String::new(),
             user_verified: None,
+            signs_here: false,
         })
         .collect()
 }
@@ -275,6 +283,7 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
                 format!("0x{}", attestation.trim_start_matches("0x"))
             },
             user_verified: passkey::attestation_user_verified(attestation),
+            signs_here: false,
         });
     }
     Some(rows)
@@ -284,8 +293,37 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
 ///
 /// `device` is the account record's key list in founding order (a legacy
 /// single-key record is a list of one). `answers` is the whole transcript.
+/// `sign_in_credential` is the credential of the account's sign-in route
+/// (`app::Account::sign_in_route`), empty when it has none; its row is the one
+/// marked [`WalletKeyRow::signs_here`].
 #[must_use]
-pub fn step(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> KeysStep {
+pub fn step(
+    address: &str,
+    device: &[DeviceKey],
+    answers: &[LookupAnswer],
+    sign_in_credential: &str,
+) -> KeysStep {
+    let mut next = walk(address, device, answers);
+    if let KeysStep::Done { keys, .. } = &mut next {
+        mark_sign_in_key(keys, device, sign_in_credential);
+    }
+    next
+}
+
+/// Rows are matched by public key, because a registry row carries no
+/// credential the device record would spell the same way.
+fn mark_sign_in_key(rows: &mut [WalletKeyRow], device: &[DeviceKey], sign_in_credential: &str) {
+    let signing = device
+        .iter()
+        .filter(|_| !sign_in_credential.is_empty())
+        .find(|key| key.credential_id.eq_ignore_ascii_case(sign_in_credential))
+        .and_then(|key| normal_key(&key.public_key_hex));
+    for row in rows {
+        row.signs_here = signing.as_deref() == Some(row.public_key_hex.as_str());
+    }
+}
+
+fn walk(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> KeysStep {
     let Some(first) = device
         .first()
         .and_then(|key| public_key_bytes(&key.public_key_hex))
@@ -399,10 +437,10 @@ pub fn step(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> Ke
 // "Sign with" — which key a ceremony is pinned to, and how it is reached
 // ---------------------------------------------------------------------------
 
-/// Every "Sign with" value, in the order every shell lists them: `auto` (do
-/// what the wallet always did), the three places a passkey can be, and the
-/// Trusted Signer (spec 071) — a separate page that checks the request and runs
-/// the ceremony itself, which [`sign_route`] does not route.
+/// Every "Sign with" value: `auto` (do what the wallet always did), the three
+/// places a passkey can be, and the Trusted Signer (spec 071) — a separate page
+/// that checks the request and runs the ceremony itself. Chosen when a wallet
+/// is created or signed into, never per signature (founder, 2026-09-26).
 pub const SIGN_METHODS: [&str; 5] = [
     "auto",
     "platform",
@@ -425,10 +463,14 @@ pub struct SignRoute {
     pub signer_origin: String,
 }
 
-/// The person chose HOW to sign this one request (founder, 2026-09-19: creating
-/// and signing in let a person say where their passkey is; signing silently
-/// took the first key's stored route). `None` for `auto` — and for anything
-/// this build does not know — which means "do what you always did".
+/// Where a signature goes for a given "Sign with" value. `None` for `auto` —
+/// and for anything this build does not know — which means "do what you always
+/// did".
+///
+/// Founder, 2026-09-26: signing no longer asks. An account signs with the key
+/// it was created or signed in with (`app::Account::sign_in_route`);
+/// this answers only for records written before that existed, which ask it
+/// for `auto`.
 ///
 /// A native ceremony is PINNED to one credential, so the choice also picks the
 /// key: the first founding key whose own stored transports describe that
@@ -467,12 +509,7 @@ pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
         }
         _ => {}
     }
-    let transports = match method {
-        "platform" => "internal",
-        "hybrid" => "hybrid,internal",
-        "security_key" => "usb,nfc,ble",
-        _ => return None,
-    };
+    let transports = transports_of_method(method)?;
     // A platform sheet reaches a Trusted Signer key only when the page was the
     // wallet's own (`*.getvela.app` passkeys are the app's passkeys). A key
     // behind anybody else's page is reachable nowhere else — route it there.
@@ -498,6 +535,32 @@ pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
     })
 }
 
+/// The transports a pinned request carries to reach a key over `method` — what
+/// makes the platform look in the right place. `None` for a route that is not
+/// a place a passkey is (`auto`, the Trusted Signer, anything unknown).
+#[must_use]
+pub fn transports_of_method(method: &str) -> Option<&'static str> {
+    match method {
+        "platform" => Some("internal"),
+        "hybrid" => Some("hybrid,internal"),
+        "security_key" => Some("usb,nfc,ble"),
+        _ => None,
+    }
+}
+
+/// Both transport lists, the first's order kept, each value once — a route
+/// that names where a key was chosen to be AND where it was found.
+#[must_use]
+pub fn joined_transports(first: &str, second: &str) -> String {
+    let mut joined: Vec<&str> = Vec::new();
+    for value in first.split(',').chain(second.split(',')).map(str::trim) {
+        if !value.is_empty() && !joined.contains(&value) {
+            joined.push(value);
+        }
+    }
+    joined.join(",")
+}
+
 /// The JSON door: `null` for `auto`, an unknown method, or a wallet with no
 /// usable credential.
 #[must_use]
@@ -509,13 +572,19 @@ pub fn sign_route_json(device_keys_json: &str, method: &str) -> Option<String> {
 /// The JSON door the bindings use. `device_keys_json` is the account record's
 /// `keys` array (or a one-element array built from the legacy scalars);
 /// anything unreadable is an empty list, and the answer is then an empty view.
+/// `sign_in_credential` as [`step`] takes it.
 #[must_use]
-pub fn step_json(address: &str, device_keys_json: &str, answers_json: &str) -> String {
+pub fn step_json(
+    address: &str,
+    device_keys_json: &str,
+    answers_json: &str,
+    sign_in_credential: &str,
+) -> String {
     let device: Vec<DeviceKey> = serde_json::from_str(device_keys_json).unwrap_or_default();
     let answers: Vec<LookupAnswer> = serde_json::from_str(answers_json).unwrap_or_default();
-    serde_json::to_string(&step(address, &device, &answers)).unwrap_or_else(|_| {
-        r#"{"type":"done","source":"device","chain_id":null,"keys":[]}"#.to_owned()
-    })
+    serde_json::to_string(&step(address, &device, &answers, sign_in_credential)).unwrap_or_else(
+        |_| r#"{"type":"done","source":"device","chain_id":null,"keys":[]}"#.to_owned(),
+    )
 }
 
 #[cfg(test)]
@@ -548,11 +617,16 @@ mod tests {
 
     /// Drive the walk against the recording, with some chains "down".
     fn run(down: &[u32]) -> (KeysStep, Vec<u32>) {
+        run_as(down, "")
+    }
+
+    /// The same, for an account whose sign-in key is `sign_in_credential`.
+    fn run_as(down: &[u32], sign_in_credential: &str) -> (KeysStep, Vec<u32>) {
         let fixture = recorded();
         let mut answers = Vec::new();
         let mut asked = Vec::new();
         for _ in 0..32 {
-            match step(SAFE, &device(), &answers) {
+            match step(SAFE, &device(), &answers, sign_in_credential) {
                 KeysStep::Ask { requests } => {
                     for request in requests {
                         let LookupRequest::EthCall {
@@ -649,7 +723,7 @@ mod tests {
         let other = "0xD40086000000000000000000000000000000130b";
         let mut answers = Vec::new();
         let done = loop {
-            match step(other, &device(), &answers) {
+            match step(other, &device(), &answers, "") {
                 KeysStep::Ask { requests } => {
                     for request in requests {
                         let LookupRequest::EthCall {
@@ -683,7 +757,7 @@ mod tests {
 
     #[test]
     fn a_record_without_a_readable_key_asks_nobody() {
-        let none = step(SAFE, &[], &[]);
+        let none = step(SAFE, &[], &[], "");
         assert!(
             matches!(none, KeysStep::Done { source: KeysSource::Device, ref keys, .. } if keys.is_empty())
         );
@@ -692,7 +766,7 @@ mod tests {
             ..DeviceKey::default()
         }];
         assert!(matches!(
-            step(SAFE, &junk, &[]),
+            step(SAFE, &junk, &[], ""),
             KeysStep::Done {
                 source: KeysSource::Device,
                 ..
@@ -899,15 +973,54 @@ mod tests {
         );
     }
 
+    fn marked(step: &KeysStep) -> Vec<bool> {
+        match step {
+            KeysStep::Done { keys, .. } => keys.iter().map(|row| row.signs_here).collect(),
+            KeysStep::Ask { .. } => Vec::new(),
+        }
+    }
+
+    /// Founder, 2026-09-26: the keys list shows which key this device signs
+    /// with. The registry's rows carry no credential the record would spell the
+    /// same way, so the row is found by public key — and exactly one is marked.
+    #[test]
+    fn the_sign_in_key_is_the_one_row_marked() {
+        let (from_registry, _) = run_as(&[], "golden-key-0");
+        let rows = marked(&from_registry);
+        assert!(rows.len() > 1, "the golden Safe has several keys: {rows:?}");
+        assert_eq!(rows.iter().filter(|m| **m).count(), 1);
+        let KeysStep::Done { keys, .. } = &from_registry else {
+            unreachable!()
+        };
+        let signing = keys.iter().find(|row| row.signs_here);
+        assert_eq!(
+            signing.map(|row| row.public_key_hex.clone()),
+            normal_key(&device()[0].public_key_hex)
+        );
+
+        // No chain answered: the device's own rows, the same key marked.
+        let (from_device, _) = run_as(&READ_CHAINS, "golden-key-0");
+        assert_eq!(marked(&from_device), [true]);
+    }
+
+    /// A record from before the sign-in key, or a credential the record does
+    /// not hold, marks nothing rather than guessing at the first key.
+    #[test]
+    fn no_sign_in_key_marks_no_row() {
+        assert!(marked(&run(&[]).0).iter().all(|m| !m));
+        assert!(marked(&run_as(&[], "not-ours").0).iter().all(|m| !m));
+    }
+
     #[test]
     fn the_json_door_round_trips_and_survives_garbage() {
         let first = step_json(
             SAFE,
             &serde_json::json!([{ "publicKeyHex": device()[0].public_key_hex }]).to_string(),
             "[]",
+            "",
         );
         assert!(first.contains(r#""type":"ask""#) && first.contains("groups@100"));
-        let garbage = step_json(SAFE, "not json", "not json");
+        let garbage = step_json(SAFE, "not json", "not json", "");
         assert!(garbage.contains(r#""source":"device""#));
     }
 }

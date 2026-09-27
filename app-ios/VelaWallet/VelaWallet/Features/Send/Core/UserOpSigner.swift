@@ -27,10 +27,11 @@ import Foundation
 protocol UserOpSigner {
     /// - Parameters:
     ///   - challenge: the 32-byte SafeOp hash.
-    ///   - credentialIdHex: the pinned credential — the wallet's first key — or
+    ///   - credentialIdHex: the pinned credential — the key the account signed
+    ///     in with, or the wallet's first key on a record that names none — or
     ///     `nil` for a discoverable ceremony.
-    ///   - transports: the pinned key's stored transports (`"internal"`,
-    ///     `"hybrid,internal"`, `"usb,nfc"`…), load-bearing for routing.
+    ///   - transports: how that key is reached (`"internal"`,
+    ///     `"hybrid,internal"`, `"usb,nfc,ble"`…), load-bearing for routing.
     ///   - method: outranks the transport hints. A caBLE credential carries the
     ///     wide hint set, and without this a person who had just signed in by
     ///     scanning a QR was told to plug in a security key they never owned.

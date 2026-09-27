@@ -486,6 +486,7 @@ mod tests {
                 public_key_hex: "04aa".to_owned(),
                 created_at_iso: "2026-09-04T00:00:00.000Z".to_owned(),
                 keys: Vec::new(),
+                signed_in_with: None,
             };
             if storage::save_account(&account).is_err() {
                 unreachable!("could not save");

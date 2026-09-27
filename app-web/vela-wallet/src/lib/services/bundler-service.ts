@@ -459,8 +459,15 @@ async function requestSponsorship(
 }
 
 /**
+ * Reads in flight, shared: on Tempo the picker's prewarm, the quote a pick
+ * starts and the fee machine's `fetch_fee_recipient` ask the same account
+ * within a second of each other.
+ */
+const infoRequests = new Map<string, Promise<BundlerAccountInfo | null>>();
+
+/**
  * Fetch bundler account info from the REST API.
- * Results are cached for 30 seconds.
+ * Results are cached for 30 seconds; concurrent asks share one request.
  */
 export async function fetchBundlerAccountInfo(
 	chainId: number,
@@ -470,7 +477,20 @@ export async function fetchBundlerAccountInfo(
 	const key = `${chainId}:${safeAddress.toLowerCase()}`;
 	const cached = infoCache.get(key);
 	if (cached && Date.now() - cached.at < INFO_CACHE_TTL) return cached.info;
+	const pending = infoRequests.get(key);
+	if (pending) return pending;
+	const request = readBundlerAccountInfo(chainId, safeAddress, key).finally(() => {
+		if (infoRequests.get(key) === request) infoRequests.delete(key);
+	});
+	infoRequests.set(key, request);
+	return request;
+}
 
+async function readBundlerAccountInfo(
+	chainId: number,
+	safeAddress: string,
+	key: string
+): Promise<BundlerAccountInfo | null> {
 	try {
 		// Resolve the deposit address from the SAME bundler the pool submits to — NOT
 		// always the built-in one. On Tempo the reimbursement is paid to this bundler's
@@ -553,10 +573,14 @@ export async function fetchBundlerAccountInfo(
 export function clearBundlerCache(chainId: number, safeAddress?: string): void {
 	if (safeAddress) {
 		infoCache.delete(`${chainId}:${safeAddress.toLowerCase()}`);
+		infoRequests.delete(`${chainId}:${safeAddress.toLowerCase()}`);
 	} else {
 		// Clear all entries for this chain
 		for (const key of infoCache.keys()) {
 			if (key.startsWith(`${chainId}:`)) infoCache.delete(key);
+		}
+		for (const key of infoRequests.keys()) {
+			if (key.startsWith(`${chainId}:`)) infoRequests.delete(key);
 		}
 	}
 }

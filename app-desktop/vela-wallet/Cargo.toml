@@ -132,6 +132,10 @@ ureq = { version = "3.4", features = [
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The text wells' caret moves by grapheme cluster and by word (UAX #29) — an
+# emoji with a skin tone, a flag, an é typed as e + ´ are one step, as they
+# are in every other editor. Already in the tree through gpui; named here.
+unicode-segmentation = "1"
 
 # The batch importer's spreadsheet reader (spec 032 phase 5). The core parses
 # CSV/TSV text itself and takes a workbook only as a flattened cell matrix;
@@ -336,7 +340,21 @@ raw-window-handle = "0.6"
 # scripts), so the call was verified in an isolated crate against
 # x86_64-pc-windows-gnu instead. Note 0.59 exports only TIME_ZONE_ID_INVALID
 # of the four ids; the other three are matched by value.
-windows-sys = { version = "0.59", features = ["Win32_System_Time"] }
+#
+# The rest is `scheme_relay.rs` (spec 076): the named pipe a second process
+# hands a `velawallet://sign-result` to the running wallet over, and the one
+# call that brings that wallet's window back in front of the browser.
+windows-sys = { version = "0.59", features = [
+    "Win32_System_Time",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is
 # where gpui's LoadImageW looks for it. Declared unconditionally rather than
@@ -346,3 +364,38 @@ windows-sys = { version = "0.59", features = ["Win32_System_Time"] }
 # TARGET instead, and this crate is tiny and builds anywhere.
 [build-dependencies]
 winresource = "0.1"
+
+# `cargo run` has to scroll like the release build. gpui lays the whole window
+# out again on every scroll step, and unoptimized taffy (the layout engine) and
+# gpui (its text measuring) turned that into ~12 frames a second on a wallet
+# of 23 holdings; optimized, the debug build holds 120. Zed's own workspace
+# does the same for taffy. Both are git dependencies, so this costs one
+# rebuild of them, not a slower edit-compile loop.
+[profile.dev.package.taffy]
+opt-level = 3
+
+[profile.dev.package.gpui]
+opt-level = 3
+
+# A bug report's screenshots are decoded, scaled and re-encoded on this device
+# (078 round 3). Unoptimized, `image` and its PNG and JPEG codecs took seconds
+# per Retina screenshot under `cargo run`, so the tiles kept turning long after
+# a release build would have drawn them. Optimized for the same reason as
+# taffy and gpui above: one rebuild of them, no slower edit-compile loop.
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.crc32fast]
+opt-level = 3

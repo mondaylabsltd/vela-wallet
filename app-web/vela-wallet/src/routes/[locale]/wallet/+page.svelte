@@ -39,7 +39,7 @@
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import { session } from '$lib/session/core/session.svelte';
-	import { createContactsSession, type ContactsSession } from '$lib/contacts/core/contacts';
+	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import type { ContactGroupView } from '$lib/core/generated/ContactGroupView';
 	import type { ContactsView } from '$lib/core/generated/ContactsView';
 	import { readFlowHandoff } from '$lib/flows/contact-handoff';
@@ -74,6 +74,10 @@
 		withLiveFlow
 	} from '$lib/flows/live';
 	import { createSendSession, type SendSession } from '$lib/flows/core/send-session';
+	import { toSendToken } from '$lib/flows/core/send-types';
+	import { answerHoldings, readHoldings, type HoldingsSource } from '$lib/flows/core/send-holdings';
+	import { toApiToken } from '$lib/wallet/core/balance-executor';
+	import type { SendToken } from '$lib/core/generated/SendToken';
 	import { createBatchImportSession, type BatchImportSession } from '$lib/flows/core/batch-session';
 	import {
 		createManageTokensSession,
@@ -548,27 +552,14 @@
 	//
 	// The recipient picker (SD2e / DSD2e) showed the gallery's three fixture
 	// people in the middle of a live transfer, and `show_contact_picker` —
-	// the core's own state for it — was read by nothing. While a send is open
-	// this route holds its own ContactsCore session (024 D8: route-scoped,
-	// not a global ledger) and hands its view to the picker; a pick dispatches
-	// the core's `picked_address`, a group seeds split mode with its members.
-	let contactsView = $state<ContactsView | null>(null);
-	let contactsSession: ContactsSession | null = null;
-
-	function openContactsBook(): void {
-		if (contactsSession) return;
-		contactsSession = createContactsSession({
-			onView: (view) => (contactsView = view),
-			onError: (error) => console.error('[contacts] core fault:', error)
-		});
-		contactsSession.start({ type: 'account_switched', my_address: identity?.address ?? null });
-	}
-
-	function closeContactsBook(): void {
-		contactsSession?.dispose();
-		contactsSession = null;
-		contactsView = null;
-	}
+	// the core's own state for it — was read by nothing. The picker reads the
+	// app's one address book (`contacts-book.svelte.ts`), read at sign-in
+	// below and shared with the contacts page: it opens on a book already
+	// read, and a contact added there is here without a second read. (It was
+	// a session of this route's own, built per send — 024 D8's route scope,
+	// which the founder's "通讯录 flashes on every visit" retired.) A pick
+	// dispatches the send core's `picked_address`; a group seeds split mode.
+	const contactsView = $derived<ContactsView | null>(contactsBook.view);
 
 	/**
 	 * A whole group as split-mode recipients, amounts blank — ADDED to whoever is
@@ -588,11 +579,35 @@
 		});
 	}
 
+	/**
+	 * The balance machine, as Send's `FetchTokens` reads it (`send-holdings.ts`).
+	 * Mapped exactly as a walk's answer is: the machine's tokens are
+	 * `fetchTokens`'s rows (`toApiToken` is lossless), and `toSendToken` is the
+	 * one codec Send reads them through.
+	 */
+	const holdingsSource: HoldingsSource = {
+		view: () => balance.view,
+		settled: (address) => balance.settledFor(address),
+		reread: (address) => balance.reread(address),
+		toSend: (token) => toSendToken(toApiToken(token))
+	};
+
+	/** The holdings as they stand, for the live push — `null` unless a round reached something. */
+	function heldSendTokens(address: string): SendToken[] | null {
+		const read = readHoldings(address, holdingsSource);
+		return read.kind === 'tokens' ? read.tokens : null;
+	}
+
+	/** What Send last heard of the holdings, so an unchanged list is not re-sent. */
+	let sentHoldingsKey: string | null = null;
+
 	async function openSend(prefill?: Partial<SendOpenParams>): Promise<void> {
 		if (sendSession || !identity) return;
 		await loadCore();
 		if (!identity) return;
-		openContactsBook();
+		// The picker's suggestions come from the send history, which may have
+		// grown since the book was read: re-read that alone (the book stays).
+		contactsBook.dispatch({ type: 'history_changed' });
 		// The tracker owns the receipt from the moment the op is accepted; the
 		// send core only hears the verdict back (invariant ⑥'s ordering half).
 		setSendTrackerSink((handoff) =>
@@ -624,6 +639,18 @@
 				// it used to be a console line nobody reading the form could see.
 				alert: (kind) => (sendAlert = kind),
 				close: () => closeSend(),
+				// ONE source for holdings (spec 078): the asset list's, already in
+				// memory. `null` until it has settled a round for this account —
+				// the executor then walks the chains as it always has.
+				// A round that reached nothing is read once more before Send is
+				// told anything (the retry-once rule, all four shells).
+				holdings: async (address) => {
+					const answer = await answerHoldings(address, holdingsSource);
+					if (answer.kind === 'tokens') sentHoldingsKey = JSON.stringify(answer.tokens);
+					return answer;
+				},
+				// Which relay gas-quote row the picker's prewarm reads ahead.
+				feeTier: () => sendSpeedTier,
 				feeQuote: async (request) => {
 					// The core asks what this operation costs; HOW FAST it should be
 					// is the shell's (spec 068) — their stored default, or the
@@ -661,10 +688,10 @@
 
 	function closeSend(): void {
 		closeBatch();
-		closeContactsBook();
 		sendSession?.dispose();
 		sendSession = null;
 		sendView = null;
+		sentHoldingsKey = null;
 		feeSheetOpen = false;
 		sweepPicking = false;
 		sendClassFilter = 'all';
@@ -676,6 +703,7 @@
 		// session has heard nothing.
 		lastFeeStamp = null;
 		lastFeeBusy = false;
+		resyncedFee = null;
 		nav.close();
 	}
 
@@ -695,6 +723,31 @@
 		if (key === prefetched) return;
 		prefetched = key;
 		prefetchForSend(address, token.chain_id);
+	});
+
+	/**
+	 * The asset list moved while Send is open — a pull, the poll, a transfer
+	 * confirming — so Send hears it (`holdings_updated`), with the WHOLE list,
+	 * mapped as `FetchTokens` is answered. What follows is the core's: the
+	 * picker always, the form's balance and Max on the form, never a confirm.
+	 * Only once this account has settled a round, and only a round that
+	 * reached something: a first round still streaming is a list with chains
+	 * missing, and a round no chain answered is not an emptied wallet.
+	 */
+	const sendHoldingsReady = $derived(sendView !== null && !sendView.loading);
+	$effect(() => {
+		const ready = sendHoldingsReady;
+		const address = identity?.address;
+		void balance.view;
+		// Not while the first load is out: the core owns the list until it
+		// answers, and would drop the update anyway.
+		if (!ready || address === undefined || !sendSession) return;
+		const held = heldSendTokens(address);
+		if (held === null) return;
+		const key = JSON.stringify(held);
+		if (key === sentHoldingsKey) return;
+		sentHoldingsKey = key;
+		sendSession.dispatch({ type: 'holdings_updated', tokens: held });
 	});
 
 	/** The screen the core's stage names. The nav stack is not consulted here. */
@@ -937,8 +990,12 @@
 	 */
 	let lastFeeStamp: string | null = null;
 	let lastFeeBusy = false;
+	/** The one re-send per (session quote, send-machine quote) pair — see below. */
+	let resyncedFee: string | null = null;
 	$effect(() => {
 		const view = feeQuote.view;
+		// Read so a late answer landing in the send machine re-runs this.
+		const held = sendView?.fee ?? null;
 		if (!sendSession || !view) return;
 		if (view.busy !== lastFeeBusy) {
 			lastFeeBusy = view.busy;
@@ -960,9 +1017,33 @@
 		// it. (The money was never at stake: an in-band op signs zero gas caps
 		// and the charge is the same by construction — but the screen was.)
 		const stamp = feeKey(estimate);
-		if (stamp === lastFeeStamp) return;
-		lastFeeStamp = stamp;
-		sendSession.dispatch({ type: 'fee_updated', estimate });
+		if (stamp !== lastFeeStamp) {
+			lastFeeStamp = stamp;
+			resyncedFee = null;
+			sendSession.dispatch({ type: 'fee_updated', estimate });
+			return;
+		}
+		// Told already — but the send machine holds ANOTHER quote of this chain.
+		// Its own estimate can land after the mirror: the session settles, the
+		// answer is on its way back through the port, and meanwhile a speed
+		// preview that settled in the same instant (they share one simulation,
+		// spec 078) is promoted in place and mirrored. The older answer then
+		// arrives last and wins, and the row sits on "…" under the new tier's
+		// name. The session is the one owner of this number, so the machine is
+		// told again — once per pair, so a quote it refuses cannot loop.
+		if (
+			held !== null &&
+			!view.busy &&
+			held.chain_id === estimate.chain_id &&
+			(held.tier !== estimate.tier ||
+				held.total_wei !== estimate.total_wei ||
+				JSON.stringify(held.fee_asset) !== JSON.stringify(estimate.fee_asset))
+		) {
+			const pair = `${stamp}|${feeKey(held)}`;
+			if (pair === resyncedFee) return;
+			resyncedFee = pair;
+			sendSession.dispatch({ type: 'fee_updated', estimate });
+		}
 	});
 
 	const sendInputs = $derived(
@@ -1237,6 +1318,9 @@
 		if (address !== undefined) {
 			void balance.setAccount(address);
 			void feed.setAccount(address);
+			// Read at sign-in, like iOS's store: the book is in memory before
+			// anybody opens 通讯录 or the send picker.
+			void contactsBook.setAccount(address);
 		}
 	});
 

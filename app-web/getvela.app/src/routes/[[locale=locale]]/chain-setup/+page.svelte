@@ -536,7 +536,7 @@
 		flex: 1;
 	}
 	.label {
-		font-size: 0.8rem;
+		font-size: max(0.8rem, var(--floor-meta));
 		font-weight: 600;
 		color: var(--text-secondary);
 	}
@@ -549,7 +549,7 @@
 		color: var(--text);
 		font: inherit;
 		font-family: var(--font-mono);
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 	}
 	input[type='text']:focus {
 		outline: 2px solid var(--accent);
@@ -587,12 +587,12 @@
 	}
 	.s-meta {
 		color: var(--text-tertiary);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		white-space: nowrap;
 	}
 	.hint {
 		margin: 8px 0 0;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		color: var(--text-tertiary);
 	}
 
@@ -636,7 +636,7 @@
 		color: var(--text-tertiary);
 	}
 	.small {
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 	}
 	.mono,
 	code {
@@ -683,11 +683,11 @@
 	.id {
 		color: var(--text-tertiary);
 		font-family: var(--font-mono);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 	}
 	.rpc {
 		margin-top: 8px;
-		font-size: 0.9rem;
+		font-size: max(0.9rem, var(--floor-note));
 		color: var(--text-secondary);
 	}
 	.rpc summary {
@@ -696,7 +696,7 @@
 	}
 	.rpc summary .link {
 		margin-left: 8px;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 	}
 	.rpc ul {
 		list-style: none;
@@ -751,13 +751,13 @@
 		line-height: 1.6;
 	}
 	.verdict .sub {
-		font-size: 0.9rem;
+		font-size: max(0.9rem, var(--floor-note));
 		color: var(--text-secondary);
 	}
 	.verdict .recheck {
 		display: block;
 		margin-top: 8px;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 	}
 
 	/* checklist */
@@ -810,16 +810,16 @@
 		font-weight: 600;
 	}
 	.what {
-		font-size: 0.9rem;
+		font-size: max(0.9rem, var(--floor-note));
 		color: var(--text-secondary);
 	}
 	.addr {
-		font-size: 0.75rem;
+		font-size: max(0.75rem, var(--floor-meta));
 		color: var(--text-tertiary);
 		overflow-wrap: anywhere;
 	}
 	.state {
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		color: var(--text-secondary);
 		white-space: nowrap;
 	}
@@ -834,7 +834,7 @@
 		margin-top: 44px;
 	}
 	.plan > .lede {
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		margin-bottom: 16px;
 	}
 	.step {
@@ -862,11 +862,11 @@
 		color: var(--green);
 	}
 	.step .who {
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		color: var(--text-tertiary);
 	}
 	.status {
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		color: var(--text-secondary);
 	}
 	.step[data-status='done'] .status {
@@ -886,7 +886,7 @@
 		display: flex;
 		gap: 6px;
 		flex-wrap: wrap;
-		font-size: 0.9rem;
+		font-size: max(0.9rem, var(--floor-note));
 	}
 	.actions {
 		display: flex;
@@ -897,7 +897,7 @@
 	.fail {
 		margin: 10px 0 0 40px;
 		color: var(--status-warn-text);
-		font-size: 0.9rem;
+		font-size: max(0.9rem, var(--floor-note));
 	}
 	.step > .link.small,
 	.step > .addr {
@@ -923,7 +923,7 @@
 		overflow-wrap: anywhere;
 	}
 	.address .copy {
-		font-size: 0.8rem;
+		font-size: max(0.8rem, var(--floor-meta));
 		color: var(--link);
 		white-space: nowrap;
 	}
@@ -951,7 +951,7 @@
 		align-items: center;
 	}
 	.deployer dt {
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		color: var(--text-secondary);
 	}
 	.deployer dd {

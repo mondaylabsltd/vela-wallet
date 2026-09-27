@@ -162,9 +162,17 @@ thread_local! {
 /// Called from the paint pass of the element that OWNS that rectangle, so the
 /// webview follows the column through window resizes and through a third
 /// column opening beside it — the signing panel included.
-pub fn place(bounds: Bounds<Pixels>, window: &Window, home: &str) {
+pub fn place(bounds: Bounds<Pixels>, window: &Window, home: &str, cx: &mut gpui::App) {
+    #[cfg(windows)]
+    if BROWSER.with(|slot| slot.borrow().is_none()) {
+        build_later(window, home, cx);
+        return;
+    }
+    #[cfg(not(windows))]
+    let _ = cx;
     BROWSER.with(|slot| {
         let mut slot = slot.borrow_mut();
+        #[cfg(not(windows))]
         if slot.is_none() {
             *slot = build(window, home).map(|view| Browser {
                 view,
@@ -320,7 +328,72 @@ fn with_view(act: impl FnOnce(&wry::WebView)) {
     });
 }
 
-fn build(window: &Window, home: &str) -> Option<wry::WebView> {
+thread_local! {
+    /// A WebView2 is being created (Windows): do not start a second.
+    #[cfg(windows)]
+    static BUILDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Build the browser OUTSIDE gpui's update (Windows).
+///
+/// WebView2's creation is synchronous and runs a nested message loop while it
+/// waits for the browser process. Called from the paint pass — where
+/// `place` runs, with gpui's `App` borrowed — that loop delivered a message
+/// gpui answered by borrowing `App` again: "RefCell already borrowed", and the
+/// process aborted the moment a page was opened. A foreground task's body runs
+/// with nothing borrowed, so the nested loop is harmless there; the frame after
+/// it lands places the view.
+#[cfg(windows)]
+fn build_later(window: &Window, home: &str, cx: &mut gpui::App) {
+    if BUILDING.get() {
+        return;
+    }
+    let hwnd = crate::onboarding::native_window_handle(window);
+    if hwnd == 0 {
+        return;
+    }
+    BUILDING.set(true);
+    let home = home.to_owned();
+    cx.spawn(async move |cx| {
+        let built = build(&ParentHwnd(hwnd), &home);
+        BROWSER.with(|slot| {
+            *slot.borrow_mut() = built.map(|view| Browser {
+                view,
+                bounds: None,
+                visible: false,
+            });
+        });
+        BUILDING.set(false);
+        // Paint again, so `place` sizes and shows what was just built.
+        cx.update(|cx| cx.refresh_windows());
+    })
+    .detach();
+}
+
+/// The wallet's window, as wry takes a parent (Windows).
+#[cfg(windows)]
+struct ParentHwnd(isize);
+
+#[cfg(windows)]
+impl wry::raw_window_handle::HasWindowHandle for ParentHwnd {
+    fn window_handle(
+        &self,
+    ) -> Result<wry::raw_window_handle::WindowHandle<'_>, wry::raw_window_handle::HandleError> {
+        let hwnd = std::num::NonZeroIsize::new(self.0)
+            .ok_or(wry::raw_window_handle::HandleError::Unavailable)?;
+        let raw = wry::raw_window_handle::RawWindowHandle::Win32(
+            wry::raw_window_handle::Win32WindowHandle::new(hwnd),
+        );
+        // SAFETY: the wallet's own top-level window, alive for as long as the
+        // app runs; the handle is only borrowed for the build call.
+        Ok(unsafe { wry::raw_window_handle::WindowHandle::borrow_raw(raw) })
+    }
+}
+
+fn build<W: wry::raw_window_handle::HasWindowHandle>(
+    window: &W,
+    home: &str,
+) -> Option<wry::WebView> {
     let builder = wry::WebViewBuilder::new()
         .with_initialization_script(provider_script(ProviderHost::Desktop))
         .with_initialization_script(META_JS)

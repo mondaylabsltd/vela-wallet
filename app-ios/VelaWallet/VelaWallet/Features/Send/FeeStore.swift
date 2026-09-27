@@ -57,18 +57,32 @@ final class FeeStore {
         let tier: String
         let calls: [[String: Any]]
         let feeToken: String?
+        /// Nobody has chosen the fee coin (spec 078): the fee machine pays in
+        /// one that can, and `feeToken` is only where it falls back to. Part
+        /// of the operation, so every preview replays it.
+        let autoFeeToken: Bool
 
         /// The operation, tier aside — `calls` compared as the JSON the core
         /// reads, which is exact.
         func sameOperation(_ other: Ask) -> Bool {
             chainId == other.chainId && account == other.account && deployed == other.deployed
                 && publicKeyAvailable == other.publicKeyAvailable && feeToken == other.feeToken
+                && autoFeeToken == other.autoFeeToken
                 && CoreJSON.string(["c": calls]) == CoreJSON.string(["c": other.calls])
         }
 
         func at(_ tier: String) -> Ask {
             Ask(chainId: chainId, account: account, deployed: deployed,
-                publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls, feeToken: feeToken)
+                publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls,
+                feeToken: feeToken, autoFeeToken: autoFeeToken)
+        }
+
+        /// The same operation in the coin the person tapped: from here on it
+        /// is theirs and is priced exactly as asked.
+        func paying(_ token: String?) -> Ask {
+            Ask(chainId: chainId, account: account, deployed: deployed,
+                publicKeyAvailable: publicKeyAvailable, tier: tier, calls: calls,
+                feeToken: token, autoFeeToken: false)
         }
 
         var event: String {
@@ -81,6 +95,7 @@ final class FeeStore {
                 "tier": tier,
                 "calls": calls,
                 "fee_token": feeToken.map { $0 as Any } ?? NSNull(),
+                "auto_fee_token": autoFeeToken,
             ])
         }
     }
@@ -119,6 +134,13 @@ final class FeeStore {
     /// previews follow it.
     private var askGeneration = 0
 
+    /// No session has an effect in flight — the one in force, every speed
+    /// preview, the speed core (`CoreDriver.isIdle`). What a test waits on
+    /// instead of a clock.
+    var isIdle: Bool {
+        inForce.core.isIdle && previews.allSatisfy { $0.core.isIdle } && speedCore.isIdle
+    }
+
     /// Who is waiting for the quote in flight, and for which attempt.
     private var waiting: [(generation: Int, resume: (FeeViewWire?) -> Void)] = []
     private var generation = 0
@@ -126,15 +148,22 @@ final class FeeStore {
     private var requested = false
     /// How long a quote may take before the shell calls it a failure. Generous:
     /// the core's own TTL is 30 s and a cold pool sweeps three passes.
-    private static let settleDeadlineMs = 45_000
+    nonisolated static let settleDeadline: Duration = .seconds(45)
+    /// The deadline in force. `nil` — a test's, whose relay is scripted and
+    /// answers or does not by design — sets no clock under the quote: on a
+    /// starved CI runner a scripted quote could otherwise outlast 45 s and be
+    /// reported as a failure the code never had (`Waits.swift`).
+    private let deadline: Duration?
 
     init(
         relay: RelayClient,
         accounts: UserOpSpine.AccountPort,
-        measureCall: @escaping FeeExecutor.MeasureCall = { _, _, _, _, _ in nil }
+        measureCall: @escaping FeeExecutor.MeasureCall = { _, _, _, _, _ in nil },
+        settleDeadline: Duration? = FeeStore.settleDeadline
     ) {
         self.executor = FeeExecutor(relay: relay, accounts: accounts, measureCall: measureCall)
         self.relay = relay
+        self.deadline = settleDeadline
         self.inForce = newSession()
         self.speedCore = CoreStore(
             bridge: FeeSpeedCore(),
@@ -206,7 +235,8 @@ final class FeeStore {
         deployed: Bool,
         publicKeyAvailable: Bool,
         calls: [[String: Any]],
-        feeToken: String?
+        feeToken: String?,
+        autoFeeToken: Bool = false
     ) async -> FeeViewWire? {
         generation += 1
         let mine = generation
@@ -221,19 +251,19 @@ final class FeeStore {
         // `await` behind it holds `estimate_fee` open forever — which holds the
         // confirm gate shut forever. This is the deadline that makes a hung
         // quote a FAILURE the core can act on.
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.settleDeadlineMs) * 1_000_000)
+        if let deadline { Task { [weak self] in
+            try? await Task.sleep(for: deadline)
             guard let self, self.generation == mine, self.requested else { return }
-            print("[vela-wallet] fee_policy: quote did not settle in \(Self.settleDeadlineMs)ms")
+            print("[vela-wallet] fee_policy: quote did not settle in \(deadline)")
             self.requested = false
             let waiting = self.waiting
             self.waiting.removeAll()
             for entry in waiting { entry.resume(nil) }
-        }
+        } }
         let ask = Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "fast",
-            calls: calls, feeToken: feeToken
+            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
         )
         return await withCheckedContinuation { continuation in
             var resumed = false
@@ -255,12 +285,13 @@ final class FeeStore {
         deployed: Bool,
         publicKeyAvailable: Bool,
         calls: [[String: Any]],
-        feeToken: String?
+        feeToken: String?,
+        autoFeeToken: Bool = false
     ) {
         askInForce(Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "fast",
-            calls: calls, feeToken: feeToken
+            calls: calls, feeToken: feeToken, autoFeeToken: autoFeeToken
         ))
     }
 
@@ -282,13 +313,14 @@ final class FeeStore {
     /// coin. Telling the session in force alone would leave the previews
     /// pricing the old coin — and a speed tapped next would promote one,
     /// switching the payment back to a coin the person just walked away from.
+    ///
+    /// A tap is the person's choice (spec 078): asked with `auto_fee_token`
+    /// off, so the coin tapped is the coin priced — even when it is the one
+    /// the machine had picked for them, which is why an unchanged coin still
+    /// re-asks while the pick was automatic.
     func chooseFeeToken(_ token: String?) {
-        guard let ask = inForce.ask, ask.feeToken != token else { return }
-        askInForce(Ask(
-            chainId: ask.chainId, account: ask.account, deployed: ask.deployed,
-            publicKeyAvailable: ask.publicKeyAvailable, tier: speed?.tier ?? ask.tier,
-            calls: ask.calls, feeToken: token
-        ))
+        guard let ask = inForce.ask, ask.feeToken != token || ask.autoFeeToken else { return }
+        askInForce(ask.paying(token).at(speed?.tier ?? ask.tier))
     }
 
     /// A fee-asset chip tap. `nil` = the native coin.
@@ -297,11 +329,22 @@ final class FeeStore {
     /// batched into the simulated operation is a native transfer for `nil` and
     /// an ERC-20 `transfer` for a contract. Re-denominating a native quote
     /// would price a different operation than the one that gets submitted.
+    ///
+    /// The session in force recomputes locally (`select_fee_asset`, which
+    /// also ends the machine's own pick). The operation on record follows
+    /// the tap too, so the previews re-price in the coin chosen and a speed
+    /// re-asked later carries it with `auto_fee_token` off — replaying the
+    /// old automatic request would hand the choice back to the machine.
     func selectAsset(_ token: String?) {
         inForce.send(CoreJSON.string([
             "type": "select_fee_asset",
             "token": token.map { $0 as Any } ?? NSNull(),
         ]))
+        guard let ask = inForce.ask, ask.feeToken != token || ask.autoFeeToken else { return }
+        askGeneration += 1
+        inForce.ask = ask.paying(token)
+        inForce.generation = askGeneration
+        settleSpeed()
     }
 
     /// The core re-runs the request it priced (a stale quote on the confirm).

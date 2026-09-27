@@ -46,7 +46,7 @@
 		background: var(--bg-sunken);
 		border-bottom: 1px solid var(--border);
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: max(0.8rem, var(--floor-note));
 		line-height: 1.5;
 		text-align: center;
 	}

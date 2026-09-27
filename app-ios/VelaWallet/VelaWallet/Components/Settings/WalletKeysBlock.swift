@@ -113,19 +113,12 @@ struct WalletKeysBlock: View {
                         .foregroundStyle(theme.fgSubtle)
                         .lineLimit(1)
                     // Under the name, not beside it: a phone has no room for a
-                    // name AND two pills on one line, and the name is what loses.
+                    // name AND the pills on one line, and the name is what loses.
+                    // They wrap rather than squeeze — three pills in Russian do
+                    // not fit one line.
                     if !row.pills.isEmpty {
-                        HStack(spacing: Tokens.Space.s4) {
-                            ForEach(row.pills, id: \.text) { pill in
-                                let tint = tint(for: pill.tone)
-                                Text(pill.text)
-                                    .typeRole(Typography.flowCaption)
-                                    .foregroundStyle(tint)
-                                    .lineLimit(1)
-                                    .padding(.horizontal, Tokens.Space.s8)
-                                    .padding(.vertical, Tokens.Space.s2)
-                                    .overlay(Capsule().strokeBorder(tint, lineWidth: 1))
-                            }
+                        PillFlow(spacing: Tokens.Space.s4) {
+                            ForEach(row.pills, id: \.text) { pill in pillView(pill) }
                         }
                         .padding(.top, Tokens.Space.s2)
                     }
@@ -167,8 +160,43 @@ struct WalletKeysBlock: View {
         return out
     }
 
+    /// The sign-in key's pill is FILLED — success-soft behind success text,
+    /// medium weight, a check — so it stands out from the outlined facts
+    /// beside it without borrowing the accent, which means "act".
+    @ViewBuilder
+    private func pillView(_ pill: KeyPillModel) -> some View {
+        let tint = tint(for: pill.tone)
+        if pill.tone == .signsHere {
+            HStack(spacing: Tokens.Space.s2) {
+                LucideIcon(.check, size: LucideIconSize.nameChevron)
+                Text(pill.text)
+                    .typeRole(Typography.flowCaption)
+                    .fontWeight(.medium)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, Tokens.Space.s8)
+            .padding(.vertical, Tokens.Space.s2)
+            .background(Self.pillShape.fill(theme.successSoft))
+        } else {
+            Text(pill.text)
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(tint)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Tokens.Space.s8)
+                .padding(.vertical, Tokens.Space.s2)
+                .overlay(Self.pillShape.strokeBorder(tint, lineWidth: 1))
+        }
+    }
+
+    /// A capsule on one line; on two (Russian or German at the largest text
+    /// size, on a narrow phone) a capsule's end caps would cut into the words,
+    /// so the corners stop growing at a one-line pill's half-height.
+    private static let pillShape = RoundedRectangle(cornerRadius: Tokens.Radius.r12, style: .continuous)
+
     private func tint(for tone: KeyPillTone) -> Color {
         switch tone {
+        case .signsHere: theme.successBase
         case .verified: theme.infoBase
         case .synced: theme.successBase
         case .local: theme.fgMuted
@@ -218,5 +246,53 @@ struct WalletKeysBlock: View {
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgSunken))
         .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.r12).strokeBorder(theme.borderBase, lineWidth: 1))
         .padding(.bottom, Tokens.Space.s12)
+    }
+}
+
+/// The pills, left to right, starting a new line when the next one does not
+/// fit — never squeezing the row: a squeezed row gives the key's name one
+/// letter per line (the desktop in Russian, 2026-09-26).
+private struct PillFlow: Layout {
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let lines = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let height = lines.last.map { $0.y + $0.height } ?? 0
+        let width = lines.map(\.width).max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for line in arrange(width: bounds.width, subviews: subviews) {
+            for item in line.items {
+                subviews[item.index].place(
+                    at: CGPoint(x: bounds.minX + item.x, y: bounds.minY + line.y),
+                    proposal: ProposedViewSize(item.size)
+                )
+            }
+        }
+    }
+
+    private struct Line {
+        var items: [(index: Int, x: CGFloat, size: CGSize)] = []
+        var y: CGFloat = 0
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [Line] {
+        var lines = [Line()]
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(ProposedViewSize(width: width, height: nil))
+            if !lines[lines.count - 1].items.isEmpty, lines[lines.count - 1].width + spacing + size.width > width {
+                let last = lines[lines.count - 1]
+                lines.append(Line(y: last.y + last.height + spacing))
+            }
+            let x = lines[lines.count - 1].items.isEmpty ? 0 : lines[lines.count - 1].width + spacing
+            lines[lines.count - 1].items.append((index, x, size))
+            lines[lines.count - 1].width = x + size.width
+            lines[lines.count - 1].height = max(lines[lines.count - 1].height, size.height)
+        }
+        return lines
     }
 }

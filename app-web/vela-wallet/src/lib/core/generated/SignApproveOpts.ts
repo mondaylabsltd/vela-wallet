@@ -33,4 +33,12 @@ params_override_json: string | null,
 /**
  * Clear-signing intent captured at approve time, persisted on the record.
  */
-intent: string | null, };
+intent: string | null, 
+/**
+ * `approval_guard`'s `unlimited_consented`, copied verbatim: the sheet
+ * showed an unbounded approval and the person kept it as the site asked.
+ * The ONLY waiver of the submit chokepoint's `enforce_no_unlimited`;
+ * absent (a shell that predates it, a sheet that never mounted the
+ * approval surface) still refuses an unbounded amount.
+ */
+unlimited_approved: boolean, };

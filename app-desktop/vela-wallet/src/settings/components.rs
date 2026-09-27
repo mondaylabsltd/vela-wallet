@@ -12,7 +12,7 @@ use std::rc::Rc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, div, px, rgb,
+    StatefulInteractiveElement as _, Styled, StyledImage as _, div, px, rgb,
 };
 
 use crate::icons::{Icon, IconCache};
@@ -93,13 +93,23 @@ pub fn callout(
         CalloutTone::Info => (theme.info_base, theme.info_soft, Icon::Info),
         CalloutTone::Success => (theme.success_base, theme.success_soft, Icon::Check),
     };
+    // The web's `Callout` (078 T063): radius 12 and a hairline in the tone —
+    // the warning's own soft border, the rest their ink at 30% — with the
+    // sentence on a 1.4 line.
+    let edge = match tone {
+        CalloutTone::Warning => theme.warning_border,
+        _ => fg.opacity(0.3),
+    };
     div()
         .flex()
         .items_start()
         .gap(px(12.))
         .p(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .bg(bg)
+        .border_1()
+        .border_color(edge)
+        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
         .child(
             div()
                 .flex_none()
@@ -124,9 +134,13 @@ pub fn callout(
 
 // -- SettingsNavList ----------------------------------------------------------
 
-/// One row of the 216px second-level nav (DST1–DST8). The selected row takes
+/// One row of the second-level nav (DST1–DST8). The selected row takes
 /// `bg_raised` PLUS a hairline: on dark, raised is barely a step off sunken and
 /// the fill alone does not read as a selection (desktop SPEC 暗色注意).
+/// `wrap`: the label may run to a second line — the page passes `false`
+/// only when one of its words is wider than the row, where a wrap would
+/// break that word in half with no hyphen ("Transaktionsgeschwindi" /
+/// "gkeit") and an ellipsis reads better.
 pub fn settings_nav_row(
     id: impl Into<ElementId>,
     theme: &Theme,
@@ -134,32 +148,47 @@ pub fn settings_nav_row(
     icon: Icon,
     label: gpui::SharedString,
     selected: bool,
+    wrap: bool,
 ) -> Stateful<Div> {
     let tint = if selected {
         theme.fg_base
     } else {
         theme.fg_muted
     };
+    // The web's nav button (078 S-13): radius 12, an 18 glyph, and a hover
+    // that is the text colour only — the raised wash is the SELECTED look.
     let row = div()
         .id(id)
-        .h(px(SETTINGS_NAV_ROW_H))
+        .group("settings-nav-row")
+        // Grows with its label rather than cutting it (see the label below).
+        .min_h(px(SETTINGS_NAV_ROW_H))
         .px(px(12.))
-        .rounded(px(10.))
+        .py(px(6.))
+        .rounded(px(12.))
         .flex()
         .items_center()
         .gap(px(12.))
         .cursor_pointer()
-        .child(icon_img(icons, icon, false, tint, GLYPH_SM))
+        .child(crate::wallet::components::hover_icon(
+            icons,
+            icon,
+            false,
+            tint,
+            theme.fg_base,
+            18.,
+            "settings-nav-row",
+        ))
         .child(
             div()
-                // Truncate inside the pill rather than draw outside it. At
-                // `xlarge` the selected pill's last letter was being painted
-                // past its own white background and over the column divider;
-                // in German the whole label crossed into the panel beside it.
+                .id("settings-nav-label")
+                .group_hover("settings-nav-row", |style| style.text_color(theme.fg_base))
+                // Wraps inside the pill rather than being cut or drawn
+                // outside it: "Transaktionsgeschwindigkeit" and "Velocidad de
+                // transacción" read whole on two lines, as the community rows
+                // under them do, and the pill grows with them.
                 .flex_1()
                 .min_w(px(0.))
-                .whitespace_nowrap()
-                .truncate()
+                .when(!wrap, |el| el.whitespace_nowrap().truncate())
                 .text_size(theme::text_row_sub())
                 .text_color(tint)
                 .when(selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
@@ -170,8 +199,106 @@ pub fn settings_nav_row(
             .border_1()
             .border_color(theme.divider)
     } else {
-        row.hover(|el| el.bg(theme.bg_raised))
+        // Same box as the selected row, edge included, so selecting does not
+        // shift the label by the hairline.
+        row.border_1().border_color(gpui::transparent_black())
     }
+}
+
+/// A community row's inset at each end, and the gap after its mark and
+/// before its arrow — the nav row's 12, so the names line up with the labels
+/// above them.
+const COMMUNITY_PAD_X: f32 = 12.;
+const COMMUNITY_GAP: f32 = 12.;
+
+/// The trailing arrow: the size of the words beside it.
+fn community_arrow(factor: f32) -> f32 {
+    (12. * factor).round()
+}
+
+/// The width a community row leaves its handle, in a nav column `nav_w`
+/// wide at text factor `factor`: the column's padding, the row's, the mark,
+/// the arrow and the gaps between them. The page measures each handle
+/// against it and breaks one after its slash only when it does not fit.
+pub fn community_handle_room(nav_w: f32, factor: f32) -> f32 {
+    nav_w
+        - 2. * theme::SIDEBAR_PAD
+        - 2. * COMMUNITY_PAD_X
+        - GLYPH_SM
+        - COMMUNITY_GAP
+        - COMMUNITY_GAP
+        - community_arrow(factor)
+}
+
+/// One official community account in the nav column (Settings → Community):
+/// the brand's mark, its name, the handle under it — never cut, so it wraps
+/// before it truncates — and an arrow that says the row leaves the app.
+pub fn community_row(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+    name: gpui::SharedString,
+    handle: Vec<gpui::SharedString>,
+) -> Stateful<Div> {
+    let raised = theme.bg_raised;
+    div()
+        .id(id)
+        .min_h(px(SETTINGS_NAV_ROW_H))
+        .px(px(COMMUNITY_PAD_X))
+        .py(px(6.))
+        .rounded(px(10.))
+        .flex()
+        .items_center()
+        .gap(px(COMMUNITY_GAP))
+        .cursor_pointer()
+        .hover(move |el| el.bg(raised))
+        .active(|el| el.opacity(0.7))
+        .child(icon_img(icons, icon, false, theme.fg_muted, GLYPH_SM))
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.))
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(name),
+                )
+                // One element per line the page chose: an invite too long for
+                // the column breaks after its slash ("discord.gg/" ·
+                // "23gWrtaYSa") — never inside the code, never before the
+                // slash, which is where the wrapper alone would put it.
+                .children(handle.into_iter().map(|line| {
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_muted)
+                        .child(line)
+                })),
+        )
+        // Trailing and centred on the row, the size of the words beside it:
+        // the row leaves the app, which a chevron would not say.
+        .child(icon_img(
+            icons,
+            Icon::ArrowUpRight,
+            false,
+            theme.fg_muted,
+            community_arrow(crate::executor::appearance_prefs::text_factor()),
+        ))
+}
+
+/// A group's caption in the nav column — small, uppercase, muted.
+pub fn nav_group_label(theme: &Theme, label: gpui::SharedString) -> Div {
+    div()
+        .px(px(12.))
+        .pt(px(16.))
+        .pb(px(4.))
+        .text_size(theme::text_section_label())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(theme.fg_muted)
+        .child(gpui::SharedString::from(label.to_uppercase()))
 }
 
 // -- FormRow ------------------------------------------------------------------
@@ -319,15 +446,18 @@ fn menu_of(
         .flex_col();
     let last = rows.len().saturating_sub(1);
     for (i, (label, note, selected)) in rows.iter().enumerate() {
+        // The web's `SelectRow` (078 S-07): at least 52, padded 12, the
+        // label 15 — mono examples too — and an 18 check.
         let mut row = div()
             .flex()
             .items_center()
             .gap(px(8.))
-            .py(px(10.))
+            .min_h(px(52.))
+            .py(px(12.))
             .child(
                 div()
                     .when(mono, |el| el.font_family(theme::font_mono()))
-                    .text_size(theme::text_row_sub())
+                    .text_size(theme::text_row_title())
                     .text_color(if *selected {
                         theme.accent
                     } else {
@@ -346,7 +476,7 @@ fn menu_of(
             );
         }
         if *selected {
-            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 16.));
+            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
         }
         match on_pick.as_ref() {
             Some(pick) => {
@@ -370,7 +500,94 @@ fn menu_of(
         .left_0()
         .right_0()
         .px(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .shadow_lg()
+        .flex()
+        .flex_col()
+        .child(col)
+}
+
+/// One choice with a line saying why somebody would make it (the web's
+/// `SelectRow` with a `detail`): the name, the line, whether it is in force.
+pub type DetailRow = (gpui::SharedString, Option<gpui::SharedString>, bool);
+
+/// The menu the speed and "Sign with" dropdowns drop (078 S-04) — the web's
+/// `Dropdown` over `SelectRow`s: the name at 15, its line beneath at 11 in
+/// the subtle colour, 52-high rows on hairlines, the chosen one in the accent
+/// with an 18 check. It opens over its trigger and grows toward the row's
+/// label — `width`, since a line of words is wider than the 280 control
+/// column; the web sizes it to its widest choice, capped at the row measure.
+pub fn dropdown_menu_details(
+    theme: &Theme,
+    icons: &mut IconCache,
+    rows: &[DetailRow],
+    width: f32,
+    on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let hover = theme.bg_sunken;
+    let pick: PickAction = Rc::new(on_pick);
+    let mut col = div().flex().flex_col();
+    let last = rows.len().saturating_sub(1);
+    for (i, (label, detail, selected)) in rows.iter().enumerate() {
+        let pick = pick.clone();
+        let mut text = div()
+            .flex_1()
+            .min_w(px(0.))
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .text_color(if *selected {
+                        theme.accent
+                    } else {
+                        theme.fg_base
+                    })
+                    .when(*selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(label.clone()),
+            );
+        if let Some(detail) = detail {
+            text = text.child(
+                div()
+                    .text_size(theme::text_label())
+                    .line_height(theme::line_height_body())
+                    .text_color(theme.fg_subtle)
+                    .child(detail.clone()),
+            );
+        }
+        let mut row = div()
+            .id(ElementId::from(("dropdown-detail-option", i)))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .min_h(px(52.))
+            .py(px(12.))
+            .cursor_pointer()
+            .hover(move |el| el.bg(hover))
+            .on_click(move |_, window, cx| pick(i, window, cx))
+            .child(text);
+        if *selected {
+            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
+        }
+        if i != last {
+            row = row.border_b_1().border_color(theme.divider);
+        }
+        col = col.child(row);
+    }
+    div()
+        .absolute()
+        .top_0()
+        .right_0()
+        .w(px(width.clamp(
+            theme::SETTINGS_CONTROL_W,
+            theme::WALLET_ROW_MEASURE,
+        )))
+        .px(px(12.))
+        .rounded(px(12.))
         .bg(theme.bg_raised)
         .border_1()
         .border_color(theme.divider)
@@ -471,111 +688,47 @@ pub fn segmented_picks(
     })
 }
 
-/// A ——●—— A, drawn only. The gallery still wants the picture; a real session
-/// uses [`text_scale_stops`] so the thumb can be moved.
+/// A ——●—— A, drawn only: the gallery and the design surfaces, which have
+/// nothing to move it with, get the thumb at rest. A real session draws
+/// [`text_scale_slider`].
 pub fn text_scale(theme: &Theme, steps: usize, index: usize) -> Div {
-    text_scale_stops(theme, steps, index, &mut |_, stop| stop.into_any_element())
-}
-
-/// The same control, with each stop handed to the caller first — the live
-/// panel wraps them in `.id().on_click(...)`.
-///
-/// The stop keeps a 20px-tall hit area whatever its dot is: a 4px target is
-/// not a target. The dots themselves stay the mock's two sizes, because the
-/// thumb has to read as the thumb at a glance.
-pub fn text_scale_stops(
-    theme: &Theme,
-    steps: usize,
-    index: usize,
-    wrap: &mut dyn FnMut(usize, Div) -> gpui::AnyElement,
-) -> Div {
-    let mut track = div()
-        .flex_1()
-        .h(px(20.))
-        .flex()
-        .items_center()
-        .justify_between();
-    for i in 0..steps {
-        let dot = if i == index {
-            div().size(px(16.)).rounded_full().bg(theme.fg_muted)
-        } else {
-            div().size(px(4.)).rounded_full().bg(theme.outline_strong)
-        };
-        let stop = div()
-            .h(px(20.))
-            .w(px(20.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(dot);
-        track = track.child(wrap(i, stop));
-    }
-    div()
-        .w_full()
-        .flex()
-        .items_center()
-        .gap(px(12.))
-        .child(
-            div()
-                .text_size(theme::text_row_sub())
-                .font_weight(gpui::FontWeight::BOLD)
-                .text_color(theme.fg_base)
-                .child("A"),
-        )
-        .child(track)
-        .child(
-            div()
-                .text_size(theme::text_panel_title())
-                .font_weight(gpui::FontWeight::BOLD)
-                .text_color(theme.fg_base)
-                .child("A"),
-        )
+    text_scale_frame(theme, crate::ui::step_slider_picture(theme, steps, index))
 }
 
 /// The text-size control, live (spec 072): one stop per level the core ships
-/// (`vela_core::prefs::TEXT_SCALE_LEVELS`), each its own target. The picture
-/// above spaced dots along a track; a dot four pixels wide is not something a
-/// person can click, so here every stop owns an equal share of the track.
-pub fn text_scale_picks(
+/// (`vela_core::prefs::TEXT_SCALE_LEVELS`), on a track that is pressed and
+/// dragged like the web's range input — [`crate::ui::StepSlider`] has how.
+/// `on_pick` is handed each stop the press or the drag reaches.
+pub fn text_scale_slider(
     theme: &Theme,
+    slider: &crate::ui::StepSlider,
     steps: usize,
     index: usize,
+    reduce_motion: bool,
     on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    let on_pick: PickAction = Rc::new(on_pick);
-    let mut track = div().flex_1().h(px(28.)).flex().items_center();
-    for i in 0..steps {
-        let pick = on_pick.clone();
-        let hover = theme.fg_subtle;
-        track = track.child(
-            div()
-                .id(("text-scale-stop", i))
-                .flex_1()
-                .h_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .cursor_pointer()
-                .on_click(move |_, window, cx| pick(i, window, cx))
-                .child(if i == index {
-                    div().size(px(16.)).rounded_full().bg(theme.fg_muted)
-                } else {
-                    div()
-                        .size(px(6.))
-                        .rounded_full()
-                        .bg(theme.outline_strong)
-                        .hover(move |el| el.bg(hover))
-                }),
-        );
-    }
+    text_scale_frame(
+        theme,
+        slider.render("text-scale", theme, steps, index, reduce_motion, on_pick),
+    )
+}
+
+/// The two glyphs either side of the track, sized to what they promise.
+///
+/// They are NOT through the text-size setting (`theme::text_*` is): they are
+/// the picture of the scale's two ends, as the web draws them, and a glyph
+/// that grew with every stop would shrink the track under a pointer that is
+/// dragging along it.
+fn text_scale_frame(theme: &Theme, track: impl IntoElement) -> Div {
     div()
         .w_full()
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap(px(10.))
         .child(
             div()
-                .text_size(theme::text_row_sub())
+                .flex_none()
+                .text_size(px(13.))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.fg_base)
                 .child("A"),
@@ -583,7 +736,8 @@ pub fn text_scale_picks(
         .child(track)
         .child(
             div()
-                .text_size(theme::text_panel_title())
+                .flex_none()
+                .text_size(px(20.))
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.fg_base)
                 .child("A"),
@@ -608,6 +762,27 @@ pub fn chain_mark(letter: gpui::SharedString, color: u32, size: f32) -> Div {
         .child(letter)
 }
 
+/// A chain's avatar where the chain is known: its logo — the one the wallet's
+/// network filter and token badges draw (`marks::chain_logo_url`) — over the
+/// lettermark, which is what shows while it loads, when it cannot, and for a
+/// chain id the logo host could never name.
+pub fn chain_logo_mark(chain_id: u64, letter: gpui::SharedString, color: u32, size: f32) -> Div {
+    let url = u32::try_from(chain_id)
+        .ok()
+        .and_then(crate::marks::chain_logo_url);
+    let Some(url) = url else {
+        return chain_mark(letter, color, size);
+    };
+    let mark = move || chain_mark(letter.clone(), color, size).into_any_element();
+    div().size(px(size)).flex_none().child(
+        gpui::img(url)
+            .size(px(size))
+            .rounded_full()
+            .with_loading(mark.clone())
+            .with_fallback(mark),
+    )
+}
+
 /// One network row (DST4): mark, name, chain-id line, an optional latency
 /// pill, an optional 自定义 tag, and a disclosure caret. The desktop expands in
 /// place rather than pushing a page, so the caret is a state and not a chevron.
@@ -622,6 +797,7 @@ pub fn network_row(
     // `SharedString`, not `&'static str`: a live network's name and
     // lettermark come from the core at runtime (spec 030). The fixture
     // path passes the same constants it always did, now via `.into()`.
+    chain_id: u64,
     letter: gpui::SharedString,
     color: u32,
     name: gpui::SharedString,
@@ -659,7 +835,7 @@ pub fn network_row(
         .gap(px(12.))
         .py(px(12.))
         .cursor_pointer()
-        .child(chain_mark(letter, color, MARK))
+        .child(chain_logo_mark(chain_id, letter, color, MARK))
         .child(
             div()
                 .flex_1()
@@ -822,6 +998,31 @@ pub fn url_field(
     // `action`: the blue action inside the box — DST5's 检查密钥 / 获取密钥.
     action: Option<gpui::SharedString>,
 ) -> Div {
+    url_field_with(
+        theme,
+        label,
+        value,
+        theme.fg_base,
+        badge,
+        hint,
+        tone,
+        action,
+    )
+}
+
+/// [`url_field`] with the value's ink chosen — the subtle one when what the
+/// box shows is its placeholder, not an entry (078 T063).
+#[allow(clippy::too_many_arguments)]
+pub fn url_field_with(
+    theme: &Theme,
+    label: Option<gpui::SharedString>,
+    value: gpui::SharedString,
+    ink: gpui::Hsla,
+    badge: Option<&Pill>,
+    hint: Option<gpui::SharedString>,
+    tone: Option<Tone>,
+    action: Option<gpui::SharedString>,
+) -> Div {
     let border = match tone {
         Some(Tone::Error) => theme.error_base,
         Some(Tone::Ok) => theme.success_base,
@@ -847,7 +1048,7 @@ pub fn url_field(
         div()
             .h(px(WALLET_CONTROL_H))
             .px(px(12.))
-            .rounded(px(10.))
+            .rounded(px(12.))
             .bg(theme.bg_sunken)
             // A 1px border even at rest: on dark, sunken and base are one step
             // apart and the box would otherwise have no edge at all.
@@ -864,7 +1065,7 @@ pub fn url_field(
                     .truncate()
                     .font_family(theme::font_mono())
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
+                    .text_color(ink)
                     .child(value),
             )
             .when_some(action, |el, action| {
@@ -1137,10 +1338,12 @@ pub fn danger_card(
         .items_center()
         .gap(px(12.))
         .p(px(16.))
-        .rounded(px(10.))
+        // The web's card (078 S-10): radius 12, its edge the error colour at
+        // 35 % — a full-strength red border shouted over the words inside it.
+        .rounded(px(12.))
         .bg(theme.error_soft)
         .border_1()
-        .border_color(theme.error_base)
+        .border_color(theme.error_base.opacity(0.35))
         .child(
             div()
                 .flex_1()
@@ -1178,62 +1381,83 @@ pub fn danger_card(
     }
 }
 
-// -- ConfirmCard --------------------------------------------------------------
+// -- ConfirmSheet -------------------------------------------------------------
 
 /// What a destructive action asks before it happens (spec 072 FR-010): a
-/// title naming what goes, the consequence, an optional red callout (what
-/// is lost) and note (what is not), and the two answers.
+/// title naming what goes, the consequence, an optional quieter note (what is
+/// not lost) and red callout (what is), and the answers.
 pub struct ConfirmCopy {
     pub title: gpui::SharedString,
     pub body: gpui::SharedString,
     pub callout: Option<gpui::SharedString>,
     pub note: Option<gpui::SharedString>,
     pub confirm: gpui::SharedString,
-    pub cancel: gpui::SharedString,
+    /// The stacked "keep it" answer under the confirm — the settings sheets'.
+    /// `None` is the contacts question, where the dialog's ✕ is the refusal
+    /// and the one answer sits at the row's end.
+    pub cancel: Option<gpui::SharedString>,
     /// Red for what cannot be undone; the accent for what rebuilds itself.
     pub danger: bool,
 }
 
-/// The one confirmation card every settings question is drawn with — the
-/// sign-out dialog's shape, so a person meets one kind of question.
-pub fn confirm_card(
+/// The body every question is drawn with, inside `ui::dialog` (whose title is
+/// `copy.title`).
+///
+/// With a cancel it is the web's `settings/ui/ConfirmSheet.svelte`: the body
+/// at 15 in the base colour, the note at 13 subtle, the callout, then the
+/// answer and "cancel" stacked 12 apart at full width. Without one it is the
+/// contacts route's dialog: the body at 13 muted and one answer at the end of
+/// the row.
+pub fn confirm_sheet(
     theme: &Theme,
     copy: ConfirmCopy,
     on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    let (fg, bg, hover) = if copy.danger {
-        (theme.error_base, theme.error_soft, theme.error_base)
+    use crate::flows::components::{accent_button, danger_button, secondary_button};
+
+    let answer = if copy.danger {
+        danger_button(theme, copy.confirm)
     } else {
-        (theme.accent, theme.bg_sunken, theme.accent)
+        accent_button(theme, copy.confirm)
     };
-    let hover_cancel = theme.bg_sunken;
-    let mut card = div()
-        .w(px(400.))
+    let answer = answer
+        .id("confirm-accept")
+        .cursor_pointer()
+        .on_click(on_confirm);
+
+    let Some(cancel) = copy.cancel else {
+        return div()
+            .flex()
+            .flex_col()
+            .child(crate::ui::dialog::dialog_body(theme, copy.body))
+            .child(crate::ui::dialog::dialog_actions().child(div().child(answer.w_auto())));
+    };
+
+    let mut sheet = div()
         .flex()
         .flex_col()
         .gap(px(16.))
-        .p(px(28.))
-        .rounded(px(20.))
-        .bg(theme.bg_raised)
-        .border_1()
-        .border_color(theme.border_card)
+        .pt(px(8.))
+        .pb(px(16.))
         .child(
             div()
-                .text_size(theme::text_panel_title())
-                .font_weight(gpui::FontWeight::BOLD)
+                .text_size(theme::text_row_title())
+                .line_height(gpui::relative(1.4))
                 .text_color(theme.fg_base)
-                .child(copy.title),
-        )
-        .child(
-            div()
-                .text_size(theme::text_row_sub())
-                .line_height(theme::line_height_body())
-                .text_color(theme.fg_muted)
                 .child(copy.body),
         );
+    if let Some(note) = copy.note {
+        sheet = sheet.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(1.4))
+                .text_color(theme.fg_subtle)
+                .child(note),
+        );
+    }
     if let Some(callout) = copy.callout {
-        card = card.child(
+        sheet = sheet.child(
             div()
                 .p(px(12.))
                 .rounded(px(10.))
@@ -1244,51 +1468,13 @@ pub fn confirm_card(
                 .child(callout),
         );
     }
-    if let Some(note) = copy.note {
-        card = card.child(
-            div()
-                .text_size(theme::text_row_sub())
-                .line_height(theme::line_height_body())
-                .text_color(theme.fg_subtle)
-                .child(note),
-        );
-    }
-    card.child(
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(8.))
-            .child(
-                div()
-                    .id("confirm-accept")
-                    .h(px(44.))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .bg(bg)
-                    .text_size(theme::text_row_title())
-                    .text_color(fg)
-                    .hover(move |style| style.bg(hover).text_color(theme.fg_inverse))
-                    .on_click(on_confirm)
-                    .child(copy.confirm),
-            )
-            .child(
-                div()
-                    .id("confirm-cancel")
-                    .h(px(44.))
-                    .rounded(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .text_size(theme::text_row_title())
-                    .text_color(theme.fg_base)
-                    .hover(move |style| style.bg(hover_cancel))
-                    .on_click(on_cancel)
-                    .child(copy.cancel),
-            ),
+    sheet.child(
+        div().flex().flex_col().gap(px(12.)).child(answer).child(
+            secondary_button(theme, cancel)
+                .id("confirm-cancel")
+                .cursor_pointer()
+                .on_click(on_cancel),
+        ),
     )
 }
 
@@ -1376,4 +1562,36 @@ pub fn rpc_banner(
                 ),
         )
         .child(row)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::community_handle_room;
+    use crate::settings::fixtures::COMMUNITY_LINKS;
+    use crate::theme::SETTINGS_NAV_W;
+
+    /// The Discord invite reads on one line at the standard text size, in
+    /// every language: it is the same Latin string in the same bundled face
+    /// whatever the locale. Split after its slash, it read as two handles.
+    #[test]
+    fn the_discord_invite_fits_one_line_at_the_standard_size() {
+        // "discord.gg/23gWrtaYSa" at `text_label`'s 11px in the bundled
+        // PlusJakartaSans_400Regular.ttf: 127.58 shaped with its kerning
+        // (hb-shape), 128.68 by bare advances. The larger, so a shaper that
+        // skips the kerning still fits it.
+        const INVITE_W: f32 = 128.68;
+        let discord = COMMUNITY_LINKS
+            .iter()
+            .find(|link| link.name == "Discord")
+            .expect("the Discord row");
+        assert_eq!(
+            discord.handle, "discord.gg/23gWrtaYSa",
+            "a new invite is a new width: measure it again"
+        );
+        let room = community_handle_room(SETTINGS_NAV_W, 1.0);
+        assert!(
+            room >= INVITE_W,
+            "{room} of the {INVITE_W} the invite takes"
+        );
+    }
 }

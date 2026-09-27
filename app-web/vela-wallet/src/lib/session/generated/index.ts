@@ -2,6 +2,7 @@
 export * from './Account';
 export * from './AccountKey';
 export * from './CompletionMode';
+export * from './KeyMethod';
 export * from './SessionAccountRow';
 export * from './SessionEvent';
 export * from './SessionOperation';
@@ -9,3 +10,4 @@ export * from './SessionRoute';
 export * from './SessionShellResult';
 export * from './SessionSignOutView';
 export * from './SessionView';
+export * from './SignInKey';

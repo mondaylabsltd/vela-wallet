@@ -23,7 +23,7 @@ import type { BatchPreviewRow } from '$lib/core/generated/BatchPreviewRow';
 import type { BatchView } from '$lib/core/generated/BatchView';
 import { amountToInput, groupDigits, numberSeparators } from '$lib/services/locale-format';
 import { shortenAddress } from '$lib/wallet/identity';
-import { exactAmount as exact, trimBalance } from '$lib/wallet/live';
+import { exactAmount as exact, tokenAmountText } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
 import type { BatchImportModel, BatchRefusedModel, BatchRowModel } from './model';
@@ -244,9 +244,11 @@ export function liveBatchImport(
 						balance:
 							inputs.formHasRows && !inputs.replaces && inputs.remaining != null
 								? fill(m['send.splitRemaining'], {
-										amount: `${trimBalance(inputs.remaining)} ${symbol}`
+										amount: `${tokenAmountText(inputs.remaining)} ${symbol}`
 									})
-								: fill(m['send.balanceLabel'], { amount: `${trimBalance(balance)} ${symbol}` }),
+								: fill(m['send.balanceLabel'], {
+										amount: `${tokenAmountText(balance)} ${symbol}`
+									}),
 						over: batch.over_balance,
 						overText: batch.over_balance
 							? fill(m['send.batchOverBalance'], { sym: symbol })

@@ -15,11 +15,13 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
+import app.getvela.wallet.feature.settings.KeyPillModel
 import app.getvela.wallet.feature.settings.KeyPillTone
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -174,36 +176,30 @@ private fun KeyRow(row: WalletKeyRowModel, copyLabel: String, copiedLabel: Strin
                         append(row.holder)
                         if (row.fingerprint.isNotEmpty()) {
                             append("  ·  ")
-                            withStyle(SpanStyle(fontFamily = VelaMonoFontFamily)) { append(row.fingerprint) }
+                            // One unit: word joiners around the ellipsis, so a
+                            // wrapped line moves the whole fingerprint rather than
+                            // splitting it into `7802…` and `2eec`.
+                            withStyle(SpanStyle(fontFamily = VelaMonoFontFamily)) { append(row.fingerprint.replace("…", "\u2060…\u2060")) }
                         }
                     },
                     color = colors.fgSubtle,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
-                    maxLines = 1,
+                    // Two lines, not an ellipsis: a long holder name (Russian,
+                    // German) must not cut off the fingerprint that tells keys apart.
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 // Under the name, not beside it: a phone has no room for a name
-                // AND two pills on one line, and the name is what loses.
+                // AND two pills on one line, and the name is what loses. And
+                // wrapping: three Russian pills are wider than the column.
                 if (row.pills.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm), modifier = Modifier.padding(top = VelaSpacing.xs)) {
-                        row.pills.forEach { pill ->
-                            val tint = when (pill.tone) {
-                                KeyPillTone.Verified -> colors.infoBase
-                                KeyPillTone.Synced -> colors.successBase
-                                KeyPillTone.Local -> colors.fgMuted
-                            }
-                            Text(
-                                text = pill.text,
-                                color = tint,
-                                fontFamily = VelaFontFamily,
-                                fontSize = VelaTextSize.sm,
-                                maxLines = 1,
-                                modifier = Modifier
-                                    .border(VelaBorder.hairline, tint, CircleShape)
-                                    .padding(horizontal = VelaSpacing.md, vertical = VelaSpacing.xs),
-                            )
-                        }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
+                        modifier = Modifier.padding(top = VelaSpacing.xs),
+                    ) {
+                        row.pills.forEach { pill -> KeyPill(pill) }
                     }
                 }
             }
@@ -217,6 +213,58 @@ private fun KeyRow(row: WalletKeyRowModel, copyLabel: String, copiedLabel: Strin
             }
         }
         if (expandable && open) KeyDetails(row, copyLabel, copiedLabel)
+    }
+}
+
+/**
+ * One of a key's pills. The key this device signs with (founder, 2026-09-26)
+ * is the only FILLED one — success-soft behind a check, medium weight — so it
+ * stands out from the registry's facts, which stay outlined. Never the accent:
+ * that colour means money moving. Both shapes carry the same hairline, so a
+ * filled pill and an outlined one are the same height on one line.
+ */
+@Composable
+private fun KeyPill(pill: KeyPillModel) {
+    val colors = VelaTheme.colors
+    when (pill.tone) {
+        KeyPillTone.SignsHere -> Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(colors.successSoft)
+                .border(VelaBorder.hairline, colors.successSoft, CircleShape)
+                .padding(horizontal = VelaSpacing.md, vertical = VelaSpacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+        ) {
+            Icon(imageVector = VelaIcons.Check, contentDescription = null, tint = colors.successBase, modifier = Modifier.size(VelaIconSize.xs))
+            Text(
+                text = pill.text,
+                color = colors.successBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.sm,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        KeyPillTone.Verified, KeyPillTone.Synced, KeyPillTone.Local -> {
+            val tint = when (pill.tone) {
+                KeyPillTone.Verified -> colors.infoBase
+                KeyPillTone.Synced -> colors.successBase
+                else -> colors.fgMuted
+            }
+            Text(
+                text = pill.text,
+                color = tint,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .border(VelaBorder.hairline, tint, CircleShape)
+                    .padding(horizontal = VelaSpacing.md, vertical = VelaSpacing.xs),
+            )
+        }
     }
 }
 

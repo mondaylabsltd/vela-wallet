@@ -463,9 +463,8 @@ test('a send nobody touched the speed of names the default out loud', async ({ p
 
 	// Issue 686 rule 1, on the route itself: the factory default IS the
 	// fastest, so a free upgrade has nothing to ask about and nothing is priced
-	// beside the fee in force. One refresh, one quote. (The A test below makes
-	// the same measurement with a Slow default and gets two, so this count
-	// really does see a tier priced alongside.)
+	// beside the fee in force. One refresh, one quote. (Since spec 078 a tier
+	// priced alongside shares that one simulation too — see the A test below.)
 	expect(await quotesPerRefresh(page, () => estimates), 'no quote beside the fee in force').toBe(1);
 
 	const advance = page.getByRole('button', { name: en('send.continueBtn') });
@@ -650,10 +649,14 @@ test('a slower default goes Fast where Fast costs no more — and says so', asyn
 		await page.waitForTimeout(200);
 	}
 	// The one tier priced beside the fee in force (their default, now that Fast
-	// is in force) re-prices with it: two quotes per refresh — the control for
-	// the Fast-default count of one above.
-	expect(await quotesPerRefresh(page, () => estimates), 'the partner is priced too').toBe(2);
+	// is in force) re-prices with it — on the SAME simulation (spec 078): the
+	// operation is identical whatever the speed, so the session in force and
+	// the partner share one relay estimate and settle together. Still one per
+	// refresh, and the free upgrade — which needs the partner's settled figure
+	// — still stands after it.
+	expect(await quotesPerRefresh(page, () => estimates), 'one simulation for both').toBe(1);
 	await expect(speed).toContainText(en('send.gasTier.fast'));
+	await expect(page.getByText(en('send.feeSpeedFree'))).toBeVisible();
 
 	const advance = page.getByRole('button', { name: en('send.continueBtn') });
 	await expect(advance).toBeEnabled({ timeout: 30_000 });
@@ -794,7 +797,8 @@ test('a stored default is what the send form starts at, with no tap at all', asy
 
 /**
  * Spec 069 on the dApp sheet: a fee coin picked there is part of the question
- * every speed is priced for. Pick USDC, then Slow — the fee is still USDC.
+ * every speed is priced for. The machine picks USDC (spec 078); the person
+ * picks ETH, then Slow — the fee is still ETH.
  *
  * Until this was pinned, only the session in force heard the coin
  * (`select_fee_asset`); the speed previews priced the OLD coin, and tapping a
@@ -857,16 +861,19 @@ test('the dApp sheet keeps the coin picked when a speed is picked after it', asy
 		timeout: 25_000
 	});
 
-	// The fee row, in ETH; its list, and USDC picked.
+	// Nobody chose a coin for this request, so the fee machine did (spec 078):
+	// the stablecoin the transfer does not move. Then the person picks ETH.
 	const feeRow = page.getByRole('button', {
 		name: new RegExp('^' + en('componentsUi.gas.networkFee'))
 	});
-	await expect(feeRow).toContainText('ETH', { timeout: 30_000 });
-	await feeRow.click();
-	await page.getByRole('button', { name: /USDC/ }).first().click();
 	await expect(feeRow).toContainText('USDC', { timeout: 30_000 });
+	await feeRow.click();
+	await page.getByRole('button', { name: /ETH/ }).first().click();
+	await expect(feeRow).toContainText('ETH', { timeout: 30_000 });
+	await expect(feeRow).not.toContainText('USDC');
 
-	// Then a speed — the preview it promotes was priced in USDC too.
+	// Then a speed — the preview it promotes was priced in the PICKED coin
+	// too, not re-chosen by the machine behind the person's back.
 	const speed = page.getByRole('button', { expanded: false }).filter({
 		hasText: en('send.feeSpeedLabel')
 	});
@@ -874,9 +881,9 @@ test('the dApp sheet keeps the coin picked when a speed is picked after it', asy
 	const slow = page.getByRole('button', { pressed: false }).filter({
 		hasText: en('send.gasTier.slow')
 	});
-	await expect(slow).toContainText('USDC', { timeout: 30_000 });
+	await expect(slow).toContainText('ETH', { timeout: 30_000 });
 	await slow.click();
 	await expect(speed).toContainText(en('send.gasTier.slow'));
-	await expect(feeRow).toContainText('USDC', { timeout: 30_000 });
-	await expect(feeRow).not.toContainText('ETH');
+	await expect(feeRow).toContainText('ETH', { timeout: 30_000 });
+	await expect(feeRow).not.toContainText('USDC');
 });

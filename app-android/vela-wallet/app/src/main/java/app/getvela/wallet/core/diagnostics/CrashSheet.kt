@@ -1,5 +1,6 @@
 package app.getvela.wallet.core.diagnostics
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,7 +47,7 @@ fun CrashSheet(strings: VelaStrings, version: String) {
         CrashReport.clear(context)
         report = null
     }
-    ModalBottomSheet(onDismissRequest = dismiss, containerColor = colors.bgRaised) {
+    VelaModalSheet(onDismissRequest = dismiss, containerColor = colors.bgRaised) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = VelaSpacing.xl).navigationBarsPadding()) {
             Text(
                 text = strings.t(I18nKeys.Flow.UNKNOWN_TITLE),

@@ -73,10 +73,8 @@ struct VelaStore {
         /// tier name, judged by the core. Survives sign-out.
         static let feeTier = "vela.feeTier"
 
-        // Owned by `sign_pref` (spec 071). Raw, judged by the core; both
-        // survive sign-out.
-        /// The "Sign with" every signing sheet starts at.
-        static let signMethod = "vela.signMethod"
+        // Owned by `sign_pref` (spec 071). Raw, judged by the core; survives
+        // sign-out.
         /// The Trusted Signer page; absent is the official one.
         static let trustedSignerUrl = "vela.trustedSignerUrl"
         /// Spec 075's cross-device pairing service, RETIRED with the channel

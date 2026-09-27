@@ -17,37 +17,34 @@ import Testing
 import VelaCore
 @testable import VelaWallet
 
-/// Serves `http://<host>.index.test/api/query…` from a per-host script, so
-/// tests running side by side cannot answer each other.
-final class IndexStub: URLProtocol, @unchecked Sendable {
-    struct Script { var listing: String?; var unit: String? }
-    private static let lock = NSLock()
-    nonisolated(unsafe) private static var scripts: [String: Script] = [:]
-    nonisolated(unsafe) private static var hits: [String: Int] = [:]
+/// The index, answered from memory: a listing for `?publicKey=`, a unit for
+/// `?unitId=`, a 503 for whichever is `nil`.
+///
+/// Handed to `RegistryClient` as its transport. It was a `URLProtocol` stub
+/// under `URLSession.shared`, which kept URLSession's 15 s idle timer under
+/// every assertion here — and on a CI run where the whole unit suite was
+/// starved (these 0.1 s tests took 57 s) the stubbed index "timed out", the
+/// walk fell back to the chain, and two tests failed on the clock
+/// (2026-09-28). Nothing here waits on a clock now: an answer is returned in
+/// the call that asked for it.
+struct IndexScript: Sendable {
+    var listing: String?
+    var unit: String?
 
-    static func serve(_ host: String, _ script: Script) {
-        lock.lock(); scripts[host] = script; hits[host] = 0; lock.unlock()
-        URLProtocol.registerClass(IndexStub.self)
+    var transport: RegistryClient.Transport {
+        { request in
+            let body = (request.url?.query ?? "").contains("publicKey=") ? listing : unit
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                      url: url, statusCode: body == nil ? 503 : 200, httpVersion: nil, headerFields: nil
+                  )
+            else { throw URLError(.badURL) }
+            return (Data((body ?? "{}").utf8), response)
+        }
     }
-    static func asked(_ host: String) -> Int { lock.lock(); defer { lock.unlock() }; return hits[host] ?? 0 }
 
-    override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host?.hasSuffix(".index.test") == true
-    }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func stopLoading() {}
-    override func startLoading() {
-        guard let url = request.url, let host = url.host else { return }
-        Self.lock.lock()
-        let script = Self.scripts[host]
-        Self.hits[host, default: 0] += 1
-        Self.lock.unlock()
-        let body = (url.query ?? "").contains("publicKey=") ? script?.listing : script?.unit
-        let response = HTTPURLResponse(url: url, statusCode: body == nil ? 503 : 200, httpVersion: nil, headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data((body ?? "{}").utf8))
-        client?.urlProtocolDidFinishLoading(self)
-    }
+    /// An index nobody can reach: the request never arrives, at once.
+    static let unreachable: RegistryClient.Transport = { _ in throw URLError(.cannotConnectToHost) }
 }
 
 struct RegistryResolverTests {
@@ -92,14 +89,13 @@ struct RegistryResolverTests {
         })
     }
 
-    /// An index nobody can reach: a closed local port refuses at once.
+    /// An index nobody can reach.
     private func unreachable(_ resolver: RegistryResolver?) -> RegistryClient {
-        RegistryClient(baseURL: "http://127.0.0.1:9", resolver: resolver)
+        RegistryClient(baseURL: "https://index.test", resolver: resolver, transport: IndexScript.unreachable)
     }
 
-    private func served(_ host: String, _ script: IndexStub.Script, _ resolver: RegistryResolver) -> RegistryClient {
-        IndexStub.serve("\(host).index.test", script)
-        return RegistryClient(baseURL: "http://\(host).index.test", resolver: resolver)
+    private func served(_ script: IndexScript, _ resolver: RegistryResolver) -> RegistryClient {
+        RegistryClient(baseURL: "https://index.test", resolver: resolver, transport: script.transport)
     }
 
     /// Gnosis unit 10 in the index's shape, built from the CHAIN's own bytes —
@@ -123,7 +119,7 @@ struct RegistryResolverTests {
 
     @Test func anHonestIndexIsProvedByOneCallToGnosis() async throws {
         let asked = Asked()
-        let client = served("honest", .init(listing: Self.listing, unit: Self.text(try honestUnit())), resolver(asked: asked))
+        let client = served(IndexScript(listing: Self.listing, unit: Self.text(try honestUnit())), resolver(asked: asked))
         #expect(try await client.queryByPublicKey(key).unitIds == [10])
         asked.clear()
         #expect(try await client.queryUnit(10).members.count == 3)
@@ -139,7 +135,7 @@ struct RegistryResolverTests {
         box["items"] = items
         forged["members"] = box
 
-        let client = served("forged", .init(listing: Self.listing, unit: Self.text(forged)), resolver())
+        let client = served(IndexScript(listing: Self.listing, unit: Self.text(forged)), resolver())
         _ = try await client.queryByPublicKey(key)
         let members = try await client.queryUnit(10).members.map(\.publicKeyHex)
         let real = ((honest["members"] as? [String: Any])?["items"] as? [[String: Any]])?
@@ -150,17 +146,17 @@ struct RegistryResolverTests {
 
     @Test func noChainReachable_thePersonStillSignsInOnTheIndexsWord() async throws {
         let client = served(
-            "nochain", .init(listing: Self.listing, unit: Self.text(try honestUnit())), resolver(down: [100, 1])
+            IndexScript(listing: Self.listing, unit: Self.text(try honestUnit())), resolver(down: [100, 1])
         )
         _ = try await client.queryByPublicKey(key)
         #expect(try await client.queryUnit(10).members.count == 3)
     }
 
     @Test func aFailingIndexIsCheckedWithTheContract() async throws {
-        let failing = served("failing", .init(listing: nil, unit: nil), resolver())
+        let failing = served(IndexScript(listing: nil, unit: nil), resolver())
         #expect(try await failing.queryByPublicKey(key).unitIds == [12, 10, 8])
         let denying = served(
-            "denying", .init(listing: #"{"entry":null,"groups":{"total":0,"unitIds":[]}}"#, unit: nil), resolver()
+            IndexScript(listing: #"{"entry":null,"groups":{"total":0,"unitIds":[]}}"#, unit: nil), resolver()
         )
         #expect(try await denying.queryByPublicKey(key).unitIds == [12, 10, 8])
     }

@@ -33,27 +33,32 @@
 	<div class="row">
 		<button type="button" class="open" aria-label={fee.openLabel} onclick={onopen}>
 			<span class="label">{fee.label}</span>
-			<TokenIcon
-				ticker={fee.mark.ticker}
-				badgeColor={fee.mark.badgeColor}
-				logoUrls={fee.mark.logoUrls}
-				badgeLogoUrl={fee.mark.badgeLogoUrl}
-				badgeHidden={fee.mark.badgeHidden}
-				size="inline"
-			/>
-			<!-- Two pieces, each unbreakable (issue 231): when the row is tight the
-			     money drops to a second, right-aligned line WHOLE. As one string the
-			     row wrapped wherever it ran out — "Network fee" onto two lines, a
-			     figure split from its ticker. No "·" between them: "≈" already joins
-			     a coin to its money, and a dropped line that began "· ≈ $0.55" — the
-			     everyday look on the narrowest phones — read as a rendering leftover. -->
-			<span class="values">
-				<span class="value">{fee.value}</span>
-				{#if fee.valueFiat}
-					<span class="value">{fee.valueFiat}</span>
-				{/if}
+			<!-- The label and the fee are two wholes (078 round 3): side by side
+			     while both fit; otherwise the label keeps a line of its own, WHOLE,
+			     and the fee goes under it at the row's end. German at the largest
+			     size cut the label mid-word ("Netzwerkg…") and the value with it;
+			     a label is never elided and never broken inside a word. -->
+			<span class="amount">
+				<TokenIcon
+					ticker={fee.mark.ticker}
+					badgeColor={fee.mark.badgeColor}
+					logoUrls={fee.mark.logoUrls}
+					badgeLogoUrl={fee.mark.badgeLogoUrl}
+					badgeHidden={fee.mark.badgeHidden}
+					size="inline"
+				/>
+				<!-- Two pieces, each unbreakable (issue 231): when even the fee's own
+				     line is tight, the money drops under the coin WHOLE, right-aligned.
+				     No "·" between them: "≈" already joins a coin to its money, and a
+				     dropped line that began "· ≈ $0.55" read as a rendering leftover. -->
+				<span class="values">
+					<span class="value">{fee.value}</span>
+					{#if fee.valueFiat}
+						<span class="value">{fee.valueFiat}</span>
+					{/if}
+				</span>
+				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 			</span>
-			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 		</button>
 		<!-- A tap must never be ambiguous: while the measurement is out the icon
 		     turns (and the control refuses a second tap), so "did that do
@@ -61,6 +66,7 @@
 		<button
 			type="button"
 			class="refresh"
+			data-focus-inner
 			aria-label={fee.refreshLabel}
 			aria-busy={fee.refreshing === true}
 			disabled={onrefresh === undefined || fee.refreshing === true}
@@ -115,8 +121,10 @@
 
 	.open {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-md);
+		column-gap: var(--space-md);
+		row-gap: var(--space-xs);
 		flex: 1 1 auto;
 		min-width: 0;
 		padding: var(--space-lg);
@@ -128,26 +136,36 @@
 		cursor: pointer;
 	}
 
-	/* What gives way, in order. First the VALUE: its money drops to a second
-	   line (the enormous shrink factor is that ordering — flex has no other
-	   way to say "this one first"), but never below its widest unbroken piece
-	   (`min-content`), because a column narrower than its figure is painted
-	   leftward, under the coin's mark: "0 [ETH] 01329 AVAX", on the screen
-	   where a person decides to pay. Only then the LABEL, which keeps its one
-	   line and is elided — "Commissione di rete" on a narrow phone. An elided word is
-	   better than a hidden number. */
+	/* The label is WHOLE: it may wrap between words when a line cannot hold
+	   it, never inside one (`min-content` is its longest word) and never into
+	   "…". When it and the fee do not share a line, the fee — the next flex
+	   item — drops under it. */
 	.label {
-		flex: 1 1 auto;
-		min-width: 0;
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
+		flex: 0 1 auto;
+		min-width: min-content;
+		overflow-wrap: normal;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
 	}
 
+	/* The mark, the figures and the chevron, at the row's end — beside the
+	   label, or on the line under it. It never shrinks below its widest
+	   unbroken piece: a column narrower than its figure is painted leftward,
+	   under the coin's mark ("0 [ETH] 01329 AVAX"), on the screen where a
+	   person decides to pay. */
+	.amount {
+		display: flex;
+		flex: 1 1 auto;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--space-md);
+		min-width: min-content;
+	}
+
+	/* Within its line the money still drops under the coin, whole, when even
+	   that line is tight. */
 	.values {
-		flex: 0 100000 auto;
+		flex: 0 1 auto;
 		min-width: min-content;
 		display: flex;
 		flex-wrap: wrap;
@@ -164,13 +182,18 @@
 	}
 
 	/* Quiet on purpose: a fee that is fine is the normal case, and a loud
-	   refresh button next to a good number invites a tap nobody needs. */
+	   refresh button next to a good number invites a tap nobody needs.
+
+	   Exactly the card's height (078 round 2): the same top and bottom edges
+	   at every text size, so a two-line fee at the largest size does not leave
+	   a small target floating in the middle of a tall card. The glyph stays
+	   centred inside it. */
 	.refresh {
 		display: flex;
 		align-items: center;
+		align-self: stretch;
 		flex: 0 0 auto;
-		padding: var(--space-lg);
-		padding-inline-start: 0;
+		padding: 0 var(--space-sm) 0 0;
 		border: none;
 		background: none;
 		color: var(--color-fg-subtle);
@@ -181,10 +204,39 @@
 		cursor: default;
 	}
 
-	/* Shrink-wrapped around the square glyph, so `spin` turns it on its own
-	   centre rather than orbiting it around the lopsided button's. */
+	/* What is SEEN of the control (078 round 3): a small round icon button in
+	   the card, a fixed circle at the vertical centre whatever the card's
+	   height. The button around it stays the card's height so the whole edge
+	   takes a tap, but it draws nothing — no box stretches with a two-line
+	   card; its hover and its keyboard ring go on the circle. A circle round
+	   the glyph, so `spin` still turns it on its own centre. */
 	.turn {
 		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: var(--size-control-sm);
+		height: var(--size-control-sm);
+		border-radius: var(--radius-full);
+	}
+
+	@media (hover: hover) {
+		.refresh:not(:disabled):hover .turn {
+			background: var(--color-bg-sunken);
+			color: var(--color-fg-base);
+		}
+	}
+
+	/* `data-focus-inner` takes the button out of the global ring (app.css);
+	   the ring goes on the circle. The transparent outline stays, for forced
+	   colours, as the global rule keeps it. */
+	.refresh:focus-visible {
+		outline: var(--space-xs) solid transparent;
+	}
+
+	.refresh:focus-visible .turn {
+		box-shadow:
+			0 0 0 var(--space-xs) var(--color-fixed-focusRingInner),
+			0 0 0 var(--space-sm) var(--color-fixed-focusRingOuter);
 	}
 
 	.turn.spinning {

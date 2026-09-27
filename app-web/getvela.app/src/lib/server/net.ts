@@ -10,7 +10,9 @@
  * helpers that went with them (`fetchWithConnectTimeout` for the streaming
  * proxy, `safeHost` for keeping provider API keys out of the bundler's logs,
  * and the `bundler`/`nft`/`proxy` budgets) were removed at the same time; the
- * two survivors below are what `exchange-rate` and `bug-report` still call.
+ * two survivors below are what `exchange-rate` still calls. `bug-report` sets
+ * its own timeout on an injected `fetch` (`$lib/server/bug-report`), so its
+ * whole flow runs under test without the network.
  */
 
 export const UPSTREAM_TIMEOUTS = {

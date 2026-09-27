@@ -120,8 +120,16 @@ class Formats(
         return if (negative) "-$out" else out
     }
 
-    /** Money's two places: `1234.5` → `1,234.50`. */
-    fun fixed2(value: Double): String = number(BigDecimal(value), minFraction = 2, maxFraction = 2)
+    /**
+     * Money's two places: `1234.5` → `1,234.50` — the double's EXACT binary
+     * value rounded half up, which is what the web's `toFixed(2)` does, so
+     * the two agree digit for digit (1.005 → 1.00, 2.675 → 2.67, 110.445 →
+     * 110.44: each is a hair below the half in binary). It used to CUT, and
+     * cut, 12.34 — really 12.3399… — printed 12.33; the rows under a total
+     * of CN¥63.23 added up to 63.21 (spec 078 round 2).
+     */
+    fun fixed2(value: Double): String =
+        number(BigDecimal(value).setScale(2, RoundingMode.HALF_UP), minFraction = 2, maxFraction = 2)
 
     fun date(epochMs: Long): String {
         val c = Calendar.getInstance(locale).apply { timeInMillis = epochMs }

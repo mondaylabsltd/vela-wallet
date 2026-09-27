@@ -169,14 +169,15 @@ struct RegistryBackupTests {
             let script = Script([ask, done(wire)])
             let reader = WalletKeys(
                 ethCall: { _, _, _ in nil },
-                step: { _, _, answers in
+                step: { _, _, answers, _ in
                     let parsed = (try? JSONSerialization.jsonObject(with: Data(answers.utf8))) as? [[String: Any]]
                     script.transcripts.append(parsed ?? [])
                     return script.rounds.removeFirst()
                 }
             )
             let result = await reader.read(
-                address: "0xsafe", device: [WalletKeys.DeviceKey(publicKeyHex: "04ab", name: "A", transports: "")]
+                address: "0xsafe", device: [WalletKeys.DeviceKey(publicKeyHex: "04ab", name: "A", transports: "")],
+                signInCredential: ""
             )
             #expect(result.source == source)
             #expect(result.rows.first?.key.method == .securityKey)
@@ -225,7 +226,7 @@ struct RegistryBackupTests {
         // The real core, asked with no address so that it answers from the
         // record alone — the only place a page is ever known.
         let rows = await WalletKeys(ethCall: { _, _, _ in nil })
-            .read(address: "", device: device).rows
+            .read(address: "", device: device, signInCredential: "").rows
         #expect(rows.map(\.key.method) == [.trustedSigner, .platform])
         #expect(rows.map(\.signerOrigin) == [page, ""])
 

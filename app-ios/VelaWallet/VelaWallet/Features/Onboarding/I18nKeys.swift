@@ -281,6 +281,7 @@ enum I18nKeys {
         static let sectionAppearance = "settings.sections.appearance"
         static let sectionLocalization = "settings.sections.localization"
         static let sectionAdvanced = "settings.sections.advanced"
+        static let sectionCommunity = "settings.sections.community"
 
             // Home rows.
         static let accountSwitch = "settings.account.switch"
@@ -354,6 +355,7 @@ enum I18nKeys {
         static let keysTransport = "settingsModals.keys.transport"
         static let keysAttestation = "settingsModals.keys.attestation"
         static let keysUserVerified = "settingsModals.keys.userVerified"
+        static let keysSignsHere = "settingsModals.keys.signsHere"
         static let keysCopy = "componentsUi.signing.copyValue"
         static let keysCopied = "receive.copied"
         static let backupExplain = "settingsModals.backup.explain"
@@ -526,6 +528,33 @@ enum I18nKeys {
         static let bugConsent = "componentsUi.bugReport.consent"
         static let bugSend = "componentsUi.bugReport.send"
         static let bugGithub = "componentsUi.bugReport.openGithubForm"
+        /// The one-click report's own states (round 3): typing, sending,
+        /// filed, and the GitHub road when the endpoint could not file it.
+        static let bugStepsPlaceholder = "componentsUi.bugReport.stepsPlaceholder"
+        static let bugSending = "componentsUi.bugReport.sending"
+        static let bugSuccessTitle = "componentsUi.bugReport.successTitle"
+        static let bugSuccessBodyNew = "componentsUi.bugReport.successBodyNew"
+        static let bugSuccessBodyDeduped = "componentsUi.bugReport.successBodyDeduped"
+        static let bugViewIssue = "componentsUi.bugReport.viewIssue"
+        static let bugFallbackTitle = "componentsUi.bugReport.fallbackTitle"
+        static let bugFallbackBody = "componentsUi.bugReport.fallbackBody"
+        static let bugOpenGithub = "componentsUi.bugReport.openGithub"
+        static let bugDone = "componentsUi.bugReport.done"
+        /// Screenshots (2026-09-26): attached, public on GitHub, refused.
+        static let bugScreenshotsLabel = "componentsUi.bugReport.screenshotsLabel"
+        static let bugAddScreenshots = "componentsUi.bugReport.addScreenshots"
+        static let bugScreenshotsHint = "componentsUi.bugReport.screenshotsHint"
+        static let bugScreenshotsPublic = "componentsUi.bugReport.screenshotsPublic"
+        static let bugRemoveScreenshot = "componentsUi.bugReport.removeScreenshot"
+        static let bugScreenshotsLimit = "componentsUi.bugReport.screenshotsLimit"
+        static let bugScreenshotUnsupported = "componentsUi.bugReport.screenshotUnsupported"
+        static let bugScreenshotsDropped = "componentsUi.bugReport.screenshotsDropped"
+        static let bugFallbackScreenshots = "componentsUi.bugReport.fallbackScreenshots"
+        /// Tap a screenshot to preview it (spec C, 2026-09-27): the tile's
+        /// accessible name, the viewer's ✕ and its Remove.
+        static let bugViewScreenshot = "componentsUi.bugReport.viewScreenshot"
+        static let bugCloseViewer = "componentsUi.bugReport.closeViewer"
+        static let bugRemoveFromViewer = "componentsUi.bugReport.removeFromViewer"
 
             // Rescue (SR1–SR5).
         static let rpcUnavailableMultiple = "assets.rpcUnavailableMultiple"

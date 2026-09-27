@@ -45,6 +45,20 @@ pub struct WalletStrings {
     /// sentence, not a $0.
     pub balance_unreachable: SharedString,
     pub balance_unpriced: SharedString,
+    /// The hero's status line naming unreachable chains (078 H-03):
+    /// templates carrying `{{name}}` / `{{count}}`.
+    pub rpc_unavailable_single: String,
+    pub rpc_unavailable_multiple: String,
+    /// SR3, the balance breakdown the status line opens (078 H-03).
+    pub detail_title: SharedString,
+    /// Template carrying `{{amount}}`.
+    pub detail_total: String,
+    pub detail_networks_label: SharedString,
+    pub detail_networks_note: SharedString,
+    pub detail_retrying: SharedString,
+    pub detail_failed: SharedString,
+    pub detail_retry: SharedString,
+    pub detail_updated: SharedString,
     pub no_price: SharedString,
     pub action_receive: SharedString,
     pub action_send: SharedString,
@@ -72,7 +86,6 @@ pub struct WalletStrings {
     pub networks_title: SharedString,
     /// The sign-out row and its confirmation. The copy is the shipping
     /// client's, already translated in all fifteen locales.
-    pub sign_out_button: SharedString,
     pub sign_out_title: SharedString,
     pub sign_out_keeps: SharedString,
     pub sign_out_warning: SharedString,
@@ -85,7 +98,6 @@ pub struct WalletStrings {
     pub account_remove: SharedString,
     pub account_remove_body: SharedString,
     pub all_networks: SharedString,
-    pub search_placeholder: SharedString,
     pub receive_title: SharedString,
     pub address_label: SharedString,
     pub copy_address: SharedString,
@@ -93,6 +105,11 @@ pub struct WalletStrings {
     /// 关闭 — for a dialog that is only ever LOOKED at. "取消" would be wrong:
     /// nothing is being cancelled by closing a picture.
     pub close_viewer: SharedString,
+    /// The identicon viewer (078 H-02): the artwork, big, beside the address
+    /// that drew it.
+    pub viewer_title: SharedString,
+    pub viewer_caption: SharedString,
+    pub viewer_copied: SharedString,
     pub warning_title: SharedString,
     pub warning_reminder: SharedString,
     /// Template carrying `{{count}}`.
@@ -126,6 +143,16 @@ impl WalletStrings {
             balance_stale: s("home.balanceStale"),
             balance_unreachable: s("onboarding.common.networkBody"),
             balance_unpriced: s("home.balanceUnpriced"),
+            rpc_unavailable_single: raw("assets.rpcUnavailableSingle"),
+            rpc_unavailable_multiple: raw("assets.rpcUnavailableMultiple"),
+            detail_title: s("home.balanceDetailTitle"),
+            detail_total: raw("assets.switcherTotal"),
+            detail_networks_label: s("home.balanceDetailNetworksLabel"),
+            detail_networks_note: s("home.balanceDetailNetworksNote"),
+            detail_retrying: s("home.balanceDetailStatusRetrying"),
+            detail_failed: s("home.balanceDetailStatusFailed"),
+            detail_retry: s("home.balanceDetailRetry"),
+            detail_updated: s("home.balanceDetailUpdatedLabel"),
             no_price: s("home.balanceDetailNoPrice"),
             action_receive: s("componentsUi.dock.receive"),
             action_send: s("componentsUi.dock.send"),
@@ -147,7 +174,6 @@ impl WalletStrings {
             empty_assets_title: s("assets.emptyTitle"),
             empty_assets_caption: s("assets.emptySubtext"),
             networks_title: s("settingsModals.network.modalTitle"),
-            sign_out_button: s("settings.signOut.button"),
             sign_out_title: s("settings.signOut.title"),
             // `settings.signOut.desc` is deliberately NOT read here. It ends
             // "your passkey stays in Face ID / fingerprint", which is a fact
@@ -164,11 +190,13 @@ impl WalletStrings {
             account_remove: s("settings.account.remove"),
             account_remove_body: s("settings.account.removeBody"),
             all_networks: s("componentsUi.networkFilter.allNetworks"),
-            search_placeholder: s("componentsUi.commandBar.placeholder"),
             receive_title: s("receive.title"),
             address_label: s("receive.addressLabel"),
             copy_address: s("componentsUi.identiconViewer.copyAddress"),
             close_viewer: s("componentsUi.identiconViewer.close"),
+            viewer_title: s("componentsUi.identiconViewer.title"),
+            viewer_caption: s("componentsUi.identiconViewer.caption"),
+            viewer_copied: s("componentsUi.identiconViewer.copied"),
             qr_caption: s("componentsUi.qrPlaceholder.caption"),
             warning_title: s("receive.warningTitle"),
             warning_reminder: s("receive.warningReminder"),
@@ -205,6 +233,22 @@ mod tests {
             (s.nav_wallet.as_ref(), "componentsUi.mainNav.wallet"),
             (s.total_balance.as_ref(), "home.totalBalance"),
             (s.no_price.as_ref(), "home.balanceDetailNoPrice"),
+            (s.detail_title.as_ref(), "home.balanceDetailTitle"),
+            (
+                s.detail_networks_label.as_ref(),
+                "home.balanceDetailNetworksLabel",
+            ),
+            (
+                s.detail_networks_note.as_ref(),
+                "home.balanceDetailNetworksNote",
+            ),
+            (
+                s.detail_retrying.as_ref(),
+                "home.balanceDetailStatusRetrying",
+            ),
+            (s.detail_failed.as_ref(), "home.balanceDetailStatusFailed"),
+            (s.detail_retry.as_ref(), "home.balanceDetailRetry"),
+            (s.detail_updated.as_ref(), "home.balanceDetailUpdatedLabel"),
             (s.qr_caption.as_ref(), "componentsUi.qrPlaceholder.caption"),
             (s.address_label.as_ref(), "receive.addressLabel"),
             (

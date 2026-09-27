@@ -123,6 +123,8 @@ enum Request {
         chain_id: u32,
         reply: Sender<Option<String>>,
     },
+    /// The chains whose last failure was the providers' rate limit.
+    RateLimited { reply: Sender<Vec<u32>> },
 }
 
 /// Why a routed call produced no answer.
@@ -189,6 +191,21 @@ fn query(
         tx.send(Message::Ask(make(chain_id, reply))).ok()?;
     }
     answer.recv().ok().flatten()
+}
+
+/// The chains whose last failed call saw only rate limits (`getRateLimitedChains`,
+/// invariant ④): transient — the balance keeps what it had and nobody is told
+/// to swap in their own RPC (078 W-08). **Blocks** on the pool thread.
+pub fn rate_limited_chains() -> Vec<u32> {
+    let (reply, answer) = channel();
+    let sent = sender().lock().ok().is_some_and(|tx| {
+        tx.send(Message::Ask(Request::RateLimited { reply }))
+            .is_ok()
+    });
+    if !sent {
+        return Vec::new();
+    }
+    answer.recv().unwrap_or_default()
 }
 
 /// Forget an endpoint's measured state — after the settings screen edits it.
@@ -336,6 +353,9 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                     now_ms: now_ms(),
                 });
                 drain(&mut host, pending, &mut inflight, &mut queries, workers);
+            }
+            Request::RateLimited { reply } => {
+                let _ = reply.send(host.view().rate_limited_chains);
             }
         }
     }
@@ -808,6 +828,14 @@ fn stored_network_config(chain_id: u32) -> Option<String> {
 
 fn stored_custom_rpc(chain_id: u32) -> Option<String> {
     stored_array(storage::KEY_CUSTOM_NETWORKS, chain_id, "rpcURL")
+}
+
+/// `isUsingBuiltinBundler`: no user-set bundler for this chain, or one that
+/// is the built-in relay's host anyway. Only the built-in relay keeps a
+/// per-Safe gas account that can run short, so only it is pre-checked.
+pub fn uses_builtin_bundler(chain_id: u32) -> bool {
+    let builtin = crate::executor::relay::builtin_base();
+    stored_custom_bundler(chain_id).is_none_or(|url| url.contains(&builtin))
 }
 
 fn stored_custom_bundler(chain_id: u32) -> Option<String> {

@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.wallet.components
 
+import app.getvela.wallet.core.designsystem.tokens.VelaBorder
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -66,7 +68,11 @@ fun TokenIcon(
             Box(
                 modifier = Modifier
                     .size(circle)
-                    .background(colors.bgSunken, CircleShape),
+                    .background(colors.bgSunken, CircleShape)
+                    // No ticker = no coin yet (a fee still being measured): a
+                    // hairline ring, so the empty disc still reads as a place
+                    // on a raised card in dark (design review, 078 round 3).
+                    .then(if (ticker.isEmpty()) Modifier.border(VelaBorder.hairline, colors.borderStrong, CircleShape) else Modifier),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(

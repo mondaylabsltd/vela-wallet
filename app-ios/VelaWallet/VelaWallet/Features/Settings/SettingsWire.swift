@@ -301,16 +301,23 @@ struct NetViewWire: Decodable, Equatable {
     let lastAddedChainId: Int?
 }
 
+// MARK: - fee_tier_pref (spec 069)
+
+/// `fee_tier_pref`'s view (spec 069): the tier every send STARTS at — always a
+/// real one, the factory `fast` when nothing was chosen.
+struct FeeTierPrefViewWire: Decodable, Equatable {
+    let tier: String
+    /// `false` ⇒ the factory default is showing, not a choice.
+    let committed: Bool
+    /// The tiers Settings may offer, fastest first — never the dead `rapid`.
+    let offered: [String]
+}
+
 // MARK: - sign_pref (spec 071)
 
-/// `sign_pref`'s view (spec 071): the "Sign with" every signing sheet starts
-/// at, and the Trusted Signer page. Every judgement in it is the core's.
+/// `sign_pref`'s view (spec 071): the Trusted Signer page. Every judgement in
+/// it is the core's.
 struct SignPrefViewWire: Decodable, Equatable {
-    /// Always an offered name; `auto` when nothing was chosen.
-    let method: String
-    let methodCommitted: Bool
-    /// Every "Sign with" value, in the order a picker lists them.
-    let offered: [String]
     /// The page the Trusted Signer opens. Always usable.
     let signerUrl: String
     let signerUrlIsDefault: Bool
@@ -323,8 +330,7 @@ struct SignPrefViewWire: Decodable, Equatable {
     /// synthesized set; the names are the decoder's post-`convertFromSnakeCase`
     /// ones.
     private enum CodingKeys: String, CodingKey {
-        case method, methodCommitted, offered, signerUrl, signerUrlIsDefault
-        case signerUrlError, signerUsesWalletPasskeys
+        case signerUrl, signerUrlIsDefault, signerUrlError, signerUsesWalletPasskeys
     }
 
     /// `decodeIfPresent` throughout, with the core's own defaults behind it.
@@ -336,9 +342,6 @@ struct SignPrefViewWire: Decodable, Equatable {
     /// this file exists to stop rather than cause.
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        method = try values.decodeIfPresent(String.self, forKey: .method) ?? "auto"
-        methodCommitted = try values.decodeIfPresent(Bool.self, forKey: .methodCommitted) ?? false
-        offered = try values.decodeIfPresent([String].self, forKey: .offered) ?? []
         signerUrl = try values.decodeIfPresent(String.self, forKey: .signerUrl) ?? trustedSignerDefaultUrl()
         signerUrlIsDefault = try values.decodeIfPresent(Bool.self, forKey: .signerUrlIsDefault) ?? true
         signerUrlError = try values.decodeIfPresent(String.self, forKey: .signerUrlError)
@@ -346,8 +349,7 @@ struct SignPrefViewWire: Decodable, Equatable {
             try values.decodeIfPresent(Bool.self, forKey: .signerUsesWalletPasskeys) ?? true
     }
 
-    /// What the machine says before it has read anything: `auto`, the
-    /// official page, and everything it offers.
+    /// What the machine says before it has read anything: the official page.
     static var initial: SignPrefViewWire? {
         (try? SignPrefCore().view()).flatMap {
             try? CoreJSON.decode(SignPrefViewWire.self, from: CoreJSON.object($0))

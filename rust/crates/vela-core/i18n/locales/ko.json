@@ -6,7 +6,8 @@
     "error": "오류",
     "somethingWrong": "문제가 발생했습니다",
     "tryAgain": "다시 시도",
-    "done": "완료"
+    "done": "완료",
+    "gotIt": "확인"
   },
   "language": {
     "title": "언어",
@@ -25,6 +26,7 @@
       "appearance": "테마",
       "localization": "지역 설정",
       "advanced": "고급",
+      "community": "커뮤니티",
       "developer": "개발자"
     },
     "account": {
@@ -36,7 +38,7 @@
     "appearance": {
       "themeLight": "라이트",
       "themeDark": "다크",
-      "themeAuto": "시스템 설정 따르기",
+      "themeAuto": "자동",
       "avatarInitials": "이니셜",
       "avatarIdenticon": "아이덴티콘",
       "themeTitle": "테마",

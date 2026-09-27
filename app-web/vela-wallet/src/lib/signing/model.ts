@@ -123,6 +123,9 @@ export type Block =
 	| { kind: 'sentence'; text: string; tone: Tone }
 	| {
 			kind: 'allowance';
+			/** The batch leg this card caps; absent = the single approval. The
+			 *  sheet routes its chips and field to that leg's own events. */
+			leg?: number;
 			label: string;
 			value: string;
 			valueTone: Tone;
@@ -250,18 +253,6 @@ export interface SigningModel {
 		identiconSvg: string;
 		/** The signing account's address — the identicon viewer's seed. Live only. */
 		address?: string;
-	};
-	/**
-	 * "Sign with · Automatic ›" — WHERE the passkey that signs this is (founder,
-	 * 2026-09-19). Live only; absent in the gallery. `open` draws the choices in
-	 * place of the row, the way the fee selector does.
-	 */
-	signWith?: {
-		label: string;
-		value: string;
-		open: boolean;
-		/** `detail`: a second line saying what a choice is — the Trusted Signer's (spec 071). */
-		options: { id: string; title: string; detail?: string; selected: boolean }[];
 	};
 	/**
 	 * The slide. There is no reject button anywhere in this vocabulary:

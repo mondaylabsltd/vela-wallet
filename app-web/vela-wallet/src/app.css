@@ -46,9 +46,19 @@ a {
  * links, rows, tabs. Text entry is NOT one of them — a field is its own edge,
  * and this halo around a field drew a second ring outside the first (founder,
  * 2026-09-05: "不要这么多 active 边框"). Fields take the quiet rule below.
+ * A control whose visible part is SMALLER than its tap area — the fee card's
+ * round refresh, whose hit area is the card's whole height — marks itself
+ * `data-focus-inner` and draws the ring on that visible part instead, so no
+ * tall box appears around a small round button.
  */
 :where(
-	:not(textarea, select, [data-field], input:not([type='checkbox'], [type='radio'], [type='range']))
+	:not(
+		textarea,
+		select,
+		[data-field],
+		[data-focus-inner],
+		input:not([type='checkbox'], [type='radio'], [type='range'])
+	)
 ):focus-visible {
 	/* Transparent outline (not `none`): forced-colors mode repaints it, so
 	   keyboard focus stays visible in Windows High Contrast where the

@@ -6,7 +6,8 @@
     "error": "Fehler",
     "somethingWrong": "Etwas ist schiefgelaufen",
     "tryAgain": "Erneut versuchen",
-    "done": "Fertig"
+    "done": "Fertig",
+    "gotIt": "Verstanden"
   },
   "language": {
     "title": "Sprache",
@@ -25,6 +26,7 @@
       "appearance": "Darstellung",
       "localization": "Lokalisierung",
       "advanced": "Erweitert",
+      "community": "Community",
       "developer": "Entwickler"
     },
     "account": {
@@ -36,7 +38,7 @@
     "appearance": {
       "themeLight": "Hell",
       "themeDark": "Dunkel",
-      "themeAuto": "System folgen",
+      "themeAuto": "System",
       "avatarInitials": "Initialen",
       "avatarIdenticon": "Identicon",
       "themeTitle": "Design",
@@ -54,7 +56,7 @@
       "timeSubtitle": "12-Stunden- oder 24-Stunden-Format."
     },
     "feeSpeed": {
-      "title": "Transaktionsgeschwindigkeit",
+      "title": "Transaktionstempo",
       "subtitle": "Jede Überweisung, die du in Vela startest, beginnt hier. Eine einzelne kannst du beim Senden trotzdem ändern."
     },
     "signing": {
@@ -78,7 +80,7 @@
       "addNetworkSubtitle": "Eigenes EVM-Netzwerk hinzufügen",
       "endpointsTitle": "Dienst-Endpunkte",
       "endpointsSubtitle": "Chain-Daten, Identity-Index, Bundler",
-      "feeSpeedTitle": "Transaktionsgeschwindigkeit",
+      "feeSpeedTitle": "Transaktionstempo",
       "feeSpeedSubtitle": "Der Startwert für jede Überweisung"
     },
     "developer": {

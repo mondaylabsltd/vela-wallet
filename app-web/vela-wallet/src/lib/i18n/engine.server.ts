@@ -23,6 +23,7 @@ import { WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { SigningMessages } from '$lib/signing/messages';
+import { CLEAR_TERMS } from '$lib/signing/terms';
 import type { SettingsMessages } from '$lib/settings/messages';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
@@ -303,7 +304,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			account: k('settings.sections.account'),
 			appearance: k('settings.sections.appearance'),
 			localization: k('settings.sections.localization'),
-			advanced: k('settings.sections.advanced')
+			advanced: k('settings.sections.advanced'),
+			community: k('settings.sections.community')
 		},
 		account: {
 			switch: k('settings.account.switch'),
@@ -370,14 +372,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			slowHint: k('send.gasTierHintSlow')
 		},
 		signing: {
-			title: k('settings.signing.title'),
-			subtitle: k('settings.signing.subtitle'),
-			// The signing sheet's own names, so the two surfaces cannot drift.
 			methods: {
-				auto: k('common.automatic'),
-				platform: k('onboarding.create.methodPlatformTitle'),
-				hybrid: k('onboarding.create.methodHybridTitle'),
-				security_key: k('onboarding.create.methodSecurityKeyTitle'),
 				trusted_signer: k('componentsUi.signing.trustedSignerTitle')
 			},
 			trustedSignerBody: k('componentsUi.signing.trustedSignerBody'),
@@ -565,7 +560,21 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			fallbackTitle: k('componentsUi.bugReport.fallbackTitle'),
 			fallbackBody: k('componentsUi.bugReport.fallbackBody'),
 			openGithub: k('componentsUi.bugReport.openGithub'),
-			openGithubForm: k('componentsUi.bugReport.openGithubForm')
+			openGithubForm: k('componentsUi.bugReport.openGithubForm'),
+			screenshotsLabel: k('componentsUi.bugReport.screenshotsLabel'),
+			addScreenshots: k('componentsUi.bugReport.addScreenshots'),
+			screenshotsHint: k('componentsUi.bugReport.screenshotsHint'),
+			screenshotsPublic: k('componentsUi.bugReport.screenshotsPublic'),
+			removeScreenshot: k('componentsUi.bugReport.removeScreenshot'),
+			screenshotsLimit: k('componentsUi.bugReport.screenshotsLimit'),
+			screenshotUnsupported: k('componentsUi.bugReport.screenshotUnsupported'),
+			dropHint: k('componentsUi.bugReport.dropHint'),
+			screenshotsDropped: k('componentsUi.bugReport.screenshotsDropped'),
+			fallbackScreenshots: k('componentsUi.bugReport.fallbackScreenshots'),
+			done: k('componentsUi.bugReport.done'),
+			viewScreenshot: k('componentsUi.bugReport.viewScreenshot'),
+			closeViewer: k('componentsUi.bugReport.closeViewer'),
+			removeFromViewer: k('componentsUi.bugReport.removeFromViewer')
 		},
 		rescue: {
 			rpcUnavailableSingle: k('assets.rpcUnavailableSingle'),
@@ -612,6 +621,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			transport: k('settingsModals.keys.transport'),
 			attestation: k('settingsModals.keys.attestation'),
 			userVerified: k('settingsModals.keys.userVerified'),
+			signsHere: k('settingsModals.keys.signsHere'),
 			copy: k('componentsUi.signing.copyValue'),
 			copied: k('receive.copied')
 		},
@@ -915,16 +925,11 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techIdentityToken: k('componentsUi.signing.techIdentityToken'),
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
+		terms: Object.fromEntries(CLEAR_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])),
 		backupIntent: k('settingsModals.backup.intent'),
 		backupRegisteredAs: k('settingsModals.backup.registeredAs'),
 		backupAddress: k('contacts.addressLabel'),
 		backupPublicKeys: k('settingsModals.backup.publicKeys'),
-		signWithLabel: k('componentsUi.signing.signWith'),
-		signWithAuto: k('common.automatic'),
-		// Titles only: the create flow's descriptions say "create it on…".
-		signWithPlatform: k('onboarding.create.methodPlatformTitle'),
-		signWithHybrid: k('onboarding.create.methodHybridTitle'),
-		signWithSecurityKey: k('onboarding.create.methodSecurityKeyTitle'),
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.
 		receipt: {

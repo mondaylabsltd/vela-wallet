@@ -19,7 +19,7 @@
 	 * defeated at the last step.
 	 */
 	import SigningSheetView from '$lib/signing/SigningSheet.svelte';
-	import { buildSigningModel, signWithModel } from '$lib/signing/live';
+	import { buildSigningModel } from '$lib/signing/live';
 	import { signingSheet } from '$lib/signing/core/sheet.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { session } from '$lib/session/core/session.svelte';
@@ -42,8 +42,6 @@
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { onMount } from 'svelte';
-	import { setSignMethod } from '$lib/onboarding/core/passkey';
-	import { signPreference } from '$lib/settings/core/sign-pref.svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -211,9 +209,6 @@
 	);
 	onMount(() => {
 		void speedControl.boot();
-		// Where every request's "Sign with" starts, and the page the Clear
-		// Signer opens (spec 071).
-		void signPreference.boot();
 		return () => speedControl.dispose();
 	});
 
@@ -244,6 +239,12 @@
 			account: identity.address,
 			calls,
 			feeToken: null,
+			// Nobody has chosen the fee coin for this request: the fee machine
+			// pays in one that can (spec 078) instead of quoting the native coin
+			// a wallet may not hold and sending the person to the picker. The
+			// approve carries the view's `fee_token` — the coin it picked — so
+			// the coin displayed is the coin signed, exactly as after a tap.
+			autoFeeToken: true,
 			// HOW FAST is the speed control's to say: the stored default, a
 			// one-shot pick, or a free upgrade.
 			tier: speedControl.tier,
@@ -253,48 +254,16 @@
 		});
 	});
 
-	// WHERE the signing passkey is — or whether the Trusted Signer signs (spec
-	// 071) — this request's, and only this request's. Every request starts at
-	// Settings' default (`sign_pref`); a pick here lies over it for this request
-	// alone and never reaches the preference. The passkey module reads it at the
-	// ceremony, and hears `null` the moment the sheet is gone, so a choice made
-	// for one request never signs another.
-	let picked = $state<{ id: string; method: string } | null>(null);
-	let signWithOpen = $state(false);
 	/** The fee-coin list is open. Like Send's: every coin the relay takes, the core's verdict on each. */
 	let feeOpen = $state(false);
-	const signWith = $derived(
-		signWithModel({
-			offered: signPreference.view.offered,
-			defaultMethod: signPreference.view.method,
-			picked: picked !== null && picked.id === signView.request?.id ? picked.method : null,
-			open: signWithOpen,
-			m: messages
-		})
-	);
-	$effect(() => {
-		setSignMethod(signView.request && signView.surface !== 'hidden' ? signWith.method : null);
-	});
 	$effect(() => {
 		if (signView.request && signView.surface !== 'hidden') return;
-		picked = null;
-		signWithOpen = false;
 		feeOpen = false;
 	});
 
-	function onSignWith(id: string | null): void {
-		if (id === null) {
-			signWithOpen = !signWithOpen;
-			return;
-		}
-		const request = signView.request;
-		if (request) picked = { id: request.id, method: id };
-		signWithOpen = false;
-	}
-
 	const model = $derived.by(() => {
 		if (!identity) return null;
-		const built = buildSigningModel({
+		return buildSigningModel({
 			sign: signView,
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
@@ -309,11 +278,6 @@
 			identity,
 			identicon: identiconSvgForClient
 		});
-		if (!built) return built;
-		return {
-			...built,
-			signWith: signWith.row
-		};
 	});
 
 	/**
@@ -342,14 +306,23 @@
 					: null,
 			fee_collector: null,
 			params_override_json: signingSheet.guard.rewritten_params_json,
-			intent: null
+			intent: null,
+			// The approval surface showed an unbounded amount and it was kept as
+			// the site asked — the submit guard's only waiver, copied, not decided.
+			unlimited_approved: signingSheet.guard.unlimited_consented
 		};
 	}
 
 	/** The chip ids the drawn editor emits, in the guard's vocabulary. */
-	function guardChip(id: string): void {
+	function guardChip(id: string, leg?: number): void {
 		if (id === 'requested' || id === 'balance' || id === 'custom' || id === 'revoke') {
-			signingSheet.dispatchGuard({ type: 'preset_selected', mode: id });
+			// A batch leg's card talks to its OWN leg: the core ignores the
+			// single approval's `preset_selected` on a batch.
+			signingSheet.dispatchGuard(
+				leg === undefined
+					? { type: 'preset_selected', mode: id }
+					: { type: 'leg_preset_selected', index: leg, mode: id }
+			);
 		}
 	}
 
@@ -360,8 +333,12 @@
 	 * by the shell, as payment_request's amount is), so nothing here decides
 	 * whether what was typed is a number — it only carries it.
 	 */
-	function guardCustom(text: string): void {
-		signingSheet.dispatchGuard({ type: 'custom_amount_changed', text });
+	function guardCustom(text: string, leg?: number): void {
+		signingSheet.dispatchGuard(
+			leg === undefined
+				? { type: 'custom_amount_changed', text }
+				: { type: 'leg_custom_amount_changed', index: leg, text }
+		);
 	}
 </script>
 
@@ -395,6 +372,7 @@
 	-->
 	<SigningSheetView
 		{model}
+		dismissible={!signView.is_signing && !signView.is_submitting}
 		onclose={() => signRequest.dispatch({ type: 'reject_tapped' })}
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
 		onchip={guardChip}
@@ -413,14 +391,23 @@
 			// Telling the session in force alone would leave the previews in
 			// the old coin, and promoting one would switch the coin back. The
 			// approve carries `fee_token` from the same view.
+			// A tap is the person's choice, never the machine's: priced as
+			// picked from here on (`autoFeeToken: false`). While the machine
+			// was still choosing, even a tap on the coin it had picked is
+			// asked again — `feeToken` there only named the fallback, and the
+			// previews must stop choosing for themselves too.
 			const token = id === 'native' ? null : id;
 			const last = fee.lastRequest;
-			if (last && last.feeToken !== token) {
-				void fee.requestQuote({ ...last, feeToken: token, tier: speedControl.tier });
+			if (last && (last.feeToken !== token || last.autoFeeToken)) {
+				void fee.requestQuote({
+					...last,
+					feeToken: token,
+					autoFeeToken: false,
+					tier: speedControl.tier
+				});
 			}
 			feeOpen = false;
 		}}
-		onsignwith={onSignWith}
 		onspeed={() => speedControl.toggle()}
 		onspeedpick={(id) => {
 			if (id === 'fast' || id === 'standard' || id === 'slow') speedControl.pick(id);

@@ -1,7 +1,7 @@
 ---
 title: Denetimler ve bilinen sorunlar
 description: "Vela'nın bağlı olduğu her sözleşme, hangi sürümü kimin denetlediği, denetlenen sürümün dağıtılan sürüm olup olmadığı, izlediğimiz açık bulgular ve hiç denetlenmemiş olanlar."
-source: d0bb95c016da
+source: 09a0c3d8acc0
 ---
 
 "Denetlendi", belirli bir kodun belirli bir sürümü hakkında bir iddiadır; bu yüzden bu
@@ -149,12 +149,19 @@ bağlı; olduğunda bu sayfa bunu yazacak.
 ### Vela'nın kendi savunmalarındaki eksikler
 
 Bunlar sözleşme bulguları değil, cüzdanın sizi sandığınızdan daha az koruduğu yerler.
-Her biri düzeltilmek üzere takip ediliyor:
+Her biri düzeltilmek üzere takip ediliyor; bilinçli bir ödünleşim olduğu belirtilenler
+hariç:
 
-- **Onay koruması yalnızca "sınırsız" tutarları durdurur** (2^200 ya da daha fazla;
-  Permit2 için 2^152). Büyük ama sınırlı bir onay, imzalı bir izin (permit) ya da bir NFT
-  `setApprovalForAll` engellenmez, yalnızca uyarı alır.
-- **Bağımsız imza sayfası** henüz hiçbir uygulamaya **bağlı değil**.
+- **Sınırsız bir onay, olduğu gibi bırakırsanız gönderilir** — bilinçli bir ödünleşim,
+  çünkü üst sınır konmuş bir onay Permit2'yi ve toplu takasları bozar. "Sınırsız" bir
+  onay (2^200 ya da daha fazla; Permit2 için 2^152) kırmızıyla gösterilir ve siz üst
+  sınır koymadıkça dApp'in istediği gibi gönderilir. İmzalı izinlere (permit) hiçbir
+  yerde üst sınır konamaz.
+- **Trusted Signer isteğe bağlıdır ve bütünlük kontrolü henüz hiçbir sayfayı
+  reddetmiyor.** Bağımsız imza sayfası yalnızca cüzdanınızı oluştururken ya da giriş
+  yaparken onu seçtiğiniz cihazda kullanılır ve web cüzdanı onu kullanamaz. Masaüstü
+  uygulaması sayfayı kendisiyle birlikte gelen sürümlerle karşılaştırır ama bir
+  uyuşmazlığı yalnızca günlüğe yazar; telefon uygulamaları henüz kontrol etmiyor.
 - **Web sitesi, geçiş anahtarlarıyla aynı alan adında üçüncü taraf bir analitik
   betiği yükler.** Site kendi sayfalarının geçiş anahtarı kullanmasını yasaklar (bir
   Permissions-Policy başlığıyla) ve betiği anahtar barındıran sayfanın dışında tutar.

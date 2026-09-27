@@ -600,10 +600,7 @@ pub fn callback_query(request_head: &str) -> Option<&str> {
 /// then [`verify`].
 #[must_use]
 pub fn callback_token(url: &str) -> Option<String> {
-    let query = url
-        .strip_prefix(CALLBACK_URL)
-        .and_then(|rest| rest.strip_prefix('?'))?;
-    query
+    callback_of(url)?
         .split('&')
         .find_map(|pair| pair.strip_prefix("t="))
         .map(unpercent)
@@ -612,10 +609,16 @@ pub fn callback_token(url: &str) -> Option<String> {
 
 /// The query of a [`CALLBACK_URL`], for [`parse_callback`] — `None` when the
 /// URL is not a callback.
+///
+/// The page navigates to `velawallet://sign-result?…`, but Windows hands the
+/// app `velawallet://sign-result/?…`: it gives the host an empty path, as it
+/// does for any URL with an authority. Measured on Windows 11 with the
+/// published page, where the token matched and the answer was dropped for the
+/// slash alone. That one slash is the only other spelling accepted.
 #[must_use]
 pub fn callback_of(url: &str) -> Option<&str> {
-    url.strip_prefix(CALLBACK_URL)
-        .and_then(|rest| rest.strip_prefix('?'))
+    let rest = url.strip_prefix(CALLBACK_URL)?;
+    rest.strip_prefix('?').or_else(|| rest.strip_prefix("/?"))
 }
 
 /// What the callback carried: `?t=<token>&result=<b64url json>` or
@@ -766,6 +769,11 @@ mod tests {
             Some("tok-9")
         );
 
+        // What Windows actually hands the app: the same URL with an empty path.
+        let windows = format!("{CALLBACK_URL}/?t=tok-1&result=e30");
+        assert_eq!(callback_token(&windows).as_deref(), Some("tok-1"));
+        assert_eq!(callback_of(&windows), Some("t=tok-1&result=e30"));
+
         // Everything a shell must drop in SILENCE. The prefix check is on the
         // whole URL, so a host that merely starts the same way is not ours —
         // which is the one a naive `starts_with` gets wrong.
@@ -773,6 +781,9 @@ mod tests {
             "velawallet://pay?to=0x1&t=tok-1",
             "velawallet://sign-results?t=tok-1",
             "velawallet://sign-result",
+            "velawallet://sign-result/",
+            "velawallet://sign-result/x?t=tok-1",
+            "velawallet://sign-result//?t=tok-1",
             "https://sign.getvela.app/?t=tok-1",
             "",
         ] {

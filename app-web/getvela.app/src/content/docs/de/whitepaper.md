@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Wie Vela funktioniert und worauf du vertrauen musst – und worauf nicht –, um es zu nutzen: das Konto, die Schlüssel, die Gebühr, das Bedrohungsmodell, die Wiederherstellung und was passiert, wenn Vela verschwindet."
-source: 60d297b650ac
+source: 227acd1acf3d
 ---
 
 <script>
@@ -179,9 +179,11 @@ Selektor-Datenbank, gekennzeichnet als „ohne Gewähr“. Was übrig bleibt, be
 ausdrückliche Blindsignatur-Warnung. Ein abgerufener Deskriptor wird nie als
 verifiziert gekennzeichnet – dieses Wort verdient nur einer, der in die App eingebaut
 ist, oder ein abgerufener, der mit ihm identisch ist. Eine On-Chain-Freigabe in
-„unbegrenzter“ Höhe (2^200 oder mehr) lässt sich erst absenden, wenn du sie
-verringerst; eine große, aber begrenzte Freigabe und signierte Permits werden mit
-einem Vorsichtshinweis angezeigt, aber nicht blockiert.
+„unbegrenzter“ Höhe (2^200 oder mehr) wird rot angezeigt, mit einer Obergrenze zur
+Auswahl; begrenzt du sie nicht, wird sie genau so gesendet, wie die dApp sie gebaut
+hat. Eine große, aber begrenzte Freigabe wird mit einem Vorsichtshinweis angezeigt;
+signierte Permits lassen sich nicht begrenzen, deshalb werden sie wie angefragt
+signiert oder abgelehnt.
 Details: [Klartext-Signatur](/de/docs/clear-signing).
 
 ### Netzwerke
@@ -265,8 +267,11 @@ Was dir Selbstverwahrung gibt: Vela ist keine zweite Partei, die das kann.
   das eigene Bauen der Erweiterung oder der Apps aus dem Quellcode (Release-Pakete
   haben SHA-256-Prüfsummen und GitHub-Build-Provenance-Attestierungen, die Commit und
   Workflow-Lauf benennen; das Windows-Installationsprogramm ist weiterhin nicht
-  codesigniert). Eine unabhängige Signaturseite, die den Code der App nicht teilt, ist
-  gebaut, aber noch nicht angebunden.
+  codesigniert). Der [Trusted Signer](/de/docs/clear-signing-self-host), eine
+  unabhängige Signaturseite, die den Code der App nicht teilt, lässt sich in der
+  Desktop-, iPhone- und Android-App als deine Art zu signieren wählen; die
+  Integritätsprüfung der Desktop-App protokolliert eine abweichende Seite nur, und die
+  Handy-Apps prüfen noch nicht.
 - **Alles, was von der Domain ausgeliefert wird** – jede Seite auf getvela.app oder
   ihren Subdomains, einschließlich eines Skripts, das sie lädt, könnte Signaturen von
   Vela-Passkeys anfordern, und die Abfrage zeigt nur „getvela.app“. Die Website

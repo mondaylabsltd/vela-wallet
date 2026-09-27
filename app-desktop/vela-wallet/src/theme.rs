@@ -55,15 +55,16 @@ pub struct Theme {
     /// from `bg_base` instead makes it white-on-white in the light palette, so
     /// the dialog it is meant to lift off the page does not lift.
     pub backdrop: Hsla,
+    /// `color.fixed.shadowInk` (#1A1A18 in both palettes): the fixed ink a
+    /// screenshot's remove badge is mixed from, the same in either theme.
+    pub shadow_ink: Hsla,
     // foreground ladder
     pub fg_base: Hsla,
     pub fg_muted: Hsla,
     pub fg_subtle: Hsla,
     pub fg_inverse: Hsla,
-    /// The onboarding rail's surface. Light steps DOWN to the sunken tone and
-    /// dark stays on the base — the same pair the wallet home's sidebar uses
-    /// (spec 015 deviation 4: dark `bg_sunken` is LIGHTER than the canvas and
-    /// would invert the hierarchy), so the two rails are visibly one app.
+    /// The onboarding rail's surface: the sunken tone in both themes, as the
+    /// wallet home's sidebar is, so the two rails are visibly one app.
     pub rail_surface: Hsla,
     /// The onboarding rail's step ordinal and its `/03`. A WATERMARK on the
     /// rail's own surface — one step above the background and well below any
@@ -77,6 +78,12 @@ pub struct Theme {
     pub accent_active: Hsla,
     // structure
     pub border_card: Hsla,
+    /// The web's `--color-border-strong`: the edge of an outline button, a
+    /// field, the scanner's tools. `border_card` could not stand in for it —
+    /// in dark it IS the raised colour, so every outline vanished.
+    pub border_strong: Hsla,
+    /// The web's `--color-accent-soft`: the slide-to-confirm fill.
+    pub accent_soft: Hsla,
     pub outline_strong: Hsla,
     pub divider: Hsla,
     /// The 1 px edge between content column and action panel.
@@ -145,6 +152,7 @@ impl Theme {
             bg_raised: c(0xffffff),
             bg_sunken: c(0xf5f3ef),
             backdrop: c(0x000000).opacity(0.35),
+            shadow_ink: c(0x1a1a18),
             fg_base: c(0x1a1a18),
             fg_muted: c(0x6e6b62),
             fg_subtle: c(0x8c887e),
@@ -156,6 +164,8 @@ impl Theme {
             accent_hover: c(0xd14a20),
             accent_active: c(0xbf421c),
             border_card: c(0xecebe4),
+            border_strong: c(0xd8d6ce),
+            accent_soft: c(0xfff0eb),
             outline_strong: c(0x554b46),
             divider: c(0xecebe4),
             panel_edge: c(0xecebe4),
@@ -182,19 +192,30 @@ impl Theme {
             dark: true,
             bg_base: c(0x141412),
             bg_raised: c(0x1e1e1b),
-            bg_sunken: c(0x262622),
+            // The web's dark `--color-bg-sunken`: BELOW the canvas, as sunken
+            // means. It was #262622 here — lighter than raised — after an
+            // early mock; the web is the reference now (spec 078 X-01).
+            bg_sunken: c(0x0f0f0d),
             backdrop: c(0x000000).opacity(0.35),
+            shadow_ink: c(0x1a1a18),
             fg_base: c(0xe8e6e1),
             fg_muted: c(0x9a9790),
             fg_subtle: c(0x85827a),
             fg_inverse: c(0xffffff),
-            rail_surface: c(0x141412),
+            // The web's dark sidebar and onboarding rail sit on the sunken
+            // tone, now that sunken is darker than the canvas (078 H-11).
+            rail_surface: c(0x0f0f0d),
             rail_ordinal: c(0x2e2e27),
             rail_ordinal_soft: c(0x3b3b33),
             accent: c(0xe8572a),
             accent_hover: c(0xf26a40),
             accent_active: c(0xd44d22),
-            border_card: c(0x1e1e1b), // no visible card border in the dark mock
+            // The web's dark `--color-border-base`. It was the raised colour
+            // ("no visible card border in the dark mock"), so dark cards had
+            // no edge where the web's have one (078 X-01).
+            border_card: c(0x2c2c28),
+            border_strong: c(0x3e3e38),
+            accent_soft: c(0x2c1a12),
             outline_strong: c(0x554b46),
             divider: c(0x2c2c28),
             panel_edge: c(0x1e1e1b),
@@ -209,7 +230,9 @@ impl Theme {
             error_soft: c(0x2d1515),
             info_base: c(0x5a7cf6),
             info_soft: c(0x131b33),
-            bg_well: c(0x121210),
+            // The web has no separate well: its fields and code blocks sit on
+            // `--color-bg-sunken`, #0F0F0D in dark (078 X-01).
+            bg_well: c(0x0f0f0d),
             success: c(0x3da872),
             warning: c(0xd4a54a),
             warning_border: c(0x3d3020),
@@ -295,12 +318,18 @@ pub const SIDEBAR_PAD: f32 = 16.;
 pub const SIDEBAR_TOP: f32 = 36.;
 /// Content column padding.
 pub const WALLET_PAD_X: f32 = 24.;
+/// The Wallet column's widest, and its rows' — the web's
+/// `--layout-maxContentWidth` and `--layout-rowMeasure`.
+pub const WALLET_CONTENT_MAX_W: f32 = 800.;
+pub const WALLET_ROW_MEASURE: f32 = 560.;
 pub const WALLET_PAD_TOP: f32 = 28.;
 /// Row heights / avatar sizes.
 pub const WALLET_AVATAR: f32 = 40.;
 pub const WALLET_ROW_ICON: f32 = 40.;
 pub const WALLET_BADGE: f32 = 12.;
-pub const WALLET_NAV_ROW_H: f32 = 40.;
+/// The web sidebar's `--size-control-md`; its network rows use the same 44
+/// (`--size-hitTarget`). At 40/32 the desktop rail read as a crowded copy.
+pub const WALLET_NAV_ROW_H: f32 = 44.;
 pub const WALLET_CONTROL_H: f32 = 44.;
 /// The money-in toast (D1b): the glyph disc, and how far below the top of the
 /// window the pill floats. Measured against the phone's own banner — same
@@ -317,9 +346,12 @@ pub const WALLET_TOAST_TOP: f32 = 16.;
 pub const CONTACTS_RAIL_W: f32 = 216.;
 
 /// Spec 023 desktop SPEC: the settings second-level nav column, measured 216
-/// in DST1–DST8. Same width as the contacts group rail and for the same
-/// reason — it is the same column, doing the same job, one section over.
-pub const SETTINGS_NAV_W: f32 = 216.;
+/// in DST1–DST8 — the contacts group rail's width. 240, the sidebar's, since
+/// the Community rows (2026-09-27): a brand mark, the handle, and a trailing
+/// ↗ in its own column left "discord.gg/23gWrtaYSa" 108 of the 128 it
+/// takes at the standard size, and it broke in two. It has no space to wrap
+/// at, and the type is not made smaller to fit (`community_handle_room`).
+pub const SETTINGS_NAV_W: f32 = 240.;
 
 /// The same column, at the person's text size.
 ///
@@ -331,8 +363,8 @@ pub const SETTINGS_NAV_W: f32 = 216.;
 ///
 /// It only ever GROWS. Multiplying it down at the smaller stops bought
 /// nothing — the panel beside it has room to spare either way — and cost two
-/// German labels their endings at `compact`, where a 216px column would have
-/// held them whole.
+/// German labels their endings at `compact`, where the full column would
+/// have held them whole.
 #[must_use]
 pub fn settings_nav_w() -> f32 {
     let factor = crate::executor::appearance_prefs::text_factor();
@@ -353,7 +385,10 @@ pub const SETTINGS_DIALOG_W: f32 = 520.;
 /// The panel's own content column. Measured on DST7: the storage bar runs
 /// 505 -> 1146 inside the 1280 frame, so the content is 640 wide and starts
 /// 48 past the nav column's right edge (240 + 216 + 48 = 504).
-pub const SETTINGS_PANEL_W: f32 = 640.;
+/// Since 078 S-08 the web's `--layout-rowMeasure`, 560: the panel is that
+/// measure plus its 48 sides — at 640 a label sat further from its control
+/// than the web draws.
+pub const SETTINGS_PANEL_W: f32 = 560.;
 
 /// That 48. Left-aligned like the wallet's own content column, never centred:
 /// centring parks the form in the middle of a wide window and opens a gap the
@@ -364,14 +399,22 @@ pub const CONTACTS_RAIL_ROW_H: f32 = 36.;
 /// The `分组` caption block between the 全部联系人 row and the group rows.
 pub const CONTACTS_RAIL_LABEL_H: f32 = 32.;
 /// Inset from the header hairline down to the first rail row / list section.
-pub const CONTACTS_BODY_PAD_TOP: f32 = 16.;
+pub const CONTACTS_BODY_PAD_TOP: f32 = 24.;
 /// Header/CTA control height shared by 添加联系人, 群发转账 and the ⋯ buttons.
 pub const CONTACTS_BUTTON_H: f32 = 40.;
+/// A settings dialog's buttons: the web's `Button` at `--size-control-lg`
+/// (078 T063) — Add Network, the chain setup tool, Save & Retry and the
+/// erase pair were drawn at the contacts page's 40.
+pub const DIALOG_BUTTON_H: f32 = 52.;
 /// Page-local search field in the contacts header (DC1: 780 → 1060).
 pub const CONTACTS_SEARCH_W: f32 = 280.;
 /// Dropdown/context menu card width and row height (M1/M2).
 pub const CONTACTS_MENU_W: f32 = 220.;
 pub const CONTACTS_MENU_ROW_H: f32 = 44.;
+/// The empty book's group (icon, title, caption, the CTA pair), DC3. The
+/// page centres it on the workspace only while the column beside the rail
+/// still holds it this wide.
+pub const CONTACTS_EMPTY_W: f32 = 360.;
 /// Contacts page header band (title + search + 添加联系人 + ⋯), DC1: the
 /// hairline under it sits at y = 92 in the mock.
 pub const CONTACTS_HEADER_H: f32 = 92.;
@@ -382,7 +425,7 @@ pub const GALLERY_BAR_H: f32 = 45.;
 /// Contact detail hero avatar (desktop third-column size — measured 48 in DC2).
 pub const CONTACTS_HERO_AVATAR: f32 = 48.;
 /// Contact row leading avatar (row size, same as the wallet rows).
-pub const CONTACTS_ROW_AVATAR: f32 = 40.;
+pub const CONTACTS_ROW_AVATAR: f32 = 30.;
 
 /// Contacts motion contract (spec 018 FR-011): named here so all four
 /// platforms share one set of values. The gpui build renders fixture states
@@ -430,8 +473,49 @@ fn scaled(base: f32) -> Pixels {
 pub fn text_balance_hero() -> Pixels {
     scaled(40.)
 }
+/// The send form's typed figure, on the web's ladder (`AmountInput`):
+/// `--text-hero` 46, `--text-heroCompact` 38, `--text-heroTight` 31, stepped
+/// by the DRAWN length — the figure plus half its unit, which is set smaller
+/// — at 8 and 11, exactly as the web counts it. A Max of an 18-decimal coin
+/// steps down instead of running off the column.
+pub fn amount_hero_rung(figure_chars: usize, unit_chars: usize) -> f32 {
+    match figure_chars + unit_chars / 2 {
+        0..=8 => 46.,
+        9..=11 => 38.,
+        _ => 31.,
+    }
+}
+pub fn text_amount_hero(rung: f32) -> Pixels {
+    scaled(rung)
+}
+/// The line the figure sits on — the hero rung's on every rung, so the block
+/// is one height whatever is typed and nothing below it moves.
+pub fn line_amount_hero() -> Pixels {
+    scaled(46. * 1.2)
+}
+/// The unit after the figure (`--text-3xl` at the hero rung), stepping down
+/// with it so the pair keeps its proportion: lighter, so the number reads
+/// first.
+pub fn text_amount_unit(rung: f32) -> Pixels {
+    scaled(26. * rung / 46.)
+}
+/// The hero's decimals (`--text-3xl`, 078 H-10).
 pub fn text_balance_decimals() -> Pixels {
-    scaled(24.)
+    scaled(26.)
+}
+/// The figure on the confirm and a transaction's detail (`--text-4xl`,
+/// 078 F-11) — smaller than the balance hero: it states what was sent, it
+/// does not headline the screen.
+pub fn text_amount_detail() -> Pixels {
+    scaled(32.)
+}
+/// A token circle's ticker (`--text-xs`, 078 H-09).
+pub fn text_glyph() -> Pixels {
+    scaled(10.)
+}
+/// A button's label (`--text-xl`), as the web's `Button` sets it.
+pub fn text_button() -> Pixels {
+    scaled(17.)
 }
 pub fn text_row_title() -> Pixels {
     scaled(15.)
@@ -481,8 +565,14 @@ pub const UI_FONT_FILES: [&[u8]; 4] = [
 ];
 
 pub fn font_mono() -> &'static str {
+    // A face the host actually has: an absent one falls back to the UI face,
+    // silently, and every "mono" address and hash was proportional on Windows
+    // (found comparing 078 H-11) — Windows ships no DejaVu. The web's IBM Plex
+    // Mono is not bundled; each host's own programming face stands in.
     if cfg!(target_os = "macos") {
         "Menlo"
+    } else if cfg!(windows) {
+        "Consolas"
     } else {
         "DejaVu Sans Mono"
     }

@@ -39,15 +39,15 @@ import type {
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
-import { encodeQr } from '$lib/wallet/qr';
+import { encodeQr, encodeShareQr } from '$lib/wallet/qr';
 import {
 	liveActivityGroups,
 	liveActivityRow,
 	liveAssetRow,
 	moneyText,
 	narrowedFeed,
-	tokenExplorerURL,
-	trimBalance
+	tokenAmountText,
+	tokenExplorerURL
 } from '$lib/wallet/live';
 import { addressLines } from './fixtures';
 import { liveBatchImport, type BatchLiveInputs } from './live-batch';
@@ -261,11 +261,14 @@ function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQ
 				? undefined
 				: {
 						headline: fm['receive.shareCardHeadline'],
-						code: encodeQr(identity.address),
+						code: encodeShareQr(identity.address),
 						name: identity.name,
 						lines: addressLines(identity.address),
 						networkNote: fill(fm['receive.shareCardNetworkNote'], { network }),
-						networkMark: token === undefined ? chainMark(chainId) : balanceTokenMark(token),
+						// The NETWORK's logo in the code's centre, token or not: the
+						// card says which network may pay, and one card serves every
+						// asset on it (founder, 2026-08-15).
+						networkMark: chainMark(chainId),
 						identiconSvg: identity.identiconSvg,
 						wordmark: 'Vela Wallet'
 					}
@@ -326,7 +329,7 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		mark: balanceTokenMark(token),
 		symbol: token.symbol,
 		chain: chainName(token.chain_id),
-		balance: hidden ? MASK : `${trimBalance(token.balance)} ${token.symbol}`,
+		balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
 		fiat,
 		facts,
 		rows,
@@ -349,7 +352,7 @@ function liveShareCard(model: ShareCardModel, inputs: FlowsLiveInputs): ShareCar
 	if (identity === undefined) return model;
 	return {
 		...model,
-		code: encodeQr(identity.address),
+		code: encodeShareQr(identity.address),
 		name: identity.name,
 		lines: addressLines(identity.address),
 		identiconSvg: identity.identiconSvg

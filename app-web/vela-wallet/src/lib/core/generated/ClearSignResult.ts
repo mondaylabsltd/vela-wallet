@@ -3,11 +3,17 @@ import type { ClearProvenance } from "./ClearProvenance";
 import type { ClearRisk } from "./ClearRisk";
 import type { ClearSignField } from "./ClearSignField";
 import type { ClearSignType } from "./ClearSignType";
+import type { ClearTerm } from "./ClearTerm";
 
 /**
  * Resolved clear-signing result, ready for display (`ClearSignResult`).
  */
-export type ClearSignResult = { intent: string, contract_name: string | null, owner: string | null, fields: Array<ClearSignField>, risk: ClearRisk, contract_address: string | null, 
+export type ClearSignResult = { intent: string, 
+/**
+ * `intent` as a word the shell can translate — projected in
+ * [`ClearSigning::view`]; builders write `None`.
+ */
+intent_term: ClearTerm | null, contract_name: string | null, owner: string | null, fields: Array<ClearSignField>, risk: ClearRisk, contract_address: string | null, 
 /**
  * Whether the description may be called "verified".
  *

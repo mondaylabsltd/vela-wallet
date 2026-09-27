@@ -162,6 +162,13 @@ type TokenCacheEntry = {
 	fetchedAt: number;
 	tokens: APIToken[];
 	inFlight?: Promise<APIToken[]>;
+	/**
+	 * The chains the in-flight round could not read, known once it lands. A
+	 * caller that JOINED that round hears them too: it used to get the tokens
+	 * alone, and a balance-machine fetch that joined a launch-time blip
+	 * reported "every chain answered", which the machine took at its word.
+	 */
+	inFlightFailed?: Promise<number[]>;
 };
 
 const tokenCache = new Map<string, TokenCacheEntry>();
@@ -193,10 +200,17 @@ export async function fetchTokens(
 
 	// includeZeroBalance bypasses cache (different result set)
 	if (!options.forceRefresh && !options.includeZeroBalance && cached) {
-		if (cached.inFlight) return cloneTokens(await cached.inFlight);
+		if (cached.inFlight) {
+			const tokens = await cached.inFlight;
+			const failed = (await cached.inFlightFailed?.catch(() => [])) ?? [];
+			if (failed.length > 0) options.onFailedChains?.(failed);
+			return cloneTokens(tokens);
+		}
 		if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
 	}
 
+	let partial = false;
+	let failedIds: number[] = [];
 	const request = fetchAllChainTokens(
 		address,
 		// The snapshot a chain falls back to when it does not answer. The
@@ -204,23 +218,40 @@ export async function fetchTokens(
 		// (uncached) shape, so it carries nothing over.
 		options.includeZeroBalance ? [] : (cached?.tokens ?? []),
 		options.onProgress,
-		options.onFailedChains,
+		(ids) => {
+			partial = ids.length > 0;
+			failedIds = ids;
+			options.onFailedChains?.(ids);
+		},
 		options.includeZeroBalance
 	);
+	const requestFailed = request.then(() => failedIds);
 
 	// Don't pollute the main cache with includeZeroBalance results
 	if (!options.includeZeroBalance) {
 		tokenCache.set(cacheKey, {
 			fetchedAt: cached?.fetchedAt ?? 0,
 			tokens: cached?.tokens ?? [],
-			inFlight: request
+			inFlight: request,
+			inFlightFailed: requestFailed
 		});
 	}
 
 	try {
 		const tokens = await request;
 		if (!options.includeZeroBalance) {
-			tokenCache.set(cacheKey, { fetchedAt: Date.now(), tokens });
+			// A round some chain did not answer is kept as the carry-over
+			// snapshot, but NOT as fresh: served from the cache it reports no
+			// failures (`onFailedChains` never fires on a hit), so the balance
+			// machine's silent retry used to be told that a launch-time proxy
+			// blip — every chain down, nothing known — was a complete, empty
+			// wallet, and nothing ever re-read it (Send's retry-once rule could
+			// not see the round had reached nothing). Only a complete round
+			// may be held, the rule the fee-signal cache keeps too.
+			tokenCache.set(cacheKey, {
+				fetchedAt: partial ? (cached?.fetchedAt ?? 0) : Date.now(),
+				tokens
+			});
 		}
 		return cloneTokens(tokens);
 	} catch (error) {

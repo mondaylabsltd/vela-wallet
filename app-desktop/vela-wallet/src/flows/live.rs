@@ -44,8 +44,9 @@ use crate::flows::fixtures::{
     AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick,
     CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeSpeedModel,
     FeeSpeedOption, FeeTokenPick, FeeTokenRow, FilterChip, HistoryGroup, HistoryPanel, NetworkRow,
-    ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm, SendNotice,
-    SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
+    ReceiptStage, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm,
+    SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, SweepForm, SweepRow, TokenMark,
+    address_lines,
 };
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
@@ -175,25 +176,12 @@ pub fn assets(
     // blank column under a pill reads as a panel that failed to load.
     let filtered_empty = rows.is_empty() && !view.tokens.is_empty();
     AssetsPanel {
-        // The chain filter's dots: the chains this person actually holds on,
-        // in the order the core sorted them. A filter offering chains with
-        // nothing on them is a filter that does nothing.
-        filter: Some((
-            // Narrowed: this chain's own dot and its name, so the panel says
-            // WHICH list this is. The web puts the same fact in the same pill.
-            match filter {
-                Some(chain_id) => vec![tint(chain_id)],
-                None => chain_dots(&view.tokens),
-            },
-            match filter {
-                Some(chain_id) => {
-                    SharedString::from(crate::executor::custom_tokens::network_name(chain_id))
-                }
-                None => s.pill_all.clone(),
-            },
-            s.assets_add.clone(),
-        )),
+        // No filter row (078 T067): the web's Assets screen has none, and
+        // this one's pill and "Add" answered no click. Which chain the list
+        // is narrowed to is the sidebar's selected network.
+        filter: None,
         search_placeholder: s.assets_search.clone(),
+        no_match: s.no_matching_tokens.clone(),
         rows: rows.clone(),
         add_by_address: s.add_by_address.clone(),
         empty: (rows.is_empty() && (settled || filtered_empty)).then(|| AssetsEmpty {
@@ -204,20 +192,6 @@ pub fn assets(
             hint_body: s.not_showing_body.clone(),
         }),
     }
-}
-
-/// Up to three chain dots for the filter pill, deduped in holdings order.
-fn chain_dots(tokens: &[BalanceToken]) -> Vec<Hsla> {
-    let mut seen = Vec::new();
-    for token in tokens {
-        if !seen.contains(&token.chain_id) {
-            seen.push(token.chain_id);
-        }
-        if seen.len() == 3 {
-            break;
-        }
-    }
-    seen.into_iter().map(tint).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +304,7 @@ pub fn history_ids(view: &FeedView) -> Vec<String> {
 /// Compared against the shell's own local day boundary, which is the same
 /// function the executor stamps records with — asking two different questions
 /// about which day it is here is how a row lands under the wrong heading.
-fn day_label(day_start_ms: f64, s: &FlowStrings) -> SharedString {
+pub(crate) fn day_label(day_start_ms: f64, s: &FlowStrings) -> SharedString {
     let today = crate::executor::day_start_ms(crate::executor::now_ms());
     const DAY_MS: f64 = 86_400_000.0;
     if (day_start_ms - today).abs() < DAY_MS / 2.0 {
@@ -389,7 +363,7 @@ pub fn tx_detail(
             // A name is prose; an address is a string somebody compares
             // character by character, and that needs the mono face.
             mono: named.is_none(),
-            copyable: true,
+            copy: Some(SharedString::from(counterparty.clone())),
             note: None,
         });
     }
@@ -402,7 +376,7 @@ pub fn tx_detail(
             logos: crate::marks::token_logos(item.chain_id, &item.symbol, None, &[]),
         }),
         mono: false,
-        copyable: false,
+        copy: None,
         note: None,
     });
     facts.push(FactRow {
@@ -410,7 +384,7 @@ pub fn tx_detail(
         value: SharedString::from(stamp(item.timestamp, s, locale)),
         lead: FactLead::None,
         mono: false,
-        copyable: false,
+        copy: None,
         note: None,
     });
     // Only if there IS one. An empty hash row on an off-chain signature invites
@@ -422,7 +396,7 @@ pub fn tx_detail(
             value: SharedString::from(hash.clone()),
             lead: FactLead::None,
             mono: true,
-            copyable: true,
+            copy: Some(SharedString::from(hash.clone())),
             note: None,
         });
     }
@@ -506,86 +480,245 @@ fn stamp(timestamp_sec: f64, s: &FlowStrings, locale: &str) -> String {
 /// added. This turns that into the drawing.
 #[must_use]
 pub fn add_token(view: &MtokView, s: &FlowStrings) -> crate::flows::fixtures::AddToken {
+    use crate::flows::fixtures::{AddTokenResult, StatusChip, StatusTone};
     let found = view.found.first();
+    let typed = !view.input_address.trim().is_empty();
+    // The web's `liveAddToken`, state for state (078 F-07): searching and
+    // not-found are a line, not a card; a found token is a card, with
+    // "Added" when it is already in the wallet; nothing typed says nothing.
+    let result = if view.detecting {
+        AddTokenResult::Note(s.searching_networks.clone())
+    } else if let Some(found) = found {
+        AddTokenResult::Token {
+            mark: TokenMark {
+                ticker: SharedString::from(found.symbol.clone()),
+                badge: tint(found.chain_id),
+                logos: crate::marks::token_logos(
+                    found.chain_id,
+                    &found.symbol,
+                    view.input_address.as_str().into(),
+                    &[],
+                ),
+            },
+            name: SharedString::from(found.name.clone()),
+            // The mock's own order: symbol, scale, network. The SCALE is on
+            // the card because adding a token at the wrong one renders every
+            // amount at the wrong magnitude, and this is the last screen where
+            // somebody can notice.
+            detail: SharedString::from(format!(
+                "{} · {} {} · {}",
+                found.symbol, s.label_decimals, found.decimals, found.network_name
+            )),
+            chip: found.added.then(|| StatusChip {
+                text: s.token_added.clone(),
+                tone: StatusTone::Success,
+            }),
+        }
+    } else if view.native_alias {
+        // A native coin that also answers an ERC-20 interface is FOUND by the
+        // probe and refused with a reason (spec 060) — not "not found".
+        AddTokenResult::Note(SharedString::from(format!(
+            "{} — {}",
+            s.native_alias_title, s.native_alias_message
+        )))
+    } else if view.not_found {
+        AddTokenResult::Note(SharedString::from(format!(
+            "{} — {}",
+            s.not_found_title, s.not_found_message
+        )))
+    } else {
+        AddTokenResult::Empty
+    };
     crate::flows::fixtures::AddToken {
         tab_erc20: s.tab_erc20.clone(),
         tab_native: s.tab_native.clone(),
-        // The native tab adds a NETWORK, which is the settings screen's job on
-        // this client. One tab, honestly labelled, beats a second that leads
-        // somewhere the desktop does not go.
         native: false,
         // No network row: the core searches EVERY network at once and reports
         // the ones where the contract resolved, so there is nothing to pick.
         network: None,
         field_label: s.token_address_label.clone(),
         field_value: SharedString::from(view.input_address.clone()),
-        result: match found {
-            Some(found) => crate::flows::fixtures::AddTokenResult::Token {
-                mark: TokenMark {
-                    ticker: SharedString::from(found.symbol.clone()),
-                    badge: tint(found.chain_id),
-                    logos: crate::marks::token_logos(
-                        found.chain_id,
-                        &found.symbol,
-                        view.input_address.as_str().into(),
-                        &[],
-                    ),
-                },
-                name: SharedString::from(found.name.clone()),
-                // The mock's own order and separators: symbol, scale, network.
-                // The SCALE is on the card because adding a token at the wrong
-                // one renders every amount at the wrong magnitude, and this is
-                // the last screen where somebody can notice.
-                detail: SharedString::from(format!(
-                    "{} · {} {} · {}",
-                    found.symbol, s.label_decimals, found.decimals, found.network_name
-                )),
-            },
-            // Nothing found yet — or nothing to find. The card states which,
-            // because "not found" and "not searched" are different answers and
-            // an empty card says neither.
-            None => crate::flows::fixtures::AddTokenResult::Token {
-                mark: TokenMark {
-                    ticker: SharedString::from(""),
-                    badge: gpui::rgb(0x8A_8F_98).into(),
-                    logos: crate::marks::Logos::default(),
-                },
-                // A native coin that also answers an ERC-20 interface is FOUND
-                // by the probe and refused by the core with a reason (spec
-                // 060) — "not found" would be the wrong words for it.
-                name: if view.native_alias {
-                    s.native_alias_title.clone()
-                } else if view.not_found {
-                    s.not_found_title.clone()
-                } else if view.detecting {
-                    s.searching_networks.clone()
-                } else {
-                    s.search_token_btn.clone()
-                },
-                detail: if view.native_alias {
-                    s.native_alias_message.clone()
-                } else if view.not_found {
-                    s.not_found_message.clone()
-                } else {
-                    SharedString::from("")
-                },
-            },
-        },
-        // The write failed — the core raises the flag and the corpus has the
-        // sentence; without it the button simply does nothing, twice.
-        notice: view.save_error.then(|| SendNotice {
-            dismiss: None,
-            title: Some(s.add_token_error_title.clone()),
-            body: s.add_token_error_save.clone(),
-            detail: None,
-            action: None,
-            error: true,
-        }),
-        cta: if view.saving {
-            s.searching_networks.clone()
+        field_placeholder: SharedString::from("0x…"),
+        // The field says what is wrong with it: a write that failed, or a
+        // string that is not a contract address.
+        field_error: if view.save_error {
+            Some(s.add_token_error_save.clone())
+        } else if typed && !view.address_valid {
+            Some(s.invalid_contract.clone())
         } else {
-            s.add_to_wallet.clone()
+            None
         },
+        result,
+        notice: None,
+        cta: s.add_to_wallet.clone(),
+        cta_disabled: found.is_none_or(|found| found.added) || view.saving,
+    }
+}
+
+/// The native tab — a NETWORK by name or chain ID (the web's
+/// `liveAddNetworkTab`, 078 F-07), driven by the same `network_admin` wizard
+/// the settings screen's Add Network runs. `added` is the chain this panel
+/// just added: the core resets its wizard on the add, so the panel keeps what
+/// it confirmed to say so.
+#[must_use]
+pub fn add_network_tab(
+    wizard: &vela_core::app::network_admin::NetWizardView,
+    query: &str,
+    added: Option<&vela_core::app::network_admin::NetChainInfo>,
+    s: &FlowStrings,
+) -> crate::flows::fixtures::AddToken {
+    use crate::flows::fixtures::{
+        AddTokenResult, FactLead, FactRow, NetworkSuggestion, StatusChip, StatusTone,
+    };
+    use vela_core::app::network_admin::{NetWizardErrorKind, NetWizardPhase};
+
+    let mark_of = |chain_id: u32, symbol: &str| TokenMark {
+        ticker: SharedString::from(symbol.to_owned()),
+        badge: tint(chain_id),
+        logos: crate::marks::token_logos(chain_id, symbol, None, &[]),
+    };
+    let facts = |chain_id: u32, symbol: &str| {
+        vec![
+            FactRow {
+                label: s.label_chain_id.clone(),
+                value: SharedString::from(chain_id.to_string()),
+                lead: FactLead::None,
+                mono: false,
+                copy: None,
+                note: None,
+            },
+            FactRow {
+                label: s.label_native_token.clone(),
+                value: SharedString::from(symbol.to_owned()),
+                lead: FactLead::None,
+                mono: false,
+                copy: None,
+                note: None,
+            },
+        ]
+    };
+    let info = wizard.chain_info.as_ref();
+    let card = |text: SharedString, tone: StatusTone, link: Option<SharedString>| {
+        let (chain_id, name, symbol) = match info {
+            Some(info) => (info.chain_id, info.name.clone(), info.native_symbol.clone()),
+            None => (0, query.to_owned(), String::new()),
+        };
+        AddTokenResult::Network {
+            mark: mark_of(chain_id, &symbol),
+            name: SharedString::from(name),
+            chip: StatusChip { text, tone },
+            link,
+            facts: if info.is_some() {
+                facts(chain_id, &symbol)
+            } else {
+                Vec::new()
+            },
+        }
+    };
+    let not_found = || {
+        AddTokenResult::Note(SharedString::from(
+            s.net_picker_empty.replace("{{query}}", query),
+        ))
+    };
+    let incompatible = || {
+        card(
+            s.not_compatible.clone(),
+            StatusTone::Error,
+            Some(SharedString::from(format!(
+                "{} · {}",
+                s.error_not_compatible, s.deploy_contracts
+            ))),
+        )
+    };
+
+    let mut can_add = false;
+    let result = if let Some(added) = added {
+        AddTokenResult::Network {
+            mark: mark_of(added.chain_id, &added.native_symbol),
+            name: SharedString::from(added.name.clone()),
+            chip: StatusChip {
+                text: s.network_added.clone(),
+                tone: StatusTone::Success,
+            },
+            link: None,
+            facts: facts(added.chain_id, &added.native_symbol),
+        }
+    } else if query.trim().is_empty() {
+        AddTokenResult::Empty
+    } else {
+        match wizard.phase {
+            NetWizardPhase::Searching => AddTokenResult::Note(s.searching_networks.clone()),
+            NetWizardPhase::Idle | NetWizardPhase::Suggested => {
+                if wizard.suggestions.is_empty() {
+                    not_found()
+                } else {
+                    AddTokenResult::Suggestions(
+                        wizard
+                            .suggestions
+                            .iter()
+                            .map(|entry| NetworkSuggestion {
+                                chain_id: entry.chain_id,
+                                mark: mark_of(entry.chain_id, &entry.native_currency_symbol),
+                                name: SharedString::from(entry.name.clone()),
+                                meta: SharedString::from(format!(
+                                    "{} {}",
+                                    s.label_chain_id, entry.chain_id
+                                )),
+                            })
+                            .collect(),
+                    )
+                }
+            }
+            NetWizardPhase::Resolving | NetWizardPhase::Checking => {
+                card(s.searching_networks.clone(), StatusTone::Info, None)
+            }
+            NetWizardPhase::Error => match &wizard.error {
+                None | Some(NetWizardErrorKind::NotFound { .. }) => not_found(),
+                Some(NetWizardErrorKind::AlreadyAdded { chain_id }) => {
+                    let symbol = info.map_or_else(
+                        || native_symbol(*chain_id),
+                        |info| info.native_symbol.clone(),
+                    );
+                    AddTokenResult::Network {
+                        mark: mark_of(*chain_id, &symbol),
+                        name: SharedString::from(
+                            info.map_or_else(|| chain_name(*chain_id), |info| info.name.clone()),
+                        ),
+                        chip: StatusChip {
+                            text: s.network_added.clone(),
+                            tone: StatusTone::Success,
+                        },
+                        link: None,
+                        facts: facts(*chain_id, &symbol),
+                    }
+                }
+                Some(_) => incompatible(),
+            },
+            NetWizardPhase::Checked => match &wizard.compat {
+                Some(compat) if compat.rpc_failure.is_none() && compat.compatible => {
+                    can_add = wizard.can_add;
+                    card(s.compatible.clone(), StatusTone::Success, None)
+                }
+                Some(compat) if compat.rpc_failure.is_none() => incompatible(),
+                // Inconclusive is never "not compatible" (invariant ③).
+                _ => card(s.unable_to_verify.clone(), StatusTone::Warning, None),
+            },
+        }
+    };
+
+    crate::flows::fixtures::AddToken {
+        tab_erc20: s.tab_erc20.clone(),
+        tab_native: s.tab_native.clone(),
+        native: true,
+        network: None,
+        field_label: s.net_search_label.clone(),
+        field_value: SharedString::from(query.to_owned()),
+        field_placeholder: s.net_search_placeholder.clone(),
+        field_error: None,
+        result,
+        notice: None,
+        cta: s.add_network_btn.clone(),
+        cta_disabled: !can_add,
     }
 }
 
@@ -608,6 +741,11 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
             code: SharedString::from(symbol),
             badge: tint(chain_id),
             address: SharedString::from(shorten(address)),
+            address_full: SharedString::from(address.to_owned()),
+            // The chain's own logo — the one the sidebar's network filter and
+            // this network's QR centre wear. The row drew only the lettermark,
+            // so twenty-four networks read as a column of "ETH" circles.
+            logos: crate::marks::chain_logos(chain_id),
         })
         .collect();
     ReceiveList {
@@ -617,6 +755,7 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
             &rows.len().to_string(),
         )),
         search_placeholder: s.receive_search.clone(),
+        empty_text: s.search_empty.clone(),
         rows,
     }
 }
@@ -919,12 +1058,15 @@ fn native_symbol(chain_id: u32) -> String {
         .map_or_else(String::new, |chain| chain.native_symbol.to_owned())
 }
 
+/// A token figure held as a float (a fee in its coin, a parsed balance), on
+/// the one token-amount rule ([`crate::wallet::live::token_amount_text`]).
+/// Rust prints a float's shortest round-trip digits without an exponent, so
+/// the rule reads the same figure a string would have given it.
 fn trimmed(amount: f64) -> String {
-    format_token_amount(
-        amount,
-        crate::executor::format_prefs::current().number,
-        false,
-    )
+    if !amount.is_finite() {
+        return "0".to_owned();
+    }
+    crate::wallet::live::token_amount_text(&amount.to_string())
 }
 
 fn fiat_line(
@@ -1212,9 +1354,55 @@ fn send_token_row(
     }
 }
 
+/// SD1's chips: all, the stables, the chains' own coins, the rest — in the
+/// order they are drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SendClass {
+    #[default]
+    All,
+    Stable,
+    Gas,
+    Other,
+}
+
+impl SendClass {
+    pub const CHIPS: [Self; 4] = [Self::All, Self::Stable, Self::Gas, Self::Other];
+
+    /// Which chip a token answers to — the web's `sendTokenClass`, word for
+    /// word. A chain's native coin is what pays its gas; a stable is one by
+    /// the symbol table the core's activity feed keeps; everything else is
+    /// "other". One rule, so the chip and the row can never disagree.
+    #[must_use]
+    pub fn of(token: &SendToken) -> Self {
+        if token.token_address.is_none() {
+            Self::Gas
+        } else if vela_core::app::activity_feed::is_stable(&token.symbol) {
+            Self::Stable
+        } else {
+            Self::Other
+        }
+    }
+}
+
+/// The picker's rows after both narrowings, in the core's order: the
+/// sidebar's network (the desktop's one network filter — the picker has no
+/// second) and the chip.
+///
+/// Applied to the VIEW, before anything is read from it, so the rows drawn,
+/// the listener each row gets and the scope of "select all valuable" are the
+/// same list. Narrowing only the drawing would hand row 2's click to whatever
+/// token was third before the filter — here, a transfer of the wrong coin.
+pub fn narrow_send_tokens(view: &mut SendView, chain: Option<u32>, class: SendClass) {
+    view.tokens.retain(|token| {
+        chain.is_none_or(|chain| token.chain_id == chain)
+            && (class == SendClass::All || SendClass::of(token) == class)
+    });
+}
+
 /// DSD1L — which token to send, in one of the picker's two modes.
 ///
-/// The rows are the core's holdings.
+/// The rows are the core's holdings, already narrowed (`narrow_send_tokens`);
+/// `class` only says which chip is lit.
 ///
 /// `sweeping` is the SHELL's flag, and deliberately: the core's
 /// `multi_select_mode` flips only when a selection is CONFIRMED, so before
@@ -1223,33 +1411,30 @@ fn send_token_row(
 /// sweep moves are all still the core's — the web's port records the same
 /// split in the same words (`live-send.ts` `sweepPicking`).
 #[must_use]
-pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool) -> SendPick {
+pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> SendPick {
     let s = i.s;
-    let mut dots = Vec::new();
-    for token in &i.send.tokens {
-        let colour = tint(token.chain_id);
-        if !dots.contains(&colour) {
-            dots.push(colour);
-        }
-        if dots.len() == 3 {
-            break;
-        }
-    }
-    let chip = |label: &SharedString, selected: bool| FilterChip {
-        label: label.clone(),
-        selected,
-    };
     let mut pick = SendPick {
         selection: None,
+        lock_notice: i
+            .send
+            .lock_error
+            .as_ref()
+            .and_then(|_| send_notice(i, false)),
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
-        pill: (dots, s.pill_all.clone()),
-        filters: vec![
-            chip(&s.filter_all, true),
-            chip(&s.filter_stable, false),
-            chip(&s.filter_gas, false),
-            chip(&s.filter_other, false),
-        ],
+        no_match: s.no_matching_tokens.clone(),
+        filters: SendClass::CHIPS
+            .iter()
+            .map(|chip| FilterChip {
+                label: match chip {
+                    SendClass::All => s.filter_all.clone(),
+                    SendClass::Stable => s.filter_stable.clone(),
+                    SendClass::Gas => s.filter_gas.clone(),
+                    SendClass::Other => s.filter_other.clone(),
+                },
+                selected: *chip == class,
+            })
+            .collect(),
         rows: i
             .send
             .tokens
@@ -1283,6 +1468,7 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool) -> SendPick {
         notice: chain.map(|chain_id| {
             let name = crate::executor::custom_tokens::network_name(chain_id);
             (
+                chain_id,
                 crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
                 SharedString::from(crate::settings::model::lettermark(&name)),
                 SharedString::from(crate::wallet::fill(
@@ -1357,6 +1543,80 @@ mod sweep_tests {
         }
     }
 
+    /// The chips narrow by the web's rule, the sidebar's network narrows with
+    /// them, and the lit chip is the one the person pressed.
+    #[test]
+    fn the_picker_narrows_by_class_and_by_the_sidebars_network() {
+        let tokens = vec![
+            token(1, "ETH", None),
+            token(1, "USDT", Some("0xaa")),
+            token(1, "PEPE", Some("0xbb")),
+            token(100, "xDAI", None),
+            token(100, "USDC", Some("0xcc")),
+        ];
+        let symbols = |class, chain| {
+            let mut view = view_with(tokens.clone(), Vec::new(), None);
+            narrow_send_tokens(&mut view, chain, class);
+            view.tokens
+                .iter()
+                .map(|token| token.symbol.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(symbols(SendClass::All, None).len(), 5);
+        assert_eq!(symbols(SendClass::Gas, None), ["ETH", "xDAI"]);
+        assert_eq!(symbols(SendClass::Stable, None), ["USDT", "USDC"]);
+        assert_eq!(symbols(SendClass::Other, None), ["PEPE"]);
+        assert_eq!(symbols(SendClass::All, Some(100)), ["xDAI", "USDC"]);
+        assert_eq!(symbols(SendClass::Stable, Some(100)), ["USDC"]);
+
+        crate::executor::storage::tests::with_temp_state("send-chips", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let view = view_with(tokens, Vec::new(), None);
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::Gas);
+            let lit: Vec<bool> = pick.filters.iter().map(|chip| chip.selected).collect();
+            assert_eq!(lit, [false, false, true, false]);
+        });
+    }
+
+    /// 078 W-04: a locked request on a chain the wallet lacks is refused ON
+    /// the list the stage shows — with "Add this network" as its way out, and
+    /// the same button busy, taking no press, while the add is out.
+    #[test]
+    fn a_locked_request_on_a_missing_chain_offers_to_add_it() {
+        crate::executor::storage::tests::with_temp_state("send-lock-net", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let mut view = view_with(vec![token(1, "ETH", None)], Vec::new(), None);
+            view.lock_error = Some(SendLockError::Network { chain_id: 59144 });
+
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let notice = pick.lock_notice.unwrap_or_else(|| unreachable!("refused"));
+            assert_eq!(notice.action.as_ref(), Some(&s.lock_add_network));
+            assert!(notice.body.contains("59144"), "{}", notice.body);
+            assert_eq!(
+                notice_way_out(&inputs(&view, &fee, &s, &wallet), false),
+                Some(NoticeWayOut::AddNetwork { chain_id: 59144 })
+            );
+
+            view.adding_network = true;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let notice = pick.lock_notice.unwrap_or_else(|| unreachable!("refused"));
+            assert_eq!(notice.action.as_ref(), Some(&s.lock_adding_network));
+            assert_eq!(
+                notice_way_out(&inputs(&view, &fee, &s, &wallet), false),
+                None
+            );
+
+            // No refusal, no card: the ordinary list.
+            view.lock_error = None;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(pick.lock_notice.is_none());
+        });
+    }
+
     /// The sweep picker says which rows are ticked, which are on the wrong
     /// chain, and how many are going — all of it read from the core's view.
     ///
@@ -1379,7 +1639,7 @@ mod sweep_tests {
 
             // Not sweeping: the one-token list, and no selection at all.
             let plain = view_with(tokens.clone(), Vec::new(), None);
-            let pick = send_pick_with(&inputs(&plain, &fee, &s, &wallet), false);
+            let pick = send_pick_with(&inputs(&plain, &fee, &s, &wallet), false, SendClass::All);
             assert!(pick.selection.is_none());
             assert!(!pick.cta_accent);
             assert_eq!(pick.cta, s.multi_send_title);
@@ -1387,7 +1647,7 @@ mod sweep_tests {
             // Sweeping, nothing picked yet: ticks are showing, nothing is
             // dimmed (no chain is pinned), and the CTA is still the quiet one.
             let empty = view_with(tokens.clone(), Vec::new(), None);
-            let pick = send_pick_with(&inputs(&empty, &fee, &s, &wallet), true);
+            let pick = send_pick_with(&inputs(&empty, &fee, &s, &wallet), true, SendClass::All);
             let selection = pick
                 .selection
                 .as_ref()
@@ -1400,14 +1660,14 @@ mod sweep_tests {
             // Two picked on Gnosis: those two ticked, Ethereum's row dimmed
             // (still listed), the chain named, and the CTA counting.
             let picked = view_with(tokens, vec![ids[0].clone(), ids[1].clone()], Some(100));
-            let pick = send_pick_with(&inputs(&picked, &fee, &s, &wallet), true);
+            let pick = send_pick_with(&inputs(&picked, &fee, &s, &wallet), true, SendClass::All);
             let selection = pick
                 .selection
                 .as_ref()
                 .unwrap_or_else(|| unreachable!("sweeping"));
             assert_eq!(selection.selected, vec![true, true, false]);
             assert_eq!(selection.dimmed, vec![false, false, true]);
-            let (_, letter, text) = selection
+            let (_, _, letter, text) = selection
                 .notice
                 .clone()
                 .unwrap_or_else(|| unreachable!("a chain is pinned"));
@@ -1505,19 +1765,59 @@ pub fn split_amount_edited(
 ) -> Vec<SendRecipientDraft> {
     let mut next = rows.to_vec();
     if let Some(row) = next.get_mut(index) {
-        if let Some(clean) = amount_edited(&amount, &row.amount) {
+        if let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount)) {
             row.amount = clean;
         }
     }
     next
 }
 
+/// A split row's address, typed (078 F-06): the whole list goes back to the
+/// core with that one row's address replaced — `RecipientsChanged` is the
+/// event the machine offers, and it validates the rest.
+#[must_use]
+pub fn split_address_edited(
+    rows: &[SendRecipientDraft],
+    index: usize,
+    address: &str,
+) -> Vec<SendRecipientDraft> {
+    let mut next = rows.to_vec();
+    if let Some(row) = next.get_mut(index) {
+        row.address = address.trim().to_owned();
+    }
+    next
+}
+
+/// The core's figure as the field shows it (078 M-04) — the web's
+/// `amountToInput`: the core stores and echoes a dot, a decimal-comma person
+/// reads a comma. Max's "0,00075" and the typing both, so the field never
+/// switches marks under the person's hands.
+#[must_use]
+pub fn amount_to_input(canonical: &str) -> String {
+    amount_to_input_with(canonical, crate::executor::format_prefs::current().number)
+}
+
+#[must_use]
+pub fn amount_to_input_with(
+    canonical: &str,
+    preset: vela_core::l10n::number::NumberPreset,
+) -> String {
+    let decimal = preset.separators().decimal;
+    if decimal == "." {
+        canonical.to_owned()
+    } else {
+        canonical.replacen('.', decimal, 1)
+    }
+}
+
 /// An amount field's edit as the core reads it (spec 073;
 /// `vela_core::l10n::amount_text` says why): a decimal-comma keyboard's
 /// "4,5" is 4.5 — raw, the send machine read 4 in fiat mode, and a custom
-/// allowance's parser dropped the comma and allowed 45. `previous` is the
-/// field's text before the edit; `None` is an edit with no reading as one
-/// figure, and the field keeps what it had.
+/// allowance's parser dropped the comma and allowed 45. `next` is the field's
+/// text after the edit and `previous` what it showed before — both in the
+/// person's mark (078 M-04); the answer is the core's dot-decimal figure.
+/// `None` is an edit with no reading as one figure, and the field keeps what
+/// it had.
 #[must_use]
 pub fn amount_edited(next: &str, previous: &str) -> Option<String> {
     use vela_core::l10n::amount_text;
@@ -1662,6 +1962,15 @@ mod split_tests {
 
         // An index nobody has is not a reason to lose the list.
         assert_eq!(split_amount_edited(&rows, 9, "1".to_owned()), rows);
+
+        // A row's address, typed (078 F-06): that row only, trimmed, its
+        // amount and identity kept.
+        let typed = split_address_edited(&rows, 2, "  0xDDD ");
+        assert_eq!(typed[2].address, "0xDDD");
+        assert_eq!(typed[2].amount, "3");
+        assert_eq!(typed[2].id, "rcpt_3");
+        assert_eq!(typed[0], rows[0]);
+        assert_eq!(split_address_edited(&rows, 9, "0x1"), rows);
 
         let removed = split_row_removed(&rows, 1);
         assert_eq!(removed.len(), 2);
@@ -1860,9 +2169,19 @@ fn build_notice(
             SendAddNetworkMsg::NetAddError => s.lock_net_add_error.clone(),
         });
         let way_out = match error {
-            SendLockError::Network { chain_id } => Some(NoticeWayOut::AddNetwork {
-                chain_id: *chain_id,
-            }),
+            // While an add is out the button says so and takes no press.
+            SendLockError::Network { chain_id } if !send.adding_network => {
+                Some(NoticeWayOut::AddNetwork {
+                    chain_id: *chain_id,
+                })
+            }
+            SendLockError::Network { .. } | SendLockError::Token => None,
+        };
+        let action = match error {
+            SendLockError::Network { .. } if send.adding_network => {
+                Some(s.lock_adding_network.clone())
+            }
+            SendLockError::Network { .. } => Some(s.lock_add_network.clone()),
             SendLockError::Token => None,
         };
         let notice = SendNotice {
@@ -1870,7 +2189,7 @@ fn build_notice(
             title: Some(title),
             body,
             detail,
-            action: way_out.is_some().then(|| s.lock_add_network.clone()),
+            action,
             error: true,
         };
         return Some((notice, way_out));
@@ -1889,12 +2208,16 @@ fn build_notice(
             .selected_token
             .as_ref()
             .map_or(18, |token| token.decimals);
-        let human = |base: &str| {
+        let exact = |base: &str| {
             base.parse::<u128>().map_or_else(
                 |_| base.to_owned(),
                 |units| vela_core::app::fee_policy::from_base_units(units, decimals),
             )
         };
+        // The one token-amount rule — and the ceiling cut DOWN, so the figure
+        // it offers can be typed back and still clear the fee.
+        let human = |base: &str| trimmed_str(&exact(base));
+        let ceiling = |base: &str| crate::wallet::live::token_amount_text_down(&exact(base));
         let body = fill(
             &fill(
                 &fill(
@@ -1921,7 +2244,7 @@ fn build_notice(
                     &fill(
                         &s.same_fee_max,
                         "amount",
-                        &human(&issue.max_transfer_amount),
+                        &ceiling(&issue.max_transfer_amount),
                     ),
                     "symbol",
                     &issue.symbol,
@@ -2101,6 +2424,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
         ),
     };
 
+    let sweeping = send.multi_select_mode;
     let recipient = (!split).then(|| {
         let lines = if send.recipient.is_empty() {
             (String::new(), String::new())
@@ -2108,10 +2432,67 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             address_lines(&send.recipient)
         };
         (
-            recipient_note(send, s).unwrap_or_else(|| s.recipient_label.clone()),
+            // The field is "Recipient", always (078 F-08): the trust line is
+            // a note UNDER it, not the label's replacement — a name the core
+            // resolved used to become the field's title.
+            s.recipient_label.clone(),
             (lines.0.into(), lines.1.into()),
             SharedString::from(send.recipient.clone()),
         )
+    });
+    let recipient_note = if sweeping {
+        Some(s.multi_send_same_recipient.clone())
+    } else if split {
+        None
+    } else {
+        recipient_note(send, s)
+    };
+    // SD2d (078 F-05): the picked coins, each at the amount it will move —
+    // the same reading the confirm lists (`sweep_breakdown`).
+    let sweep = sweeping.then(|| {
+        let picked: Vec<_> = send
+            .tokens
+            .iter()
+            .filter(|token| send.multi_selected_ids.contains(&token.id()))
+            .collect();
+        let chain_id = send
+            .multi_chain_id
+            .or_else(|| picked.first().map(|token| token.chain_id))
+            .unwrap_or(1);
+        SweepForm {
+            summary: fill(
+                &fill(&s.multi_send_summary, "n", &picked.len().to_string()),
+                "chain",
+                &chain_name(chain_id),
+            )
+            .into(),
+            rows: picked
+                .iter()
+                .map(|token| {
+                    let amount = send
+                        .multi_specs
+                        .iter()
+                        .find(|spec| spec.token_address == token.token_address)
+                        .map_or(token.balance.as_str(), |spec| spec.amount.as_str());
+                    SweepRow {
+                        mark: TokenMark {
+                            ticker: token.symbol.clone().into(),
+                            badge: tint(token.chain_id),
+                            logos: crate::marks::token_logos(
+                                token.chain_id,
+                                &token.symbol,
+                                token.token_address.as_deref(),
+                                &token.logo_urls,
+                            ),
+                        },
+                        symbol: token.symbol.clone().into(),
+                        balance: fill(&s.balance_label, "amount", &trimmed_str(&token.balance))
+                            .into(),
+                        amount: trimmed_str(amount).into(),
+                    }
+                })
+                .collect(),
+        }
     });
 
     // Which unit the figure is TYPED in: the figure's own code, never the
@@ -2134,7 +2515,9 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
 
     SendForm {
         token: header,
-        amount: (!split).then(|| {
+        sweep,
+        recipient_note,
+        amount: (!split && !sweeping).then(|| {
             (
                 SharedString::from(if send.amount.is_empty() {
                     "0".to_owned()
@@ -2144,13 +2527,15 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                 other_line,
             )
         }),
-        amount_unit: (!split)
+        amount_unit: (!split && !sweeping)
             .then(|| SharedString::from(fiat_code.cloned().unwrap_or_else(|| symbol.clone()))),
         // ⇄ exists only where the core offers it, and is live only where
         // pressing it would change something; its refusal is the notice's.
-        denom_toggle: (!split && send.denom_toggle_shown).then_some(send.denom_toggle_enabled),
+        denom_toggle: (!split && !sweeping && send.denom_toggle_shown)
+            .then_some(send.denom_toggle_enabled),
         recipient,
-        add_recipient: (!split).then(|| s.add_recipient.clone()),
+        // A sweep is one person by definition: no door into a split.
+        add_recipient: (!split && !sweeping).then(|| s.add_recipient.clone()),
         recipients: if split {
             send.recipients
                 .iter()
@@ -2162,6 +2547,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                         .clone()
                         .unwrap_or_else(|| shorten(&draft.address))
                         .into(),
+                    address: draft.name.as_ref().map(|_| shorten(&draft.address).into()),
                     seed: draft.address.clone().into(),
                     amount: format!("{} {symbol}", draft.amount)
                         .trim()
@@ -2203,11 +2589,16 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                 },
             )
         }),
+        summary_detail: None,
         remaining: send.split_remaining.as_ref().filter(|_| split).map(|left| {
             fill(
                 &s.split_remaining,
                 "amount",
-                format!("{} {symbol}", trimmed_str(left)).trim(),
+                format!(
+                    "{} {symbol}",
+                    crate::wallet::live::token_amount_text_down(left)
+                )
+                .trim(),
             )
             .into()
         }),
@@ -2269,7 +2660,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             value: i.identity_name.to_owned().into(),
             lead: FactLead::Identicon(i.identity_address.to_owned().into()),
             mono: false,
-            copyable: false,
+            copy: None,
             note: None,
         },
         FactRow {
@@ -2280,7 +2671,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                 .into(),
             lead: FactLead::Identicon(send.recipient.clone().into()),
             mono: to_name.is_none(),
-            copyable: false,
+            copy: None,
             note: None,
         },
         FactRow {
@@ -2292,7 +2683,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                 logos: crate::marks::chain_logos(chain_id),
             }),
             mono: false,
-            copyable: false,
+            copy: None,
             note: None,
         },
         FactRow {
@@ -2311,7 +2702,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             },
             lead: FactLead::None,
             mono: false,
-            copyable: false,
+            copy: None,
             note: None,
         },
     ];
@@ -2328,7 +2719,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             value: tier_name(s, speed.tier),
             lead: FactLead::None,
             mono: false,
-            copyable: false,
+            copy: None,
             note: (!speed.picked).then(|| s.fee_speed_free.clone()),
         });
     }
@@ -2367,11 +2758,19 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         amount: match &sweep {
             // A sweep has no single headline figure: "3 assets".
             Some((rows, _)) => fill(&s.assets_count, "n", &rows.len().to_string()).into(),
-            None => format!("{} {symbol}", send.confirm_amount)
+            // One transfer reads as the rows and the form read it — the
+            // ladder, not the eighteen digits of a balance less a fee (a Max
+            // wrote "0.00254" on the form; the confirm used to repeat it to
+            // the wei). A split's total stays exact: it is the sum of rows.
+            None if send.split_mode => format!("{} {symbol}", send.confirm_amount)
                 .trim()
                 .to_owned()
                 .into(),
+            None => trimmed_str(&send.confirm_amount).into(),
         },
+        // The unit beside a single transfer's figure, as the form draws it.
+        amount_unit: (sweep.is_none() && !send.split_mode && !symbol.is_empty())
+            .then(|| SharedString::from(symbol.clone())),
         subline: match &sweep {
             Some((_, total_usd)) => fill(
                 &fill(
@@ -2521,6 +2920,10 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
 
     if status == Some(SendReceiptStatus::Failed) || send.tx_status == SendTxStatus::Error {
         return SendReceipt {
+            stage: ReceiptStage::Failed,
+            progress: None,
+            explorer: None,
+            cta_accent: false,
             breakdown_title: None,
             breakdown: Vec::new(),
             title: tx_error_text(send, s).unwrap_or_else(|| s.tx_error_generic.clone()),
@@ -2537,10 +2940,25 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             .filter(|amount| !amount.is_empty())
             .unwrap_or_else(|| send.confirm_amount.clone());
         return SendReceipt {
+            stage: ReceiptStage::Confirmed,
+            progress: Some(1.0),
+            // The chain is the TOKEN's, never whichever one the wallet is
+            // looking at now: a send can confirm after the person moved on.
+            explorer: send
+                .tx_hash
+                .as_ref()
+                .filter(|hash| !hash.is_empty())
+                .map(|hash| {
+                    (
+                        s.view_on_explorer.clone(),
+                        SharedString::from(format!("{}/tx/{hash}", explorer_root(chain_id))),
+                    )
+                }),
+            cta_accent: true,
             breakdown_title: breakdown_title.clone(),
             breakdown: breakdown.clone(),
             title: fill(
-                &fill(&s.tx_confirmed_title, "amount", &amount),
+                &fill(&s.tx_confirmed_title, "amount", &trimmed_str(&amount)),
                 "symbol",
                 &symbol,
             )
@@ -2565,7 +2983,16 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         };
     }
     if status == Some(SendReceiptStatus::Submitted) {
+        let eta = send.receipt.as_ref().and_then(|receipt| {
+            let (at, typical) = (receipt.submitted_at_ms?, receipt.typical_inclusion_s?);
+            let elapsed = ((crate::executor::now_ms() - at) / 1000.0).max(0.0) as u64;
+            Some((elapsed, u64::from(typical)))
+        });
         return SendReceipt {
+            stage: ReceiptStage::Submitted,
+            progress: eta.and_then(|(elapsed, typical)| ring_progress(elapsed, typical)),
+            explorer: None,
+            cta_accent: false,
             breakdown_title: breakdown_title.clone(),
             breakdown: breakdown.clone(),
             title: s.tx_submitted_title.clone(),
@@ -2590,10 +3017,22 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                         )
                         .into(),
                     );
-                    lines.push(if elapsed >= u64::from(typical) * 2 {
-                        s.tx_slow_confirm.clone()
-                    } else {
+                    // Inside the usual time the line counts DOWN — "~9s
+                    // remaining" is a promise with an end; "almost there"
+                    // waits until the usual time has passed, which is when it
+                    // is true (the web's `etaLines`).
+                    let typical = u64::from(typical);
+                    lines.push(if elapsed < typical {
+                        fill(
+                            &s.tx_remaining,
+                            "remaining",
+                            &(typical - elapsed).to_string(),
+                        )
+                        .into()
+                    } else if elapsed < typical * 2 {
                         fill(&s.tx_elapsed, "elapsed", &elapsed.to_string()).into()
+                    } else {
+                        s.tx_slow_confirm.clone()
                     });
                 }
                 lines
@@ -2608,6 +3047,10 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
     }
     // Signing or submitting: nothing has been accepted yet.
     SendReceipt {
+        stage: ReceiptStage::Submitting,
+        progress: None,
+        explorer: None,
+        cta_accent: false,
         breakdown_title,
         breakdown,
         title: s.tx_submitting.clone(),
@@ -2615,6 +3058,20 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         hash: None,
         cta: s.tx_close_background.clone(),
     }
+}
+
+/// The ring round the receipt's disc while a transaction is on its way — the
+/// web's `ringProgress`, one curve for both receipts: it eases toward full and
+/// never gets there (about 70% at the chain's typical time, 86% at twice it, a
+/// 92% ceiling), so only the confirmation closes the ring. `None` without a
+/// typical time, and the ring roams instead of filling.
+#[must_use]
+pub fn ring_progress(elapsed_s: u64, typical_s: u64) -> Option<f32> {
+    if typical_s == 0 {
+        return None;
+    }
+    let elapsed = elapsed_s as f32;
+    Some(0.92 * (1. - (-1.4 * elapsed / typical_s.max(1) as f32).exp()))
 }
 
 /// Spec 038 #D2: a split's parts on the receipt as on the confirm — from the
@@ -2714,9 +3171,7 @@ fn detail_parts(
 
 /// A decimal string as the shell prints token amounts.
 fn trimmed_str(value: &str) -> String {
-    value
-        .parse::<f64>()
-        .map_or_else(|_| value.to_owned(), trimmed)
+    crate::wallet::live::token_amount_text(value)
 }
 
 /// DSD2fL — the fee coin sheet. Every row the relay published, including the
@@ -2856,19 +3311,17 @@ fn batch_rows(view: &BatchView, symbol: &str, s: &FlowStrings) -> Vec<BatchRow> 
                 row.line,
                 BatchRow {
                     ok: row.ok,
-                    address: row
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| row.address.clone())
-                        .into(),
+                    // The sheet's name over the address, as the web draws
+                    // them (078 T062) — the name ALONE hid which address it
+                    // would pay.
+                    name: row.name.clone().map(Into::into),
+                    address: crate::contacts::model::shorten(&row.address),
+                    seed: Some(row.address.clone().into()),
+                    amount: amount.into(),
                     // A fiat sheet's figure exactly as the sheet wrote it, so
-                    // it can be read back against the sheet — beside what it
-                    // became (the mock's "5,000 CNY → 689.66").
-                    conversion: if fiat {
-                        format!("{} {} → {amount}", row.raw_amount, view.fiat_code).into()
-                    } else {
-                        amount.into()
-                    },
+                    // it can be read back against the sheet under what it
+                    // became.
+                    source: fiat.then(|| format!("{} {}", row.raw_amount, view.fiat_code).into()),
                     note: if row.dup {
                         Some(s.batch_dup.clone())
                     } else if row.valid {
@@ -2885,8 +3338,11 @@ fn batch_rows(view: &BatchView, symbol: &str, s: &FlowStrings) -> Vec<BatchRow> 
             error.line,
             BatchRow {
                 ok: false,
+                name: None,
                 address: error.raw.clone().into(),
-                conversion: SharedString::default(),
+                seed: None,
+                amount: SharedString::default(),
+                source: None,
                 note: Some(match error.reason {
                     BatchParseReason::NoAddress => s.batch_bad_address.clone(),
                     BatchParseReason::NoAmount => s.bad_amount.clone(),
@@ -2924,7 +3380,10 @@ pub fn batch_total(
             Some(left) => fill(
                 &s.split_remaining,
                 "amount",
-                &format!("{} {symbol}", trimmed_str(left)),
+                &format!(
+                    "{} {symbol}",
+                    crate::wallet::live::token_amount_text_down(left)
+                ),
             ),
             None => fill(
                 &s.balance_label,
@@ -2987,22 +3446,33 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
         n => fill(&s.batch_rejected_other, "count", &n.to_string()),
     };
     BatchImport {
+        unit_caption: s.batch_unit_caption.clone(),
         unit_fiat: fill(&s.batch_unit_fiat, "code", code).into(),
         unit_token: fill(&s.batch_unit_token, "sym", symbol).into(),
         fiat_on: view.unit == BatchUnit::Fiat,
         paste: paste.into(),
+        paste_empty: view.file_name.is_none() && view.raw_text.is_empty(),
         import_file: if view.busy {
             s.batch_reading.clone()
         } else {
-            format!("{} (xlsx / csv / txt)", s.batch_import_file).into()
+            s.batch_import_file.clone()
         },
         template: if view.template_saved {
             s.batch_template_saved.clone()
         } else {
             s.batch_template.clone()
         },
+        template_saved: view.template_saved,
+        // What the picker takes — or, once a file was picked, which file the
+        // rows below came from (the web's `formats` / `fileName`).
+        formats: view
+            .file_name
+            .clone()
+            .map_or_else(|| crate::flows::fixtures::BATCH_FORMATS.into(), Into::into),
+        file_named: view.file_name.is_some(),
         rate_section: s.batch_rate_section.clone(),
         rate_value: rate_value.into(),
+        rate_equation: None,
         rate_hint: rate_hint.into(),
         // Lines READ, not rows kept: the count above a list is the length of
         // that list, refused lines included (the web's `seen`).
@@ -3104,6 +3574,39 @@ pub fn send_panel(view: &SendView, fee_picker_open: bool) -> crate::flows::FlowP
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 078 M-04: the field speaks the person's decimal mark; the core's dot
+    /// is only its storage.
+    #[test]
+    fn the_amount_field_shows_the_persons_decimal_mark() {
+        use vela_core::l10n::number::NumberPreset;
+        assert_eq!(
+            amount_to_input_with("0.00075", NumberPreset::CommaDot),
+            "0.00075"
+        );
+        assert_eq!(
+            amount_to_input_with("0.00075", NumberPreset::Indian),
+            "0.00075"
+        );
+        assert_eq!(
+            amount_to_input_with("0.00075", NumberPreset::DotComma),
+            "0,00075"
+        );
+        assert_eq!(
+            amount_to_input_with("12.5", NumberPreset::SpaceComma),
+            "12,5"
+        );
+        assert_eq!(amount_to_input_with("12", NumberPreset::DotComma), "12");
+        assert_eq!(amount_to_input_with("", NumberPreset::DotComma), "");
+        // …and what is typed over it reads back as the core's figure.
+        let clean = vela_core::l10n::amount_text::clean(
+            "0,000756",
+            NumberPreset::DotComma,
+            vela_core::l10n::amount_text::Entry::Unknown,
+            Some("0,00075"),
+        );
+        assert_eq!(clean.as_deref(), Some("0.000756"));
+    }
     use crate::core_host::CoreHost;
     use vela_core::app::balance_dashboard::{BalanceDashboard, Event as BalanceEvent};
 
@@ -3270,6 +3773,37 @@ mod tests {
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             speed: None,
         })
+    }
+
+    /// 078 F-04: each receipt state is its own stage — the disc's colour and
+    /// mark — and only a confirmation wears the accent "Done" and a full ring.
+    #[test]
+    fn each_receipt_state_draws_its_own_stage() {
+        use vela_core::app::send::SendReceiptStatus;
+        let confirmed = receipt_with(SendReceiptStatus::Confirmed, None);
+        assert_eq!(confirmed.stage, ReceiptStage::Confirmed);
+        assert!(confirmed.cta_accent);
+        assert_eq!(confirmed.progress, Some(1.0));
+
+        let submitted = receipt_with(SendReceiptStatus::Submitted, None);
+        assert_eq!(submitted.stage, ReceiptStage::Submitted);
+        assert!(!submitted.cta_accent);
+        assert_eq!(submitted.progress, None, "no estimate: the ring roams");
+
+        let failed = receipt_with(SendReceiptStatus::Failed, None);
+        assert_eq!(failed.stage, ReceiptStage::Failed);
+        assert!(failed.explorer.is_none() && failed.hash.is_none());
+    }
+
+    /// The ring eases toward full and never reaches it by waiting: ~70% at
+    /// the chain's usual time, under the 92% ceiling at any length.
+    #[test]
+    fn the_ring_never_closes_by_itself() {
+        assert_eq!(ring_progress(10, 0), None);
+        assert_eq!(ring_progress(0, 12), Some(0.0));
+        let at_typical = ring_progress(12, 12).unwrap_or_default();
+        assert!((0.65..0.72).contains(&at_typical), "{at_typical}");
+        assert!(ring_progress(10_000, 12).unwrap_or_default() <= 0.92);
     }
 
     /// Spec 038 #D2: a split's receipt lists every recipient the core froze,
@@ -3704,32 +4238,27 @@ mod tests {
         );
     }
 
-    /// The filter dots are the chains this person actually holds on.
+    /// No filter row over the assets (078 T067): the web's Assets screen has
+    /// none, and the desktop's pill and "Add" answered no click. Narrowed or
+    /// not, the sidebar's selected network says which list this is.
     #[test]
-    fn the_chain_filter_offers_only_chains_with_something_on_them() {
+    fn the_assets_panel_draws_no_filter_row() {
         let mut view = view();
         view.tokens = vec![
             token(100, "xDAI", "1", Some(1.0)),
-            token(100, "USDC", "1", Some(1.0)),
             token(1, "ETH", "1", Some(2000.0)),
-            token(56, "BNB", "1", Some(700.0)),
-            token(137, "POL", "1", Some(0.4)),
         ];
-        let panel = assets(
-            &view,
-            &strings(),
-            &wallet_strings(),
-            "en-US",
-            None,
-            crate::wallet::live::Money::usd(),
-        );
-        let dots = panel
-            .filter
-            .as_ref()
-            .map(|(dots, _, _)| dots.len())
-            .unwrap_or_default();
-        // Deduped by chain (Gnosis appears twice) and capped at three.
-        assert_eq!(dots, 3);
+        for narrowed in [None, Some(100)] {
+            let panel = assets(
+                &view,
+                &strings(),
+                &wallet_strings(),
+                "en-US",
+                narrowed,
+                crate::wallet::live::Money::usd(),
+            );
+            assert!(panel.filter.is_none(), "narrowed = {narrowed:?}");
+        }
     }
 
     /// Every network shows the SAME address — that is what a Safe is.
@@ -3796,9 +4325,13 @@ mod tests {
         });
     }
 
-    /// The add-token card says which of three things is true, never nothing.
+    /// The add-token panel says which thing is true, the web's way (078
+    /// F-07): nothing typed says nothing; searching and not-found are a line;
+    /// a found token is a card, "Added" when it is already there; and the CTA
+    /// acts only when there is something new to add.
     #[test]
-    fn the_add_token_card_distinguishes_searching_from_not_found() {
+    fn the_add_token_panel_distinguishes_its_states() {
+        use crate::flows::fixtures::AddTokenResult;
         use vela_core::app::manage_tokens::{Event as MtokEvent, ManageTokens, MtokFound};
 
         let mut host = CoreHost::<ManageTokens>::new();
@@ -3806,39 +4339,36 @@ mod tests {
         let base = host.view();
         let s = strings();
 
-        // Nothing typed yet: the card invites a search.
         let idle = add_token(&base, &s);
         assert_eq!(idle.field_value, "");
-        match &idle.result {
-            crate::flows::fixtures::AddTokenResult::Token { name, .. } => {
-                assert_eq!(*name, s.search_token_btn);
-            }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => {
-                unreachable!("the ERC-20 tab does not draw a network card")
-            }
-        }
+        assert!(matches!(idle.result, AddTokenResult::Empty));
+        assert!(idle.cta_disabled, "nothing found, nothing to add");
+        assert_eq!(idle.field_error, None);
 
-        // Searching.
         let mut looking = base.clone();
         looking.detecting = true;
         looking.input_address = "0xaaa".to_owned();
         match &add_token(&looking, &s).result {
-            crate::flows::fixtures::AddTokenResult::Token { name, .. } => {
-                assert_eq!(*name, s.searching_networks);
-            }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+            AddTokenResult::Note(line) => assert_eq!(*line, s.searching_networks),
+            _ => unreachable!("searching is a line"),
         }
 
-        // Searched, and there is nothing there — which is a different answer
-        // from "not searched", and the card has to say which.
+        let mut bad = base.clone();
+        bad.input_address = "0xnope".to_owned();
+        bad.address_valid = false;
+        assert_eq!(
+            add_token(&bad, &s).field_error,
+            Some(s.invalid_contract.clone())
+        );
+
         let mut missing = base.clone();
         missing.not_found = true;
         match &add_token(&missing, &s).result {
-            crate::flows::fixtures::AddTokenResult::Token { name, detail, .. } => {
-                assert_eq!(*name, s.not_found_title);
-                assert_eq!(*detail, s.not_found_message);
+            AddTokenResult::Note(line) => {
+                assert!(line.contains(s.not_found_title.as_ref()));
+                assert!(line.contains(s.not_found_message.as_ref()));
             }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+            _ => unreachable!("not found is a line"),
         }
 
         // A native coin that also answers an ERC-20 interface: refused with
@@ -3846,15 +4376,13 @@ mod tests {
         let mut native = base.clone();
         native.native_alias = true;
         match &add_token(&native, &s).result {
-            crate::flows::fixtures::AddTokenResult::Token { name, detail, .. } => {
-                assert_eq!(*name, s.native_alias_title);
-                assert_eq!(*detail, s.native_alias_message);
-                assert_ne!(*name, s.not_found_title);
+            AddTokenResult::Note(line) => {
+                assert!(line.contains(s.native_alias_title.as_ref()));
+                assert!(!line.contains(s.not_found_title.as_ref()));
             }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+            _ => unreachable!(),
         }
 
-        // Found: the token, its network and its scale.
         let mut found = base;
         found.found = vec![MtokFound {
             chain_id: 100,
@@ -3866,17 +4394,68 @@ mod tests {
         }];
         let card = add_token(&found, &s);
         match &card.result {
-            crate::flows::fixtures::AddTokenResult::Token { mark, name, detail } => {
+            AddTokenResult::Token {
+                mark,
+                name,
+                detail,
+                chip,
+            } => {
                 assert_eq!(*name, "USD Coin");
                 assert_eq!(mark.ticker, "USDC");
                 assert!(detail.contains("Gnosis"));
-                // The scale is on the card, because adding a token at the wrong
-                // one renders every amount at the wrong magnitude.
                 assert!(detail.contains('6'), "no decimals: {detail}");
+                assert!(chip.is_none());
             }
-            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+            _ => unreachable!(),
         }
-        assert_eq!(card.cta, s.add_to_wallet);
+        assert!(!card.cta_disabled);
+
+        found.found[0].added = true;
+        let card = add_token(&found, &s);
+        assert!(matches!(
+            &card.result,
+            AddTokenResult::Token { chip: Some(_), .. }
+        ));
+        assert!(card.cta_disabled, "an added token is not added twice");
+    }
+
+    /// The native tab: nothing typed says nothing and cannot add; a query the
+    /// index matches offers its chains; one it does not says so.
+    #[test]
+    fn the_native_tab_offers_the_chains_it_matched() {
+        use crate::flows::fixtures::AddTokenResult;
+        use vela_core::app::network_admin::{NetChainIndexEntry, NetWizardPhase};
+        let s = strings();
+        let mut wizard = CoreHost::<vela_core::app::network_admin::NetworkAdmin>::new()
+            .view()
+            .wizard;
+
+        let idle = add_network_tab(&wizard, "", None, &s);
+        assert!(idle.native);
+        assert!(matches!(idle.result, AddTokenResult::Empty));
+        assert!(idle.cta_disabled);
+
+        wizard.phase = NetWizardPhase::Suggested;
+        wizard.suggestions = vec![NetChainIndexEntry {
+            chain_id: 43_114,
+            name: "Avalanche".to_owned(),
+            short_name: "avax".to_owned(),
+            native_currency_symbol: "AVAX".to_owned(),
+            has_logo: true,
+        }];
+        match add_network_tab(&wizard, "aval", None, &s).result {
+            AddTokenResult::Suggestions(rows) => {
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].chain_id, 43_114);
+            }
+            _ => unreachable!("a match is offered"),
+        }
+
+        wizard.suggestions.clear();
+        match add_network_tab(&wizard, "zzz", None, &s).result {
+            AddTokenResult::Note(line) => assert!(line.contains("zzz")),
+            _ => unreachable!("no match says so"),
+        }
     }
 
     /// A transaction's detail, and the row order the listeners are bound in.
@@ -5135,11 +5714,12 @@ mod parity_tests {
             ],
             "sheet order, each skipped line with its reason"
         );
-        assert_eq!(model.rows[0].conversion, "5000 CNY → 689.66 USDT");
+        assert_eq!(model.rows[0].amount, "689.66 USDT");
+        assert_eq!(model.rows[0].source.as_deref(), Some("5000 CNY"));
         assert_eq!(model.parsed, fill(&s.batch_parsed, "n", "4"), "lines read");
         assert!(
-            model.rows[1].conversion.is_empty(),
-            "a refused line has no figure"
+            model.rows[1].amount.is_empty() && model.rows[1].seed.is_none(),
+            "a refused line has no figure and nobody to draw"
         );
 
         let total = batch_total(&view, "USDT", "1000", None, &s)

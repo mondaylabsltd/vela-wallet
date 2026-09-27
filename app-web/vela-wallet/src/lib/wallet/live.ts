@@ -209,6 +209,71 @@ export function trimBalance(balance: string, maxDecimals = 6): string {
 }
 
 /**
+ * A token amount as every money surface reads it — the asset list's rows, the
+ * Send picker and token card, the confirm and the receipt — ONE call, so the
+ * balance on the home row and the balance beside the token on Send are the
+ * same digits, and the figure `Max` writes (the core's `send::max_figure`) is
+ * the figure the confirm repeats.
+ *
+ * The core's ladder, digit for digit: 6 places under 1, 4 under 1000, 2 from
+ * 1000 (`l10n::number::format_token_amount`, which the desktop's rows use),
+ * rounded HALF UP, trailing zeros dropped; an amount too small to survive six
+ * places keeps two significant digits instead of reading `0`. String
+ * arithmetic only — a uint256 must never pass through a JS `number` — and the
+ * decimal mark is the person's preset. Ungrouped, like the field `Max` fills:
+ * a figure and the balance it came from must read the same.
+ *
+ * It used to be `trimBalance`'s six places, TRUNCATED, at every magnitude:
+ * `1.22456789` read "1.224567" on the row while Max wrote "1.2246", and a
+ * balance less a fee could read one digit lower on the confirm than on the
+ * form it came from.
+ */
+export function tokenAmountText(amount: string, rounding: 'half-up' | 'down' = 'half-up'): string {
+	const exact = amount.trim();
+	const dot = exact.indexOf('.');
+	const intRaw = dot === -1 ? exact : exact.slice(0, dot);
+	const fracRaw = dot === -1 ? '' : exact.slice(dot + 1);
+	if ((intRaw === '' && fracRaw === '') || !/^\d*$/.test(intRaw) || !/^\d*$/.test(fracRaw)) {
+		return exact;
+	}
+	const intDigits = intRaw.replace(/^0+/, '');
+	const places = intDigits.length === 0 ? 6 : intDigits.length <= 3 ? 4 : 2;
+	const digits = (intDigits + fracRaw.padEnd(places, '0').slice(0, places))
+		.split('')
+		.map((d) => d.charCodeAt(0) - 48);
+	const next = fracRaw[places];
+	// `down` for a CEILING the person may type back ("you can send up to"):
+	// rounded up, it would be a figure the balance cannot cover.
+	if (rounding === 'half-up' && next !== undefined && next >= '5') {
+		let i = digits.length;
+		for (;;) {
+			if (i === 0) {
+				digits.unshift(1);
+				break;
+			}
+			i -= 1;
+			if (digits[i] === 9) digits[i] = 0;
+			else {
+				digits[i] += 1;
+				break;
+			}
+		}
+	}
+	const decimal = numberSeparators().decimal;
+	const split = digits.length - places;
+	const intPart = digits.slice(0, split).join('') || '0';
+	const fracPart = digits.slice(split).join('').replace(/0+$/, '');
+	if (intPart === '0' && fracPart === '') {
+		// Below the ladder's last place: two significant digits, cut.
+		const lead = /^0*/.exec(fracRaw)?.[0].length ?? 0;
+		if (lead === fracRaw.length) return '0';
+		const keep = Math.min(lead + 2, fracRaw.length);
+		return `0${decimal}${fracRaw.slice(0, keep).replace(/0+$/, '')}`;
+	}
+	return fracPart === '' ? intPart : `${intPart}${decimal}${fracPart}`;
+}
+
+/**
  * A token figure that is about to be SENT: the person's decimal mark, and
  * every digit the core gave it. `trimBalance`'s six places are for a balance
  * being glanced at — a share of 0.00022989 printed as 0.000229 is not what
@@ -324,7 +389,7 @@ export function liveAssetRow(
 		logoUrls: balanceTokenLogoURLs(token),
 		badgeLogoUrl: badgeChain === null ? undefined : chainLogoURL(badgeChain),
 		badgeHidden: badgeChain === null,
-		balance: hidden ? MASK : trimBalance(token.balance),
+		balance: hidden ? MASK : tokenAmountText(token.balance),
 		fiat,
 		masked: hidden
 	};
@@ -460,7 +525,7 @@ export function liveAssetDetail(
 		token: {
 			ticker: token.symbol,
 			badgeColor: chainColor(token.chain_id),
-			balance: hidden ? MASK : `${trimBalance(token.balance)} ${token.symbol}`,
+			balance: hidden ? MASK : `${tokenAmountText(token.balance)} ${token.symbol}`,
 			fiatLine: [fiat, chainName(token.chain_id)].filter((part) => part !== undefined).join(' · '),
 			logoUrls: balanceTokenLogoURLs(token),
 			badgeLogoUrl: badgeChain === null ? undefined : chainLogoURL(badgeChain),

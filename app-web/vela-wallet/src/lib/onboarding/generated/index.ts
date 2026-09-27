@@ -22,5 +22,6 @@ export * from './RegistryPublishMember';
 export * from './RegistryUnitMember';
 export * from './ShellOperation';
 export * from './ShellResult';
+export * from './SignInKey';
 export * from './StatusKey';
 export * from './SubmitLabel';

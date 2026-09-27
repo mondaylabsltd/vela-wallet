@@ -10,6 +10,9 @@
 import SwiftUI
 
 struct VelaButton: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
     enum Kind {
         case primary
         case secondary
@@ -30,6 +33,11 @@ struct VelaButton: View {
     /// spinner where its label was (docs/design-system.md — "Loading state:
     /// ActivityIndicator replacing text").
     var loading: Bool = false
+    /// While `loading`, say what is happening BESIDE the spinner ("Sending…")
+    /// instead of hiding the label behind it — for an action that takes long
+    /// enough for the word to matter (the bug report's send, round v2).
+    /// `nil` keeps the spinner alone in the label's place.
+    var busyTitle: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -39,15 +47,31 @@ struct VelaButton: View {
             VelaHaptic.press.play()
             action()
         } label: {
-            Text(title).typeRole(Typography.button)
+            if loading, let busyTitle {
+                HStack(spacing: Tokens.Space.s8) {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .controlSize(VelaButton.spinnerSize(textScale))
+                        .tint(kind == .secondary ? theme.fgBase : theme.onAccent)
+                    Text(busyTitle).typeRole(Typography.button)
+                }
+            } else {
+                Text(title).typeRole(Typography.button)
+            }
         }
-        .buttonStyle(VelaButtonStyle(kind: kind, loading: loading))
+        .buttonStyle(VelaButtonStyle(kind: kind, loading: loading && busyTitle == nil, textScale: textScale))
         .disabled(!enabled || loading)
         // Dimming follows `enabled` alone, never `loading`.
         .opacity(enabled ? 1 : Tokens.Opacity.disabled)
         // The label is hidden behind the spinner while busy; the button still
         // answers to its own name.
-        .accessibilityLabel(title)
+        .accessibilityLabel(loading ? (busyTitle ?? title) : title)
+    }
+
+    /// The spinner grows with the words (v3 B4): small at the standard sizes,
+    /// the regular control from the large text sizes up.
+    static func spinnerSize(_ textScale: CGFloat) -> ControlSize {
+        textScale >= Interaction.largeTextSpinner ? .regular : .small
     }
 }
 
@@ -55,6 +79,7 @@ private struct VelaButtonStyle: ButtonStyle {
     @Environment(\.theme) private var theme
     let kind: VelaButton.Kind
     var loading: Bool = false
+    var textScale: CGFloat = 1
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
@@ -71,7 +96,7 @@ private struct VelaButtonStyle: ButtonStyle {
                 if loading {
                     ProgressView()
                         .progressViewStyle(.circular)
-                        .controlSize(.small)
+                        .controlSize(VelaButton.spinnerSize(textScale))
                         .tint(labelColor)
                 }
             }
@@ -120,6 +145,9 @@ enum Interaction {
     /// How long the address strip's 已复制 confirmation stays visible
     /// (spec 014 — copy feedback is the one sanctioned timed visual).
     static let copiedFeedbackSeconds: Double = 1.5
+    /// From this text size up a button's spinner is the regular control, so
+    /// it grows with the label beside it (feedback v3 B4).
+    static let largeTextSpinner: CGFloat = 1.2
 }
 
 #Preview("Buttons") {
