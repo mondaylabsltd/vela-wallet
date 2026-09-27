@@ -554,6 +554,51 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(slide.isEnabled, "a finite choice keeps the slide armed")
     }
 
+    /// 2^254 is past the approval guard's line (2^200) but under the
+    /// registry's usual "Unlimited" threshold (2^255). The sheet used to draw it
+    /// as a seventy-digit figure beside the guard's warning, and a cap chosen
+    /// never replaced it. Now the decode says 无限额 where the guard does, and
+    /// a finite choice takes its place.
+    func testAnApprovalPastTheGuardsLineReadsUnlimitedAndACapReplacesIt() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        openExplore(app)
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+        connect(app)
+
+        app.webViews.buttons["Approve 2^254"].firstMatch.tap()
+
+        XCTAssertTrue(app.staticTexts["授权上限"].waitForExistence(timeout: 30),
+                      "the spending-cap editor never appeared")
+        _ = XCTWaiter.wait(for: [expectation(description: "settle")], timeout: 3)
+        attach(app.screenshot(), named: "device-browser-2-254")
+        let unlimited = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "无限额")
+        )
+        XCTAssertGreaterThanOrEqual(unlimited.count, 2,
+                                    "the headline and the cap row must both read 无限额")
+        let digits = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", ".*[0-9,]{30,}.*")
+        )
+        XCTAssertEqual(digits.count, 0, "no seventy-digit figure may be drawn")
+
+        let revoke = app.buttons.matching(identifier: "撤销").allElementsBoundByIndex
+        guard let hittable = revoke.first(where: { $0.isHittable }) else {
+            XCTFail("no on-screen 撤销 chip among \(revoke.count) matches")
+            return
+        }
+        hittable.tap()
+        _ = XCTWaiter.wait(for: [expectation(description: "capped")], timeout: 3)
+        attach(app.screenshot(), named: "device-browser-2-254-capped")
+        let stillUnlimited = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "无限额")
+        )
+        XCTAssertEqual(stillUnlimited.count, 0,
+                       "a chosen cap must replace 无限额 everywhere, the headline included")
+
+        app.swipeDown(velocity: .fast)
+    }
+
     // MARK: - US6: a signature the page can verify
 
     /// `personal_sign` is answered, and the page verifies the signature
