@@ -650,6 +650,9 @@ enum SettingsFixtures {
             screenshotUnsupported: loc.t(k.bugScreenshotUnsupported),
             screenshotsDropped: loc.t(k.bugScreenshotsDropped),
             fallbackScreenshots: loc.t(k.bugFallbackScreenshots),
+            viewScreenshot: loc.t(k.bugViewScreenshot, vars: ["index": "{{index}}"]),
+            closeViewer: loc.t(k.bugCloseViewer),
+            removeFromViewer: loc.t(k.bugRemoveFromViewer),
             tryAgain: loc.t(k.commonTryAgain)
         )
     }

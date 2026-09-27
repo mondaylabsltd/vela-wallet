@@ -408,6 +408,12 @@ struct FeedbackModel {
     var screenshotUnsupported = ""
     var screenshotsDropped = ""
     var fallbackScreenshots = ""
+    /// "View screenshot {{index}}" — a tile's accessible name, and the
+    /// viewer's picture's; `{{index}}` (1-based) filled per picture.
+    var viewScreenshot = ""
+    /// The viewer's ✕ (accessible name) and its Remove.
+    var closeViewer = ""
+    var removeFromViewer = ""
     /// The send button's word after a fallback: sending again is a retry.
     var tryAgain = ""
     /// Only a LIVE sheet sends: the gallery draws this sheet as a picture of

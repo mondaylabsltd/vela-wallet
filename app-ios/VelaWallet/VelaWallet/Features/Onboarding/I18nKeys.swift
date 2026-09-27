@@ -550,6 +550,11 @@ enum I18nKeys {
         static let bugScreenshotUnsupported = "componentsUi.bugReport.screenshotUnsupported"
         static let bugScreenshotsDropped = "componentsUi.bugReport.screenshotsDropped"
         static let bugFallbackScreenshots = "componentsUi.bugReport.fallbackScreenshots"
+        /// Tap a screenshot to preview it (spec C, 2026-09-27): the tile's
+        /// accessible name, the viewer's ✕ and its Remove.
+        static let bugViewScreenshot = "componentsUi.bugReport.viewScreenshot"
+        static let bugCloseViewer = "componentsUi.bugReport.closeViewer"
+        static let bugRemoveFromViewer = "componentsUi.bugReport.removeFromViewer"
 
             // Rescue (SR1–SR5).
         static let rpcUnavailableMultiple = "assets.rpcUnavailableMultiple"

@@ -512,6 +512,411 @@ final class FeedbackReportDeviceTests: XCTestCase {
         app.terminate()
     }
 
+    // MARK: - Tap a screenshot to preview it (spec C)
+
+    /// Settings → Send feedback → three screenshots → tap tile 2, and every
+    /// action's aftermath: the viewer at 2 / 3, paging both ways (and the
+    /// bounce at the end), double-tap zoom, a pan while zoomed that neither
+    /// pages nor closes, pinch zoom, a swipe down that springs back (captured
+    /// mid-swipe) and one that closes, the ✕, then Remove — middle, last,
+    /// only. Offline; nothing is sent.
+    ///
+    /// The pictures are told apart by their shape: seed 1 is a phone
+    /// screenshot (887×1920 once processed), 2 is 4:3, 3 is 3:4.
+    func testCGViewerFromRow() {
+        let app = launchApp(theme: "light", endpoint: Self.unreachable)
+        openFeedbackFromRow(app)
+        openPicker(app)
+        pick([1, 2, 3], in: app)
+        confirmPicker(app)
+        waitForTiles(app, count: 3)
+        settle(0.6)
+        shot(app, "g00-three-tiles")
+
+        // Open on tile 2 — frames taken while it opens show the picture
+        // flying out of the tile.
+        capturing("g01a-opening", count: 5, every: 0.07) {
+            app.buttons["feedback.viewScreenshot.2"].tap()
+        }
+        XCTAssertTrue(app.buttons["feedback.viewer.close"].waitForExistence(timeout: 5), "tile 2 did not open the viewer")
+        settle(0.5)
+        shot(app, "g01-viewer-3-open-at-2")
+        let image = viewerImage(app)
+        dump(app, "g01-viewer-tree")
+        XCTAssertEqual(image.label, "View screenshot 2")
+        XCTAssertEqual(image.value as? String, "2 / 3")
+        assertShape(image, Self.shape2, "tile 2 opened something else")
+        assertBetweenBars(image, in: app)
+        XCTAssertTrue(app.buttons["feedback.viewer.remove"].isHittable, "no Remove")
+        XCTAssertEqual(app.buttons["feedback.viewer.close"].label, "Close")
+        let closeFrame = app.buttons["feedback.viewer.close"].frame
+        XCTAssertLessThan(closeFrame.midX, app.frame.width / 2, "the ✕ is not at the leading edge")
+
+        // Paging.
+        image.swipeLeft()
+        settle(0.9)
+        XCTAssertEqual(image.value as? String, "3 / 3", "a swipe left did not page")
+        assertShape(image, Self.shape3, "page 3 is not seed 3")
+        shot(app, "g02-paged-to-3")
+        image.swipeLeft()
+        settle(0.9)
+        XCTAssertEqual(image.value as? String, "3 / 3", "paged past the last")
+        image.swipeRight()
+        settle(0.9)
+        image.swipeRight()
+        settle(0.9)
+        XCTAssertEqual(image.value as? String, "1 / 3", "two swipes right did not reach the first")
+        assertShape(image, Self.shape1, "page 1 is not seed 1")
+        shot(app, "g03-paged-to-1")
+        let fit = image.frame
+
+        // Double tap: 2×, and back.
+        doubleTapCentre(app)
+        settle(0.9)
+        print("VELA_ZOOM fit=\(fit) zoomed=\(image.frame)")
+        XCTAssertGreaterThan(image.frame.width, fit.width * 1.8, "a double tap did not zoom")
+        shot(app, "g04-zoomed-double-tap")
+        // Zoomed, a drag pans: no page, no close.
+        let before = image.frame
+        drag(app, from: CGVector(dx: 0.5, dy: 0.5), to: CGVector(dx: 0.2, dy: 0.3))
+        settle(0.8)
+        print("VELA_PAN before=\(before) after=\(image.frame)")
+        XCTAssertNotEqual(image.frame.origin, before.origin, "a drag while zoomed did not pan")
+        XCTAssertEqual(image.value as? String, "1 / 3", "a drag while zoomed paged")
+        XCTAssertTrue(viewerOpen(app), "a drag while zoomed closed the viewer")
+        shot(app, "g05-zoomed-panned")
+        drag(app, from: CGVector(dx: 0.5, dy: 0.35), to: CGVector(dx: 0.5, dy: 0.75))
+        settle(0.8)
+        XCTAssertTrue(viewerOpen(app), "a drag DOWN while zoomed closed the viewer")
+        XCTAssertGreaterThan(image.frame.width, fit.width * 1.5, "a drag down while zoomed un-zoomed it")
+        doubleTapCentre(app)
+        settle(0.9)
+        XCTAssertEqual(image.frame.width, fit.width, accuracy: 2, "a second double tap did not reset")
+
+        // Pinch.
+        image.pinch(withScale: 3, velocity: 3)
+        settle(1)
+        print("VELA_PINCH fit=\(fit) pinched=\(image.frame)")
+        XCTAssertGreaterThan(image.frame.width, fit.width * 2, "a pinch did not zoom")
+        shot(app, "g06-pinched")
+        doubleTapCentre(app)
+        settle(0.9)
+        XCTAssertEqual(image.frame.width, fit.width, accuracy: 2)
+
+        // A swipe down that stops short springs back — the frame is taken
+        // while the finger is still down.
+        dragHoldingWithCapture(from: CGVector(dx: 0.5, dy: 0.42), to: CGVector(dx: 0.55, dy: 0.6),
+                               hold: 3, captureAfter: 2, name: "g07-mid-swipe-down", in: app)
+        settle(1)
+        XCTAssertTrue(viewerOpen(app), "a short swipe down closed the viewer")
+        XCTAssertEqual(image.frame.minY, fit.minY, accuracy: 2, "it did not spring back")
+        shot(app, "g08-sprung-back")
+
+        // A real swipe down closes — back on the sheet, tile 1 in its place.
+        drag(app, from: CGVector(dx: 0.5, dy: 0.4), to: CGVector(dx: 0.5, dy: 0.85), velocity: .fast)
+        settle(1.2)
+        XCTAssertFalse(viewerOpen(app), "a swipe down did not close the viewer")
+        XCTAssertTrue(app.buttons["feedback.viewScreenshot.1"].isHittable, "back on the sheet, tile 1 is not there")
+        XCTAssertTrue(element(app, "feedback.what").exists, "not back on the report sheet")
+        shot(app, "g09-closed-by-swipe")
+
+        // The ✕ — frames taken while it closes show the picture flying back.
+        openTile(1, in: app)
+        capturing("g10a-closing", count: 5, every: 0.07) {
+            app.buttons["feedback.viewer.close"].tap()
+        }
+        settle(1)
+        XCTAssertFalse(viewerOpen(app), "the ✕ did not close the viewer")
+        XCTAssertTrue(app.buttons["feedback.viewScreenshot.1"].isHittable)
+        shot(app, "g10-closed-by-x")
+
+        // Remove the middle one: the next takes its place.
+        openTile(2, in: app)
+        app.buttons["feedback.viewer.remove"].tap()
+        settle(1)
+        XCTAssertTrue(viewerOpen(app), "removing one of three closed the viewer")
+        XCTAssertEqual(image.value as? String, "2 / 2")
+        assertShape(image, Self.shape3, "after removing the middle, the next did not show")
+        shot(app, "g11-removed-middle")
+        // Now on the last: removing it shows the previous.
+        app.buttons["feedback.viewer.remove"].tap()
+        settle(1)
+        XCTAssertTrue(viewerOpen(app), "removing one of two closed the viewer")
+        XCTAssertEqual(image.label, "View screenshot 1")
+        XCTAssertTrue(((image.value as? String) ?? "").isEmpty, "one picture still shows a counter")
+        assertShape(image, Self.shape1, "after removing the last, the previous did not show")
+        shot(app, "g12-one-image")
+        // The only one: the viewer closes, the sheet is empty again.
+        app.buttons["feedback.viewer.remove"].tap()
+        settle(1.2)
+        XCTAssertFalse(viewerOpen(app), "removing the only picture left the viewer open")
+        XCTAssertFalse(app.buttons["feedback.viewScreenshot.1"].exists, "a tile is left")
+        XCTAssertTrue(app.staticTexts["Optional · up to 5"].exists, "the section is not back to empty")
+        XCTAssertTrue(element(app, "feedback.addScreenshots").isHittable, "no add target")
+        shot(app, "g13-removed-only")
+        app.terminate()
+    }
+
+    /// Dark app theme, the largest text: the viewer stays black, its words
+    /// grow, and the picture still fits between the bars.
+    func testCHViewerDarkLargest() {
+        let app = launchApp(theme: "dark", textScale: "xlarge", endpoint: Self.unreachable)
+        openFeedbackFromRow(app)
+        openPicker(app)
+        pick([1, 2, 3], in: app)
+        confirmPicker(app)
+        waitForTiles(app, count: 3)
+        settle(0.6)
+        shot(app, "h00-dark-xl-tiles")
+        openTile(1, in: app)
+        let image = viewerImage(app)
+        XCTAssertEqual(image.value as? String, "1 / 3")
+        assertBetweenBars(image, in: app)
+        shot(app, "h01-dark-xl-viewer")
+        doubleTapCentre(app)
+        settle(0.9)
+        shot(app, "h02-dark-xl-zoomed")
+        doubleTapCentre(app)
+        settle(0.9)
+        dragHoldingWithCapture(from: CGVector(dx: 0.5, dy: 0.42), to: CGVector(dx: 0.45, dy: 0.6),
+                               hold: 3, captureAfter: 2, name: "h03-dark-xl-mid-swipe-down", in: app)
+        settle(1)
+        XCTAssertTrue(viewerOpen(app))
+        image.swipeLeft()
+        settle(0.9)
+        shot(app, "h04-dark-xl-page-2")
+        app.buttons["feedback.viewer.close"].tap()
+        settle(1)
+        XCTAssertFalse(viewerOpen(app))
+        shot(app, "h05-dark-xl-closed")
+        app.terminate()
+    }
+
+    /// A scroll that starts on a tile scrolls — it never opens the viewer; a
+    /// plain tap still does. (A scroll from the remove badge once deleted a
+    /// screenshot; the tile is a tap that fails on movement for the same
+    /// reason.)
+    func testCIScrollFromTileNeverOpens() {
+        let app = launchApp(theme: "light", endpoint: Self.unreachable)
+        openFeedbackFromRow(app)
+        openPicker(app)
+        pick([1, 2], in: app)
+        confirmPicker(app)
+        waitForTiles(app, count: 2)
+        settle(0.6)
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        var log: [String] = []
+        for (name, dx, dy) in [("up from tile 1", 0.0, -220.0), ("up-left from tile 2", -60.0, -180.0),
+                               ("sideways on tile 1", 120.0, 0.0)] as [(String, CGFloat, CGFloat)] {
+            let tileNumber = name.contains("tile 2") ? 2 : 1
+            let tile = app.buttons["feedback.viewScreenshot.\(tileNumber)"]
+            XCTAssertTrue(tile.waitForExistence(timeout: 5))
+            let start = CGPoint(x: tile.frame.midX, y: tile.frame.midY)
+            let rowTop = tile.frame.minY
+            origin.withOffset(CGVector(dx: start.x, dy: start.y))
+                .press(forDuration: 0.12, thenDragTo: origin.withOffset(CGVector(dx: start.x + dx, dy: start.y + dy)),
+                       withVelocity: .slow, thenHoldForDuration: 0.1)
+            settle(1)
+            let opened = viewerOpen(app)
+            let moved = rowTop - app.buttons["feedback.viewScreenshot.\(tileNumber)"].frame.minY
+            let line = "\(name): start=\(start) contentMoved=\(moved) opened=\(opened) tiles=\(tileCount(app))"
+            print("VELA_TILE_SCROLL " + line)
+            log.append(line)
+            XCTAssertFalse(opened, "a drag \(name) opened the viewer")
+            XCTAssertEqual(tileCount(app), 2, "a drag \(name) removed a screenshot")
+            shot(app, "i-\(name)")
+            if opened { app.buttons["feedback.viewer.close"].tap(); settle(1) }
+            // Back down by what the content moved — never past the top.
+            if moved > 20 {
+                let y = app.frame.height * 0.3
+                origin.withOffset(CGVector(dx: 330, dy: y))
+                    .press(forDuration: 0.12, thenDragTo: origin.withOffset(CGVector(dx: 330, dy: y + moved - 10)),
+                           withVelocity: .slow, thenHoldForDuration: 0.1)
+                settle(0.8)
+            }
+        }
+        // A tap still opens.
+        openTile(1, in: app)
+        log.append("tap on tile 1: opened=\(viewerOpen(app))")
+        app.buttons["feedback.viewer.close"].tap()
+        settle(1)
+        // A held press shows the 0.97 press (frame taken while the finger is
+        // down, before the half-second hold opens it) — never a dead press.
+        let tile = app.buttons["feedback.viewScreenshot.2"]
+        let box = CaptureBox()
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            Thread.sleep(forTimeInterval: 0.3)
+            box.shot = XCUIScreen.main.screenshot()
+            done.signal()
+        }
+        tile.press(forDuration: 1.4)
+        _ = done.wait(timeout: .now() + 10)
+        if let pressed = box.shot { attach(pressed, "i-pressed-tile-2") }
+        XCTAssertTrue(app.buttons["feedback.viewer.close"].waitForExistence(timeout: 5), "a held press opened nothing")
+        log.append("held press on tile 2: opened=\(viewerOpen(app))")
+        app.buttons["feedback.viewer.close"].tap()
+        settle(1)
+        XCTAssertEqual(tileCount(app), 2)
+        note(log.joined(separator: "\n"), "i-results")
+        app.terminate()
+    }
+
+    /// No tile opens while the report is on its way (against the runner's
+    /// stub, refused after 8 s), and they open again once it is answered.
+    func testCJProcessingAndSendingNeverOpen() throws {
+        let stub = try StubReportServer(answer: .status(503, #"{"error":"not_configured"}"#, delay: 8))
+        stub.start()
+        defer { stub.stop() }
+        let app = launchApp(theme: "light", endpoint: stub.url)
+        openFeedbackFromRow(app)
+        // (A tile still PROCESSING cannot be tapped from here: XCUITest
+        // holds every synthesized tap until the app is idle, and a spinning
+        // tile keeps it busy — three tries, recorded, each tap landed after
+        // the tile had finished and rightly opened it. That rule is held by
+        // `ScreenshotViewerTests.aProcessingTileDoesNotOpenAndIsNotAPage`.)
+        openPicker(app)
+        pick([3], in: app)
+        confirmPicker(app)
+        waitForTiles(app, count: 1)
+        settle(0.6)
+
+        type("Viewer inert-while-sending check (device verification, stub endpoint).", into: "feedback.what", in: app)
+        tapSend(app)
+        settle(0.4)
+        let tile = app.buttons["feedback.viewScreenshot.1"]
+        print("VELA_SENDING_TILE exists=\(tile.exists) hittable=\(tile.isHittable) frame=\(tile.frame)")
+        revealTile(1, in: app)
+        XCTAssertTrue(tile.isHittable, "the tile is not reachable while sending")
+        let sendingBefore = element(app, "feedback.fallback").exists
+        let tapStart = Date()
+        tile.tap()
+        let tapTook = Date().timeIntervalSince(tapStart)
+        let answeredBeforeTapLanded = element(app, "feedback.fallback").exists
+        print("VELA_SENDING_TAP took=\(String(format: "%.2f", tapTook))s fallbackBefore=\(sendingBefore) fallbackAfterTap=\(answeredBeforeTapLanded) opened=\(viewerOpen(app))")
+        XCTAssertFalse(answeredBeforeTapLanded, "the tap landed after the send was answered — it proves nothing")
+        settle(0.8)
+        shot(app, "j02-tapped-while-sending")
+        XCTAssertFalse(viewerOpen(app), "a tile opened the viewer while the report was sending")
+        XCTAssertTrue(element(app, "feedback.fallback").waitForExistence(timeout: 30), "no fallback after the refusal")
+        settle(1)
+        // Answered: the tiles open again.
+        revealTile(1, in: app)
+        openTile(1, in: app)
+        shot(app, "j03-opens-after-send")
+        app.buttons["feedback.viewer.close"].tap()
+        settle(1)
+        app.terminate()
+    }
+
+    // MARK: Viewer plumbing
+
+    /// Processed shapes of the three seeds (width ÷ height).
+    static let shape1: CGFloat = 887.0 / 1920.0
+    static let shape2: CGFloat = 1600.0 / 1200.0
+    static let shape3: CGFloat = 1440.0 / 1920.0
+
+    private func openTile(_ number: Int, in app: XCUIApplication) {
+        let tile = app.buttons["feedback.viewScreenshot.\(number)"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 5), "no tile \(number)")
+        XCTAssertEqual(tile.label, "View screenshot \(number)")
+        tile.tap()
+        let close = app.buttons["feedback.viewer.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5), "tile \(number) did not open the viewer")
+        settle(0.5)
+    }
+
+    /// A double tap in the middle of the screen — a zoomed picture's own
+    /// centre may be off screen.
+    private func doubleTapCentre(_ app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).doubleTap()
+    }
+
+    /// Bring a tile the sheet scrolled away back into reach with short
+    /// downward drags — one long one at the top would pull the sheet down.
+    private func revealTile(_ number: Int, in app: XCUIApplication) {
+        let tile = app.buttons["feedback.viewScreenshot.\(number)"]
+        var drags = 0
+        while !(tile.exists && tile.isHittable && tile.frame.minY > 60), drags < 6 {
+            slowDrag(app, from: 0.35, to: 0.47)
+            drags += 1
+        }
+        print("VELA_REVEAL tile \(number) drags=\(drags) frame=\(tile.frame)")
+    }
+
+    private func viewerImage(_ app: XCUIApplication) -> XCUIElement {
+        let image = element(app, "feedback.viewer.image")
+        XCTAssertTrue(image.waitForExistence(timeout: 5), "no picture in the viewer")
+        return image
+    }
+
+    private func viewerOpen(_ app: XCUIApplication) -> Bool {
+        app.buttons["feedback.viewer.close"].exists
+    }
+
+    private func tileCount(_ app: XCUIApplication) -> Int {
+        (1...5).filter { app.buttons["feedback.viewScreenshot.\($0)"].exists }.count
+    }
+
+    private func assertShape(_ image: XCUIElement, _ shape: CGFloat, _ message: String) {
+        let frame = image.frame
+        let seen = frame.width / max(1, frame.height)
+        XCTAssertEqual(seen, shape, accuracy: 0.03, "\(message) — \(frame)")
+    }
+
+    /// The picture sits between the ✕ row and the Remove row, never under
+    /// either (C2).
+    private func assertBetweenBars(_ image: XCUIElement, in app: XCUIApplication) {
+        let close = app.buttons["feedback.viewer.close"].frame
+        let remove = app.buttons["feedback.viewer.remove"].frame
+        print("VELA_BARS close=\(close) remove=\(remove) image=\(image.frame) screen=\(app.frame)")
+        XCTAssertGreaterThanOrEqual(image.frame.minY, close.maxY - 1, "the picture runs under the top bar")
+        XCTAssertLessThanOrEqual(image.frame.maxY, remove.minY + 1, "the picture runs under the bottom bar")
+    }
+
+    private func drag(_ app: XCUIApplication, from: CGVector, to: CGVector, velocity: XCUIGestureVelocity = .slow) {
+        app.coordinate(withNormalizedOffset: from)
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: to),
+                   withVelocity: velocity, thenHoldForDuration: 0.05)
+    }
+
+    /// Frames taken from another thread while `action` runs on this one —
+    /// an opening or closing animation, which a screenshot after the tap
+    /// would miss.
+    private func capturing(_ name: String, count: Int, every interval: TimeInterval, _ action: () -> Void) {
+        let box = FramesBox()
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            for _ in 0..<count {
+                box.append(XCUIScreen.main.screenshot())
+                Thread.sleep(forTimeInterval: interval)
+            }
+            done.signal()
+        }
+        action()
+        _ = done.wait(timeout: .now() + 15)
+        for (index, frame) in box.frames.enumerated() { attach(frame, "\(name)-\(index)") }
+    }
+
+    /// A frame taken WHILE the finger is still down. XCUITest's gestures
+    /// block the main thread, so the screen is read from another thread
+    /// during the hold.
+    private func dragHoldingWithCapture(from: CGVector, to: CGVector, hold: TimeInterval, captureAfter: TimeInterval,
+                                        name: String, in app: XCUIApplication) {
+        let box = CaptureBox()
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            Thread.sleep(forTimeInterval: captureAfter)
+            box.shot = XCUIScreen.main.screenshot()
+            done.signal()
+        }
+        app.coordinate(withNormalizedOffset: from)
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: to),
+                   withVelocity: .slow, thenHoldForDuration: hold)
+        _ = done.wait(timeout: .now() + 15)
+        if let captured = box.shot { attach(captured, name) } else { note("no capture", name) }
+    }
+
     // MARK: - The real keyboard in the report
 
     /// English, then Pinyin (n-i-h-a-o → 你好, via the candidate bar) typed at
@@ -1169,4 +1574,16 @@ final class StubReportServer {
             connection.send(content: response, completion: .contentProcessed { _ in connection.cancel() })
         }
     }
+}
+
+/// The frame a background thread took during a held gesture.
+private final class CaptureBox: @unchecked Sendable {
+    var shot: XCUIScreenshot?
+}
+
+private final class FramesBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var shots: [XCUIScreenshot] = []
+    var frames: [XCUIScreenshot] { lock.lock(); defer { lock.unlock() }; return shots }
+    func append(_ shot: XCUIScreenshot) { lock.lock(); shots.append(shot); lock.unlock() }
 }

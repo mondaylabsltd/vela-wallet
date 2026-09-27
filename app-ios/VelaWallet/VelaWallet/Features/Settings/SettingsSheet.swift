@@ -475,8 +475,27 @@ struct FeedbackSheetBody: View {
     /// took the keyboard BACK when it re-enabled — straight over the fallback
     /// block and its "Open GitHub form" button (device run, 2026-09-27).
     @FocusState private var typing: String?
+    /// The screenshot viewer while it is up (spec C), and the picture on
+    /// screen — whose tile hides under it, as in Photos, so the picture flies
+    /// out of an empty slot and back into it.
+    @State private var viewer: ScreenshotViewer.Launch?
+    @State private var viewing: UUID?
+    /// Where the opened tile was, and its place in the row — the fallback for
+    /// finding a tile to fly back to if its probe cannot say.
+    @State private var viewerAnchor: ViewerAnchor?
+    @State private var tileProbes = TileProbes()
 
-    private enum FocusTarget: Hashable { case fallback, success }
+    private enum FocusTarget: Hashable {
+        case fallback, success
+        /// Back from the viewer (C4): the tile of the picture it closed on,
+        /// or the add target when none is left.
+        case tile(UUID), add
+    }
+
+    private struct ViewerAnchor {
+        let frame: CGRect
+        let index: Int
+    }
     /// The fallback block's scroll anchor.
     private static let fallbackAnchor = "feedback.fallbackBlock"
 
@@ -535,6 +554,22 @@ struct FeedbackSheetBody: View {
             }
             picked = []
             sender.attach(loaders)
+        }
+        .fullScreenCover(item: $viewer) { launch in
+            ScreenshotViewer(
+                launch: launch,
+                sender: sender,
+                words: ScreenshotViewer.Words(viewScreenshot: model.viewScreenshot,
+                                              close: model.closeViewer,
+                                              remove: model.removeFromViewer),
+                tileFrame: { id in tileFrame(id) },
+                onCurrent: { id in viewing = id },
+                onRemove: { id in removeTile(id) },
+                onClosed: { id in viewerClosed(on: id) }
+            )
+            // Over the sheet, not instead of it: the sheet shows through as
+            // the black fades under a swipe down.
+            .presentationBackground(.clear)
         }
     }
 
@@ -769,6 +804,7 @@ struct FeedbackSheetBody: View {
         .disabled(inert)
         .accessibilityLabel(model.addScreenshots)
         .accessibilityIdentifier("feedback.addScreenshots")
+        .accessibilityFocused($focus, equals: .add)
     }
 
     private var dashed: some View {
@@ -801,8 +837,31 @@ struct FeedbackSheetBody: View {
     }
 
     private func tile(_ shot: FeedbackSender.Shot, index: Int) -> some View {
+        TileBody(
+            ready: shot.prepared != nil,
+            name: model.viewScreenshot.replacingOccurrences(of: "{{index}}", with: String(index + 1)),
+            number: index + 1,
+            enabled: !inert,
+            open: { openViewer(shot.id) }
+        ) {
+            tileFace(shot)
+        }
+        // Outside the button, so the press's shrink never skews where the
+        // picture flies from.
+        .background(TileFrameProbe(id: shot.id, probes: tileProbes))
+        .accessibilityFocused($focus, equals: .tile(shot.id))
+        .overlay(alignment: .topTrailing) { removeBadge(shot, index: index) }
+        // Under the viewer, the slot is empty — the picture is up there.
+        .opacity(viewing == shot.id ? 0 : 1)
+    }
+
+    /// The square itself: the processed picture, or a spinner while it is
+    /// being prepared.
+    private func tileFace(_ shot: FeedbackSender.Shot) -> some View {
         ZStack {
-            if let prepared = shot.prepared, let image = UIImage(data: prepared.jpeg) {
+            // The PROCESSED pixels — what will be sent (C5), decoded once and
+            // shared with the viewer so the flight starts on the same image.
+            if shot.prepared != nil, let image = ScreenshotImages.image(for: shot) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -821,48 +880,110 @@ struct FeedbackSheetBody: View {
             RoundedRectangle(cornerRadius: Tokens.Radius.r12)
                 .stroke(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
         )
-        .overlay(alignment: .topTrailing) {
-            // A TAP, not a Button (device run, 2026-09-27): the 44 grows out
-            // into the gap above the row — where a thumb starts a scroll — and
-            // a Button there still fired when the touch became a scroll, so
-            // scrolling the sheet quietly removed a screenshot (it happened to
-            // the real report). A tap gesture fails as soon as the finger
-            // moves; VoiceOver and UI tests still see a button.
-            Group {
-                // Opaque (v3 B1): a translucent disc read two-toned and let
-                // the screenshot show through. Near-black on light; in dark a
-                // solid neutral lighter than the page — `fg.base` / `border.strong`.
-                LucideIcon(.close, size: FeedbackGeometry.badgeGlyph)
-                    .foregroundStyle(Color.white)
-                    .frame(width: FeedbackGeometry.badge, height: FeedbackGeometry.badge)
-                    .background(Circle().fill(theme.scheme == .dark ? theme.borderStrong : theme.fgBase))
-                    .overlay(Circle().stroke(theme.bgBase, lineWidth: FeedbackGeometry.badgeRing))
-                    // Small to see, 44 to hit — and the 44 grows OUTWARD
-                    // (v3 B10): centred on the tile's corner, it reaches into
-                    // the picture only as far as the badge's own size, never
-                    // half a small tile. The badge sits in its inner corner,
-                    // overhanging the tile by `badgeOverlap`.
-                    .padding(.top, FeedbackGeometry.removeReach - FeedbackGeometry.badgeOverlap)
-                    .padding(.trailing, FeedbackGeometry.removeReach - FeedbackGeometry.badgeOverlap)
-                    .frame(width: FeedbackGeometry.badgeTarget, height: FeedbackGeometry.badgeTarget,
-                           alignment: .topTrailing)
-                    .contentShape(Rectangle())
-            }
-            .onTapGesture { removeTile(shot.id) }
-            .allowsHitTesting(!inert)
-            .offset(x: FeedbackGeometry.removeReach, y: -FeedbackGeometry.removeReach)
-            .accessibilityElement(children: .ignore)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(model.removeScreenshot.replacingOccurrences(of: "{{index}}", with: String(index + 1)))
-            .accessibilityAction { removeTile(shot.id) }
-            .accessibilityIdentifier("feedback.removeScreenshot.\(index + 1)")
+        .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+    }
+
+    private func removeBadge(_ shot: FeedbackSender.Shot, index: Int) -> some View {
+        // A TAP, not a Button (device run, 2026-09-27): the 44 grows out
+        // into the gap above the row — where a thumb starts a scroll — and
+        // a Button there still fired when the touch became a scroll, so
+        // scrolling the sheet quietly removed a screenshot (it happened to
+        // the real report). A tap gesture fails as soon as the finger
+        // moves; VoiceOver and UI tests still see a button.
+        Group {
+            // Opaque (v3 B1): a translucent disc read two-toned and let
+            // the screenshot show through. Near-black on light; in dark a
+            // solid neutral lighter than the page — `fg.base` / `border.strong`.
+            LucideIcon(.close, size: FeedbackGeometry.badgeGlyph)
+                .foregroundStyle(Color.white)
+                .frame(width: FeedbackGeometry.badge, height: FeedbackGeometry.badge)
+                .background(Circle().fill(theme.scheme == .dark ? theme.borderStrong : theme.fgBase))
+                .overlay(Circle().stroke(theme.bgBase, lineWidth: FeedbackGeometry.badgeRing))
+                // Small to see, 44 to hit — and the 44 grows OUTWARD
+                // (v3 B10): centred on the tile's corner, it reaches into
+                // the picture only as far as the badge's own size, never
+                // half a small tile. The badge sits in its inner corner,
+                // overhanging the tile by `badgeOverlap`.
+                .padding(.top, FeedbackGeometry.removeReach - FeedbackGeometry.badgeOverlap)
+                .padding(.trailing, FeedbackGeometry.removeReach - FeedbackGeometry.badgeOverlap)
+                .frame(width: FeedbackGeometry.badgeTarget, height: FeedbackGeometry.badgeTarget,
+                       alignment: .topTrailing)
+                .contentShape(Rectangle())
         }
+        .onTapGesture { removeTile(shot.id) }
+        .allowsHitTesting(!inert)
+        .offset(x: FeedbackGeometry.removeReach, y: -FeedbackGeometry.removeReach)
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(model.removeScreenshot.replacingOccurrences(of: "{{index}}", with: String(index + 1)))
+        .accessibilityAction { removeTile(shot.id) }
+        .accessibilityIdentifier("feedback.removeScreenshot.\(index + 1)")
     }
 
     private func removeTile(_ id: UUID) {
         guard !inert else { return }
         VelaHaptic.select.play()
         sender.remove(id)
+    }
+
+    // MARK: - The viewer
+
+    /// Open the viewer on a processed tile — never a processing one, never
+    /// while the report is on its way (C1, C5). With the keyboard up it goes
+    /// down first, and the viewer opens once the sheet has settled, so the
+    /// picture flies from where the tile really is.
+    private func openViewer(_ id: UUID) {
+        guard viewer == nil,
+              ScreenshotViewerState(opening: id, shots: sender.shots, sending: inert) != nil
+        else { return }
+        let present = {
+            guard viewer == nil,
+                  let state = ScreenshotViewerState(opening: id, shots: sender.shots, sending: inert)
+            else { return }
+            let from = tileProbes.frameInWindow(id)
+            viewerAnchor = from.flatMap { frame in
+                sender.shots.firstIndex { $0.id == id }.map { ViewerAnchor(frame: frame, index: $0) }
+            }
+            // No slide-up: the viewer draws its own opening, from the tile.
+            var still = Transaction()
+            still.disablesAnimations = true
+            withTransaction(still) {
+                viewer = ScreenshotViewer.Launch(state: state, from: from)
+            }
+        }
+        if typing != nil {
+            typing = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + ScreenshotViewerGeometry.keyboardSettle, execute: present)
+        } else {
+            present()
+        }
+    }
+
+    /// A tile's frame on screen now: its probe, or — should the probe be out
+    /// of the window — worked out from the opened tile and its column.
+    private func tileFrame(_ id: UUID) -> CGRect? {
+        if let frame = tileProbes.frameInWindow(id) { return frame }
+        guard let anchor = viewerAnchor, let index = sender.shots.firstIndex(where: { $0.id == id }) else { return nil }
+        return anchor.frame.offsetBy(dx: CGFloat(index - anchor.index) * (anchor.frame.width + FeedbackGeometry.tileGap),
+                                     dy: 0)
+    }
+
+    /// The viewer has landed (or faded). The tile shows again under the
+    /// landed picture first, and the cover goes a beat later — never a frame
+    /// with neither. Focus goes back to the tile of the picture it closed on,
+    /// or to the add target when none is left (C4).
+    private func viewerClosed(on id: UUID?) {
+        viewing = nil
+        DispatchQueue.main.async {
+            var still = Transaction()
+            still.disablesAnimations = true
+            withTransaction(still) { viewer = nil }
+            viewerAnchor = nil
+            switch ScreenshotViewerState.returnFocus(closingOn: id, shots: sender.shots) {
+            case .tile(let tile): focusSoon(.tile(tile))
+            case .add: focusSoon(.add)
+            }
+        }
     }
 
     /// A refusal, when there is one, ABOVE the public warning — never in its
@@ -997,6 +1118,78 @@ struct FeedbackSheetBody: View {
             .focused($typing, equals: id)
             .accessibilityLabel(placeholder)
             .accessibilityIdentifier(id)
+    }
+}
+
+/// A processed tile is a button named "View screenshot n" (C1) that answers
+/// the finger like every other one — it shrinks to 0.97 and ticks while
+/// pressed (the founder's rule) — but is NOT a SwiftUI `Button`: in this
+/// sheet's ScrollView a Button fired when the finger lifted after a scroll
+/// that had started on it, opening the viewer mid-scroll (device run,
+/// 2026-09-27, recorded; the remove badge hit the same thing). So:
+///
+/// - the ACTION is a tap, which fails the moment the finger moves — a
+///   scroll that starts on a tile never opens it;
+/// - the PRESS is a separate press recogniser that also lets go after 10 pt,
+///   shown after `pressDelay` — UIKit's own delay for a control in a scroll
+///   view — so a finger that is about to scroll does not tick; held still
+///   for `holdToOpen` it opens too, so a slow press is never a dead one.
+///
+/// One still processing is only what it shows — a spinner — and does nothing.
+private struct TileBody<Face: View>: View {
+    let ready: Bool
+    let name: String
+    let number: Int
+    /// Inert while the report is sending (v3 B9): no press, no tick, no open.
+    let enabled: Bool
+    let open: () -> Void
+    @ViewBuilder let face: () -> Face
+
+    @State private var pressed = false
+    @State private var pending: DispatchWorkItem?
+
+    private static var pressDelay: TimeInterval { 0.15 }
+    private static var holdToOpen: TimeInterval { 0.5 }
+    private static var pressSlop: CGFloat { 10 }
+
+    var body: some View {
+        if ready {
+            face()
+                .scaleEffect(pressed ? Interaction.pressScaleButton : 1)
+                .animation(Interaction.pressSpring, value: pressed)
+                .onTapGesture {
+                    guard enabled else { return }
+                    // A quick tap never showed the press: it still ticks.
+                    if !pressed { VelaHaptic.press.play() }
+                    open()
+                }
+                .onLongPressGesture(minimumDuration: Self.holdToOpen, maximumDistance: Self.pressSlop,
+                                    perform: { if enabled { open() } }, onPressingChanged: pressing)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(name)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { if enabled { open() } }
+                .accessibilityIdentifier("feedback.viewScreenshot.\(number)")
+        } else {
+            face()
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("feedback.processingScreenshot.\(number)")
+        }
+    }
+
+    private func pressing(_ down: Bool) {
+        pending?.cancel()
+        pending = nil
+        guard down, enabled else {
+            pressed = false
+            return
+        }
+        let show = DispatchWorkItem {
+            pressed = true
+            VelaHaptic.press.play()
+        }
+        pending = show
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pressDelay, execute: show)
     }
 }
 
