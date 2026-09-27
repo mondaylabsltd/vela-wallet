@@ -52,6 +52,10 @@ struct SettingsSheet: View {
     var onResetTunnelUrl: (() -> Void)?
     /// The language sheet's "suggest a fix". Absent in the gallery.
     var onOpenLink: ((String) -> Void)?
+    /// The report's sender, owned by the settings page so a report whose
+    /// sheet is closed mid-send still lands and is still told (2026-09-27).
+    /// Absent in the gallery, where the sheet makes its own.
+    var feedbackSender: FeedbackSender?
 
     /// Where "suggest a fix" goes — the issue tracker the web links (its
     /// `SelectSheetBody`), since the corpus lives in that repository.
@@ -158,7 +162,7 @@ struct SettingsSheet: View {
                         onCancel: onDismiss
                     )
                 case .feedback:
-                    FeedbackSheetBody(model: model.feedback, onDone: onDismiss)
+                    FeedbackSheetBody(model: model.feedback, sender: feedbackSender, onDone: onDismiss)
                 case .rpcFix:
                     RpcFixSheetBody(
                         model: model.rpcFix,
@@ -466,6 +470,11 @@ struct FeedbackSheetBody: View {
     /// Where VoiceOver goes when the outcome changes (v3 B6/B7): a fallback's
     /// title, the success title.
     @AccessibilityFocusState private var focus: FocusTarget?
+    /// Which field has the keyboard. Let go when Send is pressed: the fields
+    /// are disabled while sending, and on the iPhone a field that was focused
+    /// took the keyboard BACK when it re-enabled — straight over the fallback
+    /// block and its "Open GitHub form" button (device run, 2026-09-27).
+    @FocusState private var typing: String?
 
     private enum FocusTarget: Hashable { case fallback, success }
     /// The fallback block's scroll anchor.
@@ -496,17 +505,22 @@ struct FeedbackSheetBody: View {
             .onChange(of: sender.state) { _, state in
                 switch state {
                 case .filed:
+                    typing = nil
                     VelaHaptic.success.play()
                     // Said, and focused (v3 B7): the form the person was in
                     // is gone, and VoiceOver must not be left on nothing.
                     UIAccessibility.post(notification: .screenChanged, argument: nil)
                     focusSoon(.success)
                 case .fallback:
-                    // Never stranded below the fold (v3 B6): the block and its
-                    // "Open GitHub form" button come into view, and VoiceOver
-                    // reads the block.
-                    withAnimation(.easeOut(duration: FeedbackGeometry.tileAnimation * 2)) {
-                        proxy.scrollTo(Self.fallbackAnchor, anchor: .top)
+                    // Never stranded below the fold (v3 B6): the keyboard stays
+                    // down, the block and its "Open GitHub form" button come
+                    // into view, and VoiceOver reads the block. The scroll waits
+                    // a beat so it measures the page without a keyboard.
+                    typing = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + FeedbackGeometry.focusDelay) {
+                        withAnimation(.easeOut(duration: FeedbackGeometry.tileAnimation * 2)) {
+                            proxy.scrollTo(Self.fallbackAnchor, anchor: .top)
+                        }
                     }
                     focusSoon(.fallback)
                 default:
@@ -583,6 +597,8 @@ struct FeedbackSheetBody: View {
             busyTitle: model.sending
         ) {
             guard model.live else { return }
+            // The keyboard goes down with the press, and stays down.
+            typing = nil
             let lines = model.previewLines
             let typed = (what, steps)
             Task { await sender.send(what: typed.0, steps: typed.1, previewLines: lines, version: BuildInfo.version) }
@@ -806,10 +822,13 @@ struct FeedbackSheetBody: View {
                 .stroke(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
         )
         .overlay(alignment: .topTrailing) {
-            Button {
-                VelaHaptic.select.play()
-                sender.remove(shot.id)
-            } label: {
+            // A TAP, not a Button (device run, 2026-09-27): the 44 grows out
+            // into the gap above the row — where a thumb starts a scroll — and
+            // a Button there still fired when the touch became a scroll, so
+            // scrolling the sheet quietly removed a screenshot (it happened to
+            // the real report). A tap gesture fails as soon as the finger
+            // moves; VoiceOver and UI tests still see a button.
+            Group {
                 // Opaque (v3 B1): a translucent disc read two-toned and let
                 // the screenshot show through. Near-black on light; in dark a
                 // solid neutral lighter than the page — `fg.base` / `border.strong`.
@@ -829,12 +848,21 @@ struct FeedbackSheetBody: View {
                            alignment: .topTrailing)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .disabled(inert)
+            .onTapGesture { removeTile(shot.id) }
+            .allowsHitTesting(!inert)
             .offset(x: FeedbackGeometry.removeReach, y: -FeedbackGeometry.removeReach)
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
             .accessibilityLabel(model.removeScreenshot.replacingOccurrences(of: "{{index}}", with: String(index + 1)))
+            .accessibilityAction { removeTile(shot.id) }
             .accessibilityIdentifier("feedback.removeScreenshot.\(index + 1)")
         }
+    }
+
+    private func removeTile(_ id: UUID) {
+        guard !inert else { return }
+        VelaHaptic.select.play()
+        sender.remove(id)
     }
 
     /// A refusal, when there is one, ABOVE the public warning — never in its
@@ -966,6 +994,7 @@ struct FeedbackSheetBody: View {
                         .allowsHitTesting(false)
                 }
             }
+            .focused($typing, equals: id)
             .accessibilityLabel(placeholder)
             .accessibilityIdentifier(id)
     }

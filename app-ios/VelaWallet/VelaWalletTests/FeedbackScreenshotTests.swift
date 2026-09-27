@@ -159,7 +159,9 @@ struct FeedbackScreenshotTests {
         let report = BugReport.build(what: "x", steps: "", environmentLines: [], version: "1")
         let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(report)) as? [String: Any])
         #expect(object["screenshots"] == nil)
-        #expect(object.keys.sorted() == ["area", "environment", "fingerprint", "steps", "what"])
+        #expect(object.keys.sorted() == [
+            "appVersion", "area", "client", "environment", "fingerprint", "os", "steps", "what",
+        ])
     }
 
     /// Base64 that decodes to the prepared JPEGs — no APP1, ≤ 1920 — in tile

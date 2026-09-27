@@ -145,13 +145,15 @@ enum SettingsFixtures {
     private static func sections(_ loc: Loc, advancedOpen: Bool) -> [SettingsSectionModel] {
         let k = I18nKeys.SettingsUi.self
         return [
-            // 通讯录 and 反馈 are NOT on this page.
+            // 通讯录 is NOT on this page: the founder's ruling (2026-09-12,
+            // applied on Android in 047 and recorded again in 054's plan) — the
+            // address book has its own tab, and a settings row pointing at it
+            // is a second front door to one room.
             //
-            // The founder's ruling (2026-09-12, applied on Android in 047 and
-            // recorded again in 054's plan): the address book has its own tab
-            // and a settings row pointing at it is a second front door to one
-            // room; the feedback sheet stays drawn and reachable from the
-            // places that raise it, not from a list of preferences.
+            // 反馈 IS, in the last block beside 关于 (spec 081 FR-016, 078
+            // round 3, as Android places it): a report sheet no row opens is a
+            // report nobody can send, and on iOS none did (founder, 2026-09-27:
+            // "设置的关于下面，没有看到反馈按钮").
             SettingsSectionModel(
                 rows: [
                     SettingsRowModel(id: "language", title: loc.t(k.languageTitle), icon: .globe,
@@ -199,12 +201,49 @@ enum SettingsFixtures {
                 label: loc.t(k.sectionAdvanced),
                 collapsible: true
             ),
+            // Community (founder, 2026-09-27: "设置里面再加一下，我们的官方社交
+            // 账号链接"): directly above 关于 / 反馈. Each row leaves the app,
+            // so it wears the external mark, not a chevron.
+            SettingsSectionModel(
+                rows: communityLinks.map { link in
+                    SettingsRowModel(id: link.id, title: link.title, icon: link.glyph,
+                                     subtitle: link.handle, trailing: .external)
+                },
+                label: loc.t(k.sectionCommunity)
+            ),
             SettingsSectionModel(rows: [
                 SettingsRowModel(id: "about", title: loc.t(k.aboutTitle), icon: .info,
                                  value: loc.t(k.aboutSubtitle, vars: ["version": appVersion])),
+                SettingsRowModel(id: feedbackRow, title: loc.t(k.feedbackTitle), icon: .messageSquareText,
+                                 subtitle: loc.t(k.feedbackSubtitle)),
             ]),
         ]
     }
+
+    /// The row that opens the report sheet (ST15).
+    static let feedbackRow = "feedback"
+
+    /// One official account: its row, its brand name (never translated), the
+    /// handle shown under it, and where it goes.
+    struct CommunityLink: Equatable {
+        let id: String
+        let title: String
+        let handle: String
+        let url: String
+        let glyph: LucideGlyph
+    }
+
+    /// The official accounts, exactly as getvela.app's footer publishes them —
+    /// defined ONCE, and pinned by `SettingsCommunityTests`, so the shells
+    /// cannot drift.
+    static let communityLinks: [CommunityLink] = [
+        CommunityLink(id: "community-x", title: "X (Twitter)", handle: "@realvelawallet",
+                      url: "https://x.com/realvelawallet", glyph: .brandX),
+        CommunityLink(id: "community-telegram", title: "Telegram", handle: "@velawallet",
+                      url: "https://t.me/velawallet", glyph: .brandTelegram),
+        CommunityLink(id: "community-discord", title: "Discord", handle: "discord.gg/23gWrtaYSa",
+                      url: "https://discord.gg/23gWrtaYSa", glyph: .brandDiscord),
+    ]
 
     private static func networkRows(_ loc: Loc) -> [SettingsNetworkRowModel] {
         networksCanon.map { network in

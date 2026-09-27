@@ -37,12 +37,13 @@ struct SettingsAliveTests {
     }
 
     /// **The founder's ruling** (2026-09-12, Android 047): the address book has
-    /// its own tab and the feedback sheet has its own doors. Neither is a row
-    /// on the preferences page.
-    @Test func theSettingsHomeHasNoContactsOrFeedbackRow() {
+    /// its own tab, so it is not a row on the preferences page. The feedback
+    /// sheet IS (spec 081 FR-016, founder 2026-09-27: "设置的关于下面，没有看到
+    /// 反馈按钮") — `SettingsFeedbackRowTests` holds where and what it opens.
+    @Test func theSettingsHomeHasNoContactsRow() {
         let ids = rows(model(preferences())).map(\.id)
         #expect(!ids.contains("contacts"))
-        #expect(!ids.contains("feedback"))
+        #expect(ids.contains("feedback"))
         // And the rows that DO belong are still there.
         #expect(ids.contains("language"))
         #expect(ids.contains("currency"))

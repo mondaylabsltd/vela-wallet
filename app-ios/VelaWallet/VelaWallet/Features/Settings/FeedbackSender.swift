@@ -132,6 +132,19 @@ final class FeedbackSender {
         shots.removeAll { $0.id == id }
     }
 
+    /// A fresh form for a sheet opened anew — never while a report is on its
+    /// way. The sender outlives the sheet (the settings page owns it), so a
+    /// report whose sheet was closed mid-send still lands, and its outcome is
+    /// said on the page; the NEXT sheet must not reopen on that old outcome.
+    func reset() {
+        guard !sending else { return }
+        for task in inFlight.values { task.cancel() }
+        inFlight = [:]
+        state = .idle
+        shots = []
+        notice = nil
+    }
+
     // MARK: - Sending
 
     /// Send the report: the person's words, the lines the sheet showed, and

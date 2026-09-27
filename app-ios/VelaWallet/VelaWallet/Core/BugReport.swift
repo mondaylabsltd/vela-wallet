@@ -50,7 +50,18 @@ enum BugReport {
     /// are where the area actually is.
     static let areaOther = "Other (explain above)"
 
-    /// The five text fields the endpoint accepts, and the screenshots.
+    /// What this client is, for the issue title's tag (spec §E): the backend
+    /// titles an iOS report "[iOS] …" and opens it "Platform: iOS 26.0. App v0.9.4."
+    static let client = "ios"
+
+    /// The OS as this phone reports it — "iOS 26.5.2", the same string the
+    /// preview's Platform line shows. Never a user agent, never an address.
+    static var deviceOS: String {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return "iOS \(v.majorVersion).\(v.minorVersion)" + (v.patchVersion > 0 ? ".\(v.patchVersion)" : "")
+    }
+
+    /// The text fields the endpoint accepts, and the screenshots.
     struct Payload: Codable, Equatable {
         let what: String
         let steps: String
@@ -59,6 +70,12 @@ enum BugReport {
         let environment: String
         /// Dedup marker: stable for the same complaint, meaningless alone.
         let fingerprint: String
+        /// Spec §E: which client, its OS in one short line, and the app's
+        /// version without a "v" or a commit. A backend older than these
+        /// fields ignores them (it reads only the keys it knows).
+        var client: String = BugReport.client
+        var os: String = ""
+        var appVersion: String = ""
         /// Plain base64 (standard alphabet, padded, no line breaks, no
         /// `data:` prefix) of each prepared JPEG, in tile order. ABSENT —
         /// not an empty list — when none is attached, so a text-only report
@@ -67,7 +84,8 @@ enum BugReport {
 
         /// The same report without its images — what the text cap measures.
         var textOnly: Payload {
-            Payload(what: what, steps: steps, area: area, environment: environment, fingerprint: fingerprint)
+            Payload(what: what, steps: steps, area: area, environment: environment, fingerprint: fingerprint,
+                    client: client, os: os, appVersion: appVersion)
         }
     }
 
@@ -91,7 +109,7 @@ enum BugReport {
 
     /// The whole payload, from the person's words and the shown lines only.
     static func build(what: String, steps: String, area: String = areaOther,
-                      environmentLines: [String], version: String,
+                      environmentLines: [String], version: String, os: String = deviceOS,
                       screenshots: [Data] = []) -> Payload {
         let what = what.trimmingCharacters(in: .whitespacesAndNewlines)
         return Payload(
@@ -100,6 +118,9 @@ enum BugReport {
             area: area,
             environment: environmentLines.joined(separator: "\n"),
             fingerprint: fingerprint(what: what, area: area, version: version),
+            client: client,
+            os: os,
+            appVersion: version,
             screenshots: screenshots.isEmpty
                 ? nil
                 : screenshots.prefix(ScreenshotPrep.maxCount).map { $0.base64EncodedString() }
@@ -123,10 +144,9 @@ enum BugReport {
     /// The prefilled issue form — by the form's FIELD IDS, in the web's order,
     /// encoded as `URLSearchParams` writes them.
     static func prefilledIssueURL(_ payload: Payload) -> String {
-        let title = String(decoding: Array(payload.what.utf16.prefix(80)), as: UTF16.self)
         var params: [(String, String)] = [
             ("template", "bug.yml"),
-            ("title", "[bug] \(title)"),
+            ("title", issueTitle(payload.what)),
             ("what", payload.what),
             // The form marks steps required; an empty box beats a missing one.
             ("steps", payload.steps),
@@ -135,6 +155,15 @@ enum BugReport {
         if !payload.area.isEmpty { params.append(("area", payload.area)) }
         let query = params.map { "\(formEncode($0.0))=\(formEncode($0.1))" }.joined(separator: "&")
         return "\(issueForm)?\(query)"
+    }
+
+    /// "[iOS] <first line of what, ≤ 80 characters>" (spec §E) — the tag the
+    /// backend puts on a filed report, so the form's issue reads the same.
+    static func issueTitle(_ what: String) -> String {
+        let line = what.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty } ?? ""
+        return "[iOS] " + String(decoding: Array(line.utf16.prefix(80)), as: UTF16.self)
     }
 
     /// `application/x-www-form-urlencoded`: unreserved bytes as they are, a

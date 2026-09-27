@@ -62,10 +62,34 @@ struct BugReportTests {
 
     // MARK: - What a report is allowed to know
 
-    @Test func carriesFiveFieldsAndNoSixth() throws {
+    @Test func carriesTheTextFieldsAndNoOther() throws {
         let data = try JSONEncoder().encode(payload())
-        let keys = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any]).keys
-        #expect(keys.sorted() == ["area", "environment", "fingerprint", "steps", "what"])
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object.keys.sorted() == [
+            "appVersion", "area", "client", "environment", "fingerprint", "os", "steps", "what",
+        ])
+    }
+
+    /// Spec §E: the backend tags the issue "[iOS] …" and opens it
+    /// "Platform: iOS 26.0. App v0.9.4." only from these three fields.
+    @Test func carriesTheClientItsOSAndTheAppVersion() throws {
+        let report = BugReport.build(what: "x", steps: "", environmentLines: [], version: "0.9.4", os: "iOS 26.0")
+        #expect(report.client == "ios")
+        #expect(report.os == "iOS 26.0")
+        #expect(report.appVersion == "0.9.4")
+        // The device's own, by default: one short line, no user agent.
+        let live = BugReport.build(what: "x", steps: "", environmentLines: [], version: "0.9.4")
+        #expect(live.os.hasPrefix("iOS "))
+        #expect(!live.os.contains("\n") && live.os.count < 20)
+        // And the text cap measures them too.
+        #expect(live.textOnly.client == "ios" && live.textOnly.appVersion == "0.9.4")
+    }
+
+    @Test func theFallbackTitleIsTaggedWithThePlatform() {
+        #expect(BugReport.issueTitle("Send froze") == "[iOS] Send froze")
+        #expect(BugReport.issueTitle("\n  First line \nsecond line") == "[iOS] First line")
+        let long = String(repeating: "a", count: 120)
+        #expect(BugReport.issueTitle(long) == "[iOS] " + String(repeating: "a", count: 80))
     }
 
     @Test func noAddressOrEndpointURLReachesTheWire() throws {
@@ -116,7 +140,7 @@ struct BugReportTests {
             environmentLines: [], version: "1.0.0"
         )
         let url = BugReport.prefilledIssueURL(report)
-        #expect(url.hasPrefix("https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=%5Bbug%5D+It+broke+%26+stayed+broken&what="))
+        #expect(url.hasPrefix("https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=%5BiOS%5D+It+broke+%26+stayed+broken&what="))
         #expect(url.contains("&steps=1.+open%0A2.+send&"))
         #expect(url.contains("&area=Other+%28explain+above%29"))
         #expect(!url.contains("body="))

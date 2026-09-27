@@ -281,6 +281,7 @@ enum I18nKeys {
         static let sectionAppearance = "settings.sections.appearance"
         static let sectionLocalization = "settings.sections.localization"
         static let sectionAdvanced = "settings.sections.advanced"
+        static let sectionCommunity = "settings.sections.community"
 
             // Home rows.
         static let accountSwitch = "settings.account.switch"
