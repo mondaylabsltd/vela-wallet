@@ -394,6 +394,10 @@ pub const CONTACTS_RAIL_LABEL_H: f32 = 32.;
 pub const CONTACTS_BODY_PAD_TOP: f32 = 24.;
 /// Header/CTA control height shared by 添加联系人, 群发转账 and the ⋯ buttons.
 pub const CONTACTS_BUTTON_H: f32 = 40.;
+/// A settings dialog's buttons: the web's `Button` at `--size-control-lg`
+/// (078 T063) — Add Network, the chain setup tool, Save & Retry and the
+/// erase pair were drawn at the contacts page's 40.
+pub const DIALOG_BUTTON_H: f32 = 52.;
 /// Page-local search field in the contacts header (DC1: 780 → 1060).
 pub const CONTACTS_SEARCH_W: f32 = 280.;
 /// Dropdown/context menu card width and row height (M1/M2).

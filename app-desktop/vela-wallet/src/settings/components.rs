@@ -93,13 +93,23 @@ pub fn callout(
         CalloutTone::Info => (theme.info_base, theme.info_soft, Icon::Info),
         CalloutTone::Success => (theme.success_base, theme.success_soft, Icon::Check),
     };
+    // The web's `Callout` (078 T063): radius 12 and a hairline in the tone —
+    // the warning's own soft border, the rest their ink at 30% — with the
+    // sentence on a 1.4 line.
+    let edge = match tone {
+        CalloutTone::Warning => theme.warning_border,
+        _ => fg.opacity(0.3),
+    };
     div()
         .flex()
         .items_start()
         .gap(px(12.))
         .p(px(12.))
-        .rounded(px(10.))
+        .rounded(px(12.))
         .bg(bg)
+        .border_1()
+        .border_color(edge)
+        .line_height(gpui::relative(crate::wallet::components::LINE_BODY))
         .child(
             div()
                 .flex_none()
@@ -886,6 +896,31 @@ pub fn url_field(
     // `action`: the blue action inside the box — DST5's 检查密钥 / 获取密钥.
     action: Option<gpui::SharedString>,
 ) -> Div {
+    url_field_with(
+        theme,
+        label,
+        value,
+        theme.fg_base,
+        badge,
+        hint,
+        tone,
+        action,
+    )
+}
+
+/// [`url_field`] with the value's ink chosen — the subtle one when what the
+/// box shows is its placeholder, not an entry (078 T063).
+#[allow(clippy::too_many_arguments)]
+pub fn url_field_with(
+    theme: &Theme,
+    label: Option<gpui::SharedString>,
+    value: gpui::SharedString,
+    ink: gpui::Hsla,
+    badge: Option<&Pill>,
+    hint: Option<gpui::SharedString>,
+    tone: Option<Tone>,
+    action: Option<gpui::SharedString>,
+) -> Div {
     let border = match tone {
         Some(Tone::Error) => theme.error_base,
         Some(Tone::Ok) => theme.success_base,
@@ -928,7 +963,7 @@ pub fn url_field(
                     .truncate()
                     .font_family(theme::font_mono())
                     .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_base)
+                    .text_color(ink)
                     .child(value),
             )
             .when_some(action, |el, action| {

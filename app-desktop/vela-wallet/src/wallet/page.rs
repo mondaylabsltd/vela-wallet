@@ -63,6 +63,7 @@ use crate::settings::components::{
     dropdown_menu_picks, dropdown_trigger, editable_url_field, form_row, key_value_row,
     network_row, rpc_banner, segmented, segmented_picks, settings_nav_row, status_pill,
     storage_bar, storage_group, storage_group_with, text_scale, text_scale_slider, url_field,
+    url_field_with,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -11658,7 +11659,7 @@ impl WalletPage {
                             .gap(px(2.))
                             .child(
                                 div()
-                                    .text_size(theme::text_panel_title())
+                                    .text_size(theme::text_section())
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(theme.fg_base)
                                     .child(SharedString::from(info.name.clone())),
@@ -11729,7 +11730,7 @@ impl WalletPage {
             col = col.child(
                 div()
                     .id("settings-add-network-confirm")
-                    .h(px(CONTACTS_BUTTON_H))
+                    .h(px(theme::DIALOG_BUTTON_H))
                     .rounded(px(12.))
                     .flex()
                     .items_center()
@@ -11737,7 +11738,7 @@ impl WalletPage {
                     .cursor_pointer()
                     .bg(theme.accent)
                     .hover(move |el| el.bg(hover_accent))
-                    .text_size(theme::text_row_title())
+                    .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
                     .child(primary)
@@ -11775,7 +11776,7 @@ impl WalletPage {
             col = col.child(
                 div()
                     .id("wizard-chain-setup-tool")
-                    .h(px(CONTACTS_BUTTON_H))
+                    .h(px(theme::DIALOG_BUTTON_H))
                     .rounded(px(12.))
                     .flex()
                     .items_center()
@@ -11783,7 +11784,7 @@ impl WalletPage {
                     .cursor_pointer()
                     .border_1()
                     .border_color(theme.outline_strong)
-                    .text_size(theme::text_row_title())
+                    .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_base)
                     .child(self.settings.open_chain_setup_tool.clone())
@@ -11963,44 +11964,13 @@ impl WalletPage {
         let cta = s.add_network.clone();
         let hover_accent = theme.accent_hover;
 
-        let search_placeholder = s.search_placeholder.clone();
-        let description = s.add_network_desc.clone();
-
+        // The verdict alone, 16 apart (078 T063): the web draws the search OR
+        // the candidate — the live dialog already did — and this mock drew a
+        // search box above a verdict it had already reached.
         div()
             .flex()
             .flex_col()
-            .gap(px(20.))
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(description),
-            )
-            .child(
-                div()
-                    .h(px(44.))
-                    .px(px(12.))
-                    .rounded(px(10.))
-                    .bg(theme.bg_sunken)
-                    .border_1()
-                    .border_color(theme.divider)
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(icon_img(
-                        &mut self.icons,
-                        Icon::Search,
-                        false,
-                        theme.fg_subtle,
-                        16.,
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
-                            .child(search_placeholder),
-                    ),
-            )
+            .gap(px(16.))
             .child(
                 div()
                     .flex()
@@ -12016,7 +11986,7 @@ impl WalletPage {
                             .gap(px(2.))
                             .child(
                                 div()
-                                    .text_size(theme::text_panel_title())
+                                    .text_size(theme::text_section())
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(theme.fg_base)
                                     .child("Zora"),
@@ -12031,10 +12001,11 @@ impl WalletPage {
                     .child(status_pill(theme, &badge)),
             )
             .child(check_list(theme, &mut self.icons, checks_title, &checks))
-            .child(url_field(
+            .child(url_field_with(
                 theme,
                 Some(custom_title),
                 custom_placeholder,
+                theme.fg_subtle,
                 None,
                 None,
                 None,
@@ -12043,7 +12014,7 @@ impl WalletPage {
             .child(
                 div()
                     .id("settings-add-network-confirm")
-                    .h(px(CONTACTS_BUTTON_H))
+                    .h(px(theme::DIALOG_BUTTON_H))
                     .rounded(px(12.))
                     .flex()
                     .items_center()
@@ -12051,7 +12022,7 @@ impl WalletPage {
                     .cursor_pointer()
                     .bg(theme.accent)
                     .hover(move |el| el.bg(hover_accent))
-                    .text_size(theme::text_row_title())
+                    .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
                     .child(cta),
@@ -12101,10 +12072,20 @@ impl WalletPage {
                     .border_1()
                     .border_color(theme.divider)
                     .hover(move |el| el.border_color(hover))
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
                     .on_click(move |_, _, cx| cx.open_url(url))
-                    .child(provider),
+                    .child(provider)
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::ExternalLink,
+                        false,
+                        theme.fg_subtle,
+                        12.,
+                    )),
             );
         }
 
@@ -12132,7 +12113,7 @@ impl WalletPage {
                             .gap(px(2.))
                             .child(
                                 div()
-                                    .text_size(theme::text_panel_title())
+                                    .text_size(theme::text_section())
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(theme.fg_base)
                                     .child(gpui::SharedString::from(name)),
@@ -12140,7 +12121,7 @@ impl WalletPage {
                             .child(
                                 div()
                                     .font_family(theme::font_mono())
-                                    .text_size(theme::text_row_sub())
+                                    .text_size(theme::text_label())
                                     .text_color(theme.fg_subtle)
                                     .child(meta),
                             ),
@@ -12159,15 +12140,22 @@ impl WalletPage {
             // sometimes saves is worse than no button.
             .child(
                 div()
-                    .text_size(theme::text_label())
-                    .text_color(theme.fg_subtle)
-                    .child(providers_hint),
+                    .flex()
+                    .flex_col()
+                    .gap(px(24.))
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(providers_hint),
+                    )
+                    .child(chips),
             )
-            .child(chips)
             .child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.info_base)
+                    .underline()
                     .child(report),
             )
     }
@@ -12192,6 +12180,9 @@ impl WalletPage {
         for (name, _) in settings_fixtures::RPC_PROVIDER_LINKS {
             chips = chips.child(
                 div()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
                     .px(px(12.))
                     .py(px(8.))
                     .rounded(px(8.))
@@ -12200,7 +12191,14 @@ impl WalletPage {
                     .border_color(theme.divider)
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_base)
-                    .child(name),
+                    .child(name)
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::ExternalLink,
+                        false,
+                        theme.fg_subtle,
+                        12.,
+                    )),
             );
         }
 
@@ -12223,7 +12221,7 @@ impl WalletPage {
                             .gap(px(2.))
                             .child(
                                 div()
-                                    .text_size(theme::text_panel_title())
+                                    .text_size(theme::text_section())
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(theme.fg_base)
                                     .child(n.name),
@@ -12231,7 +12229,7 @@ impl WalletPage {
                             .child(
                                 div()
                                     .font_family(theme::font_mono())
-                                    .text_size(theme::text_row_sub())
+                                    .text_size(theme::text_label())
                                     .text_color(theme.fg_subtle)
                                     .child(meta),
                             ),
@@ -12256,7 +12254,7 @@ impl WalletPage {
             .child(
                 div()
                     .id("settings-fix-rpc-save")
-                    .h(px(CONTACTS_BUTTON_H))
+                    .h(px(theme::DIALOG_BUTTON_H))
                     .rounded(px(12.))
                     .flex()
                     .items_center()
@@ -12264,22 +12262,29 @@ impl WalletPage {
                     .cursor_pointer()
                     .bg(theme.accent)
                     .hover(move |el| el.bg(hover_accent))
-                    .text_size(theme::text_row_title())
+                    .text_size(theme::text_button())
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(theme.fg_inverse)
                     .child(cta),
             )
             .child(
                 div()
-                    .text_size(theme::text_label())
-                    .text_color(theme.fg_subtle)
-                    .child(providers_hint),
+                    .flex()
+                    .flex_col()
+                    .gap(px(24.))
+                    .child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(providers_hint),
+                    )
+                    .child(chips),
             )
-            .child(chips)
             .child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.info_base)
+                    .underline()
                     .child(report),
             )
     }
@@ -12319,14 +12324,14 @@ impl WalletPage {
         body.child(
             div()
                 .id("settings-erase-confirm")
-                .h(px(CONTACTS_BUTTON_H))
+                .h(px(theme::DIALOG_BUTTON_H))
                 .rounded(px(12.))
                 .flex()
                 .items_center()
                 .justify_center()
                 .cursor_pointer()
                 .bg(theme.error_base)
-                .text_size(theme::text_row_title())
+                .text_size(theme::text_button())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(theme.fg_inverse)
                 .on_click(cx.listener(|this, _, _, cx| this.erase_device(cx)))
@@ -12335,7 +12340,7 @@ impl WalletPage {
         .child(
             div()
                 .id("settings-erase-cancel")
-                .h(px(CONTACTS_BUTTON_H))
+                .h(px(theme::DIALOG_BUTTON_H))
                 .rounded(px(12.))
                 .flex()
                 .items_center()
@@ -12343,7 +12348,7 @@ impl WalletPage {
                 .cursor_pointer()
                 .border_1()
                 .border_color(theme.outline_strong)
-                .text_size(theme::text_row_title())
+                .text_size(theme::text_button())
                 .text_color(theme.fg_base)
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.close_settings_dialog(cx);

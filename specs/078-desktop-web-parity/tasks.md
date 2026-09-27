@@ -115,8 +115,15 @@ screenshot checked against the web.
       refusal — pinned with the button at the foot. Checked on the fixture and
       live (a pasted sheet: named, unnamed, duplicate and refused lines). A
       disabled accent CTA now fades its fill, not its label.
-- [ ] T063 DSR1: the RPC banner behind the dialog draws empty; provider chips
-      without their link glyph; Save & Retry and DST4b's Add Network short.
+- [x] T063 DSR1 and DST4b dialogs on the web's measures: the identity name 17
+      and meta 11, callouts with a hairline in their tone on a 1.4 line, link
+      chips with the external-link glyph 24 under their hint, the report link
+      underlined, every settings-dialog button 52 with a 17 label (Add
+      Network, the chain setup tool, Save & Retry, the erase pair), and the
+      DST4b mock shows the verdict alone, as the live dialog and the web do.
+      The "empty banner" was the gallery's chip row pushing the page under
+      the dialog, not a defect. The DST4b "4 more contracts" stays: it is what
+      the live check counts (seen live on Scroll); the web fixture's 8 is off.
 - [ ] T064 DR2, DR3: the QR centre badge (chain / token art, not a grey disc).
 - [ ] T065 DA2, DA3: tx-detail row height and the space under the amount.
 - [ ] T066 Send form: DSD2 unit and ⇕ switch; DSD2b recipient rows, icon
