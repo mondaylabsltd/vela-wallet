@@ -132,6 +132,10 @@ ureq = { version = "3.4", features = [
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The text wells' caret moves by grapheme cluster and by word (UAX #29) — an
+# emoji with a skin tone, a flag, an é typed as e + ´ are one step, as they
+# are in every other editor. Already in the tree through gpui; named here.
+unicode-segmentation = "1"
 
 # The batch importer's spreadsheet reader (spec 032 phase 5). The core parses
 # CSV/TSV text itself and takes a workbook only as a flattened cell matrix;
@@ -371,4 +375,27 @@ winresource = "0.1"
 opt-level = 3
 
 [profile.dev.package.gpui]
+opt-level = 3
+
+# A bug report's screenshots are decoded, scaled and re-encoded on this device
+# (078 round 3). Unoptimized, `image` and its PNG and JPEG codecs took seconds
+# per Retina screenshot under `cargo run`, so the tiles kept turning long after
+# a release build would have drawn them. Optimized for the same reason as
+# taffy and gpui above: one rebuild of them, no slower edit-compile loop.
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.crc32fast]
 opt-level = 3

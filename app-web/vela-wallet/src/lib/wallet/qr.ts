@@ -37,10 +37,19 @@ export interface QrCode {
  * not paper over that with a placeholder, because a placeholder is exactly the
  * failure this module exists to end.
  */
-export function encodeQr(text: string): QrCode {
-	const code = QRCode.create(text, { errorCorrectionLevel: 'M' });
+export function encodeQr(text: string, level: 'M' | 'H' = 'M'): QrCode {
+	const code = QRCode.create(text, { errorCorrectionLevel: level });
 	const modules = code.modules.size;
 	return { modules, path: buildQrPath(code.modules.data, modules) };
+}
+
+/**
+ * The saved share card's code: level H, because the network's logo sits on a
+ * plate in its centre and the picture is recompressed by every chat app it
+ * passes through. A plain address comes out 37 modules across.
+ */
+export function encodeShareQr(text: string): QrCode {
+	return encodeQr(text, 'H');
 }
 
 /**

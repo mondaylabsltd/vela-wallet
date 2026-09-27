@@ -55,6 +55,9 @@ pub struct Theme {
     /// from `bg_base` instead makes it white-on-white in the light palette, so
     /// the dialog it is meant to lift off the page does not lift.
     pub backdrop: Hsla,
+    /// `color.fixed.shadowInk` (#1A1A18 in both palettes): the fixed ink a
+    /// screenshot's remove badge is mixed from, the same in either theme.
+    pub shadow_ink: Hsla,
     // foreground ladder
     pub fg_base: Hsla,
     pub fg_muted: Hsla,
@@ -149,6 +152,7 @@ impl Theme {
             bg_raised: c(0xffffff),
             bg_sunken: c(0xf5f3ef),
             backdrop: c(0x000000).opacity(0.35),
+            shadow_ink: c(0x1a1a18),
             fg_base: c(0x1a1a18),
             fg_muted: c(0x6e6b62),
             fg_subtle: c(0x8c887e),
@@ -193,6 +197,7 @@ impl Theme {
             // early mock; the web is the reference now (spec 078 X-01).
             bg_sunken: c(0x0f0f0d),
             backdrop: c(0x000000).opacity(0.35),
+            shadow_ink: c(0x1a1a18),
             fg_base: c(0xe8e6e1),
             fg_muted: c(0x9a9790),
             fg_subtle: c(0x85827a),

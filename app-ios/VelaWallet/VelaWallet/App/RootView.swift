@@ -2711,9 +2711,7 @@ struct RootView: View {
             loc: loc
         )
         Task {
-            saveOutcome = await ShareCardExport.save(
-                card, scheme: scheme, scale: UIScreen.main.scale
-            )
+            saveOutcome = await ShareCardExport.save(card)
         }
     }
 

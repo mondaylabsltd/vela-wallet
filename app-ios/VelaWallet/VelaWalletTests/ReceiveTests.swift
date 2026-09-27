@@ -221,7 +221,9 @@ struct ShareCardTests {
         #expect(live.name == "我")
         #expect(live.identiconSeed == golden)
         #expect(live.lines.joined() == golden)
-        #expect(live.modules == QrCode.modules(golden))
+        // Level H: the network's logo covers the code's centre.
+        #expect(live.modules == QrCode.shareModules(golden))
+        #expect(live.modules?.count == 37, "a plain address at level H is 37 modules across")
         // The fixture's identity is gone from every field.
         #expect(!live.lines.joined().contains("14fB1f"))
         #expect(live.identiconSeed != WalletFixtures.identity.addressFull)
@@ -236,6 +238,8 @@ struct ShareCardTests {
         #expect(live.networkNote == loc.t("receive.shareCardNetworkNote",
                                           vars: ["network": "Gnosis"]))
         #expect(live.networkMark.ticker == "xDAI")
+        // The network's OWN logo goes in the code's centre.
+        #expect(live.networkMark.logoURLs == [Marks.chainLogoURL(100)].compactMap { $0 })
     }
 
     /// No address, no swap: the drawn card stands rather than becoming a card

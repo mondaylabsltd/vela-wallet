@@ -1081,7 +1081,7 @@ fun VelaNavHost(
                         },
                         onSaveImage = {
                             val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
-                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id)
+                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id, networks.networks.firstOrNull { it.chain_id.toInt() == request.asset.chain_id }?.native_symbol)
                         },
                         addToken = AddTokenCallbacks(
                             onInput = { wallet.addTokenInput(it.trim()) },

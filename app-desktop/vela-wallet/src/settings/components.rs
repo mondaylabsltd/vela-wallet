@@ -127,6 +127,10 @@ pub fn callout(
 /// One row of the 216px second-level nav (DST1–DST8). The selected row takes
 /// `bg_raised` PLUS a hairline: on dark, raised is barely a step off sunken and
 /// the fill alone does not read as a selection (desktop SPEC 暗色注意).
+/// `wrap`: the label may run to a second line — the page passes `false`
+/// only when one of its words is wider than the row, where a wrap would
+/// break that word in half with no hyphen ("Transaktionsgeschwindi" /
+/// "gkeit") and an ellipsis reads better.
 pub fn settings_nav_row(
     id: impl Into<ElementId>,
     theme: &Theme,
@@ -134,6 +138,7 @@ pub fn settings_nav_row(
     icon: Icon,
     label: gpui::SharedString,
     selected: bool,
+    wrap: bool,
 ) -> Stateful<Div> {
     let tint = if selected {
         theme.fg_base
@@ -142,8 +147,9 @@ pub fn settings_nav_row(
     };
     let row = div()
         .id(id)
-        .h(px(SETTINGS_NAV_ROW_H))
+        .min_h(px(SETTINGS_NAV_ROW_H))
         .px(px(12.))
+        .py(px(6.))
         .rounded(px(10.))
         .flex()
         .items_center()
@@ -152,14 +158,13 @@ pub fn settings_nav_row(
         .child(icon_img(icons, icon, false, tint, GLYPH_SM))
         .child(
             div()
-                // Truncate inside the pill rather than draw outside it. At
-                // `xlarge` the selected pill's last letter was being painted
-                // past its own white background and over the column divider;
-                // in German the whole label crossed into the panel beside it.
+                // Wraps inside the pill rather than being cut or drawn
+                // outside it: "Transaktionsgeschwindigkeit" and "Velocidad de
+                // transacción" read whole on two lines, as the community rows
+                // under them do, and the pill grows with them.
                 .flex_1()
                 .min_w(px(0.))
-                .whitespace_nowrap()
-                .truncate()
+                .when(!wrap, |el| el.whitespace_nowrap().truncate())
                 .text_size(theme::text_row_sub())
                 .text_color(tint)
                 .when(selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
@@ -172,6 +177,77 @@ pub fn settings_nav_row(
     } else {
         row.hover(|el| el.bg(theme.bg_raised))
     }
+}
+
+/// One official community account in the nav column (Settings → Community):
+/// the brand's mark, its name, the handle under it — never cut, so it wraps
+/// before it truncates — and an arrow that says the row leaves the app.
+pub fn community_row(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+    name: gpui::SharedString,
+    handle: Vec<gpui::SharedString>,
+) -> Stateful<Div> {
+    let raised = theme.bg_raised;
+    div()
+        .id(id)
+        .min_h(px(SETTINGS_NAV_ROW_H))
+        .px(px(12.))
+        .py(px(6.))
+        .rounded(px(10.))
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .cursor_pointer()
+        .hover(move |el| el.bg(raised))
+        .active(|el| el.opacity(0.7))
+        .child(icon_img(icons, icon, false, theme.fg_muted, GLYPH_SM))
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.))
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(name),
+                )
+                // One element per line the page chose: an invite too long for
+                // the column breaks after its slash ("discord.gg/" ·
+                // "23gWrtaYSa") — never inside the code, never before the
+                // slash, which is where the wrapper alone would put it.
+                .children(handle.into_iter().map(|line| {
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_muted)
+                        .child(line)
+                })),
+        )
+        // Trailing and centred on the row, the size of the words beside it:
+        // the row leaves the app, which a chevron would not say.
+        .child(icon_img(
+            icons,
+            Icon::ArrowUpRight,
+            false,
+            theme.fg_muted,
+            (12. * crate::executor::appearance_prefs::text_factor()).round(),
+        ))
+}
+
+/// A group's caption in the nav column — small, uppercase, muted.
+pub fn nav_group_label(theme: &Theme, label: gpui::SharedString) -> Div {
+    div()
+        .px(px(12.))
+        .pt(px(16.))
+        .pb(px(4.))
+        .text_size(theme::text_section_label())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(theme.fg_muted)
+        .child(gpui::SharedString::from(label.to_uppercase()))
 }
 
 // -- FormRow ------------------------------------------------------------------

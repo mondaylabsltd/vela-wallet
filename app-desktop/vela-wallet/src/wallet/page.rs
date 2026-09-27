@@ -41,6 +41,11 @@ use crate::resident;
 use crate::session;
 use crate::settings::SettingsStrings;
 
+/// The Feedback page — the report, its screenshots and its two outcomes
+/// (078 S-03 and round 3) — kept beside this file rather than in it.
+mod feedback;
+use feedback::FeedbackDraft;
+
 /// How many focus handles the endpoints panel claims before the providers
 /// panel starts. Four fields, one per service.
 const ENDPOINT_FOCUS_COUNT: usize = 4;
@@ -342,13 +347,15 @@ struct ShareCardFacts {
     network_note: String,
     network_ticker: String,
     network_tint: gpui::Hsla,
+    /// The chain-data endpoint's logo for the network, fetched at save time.
+    network_logo_url: Option<String>,
     seed: String,
     wordmark: String,
     file_name: String,
 }
 
 impl ShareCardFacts {
-    fn as_card(&self) -> crate::flows::share_card::ShareCard<'_> {
+    fn as_card<'a>(&'a self, logo: Option<&'a [u8]>) -> crate::flows::share_card::ShareCard<'a> {
         crate::flows::share_card::ShareCard {
             headline: &self.headline,
             payload: &self.payload,
@@ -357,6 +364,7 @@ impl ShareCardFacts {
             network_note: &self.network_note,
             network_ticker: &self.network_ticker,
             network_tint: self.network_tint,
+            network_logo: logo,
             seed: &self.seed,
             wordmark: &self.wordmark,
         }
@@ -971,6 +979,14 @@ impl WalletPage {
         {
             page.select_tab(tab, window);
         }
+        // `VELA_FEEDBACK_STATE` on the live route too: the signed-in page, in
+        // one Feedback state — or, `autosend`, a REAL send of a report with
+        // `VELA_SCREENSHOT_FILES` attached (078 round 3).
+        if section == Section::Settings
+            && let Ok(state) = std::env::var("VELA_FEEDBACK_STATE")
+        {
+            page.pin_feedback_state(&state);
+        }
         page
     }
 
@@ -992,6 +1008,11 @@ impl WalletPage {
         let mut page = Self::with_section(Section::Settings, false, window, cx);
         if let Some(tab) = GalleryTab::from_settings_env() {
             page.select_tab(tab, window);
+        }
+        // `VELA_FEEDBACK_STATE` opens the Feedback page in one state, for a
+        // screenshot pass that cannot click, drop or paste (078 round 3).
+        if let Ok(state) = std::env::var("VELA_FEEDBACK_STATE") {
+            page.pin_feedback_state(&state);
         }
         page
     }
@@ -1262,18 +1283,15 @@ impl WalletPage {
                 "network",
                 &network,
             ),
-            // "Vela Wallet", as the web's card signs itself.
-            // A token's own code marks the card with the token (the web's
-            // `networkMark: balanceTokenMark(token)`); a network's, the network.
-            network_ticker: match (self.flows.last(), self.receive_token.as_ref()) {
-                (Some(FlowPanel::Dr3), Some(token)) => &token.symbol,
-                _ => &network,
-            }
-            .chars()
-            .take(3)
-            .collect::<String>()
-            .to_uppercase(),
+            // The NETWORK's mark in the code's centre, token or not: the card
+            // says which network may pay, and one card serves every asset on
+            // it (founder, 2026-08-15). The letters only show when the logo
+            // cannot be fetched.
+            network_ticker: network.chars().take(3).collect::<String>().to_uppercase(),
             network_tint: flows_live::chain_tint(self.receive_chain),
+            network_logo_url: crate::marks::chain_logo_url(self.receive_chain)
+                .map(|url| url.to_string()),
+            // "Vela Wallet", as the web's card signs itself.
             seed: identity.address.to_string(),
             wordmark: "Vela Wallet".to_owned(),
             // The address is in the NAME as well as the picture: a folder of
@@ -1289,24 +1307,43 @@ impl WalletPage {
     ///
     /// The picture is built from what the screen is already showing, so the
     /// saved card and the open screen cannot disagree about an address. The
-    /// dialog opens in the home directory for the reason the contacts export
-    /// does: `.` is wherever the binary was launched from, which on a
-    /// double-click is nowhere useful.
+    /// network's logo is part of the card, so it is fetched here — off the
+    /// UI thread, while the dialog is open, with a short timeout after which
+    /// the lettered disc stands in. A card that fails to render writes
+    /// nothing. The dialog opens in the home directory for the reason the
+    /// contacts export does: `.` is wherever the binary was launched from,
+    /// which on a double-click is nowhere useful. `VELA_EXPORT_DIR=<dir>`
+    /// answers the dialog with the card's filename in that folder, as the
+    /// contacts export does.
     fn save_share_card(&mut self, cx: &mut Context<Self>) {
         let Some(model) = self.receive_share_card(cx) else {
             return;
         };
-        let theme = Theme::of(self.theme_mode());
-        let png = crate::flows::share_card::render_png(&model.as_card(), &theme);
-        // Composed BEFORE the dialog: a picture that fails to render must not
-        // ask somebody where to put it first.
-        let Some(png) = png else {
-            return;
-        };
-        let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let target = cx.prompt_for_new_path(&directory, Some(&model.file_name));
+        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+            .map(|dir| std::path::PathBuf::from(dir).join(&model.file_name));
+        let target = pinned.is_none().then(|| {
+            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            cx.prompt_for_new_path(&directory, Some(&model.file_name))
+        });
+        let png = cx.background_executor().spawn(async move {
+            let logo = model
+                .network_logo_url
+                .as_deref()
+                .and_then(crate::flows::share_card::fetch_logo);
+            crate::flows::share_card::render_png(&model.as_card(logo.as_deref()))
+        });
         cx.spawn(async move |_, _| {
-            let Ok(Ok(Some(path))) = target.await else {
+            let path = match (pinned, target) {
+                (Some(path), _) => path,
+                (None, Some(target)) => {
+                    let Ok(Ok(Some(path))) = target.await else {
+                        return;
+                    };
+                    path
+                }
+                (None, None) => return,
+            };
+            let Some(png) = png.await else {
                 return;
             };
             // Best effort, like every other write in this shell: a refused
@@ -7908,7 +7945,7 @@ impl WalletPage {
     /// The same column the contacts group rail occupies, doing the same job one
     /// section over — which is why it reuses the width rather than inventing a
     /// second one.
-    fn settings_nav(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+    fn settings_nav(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let title = self.settings.title.clone();
         let current = self.settings_page;
         let mut col = div().flex().flex_col().gap(px(2.)).child(
@@ -7928,8 +7965,57 @@ impl WalletPage {
                 .text_color(theme.fg_base)
                 .child(title),
         );
+        // A label's room: the column, less its padding, the row's own, the
+        // icon and the gap after it (`settings_nav_row`).
+        let room = px(theme::settings_nav_w() - 2. * SIDEBAR_PAD - 24. - 16. - 12.);
         for (i, page) in SettingsPage::ALL.into_iter().enumerate() {
+            // Community (2026-09-27): the official accounts, directly above
+            // the group that ends the column — About, then Send feedback, as
+            // the phones end theirs. Each row leaves the app for its link;
+            // none of them is a panel.
+            if page == SettingsPage::About {
+                col = col.child(crate::settings::components::nav_group_label(
+                    theme,
+                    self.settings.nav_community.clone(),
+                ));
+                // The handle's room: a label's, less the trailing arrow and
+                // its gap (`community_row`).
+                let factor = crate::executor::appearance_prefs::text_factor();
+                let handle_room = room - px((12. * factor).round() + 12.);
+                for (n, link) in settings_fixtures::COMMUNITY_LINKS.iter().enumerate() {
+                    let url = link.url;
+                    let fits = crate::wallet::components::text_width(
+                        window,
+                        link.handle,
+                        theme::text_label(),
+                    ) <= handle_room;
+                    let handle = match link.handle.rsplit_once('/') {
+                        Some((head, tail)) if !fits => vec![
+                            SharedString::from(format!("{head}/")),
+                            SharedString::from(tail),
+                        ],
+                        _ => vec![SharedString::from(link.handle)],
+                    };
+                    col = col.child(
+                        crate::settings::components::community_row(
+                            ElementId::from(("settings-community", n)),
+                            theme,
+                            &mut self.icons,
+                            link.icon,
+                            SharedString::from(link.name),
+                            handle,
+                        )
+                        .on_click(move |_, _, cx| crate::executor::opener::open(url, cx)),
+                    );
+                }
+                col = col.child(div().h(px(12.)));
+            }
             let label = page.label(&self.settings);
+            // Wraps unless one of its words is wider than the row itself.
+            let size = theme::text_row_sub();
+            let wrap = label
+                .split_whitespace()
+                .all(|word| crate::wallet::components::text_width(window, word, size) <= room);
             let row = settings_nav_row(
                 ElementId::from(("settings-nav", i)),
                 theme,
@@ -7937,6 +8023,7 @@ impl WalletPage {
                 page.icon(),
                 label,
                 page == current,
+                wrap,
             );
             col = col.child(row.on_click(cx.listener(move |this, _, _, cx| {
                 if page != SettingsPage::Account {
@@ -7968,7 +8055,16 @@ impl WalletPage {
             .border_color(theme.divider)
             .p(px(SIDEBAR_PAD))
             .pt(px(SIDEBAR_TOP))
-            .child(col)
+            // Scrolls rather than runs off the window: fourteen rows and a
+            // caption fit at the standard size, and not every text size.
+            .child(
+                div()
+                    .id("settings-nav-scroll")
+                    .flex_1()
+                    .min_h(px(0.))
+                    .overflow_y_scroll()
+                    .child(col),
+            )
     }
 
     /// Column 3: the panel the nav selected.
@@ -7998,9 +8094,10 @@ impl WalletPage {
                 self.settings.nav_storage.clone(),
                 Some(self.settings.storage_subtitle.clone()),
             ),
+            // Filed, the invitation to describe a problem has been answered.
             SettingsPage::Feedback => (
                 self.settings.bug_title.clone(),
-                Some(self.settings.bug_subtitle.clone()),
+                (!self.feedback.filed()).then(|| self.settings.bug_subtitle.clone()),
             ),
             SettingsPage::About => (self.settings.nav_about.clone(), None),
         };
@@ -8030,11 +8127,22 @@ impl WalletPage {
                             .text_color(theme.fg_base)
                             .child(title),
                     );
+                // fg-muted (coordinator, 2026-09-27): fg-subtle measured
+                // 3.39:1. Balanced, and never opening a line with a closing
+                // mark, so no word or 「。」 is left alone on the last line.
                 if let Some(description) = description {
+                    let size = theme::text_row_sub();
+                    let width = crate::wallet::components::even_wrap_width(
+                        window,
+                        &description,
+                        size,
+                        px(SETTINGS_PANEL_W),
+                    );
                     titles = titles.child(
                         div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_subtle)
+                            .max_w(width)
+                            .text_size(size)
+                            .text_color(theme.fg_muted)
                             .child(description),
                     );
                 }
@@ -8113,11 +8221,9 @@ impl WalletPage {
         let action = self.settings.rpc_fix_action.clone();
         let banner = match live_chips {
             Some(chips) if !chips.is_empty() => {
-                let text = SharedString::from(crate::wallet::fill(
-                    &self.settings.rpc_unavailable_multiple,
-                    "count",
-                    &chips.len().to_string(),
-                ));
+                let names: Vec<SharedString> =
+                    chips.iter().map(|(_, _, name)| name.clone()).collect();
+                let text = settings_fixtures::unavailable_text(&self.settings, &names);
                 let chips = chips
                     .into_iter()
                     .enumerate()
@@ -8161,6 +8267,7 @@ impl WalletPage {
             None => None,
         };
 
+        let filed_report = self.settings_page == SettingsPage::Feedback && self.feedback.filed();
         let panel = self
             .settings_scroll
             .wire(div().id("settings-panel").size_full(), cx.entity_id())
@@ -8173,9 +8280,13 @@ impl WalletPage {
             .child(
                 div()
                     .max_w(px(SETTINGS_PANEL_W))
+                    // The filed report's thank-you takes the panel's whole
+                    // visible height, so it can sit at the optical centre
+                    // without a guessed header height (078 v2 A7).
+                    .when(filed_report, |el| el.min_h_full().flex().flex_col())
                     .child(head)
                     .when_some(banner, |el, banner| {
-                        el.child(div().pb(px(24.)).child(banner))
+                        el.child(div().max_w(px(560.)).pb(px(24.)).child(banner))
                     })
                     .child(body),
             );
@@ -10644,336 +10755,6 @@ impl WalletPage {
             .child(section.child(actions))
     }
 
-    /// What this device may say about itself in a report, and nothing more
-    /// (the web's `deviceFacts`): the build, the platform, the language, the
-    /// NAMES of the networks it cannot reach. No failure counters exist on
-    /// this shell yet, so that line honestly says none.
-    fn feedback_facts(&self, cx: &mut Context<Self>) -> crate::executor::bug_report::DeviceFacts {
-        let unreachable = if self.identity.is_some() {
-            resident::resident::<BalanceDashboard>(cx)
-                .read(cx)
-                .view()
-                .banner_chain_ids
-                .iter()
-                .map(|chain_id| crate::executor::custom_tokens::network_name(*chain_id))
-                .collect()
-        } else {
-            Vec::new()
-        };
-        crate::executor::bug_report::DeviceFacts {
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            commit: env!("VELA_GIT_COMMIT").to_owned(),
-            platform: crate::executor::bug_report::desktop_platform(),
-            language: self.locale.to_string(),
-            unreachable,
-            failures: Vec::new(),
-        }
-    }
-
-    /// Send the report, off the frame, and keep what comes back.
-    fn send_feedback(&mut self, cx: &mut Context<Self>) {
-        use crate::executor::bug_report;
-        if self.feedback.sending || self.feedback.what.trim().is_empty() {
-            return;
-        }
-        let payload = bug_report::build_bug_report(
-            &self.feedback.what,
-            &self.feedback.steps,
-            bug_report::AREA_OTHER,
-            &self.settings.bug_labels,
-            &self.feedback_facts(cx),
-        );
-        self.feedback.sending = true;
-        self.feedback.result = None;
-        cx.notify();
-        cx.spawn(async move |page, cx| {
-            let outcome = cx
-                .background_executor()
-                .spawn(
-                    async move { bug_report::send_bug_report(&payload, &bug_report::endpoint()) },
-                )
-                .await;
-            page.update(cx, |this, cx| {
-                this.feedback.sending = false;
-                this.feedback.result = Some(outcome);
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    /// ST15 / the web's `FeedbackBody` (078 S-03): what went wrong, the
-    /// optional steps, exactly what will be sent — open, with the consent
-    /// note beside the button it is about — and the two ways a send ends.
-    fn settings_feedback(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
-        use crate::executor::bug_report::{self, BugReportOutcome};
-        let s = &self.settings;
-        let mut col = div()
-            .flex()
-            .flex_col()
-            .gap(px(16.))
-            .pt(px(8.))
-            .max_w(px(560.));
-        let info = theme.info_base;
-
-        // Filed. The number is the point: somebody who reported something is
-        // owed a way back to it.
-        if let Some(BugReportOutcome::Filed {
-            number,
-            url,
-            deduped,
-        }) = self.feedback.result.clone()
-        {
-            let body = crate::wallet::fill(
-                if deduped {
-                    &s.bug_success_deduped
-                } else {
-                    &s.bug_success_new
-                },
-                "number",
-                &number.to_string(),
-            );
-            return col
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .text_size(theme::text_row_title())
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme.success)
-                        .child(icon_img(
-                            &mut self.icons,
-                            Icon::Check,
-                            false,
-                            theme.success,
-                            18.,
-                        ))
-                        .child(s.bug_success_title.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(theme::text_body())
-                        .text_color(theme.fg_base)
-                        .child(SharedString::from(body)),
-                )
-                .child(
-                    div()
-                        .id("feedback-view-issue")
-                        .cursor_pointer()
-                        .text_size(theme::text_body())
-                        .text_color(info)
-                        .child(s.bug_view_issue.clone())
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                );
-        }
-
-        let what_placeholder = s.bug_what_placeholder.clone();
-        let what_focus = self.feedback.what_focus.clone();
-        let page = cx.entity().downgrade();
-        col = col.child(crate::ui::text_area(
-            "feedback-what",
-            theme,
-            &self.feedback.what,
-            what_placeholder,
-            4,
-            &what_focus,
-            window,
-            move |text, _, cx| {
-                let _ = page.update(cx, |this, cx| {
-                    this.feedback.what = text;
-                    cx.notify();
-                });
-            },
-        ));
-        if self.feedback.steps_open {
-            let steps_focus = self.feedback.steps_focus.clone();
-            let page = cx.entity().downgrade();
-            col = col.child(crate::ui::text_area(
-                "feedback-steps",
-                theme,
-                &self.feedback.steps,
-                s.bug_steps_placeholder.clone(),
-                3,
-                &steps_focus,
-                window,
-                move |text, _, cx| {
-                    let _ = page.update(cx, |this, cx| {
-                        this.feedback.steps = text;
-                        cx.notify();
-                    });
-                },
-            ));
-        } else {
-            col = col.child(
-                div().flex().child(
-                    div()
-                        .id("feedback-add-steps")
-                        .cursor_pointer()
-                        .text_size(theme::text_body())
-                        .text_color(info)
-                        .child(s.bug_add_steps.clone())
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            this.feedback.steps_open = true;
-                            this.feedback.steps_focus.focus(window, cx);
-                            cx.notify();
-                        })),
-                ),
-            );
-        }
-
-        // Exactly what will be sent — the same lines the payload carries.
-        let lines = bug_report::environment_lines(&s.bug_labels, &self.feedback_facts(cx));
-        let s = &self.settings;
-        let open = self.feedback.preview_open;
-        let mut disclosure = div()
-            .flex()
-            .flex_col()
-            .rounded(px(12.))
-            .bg(theme.bg_sunken)
-            .border_1()
-            .border_color(theme.divider)
-            .overflow_hidden()
-            .child(
-                div()
-                    .id("feedback-preview")
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .p(px(12.))
-                    .cursor_pointer()
-                    .text_size(theme::text_body())
-                    .text_color(theme.fg_muted)
-                    .child(s.bug_preview_toggle.clone())
-                    .child(icon_img(
-                        &mut self.icons,
-                        if open {
-                            Icon::ChevronUp
-                        } else {
-                            Icon::ChevronDown
-                        },
-                        false,
-                        theme.fg_muted,
-                        14.,
-                    ))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.feedback.preview_open = !this.feedback.preview_open;
-                        cx.notify();
-                    })),
-            );
-        if open {
-            let mut body = div()
-                .flex()
-                .flex_col()
-                .px(px(12.))
-                .pb(px(12.))
-                .font_family(theme::font_mono())
-                .text_size(theme::text_label())
-                .line_height(theme::text_label() * 1.7)
-                .text_color(theme.fg_subtle);
-            for line in lines {
-                body = body.child(SharedString::from(line));
-            }
-            disclosure = disclosure.child(body);
-        }
-        col = col.child(disclosure);
-
-        // The consent sits directly above the button it is a promise about.
-        let s = &self.settings;
-        let note = |icon: Icon,
-                    fg: gpui::Hsla,
-                    bg: gpui::Hsla,
-                    text: SharedString,
-                    icons: &mut IconCache| {
-            div()
-                .flex()
-                .items_start()
-                .gap(px(8.))
-                .p(px(12.))
-                .rounded(px(12.))
-                .bg(bg)
-                .text_size(theme::text_body())
-                .line_height(theme::line_height_body())
-                .text_color(fg)
-                .child(icon_img(icons, icon, false, fg, 18.))
-                .child(div().flex_1().min_w(px(0.)).child(text))
-        };
-        col = col.child(note(
-            Icon::Info,
-            info,
-            theme.info_soft,
-            s.bug_consent.clone(),
-            &mut self.icons,
-        ));
-
-        // The endpoint could not file it: the other road, with the person's
-        // words already in it — amber, because nothing has been lost.
-        let fallback = match &self.feedback.result {
-            Some(BugReportOutcome::Fallback { fallback_url }) => Some(fallback_url.clone()),
-            _ => None,
-        };
-        if let Some(url) = fallback.clone() {
-            let s = &self.settings;
-            col = col.child(note(
-                Icon::TriangleAlert,
-                theme.warning_base,
-                theme.warning_soft,
-                SharedString::from(format!(
-                    "{} — {}",
-                    s.bug_fallback_title, s.bug_fallback_body
-                )),
-                &mut self.icons,
-            ));
-            col = col.child(
-                div()
-                    .id("feedback-open-github")
-                    .cursor_pointer()
-                    .child(crate::flows::components::accent_button(
-                        theme,
-                        s.bug_open_github.clone(),
-                    ))
-                    .on_click(move |_, _, cx| cx.open_url(&url)),
-            );
-        }
-
-        // Send — secondary once the other road is on screen, since "try
-        // again" is a real answer to a 429. Busy says so rather than going
-        // dark; nothing typed is nothing to file.
-        let s = &self.settings;
-        let label = if self.feedback.sending {
-            s.bug_sending.clone()
-        } else {
-            s.bug_send.clone()
-        };
-        let ready = !self.feedback.what.trim().is_empty();
-        let button = if !ready {
-            crate::flows::components::disabled_accent_button(theme, label)
-        } else if fallback.is_some() {
-            crate::flows::components::secondary_button(theme, label)
-        } else {
-            crate::flows::components::accent_button(theme, label)
-        };
-        col = col.child(
-            div()
-                .id("feedback-send")
-                .when(ready && !self.feedback.sending, |el| el.cursor_pointer())
-                .child(button)
-                .on_click(cx.listener(|this, _, _, cx| this.send_feedback(cx))),
-        );
-        col.child(
-            div().flex().justify_center().child(
-                div()
-                    .id("feedback-github-form")
-                    .cursor_pointer()
-                    .text_size(theme::text_body())
-                    .text_color(info)
-                    .child(s.bug_open_github_form.clone())
-                    .on_click(|_, _, cx| cx.open_url(bug_report::GITHUB_ISSUE_FORM)),
-            ),
-        )
-    }
-
     fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         // Live since 031; from the core's catalog since 072 — the rows, which
         // key is whose, what a cache is — with this device's own numbers.
@@ -12646,11 +12427,59 @@ impl WalletPage {
             notice: (self.copied.as_deref() == Some(EXPLORE_COPY))
                 .then(|| self.explore.copied.clone()),
         };
-        let field = explore_components::address_field(theme, &mut self.icons, &bar);
         // Editable once somebody is signed in: a click takes the page's URL
         // into the field, Enter goes wherever the core's `browser_input` says
-        // the text means — a URL, or a search for it.
-        let address: gpui::AnyElement = if self.identity.is_some() {
+        // the text means — a URL, or a search for it. While typing, the text
+        // is the shared editor (caret, selection, IME), like every well.
+        let live_address = self.identity.is_some();
+        let address_change: crate::ui::editor::OnChange = {
+            let page = cx.entity().downgrade();
+            std::rc::Rc::new(move |text, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    if this.address_draft.is_some() {
+                        this.address_draft = Some(text);
+                        cx.notify();
+                    }
+                });
+            })
+        };
+        let typing = match (&self.address_draft, live_address) {
+            (Some(draft), true) => {
+                crate::ui::editor::sync(&self.address_focus, draft);
+                let size = theme::text_row_sub();
+                Some(
+                    crate::ui::editor::editor(
+                        &self.address_focus,
+                        self.explore.search_placeholder.clone(),
+                        crate::ui::editor::EditorStyle {
+                            family: theme::font_ui().into(),
+                            placeholder_family: theme::font_ui().into(),
+                            weight: gpui::FontWeight::NORMAL,
+                            size,
+                            line_height: size * 1.45,
+                            color: theme.fg_base,
+                            placeholder: theme.fg_subtle,
+                            caret: theme.accent,
+                            selection: theme.accent.opacity(0.28),
+                        },
+                        crate::ui::editor::Wrap::None,
+                        std::rc::Rc::clone(&address_change),
+                    )
+                    .into_any_element(),
+                )
+            }
+            _ => None,
+        };
+        let field = explore_components::address_field(theme, &mut self.icons, &bar, typing);
+        let address: gpui::AnyElement = if live_address {
+            let editor_click =
+                crate::ui::editor::mouse_down(&self.address_focus, address_change.clone());
+            let editor_keys = crate::ui::editor::key_down(
+                &self.address_focus,
+                crate::ui::editor::Wrap::None,
+                false,
+                address_change,
+            );
             div()
                 .id("address-bar")
                 .track_focus(&self.address_focus)
@@ -12662,11 +12491,16 @@ impl WalletPage {
                 .overflow_hidden()
                 .cursor_text()
                 .child(field)
+                .when(self.address_draft.is_some(), |el| {
+                    el.on_mouse_down(MouseButton::Left, editor_click)
+                })
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
                     this.edit_address(window, cx);
                 }))
-                .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                    this.address_key(event, cx);
+                .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
+                    if !this.address_key(event, cx) {
+                        editor_keys(event, window, cx);
+                    }
                 }))
                 .into_any_element()
         } else {
@@ -12852,90 +12686,51 @@ impl WalletPage {
             let current = current.unwrap_or_default();
             // As a browser does: the URL taken into the field is selected, so
             // typing replaces it and a paste lands in its place.
-            self.address_selected = !current.is_empty();
+            crate::ui::editor::sync(&self.address_focus, &current);
+            if !current.is_empty() {
+                crate::ui::editor::select_all(&self.address_focus);
+            }
+            self.address_selected = false;
             self.address_draft = Some(current);
         }
         window.focus(&self.address_focus, cx);
         cx.notify();
     }
 
-    /// One key in the address bar. Enter goes where the core's
-    /// `browser_input` says the text means: a URL as typed, a bare host with
-    /// a scheme, anything else a search — the same rule on every client.
-    fn address_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
-        let Some(draft) = self.address_draft.as_mut() else {
-            return;
-        };
-        let ks = &event.keystroke;
-        let selected = self.address_selected && !draft.is_empty();
-        // The same four chords as every other well (`ui::edit_chord`): ⌘ on
-        // macOS, Ctrl on Windows and Linux.
-        if let Some(chord) = crate::ui::edit_chord(ks) {
-            match chord {
-                crate::ui::EditChord::SelectAll => self.address_selected = !draft.is_empty(),
-                crate::ui::EditChord::Copy => {
-                    if selected {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(draft.clone()));
-                    }
-                }
-                crate::ui::EditChord::Cut => {
-                    if selected {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(draft.clone()));
-                        draft.clear();
-                        self.address_selected = false;
-                    }
-                }
-                crate::ui::EditChord::Paste => {
-                    if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                        if selected {
-                            draft.clear();
-                        }
-                        // A pasted URL is one line; a newline in it is the end.
-                        draft.push_str(text.lines().next().unwrap_or_default().trim());
-                        self.address_selected = false;
-                    }
-                }
-            }
-            cx.notify();
-            return;
+    /// The address bar's own two keys; everything else is the editor's.
+    /// Enter goes where the core's `browser_input` says the text means: a URL
+    /// as typed, a bare host with a scheme, anything else a search — the same
+    /// rule on every client. Escape stops typing and leaves the column.
+    /// `true` when the key was one of the two.
+    fn address_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
+        // While the IME composes, Enter commits and Esc cancels ITS text —
+        // never "go" or "stop typing".
+        if self.address_draft.is_none() || crate::ui::editor::is_composing(&self.address_focus) {
+            return false;
         }
-        match ks.key.as_str() {
+        match event.keystroke.key.as_str() {
             "enter" => {
                 cx.stop_propagation();
                 self.address_selected = false;
                 let typed = self.address_draft.take().unwrap_or_default();
+                // A pasted URL is one line, and so is what is sent.
+                let typed = typed.trim().to_owned();
                 if let Some(url) = vela_core::app::dapp_rpc::browser_input(&typed) {
                     self.open_typed_url(url, cx);
                 }
+                cx.notify();
+                true
             }
             "escape" => {
                 // One layer only: the typing stops, the column stays.
                 cx.stop_propagation();
                 self.address_selected = false;
                 self.address_draft = None;
+                cx.notify();
+                true
             }
-            "backspace" | "delete" if selected => {
-                draft.clear();
-                self.address_selected = false;
-            }
-            "backspace" => {
-                draft.pop();
-            }
-            "left" | "right" | "home" | "end" => self.address_selected = false,
-            _ if ks.modifiers.platform || ks.modifiers.control || ks.modifiers.alt => return,
-            _ => match &ks.key_char {
-                // A selection is replaced by whatever is typed over it.
-                Some(ch) if !ch.chars().any(char::is_control) => {
-                    if selected {
-                        draft.clear();
-                    }
-                    draft.push_str(ch);
-                    self.address_selected = false;
-                }
-                _ => return,
-            },
+            _ => false,
         }
-        cx.notify();
     }
 
     /// Open what the address bar resolved to, in the page on screen — as a
@@ -14790,7 +14585,7 @@ impl WalletPage {
             Section::Contacts => columns.child(self.contacts_content(theme, caption, window, cx)),
             Section::Explore => columns.child(self.explore_content(theme, cx)),
             Section::Settings => columns
-                .child(self.settings_nav(theme, cx))
+                .child(self.settings_nav(theme, window, cx))
                 .child(self.settings_panel(theme, window, cx)),
         };
         // The contact form takes the third column over whatever it was about
@@ -16768,6 +16563,8 @@ impl Render for WalletPage {
         let network_remove = self.network_remove_dialog(&theme, window, cx);
         let account_switcher = self.account_switcher_dialog(&theme, window, cx);
         let identicon_viewer = self.identicon_viewer_dialog(&theme, cx);
+        let feedback_viewer = self.feedback_viewer(&theme, window, cx);
+        let feedback_toast = self.feedback_toast(&theme, window, cx);
         let confirm = self.confirm_dialog(&theme, window, cx);
         let settings_dialog = self.settings_dialog_overlay(&theme, window, cx);
         let import_result = self.import_result_dialog(&theme, window, cx);
@@ -16794,6 +16591,10 @@ impl Render for WalletPage {
             root = root.child(toast);
         }
         if let Some(toast) = self.contacts_toast(&theme) {
+            root = root.child(toast);
+        }
+        // A report that ended while the person was elsewhere (078 round 3).
+        if let Some(toast) = feedback_toast {
             root = root.child(toast);
         }
         // The cable's dialogs and the core's alert, over the send flow.
@@ -16855,6 +16656,10 @@ impl Render for WalletPage {
         if let Some(identicon_viewer) = identicon_viewer {
             root = root.child(identicon_viewer);
         }
+        // The report's screenshot viewer, over the page it was opened from.
+        if let Some(feedback_viewer) = feedback_viewer {
+            root = root.child(feedback_viewer);
+        }
         if let Some(prompt) = &self.crash {
             let entity = cx.entity();
             root = root.child(crate::outcome::outcome_sheet(
@@ -16888,6 +16693,14 @@ impl Render for WalletPage {
         }
         let root = root
             .track_focus(&self.focus_handle)
+            // ⌘V / Ctrl+V with an image on the clipboard, while the Feedback
+            // form is up: heard here, before any field, so it attaches the
+            // image whether or not a field has the caret (078 round 3).
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if this.feedback_capture_key(event, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
                 // Esc peels one layer at a time: the dialog on top first, then
@@ -17333,9 +17146,10 @@ mod tests {
         assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
         // "Sign with" beside the speed (spec 071).
         assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
-        // Send feedback beside About, as the web's (078 S-03).
-        assert_eq!(SettingsPage::ALL[9], SettingsPage::Feedback);
-        assert_eq!(SettingsPage::ALL[10], SettingsPage::About);
+        // Community, About, then Send feedback — the phones' order
+        // (2026-09-27); Community is drawn above About.
+        assert_eq!(SettingsPage::ALL[9], SettingsPage::About);
+        assert_eq!(SettingsPage::ALL[10], SettingsPage::Feedback);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips
@@ -17421,36 +17235,6 @@ struct MoneyWatch {
     receiving: Option<gpui::Subscription>,
     /// Deposits the running watcher has reported.
     deposits: usize,
-}
-
-/// The Feedback page's state — the web's `FeedbackBody` locals and the
-/// route's `feedbackSending` / `feedbackResult`.
-struct FeedbackDraft {
-    what: String,
-    steps: String,
-    steps_open: bool,
-    /// Open by default: the consent line promises the preview is what gets
-    /// sent, and a promise is only worth anything next to the thing.
-    preview_open: bool,
-    sending: bool,
-    result: Option<crate::executor::bug_report::BugReportOutcome>,
-    what_focus: gpui::FocusHandle,
-    steps_focus: gpui::FocusHandle,
-}
-
-impl FeedbackDraft {
-    fn new(cx: &mut gpui::App) -> Self {
-        Self {
-            what: String::new(),
-            steps: String::new(),
-            steps_open: false,
-            preview_open: true,
-            sending: false,
-            result: None,
-            what_focus: cx.focus_handle(),
-            steps_focus: cx.focus_handle(),
-        }
-    }
 }
 
 /// The signing column's technical details (078 G-05).
