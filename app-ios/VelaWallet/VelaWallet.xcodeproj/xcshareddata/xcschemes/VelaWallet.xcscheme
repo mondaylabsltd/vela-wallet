@@ -150,6 +150,9 @@
                   Identifier = "FeedbackReportDeviceTests">
                </Test>
                <Test
+                  Identifier = "ShareCardSaveDeviceTests">
+               </Test>
+               <Test
                   Identifier = "VelaWalletUITests">
                </Test>
             </SkippedTests>
