@@ -147,6 +147,9 @@
                   Identifier = "SigningDepthAcceptanceTests">
                </Test>
                <Test
+                  Identifier = "FeedbackReportDeviceTests">
+               </Test>
+               <Test
                   Identifier = "VelaWalletUITests">
                </Test>
             </SkippedTests>
