@@ -268,7 +268,22 @@ const WEB_ADDITIONS = [
 		'#FFFFFF',
 		'CTA label on accent.base, white in BOTH modes per mocks (fg.inverse flips)'
 	],
-	['opacity-hover', '0.92', 'pointer hover feedback; no export token exists for hover']
+	['opacity-hover', '0.92', 'pointer hover feedback; no export token exists for hover'],
+	[
+		'color-viewerInk',
+		'#000000',
+		"078 §C: the screenshot viewer's ground — pure black in BOTH themes, as every platform's photo viewer is, so a screenshot is judged against nothing"
+	],
+	[
+		'color-onViewer',
+		'#FFFFFF',
+		"078 §C: the viewer's ✕, counter and arrows — white on its black in both themes"
+	],
+	[
+		'color-viewerDanger',
+		'#F87171',
+		"078 §C: the viewer's Remove — the DARK theme's error.base, fixed, because the viewer is dark in both themes and the light theme's red fails on black (7.6:1 here)"
+	]
 ];
 
 /** Composite stacks: export families + docs/design-system.md CJK/system fallbacks. */

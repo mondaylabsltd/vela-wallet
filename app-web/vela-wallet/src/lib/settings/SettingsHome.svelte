@@ -12,8 +12,10 @@
 	 * not wired: the callbacks are how a route hooks the two behaviours that
 	 * already exist (signing out, and leaving for another tab).
 	 */
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { OPENED_EVENT, type OnNetEvent } from './net-events';
+	import type { ReportDraft } from './report-draft.svelte';
+	import { toastAnchor } from './report-toast.svelte';
 	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
@@ -103,6 +105,16 @@
 		feedbackSending?: boolean;
 		/** How the last send ended: filed (with its issue) or fell back. */
 		feedbackResult?: FeedbackResult;
+		/**
+		 * The report being written, owned by the route so closing the sheet —
+		 * even mid-send — never loses it. Absent: the sheet keeps its own.
+		 */
+		feedbackDraft?: ReportDraft;
+		/**
+		 * The report sheet came on screen or went (078): an outcome that
+		 * arrives while it is open is said in it, otherwise by a toast.
+		 */
+		onfeedbackopen?: (open: boolean) => void;
 	}
 
 	let {
@@ -124,7 +136,9 @@
 		onfeedbacksend,
 		onfeedbackdone,
 		feedbackSending = false,
-		feedbackResult
+		feedbackResult,
+		feedbackDraft,
+		onfeedbackopen
 	}: Props = $props();
 
 	// Seeds, not bindings: a gallery state pins where this opens, and a person
@@ -196,6 +210,14 @@
 		overlay = 'accounts';
 		onaccountsopen?.(true);
 	}
+
+	// Whether the report sheet is up, told to the route on every change (and
+	// "gone" when this screen goes, e.g. the window widens to the desktop).
+	$effect(() => {
+		const open = overlay === 'feedback';
+		untrack(() => onfeedbackopen?.(open));
+	});
+	onDestroy(() => onfeedbackopen?.(false));
 
 	/** The sub-page's own header copy. `home` has no back affordance. */
 	const header = $derived.by(() => {
@@ -296,7 +318,7 @@
 	<IndexDownScreen panel={model.indexDown} />
 {:else}
 	<div class="settings">
-		<div class="scroll">
+		<div class="scroll" {@attach toastAnchor}>
 			{#if rescue}
 				<h1 class="backdrop">{model.backdropTitle}</h1>
 				{#if model.rpcBanner !== undefined}
@@ -325,6 +347,12 @@
 					{/if}
 
 					{#each sections as section, index (index)}
+						{#if section.label === undefined && index > 0}
+							<!-- A group with no heading still starts a group: without the
+							     air a heading would have given it, About ran straight on
+							     from the last Community row and read as one of them. -->
+							<div class="group-gap" aria-hidden="true"></div>
+						{/if}
 						{#if section.label !== undefined}
 							<SectionLabel
 								label={section.label}
@@ -571,6 +599,7 @@
 						onsend={onfeedbacksend}
 						sending={feedbackSending}
 						result={feedbackResult}
+						draft={feedbackDraft}
 						ondone={() => {
 							onfeedbackdone?.();
 							close();
@@ -593,6 +622,11 @@
 		margin-top: var(--space-2xl);
 	}
 
+	/* The air a section heading would have given an unlabelled group. */
+	.group-gap {
+		height: var(--space-2xl);
+	}
+
 	.settings {
 		position: relative;
 		display: flex;
@@ -607,7 +641,8 @@
 		min-height: 0;
 		overflow-y: auto;
 		padding-inline: var(--layout-screenPaddingX);
-		padding-bottom: var(--space-4xl);
+		/* Plus room for a report toast over the list's end, while one shows. */
+		padding-bottom: calc(var(--space-4xl) + var(--toast-room, 0%));
 	}
 
 	.title {

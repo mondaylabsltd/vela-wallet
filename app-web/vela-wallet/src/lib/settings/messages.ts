@@ -21,6 +21,8 @@ export interface SettingsMessages {
 		appearance: string;
 		localization: string;
 		advanced: string;
+		/** The official X / Telegram / Discord links (founder, 2026-09-27). */
+		community: string;
 	};
 	account: { switch: string; contactsSubtitle: string };
 	contacts: string;
@@ -329,6 +331,13 @@ export interface SettingsMessages {
 		/** Fell back: the GitHub form cannot carry the images. */
 		fallbackScreenshots: string;
 		done: string;
+		/**
+		 * The screenshot viewer (078 §C): a tile's a11y label (`{{index}}`,
+		 * 1-based), the viewer's ✕, and its visible remove button.
+		 */
+		viewScreenshot: string;
+		closeViewer: string;
+		removeFromViewer: string;
 	};
 	rescue: {
 		/** Templates with `{{name}}` / `{{count}}`. */
@@ -444,6 +453,7 @@ export const SETTINGS_KEYS = [
 	'settings.sections.appearance',
 	'settings.sections.localization',
 	'settings.sections.advanced',
+	'settings.sections.community',
 	'settings.account.switch',
 	'settings.account.contactsSubtitle',
 	'settings.feedback.title',
@@ -680,6 +690,9 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.screenshotsDropped',
 	'componentsUi.bugReport.fallbackScreenshots',
 	'componentsUi.bugReport.done',
+	'componentsUi.bugReport.viewScreenshot',
+	'componentsUi.bugReport.closeViewer',
+	'componentsUi.bugReport.removeFromViewer',
 	'assets.rpcUnavailableSingle',
 	'assets.rpcUnavailableMultiple',
 	'assets.rpcFix',

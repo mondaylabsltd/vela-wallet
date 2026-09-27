@@ -9,8 +9,10 @@
 	 * fix-RPC are. Nothing here is a bottom sheet: macOS System Settings is the
 	 * reference, and it has none.
 	 */
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { OPENED_EVENT, type OnNetEvent } from './net-events';
+	import type { ReportDraft } from './report-draft.svelte';
+	import { toastAnchor } from './report-toast.svelte';
 	import type { SettingsPrefEvent } from './pref-events';
 	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
@@ -30,7 +32,6 @@
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
 	import AddNetworkPanel from './ui/AddNetworkPanel.svelte';
 	import ConfirmSheet from './ui/ConfirmSheet.svelte';
-	import Callout from './ui/Callout.svelte';
 	import DangerCard from './ui/DangerCard.svelte';
 	import Dialog from './ui/Dialog.svelte';
 	import FeedbackBody from './ui/FeedbackBody.svelte';
@@ -46,6 +47,7 @@
 	import RpcProvidersPanel from './ui/RpcProvidersPanel.svelte';
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SettingsNavList from './ui/SettingsNavList.svelte';
+	import SettingsRow from './ui/SettingsRow.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -83,6 +85,10 @@
 		onfeedbackdone?: () => void;
 		feedbackSending?: boolean;
 		feedbackResult?: FeedbackResult;
+		/** The route's report draft — outlives the panel (the phone's `feedbackDraft`). */
+		feedbackDraft?: ReportDraft;
+		/** The report panel came on screen or went (the phone's `onfeedbackopen`). */
+		onfeedbackopen?: (open: boolean) => void;
 	}
 
 	let {
@@ -103,7 +109,9 @@
 		onfeedbacksend,
 		onfeedbackdone,
 		feedbackSending = false,
-		feedbackResult
+		feedbackResult,
+		feedbackDraft,
+		onfeedbackopen
 	}: Props = $props();
 
 	let page = $state<SettingsPageId>(untrack(() => model.page));
@@ -117,6 +125,14 @@
 	$effect(() => {
 		onaccountsopen?.(page === 'account');
 	});
+
+	// The same for the report panel (078): showing it is opening the report,
+	// and another page — or this layout going — is closing it.
+	$effect(() => {
+		const open = page === 'feedback';
+		untrack(() => onfeedbackopen?.(open));
+	});
+	onDestroy(() => onfeedbackopen?.(false));
 
 	/** The panel's own heading, by page. */
 	const heading = $derived.by(() => {
@@ -143,6 +159,8 @@
 					title: model.feedback.title,
 					description: feedbackResult?.filed === true ? undefined : model.feedback.subtitle
 				};
+			case 'community':
+				return { title: model.community.title, description: undefined };
 			case 'about':
 				return { title: model.about.title, description: undefined };
 			default:
@@ -189,7 +207,9 @@
 	<SettingsNavList title={model.title} items={model.nav} selected={page} onselect={openPage} />
 
 	<main>
-		<div class="panel">
+		<!-- The detail column: a toast centres here, and this pane makes room
+		     for it at its end while it shows. -->
+		<div class="panel" {@attach toastAnchor}>
 			<header class="panel-head">
 				<div class="titles">
 					<h1>{heading.title}</h1>
@@ -386,8 +406,17 @@
 					onsend={onfeedbacksend}
 					sending={feedbackSending}
 					result={feedbackResult}
+					draft={feedbackDraft}
 					ondone={onfeedbackdone}
 				/>
+			{:else if page === 'community'}
+				<!-- The phone's Community group, as a panel: the same three rows,
+				     each leaving for its link in a new tab. -->
+				<div class="community">
+					{#each model.community.rows as row, index (row.id)}
+						<SettingsRow {row} divider={index < model.community.rows.length - 1} />
+					{/each}
+				</div>
 			{:else if page === 'about'}
 				<AboutPanel panel={model.about} layout="inline" />
 			{/if}
@@ -514,6 +543,8 @@
 		height: 100%;
 		overflow-y: auto;
 		padding: var(--space-4xl) var(--space-5xl) var(--space-5xl);
+		/* Room for a report toast over the pane's end, while one shows. */
+		padding-bottom: calc(var(--space-5xl) + var(--toast-room, 0%));
 	}
 
 	.panel-head {

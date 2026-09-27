@@ -303,7 +303,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			account: k('settings.sections.account'),
 			appearance: k('settings.sections.appearance'),
 			localization: k('settings.sections.localization'),
-			advanced: k('settings.sections.advanced')
+			advanced: k('settings.sections.advanced'),
+			community: k('settings.sections.community')
 		},
 		account: {
 			switch: k('settings.account.switch'),
@@ -569,7 +570,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			dropHint: k('componentsUi.bugReport.dropHint'),
 			screenshotsDropped: k('componentsUi.bugReport.screenshotsDropped'),
 			fallbackScreenshots: k('componentsUi.bugReport.fallbackScreenshots'),
-			done: k('componentsUi.bugReport.done')
+			done: k('componentsUi.bugReport.done'),
+			viewScreenshot: k('componentsUi.bugReport.viewScreenshot'),
+			closeViewer: k('componentsUi.bugReport.closeViewer'),
+			removeFromViewer: k('componentsUi.bugReport.removeFromViewer')
 		},
 		rescue: {
 			rpcUnavailableSingle: k('assets.rpcUnavailableSingle'),

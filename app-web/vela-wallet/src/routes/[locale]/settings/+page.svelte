@@ -89,9 +89,12 @@
 		AREA_OTHER,
 		buildBugReport,
 		sendBugReport,
+		webClient,
+		webOs,
 		webPlatform,
 		type DeviceFacts
 	} from '$lib/services/bug-report';
+	import { reportSend } from '$lib/settings/report-send.svelte';
 	import { BUILD_COMMIT, BUILD_VERSION } from '$lib/build/info';
 	import { netCounters } from '$lib/services/metrics';
 	import { getFailedRpcChains } from '$lib/services/rpc-pool';
@@ -193,15 +196,14 @@
 	/** Set when an erase ran and something survived. Said, never swallowed. */
 	let eraseFailed = $state(false);
 
-	// --- The report (spec 081 FR-016) ----------------------------------------
+	// --- The report (spec 081 FR-016; 078) ------------------------------------
 	//
-	// The sheet's 发送 was inert: `FeedbackBody` has always taken an `onsend`
-	// and this page never passed one, so a person could type a bug report,
-	// press the button, and be told nothing at all. These three pieces of state
-	// are the whole wiring — what is in flight, and how the last one ended.
-
-	let feedbackSending = $state(false);
-	let feedbackResult = $state<FeedbackResult | undefined>(undefined);
+	// The sheet's 发送 was inert until 081: `FeedbackBody` has always taken an
+	// `onsend` and this page never passed one. What is in flight, how the last
+	// one ended, and what was typed and attached all live in `reportSend` —
+	// app-resident, because the person may close the sheet (or leave this
+	// page) while the report is sending, and the send, its outcome and the
+	// words must all outlive the sheet (078: the outcome is then a toast).
 
 	/**
 	 * What this device is allowed to say about itself, and nothing more.
@@ -219,6 +221,10 @@
 		}
 		return {
 			version: BUILD_VERSION,
+			// 078 §E: the issue title's "[Web]" / "[Extension]", and the short
+			// "Chrome 151 on macOS" its Platform line reads.
+			client: webClient(),
+			os: webOs(),
 			commit: BUILD_COMMIT,
 			platform: webPlatform(),
 			language: data.locale,
@@ -242,9 +248,15 @@
 		steps: string;
 		screenshots: string[];
 	}): Promise<void> {
-		if (feedbackSending) return;
-		feedbackSending = true;
-		feedbackResult = undefined;
+		// Read now: the words of the page that sent, for a toast that may be
+		// shown on another page.
+		const copy = {
+			filed: m.bugReport.successTitle,
+			view: m.bugReport.viewIssue,
+			fellBack: m.bugReport.fallbackTitle,
+			open: m.bugReport.openGithub,
+			close: m.common.close
+		};
 		const payload = buildBugReport({
 			what: report.what,
 			steps: report.steps,
@@ -253,21 +265,22 @@
 			facts: deviceFacts,
 			screenshots: report.screenshots
 		});
-		const outcome = await sendBugReport(payload);
-		feedbackSending = false;
-		feedbackResult = outcome.ok
-			? {
-					filed: true,
-					number: outcome.number,
-					url: outcome.url,
-					deduped: outcome.deduped,
-					screenshotsDropped: outcome.screenshotsDropped
-				}
-			: {
-					filed: false,
-					fallbackUrl: outcome.fallbackUrl,
-					withScreenshots: report.screenshots.length > 0
-				};
+		await reportSend.send(async (): Promise<FeedbackResult> => {
+			const outcome = await sendBugReport(payload);
+			return outcome.ok
+				? {
+						filed: true,
+						number: outcome.number,
+						url: outcome.url,
+						deduped: outcome.deduped,
+						screenshotsDropped: outcome.screenshotsDropped
+					}
+				: {
+						filed: false,
+						fallbackUrl: outcome.fallbackUrl,
+						withScreenshots: report.screenshots.length > 0
+					};
+		}, copy);
 	}
 
 	// --- The Ethereum backup row (spec 062) ---------------------------------
@@ -533,32 +546,19 @@
 		model = withFeedback(model, m, deviceFacts);
 		model = { ...model, keys: walletKeysModel(walletKeys, backupState, m) };
 		// The phone's first block (founder, 2026-09-05): 通讯录 is a tab on the
-		// bar under this very screen, and 反馈 is not wanted here — so the block
-		// they made up goes with them. The desktop nav keeps its own list.
-		//
-		// Spec 081 FR-016 puts 反馈 back on the screen, in the LAST block rather
-		// than the first: the ruling was about that block, and a report button
-		// reachable only from `/gallery` is a report button nobody can press.
-		// Beside 关于, because "something is wrong" and "what is this" are the
-		// same errand and the person looks in the same place for both.
-		const feedbackRow = model.sections
-			.flatMap((section) => section.rows)
-			.find((row) => row.id === 'feedback');
-		const trimmed = model.sections
-			.map((section) => ({
-				...section,
-				rows: section.rows.filter((row) => row.id !== 'contacts' && row.id !== 'feedback')
-			}))
-			.filter((section) => section.rows.length > 0 || section.appearanceControls === true);
-		const last = trimmed.length - 1;
+		// bar under this very screen, so the block it made up goes with it. The
+		// report (spec 081 FR-016) is in the LAST block, after 关于 — "what is
+		// this" and "something is wrong" are one errand — and Community sits
+		// right above that block; the fixture already orders them so, the same
+		// on all four shells (2026-09-27).
 		return {
 			...model,
-			sections:
-				feedbackRow === undefined || last < 0
-					? trimmed
-					: trimmed.map((section, index) =>
-							index === last ? { ...section, rows: [...section.rows, feedbackRow] } : section
-						)
+			sections: model.sections
+				.map((section) => ({
+					...section,
+					rows: section.rows.filter((row) => row.id !== 'contacts')
+				}))
+				.filter((section) => section.rows.length > 0 || section.appearanceControls === true)
 		};
 	});
 	const liveDesktop = $derived.by(() => {
@@ -726,9 +726,11 @@
 				onstorageclear={clearRow}
 				onclearcaches={clearCaches}
 				onfeedbacksend={(report) => void sendFeedback(report)}
-				{feedbackSending}
-				{feedbackResult}
-				onfeedbackdone={() => (feedbackResult = undefined)}
+				feedbackSending={reportSend.sending}
+				feedbackResult={reportSend.result}
+				feedbackDraft={reportSend.draft}
+				onfeedbackopen={(open) => reportSend.surface(open)}
+				onfeedbackdone={() => reportSend.done()}
 				onethereumbackup={startBackup}
 			/>
 		</div>
@@ -749,9 +751,11 @@
 				onaccountsopen={accountsOpen}
 				onclearcaches={clearCaches}
 				onfeedbacksend={(report) => void sendFeedback(report)}
-				{feedbackSending}
-				{feedbackResult}
-				onfeedbackdone={() => (feedbackResult = undefined)}
+				feedbackSending={reportSend.sending}
+				feedbackResult={reportSend.result}
+				feedbackDraft={reportSend.draft}
+				onfeedbackopen={(open) => reportSend.surface(open)}
+				onfeedbackdone={() => reportSend.done()}
 				onethereumbackup={startBackup}
 			/>
 		</main>

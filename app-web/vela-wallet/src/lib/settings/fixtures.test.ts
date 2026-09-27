@@ -11,6 +11,8 @@ import {
 	ADDRESS_FULL,
 	buildDesktopState,
 	buildMobileState,
+	COMMUNITY_LINKS,
+	communityRows,
 	DESKTOP_STATES,
 	LOCALE_ENDONYMS,
 	MOBILE_STATES
@@ -27,6 +29,73 @@ describe('settings messages', () => {
 			expect(value, `${key} in ${locale}`).not.toBe(key);
 			expect(value.trim()).not.toBe('');
 		}
+	});
+});
+
+// 078 (founder, 2026-09-27): the official accounts in Settings. The strings
+// are pinned here so this shell cannot drift from getvela.app's footer or from
+// the three native shells, which pin the same three.
+describe('Settings → Community', () => {
+	it('links exactly the three official accounts', () => {
+		expect(COMMUNITY_LINKS.map((link) => [link.title, link.handle, link.url])).toEqual([
+			['X (Twitter)', '@realvelawallet', 'https://x.com/realvelawallet'],
+			['Telegram', '@velawallet', 'https://t.me/velawallet'],
+			// Not the expired discord.gg/S6A8RyCk6.
+			['Discord', 'discord.gg/23gWrtaYSa', 'https://discord.gg/23gWrtaYSa']
+		]);
+	});
+
+	it('draws each as a row that leaves the app: its brand mark, its handle, the external mark', () => {
+		expect(communityRows()).toEqual([
+			{
+				id: 'community-x',
+				icon: 'brand-x',
+				title: 'X (Twitter)',
+				subtitle: '@realvelawallet',
+				trailing: 'external',
+				href: 'https://x.com/realvelawallet'
+			},
+			{
+				id: 'community-telegram',
+				icon: 'brand-telegram',
+				title: 'Telegram',
+				subtitle: '@velawallet',
+				trailing: 'external',
+				href: 'https://t.me/velawallet'
+			},
+			{
+				id: 'community-discord',
+				icon: 'brand-discord',
+				title: 'Discord',
+				subtitle: 'discord.gg/23gWrtaYSa',
+				trailing: 'external',
+				href: 'https://discord.gg/23gWrtaYSa'
+			}
+		]);
+	});
+
+	it('ends the phone list Advanced → Community → About, Send feedback', () => {
+		const m = resolveSettingsMessages('en');
+		const sections = buildMobileState('st1', m, IDENTICON_STUB).sections;
+		const labels = sections.map((section) => section.label);
+		expect(labels.slice(-3)).toEqual([m.sections.advanced, m.sections.community, undefined]);
+		expect(sections.at(-2)?.rows.map((row) => row.id)).toEqual([
+			'community-x',
+			'community-telegram',
+			'community-discord'
+		]);
+		expect(sections.at(-1)?.rows.map((row) => row.id)).toEqual(['about', 'feedback']);
+		// The report opens a sheet here — a chevron, not the external mark the
+		// Community rows above it wear.
+		expect(sections.at(-1)?.rows[1].trailing).toBe('chevron');
+		// And nowhere else: the first block is Contacts alone.
+		expect(sections[0].rows.map((row) => row.id)).toEqual(['contacts']);
+	});
+
+	it.each(['en', 'zh', 'de', 'es-MX'] as const)('titles the group in %s', (locale) => {
+		const m = resolveSettingsMessages(locale);
+		expect(m.sections.community.trim()).not.toBe('');
+		expect(m.sections.community).not.toBe('settings.sections.community');
 	});
 });
 
@@ -229,13 +298,19 @@ describe('desktop canon', () => {
 			// the phone's 高级 section gives it (after 服务端点, before 存储).
 			'fee-speed',
 			'storage',
-			// Spec 081 FR-016 — the report. It had no desktop entrance at all,
-			// so the only way to reach it was `/gallery`. Beside 关于, which is
-			// also where the LIVE phone screen moves it (the mock's own first
-			// block keeps it, because a gallery state is the mock).
-			'feedback',
-			'about'
+			// 078 — the official accounts, directly above the last group.
+			'community',
+			// The last group, the same on all four shells (2026-09-27): About,
+			// then the report (spec 081 FR-016 gave the report its desktop
+			// entrance — before it, only `/gallery` reached it).
+			'about',
+			'feedback'
 		]);
+	});
+
+	it('the desktop Community panel carries the phone group’s three rows', () => {
+		const desktop = buildDesktopState('dst1', zh, IDENTICON_STUB);
+		expect(desktop.community.rows).toEqual(communityRows());
 	});
 
 	it('each DST mock selects its own panel', () => {

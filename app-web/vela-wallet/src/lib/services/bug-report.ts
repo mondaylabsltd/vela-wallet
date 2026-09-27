@@ -49,8 +49,8 @@
  * shelf, and "include the storage for context" is how the other three get in.
  *
  * The defence is not a scrub over a broad payload — it is that the payload is
- * ASSEMBLED from a five-field allowlist ({@link DeviceFacts}) that has no way
- * to reach any of them. {@link redact} is the second line, for the one field
+ * ASSEMBLED from a named allowlist ({@link DeviceFacts}) that has no way to
+ * reach any of them. {@link redact} is the second line, for the one field
  * whose content a person can choose: a custom network's display name reaches
  * `unreachable`, and somebody can name a network after its own RPC URL.
  */
@@ -93,8 +93,19 @@ export const SCREENSHOT_TIMEOUT_MS = 30_000;
 export const AREA_OTHER = 'Other (explain above)';
 
 /**
- * The five text fields the endpoint accepts, and the images the person chose
- * to attach. Nothing else is sent, and this type is the reason another field
+ * Which app sent the report — the endpoint puts it first in the issue title,
+ * `[Web] …` / `[Extension] …` (078 §E, founder 2026-09-27, after the team's
+ * own `[iOS · Function] …` in issue 318). The two a browser can be; the native
+ * shells send `ios` / `android` / `desktop`.
+ */
+export type ReportClient = 'web' | 'extension';
+
+/** The title tag for each, spelled as the endpoint spells it (`CLIENT_TAGS` there). */
+export const CLIENT_TAGS: Record<ReportClient, string> = { web: 'Web', extension: 'Extension' };
+
+/**
+ * The text fields the endpoint accepts, and the images the person chose to
+ * attach. Nothing else is sent, and this type is the reason another field
  * cannot appear by accident.
  */
 export interface BugReportPayload {
@@ -108,6 +119,16 @@ export interface BugReportPayload {
 	environment: string;
 	/** Dedup marker: stable for the same complaint, meaningless on its own. */
 	fingerprint: string;
+	/** `web`, or `extension` inside the MV3 extension — the issue title's tag. */
+	client: ReportClient;
+	/**
+	 * The browser and the OS, one short line — "Chrome 151 on macOS" — for the
+	 * issue's "Platform:" line. Never the user agent (that stays in
+	 * `environment`, where the person saw it), never a URL or an address.
+	 */
+	os: string;
+	/** The build's version, no leading "v" — "0.9.4". */
+	appVersion: string;
 	/**
 	 * Up to {@link MAX_SCREENSHOTS} images the person attached and saw as
 	 * tiles, in tile order: plain base64 (no `data:` prefix) of JPEGs this
@@ -121,15 +142,19 @@ export interface BugReportPayload {
 /**
  * Everything about the device a report is allowed to know.
  *
- * Five fields, by name, because an object with an index signature is how a
- * balance ends up in a bug report six months from now.
+ * Named fields, because an object with an index signature is how a balance
+ * ends up in a bug report six months from now.
  */
 export interface DeviceFacts {
 	/** `1.0.0` — the build's own, never the mock's. */
 	version: string;
+	/** Which app this is — see {@link webClient}. */
+	client: ReportClient;
+	/** "Chrome 151 on macOS" — see {@link webOs}. */
+	os: string;
 	/** Short commit, or `unknown`. */
 	commit: string;
-	/** `Web · <user agent>` — see {@link webPlatform}. */
+	/** `Web · Chrome 151 on macOS` — see {@link webPlatform}. */
 	platform: string;
 	/** The UI language tag in use. */
 	language: string;
@@ -163,13 +188,154 @@ export function redact(line: string): string {
 		.replace(/\b[a-zA-Z][a-zA-Z0-9+.-]*:\/\/\S+/g, '[url]');
 }
 
-/** A coarse, honest platform string for a browser. */
+/**
+ * This page is one of the MV3 extension's own. `chrome.runtime.id` is set
+ * only there: an ordinary page gets a `chrome.runtime` at most (when some
+ * extension lets the site message it), never an id.
+ */
+export function isExtensionPage(): boolean {
+	return (
+		(globalThis as { chrome?: { runtime?: { id?: string } } }).chrome?.runtime?.id !== undefined
+	);
+}
+
+/**
+ * A coarse, honest platform line for a browser: "Web · Chrome 151 on macOS",
+ * "Web (extension) · …" — the preview's line and the payload's, the same
+ * string.
+ *
+ * NOT the user agent (078 design review, DECIDED): the raw agent was four to
+ * seven wrapped lines on the sheet and, worse, a device fingerprint posted in
+ * a public issue. The browser's name, its major version and the OS's name
+ * say what a triager needs and nothing that tells one person from another.
+ */
 export function webPlatform(): string {
-	if (typeof navigator === 'undefined') return 'Web';
-	const extension =
-		(globalThis as { chrome?: { runtime?: { id?: string } } }).chrome?.runtime?.id !== undefined;
-	const agent = navigator.userAgent.trim();
-	return `Web${extension ? ' (extension)' : ''}${agent === '' ? '' : ` · ${agent}`}`;
+	const described = webOs();
+	return `Web${isExtensionPage() ? ' (extension)' : ''}${described === '' ? '' : ` · ${described}`}`;
+}
+
+/** Which app is sending: the same test {@link webPlatform} words for the preview. */
+export function webClient(): ReportClient {
+	return isExtensionPage() ? 'extension' : 'web';
+}
+
+/** What a browser says about itself — the inputs {@link describeBrowser} reads. */
+export interface BrowserSignals {
+	userAgent: string;
+	/** `navigator.userAgentData.brands` (Chromium only): the honest name, Brave included. */
+	brands?: readonly { brand: string; version: string }[];
+	/** `navigator.userAgentData.platform` (Chromium only): "macOS", "Windows", "Android"… */
+	platform?: string;
+	/** `navigator.maxTouchPoints`: an iPad asks for the desktop site and says "Macintosh". */
+	touchPoints?: number;
+}
+
+const BRAND_NAMES: Record<string, string> = {
+	'Google Chrome': 'Chrome',
+	'Microsoft Edge': 'Edge',
+	'Opera GX': 'Opera'
+};
+
+const PLATFORM_NAMES: Record<string, string> = {
+	macOS: 'macOS',
+	Windows: 'Windows',
+	Android: 'Android',
+	Linux: 'Linux',
+	iOS: 'iOS',
+	'Chrome OS': 'ChromeOS',
+	'Chromium OS': 'ChromeOS'
+};
+
+/** The browser's name and major version — "Chrome 151" — or '' when it cannot be told. */
+function browserName(signals: BrowserSignals): string {
+	const brands = (signals.brands ?? []).filter(
+		(b) => !/not.?a.?brand/i.test(b.brand) && b.brand !== 'Chromium'
+	);
+	const branded = brands[0] ?? signals.brands?.find((b) => b.brand === 'Chromium');
+	if (branded !== undefined) {
+		const name = (BRAND_NAMES[branded.brand] ?? branded.brand).replace(/[^\w .-]/g, '').trim();
+		const major = /^\d+/.exec(branded.version)?.[0];
+		if (name !== '') return major === undefined ? name : `${name} ${major}`;
+	}
+	const agent = signals.userAgent;
+	const rules: [RegExp, string][] = [
+		[/\bEdg(?:e|A|iOS)?\/(\d+)/, 'Edge'],
+		[/\bOPR\/(\d+)/, 'Opera'],
+		[/\bSamsungBrowser\/(\d+)/, 'Samsung Internet'],
+		[/\b(?:Firefox|FxiOS)\/(\d+)/, 'Firefox'],
+		[/\bCriOS\/(\d+)/, 'Chrome'],
+		[/\bChrome\/(\d+)/, 'Chrome'],
+		[/\bVersion\/(\d+)[\d.]*(?: Mobile\/\S+)? Safari\//, 'Safari']
+	];
+	for (const [pattern, name] of rules) {
+		const hit = pattern.exec(agent);
+		if (hit) return `${name} ${hit[1]}`;
+	}
+	return '';
+}
+
+/**
+ * The OS by NAME only. Browsers freeze the version they report (Chrome says
+ * "Android 10" and "Mac OS X 10_15_7" on every device, Safari 26 says iOS
+ * 18), so a version here would be a confident wrong answer.
+ */
+function osName(signals: BrowserSignals): string {
+	const platform = signals.platform === undefined ? undefined : PLATFORM_NAMES[signals.platform];
+	if (platform !== undefined) return platform;
+	const agent = signals.userAgent;
+	if (/\biPad\b/.test(agent)) return 'iPadOS';
+	if (/\b(?:iPhone|iPod)\b/.test(agent)) return 'iOS';
+	if (/\bAndroid\b/.test(agent)) return 'Android';
+	if (/\bCrOS\b/.test(agent)) return 'ChromeOS';
+	if (/\bWindows\b/.test(agent)) return 'Windows';
+	if (/\b(?:Macintosh|Mac OS X)\b/.test(agent)) {
+		return (signals.touchPoints ?? 0) > 1 ? 'iPadOS' : 'macOS';
+	}
+	if (/\bLinux\b/.test(agent)) return 'Linux';
+	return '';
+}
+
+/**
+ * "Chrome 151 on macOS" — the browser and the OS in one short line, for the
+ * issue's "Platform:" line (078 §E). Built from a closed set of names and a
+ * number, so nothing the person has — a profile name, a URL — can ride along;
+ * '' when neither can be told (the endpoint then says just "Web").
+ */
+export function describeBrowser(signals: BrowserSignals): string {
+	const browser = browserName(signals);
+	const os = osName(signals);
+	return browser !== '' && os !== '' ? `${browser} on ${os}` : browser || os;
+}
+
+/** {@link describeBrowser} for this browser. */
+export function webOs(): string {
+	if (typeof navigator === 'undefined') return '';
+	const data = (
+		navigator as Navigator & {
+			userAgentData?: { brands?: { brand: string; version: string }[]; platform?: string };
+		}
+	).userAgentData;
+	return describeBrowser({
+		userAgent: navigator.userAgent,
+		brands: data?.brands,
+		platform: data?.platform,
+		touchPoints: navigator.maxTouchPoints
+	});
+}
+
+/**
+ * The first line of what the person wrote, for a title: whitespace
+ * collapsed, at most `max` characters — the ellipsis included — cut at a space
+ * when one is near the end. The endpoint's `summary()` does the same for the
+ * issue it files, so the two roads title a report alike.
+ */
+export function issueSummary(what: string, max = 80): string {
+	const first = what.split('\n').find((line) => line.trim() !== '') ?? what;
+	const line = first.replace(/\s+/g, ' ').trim();
+	if (line.length <= max) return line;
+	const cut = line.slice(0, max - 1);
+	const space = cut.lastIndexOf(' ');
+	return `${space > (max - 1) * 0.6 ? cut.slice(0, space) : cut}…`;
 }
 
 /**
@@ -234,6 +400,11 @@ export function buildBugReport(draft: BugReportDraft): BugReportPayload {
 		area: draft.area,
 		environment,
 		fingerprint: fingerprintOf(what, draft.area, draft.facts.version),
+		client: draft.facts.client,
+		// One line, scrubbed like every generated line, and short: it lands in
+		// the issue's header line.
+		os: redact(draft.facts.os.replace(/\s+/g, ' ').trim()).slice(0, 120),
+		appVersion: draft.facts.version.trim().replace(/^v/i, ''),
 		...(shots.length > 0 ? { screenshots: [...shots] } : {})
 	};
 }
@@ -249,11 +420,15 @@ export function reportTimeoutMs(payload: BugReportPayload): number {
  * Field ids, not `body`. See the module doc: `template=bug.yml` makes GitHub
  * ignore `body` entirely, so a URL built the obvious way opens a blank form
  * and the person's typing is gone.
+ *
+ * The title wears the platform tag the endpoint's issues wear — `[Web] …`,
+ * `[Extension] …` — in place of bug.yml's default `[bug] ` (078 §E), so a
+ * report that took this road is triaged like one that did not.
  */
 export function prefilledIssueURL(payload: BugReportPayload): string {
 	const params = new URLSearchParams({
 		template: 'bug.yml',
-		title: `[bug] ${payload.what.slice(0, 80)}`,
+		title: `[${CLIENT_TAGS[payload.client]}] ${issueSummary(payload.what)}`,
 		what: payload.what,
 		// The form marks steps required; an empty box is better than a missing
 		// one, because the person can see the cursor sitting in it.

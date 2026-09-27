@@ -122,6 +122,11 @@ export type SettingsPageId =
 	 * so the nav gains a destination rather than the panel gaining a modal.
 	 */
 	| 'feedback'
+	/**
+	 * The official X / Telegram / Discord links (founder, 2026-09-27): the
+	 * phone's Community group, as a desktop nav destination beside About.
+	 */
+	| 'community'
 	| 'about';
 
 /**
@@ -194,6 +199,12 @@ export interface SettingsRowModel {
 	trailing?: RowTrailing;
 	tone?: RowTone;
 	badge?: StatusPillModel;
+	/**
+	 * A row that LEAVES the app (the Community links): drawn as a link that
+	 * opens this URL in a new tab, with no opener and no referrer, instead of
+	 * a button that raises `onselect`.
+	 */
+	href?: string;
 }
 
 export interface SettingsSectionModel {
@@ -544,6 +555,14 @@ export interface FeedbackModel {
 		unsupported: string;
 		dropHint: string;
 		max: number;
+		/**
+		 * The viewer a tile opens (078 §C): `view` is each tile's a11y label
+		 * and keeps `{{index}}` (1-based); `close` is the ✕; `removeFromViewer`
+		 * the visible button under the picture.
+		 */
+		view: string;
+		close: string;
+		removeFromViewer: string;
 	};
 }
 
@@ -881,6 +900,8 @@ export interface SettingsDesktopModel {
 	eraseSheet: ConfirmSheetModel;
 	/** The report panel (spec 081 FR-016) — the phone's sheet, as a page. */
 	feedback: FeedbackModel;
+	/** The phone's Community group, as a panel: the same three link rows. */
+	community: { title: string; rows: SettingsRowModel[] };
 	about: AboutModel;
 	addNetwork: AddNetworkModel;
 	rpcFix: RpcFixModel;

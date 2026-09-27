@@ -34,7 +34,11 @@ describe('drift gate', () => {
 		const MODE_INDEPENDENT = new Set([
 			'--color-onAccent',
 			'--color-rail-ordinal',
-			'--color-rail-ordinalSoft'
+			'--color-rail-ordinalSoft',
+			// 078 §C: the screenshot viewer is black in BOTH themes, by design.
+			'--color-viewerInk',
+			'--color-onViewer',
+			'--color-viewerDanger'
 		]);
 		for (const name of darkVars) {
 			if (MODE_INDEPENDENT.has(name)) continue;

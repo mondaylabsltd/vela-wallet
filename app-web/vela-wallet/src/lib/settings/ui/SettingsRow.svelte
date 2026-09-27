@@ -7,6 +7,10 @@
 	 * trailing chevron or external-link mark. Nine of them make the phone's
 	 * settings home; the danger tone makes the 退出登录 row; there is no second
 	 * row component anywhere in this feature.
+	 *
+	 * A row with an `href` leaves the app (Settings → Community): it is drawn
+	 * as a link — a new tab, no opener, no referrer — with the same look and
+	 * the same press, so the group reads as rows, not as a list of links.
 	 */
 	import type { SettingsRowModel } from '../model';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -25,17 +29,28 @@
 
 	const tone = $derived(row.tone ?? 'default');
 	const trailing = $derived(row.trailing ?? 'chevron');
+
+	/**
+	 * Is the text block taller than one title line — a subtitle, a value that
+	 * dropped under the title, a title that wrapped? Then the glyph belongs to
+	 * the title's line, not the block's middle (078 review; Android's
+	 * `VelaSettingsRow` measures the same thing). A one-line row keeps the
+	 * glyph centred, which is where the title is.
+	 */
+	let bodyHeight = $state(0);
+	let titleEl = $state<HTMLElement>();
+	const tall = $derived.by(() => {
+		if (titleEl === undefined || bodyHeight === 0) return false;
+		const size = parseFloat(getComputedStyle(titleEl).fontSize) || 0;
+		return size > 0 && bodyHeight > size * 2;
+	});
 </script>
 
-<button
-	type="button"
-	class="row {tone}"
-	class:divider
-	class:iconless={row.icon === undefined}
-	onclick={() => onselect?.(row.id)}
->
+{#snippet content()}
 	{#if row.icon !== undefined}
-		<span class="glyph"><Icon icon={UTILITY_ICONS[row.icon]} size="lg" /></span>
+		<span class="glyph" class:brand={row.icon.startsWith('brand-')} class:tall
+			><Icon icon={UTILITY_ICONS[row.icon]} size="lg" /></span
+		>
 	{/if}
 
 	<!-- The title block and the value: side by side while both fit at their own
@@ -43,9 +58,9 @@
 	     with the row's whole width (iOS's `TitleAndValue`, the same rule). A
 	     title may wrap; it is never "…" — "Idi…" beside "Español (México) ·
 	     Sistema" at the largest text size was the founder's report. -->
-	<span class="body">
+	<span class="body" bind:clientHeight={bodyHeight}>
 		<span class="text">
-			<span class="title">{row.title}</span>
+			<span class="title" bind:this={titleEl}>{row.title}</span>
 			{#if row.subtitle !== undefined}
 				<span class="subtitle">{row.subtitle}</span>
 			{/if}
@@ -67,7 +82,30 @@
 	{:else if trailing === 'external'}
 		<span class="trailing"><Icon icon={UTILITY_ICONS['external-link']} size="sm" /></span>
 	{/if}
-</button>
+{/snippet}
+
+{#if row.href !== undefined}
+	<!-- eslint-disable svelte/no-navigation-without-resolve -- an external page, never an app route -->
+	<a
+		class="row {tone}"
+		class:divider
+		class:iconless={row.icon === undefined}
+		href={row.href}
+		target="_blank"
+		rel="noopener noreferrer">{@render content()}</a
+	>
+	<!-- eslint-enable svelte/no-navigation-without-resolve -->
+{:else}
+	<button
+		type="button"
+		class="row {tone}"
+		class:divider
+		class:iconless={row.icon === undefined}
+		onclick={() => onselect?.(row.id)}
+	>
+		{@render content()}
+	</button>
+{/if}
 
 <style>
 	.row {
@@ -83,6 +121,7 @@
 		font-family: var(--font-ui);
 		color: var(--color-fg-base);
 		text-align: start;
+		text-decoration: none;
 		cursor: pointer;
 	}
 
@@ -99,6 +138,23 @@
 		width: var(--icon-2xl);
 		flex-shrink: 0;
 		color: var(--color-fg-muted);
+	}
+
+	/* On a row of more than one line the glyph belongs to the TITLE's line
+	   (078 review, as Android draws it): one title line tall — at the title's
+	   size, so `1lh` is the title's line — pinned to the top of the block. */
+	.glyph.tall {
+		align-self: flex-start;
+		height: 1lh;
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
+	}
+
+	/* A brand's mark is FILLED edge to edge. Inset to the middle 20 of its 24
+	   box — exactly as iOS (LucideIcons .brand*) and Android (VelaIcons
+	   brandIcon) inset theirs — it sits in the icon column at the weight of
+	   the stroked glyphs, and the three shells draw the same mark. */
+	.glyph.brand :global(svg) {
+		transform: scale(0.8333);
 	}
 
 	/* Two pieces that wrap as wholes: at their natural widths they share the
@@ -131,9 +187,11 @@
 		overflow-wrap: break-word;
 	}
 
+	/* fg-muted, app-wide (078 review, DECIDED): fg-subtle measured 3.38:1 on
+	   the light page and failed AA; fg-muted is 5.1:1 there and 6.3:1 dark. */
 	.subtitle {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 		overflow-wrap: break-word;
 	}
 

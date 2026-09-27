@@ -174,6 +174,9 @@
 	--layout-contactsMenuW: 216px; /* web addition: spec 018 research D9: dropdown/context menu width (M1/M2) */
 	--color-onAccent: #FFFFFF; /* web addition: CTA label on accent.base, white in BOTH modes per mocks (fg.inverse flips) */
 	--opacity-hover: 0.92; /* web addition: pointer hover feedback; no export token exists for hover */
+	--color-viewerInk: #000000; /* web addition: 078 §C: the screenshot viewer's ground — pure black in BOTH themes, as every platform's photo viewer is, so a screenshot is judged against nothing */
+	--color-onViewer: #FFFFFF; /* web addition: 078 §C: the viewer's ✕, counter and arrows — white on its black in both themes */
+	--color-viewerDanger: #F87171; /* web addition: 078 §C: the viewer's Remove — the DARK theme's error.base, fixed, because the viewer is dark in both themes and the light theme's red fails on black (7.6:1 here) */
 	--color-fg-base: #E8E6E1;
 	--color-fg-muted: #9A9790;
 	--color-fg-subtle: #85827A;

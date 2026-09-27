@@ -40,6 +40,7 @@ import type {
 	SettingsNavItemModel,
 	SettingsOverlayId,
 	SettingsPageId,
+	SettingsRowModel,
 	SettingsSectionModel,
 	StorageModel
 } from './model';
@@ -220,13 +221,6 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					title: m.contacts,
 					subtitle: m.account.contactsSubtitle,
 					trailing: 'chevron'
-				},
-				{
-					id: 'feedback',
-					icon: 'message-square-text',
-					title: m.feedback.title,
-					subtitle: m.feedback.subtitle,
-					trailing: 'external'
 				}
 			]
 		},
@@ -334,6 +328,16 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 				}
 			]
 		},
+		// The official accounts (founder, 2026-09-27), directly above the
+		// last group — so the page ends Advanced → Community → About.
+		{
+			label: m.sections.community,
+			rows: communityRows()
+		},
+		// The last group, the same on all four shells (2026-09-27): About, then
+		// Send feedback — "what is this" and "something is wrong" are one
+		// errand, and the report opens a sheet here, so its trailing mark is
+		// the chevron of a row that goes somewhere in the app.
 		{
 			rows: [
 				{
@@ -341,6 +345,13 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					icon: 'info',
 					title: m.about.title,
 					value: fill(m.about.subtitleTemplate, { version: APP_VERSION }),
+					trailing: 'chevron'
+				},
+				{
+					id: 'feedback',
+					icon: 'message-square-text',
+					title: m.feedback.title,
+					subtitle: m.feedback.subtitle,
 					trailing: 'chevron'
 				}
 			]
@@ -626,6 +637,48 @@ function storage(m: SettingsMessages): StorageModel {
 	};
 }
 
+/**
+ * The official accounts, as getvela.app's footer publishes them — defined
+ * ONCE, here beside About's links, and pinned by a test (fixtures.test.ts)
+ * so this shell cannot drift from the site or from the three native shells.
+ * The names and handles are brands, never translated.
+ */
+export const COMMUNITY_LINKS = [
+	{
+		id: 'x',
+		icon: 'brand-x',
+		title: 'X (Twitter)',
+		handle: '@realvelawallet',
+		url: 'https://x.com/realvelawallet'
+	},
+	{
+		id: 'telegram',
+		icon: 'brand-telegram',
+		title: 'Telegram',
+		handle: '@velawallet',
+		url: 'https://t.me/velawallet'
+	},
+	{
+		id: 'discord',
+		icon: 'brand-discord',
+		title: 'Discord',
+		handle: 'discord.gg/23gWrtaYSa',
+		url: 'https://discord.gg/23gWrtaYSa'
+	}
+] as const;
+
+/** The Community rows: each leaves the app for its link (a new tab, no opener). */
+export function communityRows(): SettingsRowModel[] {
+	return COMMUNITY_LINKS.map((link) => ({
+		id: `community-${link.id}`,
+		icon: link.icon,
+		title: link.title,
+		subtitle: link.handle,
+		trailing: 'external',
+		href: link.url
+	}));
+}
+
 function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
 	return {
 		title: m.about.title,
@@ -886,7 +939,10 @@ function feedback(m: SettingsMessages): FeedbackModel {
 			limit: fill(m.bugReport.screenshotsLimit, { max: MAX_SCREENSHOTS }),
 			unsupported: m.bugReport.screenshotUnsupported,
 			dropHint: m.bugReport.dropHint,
-			max: MAX_SCREENSHOTS
+			max: MAX_SCREENSHOTS,
+			view: m.bugReport.viewScreenshot,
+			close: m.bugReport.closeViewer,
+			removeFromViewer: m.bugReport.removeFromViewer
 		}
 	};
 }
@@ -1185,8 +1241,12 @@ export function buildDesktopState(
 		// reachable only from `/gallery`, which no person who owns this wallet
 		// will ever open. It sits beside 关于 for the same reason the phone puts
 		// it there: "something is wrong" and "what is this" are the same errand.
-		{ id: 'feedback', icon: 'message-square-text', label: m.feedback.title },
-		{ id: 'about', icon: 'info', label: m.about.title }
+		// The phone's Community group, one click from Settings like About —
+		// and the phone's order after it: About, then Send feedback (the same
+		// on all four shells, 2026-09-27).
+		{ id: 'community', icon: 'messages-square', label: m.sections.community },
+		{ id: 'about', icon: 'info', label: m.about.title },
+		{ id: 'feedback', icon: 'message-square-text', label: m.feedback.title }
 	];
 	const accounts = accountsSheet(m, identicon);
 
@@ -1295,6 +1355,7 @@ export function buildDesktopState(
 		clearCachesSheet: clearCachesSheet(m),
 		eraseSheet: eraseSheet(m),
 		feedback: feedback(m),
+		community: { title: m.sections.community, rows: communityRows() },
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),
 		rpcFix: rpcFix(m, false),

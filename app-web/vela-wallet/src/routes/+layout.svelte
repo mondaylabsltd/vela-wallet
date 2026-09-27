@@ -21,6 +21,7 @@
 	import { invalidateAllPools } from '$lib/services/rpc-pool';
 	import { normalizePackagedUrl } from '$lib/extension/page-url';
 	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
+	import ReportToastHost from '$lib/settings/ui/ReportToastHost.svelte';
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
 
 	let { children } = $props();
@@ -153,6 +154,10 @@
 	</div>
 
 	<ParallelSpaceBadge onopen={() => goto(parallelHref)} />
+
+	<!-- A bug report whose sheet was closed mid-send says how it ended here,
+	     on whatever page the person went on to (078). -->
+	<ReportToastHost />
 
 	{#if launching}
 		<LaunchAnimation

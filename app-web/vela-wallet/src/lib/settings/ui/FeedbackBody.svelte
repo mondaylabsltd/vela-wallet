@@ -30,22 +30,30 @@
 	 *
 	 * Icons beside words are sized in em (v2 A8), so they grow with the text
 	 * scale instead of staying the size the standard text was drawn at.
+	 *
+	 * A tile is a button (078 §C): it opens the screenshot large — the
+	 * PROCESSED JPEG, what goes public — in `ScreenshotViewer`, and closing
+	 * the viewer puts focus back on that tile (or, if it was removed there, on
+	 * the tile now in its place, else the add target). A tile still being
+	 * prepared opens nothing, and nothing opens while the form is sending.
+	 *
+	 * What was typed and attached lives in a `ReportDraft`. The route hands in
+	 * the app-resident one, so closing the sheet — even mid-send — never loses
+	 * the report; with none handed in (the gallery, the tests) the sheet keeps
+	 * its own and discards it when it goes.
 	 */
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import type { FeedbackModel, FeedbackResult } from '../model';
+	import { ReportDraft } from '../report-draft.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { fill } from '$lib/wallet/messages';
-	import {
-		chooseScreenshots,
-		imageFilesOf,
-		prepareScreenshot,
-		SCREENSHOT_ACCEPT,
-		type ScreenshotRefusal
-	} from '$lib/services/screenshot-prep';
+	import { imageFilesOf, SCREENSHOT_ACCEPT } from '$lib/services/screenshot-prep';
 	import Disclosure from './Disclosure.svelte';
+	import ScreenshotViewer, { type ViewerImage } from './ScreenshotViewer.svelte';
+	import { tapGuard } from './tap-guard';
 
 	interface Props {
 		panel: FeedbackModel;
@@ -60,43 +68,26 @@
 		result?: FeedbackResult;
 		/** 完成 on the filed state: the host closes the sheet (or resets the panel). */
 		ondone?: () => void;
+		/**
+		 * The report being written. The route passes the app-resident one so it
+		 * outlives this sheet; absent, the sheet keeps a draft of its own.
+		 */
+		draft?: ReportDraft;
 	}
 
-	let { panel, onsend, sending = false, result, ondone }: Props = $props();
+	let { panel, onsend, sending = false, result, ondone, draft: given }: Props = $props();
 
-	let what = $state('');
-	let steps = $state('');
-	let stepsOpen = $state(false);
+	/** Fixed for this sheet's life: a draft is never swapped under a form. */
+	const draft = untrack(() => given) ?? new ReportDraft();
+	const ownDraft = untrack(() => given) === undefined;
 
-	/** One tile: still being prepared, or ready with the bytes that will be sent. */
-	interface Shot {
-		id: number;
-		url?: string;
-		base64?: string;
-	}
-	let shots = $state<Shot[]>([]);
-	let refusal = $state<ScreenshotRefusal | null>(null);
 	let dropping = $state(false);
-	/**
-	 * Send was pressed while a tile was still being prepared: the person
-	 * attached it and expects it to go, so the send waits for it — busy, with
-	 * the sending words — instead of leaving it behind.
-	 */
-	let waiting = $state(false);
-	/**
-	 * Tiles still being prepared, by id: what a send waits for. Bookkeeping,
-	 * never drawn — the tiles themselves are the reactive state.
-	 */
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- deliberately not reactive (see above)
-	const preparing = new Map<number, Promise<void>>();
-	let alive = true;
 	/** Whether the send in flight carried images — the fallback says they cannot follow. */
 	let sentWithShots = $state(false);
 	let picker = $state<HTMLInputElement | undefined>();
-	let nextId = 0;
 
 	const max = $derived(panel.screenshots.max);
-	const ready = $derived(what.trim() !== '');
+	const ready = $derived(draft.what.trim() !== '');
 	const live = $derived(onsend !== undefined);
 	const fallen = $derived(
 		result !== undefined && result.filed === false && result.fallbackUrl !== undefined
@@ -116,22 +107,13 @@
 		})
 	);
 
-	/**
-	 * A user agent is one long "word"; let it wrap after its slashes
-	 * (`AppleWebKit/` · `537.36`) rather than mid-number. Only the drawing
-	 * changes — the text, and what is sent, are the same.
-	 */
-	function slashParts(value: string): string[] {
-		return value.split(/(?<=\/)/);
-	}
-
 	let root = $state<HTMLDivElement | undefined>();
 	let filedTitle = $state<HTMLElement | undefined>();
 	let fallbackTitle = $state<HTMLElement | undefined>();
 	let fallbackRoad = $state<HTMLElement | undefined>();
 
 	/** Sending, or waiting on a tile before sending: the form holds still (v3 B9). */
-	const busy = $derived(sending || waiting);
+	const busy = $derived(sending || draft.waiting);
 
 	/**
 	 * Each outcome is said where the person is (v3 B6/B7). Filed: focus moves
@@ -140,9 +122,11 @@
 	 * GitHub form" button are scrolled into view — on a real-height phone they
 	 * landed below the fold — and focus goes to the block's title.
 	 *
-	 * Only when the outcome ARRIVES while this sheet is open: the route keeps
-	 * the last outcome, so reopening the sheet (or coming back to the panel)
-	 * remounts with it — and must not grab focus or scroll again.
+	 * When the outcome ARRIVES while this sheet is open, and — for the
+	 * fallback — when the sheet is reopened on it (078 review, B6): a person
+	 * who closed the sheet mid-send and was told by a toast that it did not
+	 * go comes back to the form's road in view, not to the top of the form
+	 * with the button below the fold. A thank-you reopened grabs nothing.
 	 */
 	const outcomeAtMount = untrack(() => result);
 	/** Names the outcome blocks for assistive tech (the title is also where focus goes). */
@@ -159,62 +143,136 @@
 		}
 	});
 	/**
-	 * The height the thank-you keeps (v2 A7): the form's at Send, but never
-	 * more than the part of the sheet (or window) it is seen in. Holding it
-	 * means the sheet does not collapse under the person's thumb, and gives
-	 * the success block a frame to sit at the optical centre of.
+	 * The frame the thank-you sits in (v2 A7, 078 review): the room this body
+	 * is SEEN in — from its top to the bottom of the sheet or pane that
+	 * scrolls it. In the phone sheet that is the form's visible height (the
+	 * sheet hugs its content), so the sheet does not collapse under the
+	 * thumb; in the desktop pane it is the pane, so the block lands at the
+	 * pane's 2:3 optical centre instead of high up in a frame the size of a
+	 * short form.
 	 */
 	let held = $state(0);
 
-	function visibleHeight(el: HTMLElement): number {
-		let scroller = el.parentElement;
-		while (scroller !== null && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) {
-			scroller = scroller.parentElement;
+	function scrollerOf(el: HTMLElement): HTMLElement | null {
+		let node = el.parentElement;
+		while (node !== null && !/(auto|scroll)/.test(getComputedStyle(node).overflowY)) {
+			node = node.parentElement;
 		}
-		const top = el.getBoundingClientRect().top;
-		const room =
-			scroller === null
-				? window.innerHeight - (top + window.scrollY)
-				: scroller.clientHeight - (top - scroller.getBoundingClientRect().top + scroller.scrollTop);
-		return Math.max(0, Math.min(el.offsetHeight, room));
+		return node;
 	}
+
+	function visibleRoom(el: HTMLElement): number {
+		const scroller = scrollerOf(el);
+		const top = el.getBoundingClientRect().top;
+		if (scroller === null) return Math.max(0, window.innerHeight - top);
+		const offset = top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+		const padding = parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
+		return Math.max(0, scroller.clientHeight - offset - padding);
+	}
+
+	/**
+	 * Bring `el` into view inside the sheet (or pane) that scrolls it — by
+	 * scrolling THAT, and nothing else. `scrollIntoView` would also scroll
+	 * every clipping ancestor, and a sheet still sliding in counts as
+	 * overflow of the screen under it.
+	 */
+	function reveal(el: HTMLElement): void {
+		const scroller = scrollerOf(el);
+		if (scroller === null) {
+			el.scrollIntoView({ block: 'nearest' });
+			return;
+		}
+		const box = el.getBoundingClientRect();
+		const frame = scroller.getBoundingClientRect();
+		const margin = parseFloat(getComputedStyle(el).scrollMarginBottom) || 0;
+		const below = box.bottom + margin - frame.bottom;
+		if (below > 0) scroller.scrollTop += below;
+	}
+
+	onMount(() => {
+		const outcome = outcomeAtMount;
+		if (outcome === undefined || root === undefined) return;
+		if (outcome.filed) {
+			held = visibleRoom(root);
+		} else if (fallbackRoad !== undefined) {
+			fallbackTitle?.focus({ preventScroll: true });
+			reveal(fallbackRoad);
+		}
+	});
 
 	/** Take files from any of the three doors: the picker, a paste, a drop. */
 	function add(files: readonly File[]): void {
 		if (!live || busy || files.length === 0) return;
-		const chosen = chooseScreenshots(shots.length, files, max);
-		refusal = chosen.refusal;
-		for (const file of chosen.take) {
-			const shot: Shot = { id: nextId++ };
-			shots.push(shot);
-			const job = prepareScreenshot(file).then(
-				(prepared) => {
-					const at = shots.findIndex((s) => s.id === shot.id);
-					if (at === -1) return; // removed while it was being prepared
-					shots[at] = {
-						...shots[at],
-						url: URL.createObjectURL(prepared.blob),
-						base64: prepared.base64
-					};
-				},
-				() => {
-					// The browser could not decode it (HEIC in most of them): refused,
-					// never sent as it was.
-					remove(shot.id, false);
-					refusal = 'unsupported';
-				}
-			);
-			preparing.set(shot.id, job);
-			void job.finally(() => preparing.delete(shot.id));
-		}
+		draft.add(files, max);
 	}
 
-	function remove(id: number, clearNotice = true): void {
-		const at = shots.findIndex((s) => s.id === id);
-		if (at === -1) return;
-		const [gone] = shots.splice(at, 1);
-		if (gone.url) URL.revokeObjectURL(gone.url);
-		if (clearNotice) refusal = null;
+	function remove(id: number): void {
+		draft.remove(id);
+	}
+
+	/**
+	 * The badge and the tile act on a TAP only: a scroll that starts on a
+	 * badge — its tap area reaches out to where a thumb starts scrolling the
+	 * sheet — must scroll, never delete (iPhone, 2026-09-27).
+	 */
+	const removeTap = tapGuard();
+	const viewTap = tapGuard();
+
+	// --- the viewer (078 §C) ---------------------------------------------------
+
+	/** The tiles that can open: prepared, i.e. showing the bytes that will be sent. */
+	const viewable = $derived<ViewerImage[]>(
+		draft.shots.flatMap((shot, i) =>
+			shot.url === undefined
+				? []
+				: [{ id: shot.id, url: shot.url, label: fill(panel.screenshots.view, { index: i + 1 }) }]
+		)
+	);
+	/** The image the viewer opened on, while it is open. */
+	let viewing = $state<number | null>(null);
+	/**
+	 * The tile focus goes back to when the viewer closes: the one that opened
+	 * it — or, when that one was removed in the viewer, the tile that took its
+	 * place (`null`: none did, so the add target).
+	 */
+	let returnTo: number | null = null;
+	let tilesList = $state<HTMLElement | undefined>();
+
+	function view(id: number): void {
+		if (!live || busy) return;
+		if (!viewable.some((image) => image.id === id)) return;
+		returnTo = id;
+		viewing = id;
+	}
+
+	function removeFromViewer(id: number): void {
+		if (returnTo === id) {
+			const at = draft.shots.findIndex((s) => s.id === id);
+			returnTo = draft.shots[at + 1]?.id ?? null;
+		}
+		remove(id);
+	}
+
+	/**
+	 * Focus back on the tile (or the add target). The ring shows only when the
+	 * viewer was closed from the keyboard; a tap or click that closed it
+	 * leaves focus in place without drawing a ring nobody asked for.
+	 */
+	async function viewerClosed(via: 'keyboard' | 'pointer'): Promise<void> {
+		viewing = null;
+		await tick();
+		const tile =
+			returnTo === null
+				? null
+				: (tilesList?.querySelector<HTMLElement>(`[data-shot="${returnTo}"] .view`) ?? null);
+		// The empty section's target first: when the last tile went, the row
+		// (and its add tile) is still leaving.
+		const target =
+			tile ??
+			root?.querySelector<HTMLElement>('.add-target') ??
+			root?.querySelector<HTMLElement>('.add-tile') ??
+			null;
+		target?.focus({ preventScroll: true, focusVisible: via === 'keyboard' } as FocusOptions);
 	}
 
 	function picked(event: Event & { currentTarget: HTMLInputElement }): void {
@@ -226,7 +284,7 @@
 
 	/** Paste anywhere in the sheet: images only — text keeps pasting as text. */
 	function pasted(event: ClipboardEvent): void {
-		if (result?.filed === true || busy) return;
+		if (result?.filed === true || busy || viewing !== null) return;
 		const files = imageFilesOf(event.clipboardData).filter((f) => f.type.startsWith('image/'));
 		if (files.length === 0) return;
 		event.preventDefault();
@@ -253,36 +311,36 @@
 	 * go.
 	 */
 	async function send(): Promise<void> {
-		if (waiting) return;
-		if (root !== undefined) held = visibleHeight(root);
+		if (draft.waiting) return;
+		if (root !== undefined) held = visibleRoom(root);
 		// A send is the next change: the refusal has been read. (A tile that
-		// fails while this send waits says so again, below.)
-		refusal = null;
-		if (preparing.size > 0) {
-			waiting = true;
-			await Promise.allSettled([...preparing.values()]);
-			waiting = false;
-			if (!alive) return;
+		// fails while this send waits says so again.)
+		draft.refusal = null;
+		// Read before the wait: a sheet closed during it takes its props with it.
+		const deliver = onsend;
+		if (draft.preparing) {
+			draft.waiting = true;
+			try {
+				await draft.settled();
+			} finally {
+				draft.waiting = false;
+			}
 		}
-		const screenshots = shots.flatMap((s) => (s.base64 === undefined ? [] : [s.base64]));
+		// NOT abandoned when the sheet closed meanwhile: the draft outlives it,
+		// and the person pressed Send.
+		const screenshots = draft.screenshots();
 		sentWithShots = screenshots.length > 0;
-		onsend?.({ what, steps, screenshots });
+		deliver?.({ what: draft.what, steps: draft.steps, screenshots });
 	}
 
 	function done(): void {
-		for (const shot of shots) if (shot.url) URL.revokeObjectURL(shot.url);
-		shots = [];
-		what = '';
-		steps = '';
-		stepsOpen = false;
-		refusal = null;
+		draft.reset();
 		held = 0;
 		ondone?.();
 	}
 
 	onDestroy(() => {
-		alive = false;
-		for (const shot of shots) if (shot.url) URL.revokeObjectURL(shot.url);
+		if (ownDraft) draft.reset();
 	});
 </script>
 
@@ -341,21 +399,21 @@
 		<textarea
 			data-field
 			inert={busy}
-			bind:value={what}
+			bind:value={draft.what}
 			placeholder={panel.placeholder}
 			aria-label={panel.placeholder}
 			rows="4"></textarea>
 
-		{#if stepsOpen}
+		{#if draft.stepsOpen}
 			<textarea
 				data-field
 				inert={busy}
-				bind:value={steps}
+				bind:value={draft.steps}
 				placeholder={panel.stepsPlaceholder}
 				aria-label={panel.stepsPlaceholder}
 				rows="3"></textarea>
 		{:else}
-			<button type="button" class="steps" inert={busy} onclick={() => (stepsOpen = true)}
+			<button type="button" class="steps" inert={busy} onclick={() => (draft.stepsOpen = true)}
 				>{panel.addSteps}</button
 			>
 		{/if}
@@ -376,7 +434,7 @@
 			<div class="shots-head">
 				<span class="shots-label">{panel.screenshots.label}</span>
 				<span class="shots-count">
-					{shots.length === 0 ? panel.screenshots.hint : `${shots.length} / ${max}`}
+					{draft.shots.length === 0 ? panel.screenshots.hint : `${draft.shots.length} / ${max}`}
 				</span>
 			</div>
 
@@ -391,7 +449,7 @@
 				onchange={picked}
 			/>
 
-			{#if shots.length === 0}
+			{#if draft.shots.length === 0}
 				<button type="button" class="add-target" onclick={() => picker?.click()}>
 					<span class="add-line">
 						<Icon icon={UTILITY_ICONS['image-plus']} />
@@ -403,12 +461,27 @@
 				<!-- One row, always (v2 A6): five equal columns that shrink
 				     together on a narrow screen instead of wrapping a lone tile
 				     onto a second line. -->
-				<ul class="tiles">
-					{#each shots as shot, i (shot.id)}
-						<li class="tile" transition:scale={{ duration: 150, start: 0.9 }}>
+				<ul class="tiles" bind:this={tilesList}>
+					{#each draft.shots as shot, i (shot.id)}
+						<li class="tile" data-shot={shot.id} transition:scale={{ duration: 150, start: 0.9 }}>
 							{#if shot.url !== undefined}
-								<img src={shot.url} alt="" />
+								<!-- The tile's body opens it large (§C1); the badge above it
+								     keeps removing. -->
+								<button
+									type="button"
+									class="view"
+									aria-label={fill(panel.screenshots.view, { index: i + 1 })}
+									onpointerdown={viewTap.down}
+									onpointermove={viewTap.move}
+									onpointercancel={viewTap.cancel}
+									onclick={(event) => {
+										if (viewTap.accept(event)) view(shot.id);
+									}}
+								>
+									<img src={shot.url} alt="" />
+								</button>
 							{:else}
+								<!-- Being prepared: nothing to show yet, so nothing opens. -->
 								<span class="processing" aria-hidden="true"></span>
 							{/if}
 							<button
@@ -416,13 +489,18 @@
 								class="remove"
 								data-focus-inner
 								aria-label={fill(panel.screenshots.remove, { index: i + 1 })}
-								onclick={() => remove(shot.id)}
+								onpointerdown={removeTap.down}
+								onpointermove={removeTap.move}
+								onpointercancel={removeTap.cancel}
+								onclick={(event) => {
+									if (removeTap.accept(event)) remove(shot.id);
+								}}
 							>
 								<span class="badge"><Icon icon={UTILITY_ICONS.x} size="xs" /></span>
 							</button>
 						</li>
 					{/each}
-					{#if shots.length < max}
+					{#if draft.shots.length < max}
 						<li class="tile-slot" transition:fade={{ duration: 150 }}>
 							<button
 								type="button"
@@ -437,15 +515,17 @@
 				</ul>
 			{/if}
 
-			{#if refusal !== null}
+			{#if draft.refusal !== null}
 				<p class="shots-note refused" role="status">
 					<Icon icon={UTILITY_ICONS['triangle-alert']} />
 					<span
-						>{refusal === 'limit' ? panel.screenshots.limit : panel.screenshots.unsupported}</span
+						>{draft.refusal === 'limit'
+							? panel.screenshots.limit
+							: panel.screenshots.unsupported}</span
 					>
 				</p>
 			{/if}
-			{#if shots.length > 0}
+			{#if draft.shots.length > 0}
 				<!-- The founder's ruling, where it counts: before Send, and never
 				     displaced by a refusal (v2 A1). -->
 				<p class="shots-note public">
@@ -462,9 +542,7 @@
 						<dd class="whole">{row.value}</dd>
 					{:else}
 						<dt>{row.label}</dt>
-						<dd>
-							{#each slashParts(row.value) as part, j (j)}{#if j > 0}<wbr />{/if}{part}{/each}
-						</dd>
+						<dd>{row.value}</dd>
 					{/if}
 				{/each}
 			</dl>
@@ -518,7 +596,7 @@
 		<Button
 			variant={fallen ? 'secondary' : 'primary'}
 			shape="rounded"
-			loading={sending || waiting}
+			loading={busy}
 			busyLabel={panel.sending}
 			disabled={live && !ready}
 			onclick={() => void send()}>{fallen ? panel.fallback.retry : panel.send}</Button
@@ -533,6 +611,19 @@
 				rel="noreferrer noopener">{panel.githubLink}</a
 			>
 		{/if}
+	{/if}
+
+	<!-- Mounted on `viewing` alone: when its last image is removed the viewer
+	     plays its exit and reports back, which is when focus is placed. -->
+	{#if viewing !== null}
+		<ScreenshotViewer
+			images={viewable}
+			startId={viewing}
+			closeLabel={panel.screenshots.close}
+			removeLabel={panel.screenshots.removeFromViewer}
+			onremove={removeFromViewer}
+			onclose={(via) => void viewerClosed(via)}
+		/>
 	{/if}
 </div>
 
@@ -703,12 +794,38 @@
 	/* Laid over the square rather than sizing it: the column decides the
 	   tile, never the picture's own proportions. */
 	.tile img,
+	.view,
 	.processing,
 	.add-tile {
 		position: absolute;
 		inset: 0;
 		width: 100%;
 		height: 100%;
+	}
+
+	/* The tile's body is the button that opens it large (078 §C1). */
+	.view {
+		display: block;
+		padding: 0;
+		border: none;
+		border-radius: var(--radius-lg);
+		background: none;
+		cursor: zoom-in;
+		transition: transform var(--motion-duration-fast) ease;
+	}
+
+	.view:focus-visible {
+		border-radius: var(--radius-lg);
+	}
+
+	.view:active {
+		transform: scale(var(--motion-press-button));
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.view:hover img {
+			opacity: var(--opacity-hover);
+		}
 	}
 
 	.tile img,
@@ -916,17 +1033,23 @@
 		min-width: 0;
 	}
 
+	/* The title in the body colour; what follows in fg-muted (5.1:1 on the
+	   amber tint), as iOS and Android draw it. */
 	.fallback-text p {
 		margin: 0;
+		color: var(--color-fg-muted);
 	}
 
-	.fallback-title {
+	.fallback-text .fallback-title {
 		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
 	}
 
-	/* Its own paragraph, a little apart: the images are a separate matter. */
+	/* Its own paragraph, a little apart and a step smaller: the images are a
+	   separate, lesser matter. */
 	.fallback-text .fallback-shots {
 		margin-top: var(--space-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
 	.github {
