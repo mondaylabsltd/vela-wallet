@@ -90,7 +90,7 @@ screenshot checked against the web.
 - [x] T051 Flows F-09…F-11.
 - [x] T052 Contacts C-09.
 - [x] T053 Settings S-06…S-13.
-- [ ] T054 Explore E-04, E-05; signing G-06.
+- [x] T054 Explore E-04, E-05; signing G-06.
 
 ## Phase 5 — acceptance
 - [ ] T060 Screenshot pairs for every gallery state both apps draw (SC-001).

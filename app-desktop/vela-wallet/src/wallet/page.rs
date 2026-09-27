@@ -12597,7 +12597,8 @@ impl WalletPage {
                 });
         // The two trailing affordances open different things, so the page — not
         // the component — carries their listeners.
-        let star = explore_components::toolbar_control(
+        // Filled in the accent on a page already pinned (078 E-04).
+        let star = explore_components::toolbar_control_with(
             theme,
             &mut self.icons,
             Icon::Star,
@@ -12606,6 +12607,8 @@ impl WalletPage {
             } else {
                 theme.fg_base
             },
+            favorite_origin.is_some(),
+            true,
         );
         let dots = explore_components::toolbar_control(
             theme,
@@ -13469,10 +13472,14 @@ impl WalletPage {
 
     fn explore_start(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Stateful<Div> {
         let mut column = self.explore_scroll.wire(
+            // The web's `.start` (078 E-05): padded 32 and capped at 800 —
+            // a start page stretched across a wide window put "Edit" a
+            // screen away from the tiles it edits.
             div()
                 .id("explore-start")
                 .flex_1()
                 .min_h(px(0.))
+                .max_w(px(800.))
                 .p(px(32.))
                 .flex()
                 .flex_col(),
@@ -13548,7 +13555,13 @@ impl WalletPage {
         };
         column = column.child(section_header_row().child(title_half).child(edit_half));
 
-        let mut grid = div().flex().flex_wrap().gap(px(12.)).py(px(12.));
+        // The web's 8-up grid (078 E-05): 8 across, 20 down.
+        let mut grid = div()
+            .flex()
+            .flex_wrap()
+            .gap_x(px(8.))
+            .gap_y(px(20.))
+            .py(px(12.));
         for (i, site) in favorites.iter().enumerate() {
             grid = grid.child(
                 explore_components::site_tile(ElementId::from(("tile", i)), theme, site)
@@ -13666,9 +13679,10 @@ impl WalletPage {
                 action_half.into_any_element()
             };
             column = column.child(section_header_row().child(title_half).child(action_half));
-            let mut rows = div().flex().flex_col();
+            // Two to a line, 32 apart, as the web's `.rows` (078 E-05).
+            let mut cells: Vec<gpui::AnyElement> = Vec::new();
             for (i, site) in group.sites.iter().enumerate() {
-                rows = rows.child(
+                cells.push(
                     explore_components::site_row(
                         // By the group's place on the page, not its kind: every
                         // custom group is "custom", and row 0 of each one
@@ -13714,7 +13728,20 @@ impl WalletPage {
                             this.browsing = true;
                             cx.notify();
                         })
-                    }),
+                    })
+                    .into_any_element(),
+                );
+            }
+            let mut rows = div().flex().flex_col();
+            let mut cells = cells.into_iter();
+            while let Some(left) = cells.next() {
+                let right = cells.next();
+                rows = rows.child(
+                    div()
+                        .flex()
+                        .gap(px(32.))
+                        .child(div().flex_1().min_w(px(0.)).child(left))
+                        .child(div().flex_1().min_w(px(0.)).children(right)),
                 );
             }
             column = column.child(rows);
@@ -14918,7 +14945,10 @@ impl WalletPage {
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
             PanelId::Signing => {
-                let body = self.signing_body(theme, window, cx);
+                // The web body's 1.4 (078 G-06), as the flow column's.
+                let body = self
+                    .signing_body(theme, window, cx)
+                    .line_height(gpui::relative(crate::wallet::components::LINE_BODY));
                 let title = self.signing.panel_title.clone();
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }

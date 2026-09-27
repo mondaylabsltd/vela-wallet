@@ -240,6 +240,16 @@ different).
 - **E-05 P2 · Start page**: ≤800, 8-column grid (20/8 gaps), two-column rows;
   tile label 11; row padding 12; connection panel sizes; chain logo on the
   network dot (currently always Ethereum's colour).
+  *Fixed (T054):* live start page beside the web's DE2. The page caps at
+  800 and padding 32 ("Edit" sat a screen away from its tiles); favourites
+  on the 8-up grid (85 tiles, 8 across, 20 down) with 11 labels; group rows
+  two to a line, 32 apart, padded 12 on a button's line. Toolbar: radius 8,
+  sunken hover, forward drawn disabled (subtle at 45 %) as the web's
+  `canForward: false`, the star FILLED in the accent on a pinned page; tabs
+  radius 8, the start tab wearing the sail, a 20 close box raised on hover.
+  Not done: real back/forward availability — the web has no live browser
+  to copy it from; the desktop would need the page's `navigation.canGoBack`
+  reported over the bridge.
 
 ## Signing (G)
 
@@ -253,6 +263,12 @@ different).
   copy/explorer, raw params in a sunken card, mono 13.
 - **G-06 P2 · Footer/blocks**: blocks gap 16 padding 16, footer hairline gap
   12; warning border colour, padding 12/16, 16 icon; fee selector 12/16.
+  *Fixed (T054):* live signing column beside the web's DE4. Two overflow
+  bugs (noted since T043): the warning's words ran out of the card (no
+  `min_w(0)`), and the party badge was pushed past the column by a full
+  address — now the text wraps, the badge never shrinks, and the address is
+  middle-truncated. Warning padded 12/16, 16 glyph, caution edged in
+  `warning_border`; badge 11; the column on the body's 1.4.
 
 ## Money logic (M) — the core, every shell
 

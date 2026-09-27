@@ -47,11 +47,15 @@ pub fn letter_avatar(letter: SharedString, tint: Hsla, size: f32) -> Div {
         .child(letter)
 }
 
-/// One favourites tile: the 56 mark over a label a step below a row's.
+/// A tile's column: the web's 8-up grid over its 800 page — (736 − 7 × 8) / 8
+/// (078 E-05).
+pub const TILE_W: f32 = 85.;
+
+/// One favourites tile: the 56 mark over an 11 label (078 E-05).
 pub fn site_tile(id: ElementId, theme: &Theme, site: &SiteModel) -> Stateful<Div> {
     div()
         .id(id)
-        .w(px(88.))
+        .w(px(TILE_W))
         .flex()
         .flex_col()
         .items_center()
@@ -60,7 +64,8 @@ pub fn site_tile(id: ElementId, theme: &Theme, site: &SiteModel) -> Stateful<Div
         .child(letter_avatar(site.letter.clone(), site.tint, TILE_AVATAR))
         .child(
             div()
-                .text_size(theme::text_row_sub())
+                .max_w_full()
+                .text_size(theme::text_label())
                 .text_color(theme.fg_base)
                 .truncate()
                 .child(site.name.clone()),
@@ -76,7 +81,7 @@ pub fn add_tile(
 ) -> Stateful<Div> {
     div()
         .id(id)
-        .w(px(88.))
+        .w(px(TILE_W))
         .flex()
         .flex_col()
         .items_center()
@@ -95,7 +100,7 @@ pub fn add_tile(
         )
         .child(
             div()
-                .text_size(theme::text_row_sub())
+                .text_size(theme::text_label())
                 .text_color(theme.fg_subtle)
                 .child(label),
         )
@@ -109,12 +114,14 @@ pub fn site_row(
     site: &SiteModel,
 ) -> Stateful<Div> {
     let _ = identicons;
+    // Padded 12 on a button's line, as the web's `SiteRow` (078 E-05).
     let mut row = div()
         .id(id)
         .flex()
         .items_center()
         .gap(px(12.))
-        .py(px(10.))
+        .py(px(12.))
+        .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
         .cursor_pointer()
         .child(letter_avatar(site.letter.clone(), site.tint, ROW_AVATAR))
         .child(
@@ -203,7 +210,7 @@ pub fn tab_strip_with(
             .w(px(TAB_W))
             .h(px(TAB_H))
             .px(px(12.))
-            .rounded_t(px(6.))
+            .rounded_t(px(8.))
             .flex()
             .items_center()
             .gap(px(8.))
@@ -214,18 +221,30 @@ pub fn tab_strip_with(
             } else {
                 theme.fg_muted
             });
-        if let Some(site) = &tab.site {
-            face = face.child(letter_avatar(site.letter.clone(), site.tint, 16.));
-        }
+        // The start page's tab wears the sail, as the web's (078 E-04); a
+        // site's tab its mark.
+        face = match &tab.site {
+            Some(site) => face.child(letter_avatar(site.letter.clone(), site.tint, 16.)),
+            None => face.child(crate::ui::vela_mark(theme, px(16.))),
+        };
         // The close glyph is its own control: a click on it must close the
         // tab, never merely select it, and the two live one inside the other.
         let close = actions.close.get_mut(i).and_then(Option::take);
-        let cross = icon_img(icons, Icon::X, false, theme.fg_muted, 12.);
+        // A 20 box, radius 4, raised on hover — the web's `.close` (078 E-04).
+        let raised = theme.bg_raised;
+        let cross = div()
+            .size(px(20.))
+            .flex_none()
+            .rounded(px(4.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(icon_img(icons, Icon::X, false, theme.fg_muted, 12.));
         let cross = match close {
-            Some(close) => div()
+            Some(close) => cross
                 .id(ElementId::from(("tab-close", i)))
                 .cursor_pointer()
-                .child(cross)
+                .hover(move |el| el.bg(raised))
                 .on_click(move |event, window, cx| close(event, window, cx))
                 .into_any_element(),
             None => cross.into_any_element(),
@@ -274,15 +293,37 @@ pub fn tab_strip_with(
 
 /// One toolbar control — a 32 square with a tinted glyph.
 pub fn toolbar_control(theme: &Theme, icons: &mut IconCache, icon: Icon, tint: Hsla) -> Div {
-    let _ = theme;
-    div()
+    toolbar_control_with(theme, icons, icon, tint, false, true)
+}
+
+/// The toolbar's icon button as the web's `.icon` (078 E-04): radius 8, a
+/// sunken hover while it can act; disabled, the subtle colour at 45 % and no
+/// hover. `solid` fills the glyph — the star on a favourite.
+pub fn toolbar_control_with(
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+    tint: Hsla,
+    solid: bool,
+    enabled: bool,
+) -> Div {
+    let sunken = theme.bg_sunken;
+    let control = div()
         .w(px(TOOLBAR_CONTROL))
         .h(px(TOOLBAR_CONTROL))
-        .rounded(px(6.))
+        .rounded(px(8.))
         .flex()
         .items_center()
-        .justify_center()
-        .child(icon_img(icons, icon, false, tint, 18.))
+        .justify_center();
+    if enabled {
+        control
+            .hover(move |el| el.bg(sunken))
+            .child(icon_img(icons, icon, solid, tint, 18.))
+    } else {
+        control
+            .opacity(0.45)
+            .child(icon_img(icons, icon, solid, theme.fg_subtle, 18.))
+    }
 }
 
 /// The account chip. Its green dot IS the connection state — the only thing in
@@ -462,17 +503,19 @@ pub fn address_field(theme: &Theme, icons: &mut IconCache, bar: &AddressBar) -> 
 
 /// The three navigation buttons, live or drawn.
 fn nav_controls(theme: &Theme, icons: &mut IconCache, nav: Option<NavActions>) -> Vec<AnyElement> {
+    // Back and reload act; forward is the web's drawn `canForward: false`
+    // — disabled, not merely grey (078 E-04).
     let icons_and_tints = [
-        (Icon::ArrowLeft, theme.fg_base),
-        (Icon::ArrowRight, theme.fg_subtle),
-        (Icon::RefreshCw, theme.fg_base),
+        (Icon::ArrowLeft, true),
+        (Icon::ArrowRight, false),
+        (Icon::RefreshCw, true),
     ];
     let mut actions = nav.map(Vec::from).unwrap_or_default().into_iter();
     icons_and_tints
         .into_iter()
         .enumerate()
-        .map(|(i, (icon, tint))| {
-            let control = toolbar_control(theme, icons, icon, tint);
+        .map(|(i, (icon, enabled))| {
+            let control = toolbar_control_with(theme, icons, icon, theme.fg_base, false, enabled);
             match actions.next() {
                 Some(action) => crate::flows::panels::clickable(
                     ElementId::from(("browser-nav", i)),
