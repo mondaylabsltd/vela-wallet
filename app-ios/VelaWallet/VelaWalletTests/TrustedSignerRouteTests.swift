@@ -506,7 +506,7 @@ struct TrustedSignerExecutorTests {
     private func executor(_ port: ScriptedCeremonyPort) -> OnboardingExecutor {
         OnboardingExecutor(
             passkey: PasskeyExecutor(),
-            registry: RegistryClient(baseURL: "https://r.test"),
+            registry: RegistryClient(baseURL: "https://r.test", transport: IndexScript.unreachable),
             store: AccountStore(defaults: UserDefaults(suiteName: UUID().uuidString)!),
             deps: NoDeps(),
             trustedSigner: port,
@@ -560,7 +560,7 @@ struct TrustedSignerExecutorTests {
         let page = TrustedSignerCeremonyFixture()
         let executor = OnboardingExecutor(
             passkey: PasskeyExecutor(),
-            registry: RegistryClient(baseURL: "https://r.test"),
+            registry: RegistryClient(baseURL: "https://r.test", transport: IndexScript.unreachable),
             store: AccountStore(defaults: UserDefaults(suiteName: UUID().uuidString)!),
             deps: NoDeps(),
             trustedSigner: nil

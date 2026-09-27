@@ -30,6 +30,10 @@ final class SendStore {
 
     private var core: CoreStore<SendViewWire>!
     private let executor: SendExecutor
+
+    /// No effect in flight: nothing but a new event can change `view` —
+    /// `CoreDriver.isIdle`. What a test waits on instead of a clock.
+    var isIdle: Bool { core.isIdle }
     /// Whether `Open` has been sent for the journey currently on screen.
     private var entered = false
     /// Whose money the journey on screen is about (lower-cased) — the only

@@ -14,11 +14,11 @@
 //  well-formed, it was simply not this machine's. So every test below sends
 //  what the drawn control sends and then asks the CORE what it now holds.
 //
-//  Hermetic apart from the blur path, which is the one event that writes: a
-//  blur also starts a probe wave, and those four requests go to the real
-//  services. Nothing is asserted about them — the assertions are the stored
-//  record and the core's own model — so a machine with no network still
-//  passes.
+//  Hermetic: a blur also starts a probe wave, and those four requests are
+//  answered by `NetworkAdminStub` rather than sent to the real services (they
+//  were, until 2026-09-28 — nothing was asserted about them, but a wait for
+//  the machine to finish then waited on them too). Storage is the real
+//  executor, so what is asserted on disk is what the app would write.
 //
 
 import Foundation
@@ -49,20 +49,25 @@ struct SettingsEndpointsTests {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let shelf = VelaStore(defaults: defaults)
         let accounts = AccountStore(defaults: defaults)
-        let store = SettingsStore(store: shelf, accounts: accounts,
-                                  pool: RpcPool(store: shelf, accounts: accounts))
+        let store = SettingsStore(
+            store: shelf, accounts: accounts,
+            pool: RpcPool(store: shelf, accounts: accounts),
+            networkPerform: NetworkAdminStub.perform(
+                executor: NetworkAdminExecutor(store: shelf, accounts: accounts)
+            )
+        )
         // `open()` alone: `endpoints_opened` would start a probe wave, and
         // nothing below asserts on a probe.
         store.open()
-        await settle(until: { store.isLoaded })
+        await Wait.until({ store.isLoaded }, orIdle: { store.networksIdle })
         return (store, accounts)
     }
 
-    private func settle(
-        until condition: @escaping () -> Bool,
-        seconds: Double = 10
-    ) async {
-        await settle(untilAsync: { condition() }, seconds: seconds)
+    /// Until `condition` holds, or the networks machine has nothing left in
+    /// flight that could make it hold (`Waits.swift`). It was ten seconds by
+    /// the clock.
+    private func settle(_ store: SettingsStore, until condition: () -> Bool) async {
+        await Wait.until(condition, orIdle: { store.networksIdle })
     }
 
     /// The same wait, for a condition that has to ask an actor.
@@ -70,15 +75,8 @@ struct SettingsEndpointsTests {
     /// Storage is one: the core renders the accepted value and hands the WRITE
     /// to the shell as an effect, so a view that already shows the new endpoint
     /// says nothing yet about what is on disk.
-    private func settle(
-        untilAsync condition: @escaping () async -> Bool,
-        seconds: Double = 10
-    ) async {
-        let deadline = Date().addingTimeInterval(seconds)
-        while Date() < deadline {
-            if await condition() { return }
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
+    private func settle(_ store: SettingsStore, untilAsync condition: () async -> Bool) async {
+        await Wait.until(condition, orIdle: { store.networksIdle })
     }
 
     private func endpoint(
@@ -103,7 +101,7 @@ struct SettingsEndpointsTests {
 
         store.editEndpoint(id: NetEndpointFieldWire.passkeyIndex.rawValue,
                            value: "https://index.example")
-        await settle(until: { self.endpoint(.passkeyIndex, in: store)?.value
+        await settle(store, until: { self.endpoint(.passkeyIndex, in: store)?.value
             == "https://index.example" })
 
         #expect(endpoint(.passkeyIndex, in: store)?.value == "https://index.example",
@@ -127,7 +125,7 @@ struct SettingsEndpointsTests {
 
         store.editEndpoint(id: field.rawValue, value: "  https://stub.index.test\r\n")
         store.blurEndpoint(id: field.rawValue)
-        await settle(untilAsync: {
+        await settle(store, untilAsync: {
             (await accounts.loadServiceEndpoints()["passkeyIndexURL"] as? String) != nil
         })
 
@@ -151,10 +149,10 @@ struct SettingsEndpointsTests {
 
         store.editEndpoint(id: field.rawValue, value: "https://mine.example")
         store.blurEndpoint(id: field.rawValue)
-        await settle(until: { self.endpoint(field, in: store)?.value == "https://mine.example" })
+        await settle(store, until: { self.endpoint(field, in: store)?.value == "https://mine.example" })
 
         store.resetEndpoints()
-        await settle(until: {
+        await settle(store, until: {
             guard let row = self.endpoint(field, in: store) else { return false }
             return row.value == row.defaultValue
         })
@@ -170,10 +168,10 @@ struct SettingsEndpointsTests {
     @Test func typingAProviderKeyChangesWhatTheCoreHolds() async {
         let (store, _) = await booted()
         store.openProviders()
-        await settle(until: { self.provider(.alchemy, in: store) != nil })
+        await settle(store, until: { self.provider(.alchemy, in: store) != nil })
 
         store.editProviderKey(id: NetProviderIdWire.alchemy.rawValue, value: "test-key")
-        await settle(until: { self.provider(.alchemy, in: store)?.key == "test-key" })
+        await settle(store, until: { self.provider(.alchemy, in: store)?.key == "test-key" })
 
         #expect(provider(.alchemy, in: store)?.key == "test-key",
                 "the provider event never reached `update`")
@@ -196,13 +194,13 @@ struct SettingsEndpointsTests {
             onFault: { faults.messages.append(String(describing: $0)) }
         )
         core.boot(CoreJSON.string(["type": "started"]))
-        await settle(until: { core.view?.loaded == true })
+        await Wait.until({ core.view?.loaded == true }, orIdle: { core.isIdle })
 
         // What iOS sent until 081: the drawing's slug under the wrong key.
         core.dispatch(CoreJSON.string([
             "type": "endpoint_edited", "id": "passkey", "value": "https://refused.example",
         ]))
-        await settle(until: { !faults.messages.isEmpty }, seconds: 2)
+        // A refused event faults inside the dispatch that sent it.
         #expect(!faults.messages.isEmpty, "the core accepted an event it has no field for")
         #expect(core.view?.endpoints.contains { $0.value == "https://refused.example" } == false)
 
@@ -210,9 +208,9 @@ struct SettingsEndpointsTests {
         core.dispatch(CoreJSON.string([
             "type": "endpoint_edited", "field": "passkey_index", "value": "https://accepted.example",
         ]))
-        await settle(until: { core.view?.endpoints.contains {
+        await Wait.until({ core.view?.endpoints.contains {
             $0.value == "https://accepted.example"
-        } == true })
+        } == true }, orIdle: { core.isIdle })
         #expect(core.view?.endpoints.contains { $0.value == "https://accepted.example" } == true)
     }
 
@@ -238,7 +236,7 @@ struct SettingsEndpointsTests {
         for field in page.endpoints.fields {
             store.editEndpoint(id: field.id, value: "https://\(field.id).example")
         }
-        await settle(until: {
+        await settle(store, until: {
             store.networkAdmin?.endpoints.allSatisfy {
                 $0.value == "https://\($0.field.rawValue).example"
             } == true

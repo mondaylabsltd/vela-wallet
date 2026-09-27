@@ -128,19 +128,22 @@ final class BrowserHarness {
         delivered.filter { $0.tab == tab && $0.message["dir"] as? String == "evt" }
     }
 
-    /// Let the core's effect tasks run to quiescence.
+    /// The browser machine has nothing in flight but the reads this harness
+    /// is holding on purpose (`holdReads`): only a new event, or releasing
+    /// them, can change what the page has been told.
+    var quiet: Bool { browser.dbrInFlight <= held.count }
+
+    /// Until the machine is quiet (`Waits.swift`). It was 20 yields, 20 ms
+    /// and 20 more yields — a guess at how long the effect loop takes, which a
+    /// busy machine can outlast.
     func settle() async {
-        for _ in 0..<20 { await Task.yield() }
-        try? await Task.sleep(for: .milliseconds(20))
-        for _ in 0..<20 { await Task.yield() }
+        await Wait.until({ false }, orIdle: { self.quiet })
     }
 
-    func until(_ condition: () -> Bool, timeout: Duration = .seconds(3)) async {
-        let clock = ContinuousClock()
-        let deadline = clock.now + timeout
-        while !condition(), clock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(5))
-        }
+    /// Until `condition` holds, or the machine is quiet and nothing it still
+    /// has out could make it hold. It was three seconds by the clock.
+    func until(_ condition: () -> Bool) async {
+        await Wait.until(condition, orIdle: { self.quiet })
     }
 
     static func grant(_ origin: String, _ address: String, chain: Int) -> String {

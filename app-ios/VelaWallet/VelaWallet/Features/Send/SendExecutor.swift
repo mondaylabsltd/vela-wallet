@@ -353,6 +353,11 @@ final class SendExecutor {
 
     // MARK: - Fees, read ahead
 
+    /// The last warm-up started. Nothing in the app waits for it — a quote
+    /// simply reads whatever has landed — but a test does, rather than
+    /// sleeping and hoping the reads are in.
+    private(set) var prewarming: Task<Void, Never>?
+
     /// Warm the caches the fee executor reads, for each chain the person
     /// holds value on, while they are still choosing a token (spec 078).
     ///
@@ -369,7 +374,7 @@ final class SendExecutor {
         guard !account.isEmpty, !chainIds.isEmpty else { return }
         let tier = fees.speed?.tier ?? "fast"
         let relay = self.relay
-        Task {
+        prewarming = Task {
             await withTaskGroup(of: Void.self) { group in
                 for chainId in chainIds {
                     let tempo = isChainWithoutNativeCoin(chainId: UInt32(chainId))

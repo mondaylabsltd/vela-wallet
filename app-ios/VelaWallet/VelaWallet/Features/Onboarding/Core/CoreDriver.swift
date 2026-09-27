@@ -79,6 +79,8 @@ final class CoreDriver {
     /// FINISH rather than for a clock — a clock measures how busy the
     /// scheduler was, which on a shared CI runner is not the machine.
     var isIdle: Bool { running.isEmpty }
+    /// How many effects are in flight, by the same count.
+    var inFlight: Int { running.count }
 
     init(
         bridge: CoreBridge,

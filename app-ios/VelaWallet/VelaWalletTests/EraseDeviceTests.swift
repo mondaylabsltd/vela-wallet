@@ -117,10 +117,10 @@ struct EraseDeviceTests {
 
         let session = SessionController(store: AccountStore(defaults: defaults))
         session.boot()
-        let deadline = Date().addingTimeInterval(5)
-        while Date() < deadline, session.view.loading {
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
+        // Until the session has settled on a route — or has nothing left to
+        // read that could settle it (`Waits.swift`: five seconds by the clock
+        // was a guess about how busy the machine would be).
+        await Wait.until({ !session.view.loading }, orIdle: { session.isIdle })
         #expect(session.view.allowedRoute == .onboarding)
         #expect(!session.view.hasWallet)
         #expect(session.view.signOut == nil)

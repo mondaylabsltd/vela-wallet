@@ -56,6 +56,8 @@ final class CoreStore<View: Decodable> {
 
     /// Nothing in flight — see `CoreDriver.isIdle`.
     var isIdle: Bool { driver.isIdle }
+    /// How many effects are in flight.
+    var inFlight: Int { driver.inFlight }
 
     /// - Parameters:
     ///   - bridge: the uniffi object for this machine.

@@ -101,6 +101,41 @@ extension VelaHaptic {
 @MainActor
 func velaCopy(_ value: String, haptic: Bool = true) {
     guard !value.isEmpty else { return }
-    UIPasteboard.general.string = value
+    VelaClipboard.write(value)
     if haptic { VelaHaptic.select.play() }
+}
+
+/// Where a copy lands: the system pasteboard — or, inside a test's
+/// `recording` block, a list the test reads.
+@MainActor
+enum VelaClipboard {
+    static func write(_ value: String) {
+        #if DEBUG
+        if recorded != nil {
+            recorded?.append(value)
+            return
+        }
+        #endif
+        UIPasteboard.general.string = value
+    }
+
+    #if DEBUG
+    /// The test seam, `VelaHaptic.recording`'s twin.
+    ///
+    /// `UIPasteboard.general` is a synchronous XPC round trip to the
+    /// simulator's pasteboard daemon, on the main thread. On a loaded machine
+    /// that daemon stopped answering and one unit test held the main actor —
+    /// and with it every `@MainActor` test in the suite — for ten minutes
+    /// (2026-09-28, a spindump of the stalled run). What a copy test pins is
+    /// what was copied, not whether the daemon is awake.
+    private(set) static var recorded: [String]?
+
+    /// Runs `body` and returns every value it copied, in order.
+    static func recording(_ body: () throws -> Void) rethrows -> [String] {
+        recorded = []
+        defer { recorded = nil }
+        try body()
+        return recorded ?? []
+    }
+    #endif
 }

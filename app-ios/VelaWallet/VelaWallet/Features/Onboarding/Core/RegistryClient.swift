@@ -121,9 +121,29 @@ actor RegistryClient {
     /// A walk is a handful of rounds; this only stops a contract bug from spinning.
     private static let maxResolveRounds = 16
 
-    init(baseURL: String = RegistryClient.defaultURL, resolver: RegistryResolver? = nil) {
+    /// How a request reaches the index and comes back: one exchange, or the
+    /// error that says it never arrived.
+    typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
+    /// The app's: `URLSession.shared`, under the request's own timeout.
+    static let urlSession: Transport = { request in try await URLSession.shared.data(for: request) }
+
+    /// Injected, so a test answers the index from memory. It went through
+    /// `URLSession` with a stub protocol before, which kept URLSession's 15 s
+    /// idle timer under every assertion: on a CI run where the whole unit suite
+    /// was starved (a 0.1 s test taking 57 s), the stubbed index "timed out",
+    /// the walk fell back to the chain, and two tests failed on the clock
+    /// rather than on the code (2026-09-28).
+    private let transport: Transport
+
+    init(
+        baseURL: String = RegistryClient.defaultURL,
+        resolver: RegistryResolver? = nil,
+        transport: @escaping Transport = RegistryClient.urlSession
+    ) {
         self.baseURL = Self.normalize(baseURL)
         self.resolver = resolver
+        self.transport = transport
     }
 
     /// The service in force. Spec 075: the Trusted Signer page fetches its own
@@ -512,7 +532,7 @@ actor RegistryClient {
     func rawGet(_ path: String) async -> (status: Int, body: String)? {
         guard let url = URL(string: baseURL + path) else { return nil }
         let request = URLRequest(url: url, timeoutInterval: Self.readTimeout)
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
+        guard let (data, response) = try? await transport(request),
               let http = response as? HTTPURLResponse
         else { return nil }
         return (http.statusCode, String(decoding: data, as: UTF8.self))
@@ -553,7 +573,7 @@ actor RegistryClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: urlRequest)
+            (data, response) = try await transport(urlRequest)
         } catch {
             // The request never arrived. This is the ONE line that separates the
             // two failure worlds, and it is why the classification is delegated

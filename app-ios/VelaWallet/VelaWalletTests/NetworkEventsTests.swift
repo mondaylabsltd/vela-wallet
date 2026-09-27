@@ -24,7 +24,7 @@ import Testing
 @testable import VelaWallet
 
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(2)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct NetworkEventsTests {
 
     /// Which operations the machine asked for, in order, and of which URLs.
@@ -60,46 +60,13 @@ struct NetworkEventsTests {
         let settings = SettingsStore(
             store: shelf, accounts: accounts,
             pool: RpcPool(store: shelf, accounts: accounts),
-            networkPerform: { operation in
-                let type = operation["type"] as? String ?? ""
-                asked.types.append(type)
-                let url = operation["url"] as? String ?? ""
-                if !url.isEmpty { asked.urls.append(url) }
-                switch type {
-                case "probe_rpc":
-                    return CoreJSON.string([
-                        "type": "probed", "url": url,
-                        "reported_chain_id": reported(url) ?? NSNull(), "latency_ms": 12,
-                    ])
-                case "probe_reachable":
-                    return CoreJSON.string(["type": "reachable", "url": url, "ok": true, "latency_ms": 9])
-                case "fetch_service_health":
-                    return CoreJSON.string([
-                        "type": "service_health", "field": operation["field"] ?? "",
-                        "body": ["type": "failed"], "latency_ms": 0,
-                    ])
-                case "fetch_fiat_rates":
-                    return CoreJSON.string(["type": "fiat_rates", "body": ["type": "failed"], "latency_ms": 0])
-                case "fetch_chain_info":
-                    let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
-                    return CoreJSON.string([
-                        "type": "chain_info", "chain_id": chainId,
-                        "data": chains[chainId] ?? NSNull(),
-                    ])
-                case "fetch_search_index":
-                    return CoreJSON.string(["type": "search_index", "chains": []])
-                case "rpc_get_code":
-                    return CoreJSON.string([
-                        "type": "code", "url": url, "address": operation["address"] ?? "", "code": NSNull(),
-                    ])
-                case "rpc_call_p256":
-                    return CoreJSON.string(["type": "p256_call", "url": url, "result": NSNull()])
-                default:
-                    // Storage, the debounce, the pool and bundler flushes: the
-                    // real executor, so what is saved is what is on disk.
-                    return await executor.perform(operation)
+            networkPerform: NetworkAdminStub.perform(
+                executor: executor, reported: reported, chains: chains,
+                asked: { type, url in
+                    asked.types.append(type)
+                    if !url.isEmpty { asked.urls.append(url) }
                 }
-            }
+            )
         )
         settings.openNetworks()
         await settle(settings) { settings.isLoaded }

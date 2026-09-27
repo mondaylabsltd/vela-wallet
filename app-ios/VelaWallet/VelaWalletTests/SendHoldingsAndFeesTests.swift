@@ -43,7 +43,11 @@ final class StaggeredRelayPort: RelayPort {
     }
 }
 
+/// `timeLimit`: several waits here are for a port the executor calls, which no
+/// machine's idleness bounds (`Waits.swift`); one that never comes is a hang,
+/// and this is what reports it. Far above any real run, loaded or not.
 @MainActor
+@Suite(.timeLimit(.minutes(10)))
 struct SendHoldingsAndFeesTests {
     private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private let usdc = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
@@ -328,21 +332,26 @@ struct SendHoldingsAndFeesTests {
         let port = StaggeredRelayPort()
         scriptFeeReads(port)
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         fees.configureSpeed(preferred: "fast", number: "comma_dot")
         fees.speedStage(onForm: true)
         fees.toggleSpeed()
         let clock = ContinuousClock()
         let start = clock.now
         var settledAt: [String: Int] = [:]
+        let returned = Flag()
         let quote = Task {
-            await fees.quote(
+            let view = await fees.quote(
                 chainId: 100, account: golden, deployed: true, publicKeyAvailable: true,
                 calls: [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
                 feeToken: nil
             )
+            returned.set()
+            return view
         }
-        for _ in 0..<600 where settledAt.count < 3 {
+        // Until every row has settled, or nothing is left in flight that could
+        // settle one — never 600 × 5 ms (`Waits.swift`).
+        await Wait.until({
             for tier in ["fast", "standard", "slow"] where settledAt[tier] == nil {
                 if let view = fees.view(of: tier), !view.busy, view.fee != nil {
                     let elapsed = clock.now - start
@@ -350,8 +359,8 @@ struct SendHoldingsAndFeesTests {
                         + elapsed.components.attoseconds / 1_000_000_000_000_000)
                 }
             }
-            try? await Task.sleep(nanoseconds: 5_000_000)
-        }
+            return settledAt.count == 3
+        }, orIdle: { returned.isSet && fees.isIdle })
         _ = await quote.value
         print("[078] speed rows settled at \(settledAt) ms; relay calls \(port.counts)")
         #expect(settledAt.count == 3, "every speed priced: \(settledAt)")
@@ -374,7 +383,7 @@ struct SendHoldingsAndFeesTests {
         port.staggerMs = 0
         scriptFeeReads(port, nativeWei: "0x0", usdcUnits: "0x1dcd6500")
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         let send = try executor(relay: relay, fees: fees, balances: { nil })
         let answer = try CoreJSON.object(await send.perform([
             "type": "estimate_fee", "chain_id": 100, "account": golden,
@@ -393,9 +402,7 @@ struct SendHoldingsAndFeesTests {
 
         // A tap on the native chip is the person's own pick, priced as asked.
         fees.chooseFeeToken(nil)
-        for _ in 0..<200 where fees.view?.busy != false || fees.view?.feeToken != nil {
-            try? await Task.sleep(nanoseconds: 5_000_000)
-        }
+        await Wait.until({ fees.view?.busy == false && fees.view?.feeToken == nil }, orIdle: { fees.isIdle })
         #expect(fees.view?.feeToken == nil, "the tap is not overridden by the machine's pick")
     }
 
@@ -409,7 +416,7 @@ struct SendHoldingsAndFeesTests {
         port.staggerMs = 0
         scriptFeeReads(port)
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         let send = try executor(relay: relay, fees: fees, balances: { nil })
         let answer = try CoreJSON.object(await send.perform([
             "type": "prewarm_fees", "account": golden, "chain_ids": [100],
@@ -420,11 +427,11 @@ struct SendHoldingsAndFeesTests {
             "eth_getCode", "eth_gasPrice", "eth_getBlockByNumber", "eth_maxPriorityFeePerGas",
             "pimlico_getUserOperationGasPrice", "vela_getInBandGasQuote",
         ]
-        for _ in 0..<1000 where expected.contains(where: { port.counts[$0] == nil }) {
-            try? await Task.sleep(nanoseconds: 5_000_000)
-        }
-        // Let the last answers land in their caches.
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        // Every read made AND landed in its cache: the warm-up itself, awaited
+        // — it was a 5 s count of sleeps and then 150 ms "to let the last
+        // answers land", which a busy machine does not promise.
+        await send.prewarming?.value
+        #expect(expected.allSatisfy { port.counts[$0] != nil }, "not every read went out: \(port.counts)")
         let warmed = port.counts
         #expect(warmed["eth_getCode"] == 1)
         #expect(warmed["eth_gasPrice"] == 1)
@@ -452,7 +459,7 @@ struct SendHoldingsAndFeesTests {
     /// load".
     @Test func fetchTokensWaitsForTheFirstRound() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         var current: BalanceViewWire?
         var settled: Int?
         var opened: [String] = []
@@ -464,11 +471,13 @@ struct SendHoldingsAndFeesTests {
             round: { _ in settled }, open: { opened.append($0) }, ports: ports
         )
         let asked = Task { await send.perform(["type": "fetch_tokens", "address": golden]) }
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        // What the executor does, waited for as it happens — not 200 and 400
+        // ms of sleep that a loaded runner can outlast (`Waits.swift`).
+        await Wait.until { !opened.isEmpty }
         #expect(opened == [golden], "the dashboard is pointed at the account")
         // One chain has answered: shown, not answered.
         current = try balance([("xDAI", "0.5", 1.0)], refreshedAt: nil)
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await Wait.until { !partials.isEmpty }
         #expect(partials.count == 1)
         // The round settles.
         current = try balance([("xDAI", "0.5", 1.0), ("USDC", "3", 1.0)])
@@ -484,7 +493,7 @@ struct SendHoldingsAndFeesTests {
     /// whatever it holds.
     @Test func aLoadThatReachedNothingIsReadOnceMore() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         var current = try balance([], failed: [1, 100])
         var round: Int? = 1
         var refreshes = 0
@@ -494,9 +503,10 @@ struct SendHoldingsAndFeesTests {
             relay: relay, fees: fees, balances: { current }, round: { _ in round }, ports: ports
         )
         let asked = Task { await send.perform(["type": "fetch_tokens", "address": golden]) }
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await Wait.until { refreshes > 0 }
         #expect(refreshes == 1, "one forced re-read")
-        // The re-read is still out: nothing answered, nothing asked again.
+        // The re-read is still out: nothing answered, nothing asked again. (A
+        // window, not a wait: a busy machine can only make it pass for less.)
         try? await Task.sleep(nanoseconds: 300_000_000)
         #expect(refreshes == 1)
         current = try balance([("xDAI", "0.5", 1.0)], failed: [1])
@@ -510,7 +520,7 @@ struct SendHoldingsAndFeesTests {
     /// Only a SECOND load that reached nothing is "could not load".
     @Test func onlyASecondEmptyLoadAnswersNull() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         var current = try balance([], failed: [100])
         var round: Int? = 4
         var refreshes = 0
@@ -520,7 +530,7 @@ struct SendHoldingsAndFeesTests {
             relay: relay, fees: fees, balances: { current }, round: { _ in round }, ports: ports
         )
         let asked = Task { await send.perform(["type": "fetch_tokens", "address": golden]) }
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await Wait.until { refreshes > 0 }
         #expect(refreshes == 1)
         current = try balance([], failed: [100])
         round = 5
@@ -533,7 +543,7 @@ struct SendHoldingsAndFeesTests {
     /// once more, and a next load that still reached nothing is the refusal.
     @Test func anUnreachableDashboardIsReadOnceMoreThenRefused() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         var current = try balance([], refreshedAt: nil, failed: [100], unreachable: true)
         var round: Int?
         var refreshes = 0
@@ -543,7 +553,7 @@ struct SendHoldingsAndFeesTests {
             relay: relay, fees: fees, balances: { current }, round: { _ in round }, ports: ports
         )
         let asked = Task { await send.perform(["type": "fetch_tokens", "address": golden]) }
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        await Wait.until { refreshes > 0 }
         #expect(refreshes == 1)
         current = try balance([], failed: [100])
         round = 1
@@ -555,7 +565,7 @@ struct SendHoldingsAndFeesTests {
     /// failure, and nothing is read again.
     @Test func anEmptyWalletIsAnAnswerNotARetry() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         let empty = try balance([])
         var refreshes = 0
         var ports = SendExecutor.Ports()
@@ -571,22 +581,18 @@ struct SendHoldingsAndFeesTests {
     /// iOS wire.
     @Test func aNewRoundReachesThePickerAndTheForm() async throws {
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         let first = try balance([("xDAI", "0.5", 1.0)])
         let send = SendStore(executor: try executor(relay: relay, fees: fees, balances: { first }))
         send.open(accountId: "cred-0", address: golden, name: nil, displayCode: "USD", displayRate: 1, fiatDecimals: 2)
-        for _ in 0..<40 where send.view?.tokens.isEmpty ?? true {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        await Wait.until({ !(send.view?.tokens.isEmpty ?? true) }, orIdle: { send.isIdle })
         #expect(send.view?.tokens.count == 1)
 
         send.holdingsUpdated(try balance([("xDAI", "0.5", 1.0), ("USDC", "3", 1.0)]), round: 2)
         #expect(send.view?.tokens.count == 2, "the picker follows")
 
         send.selectToken(id: "chain-100_native_xDAI")
-        for _ in 0..<40 where send.view?.stage != .enterDetails {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        await Wait.until({ send.view?.stage == .enterDetails }, orIdle: { send.isIdle })
         send.holdingsUpdated(try balance([("xDAI", "0.75", 1.0), ("USDC", "3", 1.0)]), round: 3)
         #expect(send.view?.selectedToken?.balance == "0.75", "the form's balance follows")
         // The same round twice is handed over once; another account's never.
@@ -650,7 +656,7 @@ struct SendHoldingsAndFeesTests {
         // 12.345678 xDAI held; 500 USDC pays the fee.
         scriptFeeReads(port, nativeWei: "0xab54a8bb155ae000", usdcUnits: "0x1dcd6500")
         let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         let held = try balance([("xDAI", "12.345678", 1.0)])
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
@@ -673,11 +679,11 @@ struct SendHoldingsAndFeesTests {
             ports: SendExecutor.Ports()
         ))
         send.open(accountId: "cred-0", address: golden, name: nil, displayCode: "USD", displayRate: 1, fiatDecimals: 2)
-        for _ in 0..<80 where send.view?.tokens.isEmpty ?? true { try? await Task.sleep(nanoseconds: 25_000_000) }
+        await Wait.until({ !(send.view?.tokens.isEmpty ?? true) }, orIdle: { send.isIdle })
         send.selectToken(id: "chain-100_native_xDAI")
-        for _ in 0..<80 where send.view?.stage != .enterDetails { try? await Task.sleep(nanoseconds: 25_000_000) }
+        await Wait.until({ send.view?.stage == .enterDetails }, orIdle: { send.isIdle })
         send.tapMax()
-        for _ in 0..<200 where (send.view?.amount ?? "").isEmpty { try? await Task.sleep(nanoseconds: 25_000_000) }
+        await Wait.until({ !(send.view?.amount ?? "").isEmpty }, orIdle: { send.isIdle })
         let view = try #require(send.view)
         guard case .sendForm(let drawn) = WalletFlowFixtures.build(.sd2, loc: loc).base else {
             Issue.record("sd2 is not a send form")
@@ -743,17 +749,13 @@ struct SendHoldingsAndFeesTests {
         let loc = Loc(overrideTag: "en")
         let raw = "0.043790209243313861"
         let relay = RelayClient(port: StaggeredRelayPort(), now: { 0 }, retryDelayMs: 0)
-        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts(), settleDeadline: nil)
         let held = try balance([("xDAI", raw, 1.0)])
         let send = SendStore(executor: try executor(relay: relay, fees: fees, balances: { held }))
         send.open(accountId: "cred-0", address: golden, name: nil, displayCode: "USD", displayRate: 1, fiatDecimals: 2)
-        for _ in 0..<40 where send.view?.tokens.isEmpty ?? true {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        await Wait.until({ !(send.view?.tokens.isEmpty ?? true) }, orIdle: { send.isIdle })
         send.selectToken(id: "chain-100_native_xDAI")
-        for _ in 0..<40 where send.view?.stage != .enterDetails {
-            try? await Task.sleep(nanoseconds: 25_000_000)
-        }
+        await Wait.until({ send.view?.stage == .enterDetails }, orIdle: { send.isIdle })
         let view = try #require(send.view)
         guard case .sendForm(let drawn) = WalletFlowFixtures.build(.sd2, loc: loc).base else {
             Issue.record("sd2 is not a send form")

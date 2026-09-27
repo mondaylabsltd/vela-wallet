@@ -61,6 +61,11 @@ final class BrowserController {
     private var historyCore: CoreStore<BhistViewWire>!
     private var dbrCore: CoreStore<DbrViewWire>!
 
+    /// How many effects the in-app browser's machine has in flight — an
+    /// answer it is still waiting on (a chain read, a store write). What a test
+    /// waits on instead of a clock: `CoreDriver.isIdle`, counted.
+    var dbrInFlight: Int { dbrCore.inFlight }
+
     private let exploreExecutor: ExploreExecutor
     private let historyExecutor: BhistExecutor
     private let dbrExecutor: DbrExecutor

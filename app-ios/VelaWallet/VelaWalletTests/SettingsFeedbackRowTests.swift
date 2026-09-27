@@ -14,7 +14,10 @@ import Foundation
 import Testing
 @testable import VelaWallet
 
+/// `timeLimit`: some waits here are for a task the test itself started to
+/// reach a point (`Waits.swift`); one that never does is a hang, reported here.
 @MainActor
+@Suite(.timeLimit(.minutes(10)))
 struct SettingsFeedbackRowTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])
@@ -78,15 +81,20 @@ struct SettingsFeedbackRowTests {
     @Test func aSendOutlivesItsSheetAndResetNeverDropsIt() async throws {
         let endpoint = StubEndpoint()
         endpoint.answer = .status(200, #"{"number":42,"url":"https://github.com/o/r/issues/42","deduped":false}"#)
-        let slow: BugReport.Transport = { request in
-            try await Task.sleep(for: .milliseconds(150))
+        // Held open until the test lets it go. It was 150 ms of sleep, and on
+        // a busy machine the report could land before the reset below ran —
+        // the reset then met a finished report, not one on its way.
+        var release: CheckedContinuation<Void, Never>?
+        let held: BugReport.Transport = { request in
+            await withCheckedContinuation { release = $0 }
             return try await endpoint.transport(request)
         }
-        let sender = FeedbackSender(endpoint: "https://example.test/api/bug-report", transport: slow)
+        let sender = FeedbackSender(endpoint: "https://example.test/api/bug-report", transport: held)
         let sending = Task { await sender.send(what: "Send froze", steps: "", previewLines: ["Platform: iOS"], version: "0.9.4") }
-        while !sender.sending { await Task.yield() }
+        await Wait.until { release != nil }
         sender.reset()
         #expect(sender.sending, "reset dropped a report on its way")
+        release?.resume()
         await sending.value
         #expect(sender.state == .filed(number: 42, url: "https://github.com/o/r/issues/42", deduped: false, screenshotsDropped: 0))
 

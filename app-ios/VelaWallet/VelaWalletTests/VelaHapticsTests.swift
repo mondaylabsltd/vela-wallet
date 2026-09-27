@@ -31,16 +31,24 @@ struct VelaHapticsTests {
         #expect(past == [.detent])
     }
 
+    /// Read through `VelaClipboard.recording`, not `UIPasteboard.general`: the
+    /// real pasteboard is an XPC call to a simulator daemon, and one that
+    /// stopped answering stalled the whole suite for ten minutes (2026-09-28).
     @Test func aCopyIsOneSelectAndPutsTheValueOnTheClipboard() {
-        let played = VelaHaptic.recording { velaCopy("0x14fB1f0000000000000000000000000000D1eA5c") }
+        var copied: [String] = []
+        let played = VelaHaptic.recording {
+            copied = VelaClipboard.recording { velaCopy("0x14fB1f0000000000000000000000000000D1eA5c") }
+        }
         #expect(played == [.select])
-        #expect(UIPasteboard.general.string == "0x14fB1f0000000000000000000000000000D1eA5c")
+        #expect(copied == ["0x14fB1f0000000000000000000000000000D1eA5c"])
     }
 
     /// Nothing to copy is not a copy: no tick for an empty clipboard write.
     @Test func copyingNothingPlaysNothing() {
-        let played = VelaHaptic.recording { velaCopy("") }
+        var copied: [String] = []
+        let played = VelaHaptic.recording { copied = VelaClipboard.recording { velaCopy("") } }
         #expect(played.isEmpty)
+        #expect(copied.isEmpty)
     }
 
     /// Spec 043's `haptic { kind }`: money left, or a refusal.

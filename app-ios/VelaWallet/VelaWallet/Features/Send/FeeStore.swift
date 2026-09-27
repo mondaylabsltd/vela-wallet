@@ -134,6 +134,13 @@ final class FeeStore {
     /// previews follow it.
     private var askGeneration = 0
 
+    /// No session has an effect in flight — the one in force, every speed
+    /// preview, the speed core (`CoreDriver.isIdle`). What a test waits on
+    /// instead of a clock.
+    var isIdle: Bool {
+        inForce.core.isIdle && previews.allSatisfy { $0.core.isIdle } && speedCore.isIdle
+    }
+
     /// Who is waiting for the quote in flight, and for which attempt.
     private var waiting: [(generation: Int, resume: (FeeViewWire?) -> Void)] = []
     private var generation = 0
@@ -141,15 +148,22 @@ final class FeeStore {
     private var requested = false
     /// How long a quote may take before the shell calls it a failure. Generous:
     /// the core's own TTL is 30 s and a cold pool sweeps three passes.
-    private static let settleDeadlineMs = 45_000
+    nonisolated static let settleDeadline: Duration = .seconds(45)
+    /// The deadline in force. `nil` — a test's, whose relay is scripted and
+    /// answers or does not by design — sets no clock under the quote: on a
+    /// starved CI runner a scripted quote could otherwise outlast 45 s and be
+    /// reported as a failure the code never had (`Waits.swift`).
+    private let deadline: Duration?
 
     init(
         relay: RelayClient,
         accounts: UserOpSpine.AccountPort,
-        measureCall: @escaping FeeExecutor.MeasureCall = { _, _, _, _, _ in nil }
+        measureCall: @escaping FeeExecutor.MeasureCall = { _, _, _, _, _ in nil },
+        settleDeadline: Duration? = FeeStore.settleDeadline
     ) {
         self.executor = FeeExecutor(relay: relay, accounts: accounts, measureCall: measureCall)
         self.relay = relay
+        self.deadline = settleDeadline
         self.inForce = newSession()
         self.speedCore = CoreStore(
             bridge: FeeSpeedCore(),
@@ -237,15 +251,15 @@ final class FeeStore {
         // `await` behind it holds `estimate_fee` open forever — which holds the
         // confirm gate shut forever. This is the deadline that makes a hung
         // quote a FAILURE the core can act on.
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.settleDeadlineMs) * 1_000_000)
+        if let deadline { Task { [weak self] in
+            try? await Task.sleep(for: deadline)
             guard let self, self.generation == mine, self.requested else { return }
-            print("[vela-wallet] fee_policy: quote did not settle in \(Self.settleDeadlineMs)ms")
+            print("[vela-wallet] fee_policy: quote did not settle in \(deadline)")
             self.requested = false
             let waiting = self.waiting
             self.waiting.removeAll()
             for entry in waiting { entry.resume(nil) }
-        }
+        } }
         let ask = Ask(
             chainId: chainId, account: account, deployed: deployed,
             publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "fast",

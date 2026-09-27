@@ -16,7 +16,10 @@ import UIKit
 import UniformTypeIdentifiers
 @testable import VelaWallet
 
+/// `timeLimit`: some waits here are for a task the test itself started to
+/// reach a point (`Waits.swift`); one that never does is a hang, reported here.
 @MainActor
+@Suite(.timeLimit(.minutes(10)))
 struct FeedbackScreenshotTests {
     private let stubURL = "https://example.test/api/bug-report"
 
@@ -311,7 +314,8 @@ struct FeedbackScreenshotTests {
         #expect(sender.shots.count == 2 && sender.shots[1].prepared == nil, "the second tile is processing")
 
         let sending = Task { await sender.send(what: "Froze", steps: "", previewLines: [], version: "1") }
-        for _ in 0..<20 { await Task.yield() }
+        // Send has started — the state it sets, not 20 yields (`Waits.swift`).
+        await Wait.until { sender.sending }
         #expect(sender.sending, "busy while the tile finishes")
         #expect(stub.requests.isEmpty, "nothing leaves before every tile is ready")
 
@@ -335,7 +339,7 @@ struct FeedbackScreenshotTests {
         sender.attach([{ await withCheckedContinuation { release = $0 }; return Data("not an image".utf8) }])
         while release == nil { await Task.yield() }
         let sending = Task { await sender.send(what: "Froze", steps: "", previewLines: [], version: "1") }
-        for _ in 0..<20 { await Task.yield() }
+        await Wait.until { sender.sending }
         #expect(stub.requests.isEmpty)
         release?.resume()
         await sending.value

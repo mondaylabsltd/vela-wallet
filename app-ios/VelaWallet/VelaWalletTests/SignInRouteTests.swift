@@ -221,7 +221,7 @@ struct SignInRouteTests {
         let store = AccountStore(defaults: UserDefaults(suiteName: "vela.tests.signin.\(UUID().uuidString)")!)
         let deps = CompletionRecorder()
         let onboarding = OnboardingExecutor(
-            passkey: PasskeyExecutor(), registry: RegistryClient(baseURL: "https://r.test"),
+            passkey: PasskeyExecutor(), registry: RegistryClient(baseURL: "https://r.test", transport: IndexScript.unreachable),
             store: store, deps: deps
         )
         let session = SessionExecutor(store: store)
@@ -468,7 +468,7 @@ struct SignInRouteTests {
     ) async throws -> (answered: [String], mode: [String: Any]?) {
         let deps = CompletionRecorder()
         let executor = OnboardingExecutor(
-            passkey: PasskeyExecutor(), registry: RegistryClient(baseURL: "https://r.test"),
+            passkey: PasskeyExecutor(), registry: RegistryClient(baseURL: "https://r.test", transport: IndexScript.unreachable),
             store: store, deps: deps
         )
         let login = LoginCore()
