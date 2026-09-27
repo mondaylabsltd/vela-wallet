@@ -208,10 +208,14 @@ struct ShareCardModel {
     var name: String
     var lines: [String]
     var networkNote: String
+    /// The network the address may be paid on. Its `logoURLs` are what the
+    /// save fetches for the code's centre; without them, or when the fetch
+    /// fails, the lettered disc (ticker on `badgeColor`) stands in.
     var networkMark: TokenMarkModel
     var identiconSeed: String
     let wordmark: String
-    /// The real code's modules. `nil` keeps the drawn demo pattern, which is
+    /// The real code's modules, at level H (`QrCode.shareModules`) — the logo
+    /// plate covers part of it. `nil` keeps the drawn demo pattern, which is
     /// what the gallery renders — see `QrCode`.
     var modules: [[Bool]]?
 }

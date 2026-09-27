@@ -75,11 +75,93 @@ enum WalletFlowGeometry {
     static let scanBracketArm: CGFloat = 28
     static let scanBracketStroke: CGFloat = 3
     static let scanToolDisc: CGFloat = Tokens.Control.md
+}
 
-    /// The share card (R4) — a render product saved to the photo library, so
-    /// its geometry is fixed rather than responsive.
-    static let shareCardWidth: CGFloat = 480
-    static let shareCardMark: CGFloat = 60
+/// The share card (R4) — the picture 保存图片 puts in the album, drawn to the
+/// geometry every platform copies by hand from the web's `SHARE_CARD`
+/// (`app-web/…/flows/share-image.ts`, 2026-09-27: the WeChat Pay collection
+/// card the founder holds it against). Points here are the web's CSS px at 1×.
+///
+/// A render product, not a screen: the geometry is fixed rather than
+/// responsive, the text does not follow 设置 → 字号 or Dynamic Type, and the
+/// colours do not follow the appearance — the image is saved once and viewed
+/// anywhere. Only the HEIGHT moves, with the headline's line count.
+enum ShareCardGeometry {
+    static let width: CGFloat = 480
+    static let top: CGFloat = 52
+    /// Headline: one line at 32 when it fits, shrinking to 26, then two lines.
+    static let headlineSize: CGFloat = 32
+    static let headlineMinSize: CGFloat = 26
+    static let headlineLeading: CGFloat = 1.25
+    /// Widest a line of text on the orange may run.
+    static let textWidth: CGFloat = 400
+    static let noteGap: CGFloat = 10
+    static let noteSize: CGFloat = 15
+    static let noteMinSize: CGFloat = 11
+    static let noteLine: CGFloat = 20
+    static let sheetGap: CGFloat = 28
+    static let sheetWidth: CGFloat = 320
+    static let sheetRadius: CGFloat = 20
+    static let sheetPad: CGFloat = 48
+    static let sheetPadBottom: CGFloat = 40
+    static let qr: CGFloat = 224
+    /// The white plate the network logo sits on, in the code's centre.
+    static let plate: CGFloat = 60
+    static let plateRadius: CGFloat = 16
+    static let logo: CGFloat = 44
+    /// The hairline round a fetched logo, so a white one does not dissolve
+    /// into the plate.
+    static let logoRing: CGFloat = 1
+    static let logoRingOpacity: Double = 0.08
+    /// The lettered disc that stands in when no logo could be fetched.
+    static let tickerSize: CGFloat = 14
+    static let identityGap: CGFloat = 26
+    static let identicon: CGFloat = 48
+    static let identityTextGap: CGFloat = 12
+    static let nameSize: CGFloat = 17
+    static let nameLine: CGFloat = 22
+    static let addressSize: CGFloat = 12.5
+    static let addressLine: CGFloat = 17
+    static let addressOpacity: Double = 0.5
+    static let nameAddressGap: CGFloat = 3
+    /// Sheet bottom to where the curve leaves the card's edges.
+    static let curveGap: CGFloat = 52
+    /// How far the curve dips at the centre.
+    static let curveDepth: CGFloat = 32
+    /// The curve's lowest point to the card's bottom.
+    static let foot: CGFloat = 112
+    static let icon: CGFloat = 52
+    static let iconGap: CGFloat = 12
+    static let wordmarkSize: CGFloat = 32
+    /// Rasterised at 2× whatever the phone's own scale, so every device saves
+    /// the same 960-pixel-wide picture the web does.
+    static let scale: CGFloat = 2
+    /// Where a line of text's baseline sits below the centre of its line, as a
+    /// share of its size — the web's `baseline()`, so the two agree on where
+    /// every line lands.
+    static let baselineDrop: CGFloat = 0.35
+
+    /// The card's fixed colours: paper, ink, and the field — the APP ICON's
+    /// own orange (founder, 2026-08-15: #F46D50, not the UI accent).
+    static let paper = TokenColor(argb: 0xFFFFFFFF).color
+    static let ink = TokenColor(argb: 0xFF1A1A18).color
+    static let field = AppIconArt.plate
+
+    /// The canonical app icon, `docs/design/icon/app-icon.svg` — the picture
+    /// the home screen shows, NOT the in-app sailboat (`VelaMark`). The card
+    /// carries the app's identity away from the app, so it carries the icon
+    /// a person would find on the phone.
+    enum AppIconArt {
+        static let viewBox: CGFloat = 68
+        /// The plate: x 1, y 1, 66 across, corners 18.
+        static let plateInset: CGFloat = 1
+        static let plateSize: CGFloat = 66
+        static let plateRadius: CGFloat = 18
+        static let plate = TokenColor(argb: 0xFFF46D50).color
+        static let mainSail = TokenColor(argb: 0xFFFFF3EC).color
+        static let jib = TokenColor(argb: 0xFFFFC6B0).color
+        static let hull = TokenColor(argb: 0xFF5A4037).color
+    }
 }
 
 /// The feedback sheet's screenshots and its success state (2026-09-26, v2

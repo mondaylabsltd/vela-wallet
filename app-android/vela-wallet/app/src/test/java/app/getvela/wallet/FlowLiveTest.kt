@@ -190,6 +190,27 @@ class FlowLiveTest {
         }
     }
 
+    /**
+     * 保存图片 (2026-09-27): the saved card's centre is the NETWORK's logo and,
+     * when that cannot be fetched, the network's own letters — not the
+     * drawn fixture's ETH disc on every chain, and not a token's symbol.
+     */
+    @Test
+    fun `the share card carries the network's mark and this address`() {
+        Marks.base = "https://data.example/"
+        try {
+            val drawn = (FlowFixtures.build(FlowState.R4, strings).base as FlowBase.Share).model
+            val card = FlowLive.shareCard(drawn, mine, "Me", "Gnosis", strings, chainId = 100, nativeSymbol = "XDAI")
+            assertEquals(mine, card.code)
+            assertEquals("https://data.example/chainlogos/eip155-100.png", card.chainLogoUrl)
+            assertEquals("XDAI", card.networkMark.ticker)
+            assertEquals(WalletLive.chainMark(100, "XDAI").badgeColor, card.networkMark.badgeColor)
+            assertEquals(mine.take(21) to mine.drop(21), card.lines)
+        } finally {
+            Marks.base = ""
+        }
+    }
+
     /** No chain-data endpoint: the lettered disc is the whole mark, not a blank circle. */
     @Test
     fun `without an endpoint the centre mark falls back to its letters`() {

@@ -30,7 +30,25 @@ enum QrCode {
     /// demo pattern is NOT a fallback here. A code that looks scannable and is
     /// not is the failure this file exists to prevent.
     static func modules(_ text: String) -> [[Bool]]? {
-        guard !text.isEmpty, let matrix = cableQrMatrix(text: text) else { return nil }
+        guard !text.isEmpty else { return nil }
+        return grid(cableQrMatrix(text: text))
+    }
+
+    /// The saved share card's code: the same encoder at error-correction
+    /// level H (`shareCardQrMatrix`).
+    ///
+    /// The card puts the network's logo on a plate in the middle of the code,
+    /// and the picture is recompressed by every chat app it passes through;
+    /// level H recovers 30% where the screen's level M recovers 15%. A plain
+    /// address comes out 37 modules across instead of 29. The receive SCREEN
+    /// keeps `modules` — a code on a lit phone is read straight off the glass.
+    static func shareModules(_ text: String) -> [[Bool]]? {
+        guard !text.isEmpty else { return nil }
+        return grid(shareCardQrMatrix(text: text))
+    }
+
+    private static func grid(_ matrix: QrMatrix?) -> [[Bool]]? {
+        guard let matrix else { return nil }
         let width = Int(matrix.width)
         guard width > 0, matrix.modules.count == width * width else { return nil }
         return (0..<width).map { row in

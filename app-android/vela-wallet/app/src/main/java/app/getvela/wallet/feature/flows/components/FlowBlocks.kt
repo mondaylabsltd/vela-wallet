@@ -250,9 +250,10 @@ fun QrCard(
  * Three standard finder squares plus xorshift32-seeded noise. Identical on
  * every platform and every run, so screenshots diff cleanly. Denser than the
  * spec-015 placeholder because R2 draws the code large, where 21 modules read
- * as a chequerboard rather than a code.
+ * as a chequerboard rather than a code. The gallery's share card (R4) draws
+ * it too.
  */
-private const val QR_MODULES = 29
+internal const val QR_MODULES = 29
 private const val QR_SEED = 0xbeef
 
 private val QR_CELLS: Array<BooleanArray> by lazy {
@@ -279,7 +280,7 @@ private val QR_CELLS: Array<BooleanArray> by lazy {
     }
 }
 
-private fun qrCell(r: Int, c: Int): Boolean = QR_CELLS[r][c]
+internal fun qrCell(r: Int, c: Int): Boolean = QR_CELLS[r][c]
 
 /**
  * SD2's amount (component 8): the number, big and centred, with its fiat

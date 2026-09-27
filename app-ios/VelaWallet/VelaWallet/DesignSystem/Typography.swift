@@ -7,6 +7,7 @@
 //  through to the system face — DV-003, matching the shipped RN app.
 //
 
+import CoreText
 import SwiftUI
 
 /// Bundled Plus Jakarta Sans PostScript names (see DesignSystem/Fonts/).
@@ -180,6 +181,75 @@ enum Typography {
 
     /// Middle-truncated address — system monospaced, text.t11.
     static let monoAddress = MonoTypeRole(size: Tokens.TextSize.t11, weight: .regular, relativeTo: .caption)
+}
+
+/// The share card's faces (R4, `ShareCardGeometry`).
+///
+/// Not type roles, on purpose. The card is a picture drawn at fixed sizes —
+/// it must not grow with Dynamic Type or 设置 → 字号 — and its lines are
+/// MEASURED before they are drawn: the headline shrinks to fit, the name is
+/// cut to its room, the account row centres on its own width. So each face is
+/// a `UIFont`, measured by CoreText and drawn from CoreText's own runs
+/// (`text`), and the width a line was measured at is the width it is drawn at.
+enum ShareCardType {
+    enum Weight { case medium, bold }
+
+    /// Jakarta at `weight`, and everything Jakarta has no glyph for — CJK,
+    /// Cyrillic, Greek — from the system face at the SAME weight.
+    ///
+    /// Left to the default fallback, a medium line's Chinese and Russian came
+    /// out regular beside medium Latin (the network note, measured against the
+    /// web's card). Cascading to the weight-matched system font gives SF
+    /// Medium/Bold for Cyrillic and PingFang Medium/Semibold for Chinese — the
+    /// faces the web's card falls back to.
+    static func sans(_ size: CGFloat, _ weight: Weight) -> UIFont {
+        let name = weight == .bold ? FontName.bold : FontName.medium
+        let system = UIFont.systemFont(ofSize: size, weight: weight == .bold ? .bold : .medium)
+        guard let face = UIFont(name: name, size: size) else { return system }
+        let cascading = face.fontDescriptor.addingAttributes([.cascadeList: [system.fontDescriptor]])
+        return UIFont(descriptor: cascading, size: size)
+    }
+
+    /// The system mono face, as the app's own address lines use.
+    static func mono(_ size: CGFloat) -> UIFont {
+        .monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
+    /// How wide `text` draws in `font`, on one line.
+    static func width(_ text: String, _ font: UIFont) -> CGFloat {
+        (text as NSString).size(withAttributes: [.font: font]).width
+    }
+
+    /// `text` in `font` as a `Text` — each run in the face CoreText itself
+    /// picked for it, so the line drawn is the line `width` measured.
+    ///
+    /// SwiftUI does its own fallback and ignores a font's cascade list: handed
+    /// Jakarta Medium, it set the Chinese and the Russian of the network note
+    /// in the REGULAR system face. Resolved here, every run names its face.
+    static func text(_ text: String, _ font: UIFont) -> Text {
+        let line = CTLineCreateWithAttributedString(
+            NSAttributedString(string: text, attributes: [.font: font]))
+        // In the string's order, not the line's: a right-to-left name's runs
+        // come back in visual order, and SwiftUI lays the bidi out itself.
+        let runs = (CTLineGetGlyphRuns(line) as? [CTRun] ?? [])
+            .sorted { CTRunGetStringRange($0).location < CTRunGetStringRange($1).location }
+        let characters = text as NSString
+        var drawn = AttributedString()
+        for run in runs {
+            let range = CTRunGetStringRange(run)
+            var piece = AttributedString(characters.substring(
+                with: NSRange(location: range.location, length: range.length)))
+            let attributes = CTRunGetAttributes(run) as NSDictionary
+            if let face = attributes[kCTFontAttributeName],
+               CFGetTypeID(face as CFTypeRef) == CTFontGetTypeID() {
+                piece.font = Font(face as! CTFont)
+            } else {
+                piece.font = Font(font as CTFont)
+            }
+            drawn += piece
+        }
+        return runs.isEmpty ? Text(verbatim: text).font(Font(font as CTFont)) : Text(drawn)
+    }
 }
 
 /// A monospaced role (addresses, seeds). Uses the system mono face — the

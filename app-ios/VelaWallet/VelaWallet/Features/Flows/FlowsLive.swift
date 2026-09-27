@@ -485,8 +485,9 @@ enum FlowsLive {
         return live
     }
 
-    /// The card 保存图片 produces: the person's own address, their identicon in
-    /// the middle of a code that encodes it, and the network it is for.
+    /// The card 保存图片 produces: the person's own address, a code that
+    /// encodes it with the network's logo in its middle, and beside the
+    /// address the identicon derived from it.
     ///
     /// This one leaves the app. A card built from the fixture identity is
     /// somebody else's address in a stranger's chat, which is the receive
@@ -504,14 +505,18 @@ enum FlowsLive {
         live.name = name.isEmpty ? model.name : name
         live.lines = AddressText.lines(address)
         live.identiconSeed = address
-        live.modules = QrCode.modules(address)
+        // Level H, not the screen's M: the network's logo sits on the code.
+        live.modules = QrCode.shareModules(address)
         if let chain {
             live.networkNote = loc.t("receive.shareCardNetworkNote",
                                      vars: ["network": chain.displayName])
-            live.networkMark = TokenMarkModel(
-                ticker: chain.nativeSymbol,
-                badgeColor: SettingsLive.mark(chainId: chain.chainId,
-                                              name: chain.displayName).color
+            // The NETWORK's own logo (not its coin's — rule 2 is about coins),
+            // the one the receive screen puts in the middle of its code.
+            live.networkMark = .chain(
+                chainId: chain.chainId,
+                symbol: chain.nativeSymbol,
+                color: SettingsLive.mark(chainId: chain.chainId,
+                                         name: chain.displayName).color
             )
         }
         return live

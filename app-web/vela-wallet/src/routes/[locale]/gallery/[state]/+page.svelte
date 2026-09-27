@@ -68,7 +68,9 @@
 {:else if data.kind === 'flow-mobile'}
 	<div class="stage">
 		{#if bare}
-			<FlowsMobile model={data.model} />
+			<!-- Sized to the card itself: the flows host takes its width from
+			     its parent, and a centring stage gives it none. -->
+			<div class="bare"><FlowsMobile model={data.model} /></div>
 		{:else}
 			<div class="frame"><FlowsMobile model={data.model} /></div>
 		{/if}
@@ -130,6 +132,10 @@
 		justify-content: center;
 		padding-block: var(--space-3xl);
 		background: var(--color-bg-sunken);
+	}
+
+	.bare {
+		width: var(--layout-shareCardW);
 	}
 
 	.frame {

@@ -12957,6 +12957,24 @@ public func qrMatrix(text: String) -> QrMatrix?  {
 })
 }
 /**
+ * The saved receive share card's code: [`qr_matrix`] at error-correction
+ * level H.
+ *
+ * The card puts the network's logo on a plate in the code's centre (about 7%
+ * of its area) and the picture is recompressed by every chat app it passes
+ * through; level H recovers 30%. A plain address comes out 37 modules across
+ * instead of 29. The web (`encodeShareQr`) and the desktop (`share_card.rs`)
+ * encode the card's code at the same level.
+ */
+public func shareCardQrMatrix(text: String) -> QrMatrix?  {
+    return try!  FfiConverterOptionTypeQrMatrix.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_share_card_qr_matrix(
+        FfiConverterString.lower(text),uniffiCallStatus
+    )
+})
+}
+/**
  * `balanceOf(address)` calldata — what an `aggregate3` batch is almost always
  * made of.
  */
@@ -13718,6 +13736,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_qr_matrix() != 12762) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_share_card_qr_matrix() != 49895) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_erc20_encode_balance_of() != 6291) {

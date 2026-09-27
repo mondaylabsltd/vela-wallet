@@ -165,9 +165,13 @@ data class ShareCardModel(
     val networkMark: TokenMarkModel,
     val identiconSeed: String,
     val wordmark: String,
-    /** Spec 048: what the code encodes — the address; blank draws the gallery's placeholder pattern. */
+    /** Spec 048: what the code encodes — the address, at level H; blank draws the gallery's placeholder pattern. */
     val code: String = "",
-    /** Spec 048: the network pill's logo from the chain-data endpoint; the lettered disc is the fallback. */
+    /**
+     * The network's logo from the chain-data endpoint, drawn on a plate in the
+     * code's centre; the capture fetches it before it draws. `null`, or a logo
+     * that does not arrive in time, draws [networkMark]'s lettered disc.
+     */
     val chainLogoUrl: String? = null,
 )
 

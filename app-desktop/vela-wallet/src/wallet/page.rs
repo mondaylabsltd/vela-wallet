@@ -342,13 +342,15 @@ struct ShareCardFacts {
     network_note: String,
     network_ticker: String,
     network_tint: gpui::Hsla,
+    /// The chain-data endpoint's logo for the network, fetched at save time.
+    network_logo_url: Option<String>,
     seed: String,
     wordmark: String,
     file_name: String,
 }
 
 impl ShareCardFacts {
-    fn as_card(&self) -> crate::flows::share_card::ShareCard<'_> {
+    fn as_card<'a>(&'a self, logo: Option<&'a [u8]>) -> crate::flows::share_card::ShareCard<'a> {
         crate::flows::share_card::ShareCard {
             headline: &self.headline,
             payload: &self.payload,
@@ -357,6 +359,7 @@ impl ShareCardFacts {
             network_note: &self.network_note,
             network_ticker: &self.network_ticker,
             network_tint: self.network_tint,
+            network_logo: logo,
             seed: &self.seed,
             wordmark: &self.wordmark,
         }
@@ -1262,18 +1265,15 @@ impl WalletPage {
                 "network",
                 &network,
             ),
-            // "Vela Wallet", as the web's card signs itself.
-            // A token's own code marks the card with the token (the web's
-            // `networkMark: balanceTokenMark(token)`); a network's, the network.
-            network_ticker: match (self.flows.last(), self.receive_token.as_ref()) {
-                (Some(FlowPanel::Dr3), Some(token)) => &token.symbol,
-                _ => &network,
-            }
-            .chars()
-            .take(3)
-            .collect::<String>()
-            .to_uppercase(),
+            // The NETWORK's mark in the code's centre, token or not: the card
+            // says which network may pay, and one card serves every asset on
+            // it (founder, 2026-08-15). The letters only show when the logo
+            // cannot be fetched.
+            network_ticker: network.chars().take(3).collect::<String>().to_uppercase(),
             network_tint: flows_live::chain_tint(self.receive_chain),
+            network_logo_url: crate::marks::chain_logo_url(self.receive_chain)
+                .map(|url| url.to_string()),
+            // "Vela Wallet", as the web's card signs itself.
             seed: identity.address.to_string(),
             wordmark: "Vela Wallet".to_owned(),
             // The address is in the NAME as well as the picture: a folder of
@@ -1289,24 +1289,43 @@ impl WalletPage {
     ///
     /// The picture is built from what the screen is already showing, so the
     /// saved card and the open screen cannot disagree about an address. The
-    /// dialog opens in the home directory for the reason the contacts export
-    /// does: `.` is wherever the binary was launched from, which on a
-    /// double-click is nowhere useful.
+    /// network's logo is part of the card, so it is fetched here — off the
+    /// UI thread, while the dialog is open, with a short timeout after which
+    /// the lettered disc stands in. A card that fails to render writes
+    /// nothing. The dialog opens in the home directory for the reason the
+    /// contacts export does: `.` is wherever the binary was launched from,
+    /// which on a double-click is nowhere useful. `VELA_EXPORT_DIR=<dir>`
+    /// answers the dialog with the card's filename in that folder, as the
+    /// contacts export does.
     fn save_share_card(&mut self, cx: &mut Context<Self>) {
         let Some(model) = self.receive_share_card(cx) else {
             return;
         };
-        let theme = Theme::of(self.theme_mode());
-        let png = crate::flows::share_card::render_png(&model.as_card(), &theme);
-        // Composed BEFORE the dialog: a picture that fails to render must not
-        // ask somebody where to put it first.
-        let Some(png) = png else {
-            return;
-        };
-        let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let target = cx.prompt_for_new_path(&directory, Some(&model.file_name));
+        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+            .map(|dir| std::path::PathBuf::from(dir).join(&model.file_name));
+        let target = pinned.is_none().then(|| {
+            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            cx.prompt_for_new_path(&directory, Some(&model.file_name))
+        });
+        let png = cx.background_executor().spawn(async move {
+            let logo = model
+                .network_logo_url
+                .as_deref()
+                .and_then(crate::flows::share_card::fetch_logo);
+            crate::flows::share_card::render_png(&model.as_card(logo.as_deref()))
+        });
         cx.spawn(async move |_, _| {
-            let Ok(Ok(Some(path))) = target.await else {
+            let path = match (pinned, target) {
+                (Some(path), _) => path,
+                (None, Some(target)) => {
+                    let Ok(Ok(Some(path))) = target.await else {
+                        return;
+                    };
+                    path
+                }
+                (None, None) => return,
+            };
+            let Some(png) = png.await else {
                 return;
             };
             // Best effort, like every other write in this shell: a refused
