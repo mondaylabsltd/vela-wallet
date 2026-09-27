@@ -99,7 +99,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 7px;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-note));
 		color: var(--text-secondary);
 		transition: color 0.15s ease;
 	}

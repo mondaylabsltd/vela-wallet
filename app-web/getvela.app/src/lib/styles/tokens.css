@@ -90,6 +90,28 @@
 	--font-serif: var(--font-serif-latin);
 	--font-mono:
 		ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+
+	/* ── Type floors ──
+	   A phone is read at arm's length, not across a desk: text sized for a
+	   desktop page (0.8–0.92rem) reads at 13–14px there, and readers were
+	   pinching to zoom. Every size under 1rem names the role it plays —
+	   `font-size: max(0.88rem, var(--floor-read))` — and the floor for that
+	   role is zero on a wide window, so the desktop page is exactly as
+	   designed, and the phone page never goes below it. */
+	--floor-read: 0px; /* running text: paragraphs, answers, inputs */
+	--floor-note: 0px; /* secondary lines: notes, captions, table cells, links */
+	--floor-meta: 0px; /* metadata: dates, versions, addresses, small controls */
+	--floor-label: 0px; /* uppercase labels, badges, tags */
+}
+
+@media (max-width: 768px) {
+	:root {
+		/* 16px is also the size under which iOS Safari zooms into a focused input. */
+		--floor-read: 1rem;
+		--floor-note: 0.9375rem;
+		--floor-meta: 0.875rem;
+		--floor-label: 0.75rem;
+	}
 }
 
 /* Chinese, Japanese and Korean pages set headings in each platform's own CJK

@@ -178,7 +178,7 @@
 	}
 	.value-card p {
 		color: var(--text-secondary);
-		font-size: 0.96rem;
+		font-size: max(0.96rem, var(--floor-read));
 		line-height: 1.6;
 	}
 
@@ -222,13 +222,13 @@
 	}
 	.role {
 		color: var(--accent);
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-meta));
 		font-weight: 500;
 		margin: 2px 0 8px;
 	}
 	.bio {
 		color: var(--text-secondary);
-		font-size: 0.96rem;
+		font-size: max(0.96rem, var(--floor-read));
 		line-height: 1.6;
 	}
 	.member-links {
@@ -237,7 +237,7 @@
 		margin-top: 12px;
 	}
 	.member-links a {
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		color: var(--text-secondary);
 		border-bottom: 1px solid var(--border);
 		padding-bottom: 1px;

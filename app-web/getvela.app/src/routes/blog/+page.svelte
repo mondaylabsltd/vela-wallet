@@ -94,7 +94,7 @@
 	.rss {
 		display: inline-block;
 		margin-top: 16px;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		color: var(--text-secondary);
 		border-bottom: 1px solid var(--border);
 		padding-bottom: 1px;
@@ -130,7 +130,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 0.82rem;
+		font-size: max(0.82rem, var(--floor-meta));
 		color: var(--text-muted);
 	}
 	.card h2 {
@@ -142,7 +142,7 @@
 	}
 	.excerpt {
 		color: var(--text-secondary);
-		font-size: 0.98rem;
+		font-size: max(0.98rem, var(--floor-read));
 		line-height: 1.6;
 	}
 	.tags {
@@ -152,7 +152,7 @@
 		margin-top: 14px;
 	}
 	.tag {
-		font-size: 0.74rem;
+		font-size: max(0.74rem, var(--floor-label));
 		color: var(--text-secondary);
 		background: var(--bg-raised);
 		border: 1px solid var(--border);
@@ -162,7 +162,7 @@
 	.read {
 		display: inline-block;
 		margin-top: 16px;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-note));
 		font-weight: 600;
 		color: var(--accent);
 	}

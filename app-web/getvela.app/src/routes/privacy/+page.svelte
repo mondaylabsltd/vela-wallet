@@ -286,7 +286,7 @@
 	}
 	.updated {
 		color: var(--text-secondary);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		margin-bottom: 48px;
 	}
 
@@ -301,7 +301,7 @@
 	p {
 		color: var(--text-secondary);
 		line-height: 1.75;
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		margin-bottom: 12px;
 	}
 
@@ -314,7 +314,7 @@
 	}
 	li {
 		color: var(--text-secondary);
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		line-height: 1.7;
 		padding-left: 20px;
 		position: relative;

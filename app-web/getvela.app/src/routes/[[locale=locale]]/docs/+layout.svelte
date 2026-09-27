@@ -91,7 +91,7 @@
 		margin-bottom: 26px;
 	}
 	.group-title {
-		font-size: 0.72rem;
+		font-size: max(0.72rem, var(--floor-label));
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
 		color: var(--text-muted);
@@ -106,7 +106,7 @@
 		padding: 6px 12px;
 		margin: 1px 0;
 		border-radius: var(--radius-sm);
-		font-size: 0.92rem;
+		font-size: max(0.92rem, var(--floor-read));
 		color: var(--text-secondary);
 		transition:
 			color 0.15s ease,
@@ -136,7 +136,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		color: var(--text);
-		font-size: 0.9rem;
+		font-size: max(0.9rem, var(--floor-note));
 		font-weight: 500;
 		cursor: pointer;
 	}

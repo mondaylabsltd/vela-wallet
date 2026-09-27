@@ -128,7 +128,7 @@
 		border-radius: var(--radius);
 		border: 1px solid var(--border);
 		overflow-x: auto;
-		font-size: 0.86rem;
+		font-size: max(0.86rem, var(--floor-meta));
 		line-height: 1.6;
 		tab-size: 2;
 		-webkit-overflow-scrolling: touch;
@@ -162,7 +162,7 @@
 		border-collapse: collapse;
 		margin: 1.5em 0;
 		font-family: var(--font-sans);
-		font-size: 0.92rem;
+		font-size: max(0.92rem, var(--floor-note));
 		line-height: 1.6;
 		display: block;
 		overflow-x: auto;

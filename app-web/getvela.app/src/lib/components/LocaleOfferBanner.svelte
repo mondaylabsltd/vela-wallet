@@ -81,7 +81,7 @@
 		padding: 10px 20px;
 		background: var(--bg-sunken);
 		border-bottom: 1px solid var(--border);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 	}
 	.text {
 		color: var(--text-secondary);

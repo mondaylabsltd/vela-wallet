@@ -794,7 +794,7 @@
 	.hero-selfhost {
 		display: inline-block;
 		margin-top: 20px;
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		color: var(--text-secondary);
 		text-decoration: underline;
 		text-decoration-color: var(--border);
@@ -834,7 +834,7 @@
 		max-width: 1000px;
 		margin: 0 auto 22px;
 		color: var(--text-tertiary);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		letter-spacing: 0.01em;
 	}
 	/* A numbered list of full-width rows, the way a well-set contents page does
@@ -903,7 +903,7 @@
 	/* The proof, not the explanation: every claim is one link away from the page
 	   that can check it. */
 	.fact-proof {
-		font-size: 0.86rem;
+		font-size: max(0.86rem, var(--floor-note));
 		line-height: 1.55;
 		color: var(--text-tertiary);
 		transition: color 0.18s;
@@ -964,7 +964,7 @@
 		gap: 6px;
 		padding: 3px 9px;
 		border-radius: 999px;
-		font-size: 0.68rem;
+		font-size: max(0.68rem, var(--floor-label));
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
@@ -1034,7 +1034,7 @@
 		display: inline-block;
 		padding: 11px 22px;
 		border-radius: 10px;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-note));
 		font-weight: 600;
 		cursor: pointer;
 		transition: all 0.15s;
@@ -1065,7 +1065,7 @@
 	.more-link {
 		display: inline-block;
 		margin-top: 8px;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-note));
 		font-weight: 600;
 		color: var(--accent);
 		text-decoration: none;
@@ -1149,7 +1149,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 7px;
-		font-size: 0.7rem;
+		font-size: max(0.7rem, var(--floor-label));
 		font-weight: 600;
 		letter-spacing: 0.09em;
 		text-transform: uppercase;
@@ -1165,7 +1165,7 @@
 	:global(html[lang='ko']) .counter-label {
 		text-transform: none;
 		letter-spacing: 0.02em;
-		font-size: 0.76rem;
+		font-size: max(0.76rem, var(--floor-label));
 	}
 	.counter-dot {
 		width: 5px;
@@ -1209,7 +1209,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-note));
 		font-weight: 500;
 		color: var(--text);
 		white-space: nowrap;
@@ -1225,7 +1225,7 @@
 		max-width: 640px;
 		margin: 40px auto 0;
 		color: var(--text-secondary);
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-read));
 		line-height: 1.75;
 	}
 	.networks .more-link {
@@ -1274,7 +1274,7 @@
 	}
 	.tradeoffs-lede {
 		color: var(--text-secondary);
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		margin: 8px 0 0;
 	}
 	.tradeoff-list {
@@ -1306,7 +1306,7 @@
 	}
 	.tradeoff p {
 		color: var(--text-secondary);
-		font-size: 0.92rem;
+		font-size: max(0.92rem, var(--floor-read));
 		line-height: 1.75;
 		margin: 0;
 	}
@@ -1318,7 +1318,7 @@
 		padding-top: 22px;
 		border-top: 1px solid var(--border);
 		color: var(--text);
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		line-height: 1.7;
 	}
 
@@ -1337,7 +1337,7 @@
 	.compare-table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.82rem;
+		font-size: max(0.82rem, var(--floor-note));
 		min-width: 720px;
 	}
 	.compare-table th,
@@ -1347,7 +1347,7 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.compare-table thead th {
-		font-size: 0.78rem;
+		font-size: max(0.78rem, var(--floor-meta));
 		font-weight: 600;
 		color: var(--text-secondary);
 		white-space: normal;
@@ -1427,7 +1427,7 @@
 		padding: 16px 0;
 		cursor: pointer;
 		font-weight: 600;
-		font-size: 0.92rem;
+		font-size: max(0.92rem, var(--floor-read));
 		list-style: none;
 		display: flex;
 		justify-content: space-between;
@@ -1446,7 +1446,7 @@
 		margin: 0;
 		color: var(--text-secondary);
 		line-height: 1.7;
-		font-size: 0.88rem;
+		font-size: max(0.88rem, var(--floor-read));
 	}
 	/* The second beat is a new paragraph, not a new answer: closer together
 	   than two answers are, and only the last one pays the closing padding. */
@@ -1505,9 +1505,6 @@
 		.fact-term {
 			font-size: 1.05rem;
 		}
-		.fact-proof {
-			font-size: 0.8rem;
-		}
 		/* Side by side at phone width only if neither label has to break: a
 		   two-line button reads as a mistake. */
 		.btn.btn-hero {
@@ -1525,7 +1522,7 @@
 			font-size: 1.5rem;
 		}
 		.subtitle {
-			font-size: 0.95rem;
+			font-size: 1.0625rem;
 			margin-left: auto;
 			margin-right: auto;
 		}

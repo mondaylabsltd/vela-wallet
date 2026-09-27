@@ -550,7 +550,7 @@
 	/* ── Header ── */
 	.back {
 		display: inline-block;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-note));
 		color: var(--text-muted);
 		margin-bottom: 20px;
 		transition: color 0.15s ease;
@@ -567,7 +567,7 @@
 		color: var(--text-secondary);
 		line-height: 1.65;
 		max-width: 640px;
-		font-size: 0.98rem;
+		font-size: max(0.98rem, var(--floor-read));
 	}
 	.lede a {
 		color: var(--link);
@@ -580,7 +580,7 @@
 		align-items: center;
 		gap: 9px;
 		margin-top: 22px;
-		font-size: 0.95rem;
+		font-size: max(0.95rem, var(--floor-read));
 		color: var(--text-secondary);
 	}
 	.stat-number {
@@ -641,7 +641,7 @@
 		border: none;
 		background: none;
 		color: var(--text-secondary);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		font-weight: 500;
 		font-variant-numeric: tabular-nums;
 		padding: 6px 14px;
@@ -663,7 +663,7 @@
 		background: none;
 		border: 1px solid var(--border);
 		color: var(--text-secondary);
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		padding: 7px 14px;
 		border-radius: var(--radius-sm);
 		cursor: pointer;
@@ -723,7 +723,7 @@
 		background: var(--bg-raised);
 	}
 	.ord {
-		font-size: 0.8rem;
+		font-size: max(0.8rem, var(--floor-meta));
 		font-variant-numeric: tabular-nums;
 		color: var(--text-muted);
 		min-width: 3ch;
@@ -746,11 +746,11 @@
 	}
 	.addr {
 		font-family: var(--font-mono);
-		font-size: 0.8rem;
+		font-size: max(0.8rem, var(--floor-meta));
 		color: var(--text-muted);
 	}
 	time {
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		color: var(--text-secondary);
 		white-space: nowrap;
 	}
@@ -776,7 +776,7 @@
 		align-items: baseline;
 	}
 	.detail dt {
-		font-size: 0.8rem;
+		font-size: max(0.8rem, var(--floor-meta));
 		color: var(--text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -788,12 +788,12 @@
 		gap: 10px;
 		flex-wrap: wrap;
 		min-width: 0;
-		font-size: 0.9rem;
+		font-size: max(0.9rem, var(--floor-note));
 		color: var(--text-secondary);
 	}
 	.mono {
 		font-family: var(--font-mono);
-		font-size: 0.82rem;
+		font-size: max(0.82rem, var(--floor-meta));
 	}
 	.detail dd code.mono {
 		color: var(--code-inline-text);
@@ -815,7 +815,7 @@
 		background: none;
 		border: 1px solid var(--border);
 		color: var(--text-muted);
-		font-size: 0.72rem;
+		font-size: max(0.72rem, var(--floor-label));
 		padding: 2px 9px;
 		border-radius: 6px;
 		cursor: pointer;
@@ -878,12 +878,12 @@
 	}
 	.pk-name {
 		font-weight: 650;
-		font-size: 0.94rem;
+		font-size: max(0.94rem, var(--floor-note));
 		color: var(--text);
 		margin-right: auto;
 	}
 	.chip {
-		font-size: 0.68rem;
+		font-size: max(0.68rem, var(--floor-label));
 		font-weight: 500;
 		padding: 2px 9px;
 		border-radius: 999px;
@@ -915,7 +915,7 @@
 		align-items: baseline;
 	}
 	.pk-label {
-		font-size: 0.7rem;
+		font-size: max(0.7rem, var(--floor-label));
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: var(--text-tertiary);
@@ -927,7 +927,7 @@
 		gap: 8px;
 		flex-wrap: wrap;
 		min-width: 0;
-		font-size: 0.85rem;
+		font-size: max(0.85rem, var(--floor-meta));
 		color: var(--text-secondary);
 	}
 	.pk-value code.mono {
