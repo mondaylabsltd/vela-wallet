@@ -577,8 +577,10 @@ final class BrowserAcceptanceTests: XCTestCase {
         )
         XCTAssertGreaterThanOrEqual(unlimited.count, 2,
                                     "the headline and the cap row must both read 无限额")
+        // An address is forty hex digits and may well be all numerals (the
+        // test spender is 0x1111…1111); an amount never starts with 0x.
         let digits = app.staticTexts.matching(
-            NSPredicate(format: "label MATCHES %@", ".*[0-9,]{30,}.*")
+            NSPredicate(format: "NOT (label BEGINSWITH %@) AND label MATCHES %@", "0x", ".*[0-9,]{30,}.*")
         )
         XCTAssertEqual(digits.count, 0, "no seventy-digit figure may be drawn")
 
