@@ -131,8 +131,13 @@ screenshot checked against the web.
       semibold, the amount hero padded 12/16 with a 15 fiat line, the facts
       one hairline-ruled list, the buttons 16 under it; every `FactRow` padded
       12 with a 13 medium value (DSD3's confirm rows line up too).
-- [ ] T066 Send form: DSD2 unit and ⇕ switch; DSD2b recipient rows, icon
-      pills, stacked total; DSD3 unit size; the live disabled Continue label.
+- [x] T066 Send form: the drawn figure carries its unit on the typed field's
+      rung and the fiat line at 15 with the ⇕ (DSD2); split rows put a name
+      the book knows over its short address, live too; the three pills are
+      the web's GhostPillRow with plus / users-round / upload; the split total
+      stacks its fiat under the figure (DSD2b); a disabled Continue fades its
+      fill and keeps a white label (checked live). DSD3's unit is already the
+      web's (`amountUnit`) — the T060 note was against an older deploy.
 - [ ] T067 Labels and small gaps: DSD1 title, DST1 nav label, DST2 theme
       label, DST4b search field, DST5 counts and key link, DR1 hairlines,
       DT1/DT4 filter row, D2 network chevron, DC1 rail networks, DC2 groups

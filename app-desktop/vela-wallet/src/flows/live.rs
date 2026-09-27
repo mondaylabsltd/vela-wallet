@@ -2575,6 +2575,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                         .clone()
                         .unwrap_or_else(|| shorten(&draft.address))
                         .into(),
+                    address: draft.name.as_ref().map(|_| shorten(&draft.address).into()),
                     seed: draft.address.clone().into(),
                     amount: format!("{} {symbol}", draft.amount)
                         .trim()
@@ -2616,6 +2617,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                 },
             )
         }),
+        summary_detail: None,
         remaining: send.split_remaining.as_ref().filter(|_| split).map(|left| {
             fill(
                 &s.split_remaining,

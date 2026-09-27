@@ -443,6 +443,10 @@ pub struct SendSelection {
 pub struct RecipientCard {
     pub ordinal: SharedString,
     pub name: SharedString,
+    /// The short address under a name the book knows (078 T066, the web's
+    /// `RecipientCard`): the name alone hid which address it would pay.
+    /// `None` when `name` IS the address.
+    pub address: Option<SharedString>,
     pub seed: SharedString,
     pub amount: SharedString,
     /// Live only: what the core says about this row — a repeat of an earlier
@@ -553,6 +557,9 @@ pub struct SendForm {
     pub recipients: Vec<RecipientCard>,
     pub recipient_actions: Vec<SharedString>,
     pub summary: Option<(SharedString, SharedString)>,
+    /// The total's other denomination, under the figure (the web's
+    /// `SummaryLine.detail`) — "≈ $120.00".
+    pub summary_detail: Option<SharedString>,
     /// Live only, split: what the balance has left to give out (the core's
     /// `split_remaining`, #265), and whether the rows already outrun it —
     /// the total then draws in the error ink.
@@ -1275,6 +1282,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                 RecipientCard {
                     ordinal: fill(&s.recipient_n, "n", "1").into(),
                     name: ALICE_DISPLAY.into(),
+                    address: None,
                     seed: ALICE_FULL.into(),
                     amount: "50".into(),
                     notes: Vec::new(),
@@ -1282,6 +1290,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                 RecipientCard {
                     ordinal: fill(&s.recipient_n, "n", "2").into(),
                     name: "Alice".into(),
+                    address: Some("0x77Bd…4F02".into()),
                     seed: A_HAO_FULL.into(),
                     amount: "30".into(),
                     notes: Vec::new(),
@@ -1289,6 +1298,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                 RecipientCard {
                     ordinal: fill(&s.recipient_n, "n", "3").into(),
                     name: "hold on".into(),
+                    address: Some("0xCafe…F00d".into()),
                     seed: HOLD_ON_FULL.into(),
                     amount: "40".into(),
                     notes: Vec::new(),
@@ -1306,8 +1316,9 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                     fill(&s.recipient_count, "count", "3")
                 )
                 .into(),
-                "120 USDT · ≈$120.00".into(),
+                "120 USDT".into(),
             )),
+            summary_detail: Some("≈ $120.00".into()),
             remaining: None,
             summary_over: false,
             fill_empty: None,
@@ -1336,11 +1347,13 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         recipients: Vec::new(),
         recipient_actions: Vec::new(),
         summary: None,
+        summary_detail: None,
         remaining: None,
         summary_over: false,
         fill_empty: None,
         amount_unit: None,
-        denom_toggle: None,
+        // The web's mock draws the ⇕ beside the fiat line (078 T066).
+        denom_toggle: Some(true),
         pick_contacts: None,
         notice: None,
         fee,

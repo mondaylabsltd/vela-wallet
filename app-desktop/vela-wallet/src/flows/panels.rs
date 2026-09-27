@@ -1388,7 +1388,7 @@ fn cta_button(
     state: CtaState,
     action: Option<Click>,
 ) -> Div {
-    let button = accent_button(theme, label);
+    let button = accent_button(theme, label.clone());
     match state {
         CtaState::Enabled => clickable(id, action, button),
         // The web's `loading` (078 F-09): full emphasis, the words kept for
@@ -1416,7 +1416,9 @@ fn cta_button(
                         )),
                 ),
         ),
-        CtaState::Disabled => clickable(id, None, button.opacity(0.45)),
+        // The fill fades and the label stays white, as the web's button
+        // fades as one layer (078 T066) — see `disabled_accent_button`.
+        CtaState::Disabled => clickable(id, None, disabled_accent_button(theme, label)),
     }
 }
 
@@ -1792,36 +1794,74 @@ fn send_form_parts(
         }
         col = col.child(block);
     } else if let Some((value, fiat)) = &model.amount {
+        // Drawn as the typed field draws (078 T066): the figure with its unit
+        // after it on one baseline, both on the same rung, and the fiat line
+        // under it at 15 with the ⇕ where the swap is offered.
+        let unit = model
+            .amount_unit
+            .clone()
+            .unwrap_or_else(|| model.token.1.clone());
+        let rung = theme::amount_hero_rung(value.chars().count(), unit.chars().count());
+        let mut fiat_line = div()
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .text_size(theme::text_row_title())
+            .text_color(theme.fg_muted)
+            .child(fiat.clone());
+        if model.denom_toggle.is_some() {
+            fiat_line = fiat_line.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(icon_img(icons, Icon::ChevronUp, false, theme.fg_muted, 10.))
+                    .child(icon_img(
+                        icons,
+                        Icon::ChevronDown,
+                        false,
+                        theme.fg_muted,
+                        10.,
+                    )),
+            );
+        }
         col = col.child(
             div()
                 .flex()
                 .flex_col()
                 .items_center()
-                .py(px(16.))
+                .gap(px(4.))
+                .py(px(24.))
                 .child(
                     // The drawn figure steps down the same ladder as the typed
                     // one and is cut at its end past the last rung.
                     div()
                         .w_full()
                         .min_w(px(0.))
+                        .flex()
+                        .items_baseline()
+                        .justify_center()
                         .overflow_hidden()
                         .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_center()
-                        .text_size(theme::text_amount_hero(theme::amount_hero_rung(
-                            value.chars().count(),
-                            0,
-                        )))
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .child(value.clone()),
+                        .child(
+                            div()
+                                .min_w(px(0.))
+                                .text_ellipsis()
+                                .text_size(theme::text_amount_hero(rung))
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(theme.fg_base)
+                                .child(value.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .ml(px(8.))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_size(theme::text_amount_unit(rung))
+                                .text_color(theme.fg_muted)
+                                .child(unit),
+                        ),
                 )
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(fiat.clone()),
-                ),
+                .child(fiat_line),
         );
     }
 
@@ -2068,25 +2108,22 @@ fn send_form_parts(
             actions.open_contact_pick.take(),
             actions.open_batch_import.take(),
         ];
-        let mut pills = div().flex().gap(px(6.));
-        for (i, label) in model.recipient_actions.iter().enumerate() {
-            let pill = div()
-                .flex_1()
-                .py(px(8.))
-                .rounded(px(999.))
-                .border_1()
-                .border_color(theme.border_card)
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_base)
-                .child(label.clone());
-            let action = bound.get_mut(i).and_then(Option::take);
-            pills = pills
-                .child(clickable(ElementId::from(("recipient-action", i)), action, pill).flex_1());
-        }
-        col = col.child(pills);
+        // The web's `GhostPillRow` with its `ACTION_ICONS` (078 T066): plus,
+        // users-round, upload.
+        const GLYPHS: [Icon; 3] = [Icon::Plus, Icon::UsersRound, Icon::Upload];
+        let pills = model
+            .recipient_actions
+            .iter()
+            .enumerate()
+            .map(|(i, label)| GhostPill {
+                id: ElementId::from(("recipient-action", i)),
+                icon: GLYPHS.get(i).copied().unwrap_or(Icon::Plus),
+                label: label.clone(),
+                done: false,
+                action: bound.get_mut(i).and_then(Option::take),
+            })
+            .collect();
+        col = col.child(ghost_pill_row(theme, icons, pills));
     }
 
     let mut foot = div().flex().flex_col().gap(px(4.));
@@ -2123,16 +2160,33 @@ fn send_form_parts(
                 )
                 .child(
                     div()
-                        .text_size(theme::text_row_title())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        // Over the balance, the total says so in ink before
-                        // Continue has to refuse it.
-                        .text_color(if model.summary_over {
-                            theme.error_base
-                        } else {
-                            theme.fg_base
-                        })
-                        .child(value.clone()),
+                        .flex()
+                        .flex_col()
+                        .items_end()
+                        .gap(px(2.))
+                        .child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::BOLD)
+                                // Over the balance, the total says so in ink
+                                // before Continue has to refuse it.
+                                .text_color(if model.summary_over {
+                                    theme.error_base
+                                } else {
+                                    theme.fg_base
+                                })
+                                .child(value.clone()),
+                        )
+                        // The other denomination under the figure, as the
+                        // web's `SummaryLine.detail` (078 T066).
+                        .when_some(model.summary_detail.clone(), |el, detail| {
+                            el.child(
+                                div()
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.fg_muted)
+                                    .child(detail),
+                            )
+                        }),
                 ),
         );
     }

@@ -600,6 +600,28 @@ pub fn segmented_toggle(
 
 /// The monospace field. Addresses are compared character by character by the
 /// people pasting them, which is the whole reason for the face.
+/// A split row's payee by name (the web's `RecipientCard .who`): the name
+/// 13 medium in the UI face over its short address, 10 mono muted.
+fn recipient_who(theme: &Theme, name: SharedString, address: SharedString) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(theme.fg_base)
+                .child(name),
+        )
+        .child(
+            div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_glyph())
+                .text_color(theme.fg_muted)
+                .child(address),
+        )
+}
+
 /// One pill of a [`ghost_pill_row`].
 pub struct GhostPill {
     pub id: ElementId,
@@ -1148,16 +1170,23 @@ pub fn recipient_card(
         // form, not a payroll.
         Some(field) if !field.value.is_empty() && !field.focus.is_focused(window) => {
             let focus = field.focus.clone();
-            let mut reading = div().flex().items_center().gap(px(4.)).child(
-                div()
-                    .id(gpui::ElementId::from(("split-reading", index)))
-                    .cursor_text()
+            // A name the book knows over the address it stands for, as the
+            // drawn card (078 T066); an unnamed row is its address.
+            let text = match &recipient.address {
+                Some(address) => recipient_who(theme, recipient.name.clone(), address.clone()),
+                None => div()
                     .font_family(theme::font_mono())
                     .text_size(theme::text_mono_address())
                     .text_color(theme.fg_base)
                     .child(gpui::SharedString::from(
                         crate::wallet::live::shorten_address(&field.value),
-                    ))
+                    )),
+            };
+            let mut reading = div().flex().items_center().gap(px(4.)).child(
+                div()
+                    .id(gpui::ElementId::from(("split-reading", index)))
+                    .cursor_text()
+                    .child(text)
                     .on_click(move |_, window, cx| focus.focus(window, cx)),
             );
             if let Some(pick) = pick {
@@ -1213,12 +1242,17 @@ pub fn recipient_card(
             }
             well.into_any_element()
         }
-        None => div()
-            .font_family(theme::font_mono())
-            .text_size(theme::text_mono_address())
-            .text_color(theme.fg_base)
-            .child(recipient.name.clone())
-            .into_any_element(),
+        None => match &recipient.address {
+            Some(address) => {
+                recipient_who(theme, recipient.name.clone(), address.clone()).into_any_element()
+            }
+            None => div()
+                .font_family(theme::font_mono())
+                .text_size(theme::text_mono_address())
+                .text_color(theme.fg_base)
+                .child(recipient.name.clone())
+                .into_any_element(),
+        },
     };
     // A raised card padded 12, as the web's `RecipientCard` (078 F-11); its
     // wells are the page colour inside it.
