@@ -249,6 +249,10 @@ fn open_window_with<V: gpui::Render + 'static>(
     cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
+            // `VELA_NO_ACTIVATE=1`: the window opens without taking the
+            // keyboard, so a screenshot pass on a machine somebody is using
+            // never types into this app what they meant for another.
+            focus: std::env::var_os("VELA_NO_ACTIVATE").is_none(),
             // The card grid does not reflow below the design size (spec 007
             // edge cases): the design size is the minimum.
             window_min_size: Some(size(px(WINDOW_W), px(WINDOW_H))),
@@ -435,6 +439,8 @@ fn main() {
         }
         open_main_window(cx);
 
-        cx.activate(true);
+        if std::env::var_os("VELA_NO_ACTIVATE").is_none() {
+            cx.activate(true);
+        }
     });
 }

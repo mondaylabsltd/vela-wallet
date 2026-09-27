@@ -388,7 +388,15 @@ pub struct AddressBar {
 
 /// The address field's contents, for the page to wrap in whatever makes it
 /// editable — the focus and the keys are the page's state.
-pub fn address_field(theme: &Theme, icons: &mut IconCache, bar: &AddressBar) -> Div {
+///
+/// `typing` is the live editor while somebody types — the page's, since the
+/// caret, the selection and the IME are its state; the mock draws the draft.
+pub fn address_field(
+    theme: &Theme,
+    icons: &mut IconCache,
+    bar: &AddressBar,
+    typing: Option<AnyElement>,
+) -> Div {
     let row = div()
         .flex()
         .items_center()
@@ -396,6 +404,12 @@ pub fn address_field(theme: &Theme, icons: &mut IconCache, bar: &AddressBar) -> 
         .gap(px(8.))
         .min_w(px(0.))
         .overflow_hidden();
+    if let Some(typing) = typing {
+        return row
+            .w_full()
+            .child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
+            .child(div().flex_1().min_w(px(0.)).child(typing));
+    }
     if let Some(draft) = &bar.draft {
         let text = if draft.is_empty() {
             div()

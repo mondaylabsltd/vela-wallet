@@ -55,8 +55,10 @@ impl SettingsPage {
         SettingsPage::FeeSpeed,
         SettingsPage::Signing,
         SettingsPage::Storage,
-        SettingsPage::Feedback,
+        // The column ends as the phones' settings do (2026-09-27):
+        // Community (drawn before About), About, then Send feedback.
         SettingsPage::About,
+        SettingsPage::Feedback,
     ];
 
     pub fn icon(self) -> Icon {
@@ -621,6 +623,40 @@ pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString, Shar
     ]
 }
 
+/// One official community account (Settings → Community, 2026-09-27).
+pub struct CommunityLink {
+    pub icon: Icon,
+    /// The brand's name — never translated.
+    pub name: &'static str,
+    /// The handle or invite, drawn literally under the name.
+    pub handle: &'static str,
+    pub url: &'static str,
+}
+
+/// The official accounts, exactly as getvela.app's footer publishes them —
+/// defined once here, next to About's links, and pinned by a test so the
+/// four shells cannot drift.
+pub const COMMUNITY_LINKS: [CommunityLink; 3] = [
+    CommunityLink {
+        icon: Icon::BrandX,
+        name: "X (Twitter)",
+        handle: "@realvelawallet",
+        url: "https://x.com/realvelawallet",
+    },
+    CommunityLink {
+        icon: Icon::BrandTelegram,
+        name: "Telegram",
+        handle: "@velawallet",
+        url: "https://t.me/velawallet",
+    },
+    CommunityLink {
+        icon: Icon::BrandDiscord,
+        name: "Discord",
+        handle: "discord.gg/23gWrtaYSa",
+        url: "https://discord.gg/23gWrtaYSa",
+    },
+];
+
 // -- appearance / localization (spec 072) -------------------------------------
 
 /// Every shipped locale by its own name, in `vela_core::i18n::SUPPORTED`'s
@@ -654,11 +690,26 @@ pub const RPC_FIX_SYMBOL: &str = "POL";
 pub const BANNER_CHAINS: [&str; 2] = ["polygon", "gnosis"];
 
 pub fn banner_text(s: &SettingsStrings) -> SharedString {
-    SharedString::from(fill(
-        &s.rpc_unavailable_multiple,
-        "count",
-        &BANNER_CHAINS.len().to_string(),
-    ))
+    let names: Vec<SharedString> = BANNER_CHAINS
+        .iter()
+        .map(|id| SharedString::from(network(id).name))
+        .collect();
+    unavailable_text(s, &names)
+}
+
+/// The banner's headline: "World Chain RPC unavailable" for one network —
+/// "1 networks" is not a sentence — and "{{count}} networks RPC unavailable"
+/// for more.
+#[must_use]
+pub fn unavailable_text(s: &SettingsStrings, names: &[SharedString]) -> SharedString {
+    SharedString::from(match names {
+        [one] => fill(&s.wizard_no_rpc, "name", one),
+        many => fill(
+            &s.rpc_unavailable_multiple,
+            "count",
+            &many.len().to_string(),
+        ),
+    })
 }
 
 /// The four places SR2/DSR1 point at for a working endpoint, and where each
@@ -732,5 +783,55 @@ mod row_adapter_tests {
                 "the badge rule moved"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod community_tests {
+    use super::*;
+
+    /// The official accounts, pinned to the character — the same strings the
+    /// site's footer and the other three shells carry.
+    #[test]
+    fn the_community_links_are_the_official_ones() {
+        let pinned: Vec<(&str, &str, &str)> = COMMUNITY_LINKS
+            .iter()
+            .map(|link| (link.name, link.handle, link.url))
+            .collect();
+        assert_eq!(
+            pinned,
+            vec![
+                (
+                    "X (Twitter)",
+                    "@realvelawallet",
+                    "https://x.com/realvelawallet"
+                ),
+                ("Telegram", "@velawallet", "https://t.me/velawallet"),
+                (
+                    "Discord",
+                    "discord.gg/23gWrtaYSa",
+                    "https://discord.gg/23gWrtaYSa"
+                ),
+            ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod banner_tests {
+    use super::*;
+
+    /// One network is named, never counted as "1 networks".
+    #[test]
+    fn one_unreachable_network_is_named() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        let one = unavailable_text(&s, &[SharedString::from("World Chain")]);
+        assert!(one.contains("World Chain"), "{one}");
+        assert!(!one.contains('1'), "{one}");
+        let two = unavailable_text(
+            &s,
+            &[SharedString::from("Polygon"), SharedString::from("Gnosis")],
+        );
+        assert!(two.contains('2'), "{two}");
     }
 }

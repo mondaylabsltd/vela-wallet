@@ -1,21 +1,23 @@
-//! Account-name field (spec 014 Form pattern): optional label, single-line
-//! editable well, over-length hint (A3), optional helper caption. An empty
-//! label or helper renders NOTHING rather than an empty box with its own
-//! margin — the create screen passes both empty since spec 019, because its
-//! heading already names the field. Editing is the minimal gpui
-//! idiom — a focus handle plus `on_key_down` appending `key_char`s and
-//! handling backspace, with a styled-div caret — plus the four clipboard
-//! chords ([`edit_chord`]) over an all-or-nothing selection. Composed text input (IME) is
-//! a documented limitation of this pure-UI phase; the wiring feature owns a
-//! real input if one lands upstream.
+//! The text wells: the account-name field (spec 014 Form pattern: optional
+//! label, single-line well, over-length hint (A3), optional helper caption —
+//! an empty label or helper renders NOTHING rather than an empty box with its
+//! own margin), and the send form's figure, its recipient line, the search
+//! input and the multi-line well, which share its keys.
+//!
+//! Every one of them edits through [`super::editor`]: a caret that goes where
+//! the arrows, Home/End and the mouse send it, a real selection, and text —
+//! the IME's composition included — arriving through the platform's input
+//! handler. They used to be caret-less (typing appended, the arrows were
+//! swallowed, a click only focused, an IME had nowhere to compose); the
+//! signatures stayed, so no call site changed.
 
-use std::cell::RefCell;
+use std::rc::Rc;
 
-use crate::theme::{self, FLOW_CARET_W, FLOW_GAP_MD, FLOW_GAP_SM, INPUT_H, RADIUS_FIELD, Theme};
+use super::editor::{self, EditorStyle, OnChange, Wrap};
+use crate::theme::{self, FLOW_GAP_MD, FLOW_GAP_SM, INPUT_H, RADIUS_FIELD, Theme};
 use gpui::{
-    App, ClipboardItem, Div, ElementId, FocusHandle, FontWeight, InteractiveElement, IntoElement,
-    KeyDownEvent, Keystroke, ParentElement, SharedString, StatefulInteractiveElement, Styled,
-    WeakFocusHandle, Window, div, prelude::FluentBuilder as _, px,
+    App, Div, ElementId, FocusHandle, FontWeight, InteractiveElement, Keystroke, MouseButton,
+    ParentElement, SharedString, Styled, Window, div, px,
 };
 
 /// The four clipboard chords a text well owes a person.
@@ -50,23 +52,36 @@ pub fn edit_chord(ks: &Keystroke) -> Option<EditChord> {
     }
 }
 
-thread_local! {
-    /// The well whose whole value is selected, if any.
-    ///
-    /// These wells have no caret position — typing appends — so a selection
-    /// is all or nothing, and one at a time, like focus. Kept here rather than
-    /// in each form: thirteen call sites build a well, and a selection none of
-    /// them asked for should not become a field on all of them. Keyed by the
-    /// well's focus handle, and only honoured while that well has focus.
-    static SELECTED: RefCell<Option<WeakFocusHandle>> = const { RefCell::new(None) };
+/// The wells' shared look for the text itself: the UI face, the accent caret
+/// and the accent-tinted selection the old all-or-nothing selection wore.
+fn style(theme: &Theme, size: gpui::Pixels, line_height: gpui::Pixels) -> EditorStyle {
+    EditorStyle {
+        family: theme::font_ui().into(),
+        placeholder_family: theme::font_ui().into(),
+        weight: FontWeight::NORMAL,
+        size,
+        line_height,
+        color: theme.fg_base,
+        placeholder: theme.fg_subtle,
+        caret: theme.accent,
+        selection: theme.accent.opacity(0.28),
+    }
 }
 
-fn is_selected(focus: &FocusHandle) -> bool {
-    SELECTED.with_borrow(|selected| selected.as_ref().is_some_and(|weak| weak == focus))
-}
-
-fn select(focus: Option<&FocusHandle>) {
-    SELECTED.with_borrow_mut(|selected| *selected = focus.map(FocusHandle::downgrade));
+/// A well's two handlers — the mouse places the caret, the keys move and
+/// edit — on whatever element is the well.
+fn wire<E: InteractiveElement>(
+    well: E,
+    focus: &FocusHandle,
+    wrap: Wrap,
+    mask: bool,
+    on_change: OnChange,
+) -> E {
+    well.on_mouse_down(
+        MouseButton::Left,
+        editor::mouse_down(focus, Rc::clone(&on_change)),
+    )
+    .on_key_down(editor::key_down(focus, wrap, mask, on_change))
 }
 
 /// Already-resolved copy for the field (components know nothing about i18n).
@@ -119,7 +134,6 @@ pub fn text_field(
     on_change: impl Fn(String, &mut Window, &mut App) + 'static,
 ) -> Div {
     let focused = focus.is_focused(window);
-    let selected = focused && !value.is_empty() && is_selected(focus);
     let border = if too_long {
         theme.error_base
     } else if focused {
@@ -128,57 +142,19 @@ pub fn text_field(
         theme.divider
     };
 
-    let shown = if mask {
-        "•".repeat(value.chars().count())
-    } else {
-        value.to_owned()
-    };
-    let text: Div = if value.is_empty() {
-        div()
-            .text_size(theme::text_flow_sub())
-            .text_color(theme.fg_subtle)
-            .child(strings.placeholder.clone())
-    } else {
-        div()
-            .text_size(theme::text_flow_sub())
-            .text_color(theme.fg_base)
-            .when(selected, |text| {
-                text.bg(theme.accent.opacity(0.28)).rounded(px(2.))
-            })
-            .child(SharedString::from(shown))
-    };
+    editor::sync(focus, value);
+    let on_change: OnChange = Rc::new(on_change);
+    let size = theme::text_flow_sub();
+    let text = editor::editor(
+        focus,
+        strings.placeholder.clone(),
+        style(theme, size, size * 1.4),
+        Wrap::None,
+        Rc::clone(&on_change),
+    )
+    .masked(mask);
 
-    // The row itself has to be clipped too, not just the text inside it: a
-    // flex item's `min-width` is `auto`, so a 42-character address in a
-    // 400px dialog grew the row past the well and painted across the card
-    // behind it. Visible from the moment ⌘V could fill the field in one go.
-    let mut inner = div()
-        .flex()
-        .items_center()
-        .min_w(px(0.))
-        .overflow_hidden()
-        .child(
-            div()
-                .min_w(px(0.))
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .child(text),
-        );
-    if focused && !selected {
-        // Caret: a styled bar after the text (no blink — nothing timed here).
-        inner = inner.child(
-            div()
-                .w(px(FLOW_CARET_W))
-                .h(px(INPUT_H / 2.5))
-                .flex_none()
-                .bg(theme.accent),
-        );
-    }
-
-    let well = {
-        let current = value.to_owned();
-        let focus_for_click = focus.clone();
-        let focus_for_keys = focus.clone();
+    let well = wire(
         div()
             .id(id)
             .track_focus(focus)
@@ -196,10 +172,15 @@ pub fn text_field(
             .items_center()
             .overflow_hidden()
             .cursor_text()
-            .child(inner)
-            .on_click(click_to_edit(focus_for_click))
-            .on_key_down(edit_keys(current, focus_for_keys, mask, on_change))
-    };
+            // The row itself is clipped too: a flex item's `min-width` is
+            // `auto`, and a 42-character address in a 400px dialog grew the
+            // row past the well. The editor scrolls to its caret instead.
+            .child(div().flex_1().min_w(px(0.)).child(text)),
+        focus,
+        Wrap::None,
+        mask,
+        on_change,
+    );
 
     let mut col = div().flex().flex_col();
     if !strings.label.is_empty() {
@@ -241,115 +222,10 @@ pub fn text_field(
     )
 }
 
-/// A click into a well: the caret goes back to the end, as it would anywhere.
-fn click_to_edit(focus: FocusHandle) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut App) {
-    move |_, window, cx| {
-        select(None);
-        focus.focus(window, cx);
-    }
-}
-
-/// Every well's keys — typing, backspace, the four clipboard chords over an
-/// all-or-nothing selection — whatever the well looks like. One handler, so
-/// the bordered field, the send form's figure and its recipient line cannot
-/// disagree about what Ctrl+V does.
-fn edit_keys(
-    current: String,
-    focus_for_keys: FocusHandle,
-    mask: bool,
-    on_change: impl Fn(String, &mut Window, &mut App) + 'static,
-) -> impl Fn(&KeyDownEvent, &mut Window, &mut App) + 'static {
-    move |event: &KeyDownEvent, window, cx| {
-        let ks = &event.keystroke;
-        let selected = !current.is_empty() && is_selected(&focus_for_keys);
-        if let Some(chord) = edit_chord(ks) {
-            match chord {
-                EditChord::SelectAll => {
-                    if !current.is_empty() {
-                        select(Some(&focus_for_keys));
-                        window.refresh();
-                    }
-                }
-                // A masked well holds a PIN: it may be pasted into,
-                // never read back out.
-                EditChord::Copy => {
-                    if selected && !mask {
-                        cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
-                    }
-                }
-                EditChord::Cut => {
-                    if selected && !mask {
-                        cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
-                        select(None);
-                        on_change(String::new(), window, cx);
-                    }
-                }
-                // Every value these wells take — an address, a URL, an
-                // RPC endpoint, a contract — arrives from somewhere
-                // else. A newline is dropped rather than typed: these
-                // are single-line wells, and a pasted trailing newline
-                // is what turns a good address into one the core
-                // refuses.
-                EditChord::Paste => {
-                    let Some(pasted) = cx.read_from_clipboard().and_then(|item| item.text()) else {
-                        return;
-                    };
-                    let pasted: String = pasted.chars().filter(|c| !c.is_control()).collect();
-                    if pasted.is_empty() {
-                        return;
-                    }
-                    let kept = if selected { "" } else { current.as_str() };
-                    select(None);
-                    on_change(format!("{kept}{pasted}"), window, cx);
-                }
-            }
-            return;
-        }
-        if ks.modifiers.control || ks.modifiers.alt || ks.modifiers.platform {
-            return;
-        }
-        // A selection is replaced by whatever is typed over it.
-        let mut next = if selected {
-            String::new()
-        } else {
-            current.clone()
-        };
-        match ks.key.as_str() {
-            "backspace" | "delete" if selected => {}
-            "backspace" => {
-                if next.pop().is_none() {
-                    return;
-                }
-            }
-            "left" | "right" | "home" | "end" | "escape" => {
-                if selected {
-                    select(None);
-                    window.refresh();
-                }
-                return;
-            }
-            _ => match &ks.key_char {
-                Some(ch) if !ch.chars().any(char::is_control) => next.push_str(ch),
-                _ => return,
-            },
-        }
-        select(None);
-        on_change(next, window, cx);
-    }
-}
-
-/// The caret: a styled bar (no blink — nothing timed here).
-fn caret(theme: &Theme, height: gpui::Pixels) -> Div {
-    div()
-        .w(px(FLOW_CARET_W))
-        .h(height)
-        .flex_none()
-        .bg(theme.accent)
-}
-
 /// The send form's amount, as the web's `AmountInput` draws it: the figure
-/// large and centred, the unit after it in a lighter face, the caret between
-/// them — and the same keys as every well.
+/// large and centred, the unit after it in a lighter face — and the same keys
+/// as every well. The figure is as wide as it is, so the pair centres
+/// together; past the room there is, it scrolls to its caret.
 #[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 pub fn hero_amount_field(
     id: impl Into<ElementId>,
@@ -358,71 +234,61 @@ pub fn hero_amount_field(
     placeholder: SharedString,
     unit: SharedString,
     focus: &FocusHandle,
-    window: &Window,
+    _window: &Window,
     on_change: impl Fn(String, &mut Window, &mut App) + 'static,
 ) -> gpui::Stateful<Div> {
-    let focused = focus.is_focused(window);
-    let selected = focused && !value.is_empty() && is_selected(focus);
     let rung = theme::amount_hero_rung(value.chars().count(), unit.chars().count());
     let size = theme::text_amount_hero(rung);
-    // Past the last rung the figure is cut at its END, with an ellipsis —
-    // the web's `p.value` — so the cut says it is one, and the unit beside
-    // it never moves. Centred and clipped, both ends of a long Max vanished.
-    let figure = div()
-        .min_w(px(0.))
-        .overflow_hidden()
-        .text_ellipsis()
-        .font_weight(FontWeight::BOLD)
-        .text_size(size)
-        .text_color(if value.is_empty() {
-            theme.fg_subtle
-        } else {
-            theme.fg_base
-        })
-        .when(selected, |text| {
-            text.bg(theme.accent.opacity(0.28)).rounded(px(4.))
-        })
-        .child(if value.is_empty() {
-            placeholder
-        } else {
-            SharedString::from(value.to_owned())
-        });
+    editor::sync(focus, value);
+    let on_change: OnChange = Rc::new(on_change);
+    let figure = editor::editor(
+        focus,
+        placeholder,
+        EditorStyle {
+            weight: FontWeight::BOLD,
+            ..style(theme, size, theme::line_amount_hero())
+        },
+        Wrap::None,
+        Rc::clone(&on_change),
+    )
+    .fit_content();
     // As wide as the column and no wider: in the form's centred column a row
     // is otherwise sized to its content, so a long figure spilled past BOTH
-    // edges — the unit with it — and `min_w(0)` never got to shrink it.
-    div()
-        .id(id)
-        .track_focus(focus)
-        .cursor_text()
-        .w_full()
-        .h(theme::line_amount_hero())
-        .flex()
-        .items_center()
-        .justify_center()
-        .gap(px(2.))
-        .min_w(px(0.))
-        .overflow_hidden()
-        .whitespace_nowrap()
-        .child(figure)
-        .when(focused && !selected, |row| {
-            row.child(caret(theme, size * 0.8))
-        })
-        .child(
-            div()
-                .flex_none()
-                .ml(px(8.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_size(theme::text_amount_unit(rung))
-                .text_color(theme.fg_muted)
-                .child(unit),
-        )
-        .on_click(click_to_edit(focus.clone()))
-        .on_key_down(edit_keys(value.to_owned(), focus.clone(), false, on_change))
+    // edges — the unit with it.
+    wire(
+        div()
+            .id(id)
+            .track_focus(focus)
+            .cursor_text()
+            .w_full()
+            .h(theme::line_amount_hero())
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(px(2.))
+            .min_w(px(0.))
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .child(figure)
+            .child(
+                div()
+                    .flex_none()
+                    .ml(px(8.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_size(theme::text_amount_unit(rung))
+                    .text_color(theme.fg_muted)
+                    .child(unit),
+            ),
+        focus,
+        Wrap::None,
+        false,
+        on_change,
+    )
 }
 
 /// A well with no well: the text and its caret, for a field that sits inside
 /// a card of its own (the send form's recipient). An address runs to two
-/// lines rather than being clipped — a cut address hides exactly the
+/// even lines rather than being clipped — a cut address hides exactly the
 /// characters a poisoning attack changes.
 #[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 pub fn bare_text_field(
@@ -431,70 +297,39 @@ pub fn bare_text_field(
     value: &str,
     placeholder: SharedString,
     focus: &FocusHandle,
-    window: &Window,
+    _window: &Window,
     on_change: impl Fn(String, &mut Window, &mut App) + 'static,
 ) -> gpui::Stateful<Div> {
-    let focused = focus.is_focused(window);
-    let selected = focused && !value.is_empty() && is_selected(focus);
-    let line = |text: String| {
+    editor::sync(focus, value);
+    let on_change: OnChange = Rc::new(on_change);
+    let size = theme::text_row_sub();
+    let text = editor::editor(
+        focus,
+        placeholder,
+        EditorStyle {
+            family: theme::font_mono().into(),
+            ..style(theme, size, size * 1.45)
+        },
+        Wrap::Halves,
+        Rc::clone(&on_change),
+    );
+    wire(
         div()
-            .font_family(theme::font_mono())
-            .text_size(theme::text_row_sub())
-            .text_color(theme.fg_base)
-            .whitespace_nowrap()
-            .when(selected, |el| {
-                el.bg(theme.accent.opacity(0.28)).rounded(px(2.))
-            })
-            .child(SharedString::from(text))
-    };
-    let mut text = div().flex().flex_col().min_w(px(0.));
-    if value.is_empty() {
-        text = text.child(
-            div()
-                .flex()
-                .items_center()
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_subtle)
-                        .child(placeholder),
-                )
-                .when(focused, |el| el.child(caret(theme, px(16.)))),
-        );
-    } else {
-        // Halves past 22 characters, as the address cards split them.
-        let chars: Vec<char> = value.chars().collect();
-        let halves = if chars.len() > 22 {
-            let mid = chars.len().div_ceil(2);
-            vec![
-                chars[..mid].iter().collect::<String>(),
-                chars[mid..].iter().collect::<String>(),
-            ]
-        } else {
-            vec![value.to_owned()]
-        };
-        let last = halves.len() - 1;
-        for (i, half) in halves.into_iter().enumerate() {
-            let mut row = div().flex().items_center().child(line(half));
-            if i == last && focused && !selected {
-                row = row.child(caret(theme, px(16.)));
-            }
-            text = text.child(row);
-        }
-    }
-    div()
-        .id(id)
-        .track_focus(focus)
-        .cursor_text()
-        .flex_1()
-        .min_w(px(0.))
-        .min_h(px(36.))
-        .flex()
-        .items_center()
-        .overflow_hidden()
-        .child(text)
-        .on_click(click_to_edit(focus.clone()))
-        .on_key_down(edit_keys(value.to_owned(), focus.clone(), false, on_change))
+            .id(id)
+            .track_focus(focus)
+            .cursor_text()
+            .flex_1()
+            .min_w(px(0.))
+            .min_h(px(36.))
+            .flex()
+            .items_center()
+            .overflow_hidden()
+            .child(div().flex_1().min_w(px(0.)).child(text)),
+        focus,
+        Wrap::Halves,
+        false,
+        on_change,
+    )
 }
 
 /// The typing half of a search field (078 X-05) — the web's `<input
@@ -502,68 +337,52 @@ pub fn bare_text_field(
 /// `fg-subtle` until something is typed. The well around it (height, fill,
 /// glyph, focus edge) is the caller's, because the flows and the contacts
 /// header draw different wells around the same input.
-///
-/// Same keys as every other well (`edit_keys`), so Ctrl+V and Ctrl+A mean
-/// here what they mean in the send form.
 pub fn search_input(
     id: impl Into<ElementId>,
     theme: &Theme,
     value: &str,
     placeholder: SharedString,
     focus: &FocusHandle,
-    window: &Window,
+    _window: &Window,
     on_change: impl Fn(String, &mut Window, &mut App) + 'static,
 ) -> gpui::Stateful<Div> {
-    let focused = focus.is_focused(window);
-    let selected = focused && !value.is_empty() && is_selected(focus);
-    let text = if value.is_empty() {
+    editor::sync(focus, value);
+    let on_change: OnChange = Rc::new(on_change);
+    let size = theme::text_row_sub();
+    let text = editor::editor(
+        focus,
+        placeholder,
+        style(theme, size, size * 1.45),
+        Wrap::None,
+        Rc::clone(&on_change),
+    );
+    wire(
         div()
-            .text_color(theme.fg_subtle)
-            .truncate()
-            .child(placeholder)
-    } else {
-        div()
+            .id(id)
+            .track_focus(focus)
+            .cursor_text()
+            .flex_1()
             .min_w(px(0.))
-            .text_color(theme.fg_base)
-            .whitespace_nowrap()
+            .h_full()
+            .flex()
+            .items_center()
             .overflow_hidden()
-            .when(selected, |el| {
-                el.bg(theme.accent.opacity(0.28)).rounded(px(2.))
-            })
-            .child(SharedString::from(value.to_owned()))
-    };
-    let mut line = div().flex().items_center().min_w(px(0.));
-    // The caret after the text, or before the placeholder, as an input draws
-    // it — never after a placeholder, which would read as typed.
-    if value.is_empty() {
-        line = line
-            .when(focused, |el| el.child(caret(theme, px(16.))))
-            .child(text);
-    } else {
-        line = line
-            .child(text)
-            .when(focused && !selected, |el| el.child(caret(theme, px(16.))));
-    }
-    div()
-        .id(id)
-        .track_focus(focus)
-        .cursor_text()
-        .flex_1()
-        .min_w(px(0.))
-        .h_full()
-        .flex()
-        .items_center()
-        .overflow_hidden()
-        .text_size(theme::text_row_sub())
-        .child(line)
-        .on_click(click_to_edit(focus.clone()))
-        .on_key_down(edit_keys(value.to_owned(), focus.clone(), false, on_change))
+            .child(div().flex_1().min_w(px(0.)).child(text)),
+        focus,
+        Wrap::None,
+        false,
+        on_change,
+    )
 }
 
 /// A multi-line well — the web's `<textarea>` (078 S-03): `rows` lines tall
 /// at rest and growing with what is typed, the words wrapping, Enter a new
-/// line. The same keys and clipboard chords as every single-line well, and
-/// the same all-or-nothing selection; a paste keeps its line breaks.
+/// line, ↑/↓ between the lines drawn (wrapped ones too), a paste keeping its
+/// line breaks.
+///
+/// `inert` is the web's `inert`: while a report goes the well takes no
+/// focus, draws no caret and hears no key or click — what is being sent does
+/// not change under the spinner.
 #[allow(clippy::too_many_arguments, clippy::allow_attributes)]
 pub fn text_area(
     id: impl Into<ElementId>,
@@ -571,48 +390,26 @@ pub fn text_area(
     value: &str,
     placeholder: SharedString,
     rows: u16,
+    inert: bool,
     focus: &FocusHandle,
     window: &Window,
     on_change: impl Fn(String, &mut Window, &mut App) + 'static,
 ) -> gpui::Stateful<Div> {
-    let focused = focus.is_focused(window);
-    let selected = focused && !value.is_empty() && is_selected(focus);
-    let line = theme::text_body() * 1.5;
-    let text: gpui::AnyElement = if value.is_empty() {
-        let mut row = div().flex().items_center().gap(px(1.));
-        if focused {
-            row = row.child(caret(theme, line));
-        }
-        row.child(div().text_color(theme.fg_subtle).child(placeholder))
-            .into_any_element()
-    } else if focused && !selected {
-        // The caret rides the end of the last line: a thin bar glyph in the
-        // accent, part of the text so it wraps where the text does.
-        let shown = format!("{value}\u{258F}");
-        let start = value.len();
-        gpui::StyledText::new(shown.clone())
-            .with_highlights([(
-                start..shown.len(),
-                gpui::HighlightStyle {
-                    color: Some(theme.accent),
-                    ..Default::default()
-                },
-            )])
-            .into_any_element()
-    } else {
-        div()
-            .when(selected, |text| {
-                text.bg(theme.accent.opacity(0.28)).rounded(px(2.))
-            })
-            .child(SharedString::from(value.to_owned()))
-            .into_any_element()
-    };
-    let current = value.to_owned();
-    let focus_for_click = focus.clone();
-    let focus_for_keys = focus.clone();
-    div()
+    let focused = !inert && focus.is_focused(window);
+    let size = theme::text_body();
+    let line = size * 1.5;
+    let wrap = Wrap::Soft { min_rows: rows };
+    editor::sync(focus, value);
+    let on_change: OnChange = Rc::new(on_change);
+    let text = editor::editor(
+        focus,
+        placeholder,
+        style(theme, size, line),
+        wrap,
+        Rc::clone(&on_change),
+    );
+    let well = div()
         .id(id)
-        .track_focus(focus)
         .w_full()
         .min_h(line * f32::from(rows) + px(24.))
         .p(px(12.))
@@ -624,97 +421,17 @@ pub fn text_area(
         } else {
             theme.divider
         })
-        .text_size(theme::text_body())
-        .line_height(line)
-        .text_color(theme.fg_base)
-        .cursor_text()
-        .child(text)
-        .on_click(click_to_edit(focus_for_click))
-        .on_key_down(area_keys(current, focus_for_keys, on_change))
-}
-
-/// [`edit_keys`] for a multi-line well: Enter is a line, and a paste keeps
-/// its breaks (a `\r\n` from Windows becomes one `\n`).
-fn area_keys(
-    current: String,
-    focus_for_keys: FocusHandle,
-    on_change: impl Fn(String, &mut Window, &mut App) + 'static,
-) -> impl Fn(&KeyDownEvent, &mut Window, &mut App) + 'static {
-    move |event: &KeyDownEvent, window, cx| {
-        let ks = &event.keystroke;
-        let selected = !current.is_empty() && is_selected(&focus_for_keys);
-        if let Some(chord) = edit_chord(ks) {
-            match chord {
-                EditChord::SelectAll => {
-                    if !current.is_empty() {
-                        select(Some(&focus_for_keys));
-                        window.refresh();
-                    }
-                }
-                EditChord::Copy => {
-                    if selected {
-                        cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
-                    }
-                }
-                EditChord::Cut => {
-                    if selected {
-                        cx.write_to_clipboard(ClipboardItem::new_string(current.clone()));
-                        select(None);
-                        on_change(String::new(), window, cx);
-                    }
-                }
-                EditChord::Paste => {
-                    let Some(pasted) = cx.read_from_clipboard().and_then(|item| item.text()) else {
-                        return;
-                    };
-                    let pasted: String = pasted
-                        .replace("\r\n", "\n")
-                        .chars()
-                        .filter(|c| *c == '\n' || !c.is_control())
-                        .collect();
-                    if pasted.is_empty() {
-                        return;
-                    }
-                    let kept = if selected { "" } else { current.as_str() };
-                    select(None);
-                    on_change(format!("{kept}{pasted}"), window, cx);
-                }
-            }
-            cx.stop_propagation();
-            return;
-        }
-        if ks.modifiers.control || ks.modifiers.alt || ks.modifiers.platform {
-            return;
-        }
-        let mut next = if selected {
-            String::new()
-        } else {
-            current.clone()
-        };
-        match ks.key.as_str() {
-            "backspace" | "delete" if selected => {}
-            "backspace" => {
-                if next.pop().is_none() {
-                    return;
-                }
-            }
-            "enter" => next.push('\n'),
-            "left" | "right" | "up" | "down" | "home" | "end" | "escape" => {
-                if selected {
-                    select(None);
-                    window.refresh();
-                }
-                return;
-            }
-            _ => match &ks.key_char {
-                Some(ch) if !ch.chars().any(char::is_control) => next.push_str(ch),
-                _ => return,
-            },
-        }
-        select(None);
-        cx.stop_propagation();
-        on_change(next, window, cx);
+        .child(text);
+    if inert {
+        return well;
     }
+    wire(
+        well.track_focus(focus).cursor_text(),
+        focus,
+        wrap,
+        false,
+        on_change,
+    )
 }
 
 #[cfg(test)]

@@ -55,6 +55,8 @@ pub mod gpui_http;
 pub mod identity;
 pub mod manage_tokens;
 pub mod network_admin;
+/// A URL handed to the platform's opener, or to a verification log.
+pub mod opener;
 pub mod passkey;
 pub mod payment_request;
 #[cfg(target_os = "macos")]
@@ -66,6 +68,8 @@ pub mod qr;
 pub mod receive_watch;
 pub mod registry;
 pub mod relay;
+/// A bug report's screenshots: decoded, upright, scaled, re-encoded bare (078).
+pub mod screenshot_prep;
 pub mod send;
 pub mod sign_pref;
 /// The signing panel's seven operations.

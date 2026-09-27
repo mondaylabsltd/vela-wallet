@@ -985,6 +985,85 @@ pub fn balanced_wrap_width(
     (hi.ceil() + px(1.)).min(max)
 }
 
+/// The widest width, at most `max`, at which no wrapped line of `text` (the
+/// UI face at `size`) begins with a closing mark — the rule every CJK
+/// typesetter keeps (kinsoku): 「…通行密钥 / 。」 is a break the browser never
+/// makes, and a lone 。 on a line of its own reads as a rendering fault. Steps
+/// in by one em at a time, which carries the character before the mark down
+/// with it. `max` when nothing strands.
+pub fn kinsoku_width(window: &Window, text: &SharedString, size: Pixels, max: Pixels) -> Pixels {
+    let run = TextRun {
+        len: text.len(),
+        font: gpui::font(theme::font_ui()),
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let strands = |width: Pixels| -> bool {
+        let Ok(shaped) = window.text_system().shape_text(
+            text.clone(),
+            size,
+            std::slice::from_ref(&run),
+            Some(width),
+            None,
+        ) else {
+            return false;
+        };
+        shaped.iter().any(|line| {
+            line.wrap_boundaries().iter().any(|boundary| {
+                let at =
+                    line.unwrapped_layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix].index;
+                line.text
+                    .get(at..)
+                    .and_then(|rest| rest.chars().next())
+                    .is_some_and(|c| NO_LINE_START.contains(c))
+            })
+        })
+    };
+    let mut width = max;
+    for _ in 0..12 {
+        if !strands(width) {
+            return width;
+        }
+        width -= size;
+    }
+    max
+}
+
+/// How wide `text` is on one line, in the UI face at `size`.
+pub fn text_width(window: &Window, text: &str, size: Pixels) -> Pixels {
+    let run = TextRun {
+        len: text.len(),
+        font: gpui::font(theme::font_ui()),
+        color: gpui::black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    window
+        .text_system()
+        .shape_line(
+            SharedString::from(text.to_owned()),
+            size,
+            std::slice::from_ref(&run),
+            None,
+        )
+        .width
+}
+
+/// The width `text` wraps at inside `max` so that its lines come out even —
+/// no word, and no 「钥。」, alone on the last line — and no line opens with a
+/// closing mark. Kinsoku first: at the full width the natural break can
+/// strand a 「。」, and [`balanced_wrap_width`] declines to balance a text it
+/// cannot break cleanly; balanced inside the kinsoku width, then checked
+/// again, because the balanced break can strand one too.
+pub fn even_wrap_width(window: &Window, text: &SharedString, size: Pixels, max: Pixels) -> Pixels {
+    let clean = kinsoku_width(window, text, size, max);
+    let balanced = balanced_wrap_width(window, text, size, clean);
+    kinsoku_width(window, text, size, balanced)
+}
+
 /// Empty state: sunken circle + outline icon, title, caption.
 pub fn empty_state(
     theme: &Theme,

@@ -57,6 +57,8 @@ pub struct SettingsStrings {
     /// The Feedback page (078 S-03): its nav row, and the web's
     /// `componentsUi.bugReport.*` words for the report itself.
     pub nav_feedback: SharedString,
+    /// The Community group's label (Settings → Community, 2026-09-27).
+    pub nav_community: SharedString,
     pub bug_title: SharedString,
     pub bug_subtitle: SharedString,
     pub bug_what_placeholder: SharedString,
@@ -76,6 +78,26 @@ pub struct SettingsStrings {
     pub bug_fallback_body: SharedString,
     pub bug_open_github: SharedString,
     pub bug_open_github_form: SharedString,
+    /// The screenshots (078 round 3). `screenshotsHint` and
+    /// `screenshotsLimit` carry `{{max}}`. (`removeScreenshot` is the
+    /// badge's accessibility label on the other shells; gpui draws no
+    /// accessibility tree at this pin, so there is nowhere to put it here.)
+    pub bug_screenshots_label: SharedString,
+    pub bug_add_screenshots: SharedString,
+    pub bug_screenshots_hint: String,
+    pub bug_screenshots_public: SharedString,
+    pub bug_screenshots_limit: String,
+    pub bug_screenshot_unsupported: SharedString,
+    pub bug_drop_hint: SharedString,
+    pub bug_screenshots_dropped: SharedString,
+    pub bug_fallback_screenshots: SharedString,
+    pub bug_done: SharedString,
+    /// The send button in the fallback state (v2 A2): a retry, not "Send".
+    pub bug_try_again: SharedString,
+    /// The screenshot viewer's one button (078 round 3, C3). Its "View
+    /// screenshot {{index}}" and "Close" are accessibility labels on the
+    /// other shells, with nowhere to go on this gpui.
+    pub bug_remove_from_viewer: SharedString,
     // account panel
     /// "Total {{amount}}" — the second half of the summary. The count template
     /// ends in "· ", and the live panel printed that dangling separator with
@@ -331,6 +353,7 @@ impl SettingsStrings {
             signer_page_save: s("settings.signing.pageSave"),
             nav_about: s("settings.about.title"),
             nav_feedback: s("settings.feedback.title"),
+            nav_community: s("settings.sections.community"),
             bug_title: s("componentsUi.bugReport.title"),
             bug_subtitle: s("componentsUi.bugReport.subtitle"),
             bug_what_placeholder: s("componentsUi.bugReport.whatPlaceholder"),
@@ -356,6 +379,18 @@ impl SettingsStrings {
             bug_fallback_body: s("componentsUi.bugReport.fallbackBody"),
             bug_open_github: s("componentsUi.bugReport.openGithub"),
             bug_open_github_form: s("componentsUi.bugReport.openGithubForm"),
+            bug_screenshots_label: s("componentsUi.bugReport.screenshotsLabel"),
+            bug_add_screenshots: s("componentsUi.bugReport.addScreenshots"),
+            bug_screenshots_hint: raw("componentsUi.bugReport.screenshotsHint"),
+            bug_screenshots_public: s("componentsUi.bugReport.screenshotsPublic"),
+            bug_screenshots_limit: raw("componentsUi.bugReport.screenshotsLimit"),
+            bug_screenshot_unsupported: s("componentsUi.bugReport.screenshotUnsupported"),
+            bug_drop_hint: s("componentsUi.bugReport.dropHint"),
+            bug_screenshots_dropped: s("componentsUi.bugReport.screenshotsDropped"),
+            bug_fallback_screenshots: s("componentsUi.bugReport.fallbackScreenshots"),
+            bug_done: s("componentsUi.bugReport.done"),
+            bug_try_again: s("common.tryAgain"),
+            bug_remove_from_viewer: s("componentsUi.bugReport.removeFromViewer"),
             accounts_total: raw("settingsModals.account.total"),
             accounts_count: raw("home.switcherAccountCount"),
             accounts_title: s("settingsModals.account.modalTitle"),
@@ -586,6 +621,52 @@ mod tests {
             assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
             assert!(!value.is_empty(), "`{key}` resolved empty");
         }
+    }
+
+    /// The report's screenshot words (078 round 3), every one of them in the
+    /// corpus already — and the templates keep their placeholders.
+    #[test]
+    fn the_screenshot_words_resolve() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        for (value, key) in [
+            (
+                &s.bug_screenshots_label,
+                "componentsUi.bugReport.screenshotsLabel",
+            ),
+            (
+                &s.bug_add_screenshots,
+                "componentsUi.bugReport.addScreenshots",
+            ),
+            (
+                &s.bug_screenshots_public,
+                "componentsUi.bugReport.screenshotsPublic",
+            ),
+            (
+                &s.bug_screenshot_unsupported,
+                "componentsUi.bugReport.screenshotUnsupported",
+            ),
+            (&s.bug_drop_hint, "componentsUi.bugReport.dropHint"),
+            (
+                &s.bug_screenshots_dropped,
+                "componentsUi.bugReport.screenshotsDropped",
+            ),
+            (
+                &s.bug_fallback_screenshots,
+                "componentsUi.bugReport.fallbackScreenshots",
+            ),
+            (&s.bug_done, "componentsUi.bugReport.done"),
+            (&s.bug_try_again, "common.tryAgain"),
+            (&s.nav_community, "settings.sections.community"),
+            (
+                &s.bug_remove_from_viewer,
+                "componentsUi.bugReport.removeFromViewer",
+            ),
+        ] {
+            assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
+            assert!(!value.is_empty(), "`{key}` resolved empty");
+        }
+        assert!(s.bug_screenshots_hint.contains("{{max}}"));
+        assert!(s.bug_screenshots_limit.contains("{{max}}"));
     }
 
     /// The keys list's mark for the key this device signs with.
