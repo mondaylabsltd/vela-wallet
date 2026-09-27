@@ -426,8 +426,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   GitHub warning, remove, limit, unsupported, the web drop hint), and says
 //   when they could not be uploaded or carried into the GitHub form. All under
 //   the existing `componentsUi.bugReport` branch: 1730 + 10 = 1740.
-if (PATHS.length !== 1740) fail(`expected 1740 paths (1651 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1651) fail(`expected 1651 leaf paths, got ${leafSet.size}`);
+// 1743 (078, 2026-09-27): + `componentsUi.bugReport.{viewScreenshot, closeViewer,
+//   removeFromViewer}` — a screenshot tile opens a preview (founder: "上传的截图要
+//   能点击放大预览"): the tile's a11y label, the viewer's close and its remove
+//   button. Same branch: 1740 + 3 = 1743.
+if (PATHS.length !== 1743) fail(`expected 1743 paths (1654 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1654) fail(`expected 1654 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
