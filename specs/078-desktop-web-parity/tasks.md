@@ -124,7 +124,9 @@ screenshot checked against the web.
       The "empty banner" was the gallery's chip row pushing the page under
       the dialog, not a defect. The DST4b "4 more contracts" stays: it is what
       the live check counts (seen live on Scroll); the web fixture's 8 is off.
-- [ ] T064 DR2, DR3: the QR centre badge (chain / token art, not a grey disc).
+- [x] T064 DR2, DR3: with no logo to show, the QR centre is the web's `.mark` —
+      a 36 disc in the chain's colour, the ticker in white — not the token
+      icon's grey placeholder. Live (a logo) unchanged, checked on Ethereum.
 - [ ] T065 DA2, DA3: tx-detail row height and the space under the amount.
 - [ ] T066 Send form: DSD2 unit and ⇕ switch; DSD2b recipient rows, icon
       pills, stacked total; DSD3 unit size; the live disabled Continue label.

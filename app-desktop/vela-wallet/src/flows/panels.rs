@@ -628,12 +628,30 @@ fn receive_qr(
         // drawn against the LIGHT theme rather than the active one —
         // the dark palette's disc would punch an unreadable hole in a
         // code that a camera still has to resolve.
-        Some(token_icon_logos(
-            &Theme::light(),
-            model.centre.ticker.as_ref(),
-            model.centre.badge,
-            &model.centre.logos,
-        )),
+        //
+        // With no logo to show (the mocks), the web's `.mark`: a 36 disc in
+        // the chain's colour with the ticker in white (078 T064) — not the
+        // token icon's grey placeholder, which read as a hole in the code.
+        Some(if model.centre.logos.logo_urls.is_empty() {
+            div()
+                .size(px(36.))
+                .rounded_full()
+                .bg(model.centre.badge)
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(theme::text_glyph())
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
+                .child(model.centre.ticker.clone())
+        } else {
+            token_icon_logos(
+                &Theme::light(),
+                model.centre.ticker.as_ref(),
+                model.centre.badge,
+                &model.centre.logos,
+            )
+        }),
         model.qr_payload.as_deref(),
     )))
     .child(
