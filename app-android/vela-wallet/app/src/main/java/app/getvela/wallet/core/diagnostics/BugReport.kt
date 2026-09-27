@@ -60,6 +60,12 @@ object BugReport {
     const val MAX_SCREENSHOTS: Int = 5
     const val MAX_SCREENSHOT_BYTES: Int = 2_000_000
 
+    /** This shell's `client` value (spec 078 round 3 E). */
+    const val CLIENT: String = "android"
+
+    /** The tag the issue title carries for this shell: "[Android] …". */
+    const val TITLE_TAG: String = "Android"
+
     /** The issue form's `area` option a settings-page report answers. */
     const val AREA_OTHER: String = BugReportUrl.AREA_OTHER
 
@@ -118,6 +124,16 @@ object BugReport {
         /** The preview lines, joined — identical to what the sheet showed. */
         val environment: String,
         val fingerprint: String,
+        /**
+         * Spec 078 round 3 E: who is asking, so the backend titles the issue
+         * "[Android] …" and opens its body with "Platform: Android 14. App
+         * v0.9.4." — one of ios | android | web | extension | desktop.
+         */
+        val client: String = CLIENT,
+        /** The OS as the app reads it, one short line ("Android 14") — never a user agent, never an address. */
+        val os: String = "",
+        /** "0.9.4" — no leading v, no commit. */
+        val appVersion: String = "",
         /**
          * Plain base64 (standard alphabet, padded, no line breaks, no `data:`
          * prefix) of each processed JPEG, in tile order. Absent — not `[]` —
@@ -209,6 +225,9 @@ object BugReport {
             area = area,
             environment = environmentLines(labels, facts).joinToString("\n"),
             fingerprint = fingerprintOf(trimmed, area, facts.version),
+            client = CLIENT,
+            os = facts.platform,
+            appVersion = facts.version.removePrefix("v"),
             screenshots = screenshots.take(MAX_SCREENSHOTS).map { Base64.getEncoder().encodeToString(it) }.ifEmpty { null },
         )
     }

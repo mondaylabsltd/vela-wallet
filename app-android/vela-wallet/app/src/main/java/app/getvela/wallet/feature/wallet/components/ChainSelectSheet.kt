@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet.components
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -40,7 +40,7 @@ fun ChainSelectSheet(
     onSelect: (ChainRowModel) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.bgRaised,
     ) {

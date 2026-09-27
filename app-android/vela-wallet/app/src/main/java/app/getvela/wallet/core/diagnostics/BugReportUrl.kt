@@ -69,15 +69,16 @@ object BugReportUrl {
 
     /**
      * The fallback road for an in-app report ([BugReport.send]) — the web's
-     * `prefilledIssueURL`, byte for byte: `[bug] ` + the first 80 units of what
-     * was typed, `steps` always present (the form marks it required; an empty
+     * `prefilledIssueURL`: the platform tag (`[Android] `, spec 078 round 3 E —
+     * it was bug.yml's default `[bug] `) + the first line of what was typed,
+     * at most 80 units, `steps` always present (the form marks it required; an empty
      * box beats a missing one), `area` unless empty. `URLEncoder` and the web's
      * `URLSearchParams` escape the same set (space → `+`, `*-._` kept).
      */
     fun prefilled(payload: BugReport.Payload): String {
         val fields = buildList {
             add("template" to "bug.yml")
-            add("title" to "[bug] ${payload.what.take(80)}")
+            add("title" to "[${BugReport.TITLE_TAG}] ${payload.what.lineSequence().firstOrNull().orEmpty().take(80)}")
             add("what" to payload.what)
             add("steps" to payload.steps)
             add("environment" to payload.environment)

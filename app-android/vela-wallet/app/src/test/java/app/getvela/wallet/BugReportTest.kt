@@ -115,9 +115,12 @@ class BugReportTest {
     }
 
     @Test
-    fun `a text-only body is the five fields and no sixth`() {
+    fun `a text-only body is the five fields plus who is asking, and nothing else`() {
         val json = JSONObject(BugReport.body(payload()))
-        assertEquals(setOf("what", "steps", "area", "environment", "fingerprint"), json.keys().asSequence().toSet())
+        assertEquals(
+            setOf("what", "steps", "area", "environment", "fingerprint", "client", "os", "appVersion"),
+            json.keys().asSequence().toSet(),
+        )
         assertEquals("Send froze", json.getString("what"))
         assertEquals("1. tap send", json.getString("steps"))
         assertEquals(BugReport.AREA_OTHER, json.getString("area"))
@@ -127,14 +130,39 @@ class BugReportTest {
     }
 
     @Test
-    fun `the fallback url prefills by field id, the desktop's vector`() {
+    fun `the fallback url prefills by field id, the desktop's vector with this shell's tag`() {
         val url = BugReportUrl.prefilled(BugReport.build("It broke & stayed broken", "1. open\n2. send", BugReport.AREA_OTHER, labels, facts))
-        assertTrue(url, url.startsWith("https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=%5Bbug%5D+It+broke+%26+stayed+broken&what="))
+        assertTrue(url, url.startsWith("https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=%5BAndroid%5D+It+broke+%26+stayed+broken&what="))
         assertTrue(url.contains("&steps=1.+open%0A2.+send&"))
         assertTrue(url.contains("&area=Other+%28explain+above%29"))
         assertFalse(url.contains("body="))
         // Steps always present — the form marks it required.
         assertTrue(BugReportUrl.prefilled(payload(steps = "")).contains("&steps=&"))
+    }
+
+    // --- Platform in the issue title (spec 078 round 3 E) -----------------
+
+    @Test
+    fun `the payload says which shell, which OS and which version`() {
+        val p = BugReport.build("x", "", BugReport.AREA_OTHER, labels, facts.copy(version = "0.9.4", platform = "Android 14"))
+        assertEquals("android", p.client)
+        assertEquals("Android 14", p.os)
+        assertEquals("0.9.4", p.appVersion)
+        val json = JSONObject(BugReport.body(p))
+        assertEquals("android", json.getString("client"))
+        assertEquals("Android 14", json.getString("os"))
+        assertEquals("0.9.4", json.getString("appVersion"))
+        // `environment` is untouched: still the preview the sheet shows.
+        assertEquals(BugReport.environmentLines(labels, facts.copy(version = "0.9.4", platform = "Android 14")).joinToString("\n"), p.environment)
+    }
+
+    @Test
+    fun `the fallback title carries the android tag and only the first line`() {
+        val url = BugReportUrl.prefilled(BugReport.build("Send froze\nand then the app closed", "", BugReport.AREA_OTHER, labels, facts))
+        assertTrue(url, url.contains("title=%5BAndroid%5D+Send+froze&"))
+        assertFalse(url.contains("%5Bbug%5D"))
+        val long = "x".repeat(120)
+        assertTrue(BugReportUrl.prefilled(BugReport.build(long, "", BugReport.AREA_OTHER, labels, facts)).contains("title=%5BAndroid%5D+${"x".repeat(80)}&"))
     }
 
     // --- Screenshots on the wire ------------------------------------------

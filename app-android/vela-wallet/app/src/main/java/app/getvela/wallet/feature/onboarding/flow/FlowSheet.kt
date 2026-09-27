@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -56,7 +56,7 @@ fun FlowSheet(kind: PromptKind, confirmable: Boolean, onAnswer: (Boolean) -> Uni
     val colors = VelaTheme.colors
     val copy = promptCopy(kind, strings)
 
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = { onAnswer(false) },
         containerColor = colors.bgRaised,
         dragHandle = {

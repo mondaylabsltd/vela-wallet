@@ -1,12 +1,12 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -41,7 +41,7 @@ fun LocationAskSheet(
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
 
-    ModalBottomSheet(onDismissRequest = { onAnswer(false) }, containerColor = colors.bgRaised) {
+    VelaModalSheet(onDismissRequest = { onAnswer(false) }, containerColor = colors.bgRaised) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

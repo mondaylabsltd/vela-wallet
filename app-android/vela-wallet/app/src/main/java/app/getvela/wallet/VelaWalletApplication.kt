@@ -66,6 +66,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
 import app.getvela.wallet.feature.send.core.PaymentHandOff
+import app.getvela.wallet.feature.settings.core.FeedbackReporter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
@@ -113,6 +114,13 @@ class AppContainer(private val app: Application) {
      * for the open otherwise.
      */
     val paymentHandOff = PaymentHandOff(pendingSendParams, pendingScan)
+    /**
+     * Spec 078 round 3: the report in flight, on the app's scope — closing the
+     * sheet (or leaving the tab) mid-send loses neither the send nor its answer.
+     */
+    val feedback = FeedbackReporter(
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
+    )
     /** Spec 048: the home's status line opens the matching rescue sheet on the settings page. */
     val pendingSettingsOverlay = MutableStateFlow<SettingsOverlay?>(null)
     /** Spec 048: the add-token 原生币 tab opens the settings' add-network page. */

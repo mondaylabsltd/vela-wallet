@@ -739,6 +739,7 @@ object I18nKeys {
         const val SECTION_APPEARANCE = "settings.sections.appearance"
         const val SECTION_LOCALIZATION = "settings.sections.localization"
         const val SECTION_ADVANCED = "settings.sections.advanced"
+        const val SECTION_COMMUNITY = "settings.sections.community"
 
         // Home rows.
         const val ACCOUNT_SWITCH = "settings.account.switch"

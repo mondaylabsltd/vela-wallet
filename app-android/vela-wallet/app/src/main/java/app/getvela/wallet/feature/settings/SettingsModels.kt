@@ -77,6 +77,8 @@ data class CalloutModel(val tone: CalloutTone, val text: String)
 enum class SettingsIcon {
     Contacts, Feedback, Globe, Coins, Hash, Calendar, Clock,
     Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor, Upload,
+    /** Settings → Community: the brands' own monochrome marks. */
+    BrandX, BrandTelegram, BrandDiscord,
 }
 
 /** Row emphasis. `Danger` is the red 退出登录 / 清理数据 family. */
@@ -432,7 +434,17 @@ data class FeedbackModel(
     val fallbackScreenshots: String = "",
     /** Where the last 发送 stands; the gallery draws [FeedbackStatus.Idle]. */
     val status: FeedbackStatus = FeedbackStatus.Idle,
+    /** An answer that arrived after the sheet was closed: the settings page's notice. */
+    val notice: FeedbackNoticeModel? = null,
 )
+
+/**
+ * The page's notice for a report whose sheet was closed mid-send: filed →
+ * 感谢反馈，已收到 with 在 GitHub 查看; not filed → 暂时无法在应用内发送 with
+ * 打开 GitHub 表单. [url] is where the action goes.
+ */
+@Immutable
+data class FeedbackNoticeModel(val message: String, val action: String, val url: String)
 
 /**
  * Spec 078 round 3 (the web's `FeedbackResult` + `sending`): both endings are

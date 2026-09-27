@@ -697,6 +697,21 @@ object SettingsLive {
         feedback = model.feedback.copy(previewLines = BugReport.environmentLines(feedbackLabels(strings), facts)),
     )
 
+    /**
+     * The notice for an answer that arrived with the sheet closed (the founder:
+     * a report always ends in something the person sees): filed → the success
+     * title and 在 GitHub 查看; not filed → the fallback title and 打开 GitHub 表单.
+     */
+    fun withFeedbackNotice(model: SettingsScreenModel, notice: BugReport.Outcome?): SettingsScreenModel {
+        val f = model.feedback
+        val shown = when (notice) {
+            is BugReport.Outcome.Filed -> FeedbackNoticeModel(f.successTitle, f.viewIssue, notice.url)
+            is BugReport.Outcome.Fallback -> FeedbackNoticeModel(f.fallbackTitle, f.openGithub, notice.fallbackUrl)
+            null -> null
+        }
+        return model.copy(feedback = f.copy(notice = shown))
+    }
+
     /** Where the last 发送 stands: in flight, filed, or handed to the form. */
     fun withFeedbackStatus(model: SettingsScreenModel, sending: Boolean, outcome: BugReport.Outcome?): SettingsScreenModel = model.copy(
         feedback = model.feedback.copy(

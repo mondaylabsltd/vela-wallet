@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.contacts.components
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -7,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -38,7 +38,7 @@ import app.getvela.wallet.feature.flows.components.QrCard
 @Composable
 private fun ContactsSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = VelaTheme.colors.bgBase) {
+    VelaModalSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = VelaTheme.colors.bgBase) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

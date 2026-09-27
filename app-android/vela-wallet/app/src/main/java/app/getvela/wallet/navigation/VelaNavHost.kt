@@ -1081,7 +1081,7 @@ fun VelaNavHost(
                         },
                         onSaveImage = {
                             val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
-                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id)
+                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id, networks.networks.firstOrNull { it.chain_id.toInt() == request.asset.chain_id }?.native_symbol)
                         },
                         addToken = AddTokenCallbacks(
                             onInput = { wallet.addTokenInput(it.trim()) },
@@ -1707,9 +1707,11 @@ fun VelaNavHost(
                 var storageTick by remember { mutableStateOf(0) }
                 var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
                 var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
-                // Spec 078 round 3: the report in flight, and how the last one ended.
-                var feedbackSending by remember { mutableStateOf(false) }
-                var feedbackOutcome by remember { mutableStateOf<BugReport.Outcome?>(null) }
+                // Spec 078 round 3: the report in flight, and how the last one ended —
+                // the app's, not this screen's (closing the sheet mid-send still ends
+                // in something the person sees).
+                val feedback = application.container.feedback
+                val feedbackState by feedback.state.collectAsStateWithLifecycle()
                 // The RPC fix the home asked for (the web's `openRpcFix`): which chain,
                 // the URL being typed until it is saved, and whether a save went out
                 // from the sheet (its probe then decides "restored").
@@ -1780,7 +1782,8 @@ fun VelaNavHost(
                     m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings)
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
                     m = SettingsLive.withFeedback(m, feedbackFacts, strings)
-                    m = SettingsLive.withFeedbackStatus(m, feedbackSending, feedbackOutcome)
+                    m = SettingsLive.withFeedbackStatus(m, feedbackState.sending, feedbackState.outcome)
+                    m = SettingsLive.withFeedbackNotice(m, feedbackState.notice)
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
                     m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, balanceView.switcher, currency, strings)
@@ -1895,23 +1898,20 @@ fun VelaNavHost(
                             // Spec 078 round 3: the report is POSTed (getvela.app), the
                             // screenshots with it; any refusal hands back the prefilled
                             // GitHub form, which the sheet offers.
-                            if (!feedbackSending && what.isNotBlank()) {
-                                feedbackSending = true
-                                feedbackOutcome = null
+                            if (!feedbackState.sending && what.isNotBlank()) {
                                 val labels = SettingsLive.feedbackLabels(strings)
                                 val facts = feedbackFacts
-                                VelaLog.event("feedback", "send", "typed" to what.length, "screenshots" to screenshots.size)
                                 scope.launch {
-                                    val outcome = withContext(Dispatchers.Default) {
-                                        BugReport.send(BugReport.build(what, steps, BugReport.AREA_OTHER, labels, facts, screenshots))
+                                    val payload = withContext(Dispatchers.Default) {
+                                        BugReport.build(what, steps, BugReport.AREA_OTHER, labels, facts, screenshots)
                                     }
-                                    VelaLog.event("feedback", "outcome", "filed" to (outcome is BugReport.Outcome.Filed))
-                                    feedbackOutcome = outcome
-                                    feedbackSending = false
+                                    feedback.submit(payload)
                                 }
                             }
                         },
-                        onFeedbackClosed = { if (!feedbackSending) feedbackOutcome = null },
+                        onFeedbackOpened = { feedback.sheetOpened() },
+                        onFeedbackClosed = { feedback.sheetClosed() },
+                        onFeedbackNoticeShown = { feedback.noticeShown() },
                         onOverrideEdited = { chainId, field, value ->
                             settings.editOverride(chainId, if (field == "explorer") NetOverrideField.Explorer else NetOverrideField.Rpc, value)
                         },

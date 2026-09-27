@@ -1,5 +1,13 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
+import androidx.compose.foundation.layout.navigationBarsPadding
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
+import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.ScrollState
@@ -80,7 +88,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -210,6 +217,10 @@ data class SettingsActions(
     val onFeedbackSend: (what: String, steps: String, screenshots: List<ByteArray>) -> Unit = { _, _, _ -> },
     /** Spec 078 round 3: the sheet closed — the next open starts a fresh report. */
     val onFeedbackClosed: () -> Unit = {},
+    /** The sheet opened: an answer that arrives now is shown in it. */
+    val onFeedbackOpened: () -> Unit = {},
+    /** The page's notice (an answer after the sheet was closed) has been shown. */
+    val onFeedbackNoticeShown: () -> Unit = {},
     /** Spec 048: the network detail's RPC / explorer overrides, and the add-network sheet's custom RPC + 重新检查. */
     val onOverrideEdited: (chainId: Long, field: String, value: String) -> Unit = { _, _, _ -> },
     val onOverrideCommitted: (chainId: Long) -> Unit = {},
@@ -259,12 +270,23 @@ fun SettingsRoute(
         mutableStateOf(model.state == SettingsScreenState.ST1B)
     }
 
+    // A report whose sheet was closed mid-send ends HERE, visibly: a notice
+    // with the way onward (the founder: 反馈成功或失败都要有提示).
+    val noticeHost = remember { SnackbarHostState() }
+    val notice = model.feedback.notice
+    LaunchedEffect(notice) {
+        if (notice == null) return@LaunchedEffect
+        val result = noticeHost.showSnackbar(message = notice.message, actionLabel = notice.action, duration = SnackbarDuration.Long)
+        if (result == SnackbarResult.ActionPerformed) actions.onOpenLink(notice.url)
+        actions.onFeedbackNoticeShown()
+    }
+    Box(modifier = modifier.fillMaxSize()) {
     SettingsScreen(
         model = model,
         page = page,
         overlay = overlay,
         advancedOpen = advancedOpen,
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         onRow = { id ->
             when (id) {
                 "contacts" -> actions.onOpenContacts()
@@ -288,7 +310,8 @@ fun SettingsRoute(
                 "date-format" -> overlay = SettingsOverlay.DateFormat
                 "time-format" -> overlay = SettingsOverlay.TimeFormat
                 "feedback" -> overlay = SettingsOverlay.Feedback
-                else -> Unit
+                // Community: out to the brand's own page (its app takes over when installed).
+                else -> CommunityLinks.urlFor(id)?.let(actions.onOpenLink)
             }
         },
         onBack = { page = SettingsPage.Home },
@@ -373,6 +396,65 @@ fun SettingsRoute(
         },
         onSignerUrlSave = actions.onSignerUrlSave,
         onSignerUrlReset = actions.onSignerUrlReset,
+        onFeedbackOpened = actions.onFeedbackOpened,
+    )
+    // Above the tab bar and the system navigation bar — never under them
+    // (device pass: at the largest size the notice sat half behind both).
+    SnackbarHost(
+        hostState = noticeHost,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .navigationBarsPadding()
+            .padding(bottom = VelaSizing.tabBar + VelaSpacing.md)
+            .padding(horizontal = VelaSizing.screenPaddingX),
+    ) { data -> FeedbackNoticeBar(data) }
+    }
+}
+
+/**
+ * The page's notice: a dark pill with the answer and its one action — the
+ * app's toast shape, with room for the way onward.
+ */
+@Composable
+private fun FeedbackNoticeBar(data: SnackbarData) {
+    val colors = VelaTheme.colors
+    // The message whole and the action beside it when both fit; otherwise the
+    // action takes its own line under the message (never a word broken to
+    // make room — the largest size wrapped "发送" alone onto a second line).
+    VelaLabelBesideValue(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(VelaRadius.lg))
+            .background(colors.fgBase)
+            .padding(start = VelaSpacing.lg, top = VelaSpacing.sm, bottom = VelaSpacing.sm, end = VelaSpacing.sm),
+        gap = VelaSpacing.md,
+        rowGap = 0.dp,
+        label = {
+            Text(
+                text = data.visuals.message,
+                color = colors.bgBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                modifier = Modifier.padding(vertical = VelaSpacing.sm),
+            )
+        },
+        value = {
+          data.visuals.actionLabel?.let { label ->
+            Text(
+                text = label,
+                color = colors.bgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.base,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(VelaRadius.md))
+                    .clickable(role = Role.Button) { data.performAction() }
+                    .heightIn(min = VelaSizing.controlSm)
+                    .wrapContentHeight(Alignment.CenterVertically)
+                    .padding(horizontal = VelaSpacing.md),
+            )
+          }
+        },
     )
 }
 
@@ -418,6 +500,7 @@ fun SettingsScreen(
     onFeedbackSend: (String, String, List<ByteArray>) -> Unit = { _, _, _ -> },
     onFeedbackGithub: () -> Unit = {},
     onFeedbackClosed: () -> Unit = {},
+    onFeedbackOpened: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
@@ -550,6 +633,7 @@ fun SettingsScreen(
                 onFeedbackSend = onFeedbackSend,
                 onFeedbackGithub = onFeedbackGithub,
                 onFeedbackClosed = onFeedbackClosed,
+                onFeedbackOpened = onFeedbackOpened,
                 onOpenLink = onOpenLink,
                 onRelayerRetry = onRelayerRetry,
                 onBalanceRetry = onBalanceRetry,
@@ -1233,6 +1317,7 @@ private fun SettingsSheet(
     onFeedbackSend: (String, String, List<ByteArray>) -> Unit = { _, _, _ -> },
     onFeedbackGithub: () -> Unit = {},
     onFeedbackClosed: () -> Unit = {},
+    onFeedbackOpened: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
@@ -1246,15 +1331,16 @@ private fun SettingsSheet(
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    // The sheet is its own window, and a window's root provides its OWN
-    // density — the app's text size (VelaTheme's fontScale) stopped at the
-    // sheet's edge, so every settings sheet stayed at the standard size
-    // (found checking the report sheet at the largest size, spec 078 round 3).
-    val appDensity = LocalDensity.current
-    ModalBottomSheet(
+    // The shared host (VelaModalSheet) carries the app's text size into the
+    // sheet's own window — without it every settings sheet stayed at the
+    // standard size (found checking the report sheet at the largest size) —
+    // and keeps the sheet still under a fling (its size never follows its
+    // offset; upward overscroll never reaches it).
+    VelaModalSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = colors.bgBase,
+        followAppTextSize = true,
     ) {
       // The ✕ is the host's, handed to every body's SheetTitle, which puts it
       // in its own column beside the title: every sheet opens with one, so
@@ -1268,7 +1354,6 @@ private fun SettingsSheet(
       val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
       val sheetScroll = rememberScrollState()
       CompositionLocalProvider(
-          LocalDensity provides appDensity,
           LocalSheetScroll provides sheetScroll,
           LocalSheetClose provides SheetClose(model.closeLabel, onDismiss),
           LocalSheetBodyMax provides maxSheetHeight - VelaSpacing.xl3,
@@ -1340,7 +1425,7 @@ private fun SettingsSheet(
                     onConfirm = onErase,
                     onCancel = onDismiss,
                 )
-                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub, onOpen = onOpenLink, onDone = onDismiss, onClosed = onFeedbackClosed)
+                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub, onOpen = onOpenLink, onDone = onDismiss, onOpened = onFeedbackOpened, onClosed = onFeedbackClosed)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onRpcFixPrimary, onRpcFixField)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail, onBalanceRetry)
                 SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
@@ -1654,12 +1739,16 @@ private fun FeedbackSheetBody(
     onGithub: () -> Unit = {},
     onOpen: (String) -> Unit = {},
     onDone: () -> Unit = {},
+    onOpened: () -> Unit = {},
     onClosed: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val haptic = rememberVelaHaptic()
     val closed by rememberUpdatedState(onClosed)
-    DisposableEffect(Unit) { onDispose { closed() } }
+    DisposableEffect(Unit) {
+        onOpened()
+        onDispose { closed() }
+    }
     // The tray first — before any early return — so a fallback keeps the tiles.
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.contacts.components
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -55,7 +55,7 @@ fun ActionMenuSheet(
     modifier: Modifier = Modifier,
     onItem: (MenuItemModel) -> Unit = {},
 ) {
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = onDismiss,
         containerColor = VelaTheme.colors.bgRaised,
         modifier = modifier,
@@ -95,7 +95,7 @@ fun DeleteConfirmSheet(
     onConfirm: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.bgRaised,
         modifier = modifier,

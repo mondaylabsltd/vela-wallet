@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.contacts.components
 
+import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -8,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -32,7 +32,7 @@ fun ContactNoticeSheet(
     modifier: Modifier = Modifier,
 ) {
     val colors = VelaTheme.colors
-    ModalBottomSheet(
+    VelaModalSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.bgRaised,
         modifier = modifier,

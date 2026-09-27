@@ -252,6 +252,21 @@ object SettingsFixtures {
                 ),
             ),
         ),
+        // Community (founder, 2026-09-27): the official accounts, directly above
+        // the last group — the page ends … Advanced → Community → About / Feedback.
+        SettingsSectionModel(
+            label = s.t(I18nKeys.SettingsUi.SECTION_COMMUNITY),
+            rows = CommunityLinks.ALL.map { link ->
+                SettingsRowModel(
+                    id = link.id,
+                    title = link.title,
+                    icon = link.icon,
+                    subtitle = link.handle,
+                    // It leaves the app: the external mark, not a chevron.
+                    trailing = RowTrailing.External,
+                )
+            },
+        ),
         SettingsSectionModel(
             rows = listOf(
                 SettingsRowModel(
