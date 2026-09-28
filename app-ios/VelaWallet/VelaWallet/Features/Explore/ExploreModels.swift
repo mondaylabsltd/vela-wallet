@@ -72,6 +72,9 @@ struct TabModel: Identifiable {
     let selected: Bool
     /// The start page's own tab — drawn with the sail, not a favicon.
     let startPage: Bool
+    /// Spec 079: the page as it was last seen (`WKWebView.takeSnapshot`), so
+    /// two tabs can be told apart. `nil` draws the stand-in.
+    var snapshot: UIImage?
 }
 
 /// The page inside the browser. FIXTURE CONTENT, not chrome: it stands in for

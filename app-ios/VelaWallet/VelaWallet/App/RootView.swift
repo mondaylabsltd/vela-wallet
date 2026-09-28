@@ -1254,6 +1254,7 @@ struct RootView: View {
                             holdings: WalletLive.networkHoldings(
                                 wallet.balance, display: WalletLive.Display.from(settings.currency)
                             ),
+                            snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             loc: loc
                         ),
                         loc: loc,

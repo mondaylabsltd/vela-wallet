@@ -2,9 +2,10 @@
 //  TabCardView.swift
 //  VelaWallet
 //
-//  One card in the tab switcher (mock E5): a stand-in preview, the site's
-//  mark and title, and the ✕ that closes it. The selected card carries an
-//  accent border — the only accent on that screen.
+//  One card in the tab switcher (mock E5): the page as it was last seen
+//  (spec 079 — every card used to be the same drawing), the site's mark and
+//  title, and the ✕ that closes it. The selected card carries an accent
+//  border — the only accent on that screen.
 //
 
 import SwiftUI
@@ -23,6 +24,19 @@ struct TabCardView: View {
             Button {
                 onOpen(tab.id)
             } label: {
+                if let snapshot = tab.snapshot, !tab.startPage {
+                    Color.clear
+                        .aspectRatio(ExploreGeometry.tabCardAspect, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .overlay(alignment: .top) {
+                            Image(uiImage: snapshot)
+                                .resizable()
+                                .scaledToFill()
+                        }
+                        .clipped()
+                        .contentShape(Rectangle())
+                        .accessibilityHidden(true)
+                } else {
                 VStack(spacing: Tokens.Space.s8) {
                     if tab.startPage {
                         VelaMark(size: Tokens.Space.s48)
@@ -41,6 +55,7 @@ struct TabCardView: View {
                 .frame(maxWidth: .infinity)
                 .aspectRatio(ExploreGeometry.tabCardAspect, contentMode: .fit)
                 .contentShape(Rectangle())
+                }
             }
             .buttonStyle(.plain)
 

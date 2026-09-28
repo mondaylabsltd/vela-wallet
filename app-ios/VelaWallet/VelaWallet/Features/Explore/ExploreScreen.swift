@@ -540,7 +540,12 @@ struct ExploreScreen: View {
                 onForward: { controller?.goForward() },
                 onAccount: { sheet = .connection },
                 onBookmark: { controller?.toggleFavorite() },
-                onTabs: { viewOverride = .tabs }
+                // The page in front is photographed first, so its card in
+                // the switcher shows it as it is (spec 079).
+                onTabs: {
+                    guard let controller else { viewOverride = .tabs; return }
+                    controller.snapshotCurrent { viewOverride = .tabs }
+                }
             )
         case .start:
             startPage

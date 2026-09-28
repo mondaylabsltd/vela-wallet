@@ -70,6 +70,11 @@ final class BrowserEngine: NSObject {
     /// `app.uniswap.org` doing exactly that on the founder's phone. Until 079
     /// the panel then printed the system's own sentence and a code.
     private(set) var failure: BrowserLoadFailure?
+    /// Spec 079: the page as it was last seen, for the tab switcher's card.
+    private(set) var snapshot: UIImage?
+    /// Wide enough for a card, small enough that a dozen tabs cost little.
+    static let snapshotWidth: CGFloat = 360
+
     /// The corpus key of the failure's reason, for screens that draw it.
     var failureReasonKey: String? { failure?.reasonKey }
     /// Where the failed navigation was going. `webView.url` is `nil` after a
@@ -222,10 +227,28 @@ final class BrowserEngine: NSObject {
     // MARK: - Retrying by itself (spec 079)
 
     /// This tab's page came on screen, or left it. A page that failed while
-    /// out of sight retries once it is looked at again.
+    /// out of sight retries once it is looked at again; one leaving is
+    /// photographed for the tab switcher while it is still drawn.
     func setOnScreen(_ shown: Bool) {
         onScreen = shown
-        shown ? resumeRetry() : cancelRetry()
+        if shown { resumeRetry() } else { cancelRetry(); captureSnapshot() }
+    }
+
+    /// Photograph the page as it is now (spec 079, the tab switcher's card).
+    /// Only a page in a window can be drawn; `done` runs either way.
+    func captureSnapshot(_ done: @escaping () -> Void = {}) {
+        guard !tornDown, webView.window != nil, webView.bounds.width > 0 else {
+            done()
+            return
+        }
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = NSNumber(value: Double(Self.snapshotWidth))
+        webView.takeSnapshot(with: configuration) { [weak self] image, _ in
+            MainActor.assumeIsolated {
+                if let image, let self, !self.tornDown { self.snapshot = image }
+                done()
+            }
+        }
     }
 
     /// The app came to the front, or left it.
@@ -464,6 +487,7 @@ extension BrowserEngine: WKNavigationDelegate {
         update(loading: false)
         onLoadFinished(url)
         if !origin.isEmpty { recordVisit() }
+        captureSnapshot()
     }
 
     private func clearFailure() {

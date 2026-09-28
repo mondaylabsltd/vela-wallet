@@ -317,6 +317,27 @@ final class BrowserController {
         for engine in engines.values { engine.setAppActive(active) }
     }
 
+    /// A tab's page as it was last seen (spec 079), for the switcher.
+    func snapshot(of tab: String) -> UIImage? { engines[tab]?.snapshot }
+
+    /// Photograph the page in front, then `done` — the tab switcher opens on
+    /// a card that shows it. Never waits long: a snapshot that does not come
+    /// back within a moment is not worth a stuck button.
+    func snapshotCurrent(then done: @escaping () -> Void) {
+        guard let current else { return done() }
+        var finished = false
+        let finish = {
+            guard !finished else { return }
+            finished = true
+            done()
+        }
+        current.captureSnapshot(finish)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            finish()
+        }
+    }
+
     private func syncOnScreen() {
         for engine in engines.values {
             let shown = browsingVisible && engine === current

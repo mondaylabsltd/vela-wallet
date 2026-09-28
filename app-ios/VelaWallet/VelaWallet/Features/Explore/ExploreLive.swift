@@ -39,6 +39,8 @@ enum ExploreLive {
         /// Spec 079: what the account holds per network, in the display
         /// currency (`WalletLive.networkHoldings`) — never fetched here.
         holdings: [Int: String] = [:],
+        /// Spec 079: each tab's last snapshot, by tab id.
+        snapshot: (String) -> UIImage? = { _ in nil },
         loc: Loc
     ) -> ExploreHomeModel {
         let populated = !explore.favorites.isEmpty || !history.entries.isEmpty
@@ -90,7 +92,7 @@ enum ExploreLive {
                 explore: explore, tab: tab, engine: engine,
                 identity: identity
             ),
-            tabs: tabs(explore: explore, loc: loc),
+            tabs: tabs(explore: explore, snapshot: snapshot, loc: loc),
             tabsScreen: TabsScreenCopy(
                 title: loc.t("explore.tabs"), done: loc.t("explore.done"),
                 newTab: loc.t("explore.newTab"), closeAll: loc.t("explore.closeAllTabs"),
@@ -203,10 +205,12 @@ enum ExploreLive {
 
     // MARK: - Tabs
 
-    static func tabs(explore: ExploreViewWire, loc: Loc) -> [TabModel] {
+    static func tabs(
+        explore: ExploreViewWire, snapshot: (String) -> UIImage? = { _ in nil }, loc: Loc
+    ) -> [TabModel] {
         explore.tabs.map { tab in
             let isStart = (tab.url ?? "").isEmpty
-            return TabModel(
+            var model = TabModel(
                 id: tab.id,
                 title: isStart ? loc.t("explore.startPage") : displayTitle(tab),
                 site: isStart ? nil : site(
@@ -216,6 +220,9 @@ enum ExploreLive {
                 selected: explore.selectedTab == tab.id,
                 startPage: isStart
             )
+            // A start page keeps its drawing; a page shows itself.
+            if !isStart { model.snapshot = snapshot(tab.id) }
+            return model
         }
     }
 

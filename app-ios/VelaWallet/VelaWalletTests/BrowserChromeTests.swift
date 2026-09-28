@@ -10,6 +10,7 @@
 import Foundation
 import SwiftUI
 import Testing
+import UIKit
 @testable import VelaWallet
 
 @MainActor
@@ -101,6 +102,27 @@ struct BrowserChromeTests {
         #expect(WalletLive.networkHoldings(balance([token(100, "2", price: 1)], hidden: true), display: display).isEmpty,
                 "a hidden balance stays hidden here too")
         #expect(WalletLive.networkHoldings(nil, display: display).isEmpty)
+    }
+
+    /// Spec 079 US6: a tab's card is the page as it was last seen; a start
+    /// page keeps its drawing; a tab never photographed keeps the stand-in.
+    @Test func eachTabsCardIsItsOwnPage() {
+        let explore = ExploreViewWire(
+            favorites: [], groups: [],
+            tabs: [
+                ExploreTabWire(id: "a", url: "https://app.uniswap.org/", title: "Uniswap", host: "app.uniswap.org"),
+                ExploreTabWire(id: "b", url: "https://bscscan.com/", title: "BscScan", host: "bscscan.com"),
+                ExploreTabWire(id: "c", url: nil, title: "", host: ""),
+            ],
+            selectedTab: "a", favoritesHidden: false, recentHidden: false,
+            favoritesFull: false, tabsFull: false, ready: true
+        )
+        let shot = UIImage()
+        let tabs = ExploreLive.tabs(explore: explore, snapshot: { $0 == "a" || $0 == "c" ? shot : nil }, loc: loc)
+        #expect(tabs[0].snapshot === shot)
+        #expect(tabs[1].snapshot == nil, "not photographed yet: the stand-in")
+        #expect(tabs[2].snapshot == nil, "a start page keeps its drawing")
+        #expect(tabs[0].site?.letter == "U")
     }
 
     /// The http lock is its own glyph — lucide `lock-open` — not the warning
