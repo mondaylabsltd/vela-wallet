@@ -37,8 +37,10 @@ enum LogoStore {
     private static var misses: [String: Double?] = [:]
     /// The clock, a seam.
     static var now: () -> Double = { Date().timeIntervalSince1970 * 1000 }
-    /// The one re-ask scheduled for the earliest transient miss.
+    /// The one re-ask, scheduled for the earliest transient miss still to
+    /// expire, and when it is due (tests read it).
     private static var reask: Task<Void, Never>?
+    private(set) static var reaskDueMs: Double?
 
     /// A session with a disk cache, so a relaunch draws yesterday's logos
     /// before the network answers.
@@ -93,7 +95,7 @@ enum LogoStore {
         // `updateValue`, not a subscript: assigning a `nil` expiry through
         // the subscript would REMOVE the entry — a session miss forgotten.
         misses.updateValue(ttl.map { now() + Double($0) }, forKey: url)
-        if let ttl { scheduleReask(afterMs: Double(ttl)) }
+        if ttl != nil { scheduleReask() }
     }
 
     /// The network came back (`NetWatch`): every transient miss is forgotten
@@ -105,15 +107,32 @@ enum LogoStore {
     }
 
     /// When the earliest transient miss is up, the logos on screen ask again
-    /// — no relaunch, no scroll needed.
-    private static func scheduleReask(afterMs: Double) {
-        guard reask == nil else { return }
+    /// — no relaunch, no scroll needed. One re-ask at a time, always for the
+    /// earliest miss still to expire: misses a few ms apart each get theirs
+    /// (082 review, W20 — the first re-ask used to be the only one).
+    private static func scheduleReask() {
+        let clock = now()
+        let upcoming = misses.values.compactMap { $0 }.filter { $0 > clock }.min()
+        guard let upcoming else { return }
+        if reask != nil, let due = reaskDueMs, due <= upcoming { return }
+        reask?.cancel()
+        reaskDueMs = upcoming
         reask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(max(0, afterMs)) * 1_000_000)
-            reask = nil
+            try? await Task.sleep(nanoseconds: UInt64(max(0, upcoming - now())) * 1_000_000)
+            // A re-ask replaced by an earlier one is over.
             guard !Task.isCancelled else { return }
-            LogoEpoch.shared.bump()
+            reaskFired()
         }
+    }
+
+    /// The re-ask is due: the logos on screen ask again (a miss whose time
+    /// is up is forgotten when they do), and the next one is scheduled for
+    /// whatever is still to expire.
+    static func reaskFired() {
+        reask = nil
+        reaskDueMs = nil
+        LogoEpoch.shared.bump()
+        scheduleReask()
     }
 
     /// Tests and the erase-device path: forget everything, memory and disk.
@@ -129,6 +148,7 @@ enum LogoStore {
         misses.removeAll()
         reask?.cancel()
         reask = nil
+        reaskDueMs = nil
         session.configuration.urlCache?.removeAllCachedResponses()
     }
 }
