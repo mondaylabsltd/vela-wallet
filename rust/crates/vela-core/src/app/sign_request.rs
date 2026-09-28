@@ -94,6 +94,36 @@ pub const CODE_INVALID_PARAMS: i32 = -32602;
 /// error takes (`dapp-connection.tsx:886, 943`).
 pub const CODE_INTERNAL: i32 = -32603;
 
+/// How long a shell keeps a dApp's `eth_sendTransaction` / `wallet_sendCalls`
+/// waiting for its operation to land before it gives up and reports
+/// [`SignSubmitOutcome::NotConfirmed`] (083).
+///
+/// The page is answered with the hash of the transaction that carried the
+/// operation, once the operation is known to have executed — never with the
+/// userOpHash, which no node knows: a site that looks it up on its OWN RPC
+/// (Uniswap does) waits on "pending" forever. That
+/// overturns 079 US1, which answered the operation hash when a 90 s window
+/// ran out. Waiting costs a site nothing — EIP-1193 sets no deadline on a
+/// wallet request, and a site already shows "confirm in wallet" meanwhile —
+/// while the wallet's own column says the operation is still confirming.
+///
+/// Ten minutes is `tx_tracker`'s own line ([`super::tx_tracker::SLOW_POLL_AFTER_MS`])
+/// between an operation that is slow and one that is not landing soon (a
+/// fee hold, a stuck relay). Past it the page is answered an ERROR — the
+/// truth, "not confirmed yet" — rather than a hash it can never find, and the
+/// record stays pending for the tracker, which may still see it land.
+pub const PAGE_WAIT_CAP_MS: f64 = super::tx_tracker::SLOW_POLL_AFTER_MS;
+
+/// What a page is told when its operation was included and REVERTED — for
+/// the dApp's developer (EIP-1193 messages are not UI); the bundle
+/// transaction's hash follows it in parentheses.
+pub const REVERTED_MESSAGE: &str = "The transaction was included but reverted";
+
+/// What a page is told when its operation had not landed by
+/// [`PAGE_WAIT_CAP_MS`]; the operation's hash follows it, named as what it is.
+pub const NOT_CONFIRMED_MESSAGE: &str =
+    "The transaction was submitted but is not confirmed yet; it may still complete, so check the wallet before sending it again";
+
 /// Bound on the settled-rid registry, mirroring the bounded-map discipline of
 /// `MAX_TRACKED_USEROPS` (`use-dapp-signing.ts:41`).
 const MAX_SETTLED_RIDS: usize = 256;
@@ -407,21 +437,48 @@ pub enum SignSponsorship {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum SignSubmitOutcome {
-    /// tx: the real tx hash after the receipt wait; batch: the userOpHash;
-    /// signatures: the EIP-1271 signature hex.
+    /// tx: the real tx hash from a receipt whose operation EXECUTED (a
+    /// receipt with `success: false` is [`Self::Reverted`], never this);
+    /// batch: the userOpHash as EIP-5792's opaque batch id where the shell
+    /// answers `wallet_getCallsStatus` (the web), else the tx hash as for a
+    /// transaction (the desktop); signatures: the EIP-1271 signature hex.
     Succeeded {
         result: String,
     },
     /// The bundler accepted the op but its receipt did not arrive inside the
-    /// shell's wait (~120 s). The page is still answered — with the op hash,
-    /// since a dApp expects SOME hash — but nothing is known to have landed,
-    /// so the pending record is NOT closed here: the tx tracker (handed the
-    /// op at [`Event::OpSubmitted`]) settles it to confirmed/failed when the
-    /// receipt actually appears (issue 262: an un-reimbursable op sat in the
-    /// bundler forever while its record claimed "confirmed"). The core never
-    /// tries to tell a tx hash from an op hash — both are 32-byte hex — so
-    /// the shell must say which one it holds.
+    /// shell's wait (~120 s on the phones and the web). The page is still
+    /// answered — with the op hash, since a dApp expects SOME hash — but
+    /// nothing is known to have landed, so the pending record is NOT closed
+    /// here: the tx tracker (handed the op at [`Event::OpSubmitted`]) settles
+    /// it to confirmed/failed when the receipt actually appears (issue 262:
+    /// an un-reimbursable op sat in the bundler forever while its record
+    /// claimed "confirmed"). The core never tries to tell a tx hash from an
+    /// op hash — both are 32-byte hex — so the shell must say which one it
+    /// holds.
+    ///
+    /// A site that looks the op hash up on its OWN node never finds it (083,
+    /// Uniswap). A shell that waits the whole [`PAGE_WAIT_CAP_MS`] for the
+    /// transaction hash reports [`Self::NotConfirmed`] instead — the desktop
+    /// since 083; this is what a shell with a shorter wait still reports.
     ReceiptPending {
+        user_op_hash: String,
+    },
+    /// The operation was included and its execution REVERTED: the receipt
+    /// said `success: false` (`UserOperationEvent.success`). The bundle
+    /// transaction itself succeeded (status `0x1`), so a site reading that
+    /// hash on its own node would call it done — Uniswap showed a swap that
+    /// moved nothing (083). The page is answered ONE error
+    /// ([`REVERTED_MESSAGE`]), never the hash, and the record closes failed.
+    Reverted {
+        user_op_hash: String,
+        tx_hash: String,
+    },
+    /// The shell waited the whole [`PAGE_WAIT_CAP_MS`] and the relay reported
+    /// no transaction for the op. The page is answered an error saying so
+    /// ([`NOT_CONFIRMED_MESSAGE`]) — never the op hash, which is not a
+    /// transaction — and, as with [`Self::ReceiptPending`], the record stays
+    /// pending for the tracker: a timeout is not a failure.
+    NotConfirmed {
         user_op_hash: String,
     },
     /// User dismissed the passkey sheet — never an error, never a response
@@ -757,8 +814,21 @@ enum Stage {
     },
     /// Passkey + submit in flight — the commitment window (BUG-2).
     Submitting,
-    /// §4: persisting the confirmed record BEFORE the response goes out.
-    PersistingResult { result: String },
+    /// §4: persisting the record BEFORE the response goes out.
+    PersistingResult { then: AfterRecord },
+}
+
+/// What a request's answer is, once its durable record is down (§4).
+#[derive(Clone, Debug)]
+enum AfterRecord {
+    /// The result — the page's `Ok`, and the sheet closes.
+    Result(String),
+    /// A reverted operation: the error, the record closed failed, and the
+    /// failure stays on the sheet.
+    Reverted(String),
+    /// Not confirmed by the cap: the error, and the sheet keeps following
+    /// the operation, which may still land.
+    NotConfirmed(String),
 }
 
 /// The one in-flight approve pipeline (`approveInFlightRef` as data). It
@@ -2223,7 +2293,9 @@ fn on_submit(
                 };
                 if let Some(inner) = model.inflight.as_mut() {
                     inner.record_id = Some(record.record_id.clone());
-                    inner.stage = Stage::PersistingResult { result };
+                    inner.stage = Stage::PersistingResult {
+                        then: AfterRecord::Result(result),
+                    };
                 }
                 let command = request_op(model, SignOperation::PersistRecord { record }, false);
                 Command::all([command, render()])
@@ -2231,57 +2303,73 @@ fn on_submit(
         }
         SignSubmitOutcome::ReceiptPending { user_op_hash } => {
             model.settle(&fl.id, SignSettledOutcome::Submitted);
+            if fl.record_id.is_none() {
+                return persist_pending_then(
+                    model,
+                    &fl,
+                    user_op_hash.clone(),
+                    now_ms,
+                    AfterRecord::Result(user_op_hash),
+                );
+            }
+            // The pending record from `OpSubmitted` stays pending — the
+            // tracker already holds it (`tracker_handoff`) and alone may
+            // close it. Answer the page, emit NO confirming patch.
             let respond = respond_op(
                 &fl.transport_id,
                 &fl.id,
                 SignResponsePayload::Ok {
-                    result: Some(user_op_hash.clone()),
+                    result: Some(user_op_hash),
                 },
             );
-            if fl.record_id.is_some() {
-                // The pending record from `OpSubmitted` stays pending — the
-                // tracker already holds it (`tracker_handoff`) and alone may
-                // close it. Answer the page, emit NO confirming patch.
-                let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
-                model.inflight = None;
-                if clears_sheet {
-                    model.clear_sheet();
-                }
-                ops_and_render(model, vec![respond])
-            } else {
-                // No `OpSubmitted` was seen: the durable record must still
-                // precede the answer (§4) — persisted PENDING under the op
-                // hash and handed to the tracker, then answered on the ack.
-                let (kind, _) = record_shape(&fl.method);
-                let record = SignRecord {
-                    record_id: record_id_for(&fl.method, now_ms),
-                    kind,
-                    method: fl.method.clone(),
-                    params_json: fl.params_json.clone(),
-                    result: String::new(),
-                    from: fl.address.clone(),
-                    chain_id: fl.chain_id,
-                    now_ms,
-                    status: SignRecordStatus::Pending,
-                    user_op_hash: user_op_hash.clone(),
-                    dapp_origin: fl.record_origin.clone(),
-                    intent: fl.intent.clone(),
-                };
-                model.tracker_handoff = Some(SignTrackerHandoff {
-                    user_op_hash: user_op_hash.clone(),
-                    record_ids: vec![record.record_id.clone()],
-                    chain_id: fl.chain_id,
-                });
-                if let Some(inner) = model.inflight.as_mut() {
-                    inner.op_hash = Some(user_op_hash.clone());
-                    inner.record_id = Some(record.record_id.clone());
-                    inner.stage = Stage::PersistingResult {
-                        result: user_op_hash,
-                    };
-                }
-                let command = request_op(model, SignOperation::PersistRecord { record }, false);
-                Command::all([command, render()])
+            let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
+            model.inflight = None;
+            if clears_sheet {
+                model.clear_sheet();
             }
+            ops_and_render(model, vec![respond])
+        }
+        // 083: included and reverted — one error, the record failed. The
+        // hash is the transaction's, and a site that read it on its own
+        // node would have called the swap done.
+        SignSubmitOutcome::Reverted {
+            user_op_hash,
+            tx_hash,
+        } => {
+            model.settle(&fl.id, SignSettledOutcome::Submitted);
+            let detail = format!("{REVERTED_MESSAGE} ({tx_hash})");
+            if fl.record_id.is_none() {
+                return persist_pending_then(
+                    model,
+                    &fl,
+                    user_op_hash,
+                    now_ms,
+                    AfterRecord::Reverted(detail),
+                );
+            }
+            fail_inflight(
+                model,
+                CODE_INTERNAL,
+                SignErrorKind::SubmitFailed,
+                Some(detail),
+            )
+        }
+        // 083: the whole cap went by with no transaction. The page hears
+        // that, not a hash; the record stays pending, the sheet follows the
+        // operation, and the tracker alone may still close it either way.
+        SignSubmitOutcome::NotConfirmed { user_op_hash } => {
+            model.settle(&fl.id, SignSettledOutcome::Submitted);
+            let detail = format!("{NOT_CONFIRMED_MESSAGE} (user operation {user_op_hash})");
+            if fl.record_id.is_none() {
+                return persist_pending_then(
+                    model,
+                    &fl,
+                    user_op_hash,
+                    now_ms,
+                    AfterRecord::NotConfirmed(detail),
+                );
+            }
+            answer_still_landing(model, detail)
         }
         SignSubmitOutcome::Underfunded { message, funding } => match funding {
             Some(f) => {
@@ -2319,28 +2407,104 @@ fn on_submit(
     }
 }
 
+/// No `OpSubmitted` was seen, yet the shell reports a submitted op: the
+/// durable record must still precede the answer (§4) — persisted PENDING
+/// under the op hash and handed to the tracker, then `then` on the ack.
+fn persist_pending_then(
+    model: &mut Model,
+    fl: &Inflight,
+    user_op_hash: String,
+    now_ms: f64,
+    then: AfterRecord,
+) -> Command<SignEffect, Event> {
+    let (kind, _) = record_shape(&fl.method);
+    let record = SignRecord {
+        record_id: record_id_for(&fl.method, now_ms),
+        kind,
+        method: fl.method.clone(),
+        params_json: fl.params_json.clone(),
+        result: String::new(),
+        from: fl.address.clone(),
+        chain_id: fl.chain_id,
+        now_ms,
+        status: SignRecordStatus::Pending,
+        user_op_hash: user_op_hash.clone(),
+        dapp_origin: fl.record_origin.clone(),
+        intent: fl.intent.clone(),
+    };
+    model.tracker_handoff = Some(SignTrackerHandoff {
+        user_op_hash: user_op_hash.clone(),
+        record_ids: vec![record.record_id.clone()],
+        chain_id: fl.chain_id,
+    });
+    // A sheet that stays up after the answer follows the operation, as it
+    // would have from `OpSubmitted`; one the answer closes needs nothing.
+    if !matches!(then, AfterRecord::Result(_)) && model.inflight_matches_pending() {
+        model.pending_op_hash = Some(user_op_hash.clone());
+    }
+    if let Some(inner) = model.inflight.as_mut() {
+        inner.op_hash = Some(user_op_hash);
+        inner.record_id = Some(record.record_id.clone());
+        inner.stage = Stage::PersistingResult { then };
+    }
+    let command = request_op(model, SignOperation::PersistRecord { record }, false);
+    Command::all([command, render()])
+}
+
+/// Answer a request whose operation may still land (083,
+/// [`SignSubmitOutcome::NotConfirmed`]): the page gets the error, once; the
+/// record is left pending for the tracker; and the sheet, while this request
+/// still owns it, keeps following the operation rather than calling it
+/// failed — closing it is a dismiss, which answers nothing more.
+fn answer_still_landing(model: &mut Model, detail: String) -> Command<SignEffect, Event> {
+    let Some(fl) = model.inflight.take() else {
+        return render();
+    };
+    if let Some(p) = model.pending.as_mut().filter(|p| p.id == fl.id) {
+        p.responded = true;
+    }
+    let op = respond_op(
+        &fl.transport_id,
+        &fl.id,
+        err_payload(CODE_INTERNAL, SignErrorKind::SubmitFailed, Some(detail)),
+    );
+    ops_and_render(model, vec![op])
+}
+
 fn on_record_persisted(model: &mut Model) -> Command<SignEffect, Event> {
     // Only the §4 record-then-respond step reacts here; the tx pending-record
     // ack (stage Submitting) needs no transition.
     let Some(fl) = model.inflight.clone() else {
         return Command::done();
     };
-    let Stage::PersistingResult { result } = fl.stage else {
+    let Stage::PersistingResult { then } = fl.stage else {
         return Command::done();
     };
-    let op = respond_op(
-        &fl.transport_id,
-        &fl.id,
-        SignResponsePayload::Ok {
-            result: Some(result),
-        },
-    );
-    let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
-    model.inflight = None;
-    if clears_sheet {
-        model.clear_sheet();
+    match then {
+        AfterRecord::Result(result) => {
+            let op = respond_op(
+                &fl.transport_id,
+                &fl.id,
+                SignResponsePayload::Ok {
+                    result: Some(result),
+                },
+            );
+            let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
+            model.inflight = None;
+            if clears_sheet {
+                model.clear_sheet();
+            }
+            ops_and_render(model, vec![op])
+        }
+        // The record just written pending is closed failed with the answer.
+        AfterRecord::Reverted(detail) => fail_inflight(
+            model,
+            CODE_INTERNAL,
+            SignErrorKind::SubmitFailed,
+            Some(detail),
+        ),
+        AfterRecord::NotConfirmed(detail) => answer_still_landing(model, detail),
     }
-    ops_and_render(model, vec![op])
 }
 
 impl super::SplitEffect for SignEffect {

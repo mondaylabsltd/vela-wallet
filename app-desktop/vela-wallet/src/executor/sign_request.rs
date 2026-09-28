@@ -24,7 +24,13 @@
 //! - **once**, the final outcome. For a transaction that is the real tx hash
 //!   from the receipt, because that is what a dApp's `eth_sendTransaction`
 //!   resolves to; the userOpHash is not a tx hash and a dApp that treats it as
-//!   one looks its transaction up forever.
+//!   one looks its transaction up forever. Only an operation that EXECUTED
+//!   is answered with its hash (083): one that reverted is reported as such,
+//!   and the page gets an error — the bundle's own status is `0x1` either
+//!   way, which is how Uniswap and this column both called a swap done that
+//!   moved nothing. And the page waits for the hash — past the 90 s that
+//!   used to end in the op hash — until the core's cap, which ends in an
+//!   error, never in a hash nobody can find ([`crate::executor::landing`]).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -39,6 +45,7 @@ use vela_core::app::sign_request::{
 use vela_core::app::{Account, Assertion, KeyMethod};
 use vela_core::user_op::WalletKey;
 
+use crate::executor::landing::{self, Landing};
 use crate::executor::passkey::{self, Ceremony, PasskeyFailure};
 use crate::executor::trusted_signer::{self, Ask};
 use crate::executor::user_op::Signer;
@@ -177,14 +184,17 @@ impl SignContext {
     }
 }
 
-/// How long a dApp's transaction waits for its receipt before the answer is
-/// the userOpHash instead.
+/// How long a dApp's transaction waits for its operation to land before the
+/// page is told it has not — the core's number
+/// ([`vela_core::app::sign_request::PAGE_WAIT_CAP_MS`], ten minutes, where
+/// 079 US1 answered the userOpHash at 90 s).
 ///
-/// A dApp's promise must SETTLE. Waiting forever for a receipt is the failure
-/// mode that looks like success from inside the wallet and like a hang from
-/// inside the site.
-const RECEIPT_BUDGET: Duration = Duration::from_secs(90);
-const RECEIPT_POLL: Duration = Duration::from_secs(3);
+/// A dApp's promise must SETTLE, and with the truth: waiting forever is the
+/// failure mode that looks like success from inside the wallet and like a
+/// hang from inside the site; answering a hash no node knows is the same hang
+/// with extra steps (083, Uniswap).
+const LANDING_CAP: Duration =
+    Duration::from_millis(vela_core::app::sign_request::PAGE_WAIT_CAP_MS as u64);
 
 pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
     match operation {
@@ -383,8 +393,12 @@ fn sign_and_submit(
         now_ms: now_ms(),
     });
 
-    let receipt = await_receipt(&user_op_hash, chain_id);
-    after_receipt_wait(user_op_hash, receipt)
+    let landing = landing::await_landing(&user_op_hash, chain_id, LANDING_CAP);
+    if matches!(landing, Some(Landing::Landed(_) | Landing::Reverted(_))) {
+        // Its nonce is spent: the account's next operation builds on it.
+        user_op::note_landed(&user_op_hash);
+    }
+    after_landing(user_op_hash, landing)
 }
 
 /// A signature, not a transaction (the phones' `SignExecutor`): one
@@ -474,19 +488,32 @@ pub fn message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
     vela_core::sign_message::original_hash(method, params_json)
 }
 
-/// What the receipt wait means for the core.
+/// What the landing wait means for the core — one outcome, and never a hash
+/// that is not the answer (083).
 ///
-/// A dApp's `eth_sendTransaction` resolves to a TX hash — handing back the
-/// userOpHash instead gives the site something it can look up forever and
-/// never find. When the wait runs out the op is submitted, NOT confirmed:
-/// the page is still answered with the op hash (a dApp left waiting cannot
-/// tell a slow chain from a lost transaction — the double-spend risk 027 D37
-/// names), but the core must hear it as `ReceiptPending` so the record stays
-/// pending until the tracker sees the receipt (issue 262).
-pub fn after_receipt_wait(user_op_hash: String, receipt: Option<String>) -> SignSubmitOutcome {
-    match receipt {
-        Some(tx_hash) => SignSubmitOutcome::Succeeded { result: tx_hash },
-        None => SignSubmitOutcome::ReceiptPending { user_op_hash },
+/// - Executed: `Succeeded` with the TX hash, what `eth_sendTransaction`
+///   resolves to.
+/// - Reverted: `Reverted` — the core answers the page an error and closes the
+///   record failed. The hash stays out of the page's answer: the bundle's
+///   status is `0x1`, and a site reading it calls the operation done.
+/// - Refused by the relay after it accepted it: a failure, as the tracker
+///   rules it (`rejected` is final there too).
+/// - Nothing by the cap: `NotConfirmed` — the page is told so, and the record
+///   stays pending for the tracker (issue 262: a late receipt is not a
+///   confirmation, and a timeout is not a failure). Never `ReceiptPending`,
+///   whose answer is the op hash.
+pub fn after_landing(user_op_hash: String, landing: Option<Landing>) -> SignSubmitOutcome {
+    match landing {
+        Some(Landing::Landed(tx_hash)) => SignSubmitOutcome::Succeeded { result: tx_hash },
+        Some(Landing::Reverted(tx_hash)) => SignSubmitOutcome::Reverted {
+            user_op_hash,
+            tx_hash,
+        },
+        Some(Landing::Refused) => SignSubmitOutcome::Failed {
+            message: "The relay refused the transaction after accepting it; it was not sent"
+                .to_owned(),
+        },
+        None => SignSubmitOutcome::NotConfirmed { user_op_hash },
     }
 }
 
@@ -565,50 +592,6 @@ fn wei_of(value: Option<&Value>) -> Option<String> {
     u128::from_str_radix(digits.0, digits.1)
         .ok()
         .map(|wei| wei.to_string())
-}
-
-/// Poll until the receipt lands or the budget runs out.
-///
-/// `None` is "not yet", never "failed": a relay that could not be reached is
-/// not a transaction that did not happen, and the caller answers with the
-/// userOpHash rather than an error.
-fn await_receipt(user_op_hash: &str, chain_id: u32) -> Option<String> {
-    wait_within(RECEIPT_BUDGET, RECEIPT_POLL, |left| {
-        // A receipt that says the operation reverted is still a receipt: the
-        // tx hash is real and the dApp should have it. What it is NOT is this
-        // wallet's business to relabel.
-        relay::user_op_receipt_within(user_op_hash, chain_id, left)
-            .resolution
-            .map(|resolution| resolution.tx_hash)
-    })
-}
-
-/// Ask `poll` until it answers or `budget` is spent, sleeping `every`
-/// between asks — and giving each ask only what is LEFT of the budget (spec
-/// 079, device-found on Android: with the relay unreachable one poll hung for
-/// its own timeouts and retries, and the page waited 268 s for a two-minute
-/// wait). The page is answered on time; the tracker keeps following the
-/// operation after.
-fn wait_within<T>(
-    budget: Duration,
-    every: Duration,
-    mut poll: impl FnMut(Duration) -> Option<T>,
-) -> Option<T> {
-    let deadline = std::time::Instant::now() + budget;
-    loop {
-        let left = deadline.saturating_duration_since(std::time::Instant::now());
-        if left.is_zero() {
-            return None;
-        }
-        if let Some(answer) = poll(left) {
-            return Some(answer);
-        }
-        let left = deadline.saturating_duration_since(std::time::Instant::now());
-        if left.is_zero() {
-            return None;
-        }
-        std::thread::sleep(every.min(left));
-    }
 }
 
 /// A submit that failed, in the core's vocabulary.
@@ -1102,53 +1085,59 @@ mod tests {
         assert!(!is_message("eth_sendTransaction") && !is_message("wallet_sendCalls"));
     }
 
-    /// Issue 262: a receipt that is late is not a confirmation. The core hears
-    /// `ReceiptPending` (answer the page, keep the record pending); only a
-    /// receipt in time is `Succeeded` with the TX hash.
+    /// 083: each way an operation can end reaches the core as exactly one
+    /// outcome, and the page is answered a hash only for an operation that
+    /// EXECUTED. A reverted one is `Reverted` (the core answers an error and
+    /// fails the record — the bundle's `0x1` is not the op's success); a wait
+    /// that ran the whole cap is `NotConfirmed` (an error, the record left to
+    /// the tracker) — never `ReceiptPending`, whose answer is the op hash
+    /// Uniswap looked up on its own node forever.
     #[test]
-    fn every_poll_gets_only_what_is_left_of_the_wait() {
-        let budget = Duration::from_millis(300);
-        let started = std::time::Instant::now();
-        let mut given = Vec::new();
-        let answer: Option<()> = wait_within(budget, Duration::from_millis(40), |left| {
-            given.push(left);
-            // A relay that holds every call for as long as it is allowed.
-            std::thread::sleep(left.min(Duration::from_millis(120)));
-            None
-        });
-        assert!(answer.is_none(), "no receipt is not a failure, it is none");
-        assert!(
-            started.elapsed() < budget + Duration::from_millis(150),
-            "the wait ends on time: {:?}",
-            started.elapsed()
-        );
-        assert!(given.len() >= 2, "it asks again while there is time");
-        assert!(given.iter().all(|left| *left <= budget));
-        assert!(
-            given.windows(2).all(|pair| pair[1] < pair[0]),
-            "each ask gets less: {given:?}"
-        );
-        // An answer ends the wait at once.
+    fn a_landing_reaches_the_core_as_one_honest_outcome() {
+        let op = || "0xop".to_owned();
         assert_eq!(
-            wait_within(budget, Duration::from_millis(40), |_| Some("0xtx")),
-            Some("0xtx")
-        );
-    }
-
-    #[test]
-    fn a_late_receipt_is_reported_pending_never_succeeded() {
-        assert_eq!(
-            after_receipt_wait("0xop".to_owned(), None),
-            SignSubmitOutcome::ReceiptPending {
-                user_op_hash: "0xop".to_owned()
-            }
-        );
-        assert_eq!(
-            after_receipt_wait("0xop".to_owned(), Some("0xtx".to_owned())),
+            after_landing(op(), Some(Landing::Landed("0xtx".to_owned()))),
             SignSubmitOutcome::Succeeded {
                 result: "0xtx".to_owned()
             }
         );
+        assert_eq!(
+            after_landing(op(), Some(Landing::Reverted("0xtx".to_owned()))),
+            SignSubmitOutcome::Reverted {
+                user_op_hash: op(),
+                tx_hash: "0xtx".to_owned()
+            }
+        );
+        assert_eq!(
+            after_landing(op(), None),
+            SignSubmitOutcome::NotConfirmed { user_op_hash: op() }
+        );
+        assert!(matches!(
+            after_landing(op(), Some(Landing::Refused)),
+            SignSubmitOutcome::Failed { message } if !message.contains("0xop")
+        ));
+        for landing in [
+            None,
+            Some(Landing::Landed("0xtx".to_owned())),
+            Some(Landing::Reverted("0xtx".to_owned())),
+            Some(Landing::Refused),
+        ] {
+            assert!(
+                !matches!(
+                    after_landing(op(), landing.clone()),
+                    SignSubmitOutcome::ReceiptPending { .. }
+                ) && after_landing(op(), landing.clone())
+                    != SignSubmitOutcome::Succeeded { result: op() },
+                "{landing:?} answered the op hash"
+            );
+        }
+    }
+
+    /// The page waits the core's cap — ten minutes, where 079 answered the
+    /// op hash at 90 s.
+    #[test]
+    fn the_page_waits_the_cores_cap() {
+        assert_eq!(LANDING_CAP, Duration::from_secs(600));
     }
 
     /// A dApp transaction lands in the store the feed and the tracker read.

@@ -17,6 +17,10 @@
 //! - **The gas signals are handed over raw.** The tip-inclusive price rule
 //!   (`derive_chain_gas_price`) is `fee_policy`'s; feeding it a derived value
 //!   would apply the rule twice.
+//!
+//! And one read after the submit (083): how an operation ended inside the
+//! bundle transaction that carried it — that transaction's own status says
+//! nothing about it.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -27,7 +31,8 @@ use serde_json::{Value, json};
 use vela_core::app::fee_policy::{
     ChainGasPrice, GasSignals, derive_chain_gas_price, is_tempo_chain, min_gas_price_wei,
 };
-use vela_core::primitives::{abi_encode_address, function_selector, to_hex};
+use vela_core::app::tx_tracker::SAFE_EXECUTION_FAILURE_TOPIC;
+use vela_core::primitives::{abi_encode_address, function_selector, keccak256, to_hex};
 use vela_core::safe::ENTRY_POINT;
 use vela_core::user_op::parse_hex_quantity;
 
@@ -120,6 +125,80 @@ pub fn nonce(safe: &str, chain_id: u32) -> Result<String, String> {
             .insert(cache_key, (nonce.to_owned(), Instant::now()));
     }
     Ok(nonce.to_owned())
+}
+
+/// The EntryPoint's word on how one operation inside a bundle ended:
+/// `UserOperationEvent(bytes32 indexed userOpHash, address indexed sender,
+/// address indexed paymaster, uint256 nonce, bool success, uint256
+/// actualGasCost, uint256 actualGasUsed)`.
+const USER_OPERATION_EVENT: &str =
+    "UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)";
+
+/// How `user_op_hash` ended inside bundle transaction `tx_hash`, read from
+/// that transaction's receipt on the chain's own node (083): `Some(true)`
+/// executed, `Some(false)` reverted. `None` while the node has no receipt
+/// yet, or when the receipt carries no event for the operation — neither is
+/// an outcome.
+pub fn user_op_outcome_in(
+    tx_hash: &str,
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: Duration,
+) -> Option<bool> {
+    let body = pool::call_within(
+        chain_id,
+        "eth_getTransactionReceipt",
+        json!([tx_hash]),
+        budget,
+    )
+    .ok()?;
+    user_op_outcome(body.get("result")?, user_op_hash)
+}
+
+/// Did `user_op_hash` execute, by a bundle transaction's receipt? `false`
+/// when the EntryPoint's `UserOperationEvent` for it says `success: false`
+/// — and when its own execution logged a Safe `ExecutionFailure`: the
+/// EntryPoint counts that op a success while nothing happened, which the
+/// tracker already rules a failure (spec 038 #D1). `None` when the receipt
+/// carries no event for the op.
+///
+/// A bundle holds several operations, so only the op's OWN execution logs
+/// count: the EntryPoint (v0.7) validates every op, emits `BeforeExecution`,
+/// then runs each op and closes it with its `UserOperationEvent` — the logs
+/// since the previous boundary are that op's.
+pub fn user_op_outcome(receipt: &Value, user_op_hash: &str) -> Option<bool> {
+    let event = to_hex(&keccak256(USER_OPERATION_EVENT.as_bytes()), true);
+    let before_execution = to_hex(&keccak256(b"BeforeExecution()"), true);
+    let mut execution_failed = false;
+    for log in receipt.get("logs")?.as_array()? {
+        let Some(topics) = log.get("topics").and_then(Value::as_array) else {
+            continue;
+        };
+        let names = |index: usize, want: &str| {
+            topics
+                .get(index)
+                .and_then(Value::as_str)
+                .is_some_and(|value| value.eq_ignore_ascii_case(want))
+        };
+        let from_entry_point = log
+            .get("address")
+            .and_then(Value::as_str)
+            .is_some_and(|address| address.eq_ignore_ascii_case(ENTRY_POINT));
+        if from_entry_point && names(0, &before_execution) {
+            execution_failed = false;
+        } else if from_entry_point && names(0, &event) {
+            if names(1, user_op_hash) {
+                // Unindexed: nonce, success, actualGasCost, actualGasUsed.
+                let data = log.get("data")?.as_str()?.strip_prefix("0x")?;
+                let success = data.get(64..128)?.bytes().any(|digit| digit != b'0');
+                return Some(success && !execution_failed);
+            }
+            execution_failed = false;
+        } else if names(0, SAFE_EXECUTION_FAILURE_TOPIC) {
+            execution_failed = true;
+        }
+    }
+    None
 }
 
 /// `incrementNonceCache`: after a submit, so a concurrent send does not
@@ -276,6 +355,91 @@ pub fn verify_chain_ready(chain_id: u32) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 083: how an operation ended, from the bundle transaction's receipt —
+    /// the EntryPoint's `UserOperationEvent` for THAT op, and no Safe
+    /// `ExecutionFailure` in its own execution (#D1). A bundle carries other
+    /// operations, and other contracts emit look-alike logs; neither is this
+    /// op's outcome.
+    #[test]
+    fn an_operations_outcome_is_its_own_entry_point_event() {
+        let topic = "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f";
+        assert_eq!(
+            to_hex(&keccak256(USER_OPERATION_EVENT.as_bytes()), true),
+            topic
+        );
+        let ours = format!("0x{}", "ab".repeat(32));
+        let theirs = format!("0x{}", "ef".repeat(32));
+        let word = |value: u8| format!("{value:064x}");
+        let entry_point = ENTRY_POINT.to_lowercase();
+        let event = |op: &str, address: &str, success: u8| {
+            json!({
+                "address": address,
+                "topics": [topic, op, format!("0x{:064x}", 1), format!("0x{:064x}", 0)],
+                "data": format!("0x{}{}{}{}", word(7), word(success), word(9), word(9)),
+            })
+        };
+        let before_execution = json!({
+            "address": entry_point,
+            "topics": [to_hex(&keccak256(b"BeforeExecution()"), true)],
+            "data": "0x",
+        });
+        let safe_failure = json!({
+            "address": "0x88cca0eedbf2c4426110bbfc998f048689266894",
+            "topics": [SAFE_EXECUTION_FAILURE_TOPIC],
+            "data": format!("0x{}{}", word(1), word(0)),
+        });
+        let receipt = |logs: Vec<Value>| json!({ "status": "0x1", "logs": logs });
+
+        let reverted = receipt(vec![
+            event(&theirs, &entry_point, 1),
+            event(&ours, &entry_point, 0),
+        ]);
+        assert_eq!(
+            user_op_outcome(&reverted, &ours),
+            Some(false),
+            "status 0x1, and still reverted"
+        );
+        assert_eq!(user_op_outcome(&reverted, &theirs), Some(true));
+        let ours_in_capitals = format!("0x{}", "AB".repeat(32));
+        assert_eq!(
+            user_op_outcome(
+                &receipt(vec![event(&ours, ENTRY_POINT, 1)]),
+                &ours_in_capitals
+            ),
+            Some(true),
+            "hex case is not identity"
+        );
+
+        // #D1: the EntryPoint says success, the Safe inside says it failed.
+        // Only in the op's own execution — the logs since the last boundary.
+        let hollow = receipt(vec![
+            safe_failure.clone(), // validation-phase noise, before execution
+            before_execution,
+            safe_failure,
+            event(&theirs, &entry_point, 1),
+            event(&ours, &entry_point, 1),
+        ]);
+        assert_eq!(
+            user_op_outcome(&hollow, &theirs),
+            Some(false),
+            "its execution logged the failure"
+        );
+        assert_eq!(
+            user_op_outcome(&hollow, &ours),
+            Some(true),
+            "another op's failure is not this one's"
+        );
+
+        let impostor = receipt(vec![event(
+            &ours,
+            "0x1111111111111111111111111111111111111111",
+            1,
+        )]);
+        assert_eq!(user_op_outcome(&impostor, &ours), None);
+        assert_eq!(user_op_outcome(&receipt(Vec::new()), &ours), None);
+        assert_eq!(user_op_outcome(&Value::Null, &ours), None);
+    }
 
     #[test]
     fn a_bumped_nonce_is_one_more_and_stays_hex() {

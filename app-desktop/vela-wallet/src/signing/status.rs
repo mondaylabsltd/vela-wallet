@@ -12,12 +12,18 @@
 //!
 //! - [`approved`] — the request is still open in the core: signing, then
 //!   submitting, then submitted and counting against the chain's usual time,
-//!   or failed with the send flow's sentence.
+//!   or failed with the send flow's sentence — for an operation that
+//!   reverted on chain, the send receipt's failure with its transaction
+//!   (083). The column stays here past the old 90 s: the page is not
+//!   answered until the transaction is known, and "still confirming" is the
+//!   tracker's word meanwhile — also after the core's cap has told the page
+//!   "not confirmed yet", since the operation may still land.
 //! - [`ended`] — the core has answered the page and closed its sheet: the
-//!   tick (a message signed, a transaction landed), or — when the wait ran out
-//!   first — "not landed yet, Vela keeps checking" for as long as the tracker
-//!   follows it, and "unknown" past its 24 h line. Never "failed" on time
-//!   alone: a timeout is not a failure (the tracker's money rule).
+//!   tick (a message signed, a transaction landed), or — when an answer was
+//!   the operation hash, which the desktop no longer gives (083) — "not
+//!   landed yet, Vela keeps checking" for as long as the tracker follows it,
+//!   and "unknown" past its 24 h line. Never "failed" on time alone: a
+//!   timeout is not a failure (the tracker's money rule).
 //!
 //! Nothing here decides anything about the request. Which close answers the
 //! page, and with what, is `sign_request`'s; whether an operation landed is
@@ -268,6 +274,17 @@ pub fn approved(
         && error.kind != SignErrorKind::UserRejected
         && (sign.pending_op_hash.is_some() || error.kind == SignErrorKind::SubmitFailed)
     {
+        // 083: an operation that reverted on chain — the tracker holds the
+        // transaction that carried it, so this is the send receipt's own
+        // failure for that: its sentence, the hash, and the explorer, which
+        // says why. Never 已确认.
+        if let Some(op) = sign.pending_op_hash.as_deref()
+            && let Some(entry) = track.filter(|entry| {
+                entry.user_op_hash.eq_ignore_ascii_case(op) && entry.status == TrackStatus::Dropped
+            })
+        {
+            return Some(following(op, Some(entry), lead(), clock, s));
+        }
         let mut captions = lead();
         captions.push(s.error_generic.clone());
         return Some(receipt(
@@ -902,6 +919,107 @@ mod tests {
             );
             assert!(form.is_none(), "{kind:?} is not a submission that failed");
         }
+    }
+
+    /// 083 S2: an operation that REVERTED on chain. The core answered the
+    /// page an error and failed the record; the column shows a failure —
+    /// the generic one at once, then, as soon as the tracker has the
+    /// transaction, the send receipt's own failure with its hash and the
+    /// explorer. Never the tick, never 已确认.
+    #[test]
+    fn a_reverted_operation_is_a_failure_receipt_with_its_transaction() {
+        let s = strings();
+        let reverted = view(|v| {
+            v.pending_op_hash = Some(OP.to_owned());
+            v.error = Some(SignErrorNotice {
+                kind: SignErrorKind::SubmitFailed,
+                detail: Some(format!(
+                    "{} ({TX})",
+                    vela_core::app::sign_request::REVERTED_MESSAGE
+                )),
+            });
+        });
+        let at = |track: Option<&TrackEntryView>| {
+            approved(
+                &reverted,
+                true,
+                Some(&summary()),
+                track,
+                &clock(20_000.),
+                Signature::Given,
+                &s,
+            )
+            .unwrap_or_else(|| unreachable!("approved"))
+        };
+
+        let at_once = at(None);
+        assert_eq!(at_once.stage, ReceiptStage::Failed);
+        assert_eq!(at_once.title, s.receipt_failed);
+        assert!(
+            !at_once
+                .captions
+                .iter()
+                .any(|line| line.contains("reverted")),
+            "the page's English stays off the screen"
+        );
+
+        let dropped = entry(TrackStatus::Dropped, TrackOutcome::Final, Some(TX));
+        let with_tx = at(Some(&dropped));
+        assert_eq!(with_tx.stage, ReceiptStage::Failed);
+        assert_eq!(with_tx.title, s.receipt_failed);
+        assert!(with_tx.captions.contains(&s.receipt_failed_hint));
+        assert_eq!(
+            with_tx.hash,
+            Some((s.receipt_tx_hash.clone(), TX.to_owned()))
+        );
+        assert_eq!(
+            with_tx.explorer_tx.as_deref(),
+            Some(TX),
+            "the explorer says why"
+        );
+
+        // Even with a tracker that has not caught up — or says otherwise —
+        // the core's failure stands.
+        let pending = entry(TrackStatus::Pending, TrackOutcome::Landing, None);
+        assert_eq!(at(Some(&pending)).stage, ReceiptStage::Failed);
+    }
+
+    /// 083 S3: at the core's cap the page was told "not confirmed yet" — but
+    /// the column does not call it failed: the operation may still land, and
+    /// it says "still confirming" until the tracker knows, then lands.
+    #[test]
+    fn past_the_cap_the_column_still_follows_the_operation() {
+        let s = strings();
+        let answered = view(|v| {
+            v.pending_op_hash = Some(OP.to_owned());
+            v.tracker_handoff = None;
+        });
+        let at = |status, outcome, tx| {
+            approved(
+                &answered,
+                true,
+                None,
+                Some(&entry(status, outcome, tx)),
+                &clock(700_000.),
+                Signature::Given,
+                &s,
+            )
+            .unwrap_or_else(|| unreachable!("approved"))
+        };
+        let still = at(
+            TrackStatus::AcceptedNotLanded,
+            TrackOutcome::StillConfirming,
+            None,
+        );
+        assert_eq!(still.stage, ReceiptStage::Submitted);
+        assert!(still.captions.contains(&s.still_confirming));
+        assert_eq!(
+            still.hash,
+            Some((s.receipt_op_hash.clone(), OP.to_owned())),
+            "the OPERATION hash, labelled as one"
+        );
+        let landed = at(TrackStatus::Confirmed, TrackOutcome::Final, Some(TX));
+        assert_eq!(landed.stage, ReceiptStage::Confirmed);
     }
 
     /// Every tracker status has its own words — the column used to read

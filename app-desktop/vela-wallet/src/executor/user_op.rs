@@ -32,6 +32,10 @@
 //! message ([`sign_message`]) is the same choice over the Safe's
 //! `SafeMessage` hash, with nothing submitted.
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::Duration;
+
 use vela_core::ClientDataKind;
 use vela_core::app::fee_policy::{
     AssetPricing, FeeAssetKind, FeeAssetQuote, FeeCall, FeeGasOutcome, FeeTier,
@@ -40,18 +44,21 @@ use vela_core::app::fee_policy::{
     tempo_reimbursement,
 };
 use vela_core::app::send::SendSubmitFailure;
+use vela_core::app::tx_tracker::WAIT_WINDOW_MS;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
 use vela_core::user_op::{
-    CALL_GAS_LIMIT, MultiSendCall, PRE_VERIFICATION_GAS, UserOperation, VERIFICATION_GAS_DEPLOYED,
-    VERIFICATION_GAS_UNDEPLOYED, WalletKey, build_dummy_signature, build_in_band_fee_leg,
-    build_init_code_for_keys, build_multi_send_execute_call_data, build_user_op_signature,
-    calculate_safe_op_hash, compute_safe_message_hash, eip1271_envelope_signature,
-    encode_erc20_transfer, extract_client_data_fields, inner_calls_gas_floor,
-    is_plain_transfer_call, pad_gas_estimate, parse_existing_user_op_hash, signer_address_for,
+    CALL_GAS_LIMIT, ExistingOp, MultiSendCall, PRE_VERIFICATION_GAS, UserOperation,
+    VERIFICATION_GAS_DEPLOYED, VERIFICATION_GAS_UNDEPLOYED, WalletKey, build_dummy_signature,
+    build_in_band_fee_leg, build_init_code_for_keys, build_multi_send_execute_call_data,
+    build_user_op_signature, calculate_safe_op_hash, compute_safe_message_hash,
+    eip1271_envelope_signature, encode_erc20_transfer, existing_op, extract_client_data_fields,
+    inner_calls_gas_floor, is_plain_transfer_call, pad_gas_estimate, parse_hex_quantity,
+    signer_address_for, user_op_hash,
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
+use crate::executor::landing::{self, Landing};
 use crate::executor::passkey::PasskeyFailure;
 use crate::executor::trusted_signer::{self, Ask, Channel};
 use crate::executor::{chain, pool, relay};
@@ -365,6 +372,11 @@ fn account_context(
     keys: &[WalletKey],
 ) -> Result<(bool, String, Vec<u8>), SubmitFailure> {
     chain::verify_chain_ready(chain_id).map_err(other)?;
+    // 083: the account's previous operation lands first — before the
+    // deployment read (it may be the deploying one) and the nonce.
+    let floor = settle_previous(chain_id, safe, |previous| {
+        landing::await_landing(previous, chain_id, PREVIOUS_OP_WAIT)
+    })?;
     chain::forget_gas_price(chain_id);
     // …and the fee session's held readings (issue 212): a submit, and the
     // first quote after it, landed or not, measure again.
@@ -373,7 +385,7 @@ fn account_context(
     let nonce = chain::nonce(safe, chain_id);
     // A deployed wallet MUST sign its real nonce; an undeployed one's IS 0.
     let nonce = if deployed {
-        nonce.map_err(other)?
+        at_least(nonce.map_err(other)?, floor)
     } else {
         "0x0".to_owned()
     };
@@ -713,24 +725,203 @@ fn sign_and_submit(
         ));
     }
 
+    // This operation's own id, the relay's `[existingHash:…]` judged by it.
+    let own = user_op_hash(&op, u64::from(chain_id)).unwrap_or_default();
     let hash = match relay::send_user_op(&op, chain_id, extra, tier) {
         Ok(hash) => hash,
-        Err(relay::SubmitError::Rejected(message)) => {
-            // A previous op is still pending: poll ITS receipt instead of failing.
-            if let Some(existing) = parse_existing_user_op_hash(&message) {
-                eprintln!("[vela-wallet] relay: previous op pending ({existing}), tracking it");
-                return Ok(existing);
-            }
-            return Err(classify_rejection(message));
-        }
-        Err(relay::SubmitError::Unreachable) => {
-            return Err(other(
-                "The gas relayer could not be reached. Please try again.",
-            ));
-        }
+        Err(relay::SubmitError::Occupied { error }) => after_collision(
+            &error,
+            &own,
+            |previous| landing::await_landing(previous, chain_id, PREVIOUS_OP_WAIT),
+            || relay::send_user_op(&op, chain_id, extra, tier),
+        )?,
+        Err(relay::SubmitError::Rejected(message)) => return Err(classify_rejection(message)),
+        Err(relay::SubmitError::Unreachable) => return Err(other(UNREACHABLE)),
     };
     chain::bump_nonce(safe, chain_id);
+    note_submitted(chain_id, safe, &hash, &op.nonce);
     Ok(hash)
+}
+
+const UNREACHABLE: &str = "The gas relayer could not be reached. Please try again.";
+
+// ---------------------------------------------------------------------------
+// This account's previous operation (083)
+// ---------------------------------------------------------------------------
+
+/// How long a submit waits for the account's previous operation to land —
+/// the tracker's active window — before it gives up and says so.
+const PREVIOUS_OP_WAIT: Duration = Duration::from_millis(WAIT_WINDOW_MS as u64);
+
+/// What a request that could not go out behind another of the account's
+/// operations tells its page — for the developer; the screen has its own
+/// words.
+pub const PREVIOUS_PENDING: &str = "Another transaction from this account was still pending, so this one was not sent. Try again once it has confirmed.";
+
+/// The last operation this app submitted for an account on a chain, and
+/// whether it has been seen to land (spent its nonce).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Previous {
+    user_op_hash: String,
+    nonce: u128,
+    landed: bool,
+}
+
+static PREVIOUS: Mutex<Option<HashMap<String, Previous>>> = Mutex::new(None);
+
+fn account_key(chain_id: u32, safe: &str) -> String {
+    format!("{chain_id}:{}", safe.to_lowercase())
+}
+
+fn note_submitted(chain_id: u32, safe: &str, user_op_hash: &str, nonce: &str) {
+    let Ok(nonce) = parse_hex_quantity(Some(nonce)) else {
+        return;
+    };
+    if let Ok(mut previous) = PREVIOUS.lock() {
+        previous.get_or_insert_with(HashMap::new).insert(
+            account_key(chain_id, safe),
+            Previous {
+                user_op_hash: user_op_hash.to_owned(),
+                nonce,
+                landed: false,
+            },
+        );
+    }
+}
+
+/// An operation was seen to land — included, executed or reverted: its
+/// nonce is spent. Told by whoever sees its receipt (the dApp's landing
+/// wait, the tracker).
+pub fn note_landed(user_op_hash: &str) {
+    if let Ok(mut previous) = PREVIOUS.lock()
+        && let Some(map) = previous.as_mut()
+    {
+        for entry in map.values_mut() {
+            if entry.user_op_hash.eq_ignore_ascii_case(user_op_hash) {
+                entry.landed = true;
+            }
+        }
+    }
+}
+
+fn previous_of(chain_id: u32, safe: &str) -> Option<Previous> {
+    PREVIOUS
+        .lock()
+        .ok()?
+        .as_ref()?
+        .get(&account_key(chain_id, safe))
+        .cloned()
+}
+
+/// Forget the account's previous operation — only if it is still `hash`.
+fn forget_previous(chain_id: u32, safe: &str, hash: &str) {
+    if let Ok(mut previous) = PREVIOUS.lock()
+        && let Some(map) = previous.as_mut()
+    {
+        let key = account_key(chain_id, safe);
+        if map
+            .get(&key)
+            .is_some_and(|entry| entry.user_op_hash.eq_ignore_ascii_case(hash))
+        {
+            map.remove(&key);
+        }
+    }
+}
+
+/// Before a new operation is built (083, S3b): the account's previous one —
+/// Uniswap's approval, when its swap comes next — must land first, or the
+/// new one is signed over the same nonce and the relay refuses it. Waits up
+/// to [`PREVIOUS_OP_WAIT`] (the column says "preparing" meanwhile), and
+/// answers the nonce the new operation may not go below: the previous one's
+/// plus one, whatever a lagging node says.
+///
+/// Not landed by then: this request fails clearly, before any prompt — and
+/// the account is let go, so the next attempt asks the relay rather than
+/// waiting on an operation that may never land.
+fn settle_previous(
+    chain_id: u32,
+    safe: &str,
+    wait: impl FnOnce(&str) -> Option<Landing>,
+) -> Result<Option<u128>, SubmitFailure> {
+    let Some(previous) = previous_of(chain_id, safe) else {
+        return Ok(None);
+    };
+    if !previous.landed {
+        eprintln!(
+            "[vela-wallet] submit: waiting for this account's previous operation {} to land",
+            previous.user_op_hash
+        );
+        match wait(&previous.user_op_hash) {
+            Some(Landing::Landed(_) | Landing::Reverted(_)) => {
+                note_landed(&previous.user_op_hash);
+            }
+            // Refused: it will never spend its nonce.
+            Some(Landing::Refused) => {
+                forget_previous(chain_id, safe, &previous.user_op_hash);
+                return Ok(None);
+            }
+            None => {
+                forget_previous(chain_id, safe, &previous.user_op_hash);
+                return Err(other(PREVIOUS_PENDING));
+            }
+        }
+    }
+    Ok(Some(previous.nonce.saturating_add(1)))
+}
+
+/// The nonce read, raised to `floor` when it is below it.
+fn at_least(nonce: String, floor: Option<u128>) -> String {
+    match (parse_hex_quantity(Some(&nonce)), floor) {
+        (Ok(read), Some(floor)) if read < floor => format!("0x{floor:x}"),
+        _ => nonce,
+    }
+}
+
+/// The relay refused a signed operation because one of the account's is
+/// already pending at its nonce (083, S3b). That operation's hash is NEVER
+/// this request's answer — answered with it, Uniswap reported a swap done
+/// when only its approval had happened. So:
+///
+/// - it IS this operation (a submit that had in fact arrived): its hash;
+/// - another one: wait for it to land ([`PREVIOUS_OP_WAIT`]), then send this
+///   one again, as signed. The relay takes it when the two nonces differ; it
+///   refuses it when they were the same (the earlier operation spent it) —
+///   and then, or when the other never lands, this request fails clearly and
+///   nothing of it went out.
+fn after_collision(
+    error: &str,
+    own: &str,
+    wait: impl FnOnce(&str) -> Option<Landing>,
+    resubmit: impl FnOnce() -> Result<String, relay::SubmitError>,
+) -> Result<String, SubmitFailure> {
+    let previous = match existing_op(error, own) {
+        Some(ExistingOp::ThisOne(hash)) => {
+            eprintln!("[vela-wallet] relay: already holds this operation ({hash})");
+            return Ok(hash);
+        }
+        Some(ExistingOp::Another(previous)) => previous,
+        None => return Err(other(PREVIOUS_PENDING)),
+    };
+    eprintln!(
+        "[vela-wallet] relay: another operation of this account is pending ({previous}); waiting for it"
+    );
+    match wait(&previous) {
+        Some(Landing::Landed(_) | Landing::Reverted(_)) => note_landed(&previous),
+        Some(Landing::Refused) => {}
+        None => return Err(other(PREVIOUS_PENDING)),
+    }
+    match resubmit() {
+        Ok(hash) => Ok(hash),
+        Err(relay::SubmitError::Occupied { error }) => match existing_op(&error, own) {
+            Some(ExistingOp::ThisOne(hash)) => Ok(hash),
+            _ => Err(other(PREVIOUS_PENDING)),
+        },
+        Err(relay::SubmitError::Rejected(message)) => {
+            eprintln!("[vela-wallet] relay: refused again after {previous} landed: {message}");
+            Err(other(PREVIOUS_PENDING))
+        }
+        Err(relay::SubmitError::Unreachable) => Err(other(UNREACHABLE)),
+    }
 }
 
 /// A message (EIP-1271, spec 044 on the phones): the key signs the Safe's
@@ -887,6 +1078,140 @@ mod tests {
                 .collect(),
             signed_in_with: None,
         }
+    }
+
+    const OWN: &str = "0x2222222222222222222222222222222222222222222222222222222222222222";
+    const APPROVAL: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
+
+    fn occupied_by(hash: &str) -> String {
+        format!(r#"{{"code":-32602,"message":"AA25 invalid account nonce [existingHash:{hash}]"}}"#)
+    }
+
+    /// 083 S3b: the relay names ANOTHER pending operation of the account —
+    /// Uniswap's approval, when its swap is submitted. That hash is never
+    /// the swap's answer: the swap waits for the approval to land, then goes
+    /// out as signed; if the relay still will not take it, the request fails
+    /// clearly and nothing of it went out.
+    #[test]
+    fn another_pending_operation_is_never_this_requests_hash() {
+        // It lands; this one goes out after it.
+        let mut waited_for = None;
+        let sent = after_collision(
+            &occupied_by(APPROVAL),
+            OWN,
+            |previous| {
+                waited_for = Some(previous.to_owned());
+                Some(Landing::Landed("0xtx".to_owned()))
+            },
+            || Ok(OWN.to_owned()),
+        );
+        assert_eq!(sent, Ok(OWN.to_owned()), "this operation's own hash");
+        assert_eq!(waited_for.as_deref(), Some(APPROVAL));
+
+        // It lands, and the relay refuses this one: the approval spent the
+        // nonce it was signed with.
+        let spent = after_collision(
+            &occupied_by(APPROVAL),
+            OWN,
+            |_| Some(Landing::Landed("0xtx".to_owned())),
+            || {
+                Err(relay::SubmitError::Rejected(
+                    "Transaction nonce mismatch. Please try again.".to_owned(),
+                ))
+            },
+        );
+        assert_eq!(spent, Err(other(PREVIOUS_PENDING)));
+
+        // It never lands in the window: nothing is sent again.
+        let mut resent = false;
+        let stuck = after_collision(
+            &occupied_by(APPROVAL),
+            OWN,
+            |_| None,
+            || {
+                resent = true;
+                Ok(OWN.to_owned())
+            },
+        );
+        assert_eq!(stuck, Err(other(PREVIOUS_PENDING)));
+        assert!(!resent);
+
+        for answer in [sent, spent, stuck] {
+            assert_ne!(answer, Ok(APPROVAL.to_owned()), "the approval's hash");
+        }
+        assert!(PREVIOUS_PENDING.starts_with("Another transaction from this account"));
+    }
+
+    /// …and when the relay names THIS operation (a submit that had arrived),
+    /// that is this request's hash — nothing to wait for, nothing to resend.
+    #[test]
+    fn this_very_operation_is_its_own_hash() {
+        let answer = after_collision(
+            &occupied_by(&OWN.to_uppercase().replace("0X", "0x")),
+            OWN,
+            |_| unreachable!("nothing to wait for"),
+            || unreachable!("nothing to resend"),
+        );
+        assert!(answer.is_ok_and(|hash| hash.eq_ignore_ascii_case(OWN)));
+    }
+
+    /// Before building: this app's previous operation for the account lands
+    /// first, and the new one's nonce is never below the one after it — a
+    /// node that has not seen the landing yet reads the old nonce, which the
+    /// relay would refuse. Not landed in the window: a clear failure before
+    /// any prompt, and the account is let go so the next attempt asks the
+    /// relay. The registry is per chain and account.
+    #[test]
+    fn the_previous_operation_lands_before_the_next_is_built() {
+        let safe = "0xAAAA000000000000000000000000000000000001";
+        assert_eq!(
+            settle_previous(100, safe, |_| unreachable!("nothing submitted yet")),
+            Ok(None)
+        );
+
+        note_submitted(100, safe, APPROVAL, "0x7");
+        let mut waited = None;
+        let floor = settle_previous(100, &safe.to_lowercase(), |hash| {
+            waited = Some(hash.to_owned());
+            Some(Landing::Reverted("0xtx".to_owned()))
+        });
+        assert_eq!(floor, Ok(Some(8)), "a reverted op spent its nonce too");
+        assert_eq!(waited.as_deref(), Some(APPROVAL));
+        assert_eq!(
+            settle_previous(100, safe, |_| unreachable!("seen landed")),
+            Ok(Some(8)),
+            "once landed, only the floor is left"
+        );
+        assert_eq!(at_least("0x7".to_owned(), Some(8)), "0x8", "a lagging node");
+        assert_eq!(
+            at_least(format!("0x{:064x}", 9), Some(8)),
+            format!("0x{:064x}", 9)
+        );
+        assert_eq!(at_least("0x7".to_owned(), None), "0x7");
+        assert_eq!(
+            settle_previous(137, safe, |_| unreachable!("another chain")),
+            Ok(None)
+        );
+
+        // The next one, seen by the tracker or the page's wait.
+        note_submitted(100, safe, OWN, "0x8");
+        note_landed(&OWN.to_uppercase().replace("0X", "0x"));
+        assert_eq!(settle_previous(100, safe, |_| unreachable!()), Ok(Some(9)));
+
+        // Stuck: fail clearly, and let the account go.
+        note_submitted(100, safe, APPROVAL, "0x9");
+        assert_eq!(
+            settle_previous(100, safe, |_| None),
+            Err(other(PREVIOUS_PENDING))
+        );
+        assert_eq!(settle_previous(100, safe, |_| unreachable!()), Ok(None));
+
+        // Refused by the relay: its nonce is free again — no floor.
+        note_submitted(100, safe, APPROVAL, "0x9");
+        assert_eq!(
+            settle_previous(100, safe, |_| Some(Landing::Refused)),
+            Ok(None)
+        );
     }
 
     #[test]

@@ -547,6 +547,13 @@ pub enum SubmitError {
     /// The relay answered and refused. Carries `parseBundlerError`'s
     /// sentence — the one the send executor classifies.
     Rejected(String),
+    /// The relay refused because an operation of this account is already
+    /// pending at the nonce — its error carries the `[existingHash:…]`
+    /// marker, and this is that error RAW (083): `parse_bundler_error` words
+    /// an `AA25` as "nonce mismatch" and the marker went with it. Whether the
+    /// operation it names is this one is the caller's question
+    /// (`vela_core::user_op::existing_op`).
+    Occupied { error: String },
     /// The relay could not be reached at all.
     Unreachable,
 }
@@ -600,6 +607,9 @@ pub fn send_user_op(
         if let Some(hash) = body.get("result").and_then(Value::as_str) {
             return Ok(hash.to_owned());
         }
+        if let Some(error) = occupied(body.get("error")) {
+            return Err(SubmitError::Occupied { error });
+        }
         let message = parse_bundler_error(body.get("error"));
         let retryable = message.contains("currently processing") || message.contains("Retry later");
         if !retryable || attempt == SUBMIT_MAX_RETRIES {
@@ -614,6 +624,14 @@ pub fn send_user_op(
     Err(SubmitError::Rejected(
         "Bundler unavailable after retries".to_owned(),
     ))
+}
+
+/// The relay's error, raw, when it names the operation a submit collided
+/// with — anywhere in the error member (`message` or `data`), before any
+/// wording is applied to it.
+fn occupied(error: Option<&Value>) -> Option<String> {
+    let raw = error?.to_string();
+    vela_core::user_op::parse_existing_user_op_hash(&raw).map(|_| raw)
 }
 
 /// A definitive receipt (`UserOpResolution`).
@@ -729,15 +747,66 @@ pub fn user_op_status(
     user_op_hash: &str,
     chain_id: u32,
 ) -> Option<(TrackLifecycle, Option<String>)> {
+    status_of(user_op_hash, |params| {
+        pool::bundler_call(chain_id, "eth_getUserOperationStatus", params)
+    })
+}
+
+/// [`user_op_status`] within `budget` — the dApp's landing wait asks it for
+/// a relay that refused the operation after accepting it (083).
+pub fn user_op_status_within(
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: std::time::Duration,
+) -> Option<(TrackLifecycle, Option<String>)> {
+    status_of(user_op_hash, |params| {
+        pool::bundler_call_within(chain_id, "eth_getUserOperationStatus", params, budget)
+    })
+}
+
+/// `eth_getUserOperationByHash` within `budget`: the hash of the transaction
+/// that carried the operation, once the bundler reports one (083). `None`
+/// while it is pending — ERC-7769 answers `transactionHash: null` then —
+/// and for an unknown op, an error or a relay that could not be reached.
+/// The relay has answered this method since before 083 (`null` for an
+/// unknown hash, probed 2026-09-28), which is why the landing wait may ask
+/// it when the receipt has not come.
+pub fn user_op_transaction_within(
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: std::time::Duration,
+) -> Option<String> {
     if user_op_hash.is_empty() {
         return None;
     }
-    let body = pool::bundler_call(
+    let body = pool::bundler_call_within(
         chain_id,
-        "eth_getUserOperationStatus",
+        "eth_getUserOperationByHash",
         json!([user_op_hash]),
+        budget,
     )
     .ok()?;
+    transaction_of(&body)
+}
+
+/// The bundle transaction an `eth_getUserOperationByHash` answer names.
+fn transaction_of(body: &Value) -> Option<String> {
+    let hash = body.get("result")?.get("transactionHash")?.as_str()?;
+    let digits = hash.strip_prefix("0x")?;
+    (digits.len() == 64
+        && digits.bytes().all(|b| b.is_ascii_hexdigit())
+        && digits.bytes().any(|b| b != b'0'))
+    .then(|| hash.to_owned())
+}
+
+fn status_of(
+    user_op_hash: &str,
+    call: impl FnOnce(Value) -> Result<Value, pool::PoolError>,
+) -> Option<(TrackLifecycle, Option<String>)> {
+    if user_op_hash.is_empty() {
+        return None;
+    }
+    let body = call(json!([user_op_hash])).ok()?;
     if body.get("error").is_some() {
         return None;
     }
@@ -1172,6 +1241,60 @@ mod tests {
             parse_bundler_error(Some(&json!({ "code": -32000 })))
                 .starts_with("Transaction failed:")
         );
+    }
+
+    /// 083: the operation a submit collided with is read from the RAW error.
+    /// The sentence `parse_bundler_error` makes of an AA25 is "nonce
+    /// mismatch", and the marker used to go with it — so the "previous op
+    /// pending" branch could never see it.
+    #[test]
+    fn the_operation_a_submit_collided_with_survives_the_wording() {
+        let error = json!({
+            "code": -32602,
+            "message": "AA25 invalid account nonce [existingHash:0xAbC123]"
+        });
+        assert_eq!(
+            parse_bundler_error(Some(&error)),
+            "Transaction nonce mismatch. Please try again.",
+            "the sentence drops the marker"
+        );
+        let named = |error: &Value| {
+            occupied(Some(error))
+                .and_then(|raw| vela_core::user_op::parse_existing_user_op_hash(&raw))
+        };
+        assert_eq!(named(&error).as_deref(), Some("0xAbC123"));
+        assert_eq!(
+            named(&json!({ "message": "rejected", "data": "pending [existingHash:0xdef456]" }))
+                .as_deref(),
+            Some("0xdef456"),
+            "in `data` too"
+        );
+        assert_eq!(
+            occupied(Some(&json!({ "message": "AA25 invalid account nonce" }))),
+            None
+        );
+        assert_eq!(occupied(None), None);
+    }
+
+    /// 083: `eth_getUserOperationByHash` names the bundle transaction only
+    /// once there is one — `null` (pending, ERC-7769) and unknown ops are
+    /// nothing, never a zero hash.
+    #[test]
+    fn the_bundler_names_a_transaction_only_once_there_is_one() {
+        let tx = format!("0x{}", "cd".repeat(32));
+        assert_eq!(
+            transaction_of(&json!({ "result": { "transactionHash": tx, "blockNumber": "0x11" } })),
+            Some(tx)
+        );
+        for body in [
+            json!({ "result": null }),
+            json!({ "result": { "transactionHash": null, "blockNumber": null } }),
+            json!({ "result": { "transactionHash": format!("0x{}", "0".repeat(64)) } }),
+            json!({ "result": { "transactionHash": "0xabc" } }),
+            json!({ "error": { "code": -32601, "message": "method not found" } }),
+        ] {
+            assert_eq!(transaction_of(&body), None, "{body}");
+        }
     }
 
     #[test]

@@ -181,6 +181,28 @@ pub fn bundler_call_within(
     params: Value,
     budget: Duration,
 ) -> Result<Value, PoolError> {
+    dispatch_within(chain_id, RpcKind::Bundler, method, params, budget)
+}
+
+/// [`call`], waiting at most `budget` — the node's half of the dApp's
+/// landing wait (083: a bundle transaction's receipt, read to learn how the
+/// operation inside it ended).
+pub fn call_within(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Duration,
+) -> Result<Value, PoolError> {
+    dispatch_within(chain_id, RpcKind::Rpc, method, params, budget)
+}
+
+fn dispatch_within(
+    chain_id: u32,
+    kind: RpcKind,
+    method: &str,
+    params: Value,
+    budget: Duration,
+) -> Result<Value, PoolError> {
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
@@ -189,7 +211,7 @@ pub fn bundler_call_within(
         if tx
             .send(Message::Ask(Request::Call {
                 chain_id,
-                kind: RpcKind::Bundler,
+                kind,
                 method: method.to_owned(),
                 params,
                 reply,
