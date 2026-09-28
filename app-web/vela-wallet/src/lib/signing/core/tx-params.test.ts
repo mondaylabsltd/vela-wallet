@@ -56,7 +56,12 @@ describe('the sheet reads a transaction as the submit path sends it (RC6)', () =
 
 	it('a batch is described by its first leg', () => {
 		const params = JSON.stringify([
-			{ calls: [{ to: TO, value: '0x1', data: null }, { to: TO, data: '0xdeadbeef' }] }
+			{
+				calls: [
+					{ to: TO, value: '0x1', data: null },
+					{ to: TO, data: '0xdeadbeef' }
+				]
+			}
 		]);
 		expect(txParams(params)).toEqual({ to: TO, data: null, value: '0x1' });
 	});

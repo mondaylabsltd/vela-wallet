@@ -3424,8 +3424,7 @@ function submitResultOf(submitted: SubmittedOp, chainId: number): SubmitResult {
 async function readSubmitBlock(chainId: number): Promise<number | null> {
 	const read = rpcCall('eth_blockNumber', [], chainId).then(
 		(response) => {
-			const head =
-				typeof response.result === 'string' ? Number.parseInt(response.result, 16) : NaN;
+			const head = typeof response.result === 'string' ? Number.parseInt(response.result, 16) : NaN;
 			return Number.isSafeInteger(head) && head >= 0 ? head : null;
 		},
 		() => null

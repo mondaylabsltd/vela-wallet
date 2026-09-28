@@ -553,9 +553,8 @@ describe('the extension worker’s counters (spec 082 RB14)', () => {
 		// the request's kind (`sign`, `connect`), so its counter is
 		// `req.arrived.sign`: a closed word with a third segment, which the
 		// failures line must not read as a failure.
-		const { createSwLog, SW_COUNTS_KEY: WORKER_COUNTS_KEY } = await import(
-			'../../../extension/lib/swlog.js'
-		);
+		const { createSwLog, SW_COUNTS_KEY: WORKER_COUNTS_KEY } =
+			await import('../../../extension/lib/swlog.js');
 		const stored: Record<string, unknown> = {};
 		const storage = {
 			get: async (keys: string[]) => Object.fromEntries(keys.map((k) => [k, stored[k]])),
