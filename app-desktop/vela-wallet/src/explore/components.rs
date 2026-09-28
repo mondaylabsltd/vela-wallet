@@ -26,9 +26,6 @@ pub const TILE_AVATAR: f32 = 56.;
 pub const ROW_AVATAR: f32 = 40.;
 
 /// A site or token's mark: its first letter on a wash of its own brand colour.
-/// Deliberately NOT a fetched favicon — a wallet that downloads an icon from
-/// the site it is about to warn you about has handed that site a tracking
-/// pixel and a way to impersonate a brand.
 pub fn letter_avatar(letter: SharedString, tint: Hsla, size: f32) -> Div {
     let mut wash = tint;
     wash.a = 0.16;
@@ -47,6 +44,29 @@ pub fn letter_avatar(letter: SharedString, tint: Hsla, size: f32) -> Div {
         .child(letter)
 }
 
+/// A site's avatar (spec 079 F16): its own icon over its letter — a picture
+/// that fails to load draws nothing, so the letter beneath is what stays. The
+/// icons are https only (the founder's ruling on site icons, 2026-09-19);
+/// they are tried in order, the first that loads on top.
+pub fn site_avatar(letter: SharedString, tint: Hsla, icon_urls: &[SharedString], size: f32) -> Div {
+    let mut mark = div()
+        .relative()
+        .size(px(size))
+        .flex_none()
+        .child(letter_avatar(letter, tint, size));
+    for url in icon_urls.iter().rev() {
+        mark = mark.child(
+            gpui::img(url.clone())
+                .absolute()
+                .top_0()
+                .left_0()
+                .size(px(size))
+                .rounded_full(),
+        );
+    }
+    mark
+}
+
 /// A tile's column: the web's 8-up grid over its 800 page — (736 − 7 × 8) / 8
 /// (078 E-05).
 pub const TILE_W: f32 = 85.;
@@ -61,7 +81,12 @@ pub fn site_tile(id: ElementId, theme: &Theme, site: &SiteModel) -> Stateful<Div
         .items_center()
         .gap(px(8.))
         .cursor_pointer()
-        .child(letter_avatar(site.letter.clone(), site.tint, TILE_AVATAR))
+        .child(site_avatar(
+            site.letter.clone(),
+            site.tint,
+            &site.icon_urls,
+            TILE_AVATAR,
+        ))
         .child(
             div()
                 .max_w_full()
@@ -123,7 +148,12 @@ pub fn site_row(
         .py(px(12.))
         .line_height(gpui::relative(crate::wallet::components::LINE_NORMAL))
         .cursor_pointer()
-        .child(letter_avatar(site.letter.clone(), site.tint, ROW_AVATAR))
+        .child(site_avatar(
+            site.letter.clone(),
+            site.tint,
+            &site.icon_urls,
+            ROW_AVATAR,
+        ))
         .child(
             div()
                 .flex()
@@ -224,7 +254,12 @@ pub fn tab_strip_with(
         // The start page's tab wears the sail, as the web's (078 E-04); a
         // site's tab its mark.
         face = match &tab.site {
-            Some(site) => face.child(letter_avatar(site.letter.clone(), site.tint, 16.)),
+            Some(site) => face.child(site_avatar(
+                site.letter.clone(),
+                site.tint,
+                &site.icon_urls,
+                16.,
+            )),
             None => face.child(crate::ui::vela_mark(theme, px(16.))),
         };
         // The close glyph is its own control: a click on it must close the
@@ -494,11 +529,11 @@ pub fn address_field(
             );
     }
     if bar.browsing {
-        let (glyph, tint) = if bar.secure {
-            (Icon::Lock, theme.fg_muted)
-        } else {
-            (Icon::TriangleAlert, theme.warning_base)
-        };
+        // Spec 079 (owner: "用一把锁代表 https 和非https 就行了，不文字标记"): a
+        // closed lock, quiet, for https — it says the line is encrypted, not
+        // that the site is honest — and an open one in the warning colour for
+        // plain http. No word beside either.
+        let (glyph, tint) = lock_glyph(theme, bar.secure);
         return row.child(icon_img(icons, glyph, false, tint, 12.)).child(
             div()
                 .text_size(theme::text_row_sub())
@@ -513,6 +548,117 @@ pub fn address_field(
                 .text_color(theme.fg_subtle)
                 .child(bar.placeholder.clone()),
         )
+}
+
+/// The site's network picker (spec 079 FR-017; owner: "连接时 切换网络，没有
+/// 网络logo呀 … 需要能看到这个网络上的余额吧"): each row leads with the chain's
+/// logo, names it, shows what the account holds there, and ticks the site's
+/// own. A long list scrolls inside the card rather than off the window.
+pub fn network_pick_card(
+    theme: &Theme,
+    icons: &mut IconCache,
+    rows: &[super::fixtures::NetworkPick],
+    actions: Vec<Option<crate::contacts::components::MenuAction>>,
+) -> Div {
+    let mut list = div()
+        .id("network-pick-list")
+        .max_h(px(440.))
+        .overflow_y_scroll()
+        .flex()
+        .flex_col();
+    let mut actions = actions.into_iter();
+    for (i, row) in rows.iter().enumerate() {
+        let name = crate::executor::custom_tokens::network_name(row.chain_id);
+        let line = div()
+            .id(ElementId::from(("network-pick", i)))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(12.))
+            .h(px(44.))
+            .px(px(14.))
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_base)
+            .child(crate::settings::components::chain_logo_mark(
+                u64::from(row.chain_id),
+                crate::settings::model::lettermark(&name),
+                crate::settings::model::chain_tint(u64::from(row.chain_id)).unwrap_or(0x8A_8F_98),
+                20.,
+            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .truncate()
+                    .child(row.name.clone()),
+            )
+            .children(
+                row.amount
+                    .clone()
+                    .map(|amount| div().flex_none().text_color(theme.fg_muted).child(amount)),
+            )
+            .child(div().size(px(16.)).flex_none().when(row.current, |el| {
+                el.child(icon_img(icons, Icon::Check, false, theme.fg_base, 16.))
+            }));
+        list = list.child(match actions.next().flatten() {
+            Some(action) => line
+                .cursor_pointer()
+                .hover(|el| el.bg(theme.bg_sunken))
+                .on_click(action)
+                .into_any_element(),
+            None => line.into_any_element(),
+        });
+    }
+    div()
+        .w(px(300.))
+        .py(px(6.))
+        .rounded(px(12.))
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .shadow_lg()
+        .child(list)
+}
+
+/// The lock for a page's scheme (spec 079 FR-015): closed and neutral for
+/// https, open in the warning colour for http. The one security mark every
+/// browser surface draws, and never with a word.
+#[must_use]
+pub fn lock_glyph(theme: &Theme, secure: bool) -> (Icon, Hsla) {
+    if secure {
+        (Icon::Lock, theme.fg_muted)
+    } else {
+        (Icon::LockOpen, theme.warning_base)
+    }
+}
+
+/// The load's hairline under the toolbar (spec 079 US3): an accent segment
+/// running across while a load is out — asked for and not yet finished. The
+/// row is always 2 px tall, so nothing moves when it starts or stops.
+pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
+    use gpui::{Animation, AnimationExt as _};
+    let track = div()
+        .h(px(2.))
+        .w_full()
+        .flex_none()
+        .relative()
+        .overflow_hidden();
+    if !busy {
+        return track;
+    }
+    track.child(
+        div()
+            .absolute()
+            .top_0()
+            .h_full()
+            .w(gpui::relative(0.3))
+            .bg(theme.accent)
+            .with_animation(
+                "load-hairline",
+                Animation::new(std::time::Duration::from_millis(1200)).repeat(),
+                |bar, delta| bar.left(gpui::relative(delta * 1.3 - 0.3)),
+            ),
+    )
 }
 
 /// The three navigation buttons, live or drawn.
@@ -628,4 +774,21 @@ pub fn demo_page(page: &DemoPage) -> Div {
                 .rounded_full()
                 .bg(demo_palette::card()),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Spec 079 FR-015: the scheme is a lock and only a lock — closed and
+    /// quiet for https, open in the warning colour for http.
+    #[test]
+    fn the_lock_says_the_scheme_and_nothing_else() {
+        let theme = Theme::light();
+        assert_eq!(lock_glyph(&theme, true), (Icon::Lock, theme.fg_muted));
+        assert_eq!(
+            lock_glyph(&theme, false),
+            (Icon::LockOpen, theme.warning_base)
+        );
+    }
 }

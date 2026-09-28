@@ -33,8 +33,46 @@ fn tone_color(theme: &Theme, tone: Tone) -> Hsla {
     }
 }
 
+/// Who is asking and on which network — the header's facts alone, kept by
+/// the page so the column's ending (spec 079: the tick, "not landed yet")
+/// still names the site after the core has closed the request.
+#[derive(Clone)]
+pub struct HeaderModel {
+    pub dapp_name: SharedString,
+    pub dapp_host: SharedString,
+    pub dapp_letter: SharedString,
+    pub dapp_tint: Hsla,
+    pub dapp_own: bool,
+    pub dapp_icon_urls: Vec<SharedString>,
+    pub network_name: SharedString,
+    pub network_dot: Hsla,
+    pub network_logo: Option<SharedString>,
+}
+
+impl HeaderModel {
+    #[must_use]
+    pub fn of(model: &SigningModel) -> Self {
+        Self {
+            dapp_name: model.dapp_name.clone(),
+            dapp_host: model.dapp_host.clone(),
+            dapp_letter: model.dapp_letter.clone(),
+            dapp_tint: model.dapp_tint,
+            dapp_own: model.dapp_own,
+            dapp_icon_urls: model.dapp_icon_urls.clone(),
+            network_name: model.network_name.clone(),
+            network_dot: model.network_dot,
+            network_logo: model.network_logo.clone(),
+        }
+    }
+}
+
 /// The dApp header: who is asking, and on which network.
 pub fn header(theme: &Theme, model: &SigningModel) -> Div {
+    header_view(theme, &HeaderModel::of(model))
+}
+
+/// The header from its facts alone.
+pub fn header_view(theme: &Theme, model: &HeaderModel) -> Div {
     div()
         .flex()
         .items_center()
@@ -89,13 +127,19 @@ pub fn header(theme: &Theme, model: &SigningModel) -> Div {
                         .truncate()
                         .child(model.dapp_name.clone()),
                 )
-                .children((!model.dapp_host.is_empty()).then(|| {
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .truncate()
-                        .child(model.dapp_host.clone())
-                })),
+                // A site whose name IS its host says it once (spec 079 F14:
+                // "127.0.0.1:8137" over "127.0.0.1:8137").
+                .children(
+                    (!model.dapp_host.is_empty() && model.dapp_host != model.dapp_name).then(
+                        || {
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_muted)
+                                .truncate()
+                                .child(model.dapp_host.clone())
+                        },
+                    ),
+                ),
         )
         .child(
             div()
@@ -804,14 +848,17 @@ fn kv_row(
 ///
 /// `on_row` is the row's own tap — retry a failed quote, or open / close the
 /// coin list — and `on_pick` one listener per coin in drawn order, `None` for
-/// a coin that cannot pay (drawn for context, answers to nothing). The mocks
-/// pass neither.
+/// a coin that cannot pay (drawn for context, answers to nothing).
+/// `on_refresh` is the refresh control beside the row (spec 079: the send
+/// form's own, outside the row's click so measuring again never opens the
+/// coin list). The mocks pass none of them.
 pub fn fee(
     theme: &Theme,
     icons: &mut IconCache,
     fee: &FeeModel,
     on_row: Option<crate::flows::panels::Click>,
     on_pick: Vec<Option<crate::flows::panels::Click>>,
+    on_refresh: Option<crate::flows::panels::Click>,
 ) -> Option<Div> {
     match fee {
         FeeModel::Hidden => None,
@@ -834,6 +881,9 @@ pub fn fee(
             selector,
             warning,
             tappable,
+            refresh,
+            refreshing,
+            stale_note,
         } => {
             // Said under the row, in the error colour: why the slide is shut.
             let warning = warning.clone().map(|text| {
@@ -848,7 +898,6 @@ pub fn fee(
                     .px(px(16.))
                     .py(px(12.))
                     .rounded(px(12.))
-                    .bg(theme.bg_sunken)
                     .flex()
                     .items_center()
                     .justify_between()
@@ -885,12 +934,63 @@ pub fn fee(
                             }),
                     );
                 let on_row = if *tappable { on_row } else { None };
+                // One sunken surface, as the send form's `FeeRow` draws it:
+                // the row, and the refresh at its end — two controls side by
+                // side, not one inside the other.
+                let mut line = div()
+                    .flex()
+                    .items_center()
+                    .rounded(px(12.))
+                    .bg(theme.bg_sunken)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .child(crate::flows::panels::clickable("signing-fee", on_row, row)),
+                    );
+                if refresh.is_some() {
+                    // While a measurement is out the control turns — the row
+                    // is working, not stuck.
+                    let control = div()
+                        .flex()
+                        .flex_none()
+                        .items_center()
+                        .justify_center()
+                        .size(px(36.))
+                        .mr(px(4.))
+                        .rounded_full()
+                        .hover(|el| el.bg(theme.bg_base))
+                        .child(if *refreshing {
+                            crate::ui::spinner(theme.fg_muted, px(14.), px(1.5))
+                        } else {
+                            gpui::IntoElement::into_any_element(icon_img(
+                                icons,
+                                Icon::RefreshCw,
+                                false,
+                                theme.fg_muted,
+                                14.,
+                            ))
+                        });
+                    line = line.child(crate::flows::panels::clickable(
+                        "signing-fee-refresh",
+                        on_refresh.filter(|_| !*refreshing),
+                        control,
+                    ));
+                }
+                let stale = stale_note.clone().map(|note| {
+                    div()
+                        .px(px(16.))
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(note)
+                });
                 return Some(
                     div()
                         .flex()
                         .flex_col()
                         .gap(px(6.))
-                        .child(crate::flows::panels::clickable("signing-fee", on_row, row))
+                        .child(line)
+                        .children(stale)
                         .children(warning),
                 );
             };
@@ -1127,6 +1227,23 @@ pub fn slide_to_confirm(
         .on_mouse_up_out(gpui::MouseButton::Left, move |_, window, cx| {
             release(&action, window, cx);
         })
+}
+
+/// The confirm when the account signs on the Trusted Signer's page (spec 079
+/// US7): a primary button that goes there — the page's own slide is the one
+/// consent, so a slide here would be a second. Armed on the same terms as the
+/// slide: `action` is only ever passed when the three machines agreed.
+pub fn open_signer_button(
+    theme: &Theme,
+    label: SharedString,
+    enabled: bool,
+    action: Option<crate::flows::panels::Click>,
+) -> Div {
+    let armed = enabled && action.is_some();
+    let button = crate::flows::components::accent_button(theme, label)
+        .rounded_full()
+        .when(!armed, |el| el.opacity(0.45));
+    crate::flows::panels::clickable("signing-open-signer", action.filter(|_| armed), button)
 }
 
 /// The slide's state. One confirm is on screen at a time, and a new request

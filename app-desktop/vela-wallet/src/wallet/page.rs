@@ -580,14 +580,20 @@ pub struct WalletPage {
     /// A once-a-second redraw is running for a waiting receipt (078 F-04):
     /// the countdown and the ring move with the clock, not with the core.
     receipt_ticking: bool,
-    /// A dApp transaction landing in the signing column (078 G-04, spec 077):
-    /// the operation, its chain, and when the column raised it.
+    /// How the last request ended, held in the signing column after the core
+    /// closed it (078 G-04, spec 079): the tick, or "not landed yet" until
+    /// the tracker sees it land.
     dapp_landing: Option<DappLanding>,
-    /// The operation a landing was last raised for — dismissed or not. One
-    /// landing per operation: the handoff stays in the view after Done, and
-    /// gating on "is one showing" raised the same receipt again forever (the
-    /// web measured exactly that in its packaged extension).
-    dapp_landed_op: Option<String>,
+    /// Numbers each ending, so a tick's timer closes only its own.
+    dapp_landing_seq: u64,
+    /// The signing column's header and one-line summary as last drawn — what
+    /// the ending still shows once the request is gone (spec 079).
+    signing_last: Option<(signing_components::HeaderModel, Option<SharedString>)>,
+    /// A request the person closed after approving it (spec 079 FR-002): its
+    /// machines keep running, unseen, until the core answers the page — the
+    /// close refused nothing, so the answer must still get out.
+    #[cfg(not(target_os = "linux"))]
+    signing_background: Vec<gpui::Entity<crate::wallet::signing_host::SigningHost>>,
     /// The contacts header search (078 X-05 / C-02): the web filters the
     /// A–Z list as it is typed, in the shell (`letterSections`).
     contacts_query: String,
@@ -646,6 +652,9 @@ pub struct WalletPage {
     /// The star pins with THIS rather than the host, because the host is what
     /// a tile falls back to and a page's title is what a person recognises.
     browser_title: Option<String>,
+    /// Spec 079 US3: the shell's own account of the page's load — wry reports
+    /// no failures, so the watchdog, the probe and the retries live here.
+    load_watch: crate::explore::load_watch::LoadWatch,
     /// The browser machine (spec 070): every page's requests, the grants,
     /// each site's chain, the signing line. Born the first time anything needs
     /// it — a page's first message, or Settings listing the connected sites —
@@ -683,9 +692,10 @@ pub struct WalletPage {
     contacts_scroll: crate::ui::SmoothScroll,
     explore_scroll: crate::ui::SmoothScroll,
     pick_scroll: crate::ui::SmoothScroll,
-    /// The network menu's rows — `(chain, name, current)` — named when it
-    /// opened; `menu_origin` says which site it is about.
-    site_networks: Vec<(u32, SharedString, bool)>,
+    /// The network picker's rows — logo, name, the account's figure there,
+    /// and the site's own ticked — named when it opened; `menu_origin` says
+    /// which site it is about.
+    site_networks: Vec<explore_fixtures::NetworkPick>,
     /// `VELA_BROWSER_URL` is applied once, not on every frame the column draws.
     browser_url_pinned: bool,
     send_amount_focus: gpui::FocusHandle,
@@ -1127,7 +1137,10 @@ impl WalletPage {
             scan_camera_failure: None,
             receipt_ticking: false,
             dapp_landing: None,
-            dapp_landed_op: None,
+            dapp_landing_seq: 0,
+            signing_last: None,
+            #[cfg(not(target_os = "linux"))]
+            signing_background: Vec::new(),
             contacts_query: String::new(),
             balance_detail_open: false,
             contacts_query_focus: cx.focus_handle(),
@@ -1154,6 +1167,7 @@ impl WalletPage {
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
             browser_title: None,
+            load_watch: crate::explore::load_watch::LoadWatch::default(),
             cap_focus: cx.focus_handle(),
             leg_cap_focus: std::collections::HashMap::new(),
             browser_host: None,
@@ -5325,16 +5339,9 @@ impl WalletPage {
                             // file used to just hide the column, which left
                             // the dApp's promise hanging until a navigation
                             // happened to settle it.
-                            #[cfg(not(target_os = "linux"))]
-                            if this.panel == PanelId::Signing
-                                && let Some(host) = this.signing_host.clone()
-                            {
-                                host.update(cx, |host, cx| {
-                                    host.dispatch_sign(
-                                        vela_core::app::sign_request::Event::SwipeDismissed,
-                                        cx,
-                                    );
-                                });
+                            if this.panel == PanelId::Signing {
+                                this.close_signing_column(cx);
+                                return;
                             }
                             this.panel = PanelId::None;
                             cx.notify();
@@ -12491,7 +12498,18 @@ impl WalletPage {
         // the first page — and in the mock — it stays the drawn host.
         #[cfg(not(target_os = "linux"))]
         let host = if live_browser {
+            // Before any web page has committed in this view (the engine's
+            // blank page is not one), the site being loaded is the only name
+            // there is (spec 079).
+            let loading = self
+                .load_watch
+                .url
+                .as_deref()
+                .filter(|_| self.load_watch.loading)
+                .map(crate::explore::load_watch::host_of);
             crate::webview::host()
+                .filter(|host| !host.starts_with("about:"))
+                .or(loading)
                 .map_or_else(|| explore_fixtures::uniswap().host, SharedString::from)
         } else {
             explore_fixtures::uniswap().host
@@ -12502,6 +12520,34 @@ impl WalletPage {
         // screen, the same one that decides whether it may ask to sign.
         let secure = !live_browser || tab_view.as_ref().is_none_or(|tab| tab.secure);
         let crashed = tab_view.as_ref().is_some_and(|tab| tab.crashed);
+        // Spec 079 US3: a load that failed stands where the page was — the bar
+        // names the site that failed (by its address alone: nothing of it
+        // loaded to judge), and its scheme is the only lock there is.
+        let failed_load = self
+            .load_watch
+            .failure
+            .clone()
+            .zip(self.load_watch.url.clone())
+            .filter(|_| live_browser && !crashed);
+        // Spec 079 US4: the page's chain cannot be reached — said in one line
+        // under the bar, with Retry; the connection chip stays as it is (the
+        // connection is fine). Not over the failure panel: no page, no chain.
+        let chain_notice = tab_view
+            .as_ref()
+            .filter(|_| live_browser && !crashed && failed_load.is_none())
+            .map(|tab| tab.chain_id)
+            .filter(|chain_id| {
+                self.browser_host
+                    .as_ref()
+                    .is_some_and(|host| host.read(cx).chain_unreachable(*chain_id))
+            });
+        let (host, secure) = match &failed_load {
+            Some((_, url)) => (
+                SharedString::from(crate::explore::load_watch::host_of(url)),
+                url.to_ascii_lowercase().starts_with("https://"),
+            ),
+            None => (host, secure),
+        };
         let bar = explore_components::AddressBar {
             browsing,
             host,
@@ -12602,9 +12648,15 @@ impl WalletPage {
                 Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
                     crate::webview::forward();
                 }),
-                Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
-                    crate::webview::reload();
-                }),
+                // Over the failure panel, reload is its Retry: the address
+                // that failed, not the page before it.
+                Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                    if this.load_watch.failure.is_some() {
+                        this.load_retry(cx);
+                    } else {
+                        crate::webview::reload();
+                    }
+                })),
             ]
         });
         #[cfg(target_os = "linux")]
@@ -12612,6 +12664,23 @@ impl WalletPage {
 
         let toolbar = explore_components::toolbar(theme, &mut self.icons, address, trailing, nav);
 
+        // An automatic attempt that came due while the page was elsewhere
+        // runs now that it is back (never while it is out of sight).
+        #[cfg(not(target_os = "linux"))]
+        if live_browser && self.load_watch.retry_due {
+            cx.spawn(async move |page, cx| {
+                page.update(cx, |this, cx| {
+                    if this.load_in_front()
+                        && let Some(url) = this.load_watch.take_due()
+                    {
+                        crate::webview::navigate(&url);
+                    }
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
         let body: gpui::AnyElement = if live_browser && crashed {
             // The renderer is gone and the page with it; the core has already
             // settled what it asked. Said, with the way back — never a blank
@@ -12619,6 +12688,13 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             crate::webview::hide();
             self.page_crashed(theme, cx).into_any_element()
+        } else if let Some((failure, url)) = failed_load {
+            // The Vela panel covers the page for the whole of a retry: WKWebView
+            // keeps the page before it, and that page is not what failed.
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::hide();
+            self.load_failed_panel(theme, &failure, &url, cx)
+                .into_any_element()
         } else if live_browser {
             #[cfg(not(target_os = "linux"))]
             {
@@ -12672,7 +12748,137 @@ impl WalletPage {
             .bg(theme.bg_base)
             .child(strip)
             .child(toolbar)
+            // Spec 079 US3: the hairline, from the moment a load is asked for
+            // until it finishes or fails. Its 2 px are always there, so the
+            // page never moves when it appears.
+            .children(live_browser.then(|| {
+                crate::explore::components::load_hairline(theme, self.load_watch.busy() && !crashed)
+            }))
+            .children(chain_notice.map(|chain_id| self.chain_notice(theme, chain_id, cx)))
             .child(body)
+    }
+
+    /// The page's chain cannot be reached (spec 079 US4): which one, and a
+    /// Retry — a quiet line, gone by itself when the chain answers anyone.
+    fn chain_notice(&mut self, theme: &Theme, chain_id: u32, cx: &mut Context<Self>) -> Div {
+        let text = crate::signing::fill(
+            &self.explore.chain_down,
+            &[(
+                "chain",
+                &crate::flows::live::chain_name(chain_id).to_string(),
+            )],
+        );
+        div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(8.))
+            .px(px(16.))
+            .py(px(8.))
+            .bg(theme.warning_soft)
+            .child(icon_img(
+                &mut self.icons,
+                Icon::TriangleAlert,
+                false,
+                theme.warning_base,
+                14.,
+            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(SharedString::from(text)),
+            )
+            .child(
+                div()
+                    .id("chain-notice-retry")
+                    .flex_none()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.accent)
+                    .child(self.explore.load_retry.clone())
+                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                        let host = this.browser_host(cx);
+                        host.update(cx, |host, cx| host.retry_chain(chain_id, cx));
+                    })),
+            )
+    }
+
+    /// The load failed (spec 079 US3): the generic line, the core's reason for
+    /// its class under it, the site, and Retry — which says it is trying
+    /// again, and takes no second press, while an attempt runs.
+    fn load_failed_panel(
+        &mut self,
+        theme: &Theme,
+        failure: &vela_core::app::browser_load::LoadFailure,
+        url: &str,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let title = self.explore.load_failed.clone();
+        let reason = self.loc.t(&failure.reason_key);
+        let retrying = self.load_watch.retrying || self.load_watch.loading;
+        let button = outline_button(
+            ElementId::from("load-retry"),
+            theme,
+            &mut self.icons,
+            (!retrying).then_some(Icon::RefreshCw),
+            if retrying {
+                self.explore.load_retrying.clone()
+            } else {
+                self.explore.load_retry.clone()
+            },
+        );
+        let button = if retrying {
+            button.opacity(0.6)
+        } else {
+            button.on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                #[cfg(not(target_os = "linux"))]
+                this.load_retry(cx);
+                #[cfg(target_os = "linux")]
+                let _ = (this, cx);
+            }))
+        };
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(12.))
+            .p(px(32.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::TriangleAlert,
+                false,
+                theme.warning_base,
+                28.,
+            ))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(title.clone()),
+            )
+            .children((reason != title).then(|| {
+                div()
+                    .max_w(px(360.))
+                    .text_center()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(reason)
+            }))
+            .child(
+                div()
+                    .max_w(px(360.))
+                    .text_center()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_subtle)
+                    .child(SharedString::from(crate::explore::load_watch::host_of(url))),
+            )
+            .child(div().pt(px(4.)).child(button))
     }
 
     /// The renderer behind the page died (spec 070 FR-013; macOS reports it).
@@ -12873,12 +13079,27 @@ impl WalletPage {
         // anybody went, and the title only exists once the document parsed.
         let page = cx.entity().downgrade();
         let async_cx = cx.to_async();
-        crate::webview::on_meta_to(Box::new(move |url, title, favicon| {
+        crate::webview::on_meta_to(Box::new(move |meta| {
             let page = page.clone();
             async_cx
                 .spawn(async move |cx| {
                     page.update(cx, |page, cx| {
-                        page.browser_title = (!title.is_empty()).then(|| title.clone());
+                        // Spec 079 R3: the core's visit rule decides — never a
+                        // failed load, an error status or an engine page — and
+                        // the address, title and icon are ONE document's, read
+                        // in one script. Not a visit: the tab keeps its title.
+                        let Some(visit) = vela_core::app::browser_load::visit_to_record(
+                            vela_core::app::browser_load::LoadFinished {
+                                url: meta.url,
+                                title: meta.title,
+                                icon: (!meta.favicon.is_empty()).then_some(meta.favicon),
+                                main_frame_failed: false,
+                                http_status: meta.status,
+                            },
+                        ) else {
+                            return;
+                        };
+                        page.browser_title.clone_from(&visit.title);
                         // The strip follows the document, from the one place
                         // that knows a page settled. A navigation with no tab
                         // OPENS one: the first page a person opens is the
@@ -12891,12 +13112,12 @@ impl WalletPage {
                             let event = match selected {
                                 Some(id) => vela_core::app::explore_sites::Event::TabNavigated {
                                     id,
-                                    url: url.clone(),
-                                    title: (!title.is_empty()).then(|| title.clone()),
+                                    url: visit.url.clone(),
+                                    title: visit.title.clone(),
                                 },
                                 None => vela_core::app::explore_sites::Event::TabOpened {
-                                    url: Some(url.clone()),
-                                    title: (!title.is_empty()).then(|| title.clone()),
+                                    url: Some(visit.url.clone()),
+                                    title: visit.title.clone(),
                                     now_ms: crate::executor::now_ms(),
                                 },
                             };
@@ -12905,13 +13126,12 @@ impl WalletPage {
                         resident::resident::<BrowserHistory>(cx).update(cx, |resident, cx| {
                             resident.dispatch(
                                 vela_core::app::browser_history::Event::VisitRecorded {
-                                    url,
-                                    // Empty is ABSENT, not an empty title: the
-                                    // core's rule is that a report without one
-                                    // must not clobber a title already
-                                    // captured, and "" would clobber it.
-                                    title: (!title.is_empty()).then_some(title),
-                                    favicon: (!favicon.is_empty()).then_some(favicon),
+                                    url: visit.url,
+                                    // Absent, never "": the core's rule is that
+                                    // a report without one must not clobber a
+                                    // title already captured.
+                                    title: visit.title,
+                                    favicon: visit.favicon,
                                     now_ms: crate::executor::now_ms(),
                                 },
                                 cx,
@@ -12946,12 +13166,123 @@ impl WalletPage {
     fn browser_load(&mut self, load: crate::webview::Load, cx: &mut Context<Self>) {
         let tab = BROWSER_TAB.to_owned();
         let event = match load {
-            crate::webview::Load::Started(url) => DbrEvent::NavigationStarted { tab, url },
-            crate::webview::Load::Finished(url) => DbrEvent::LoadFinished { tab, url },
+            // The wallet's own request: the core hears the commit, not this.
+            crate::webview::Load::Requested(url) => {
+                self.load_requested(&url, cx);
+                return;
+            }
+            crate::webview::Load::Started(url) => {
+                self.load_watch.committed(&url);
+                cx.notify();
+                DbrEvent::NavigationStarted { tab, url }
+            }
+            crate::webview::Load::Finished(url) => {
+                self.load_watch.finished(&url);
+                cx.notify();
+                DbrEvent::LoadFinished { tab, url }
+            }
             crate::webview::Load::Crashed => DbrEvent::RendererGone { tab },
         };
         let host = self.browser_host(cx);
         host.update(cx, |host, cx| host.dispatch(event, cx));
+    }
+
+    /// A load the wallet asked for (spec 079 US3): progress from now, and a
+    /// watchdog — wry says nothing when a navigation fails, so a load with no
+    /// commit in three seconds is probed.
+    #[cfg(not(target_os = "linux"))]
+    fn load_requested(&mut self, url: &str, cx: &mut Context<Self>) {
+        use crate::explore::load_watch::WATCHDOG;
+        if let Some(generation) = self.load_watch.requested(url, crate::executor::now_ms()) {
+            cx.spawn(async move |page, cx| {
+                cx.background_executor().timer(WATCHDOG).await;
+                page.update(cx, |this, cx| this.load_watchdog(generation, cx))
+                    .ok();
+            })
+            .detach();
+        }
+        cx.notify();
+    }
+
+    /// Three seconds, no commit: ask the address natively, off the frame.
+    #[cfg(not(target_os = "linux"))]
+    fn load_watchdog(&mut self, generation: u64, cx: &mut Context<Self>) {
+        use crate::explore::load_watch::{PROBE_BUDGET, probe};
+        let Some(url) = self.load_watch.watchdog(generation) else {
+            return;
+        };
+        cx.spawn(async move |page, cx| {
+            let answer = cx
+                .background_executor()
+                .spawn(async move { probe(&url, PROBE_BUDGET) })
+                .await;
+            page.update(cx, |this, cx| this.load_probed(generation, answer, cx))
+                .ok();
+        })
+        .detach();
+    }
+
+    /// The probe answered: a failure is the panel, with its reason; a site
+    /// that answered gets until twenty seconds to commit.
+    #[cfg(not(target_os = "linux"))]
+    fn load_probed(&mut self, generation: u64, answer: Result<(), i64>, cx: &mut Context<Self>) {
+        use crate::explore::load_watch::Probed;
+        match self.load_watch.probed(generation, answer) {
+            Probed::Ignored => return,
+            Probed::WaitUntil(at_ms) => {
+                let wait = (at_ms - crate::executor::now_ms()).max(0.) as u64;
+                cx.spawn(async move |page, cx| {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(wait))
+                        .await;
+                    page.update(cx, |this, cx| {
+                        if this.load_watch.give_up(generation) {
+                            this.load_failed(cx);
+                        }
+                    })
+                    .ok();
+                })
+                .detach();
+            }
+            Probed::Failed => self.load_failed(cx),
+        }
+        cx.notify();
+    }
+
+    /// The panel is up: a network failure is tried again by itself, on the
+    /// core's schedule, while the page is in front.
+    #[cfg(not(target_os = "linux"))]
+    fn load_failed(&mut self, cx: &mut Context<Self>) {
+        if let Some((generation, wait)) = self.load_watch.schedule_retry() {
+            cx.spawn(async move |page, cx| {
+                cx.background_executor().timer(wait).await;
+                page.update(cx, |this, cx| {
+                    let in_front = this.load_in_front();
+                    if let Some(url) = this.load_watch.retry_fired(generation, in_front) {
+                        crate::webview::navigate(&url);
+                    }
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
+        cx.notify();
+    }
+
+    /// The page is what the person is looking at: Explore, a page, signed in.
+    fn load_in_front(&self) -> bool {
+        self.section == Section::Explore && self.browsing && self.identity.is_some()
+    }
+
+    /// The panel's Retry (and the toolbar's reload while it is up): the
+    /// address that failed, again — a reload would load the page before it.
+    #[cfg(not(target_os = "linux"))]
+    fn load_retry(&mut self, cx: &mut Context<Self>) {
+        if let Some(url) = self.load_watch.retry() {
+            crate::webview::navigate(&url);
+        }
+        cx.notify();
     }
 
     /// The browser machine, born the first time anything needs it, and the
@@ -13118,6 +13449,71 @@ impl WalletPage {
         return true;
     }
 
+    /// The open request's operation has been accepted — its receipt counts.
+    fn request_submitted(&self, cx: &gpui::App) -> bool {
+        #[cfg(not(target_os = "linux"))]
+        return self
+            .signing_host
+            .as_ref()
+            .is_some_and(|host| host.read(cx).view.pending_op_hash.is_some());
+        #[cfg(target_os = "linux")]
+        {
+            let _ = cx;
+            false
+        }
+    }
+
+    /// Where the open request stands once it has been approved (spec 079),
+    /// with its chain — `None` while it is still a request to decide on.
+    #[cfg(not(target_os = "linux"))]
+    fn open_request_receipt(
+        &self,
+        summary: Option<&SharedString>,
+        cx: &mut Context<Self>,
+    ) -> Option<(crate::signing::status::SigningReceipt, u32)> {
+        let entries = resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
+            .read(cx)
+            .view()
+            .entries;
+        let host = self.signing_host.as_ref()?.read(cx);
+        if host.view.surface != vela_core::app::sign_request::SignSurface::Sheet {
+            return None;
+        }
+        let track = host.view.pending_op_hash.as_ref().and_then(|op| {
+            entries
+                .into_iter()
+                .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))
+        });
+        let clock = signing_clock(host.chain_id, host.seen_submitted_ms);
+        crate::signing::status::approved(
+            &host.view,
+            crate::signing::status::on_chain(&host.raw.0),
+            summary,
+            track.as_ref(),
+            &clock,
+            &self.signing,
+        )
+        .map(|receipt| (receipt, host.chain_id))
+    }
+
+    /// The column's close — its ✕, Esc, and the receipt's own button. The
+    /// core decides what it answers: a request not yet approved is refused
+    /// (4001); one approved is merely no longer watched, and its answer still
+    /// reaches the page (spec 079 FR-002). An ending on screen just goes.
+    fn close_signing_column(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.clone() {
+            host.update(cx, |host, cx| {
+                host.dispatch_sign(vela_core::app::sign_request::Event::SwipeDismissed, cx);
+            });
+        }
+        self.dapp_landing = None;
+        if self.panel == PanelId::Signing {
+            self.panel = PanelId::None;
+        }
+        cx.notify();
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn signing_busy(&self, cx: &gpui::App) -> bool {
         self.signing_host.as_ref().is_some_and(|host| {
@@ -13181,37 +13577,55 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         let answers = host.update(cx, |host, _| host.take_answers());
-        let closed = host.read(cx).closed;
-        // The transaction was handed to the tracker: it is landing HERE (the
-        // web's `watchLanding`). Raised once per operation.
-        if self.signing_host.as_ref() == Some(host)
-            && let Some(handoff) = host.read(cx).view.tracker_handoff.clone()
-            && self.dapp_landed_op.as_deref() != Some(handoff.user_op_hash.as_str())
-        {
-            self.dapp_landed_op = Some(handoff.user_op_hash.clone());
-            self.dapp_landing = Some(DappLanding {
-                op_hash: handoff.user_op_hash,
-                chain_id: handoff.chain_id,
-                raised_at_ms: crate::executor::now_ms(),
-            });
-        }
+        let (closed, responded, approved) = {
+            let read = host.read(cx);
+            (read.closed, read.responded, read.approved)
+        };
         // WHETHER there is a column is the core's answer, not this file's —
         // and only for the column on screen: a column already replaced (its
         // request over) must not close the one that took its place.
         if self.signing_host.as_ref() == Some(host) {
             if closed {
+                // Spec 079: how it ended stays on screen — the tick, or "not
+                // landed yet" — for as long as the person is looking at the
+                // column. A column they already closed opens for nothing.
+                let ending = {
+                    let read = host.read(cx);
+                    read.ending.clone().map(|ending| DappLanding {
+                        ending,
+                        chain_id: read.chain_id,
+                        seq: 0,
+                        seen_submitted_ms: read.seen_submitted_ms,
+                        closing: false,
+                    })
+                };
+                if let Some(mut landing) = ending.filter(|_| self.panel == PanelId::Signing) {
+                    self.dapp_landing_seq += 1;
+                    landing.seq = self.dapp_landing_seq;
+                    self.dapp_landing = Some(landing);
+                }
                 // The request is over: the column goes, and so do its
                 // machines — a decoded intent must never outlive the request
                 // it decoded.
                 self.signing_host = None;
-                // …unless its transaction is landing: the column stays for
-                // the receipt until the person is done with it.
+                // …unless it was closed after the approval and the core has
+                // not answered the page yet (FR-002): nothing was refused, so
+                // its machines keep running, unseen, until the answer is out.
+                if approved && !responded {
+                    self.signing_background.push(host.clone());
+                }
+                // …and unless its ending is showing: the column stays for it
+                // until the person is done with it.
                 if self.panel == PanelId::Signing && self.dapp_landing.is_none() {
                     self.panel = PanelId::None;
                 }
             } else {
                 self.panel = PanelId::Signing;
             }
+        }
+        // A request running unseen has answered: its machines can go.
+        if responded {
+            self.signing_background.retain(|kept| kept != host);
         }
         if let Some(tab) = tab {
             for answer in answers {
@@ -13590,7 +14004,12 @@ impl WalletPage {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(explore_components::letter_avatar(letter, theme.accent, 40.))
+                    .child(explore_components::site_avatar(
+                        letter,
+                        theme.accent,
+                        &explore_live::icons_of(&consent.origin, None),
+                        40.,
+                    ))
                     .child(
                         div()
                             .text_size(theme::text_row_title())
@@ -13693,17 +14112,16 @@ impl WalletPage {
                 None,
             ),
         };
-        // "Secure" and "Connected" are claims, so each is only made when the
-        // core says so: a lock for the origin, a grant for the site.
-        let status = match (secure, connected) {
-            (true, true) => SharedString::from(format!(
-                "{} · {}",
-                self.explore.secure_site, self.explore.connected_tag
-            )),
-            (true, false) => self.explore.secure_site.clone(),
-            (false, true) => self.explore.connected_tag.clone(),
-            (false, false) => SharedString::default(),
-        };
+        // Spec 079 (owner: "你标记的安全站点 只是https 而已，并不代表这个站点真的
+        // 安全"): the scheme is a lock and only a lock — no "secure site" in
+        // words, and no green; "Connected" is a fact about the grant, and is
+        // said only when the core has one.
+        let (lock, lock_tint) = explore_components::lock_glyph(theme, secure);
+        let status = connected.then(|| self.explore.connected_tag.clone());
+        let site_icons = origin
+            .as_deref()
+            .map(|origin| explore_live::icons_of(origin, None))
+            .unwrap_or_default();
         let identity = self.identity();
         let e = &self.explore;
         // The site's own network, which the person can change here — the
@@ -13724,13 +14142,17 @@ impl WalletPage {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(
-                        div()
-                            .w(px(8.))
-                            .h(px(8.))
-                            .rounded_full()
-                            .bg(fixtures::chain_ethereum()),
-                    )
+                    // The chain's own logo (owner: "连接时 切换网络，没有网络
+                    // logo呀") — the dot was Ethereum's colour on every chain.
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
+                        crate::settings::model::lettermark(
+                            &crate::executor::custom_tokens::network_name(chain_id),
+                        ),
+                        crate::settings::model::chain_tint(u64::from(chain_id))
+                            .unwrap_or(0x8A_8F_98),
+                        20.,
+                    ))
                     .child(
                         div()
                             .text_size(theme::text_row_title())
@@ -13768,9 +14190,10 @@ impl WalletPage {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(explore_components::letter_avatar(
+                    .child(explore_components::site_avatar(
                         site_letter,
                         site_tint,
+                        &site_icons,
                         40.,
                     ))
                     .child(
@@ -13787,13 +14210,16 @@ impl WalletPage {
                             )
                             .child(
                                 div()
-                                    .text_size(theme::text_row_sub())
-                                    .text_color(if connected {
-                                        theme.success_base
-                                    } else {
-                                        theme.fg_muted
-                                    })
-                                    .child(status),
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .child(icon_img(&mut self.icons, lock, false, lock_tint, 12.))
+                                    .children(status.map(|status| {
+                                        div()
+                                            .text_size(theme::text_row_sub())
+                                            .text_color(theme.fg_muted)
+                                            .child(status)
+                                    })),
                             ),
                     ),
             )
@@ -13829,11 +14255,19 @@ impl WalletPage {
                                     .child(identity.display()),
                             ),
                     )
+                    // It had no listener (the audit's F9): the header's own
+                    // switcher, over the browser — every connected site
+                    // follows the account the person picks.
                     .child(
                         div()
+                            .id("connection-switch-account")
+                            .cursor_pointer()
                             .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_muted)
-                            .child(e.switch_account.clone()),
+                            .text_color(theme.accent)
+                            .child(e.switch_account.clone())
+                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.open_account_switcher(cx);
+                            })),
                     ),
             )
             .child(row_divider(theme))
@@ -13888,14 +14322,16 @@ impl WalletPage {
     ) {
         let host = self.browser_host(cx);
         host.update(cx, |host, cx| host.follow_networks(cx));
+        // The figures are filled in as it draws (`menu_overlay`): the picker
+        // opens at once, never waits on the network, and a balance that lands
+        // while it is open appears in it (spec 079 FR-017).
         self.site_networks = crate::wallet::signing_host::known_chain_ids()
             .into_iter()
-            .map(|chain_id| {
-                (
-                    chain_id,
-                    SharedString::from(crate::flows::live::chain_name(chain_id)),
-                    chain_id == current,
-                )
+            .map(|chain_id| explore_fixtures::NetworkPick {
+                chain_id,
+                name: SharedString::from(crate::flows::live::chain_name(chain_id)),
+                current: chain_id == current,
+                amount: None,
             })
             .collect();
         self.menu_origin = Some(origin);
@@ -14013,12 +14449,19 @@ impl WalletPage {
         let mut refused = false;
         // The speed control under the fee (spec 069) — the send form's own,
         // and the tiers its options pick, in order.
+        // Spec 079 US7: this account signs on the Trusted Signer's page, whose
+        // own slide is the consent — the column offers a button that goes
+        // there, not a second slide.
+        let mut signs_on_page = false;
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
         let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
             let fee = host.fee_view();
+            // The route the executor will sign over, read from the same
+            // channel it reads (`SignContext::follow_sign_in`).
+            signs_on_page = host.trusted_signer().chosen().is_some();
             // WHO signs, as the core has it — the account the site was shown
             // (078 W-07). The mock's own wallet stood here, so every sheet
             // named "大表哥" whichever wallet was about to sign.
@@ -14182,6 +14625,14 @@ impl WalletPage {
                     speed_tier,
                     &currency,
                 );
+                // Spec 079: the speed control's own deployment read, which the
+                // fee machine never sees.
+                signing_live::fee_row_state(
+                    &mut model.fee,
+                    host.fee_measuring(),
+                    host.fee_unanswered(),
+                    &self.signing,
+                );
                 model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
                 model.confirm_enabled = signing_live::confirm_enabled(
                     &host.view,
@@ -14218,6 +14669,32 @@ impl WalletPage {
         }
         #[cfg(target_os = "linux")]
         let _ = cx;
+
+        // Spec 079: once approved, the column is the send receipt — the form,
+        // its fee and its dimmed slide are gone from the first frame after the
+        // approval, not when the core closes the sheet ninety seconds later.
+        // What the column was about is kept for the ending.
+        #[cfg(not(target_os = "linux"))]
+        if self.signing_host.is_some() && !funding && !refused {
+            let summary = crate::signing::status::summary_of(&model.blocks);
+            let header = signing_components::HeaderModel::of(&model);
+            self.signing_last = Some((header.clone(), summary.clone()));
+            if let Some((receipt, chain_id)) = self.open_request_receipt(summary.as_ref(), cx) {
+                let on_close: panels::Click =
+                    Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.close_signing_column(cx);
+                    }));
+                return self.signing_receipt_view(
+                    theme,
+                    window,
+                    Some(&header),
+                    &receipt,
+                    chain_id,
+                    on_close,
+                    cx,
+                );
+            }
+        }
 
         // Passed ONLY when the three machines agreed. A shut slide that still
         // carried an action would be a control the core said no to, waiting
@@ -14541,10 +15018,15 @@ impl WalletPage {
             }
             column = column.child(row_divider(theme)).child(section);
         }
-        let (on_fee, on_fee_pick) = self.fee_actions(cx);
-        if let Some(fee) =
-            signing_components::fee(theme, &mut self.icons, &model.fee, on_fee, on_fee_pick)
-        {
+        let (on_fee, on_fee_pick, on_fee_refresh) = self.fee_actions(cx);
+        if let Some(fee) = signing_components::fee(
+            theme,
+            &mut self.icons,
+            &model.fee,
+            on_fee,
+            on_fee_pick,
+            on_fee_refresh,
+        ) {
             let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
             if let Some(speed) = &signing_speed {
                 // The same control, the same clicks, as the send form's.
@@ -14590,13 +15072,27 @@ impl WalletPage {
                 &model.signer_seed,
             ))
             .children((!model.confirm_label.is_empty()).then(|| {
-                signing_components::slide_to_confirm(
-                    theme,
-                    &mut self.icons,
-                    model.confirm_label.clone(),
-                    model.confirm_enabled,
-                    confirm_action,
-                )
+                if signs_on_page && !funding {
+                    // One slide per signature (owner, spec 079 ruling 9): the
+                    // page's. This button sends the same approval the slide
+                    // did, and the page asks for the consent.
+                    signing_components::open_signer_button(
+                        theme,
+                        self.signing.open_signer.clone(),
+                        model.confirm_enabled,
+                        confirm_action,
+                    )
+                    .into_any_element()
+                } else {
+                    signing_components::slide_to_confirm(
+                        theme,
+                        &mut self.icons,
+                        model.confirm_label.clone(),
+                        model.confirm_enabled,
+                        confirm_action,
+                    )
+                    .into_any_element()
+                }
             }));
         // A refused request's one way out (the web's `dismissOnly`): Close,
         // full width, the same dismissal as the ✕. It had none — the confirm
@@ -14635,10 +15131,21 @@ impl WalletPage {
     fn fee_actions(
         &mut self,
         cx: &mut Context<Self>,
-    ) -> (Option<panels::Click>, Vec<Option<panels::Click>>) {
+    ) -> (
+        Option<panels::Click>,
+        Vec<Option<panels::Click>>,
+        Option<panels::Click>,
+    ) {
         let Some(host) = self.signing_host.clone() else {
-            return (None, Vec::new());
+            return (None, Vec::new(), None);
         };
+        // Spec 079: the refresh control — measure again, now.
+        let on_refresh: panels::Click = Box::new({
+            let host = host.clone();
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                host.update(cx, |host, cx| host.refresh_fee(cx));
+            }
+        });
         let options = host.read(cx).fee_view().options.clone();
         let on_row: panels::Click = Box::new({
             let host = host.clone();
@@ -14660,15 +15167,19 @@ impl WalletPage {
                 })
             })
             .collect();
-        (Some(on_row), on_pick)
+        (Some(on_row), on_pick, Some(on_refresh))
     }
 
     #[cfg(target_os = "linux")]
     fn fee_actions(
         &mut self,
         _cx: &mut Context<Self>,
-    ) -> (Option<panels::Click>, Vec<Option<panels::Click>>) {
-        (None, Vec::new())
+    ) -> (
+        Option<panels::Click>,
+        Vec<Option<panels::Click>>,
+        Option<panels::Click>,
+    ) {
+        (None, Vec::new(), None)
     }
 
     fn wallet_columns(
@@ -15147,89 +15658,115 @@ impl WalletPage {
         .detach();
     }
 
-    /// The landing receipt (the web's `DappReceipt` over `StatusHero`): where
-    /// a dApp transaction stands, read from the tracker the signing host
-    /// already handed it to — submitting until the tracker has it, submitted
-    /// with the ring, confirmed with its transaction hash and explorer, or
-    /// failed. Nothing here answers the request: the site was answered before
-    /// this was drawn, so Done closes a surface, never a conversation.
+    /// The column once the core has closed the request (the web's
+    /// `DappReceipt` over `StatusHero`, spec 079): the tick — a message
+    /// signed, a transaction landed — which goes by itself, or "not landed
+    /// yet, Vela keeps checking" for as long as the tracker follows it, and
+    /// then its landing. Nothing here answers the request: the site was
+    /// answered before this was drawn, so Done closes a surface, never a
+    /// conversation.
     fn dapp_receipt_body(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
-        use crate::flows::fixtures::ReceiptStage;
-        use vela_core::app::tx_tracker::TrackStatus;
         let Some(landing) = self.dapp_landing.clone() else {
             return div();
         };
-        let entry = resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
-            .read(cx)
-            .view()
-            .entries
-            .into_iter()
-            .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(&landing.op_hash));
-        let s = &self.signing;
-        // `Unreachable` is NOT a failure: the wallet could not ask, which is
-        // not the chain saying no, and a cross for it would be a verdict this
-        // wallet does not have.
-        let (stage, title, captions, hash, explorer) = match entry.as_ref() {
-            None => (
-                ReceiptStage::Submitting,
-                s.receipt_confirming.clone(),
-                vec![],
-                None,
-                None,
-            ),
-            Some(entry) => match (entry.status, entry.tx_hash.clone()) {
-                (TrackStatus::Confirmed, Some(tx)) => {
-                    let url = crate::executor::custom_tokens::explorer_base(landing.chain_id)
-                        .map(|base| SharedString::from(format!("{base}/tx/{tx}")));
-                    (
-                        ReceiptStage::Confirmed,
-                        s.receipt_confirmed.clone(),
-                        vec![],
-                        Some((s.receipt_tx_hash.clone(), tx)),
-                        url.map(|url| (s.receipt_explorer.clone(), url)),
-                    )
-                }
-                (TrackStatus::Dropped | TrackStatus::Rejected, _) => (
-                    ReceiptStage::Failed,
-                    s.receipt_failed.clone(),
-                    vec![s.receipt_failed_hint.clone()],
-                    Some((s.receipt_op_hash.clone(), landing.op_hash.clone())),
-                    None,
-                ),
-                _ => (
-                    ReceiptStage::Submitted,
-                    s.receipt_submitted.clone(),
-                    vec![s.receipt_confirming_hint.clone()],
-                    // The OPERATION hash: there is no transaction until it
-                    // lands, and labelling one as the other sends a person to
-                    // search an explorer for nothing.
-                    Some((s.receipt_op_hash.clone(), landing.op_hash.clone())),
-                    None,
-                ),
-            },
-        };
-        let progress = match stage {
-            ReceiptStage::Submitted => {
-                let since = entry
-                    .as_ref()
-                    .and_then(|entry| entry.submitted_at_ms)
-                    .unwrap_or(landing.raised_at_ms);
-                let elapsed = ((crate::executor::now_ms() - since) / 1000.).max(0.) as u64;
-                vela_core::app::network_admin::typical_inclusion_s(landing.chain_id)
-                    .and_then(|typical| flows_live::ring_progress(elapsed, u64::from(typical)))
+        let track = match &landing.ending {
+            crate::signing::status::SigningEnding::StillConfirming { user_op_hash } => {
+                resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
+                    .read(cx)
+                    .view()
+                    .entries
+                    .into_iter()
+                    .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(user_op_hash))
             }
-            ReceiptStage::Confirmed => Some(1.),
             _ => None,
         };
-        if stage == ReceiptStage::Submitted {
+        let (header, summary) = self.signing_last.clone().unzip();
+        let clock = signing_clock(landing.chain_id, landing.seen_submitted_ms);
+        let receipt = crate::signing::status::ended(
+            &landing.ending,
+            summary.flatten().as_ref(),
+            track.as_ref(),
+            &clock,
+            &self.signing,
+        );
+        // A tick is seen, then it goes: nobody should have to close a success.
+        if let Some(wait) = receipt
+            .closes_after_ms(&landing.ending)
+            .filter(|_| !landing.closing)
+        {
+            let seq = landing.seq;
+            cx.spawn(async move |page, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(wait))
+                    .await;
+                page.update(cx, |this, cx| {
+                    if this.dapp_landing.as_ref().is_some_and(|l| l.seq == seq) {
+                        this.dapp_landing = None;
+                        if this.panel == PanelId::Signing && this.no_signing_host() {
+                            this.panel = PanelId::None;
+                        }
+                        cx.notify();
+                    }
+                })
+                .ok();
+            })
+            .detach();
+            // Scheduled once per ending: a redraw must not stack timers.
+            if let Some(shown) = self.dapp_landing.as_mut() {
+                shown.closing = true;
+            }
+        }
+        let on_done: panels::Click = Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            this.dapp_landing = None;
+            if this.panel == PanelId::Signing && this.no_signing_host() {
+                this.panel = PanelId::None;
+            }
+            cx.notify();
+        }));
+        self.signing_receipt_view(
+            theme,
+            window,
+            header.as_ref(),
+            &receipt,
+            landing.chain_id,
+            on_done,
+            cx,
+        )
+    }
+
+    /// The receipt the signing column shows after an approval — the send
+    /// receipt's hero, the hash (copied whole on a click), the explorer once
+    /// there is a transaction, and one button.
+    #[allow(clippy::too_many_arguments, reason = "one view, named parts")]
+    fn signing_receipt_view(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        header: Option<&signing_components::HeaderModel>,
+        receipt: &crate::signing::status::SigningReceipt,
+        chain_id: u32,
+        on_cta: panels::Click,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        use crate::flows::fixtures::ReceiptStage;
+        if receipt.stage == ReceiptStage::Submitted {
             self.tick_landing(cx);
         }
-
-        let hero = panels::status_hero(theme, &mut self.icons, stage, progress, &title, &captions);
-        // Centred in the column, as the web's `.receipt` (`min-height: 100%;
-        // justify-content: center`): the column's height less its header.
+        let hero = panels::status_hero(
+            theme,
+            &mut self.icons,
+            receipt.stage,
+            receipt.progress,
+            &receipt.title,
+            &receipt.captions,
+        );
+        // Centred in what is left of the column, as the web's `.receipt`
+        // (`min-height: 100%; justify-content: center`).
+        let reserved = if header.is_some() { 190. } else { 120. };
         let mut body = div()
-            .min_h(px((f32::from(window.viewport_size().height) - 120.).max(0.)))
+            .min_h(px(
+                (f32::from(window.viewport_size().height) - reserved).max(0.)
+            ))
             .flex()
             .flex_col()
             .items_center()
@@ -15237,7 +15774,7 @@ impl WalletPage {
             .gap(px(8.))
             .p(px(16.))
             .child(hero);
-        if let Some((label, value)) = hash {
+        if let Some((label, value)) = receipt.hash.clone() {
             // A click copies the whole hash and answers with a tick for 1.5 s
             // where the hash was (`DappReceipt`'s own affordance).
             let copied = self.copied.as_deref() == Some("dapp-receipt-hash");
@@ -15279,33 +15816,43 @@ impl WalletPage {
                     })),
             );
         }
-        if let Some((label, url)) = explorer {
+        let explorer = receipt.explorer_tx.as_ref().and_then(|tx| {
+            crate::executor::custom_tokens::explorer_base(chain_id)
+                .map(|base| SharedString::from(format!("{}/tx/{tx}", base.trim_end_matches('/'))))
+        });
+        if let Some(url) = explorer {
             body = body.child(
                 div()
                     .id("dapp-receipt-explorer")
                     .cursor_pointer()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.accent)
-                    .child(label)
+                    .child(self.signing.view_on_explorer.clone())
                     .on_click(move |_, _, cx| cx.open_url(&url)),
             );
         }
-        body.child(
+        let cta = if receipt.cta_accent {
+            // `<Button variant="primary">` — the default pill shape.
+            crate::flows::components::accent_button(theme, receipt.cta.clone()).rounded_full()
+        } else {
+            crate::flows::components::ghost_button(theme, receipt.cta.clone())
+        };
+        body = body.child(
             div().mt(px(8.)).w_full().child(
-                // `<Button variant="primary">` — the default pill shape.
-                crate::flows::components::accent_button(theme, self.signing.receipt_done.clone())
-                    .rounded_full()
-                    .id("dapp-receipt-done")
+                cta.id("dapp-receipt-done")
                     .cursor_pointer()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.dapp_landing = None;
-                        if this.panel == PanelId::Signing && this.no_signing_host() {
-                            this.panel = PanelId::None;
-                        }
-                        cx.notify();
-                    })),
+                    .on_click(on_cta),
             ),
-        )
+        );
+        match header {
+            Some(header) => div()
+                .flex()
+                .flex_col()
+                .gap(px(16.))
+                .child(signing_components::header_view(theme, header))
+                .child(body),
+            None => body,
+        }
     }
 
     /// Keep a landing receipt's ring moving: redraw once a second while it
@@ -15322,7 +15869,8 @@ impl WalletPage {
                     .await;
                 let go_on = page
                     .update(cx, |this, cx| {
-                        let go_on = this.dapp_landing.is_some() && this.panel == PanelId::Signing;
+                        let go_on = this.panel == PanelId::Signing
+                            && (this.dapp_landing.is_some() || this.request_submitted(cx));
                         if go_on {
                             cx.notify();
                         } else {
@@ -16301,8 +16849,8 @@ impl WalletPage {
             ContactsMenu::SiteNetwork => self
                 .site_networks
                 .iter()
-                .map(|(chain_id, _, _)| {
-                    let chain_id = *chain_id;
+                .map(|row| {
+                    let chain_id = row.chain_id;
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             let origin = this.menu_origin.take();
@@ -16537,17 +17085,35 @@ impl WalletPage {
                     .collect::<Vec<_>>(),
             ),
             ContactsMenu::Tile => explore_fixtures::tile_menu(&self.explore),
-            ContactsMenu::SiteNetwork => explore_fixtures::network_pick_menu(
-                &self
-                    .site_networks
-                    .iter()
-                    .map(|(_, name, current)| (name.clone(), *current))
-                    .collect::<Vec<_>>(),
-            ),
+            // Drawn by its own card below: logos and figures, not glyphs.
+            ContactsMenu::SiteNetwork => contacts_fixtures::MenuModel {
+                items: Vec::new(),
+                divider_after: None,
+            },
             ContactsMenu::Contact => contacts_fixtures::contact_context(&self.contacts),
         };
         let actions = self.menu_actions(kind, cx);
-        let card = menu_card(theme, &mut self.icons, &model, actions);
+        let card = if matches!(kind, ContactsMenu::SiteNetwork) {
+            // What the account holds on each network: the home screen's own
+            // figures, as they stand now.
+            let money = self.money(cx);
+            let balances = wallet_live::network_balances(
+                &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
+                &self.locale,
+                &money,
+            );
+            for row in &mut self.site_networks {
+                row.amount = balances.get(&row.chain_id).cloned();
+            }
+            explore_components::network_pick_card(
+                theme,
+                &mut self.icons,
+                &self.site_networks,
+                actions,
+            )
+        } else {
+            menu_card(theme, &mut self.icons, &model, actions)
+        };
         Some(
             deferred(
                 anchored()
@@ -16845,19 +17411,12 @@ impl Render for WalletPage {
                         // Escape is the ✕: a signing column tells its core,
                         // as the web's `onclose` does, or the dApp's request
                         // hangs and every later one is refused as busy.
-                        #[cfg(not(target_os = "linux"))]
-                        if this.panel == PanelId::Signing
-                            && let Some(host) = this.signing_host.clone()
-                        {
-                            host.update(cx, |host, cx| {
-                                host.dispatch_sign(
-                                    vela_core::app::sign_request::Event::SwipeDismissed,
-                                    cx,
-                                );
-                            });
+                        if this.panel == PanelId::Signing {
+                            this.close_signing_column(cx);
+                        } else {
+                            this.panel = PanelId::None;
+                            cx.notify();
                         }
-                        this.panel = PanelId::None;
-                        cx.notify();
                     }
                 }
                 if ks.key == "f11" {
@@ -16884,9 +17443,14 @@ impl Render for WalletPage {
 /// A dApp transaction landing in the signing column (078 G-04).
 #[derive(Clone, Debug)]
 struct DappLanding {
-    op_hash: String,
+    ending: crate::signing::status::SigningEnding,
     chain_id: u32,
-    raised_at_ms: f64,
+    /// Its number (`dapp_landing_seq`) — a tick's timer closes only its own.
+    seq: u64,
+    /// When the column first saw the operation accepted.
+    seen_submitted_ms: Option<f64>,
+    /// Its tick's timer is running.
+    closing: bool,
 }
 
 /// What the scanner read that it cannot act on (078 F-02).
@@ -16950,6 +17514,17 @@ fn backup_request(
 
 /// The host of a signer page address, for its badge — the address itself is
 /// already in the field under it.
+/// The chain's clock for a signing receipt (spec 079): now, its usual
+/// inclusion time and its name.
+fn signing_clock(chain_id: u32, seen_submitted_ms: Option<f64>) -> crate::signing::status::Clock {
+    crate::signing::status::Clock {
+        now_ms: crate::executor::now_ms(),
+        typical_s: vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from),
+        chain_name: crate::flows::live::chain_name(chain_id).to_string(),
+        seen_submitted_ms,
+    }
+}
+
 fn page_host(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     rest.split(['/', '?', '#'])

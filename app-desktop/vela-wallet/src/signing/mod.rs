@@ -9,6 +9,7 @@
 pub mod components;
 pub mod fixtures;
 pub mod live;
+pub mod status;
 pub mod trusted_signer;
 
 use gpui::SharedString;
@@ -47,6 +48,30 @@ pub struct SigningStrings {
     pub receipt_tx_hash: SharedString,
     pub receipt_explorer: SharedString,
     pub receipt_done: SharedString,
+    /// Spec 079: after the approval the column is the send receipt, in the
+    /// send receipt's own words (`send.tx*`) — a dApp transaction and a send
+    /// must read the same while they land (Android's receipt, word for word).
+    pub tx_signing: SharedString,
+    pub tx_submitting: SharedString,
+    pub tx_background_hint: SharedString,
+    pub tx_submitted_title: SharedString,
+    pub tx_waiting_confirm: SharedString,
+    pub tx_typical_time: String,
+    pub tx_remaining: String,
+    pub tx_elapsed: String,
+    pub tx_slow_confirm: SharedString,
+    pub tx_close_background: SharedString,
+    /// Queued by the relay until network fees settle (`FeeHeld`) — said in
+    /// place of the ordinary wait, as the send receipt says it.
+    pub tx_held_fees: SharedString,
+    /// Past the wait window: handed to the network, not landed, Vela keeps
+    /// checking — never "failed" (the tracker's money rule).
+    pub still_confirming: SharedString,
+    /// Past the tracker's 24 h line: fate unknown.
+    pub unknown_outcome: SharedString,
+    /// A message signed ("已签名！") — `signHandoff.signed` reads "已发送" in
+    /// zh, which a message that went nowhere is not (Android's choice).
+    pub signed: SharedString,
     pub signing_account: SharedString,
     pub advanced_toggle: SharedString,
     /// The words the core names on a clear-signing result (`ClearTerm`):
@@ -198,6 +223,13 @@ pub struct SigningStrings {
     pub fee_estimating: SharedString,
     pub fee_token_title: SharedString,
     pub fee_balance: SharedString,
+    /// Spec 079: the send form's own refresh control, its stale line, and
+    /// why a quote failed when the service could not be reached.
+    pub fee_refresh: SharedString,
+    pub fee_stale: SharedString,
+    pub fee_unreachable: SharedString,
+    /// Spec 079 US7: the Trusted Signer route's confirm ("去签名页确认").
+    pub open_signer: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
     /// under the fee row when the coin it was quoted in cannot pay it.
     pub warn_insufficient_gas: SharedString,
@@ -258,6 +290,20 @@ impl SigningStrings {
             receipt_tx_hash: loc.t("componentsTx.receipt.txHash"),
             receipt_explorer: loc.t("componentsTx.receipt.explorer"),
             receipt_done: loc.t("componentsTx.receipt.done"),
+            tx_signing: loc.t("send.txSigning"),
+            tx_submitting: loc.t("send.txSubmitting"),
+            tx_background_hint: loc.t("send.txBackgroundHint"),
+            tx_submitted_title: loc.t("send.txSubmittedTitle"),
+            tx_waiting_confirm: loc.t("send.txWaitingConfirm"),
+            tx_typical_time: loc.t("send.txTypicalTime").to_string(),
+            tx_remaining: loc.t("send.txRemaining").to_string(),
+            tx_elapsed: loc.t("send.txElapsed").to_string(),
+            tx_slow_confirm: loc.t("send.txSlowConfirm"),
+            tx_close_background: loc.t("send.txCloseBackground"),
+            tx_held_fees: loc.t("send.txHeldFees"),
+            still_confirming: s("stillConfirming"),
+            unknown_outcome: s("unknownOutcome"),
+            signed: loc.t("clearSigning.alertSignedTitle"),
             signing_account: s("signingAccount"),
             advanced_toggle: s("advancedToggle"),
             terms: vela_core::app::clear_signing::ClearTerm::all()
@@ -407,6 +453,10 @@ impl SigningStrings {
             fee_estimating: loc.t("componentsUi.gas.estimating"),
             fee_token_title: s("feeTokenTitle"),
             fee_balance: loc.t("componentsUi.gas.rowBalance"),
+            fee_refresh: loc.t("send.feeRefresh"),
+            fee_stale: loc.t("send.feeStale"),
+            fee_unreachable: loc.t("componentsUi.funding.denialNetworkError"),
+            open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             tech_function: s("techFunction"),
             tech_raw_data: s("techRawData"),
@@ -503,6 +553,42 @@ mod tests {
         ] {
             assert!(!text.contains("componentsTx"), "echoed a key: {text}");
         }
+    }
+
+    /// Spec 079: the status words after an approval are the send receipt's
+    /// and the tracker's, resolved outside this catalogue's prefix where they
+    /// live elsewhere — none may come back as its own key.
+    #[test]
+    fn the_status_words_resolve() {
+        let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
+        for text in [
+            s.tx_signing.as_ref(),
+            s.tx_submitting.as_ref(),
+            s.tx_background_hint.as_ref(),
+            s.tx_submitted_title.as_ref(),
+            s.tx_waiting_confirm.as_ref(),
+            s.tx_typical_time.as_str(),
+            s.tx_remaining.as_str(),
+            s.tx_elapsed.as_str(),
+            s.tx_slow_confirm.as_ref(),
+            s.tx_close_background.as_ref(),
+            s.tx_held_fees.as_ref(),
+            s.still_confirming.as_ref(),
+            s.unknown_outcome.as_ref(),
+            s.signed.as_ref(),
+            s.fee_refresh.as_ref(),
+            s.fee_stale.as_ref(),
+            s.fee_unreachable.as_ref(),
+            s.open_signer.as_ref(),
+        ] {
+            assert!(
+                !text.starts_with("send.")
+                    && !text.starts_with("componentsUi.")
+                    && !text.starts_with("clearSigning."),
+                "echoed a key: {text}"
+            );
+        }
+        assert!(s.tx_typical_time.contains("{{estSecs}}"));
     }
 
     #[test]

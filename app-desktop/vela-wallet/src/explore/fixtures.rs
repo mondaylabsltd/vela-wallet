@@ -78,6 +78,9 @@ pub struct SiteModel {
     /// What a click on the site opens: the history entry's URL, or the one a
     /// favourite was pinned at. `None` for a drawn site, which opens its host.
     pub url: Option<SharedString>,
+    /// The site's own icon, tried in order OVER its letter (spec 079 F16;
+    /// https only) — empty for a drawn site, which keeps its letter.
+    pub icon_urls: Vec<SharedString>,
 }
 
 impl SiteModel {
@@ -108,6 +111,7 @@ fn site(
         subtitle: None,
         meta: None,
         url: None,
+        icon_urls: Vec::new(),
     }
 }
 
@@ -343,21 +347,17 @@ pub fn group_pick_menu(strings: &ExploreStrings, groups: &[String]) -> MenuModel
     }
 }
 
-/// Which network the site on screen is on (spec 070): the wallet's own
-/// networks, the site's ticked. The tick IS the state, as in the group
-/// pickers — one shape for "which of these".
-pub fn network_pick_menu(networks: &[(SharedString, bool)]) -> MenuModel {
-    MenuModel {
-        divider_after: None,
-        items: networks
-            .iter()
-            .map(|(name, current)| MenuItemModel {
-                icon: if *current { Icon::Check } else { Icon::Network },
-                label: name.clone(),
-                destructive: false,
-            })
-            .collect(),
-    }
+/// One row of the site's network picker (spec 070, spec 079 FR-017): the
+/// wallet's own networks, each with its logo and what the account holds
+/// there, the site's ticked. The tick IS the state, as in the group pickers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NetworkPick {
+    pub chain_id: u32,
+    pub name: SharedString,
+    pub current: bool,
+    /// The home screen's figure for this network — `None` when it is not
+    /// known, nothing is held there, or balances are hidden. Never a zero.
+    pub amount: Option<SharedString>,
 }
 
 /// The menu on a row in Recent (spec 032 phase 40).

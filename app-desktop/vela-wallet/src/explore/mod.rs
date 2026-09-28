@@ -8,6 +8,7 @@
 pub mod components;
 pub mod fixtures;
 pub mod live;
+pub mod load_watch;
 
 use gpui::SharedString;
 
@@ -63,7 +64,6 @@ pub struct ExploreStrings {
     pub copied: SharedString,
     pub site_menu: SharedString,
     pub account: SharedString,
-    pub secure_site: SharedString,
     pub connected_tag: SharedString,
     pub connection_title: SharedString,
     pub switch_account: SharedString,
@@ -82,6 +82,14 @@ pub struct ExploreStrings {
     /// The page's renderer died (spec 070): said, with a way back.
     pub page_crashed_title: SharedString,
     pub page_crashed_body: SharedString,
+    /// Spec 079 US3: the load-failure panel — its title (the generic line;
+    /// the reason under it is the core's `reason_key`), Retry, and what the
+    /// button says while an attempt runs.
+    pub load_failed: SharedString,
+    pub load_retry: SharedString,
+    pub load_retrying: SharedString,
+    /// Spec 079 US4: the page's chain cannot be reached (`{{chain}}`).
+    pub chain_down: String,
 }
 
 impl ExploreStrings {
@@ -126,7 +134,6 @@ impl ExploreStrings {
             copied: s("componentsUi.identiconViewer.copied"),
             site_menu: s("explore.siteMenu"),
             account: s("explore.account"),
-            secure_site: s("explore.secureSite"),
             connected_tag: s("explore.connectedTag"),
             connection_title: s("explore.connectionTitle"),
             switch_account: s("explore.switchAccount"),
@@ -141,6 +148,10 @@ impl ExploreStrings {
             close: s("explore.close"),
             page_crashed_title: s("explore.pageCrashedTitle"),
             page_crashed_body: s("explore.pageCrashedBody"),
+            load_failed: s("connect.browser.loadFailed"),
+            load_retry: s("connect.browser.retry"),
+            load_retrying: s("explore.loadRetrying"),
+            chain_down: raw("explore.chainDown"),
         }
     }
 }
@@ -167,6 +178,9 @@ mod tests {
             (s.consent_body.as_ref(), "connect.browser.body"),
             (s.consent_connect.as_ref(), "connect.browser.connect"),
             (s.consent_cancel.as_ref(), "connect.browser.cancel"),
+            (s.load_failed.as_ref(), "connect.browser.loadFailed"),
+            (s.load_retry.as_ref(), "connect.browser.retry"),
+            (s.load_retrying.as_ref(), "explore.loadRetrying"),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");
         }
@@ -178,5 +192,18 @@ mod tests {
             s.site_count.contains("{{n}}"),
             "siteCount must be a template"
         );
+        assert!(
+            s.chain_down.contains("{{chain}}"),
+            "chainDown must name the chain"
+        );
+        // Every reason the core's classifier can name resolves here.
+        for key in [
+            "explore.loadOffline",
+            "explore.loadNotFound",
+            "explore.loadCertificate",
+            "connect.browser.loadFailed",
+        ] {
+            assert_ne!(loc.t(key).as_ref(), key, "`{key}` echoed the key");
+        }
     }
 }
