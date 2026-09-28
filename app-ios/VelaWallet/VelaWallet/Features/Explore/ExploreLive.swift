@@ -355,6 +355,16 @@ enum ExploreLive {
         )
     }
 
+    /// Spec 079 US4: the one-line notice when the page's chain cannot be
+    /// reached — its chain is in the pool's failed set and not merely rate
+    /// limited (a 429 is transient and stays quiet, the wallet's standing
+    /// rule). `nil` when there is nothing to say; it goes by itself when the
+    /// chain answers again, because the pool drops it from the set.
+    static func chainNotice(chainId: Int?, failed: [Int], rateLimited: [Int], loc: Loc) -> String? {
+        guard let chainId, failed.contains(chainId), !rateLimited.contains(chainId) else { return nil }
+        return loc.t("explore.chainDown", vars: ["chain": chainName(chainId)])
+    }
+
     private static func chainName(_ chainId: Int) -> String {
         ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
     }

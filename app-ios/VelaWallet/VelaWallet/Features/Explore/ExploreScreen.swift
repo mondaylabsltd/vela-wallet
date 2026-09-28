@@ -47,6 +47,11 @@ struct ExploreScreen: View {
     var onSigningExplorer: () -> Void = {}
     /// Spec 079: the signing fee row's refresh.
     var onRefreshFee: (() -> Void)?
+    /// Spec 079 US4: "暂时连不上 {chain}…" when the page's chain cannot be
+    /// reached (`ExploreLive.chainNotice`), and its Retry — one read through
+    /// the pool; an answer clears it.
+    var chainNotice: String?
+    var onChainRetry: () -> Void = {}
     /// The live browser. `nil` is the gallery: every E-state still renders
     /// from fixtures, and a gallery that ran somebody else's JavaScript would
     /// not be a gallery.
@@ -181,6 +186,34 @@ struct ExploreScreen: View {
         guard let engine else { return BrowserEngine.requestedProgress }
         _ = controller.engineTick
         return engine.loading ? engine.progress : nil
+    }
+
+    /// Spec 079 US4: one quiet line under the address bar — the connection
+    /// chip stays as it is, because the connection is fine; the chain is not.
+    private func chainNoticeView(_ text: String) -> some View {
+        HStack(spacing: Tokens.Space.s8) {
+            LucideIcon(.triangleAlert, size: LucideIconSize.addressLock)
+                .foregroundStyle(theme.warningBase)
+                .accessibilityHidden(true)
+            Text(verbatim: text)
+                .typeRole(Typography.rowSub)
+                .foregroundStyle(theme.fgMuted)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: onChainRetry) {
+                Text(verbatim: loc.t("connect.browser.retry"))
+                    .typeRole(Typography.label)
+                    .foregroundStyle(theme.accentBase)
+                    .frame(minHeight: Tokens.Layout.hitTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("explore.chainDown.retry")
+        }
+        .padding(.horizontal, Tokens.Space.s16)
+        .background(theme.bgSunken)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.chainDown")
     }
 
     /// The failure panel: the corpus's heading, the core's reason for the
@@ -493,6 +526,9 @@ struct ExploreScreen: View {
                 onMenu: { sheet = .siteMenu },
                 onSubmit: controller == nil ? nil : { text in controller?.open(text) }
             )
+            if engine != nil, let chainNotice {
+                chainNoticeView(chainNotice)
+            }
             if let engine {
                 ZStack {
                     BrowserWebView(engine: engine)

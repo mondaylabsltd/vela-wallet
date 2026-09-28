@@ -125,6 +125,22 @@ struct BrowserChromeTests {
         #expect(tabs[0].site?.letter == "U")
     }
 
+    /// Spec 079 US4: the page's chain cannot be reached → one line naming
+    /// it; merely rate limited → nothing (a 429 is transient); answering
+    /// again → gone, because the pool drops it from the failed set.
+    @Test func theChainNoticeShowsForAFailedChainOnly() {
+        let down = ExploreLive.chainNotice(chainId: 100, failed: [100], rateLimited: [], loc: loc)
+        #expect(down == loc.t("explore.chainDown", vars: ["chain": "Gnosis"]))
+        #expect(down?.contains("Gnosis") == true)
+        #expect(ExploreLive.chainNotice(chainId: 100, failed: [100], rateLimited: [100], loc: loc) == nil,
+                "rate limiting stays quiet")
+        #expect(ExploreLive.chainNotice(chainId: 100, failed: [1], rateLimited: [], loc: loc) == nil,
+                "another chain's trouble is not this page's")
+        #expect(ExploreLive.chainNotice(chainId: 100, failed: [], rateLimited: [], loc: loc) == nil,
+                "answered again: the notice is gone")
+        #expect(ExploreLive.chainNotice(chainId: nil, failed: [100], rateLimited: [], loc: loc) == nil)
+    }
+
     /// The http lock is its own glyph — lucide `lock-open` — not the warning
     /// triangle, and the site menu carries no status words at all.
     @Test func anHttpPageGetsAnOpenLockAndNoWords() {

@@ -1283,6 +1283,11 @@ struct RootView: View {
                         onSigningDismissed: { closeSigningSheet() },
                         onSigningExplorer: { openSigningExplorer() },
                         onRefreshFee: { signing?.refreshFee() },
+                        chainNotice: ExploreLive.chainNotice(
+                            chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
+                            failed: pool.failedChains, rateLimited: pool.rateLimitedChains, loc: loc
+                        ),
+                        onChainRetry: { retryPageChain() },
                         controller: browser,
                         camera: camera,
                         onSelectTab: selectTab,
@@ -1535,6 +1540,14 @@ struct RootView: View {
         }
         guard let hash, let url = ExplorerLinks.tx(chainId: chain, hash: hash, store: shelf) else { return }
         UIApplication.shared.open(url)
+    }
+
+    /// Spec 079 US4: the chain notice's Retry — one read on the page's chain
+    /// through the pool. An answer drops the chain from the failed set, and
+    /// the notice goes with it.
+    private func retryPageChain() {
+        guard let chain = browser.currentTab?.chainId else { return }
+        Task { _ = await pool.call(chainId: chain, method: "eth_blockNumber") }
     }
 
     /// The sheet's request is over. Drop it, and open the one waiting.
