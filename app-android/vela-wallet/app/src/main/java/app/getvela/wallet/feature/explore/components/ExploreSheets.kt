@@ -159,16 +159,9 @@ fun ConnectionPanel(
             .padding(bottom = VelaSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
     ) {
-        // Spec 079: the consent says what is being asked — "连接到 {host}".
-        if (connection.primaryAction && connection.title.isNotBlank()) {
-            Text(
-                text = connection.title,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.semibold,
-                fontSize = VelaTextSize.xl2,
-            )
-        }
+        // Spec 082 RE6 (G9/G10): while a site asks, the header row IS the
+        // question — "连接到 {host}", wrapping — so the site is named once.
+        val asking = connection.primaryAction && connection.title.isNotBlank()
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -177,12 +170,12 @@ fun ConnectionPanel(
             SiteAvatar(connection.site)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                 Text(
-                    text = connection.site.host,
+                    text = if (asking) connection.title else connection.site.host,
                     color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.xl2,
-                    maxLines = 1,
+                    maxLines = if (asking) Int.MAX_VALUE else 1,
                 )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -319,14 +312,17 @@ fun ConnectionPanel(
             )
         }
 
-        Text(
-            text = connection.footnote,
-            color = colors.fgSubtle,
-            fontFamily = VelaFontFamily,
-            fontSize = VelaTextSize.base,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // The consent has no footnote (RE6): the ✕ above is its cancel.
+        if (connection.footnote.isNotBlank()) {
+            Text(
+                text = connection.footnote,
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -571,17 +567,31 @@ fun ChainNotice(
     ) {
         Icon(VelaIcons.TriangleAlert, null, tint = colors.warningBase, modifier = Modifier.size(VelaIconSize.sm))
         Text(text = text, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, modifier = Modifier.weight(1f))
-        Text(
-            text = if (busy) busyLabel else action,
-            color = if (busy) colors.fgMuted else colors.accentBase,
-            fontFamily = VelaFontFamily,
-            fontWeight = VelaFontWeight.semibold,
-            fontSize = VelaTextSize.sm,
+        // Busy is not disabled (the house rule, RF4): the same colour, a
+        // spinner beside the words, and a tap while it runs does nothing.
+        Row(
             modifier = Modifier
-                .clickable(enabled = !busy, onClick = onAction)
+                .clickable { if (!busy) onAction() }
                 .padding(vertical = VelaSpacing.xs),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
+        ) {
+            if (busy) BusySpinner(colors.accentBase, VelaIconSize.xs)
+            Text(
+                text = if (busy) busyLabel else action,
+                color = colors.accentBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.sm,
+            )
+        }
     }
+}
+
+/** The house busy mark: a small ring beside the words, in their colour. */
+@Composable
+private fun BusySpinner(color: androidx.compose.ui.graphics.Color, size: androidx.compose.ui.unit.Dp) {
+    androidx.compose.material3.CircularProgressIndicator(color = color, strokeWidth = VelaBorder.emphasis, modifier = Modifier.size(size))
 }
 
 @Composable
@@ -614,17 +624,21 @@ fun BrowserNotice(
         if (detail.isNotBlank()) {
             Text(text = detail, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, textAlign = TextAlign.Center)
         }
-        Box(
+        // Spec 082 RE5: a retry under way is busy, not dimmed — full colour,
+        // a spinner beside "正在重试…", and a tap while it runs does nothing.
+        Row(
             modifier = Modifier
                 .height(VelaSizing.controlLg)
                 .border(VelaBorder.hairline, colors.borderStrong, CircleShape)
-                .clickable(enabled = !busy, onClick = onAction)
+                .clickable { if (!busy) onAction() }
                 .padding(horizontal = VelaSpacing.xl4),
-            contentAlignment = Alignment.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
+            if (busy) BusySpinner(colors.fgBase, VelaIconSize.sm)
             Text(
                 text = if (busy && busyLabel.isNotBlank()) busyLabel else action,
-                color = if (busy) colors.fgMuted else colors.fgBase,
+                color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.lg,

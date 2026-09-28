@@ -251,11 +251,13 @@ object SigningLive {
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
         val own = request.transportId == WALLET_TRANSPORT
-        val name = if (own) "Vela Wallet" else host
+        // Spec 082 RE7: the name and whether the host is said again are the
+        // core's (`browserSiteLabel`); a request carries no page title, so a
+        // site is named by its host, once.
+        val label = if (own) null else uniffi.vela_core_uniffi.browserSiteLabel("", host)
         return fallback.copy(
-            dappName = name,
-            // A site whose name IS its host says it once (spec 079 F14).
-            dappHost = host.takeUnless { own || it == name }.orEmpty(),
+            dappName = label?.name ?: "Vela Wallet",
+            dappHost = label?.hostLine.orEmpty(),
             dappLetter = ExploreLive.letterOf(host),
             dappTint = ExploreLive.tintOf(host),
             dappOwn = own,

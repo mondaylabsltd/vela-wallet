@@ -100,23 +100,7 @@ fun ExploreTabsScreen(
                 TabCard(tab, copy.close, onOpen, onClose)
             }
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(TAB_CARD_ASPECT)
-                        .background(colors.bgSunken, RoundedCornerShape(VelaRadius.xl))
-                        .clickable(onClick = onNew),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Icon(VelaIcons.Plus, null, tint = colors.fgMuted)
-                    Text(
-                        text = copy.newTab,
-                        color = colors.fgMuted,
-                        fontFamily = VelaFontFamily,
-                        fontSize = VelaTextSize.base,
-                    )
-                }
+                NewTabCard(copy.newTab, onNew)
             }
         }
 
@@ -133,7 +117,12 @@ fun ExploreTabsScreen(
     }
 }
 
-/** One card: the page's snapshot (a stand-in before it has one), the site's mark and title, and its ✕. */
+/**
+ * One card (spec 082 RE12): the same skeleton in every cell — a preview of the
+ * card's aspect with its content laid over it, and a caption row. The preview
+ * is the page's snapshot, top-cropped; a page with none yet shows its own
+ * mark and host rather than drawn stand-in bars; a start page the Vela mark.
+ */
 @Composable
 private fun TabCard(
     tab: TabModel,
@@ -142,75 +131,44 @@ private fun TabCard(
     onClose: (String) -> Unit,
 ) {
     val colors = VelaTheme.colors
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(VelaRadius.xl))
-            .background(colors.bgSunken)
-            .border(
-                VelaBorder.emphasis,
-                if (tab.selected) colors.accentBase else Color.Transparent,
-                RoundedCornerShape(VelaRadius.xl),
-            ),
-    ) {
-        val snapshot = tab.snapshot
-        if (snapshot != null) {
-            // Spec 079: the page itself, as it last left the screen.
-            Image(
-                bitmap = snapshot,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.TopCenter,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(TAB_CARD_ASPECT)
-                    .clickable { onOpen(tab.id) },
-            )
-        } else Column(
+    CardFrame(selected = tab.selected) {
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(TAB_CARD_ASPECT)
-                .clickable { onOpen(tab.id) }
-                .padding(VelaSpacing.xl),
-            verticalArrangement = Arrangement.spacedBy(VelaSpacing.md, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .clickable { onOpen(tab.id) },
+            contentAlignment = Alignment.Center,
         ) {
-            if (tab.startPage) {
-                VelaLogo(darkTheme = VelaTheme.isDark, modifier = Modifier.size(VelaSpacing.xl5))
-                Box(
-                    Modifier
-                        .fillMaxWidth(0.7f)
-                        .height(VelaSpacing.lg)
-                        .background(colors.bgRaised, CircleShape),
+            val snapshot = tab.snapshot
+            val site = tab.site
+            when {
+                // Spec 079: the page itself, as it last left the screen.
+                snapshot != null -> Image(
+                    bitmap = snapshot,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter,
+                    modifier = Modifier.fillMaxSize(),
                 )
-            } else {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(VelaSpacing.xl3)
-                        .background(colors.bgRaised, RoundedCornerShape(VelaRadius.md)),
-                )
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(VelaSpacing.xl3)
-                        .background(colors.bgRaised, RoundedCornerShape(VelaRadius.md)),
-                )
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(VelaSpacing.xl2)
-                        .background(tab.site?.tint ?: colors.bgRaised, CircleShape),
-                )
+                tab.startPage || site == null -> VelaLogo(darkTheme = VelaTheme.isDark, modifier = Modifier.size(VelaSpacing.xl5))
+                else -> Column(
+                    modifier = Modifier.padding(VelaSpacing.lg),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+                ) {
+                    SiteAvatar(site, size = VelaSpacing.xl5)
+                    Text(
+                        text = site.host,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.base,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(colors.bgRaised)
-                .padding(VelaSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
-        ) {
+        CaptionRow {
             tab.site?.let { SiteAvatar(it, size = VelaSpacing.xl2) }
             Text(
                 text = tab.title,
@@ -227,4 +185,59 @@ private fun TabCard(
             )
         }
     }
+}
+
+/** The "+" cell: the same preview and caption as a tab, so the grid lines up. */
+@Composable
+private fun NewTabCard(label: String, onNew: () -> Unit) {
+    val colors = VelaTheme.colors
+    CardFrame(selected = false, modifier = Modifier.clickable(onClick = onNew)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(TAB_CARD_ASPECT),
+            contentAlignment = Alignment.Center,
+        ) { Icon(VelaIcons.Plus, null, tint = colors.fgMuted) }
+        CaptionRow {
+            Text(
+                text = label,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CardFrame(selected: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(VelaRadius.xl))
+            .background(colors.bgSunken)
+            .border(
+                VelaBorder.emphasis,
+                if (selected) colors.accentBase else Color.Transparent,
+                RoundedCornerShape(VelaRadius.xl),
+            )
+            .then(modifier),
+    ) { content() }
+}
+
+@Composable
+private fun CaptionRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(VelaTheme.colors.bgRaised)
+            .padding(VelaSpacing.lg)
+            .height(VelaSpacing.xl2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+        content = content,
+    )
 }

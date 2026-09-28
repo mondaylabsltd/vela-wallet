@@ -133,11 +133,15 @@ object ExploreLive {
 
     /**
      * The page's chain could not be reached (spec 079): the pool failed it on
-     * its last try, and not because the endpoint is merely busy — a
-     * rate-limited chain keeps quiet everywhere (the pool's invariant ④).
+     * its last try — or, spec 082 RF1, one call's first full pass reached
+     * none of its endpoints (`unreached_chains`), so the notice shows while
+     * the dApp still waits rather than after three passes — and not because
+     * the endpoint is merely busy: a rate-limited chain keeps quiet
+     * everywhere (the pool's invariant ④). The home banner keeps reading
+     * `failed_chains` alone.
      */
     fun chainUnreachable(chainId: Int, pool: app.getvela.wallet.feature.wallet.core.RpcPoolView): Boolean =
-        chainId in pool.failed_chains && chainId !in pool.rate_limited_chains
+        (chainId in pool.failed_chains || chainId in pool.unreached_chains) && chainId !in pool.rate_limited_chains
 
     fun home(
         fallback: ExploreScreenModel,
@@ -174,6 +178,11 @@ object ExploreLive {
         // The page's origin, or — when its renderer died and there is no engine —
         // the core's word for what the tab shows.
         val shownOrigin = engine?.origin ?: tab?.origin
+        // Spec 082 RE1: what the bar names is the core's rule over the
+        // engine's committed, pending and failed addresses — never the drawn
+        // fixture's host, and never a lock for a page that is not there. A
+        // tab whose renderer died names the document the core last saw.
+        val bar = engine?.addressBar() ?: tab?.origin?.let { uniffi.vela_core_uniffi.browserAddressBar(it, null, null) }
         val bookmarked = shownOrigin != null && view.favorites.any { it.origin == shownOrigin }
         return fallback.copy(
             tabCountLabel = tabs.size.takeIf { it > 0 }?.toString(),
@@ -191,9 +200,10 @@ object ExploreLive {
             },
             groups = groups,
             browser = fallback.browser.copy(
-                url = engine?.url ?: fallback.browser.url,
-                host = engine?.host?.ifBlank { null } ?: tab?.origin?.substringAfter("://") ?: fallback.browser.host,
-                secure = tab?.secure ?: (engine == null && fallback.browser.secure),
+                url = bar?.url.orEmpty(),
+                host = bar?.host.orEmpty(),
+                secure = bar?.lock == "closed",
+                lockShown = bar != null && bar.lock != "none",
                 canBack = engine?.canBack ?: false,
                 canForward = engine?.canForward ?: false,
                 bookmarked = bookmarked,
@@ -283,26 +293,35 @@ object ExploreLive {
             accountSeed = identity.accountAddress.ifBlank { fallback.accountSeed },
             networkName = identity.chainName.ifBlank { fallback.networkName },
             networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
+            // One sentence above the buttons and no footnote (spec 082 RE6):
+            // the header's ✕ is the cancel.
             explainer = strings.t("connect.browser.body"),
             disconnect = strings.t("connect.browser.connect"),
-            footnote = strings.t("connect.browser.cancel"),
+            footnote = "",
         )
     }
 
     fun shortAddress(address: String): String =
         if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address
 
-    /** A recent row shows the title over the host it actually is. */
-    fun siteOf(entry: BhistEntry): SiteModel = SiteModel(
-        id = entry.url,
-        name = entry.title.trim().ifEmpty { entry.host },
-        host = entry.host,
-        letter = letterOf(entry.host),
-        tint = tintOf(entry.host),
-        subtitle = entry.host,
-        // The icon the page named when it was visited, then the usual places.
-        iconUrls = (listOf(entry.favicon).filter { it.startsWith("https://") } + iconsOf(entry.url)).distinct(),
-    )
+    /**
+     * A recent row shows the title over the host it actually is — the core's
+     * rule (`browserSiteLabel`, spec 082 RE7): a title that is empty or IS
+     * the host is said once, as the name, with no second line.
+     */
+    fun siteOf(entry: BhistEntry): SiteModel {
+        val label = uniffi.vela_core_uniffi.browserSiteLabel(entry.title, entry.host)
+        return SiteModel(
+            id = entry.url,
+            name = label.name,
+            host = entry.host,
+            letter = letterOf(entry.host),
+            tint = tintOf(entry.host),
+            subtitle = label.hostLine.orEmpty(),
+            // The icon the page named when it was visited, then the usual places.
+            iconUrls = (listOf(entry.favicon).filter { it.startsWith("https://") } + iconsOf(entry.url)).distinct(),
+        )
+    }
 
     fun tileOf(site: ExploreSite): SiteModel = SiteModel(
         id = site.url,

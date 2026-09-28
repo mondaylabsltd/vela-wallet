@@ -45,7 +45,7 @@ class ExploreLiveTest {
             ready = true,
         )
         val history = BhistView(listOf(BhistEntry("https://curve.fi", "https://curve.fi/dex", "curve.fi", "", "", 3.0)))
-        val engine = EngineState(url = "https://app.uniswap.org/swap", origin = "https://app.uniswap.org", host = "app.uniswap.org", title = "Uniswap", canBack = true)
+        val engine = EngineState(url = "https://app.uniswap.org/swap", origin = "https://app.uniswap.org", host = "app.uniswap.org", title = "Uniswap", canBack = true, shown = "https://app.uniswap.org/swap")
         // The lock is the CORE's word (spec 070), not the engine's guess.
         val tab = DbrTabView(tab = "t1", origin = "https://app.uniswap.org", secure = true)
         val model = ExploreLive.home(fallback, view, history, engine, strings, tab)
@@ -78,7 +78,7 @@ class ExploreLiveTest {
     @Test
     fun `an insecure page is never drawn with a lock, and a crashed tab says so`() {
         val view = ExploreView(tabs = listOf(ExploreTab("t1", "http://evil.example/", "", "evil.example")), selected_tab = "t1", ready = true)
-        val engine = EngineState(url = "http://evil.example/", origin = "http://evil.example", host = "evil.example")
+        val engine = EngineState(url = "http://evil.example/", origin = "http://evil.example", host = "evil.example", shown = "http://evil.example/")
         val tab = DbrTabView(tab = "t1", origin = "http://evil.example", secure = false, crashed = true)
         val model = ExploreLive.home(fallback, view, BhistView(), engine, strings, tab)
         assertFalse(model.browser.secure)
@@ -94,18 +94,92 @@ class ExploreLiveTest {
     fun `a failed page carries its reason and its retry`() {
         val view = ExploreView(tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "", "app.uniswap.org")), selected_tab = "t1", ready = true)
         val failure = uniffi.vela_core_uniffi.BrowserLoadFailure(`class` = "offline", reasonKey = "explore.loadOffline", autoRetry = true)
-        val engine = EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", failed = true, failure = failure, retrying = true)
+        val engine = EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", failed = true, failure = failure, retrying = true, failedUrl = "https://app.uniswap.org/")
         val model = ExploreLive.home(fallback, view, BhistView(), engine, strings)
         assertTrue(model.browser.failed)
         assertEquals(strings.t("explore.loadOffline"), model.browser.failureReason)
         assertTrue(model.browser.retrying)
+        // Spec 082 RE1: the panel names the failed host, with no lock.
+        assertEquals("app.uniswap.org", model.browser.host)
+        assertFalse(model.browser.lockShown)
+    }
+
+    /**
+     * Spec 082 RE1 (G28): what the bar names is the core's rule. A fresh tab
+     * names nothing — never the drawn fixture's host with an open lock; a
+     * load pending in an empty tab names its host with no lock; a load under
+     * way never renames a tab that shows a document (the page-initiated
+     * spoof).
+     */
+    @Test
+    fun `the bar names the committed document, never a fixture or a pending load over a page`() {
+        val view = ExploreView(tabs = listOf(ExploreTab("t1", null, "", "")), selected_tab = "t1", ready = true)
+        val fresh = ExploreLive.home(fallback, view, BhistView(), null, strings)
+        assertEquals("", fresh.browser.host)
+        assertEquals("", fresh.browser.url)
+        assertFalse(fresh.browser.lockShown)
+        assertFalse(fresh.browser.secure)
+
+        val opening = ExploreLive.home(fallback, view, BhistView(), EngineState(loading = true, pending = "https://app.uniswap.org/swap"), strings)
+        assertEquals("app.uniswap.org", opening.browser.host)
+        assertFalse("no lock for a page that is not there yet", opening.browser.lockShown)
+
+        val over = EngineState(url = "https://curve.fi/", loading = true, shown = "https://curve.fi/", pending = "https://evil.example/")
+        val shown = ExploreLive.home(fallback, view, BhistView(), over, strings)
+        assertEquals("curve.fi", shown.browser.host)
+        assertEquals("https://curve.fi/", shown.browser.url)
+        assertTrue(shown.browser.lockShown)
+        assertTrue(shown.browser.secure)
+    }
+
+    /** Spec 082 RE2: the watchdog's one decision, in the engine's units (progress 0–100). */
+    @Test
+    fun `a load that gets nowhere in the core's time is given up, a slow one that answers is not`() {
+        val budget = app.getvela.wallet.feature.browser.core.LoadWatch.giveUpMs()
+        assertEquals(20_000L, budget)
+        assertTrue(app.getvela.wallet.feature.browser.core.LoadWatch.givesUp(budget, committed = false, progressPercent = 10))
+        assertFalse("getting somewhere", app.getvela.wallet.feature.browser.core.LoadWatch.givesUp(budget, committed = false, progressPercent = 60))
+        assertFalse("committed", app.getvela.wallet.feature.browser.core.LoadWatch.givesUp(budget, committed = true, progressPercent = 10))
+        assertFalse("not yet", app.getvela.wallet.feature.browser.core.LoadWatch.givesUp(budget - 1, committed = false, progressPercent = 10))
+        val stalled = uniffi.vela_core_uniffi.browserLoadStalled()
+        assertEquals("timeout", stalled.`class`)
+        assertTrue(stalled.autoRetry)
+        assertTrue(uniffi.vela_core_uniffi.browserLoadRetryWhenNetworkReturns(stalled.`class`))
+        // RD9: a proxy that cannot be used says so, in the corpus's words.
+        val proxy = uniffi.vela_core_uniffi.browserLoadClassify("android", -5L, null, false)!!
+        assertEquals("proxy", proxy.`class`)
+        assertEquals(strings.t("explore.loadProxy"), strings.t(proxy.reasonKey))
+    }
+
+    /** Spec 082 RE6/RE7: the consent names the site once, in its header; a recent says a host-named site once. */
+    @Test
+    fun `the consent asks in its header, and a recent named by its host says it once`() {
+        val consent = ExploreLive.consent(
+            fallback.connection,
+            app.getvela.wallet.feature.browser.core.DbrConsentView(tab = "t1", origin = "https://app.uniswap.org"),
+            strings,
+            ExploreLive.Identity(),
+            secure = true,
+        )
+        assertEquals(strings.t("connect.browser.title", mapOf("host" to "app.uniswap.org")), consent.title)
+        assertEquals(strings.t("connect.browser.body"), consent.explainer)
+        assertEquals("no footnote: the header's close is the cancel", "", consent.footnote)
+
+        val titled = ExploreLive.siteOf(BhistEntry("https://curve.fi", "https://curve.fi/dex", "curve.fi", "Curve", "", 3.0))
+        assertEquals("Curve", titled.name)
+        assertEquals("curve.fi", titled.subtitle)
+        for (title in listOf("", "Curve.FI")) {
+            val once = ExploreLive.siteOf(BhistEntry("https://curve.fi", "https://curve.fi/dex", "curve.fi", title, "", 3.0))
+            assertEquals(title, "curve.fi", once.name)
+            assertEquals(title, "", once.subtitle)
+        }
     }
 
     /** Spec 079: the page's chain notice is the pool's verdict — never for a chain merely busy. */
     @Test
     fun `a chain the pool could not reach is named once, and a busy one is not`() {
         val view = ExploreView(tabs = listOf(ExploreTab("t1", "http://127.0.0.1:8137/", "", "127.0.0.1:8137")), selected_tab = "t1", ready = true)
-        val engine = EngineState(url = "http://127.0.0.1:8137/", origin = "http://127.0.0.1:8137", host = "127.0.0.1:8137")
+        val engine = EngineState(url = "http://127.0.0.1:8137/", origin = "http://127.0.0.1:8137", host = "127.0.0.1:8137", shown = "http://127.0.0.1:8137/")
         val tab = DbrTabView(tab = "t1", origin = "http://127.0.0.1:8137", chain_id = 100)
         val identity = ExploreLive.Identity(chainName = "Gnosis", chainId = 100)
         val down = RpcPoolView(failed_chains = listOf(100))
@@ -118,6 +192,13 @@ class ExploreLiveTest {
         assertNull(ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = busy).browser.chainNotice)
         assertNull(ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = other).browser.chainNotice)
         assertNull("no page, no notice", ExploreLive.home(fallback, view, BhistView(), null, strings, tab, identity, pool = down).browser.chainNotice)
+
+        // Spec 082 RF1: one full pass that reached nothing is enough to say so
+        // while the dApp waits — unless the chain is only busy.
+        val unreached = RpcPoolView(unreached_chains = listOf(100))
+        assertEquals(named.browser.chainNotice, ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = unreached).browser.chainNotice)
+        val unreachedBusy = RpcPoolView(unreached_chains = listOf(100), rate_limited_chains = listOf(100))
+        assertNull(ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = unreachedBusy).browser.chainNotice)
     }
 
     /** Spec 079: a tab card shows its page's snapshot; a start page keeps the drawing. */

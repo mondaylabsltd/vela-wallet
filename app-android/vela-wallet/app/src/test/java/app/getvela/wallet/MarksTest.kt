@@ -3,6 +3,7 @@ package app.getvela.wallet
 import app.getvela.wallet.core.marks.Marks
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -45,5 +46,36 @@ class MarksTest {
         assertTrue(Marks.tokenMark(1, "ETH", null).logoUrls.isEmpty())
         assertTrue(Marks.chainMark(1).logoUrls.isEmpty())
         assertNull(Marks.chainLogoUrl(1))
+    }
+
+    /**
+     * Spec 082 RE10 (W20): how long a failed logo stays failed is the core's
+     * (`markMissTtlMs`) — a 404, a refusal or bytes that do not draw for the
+     * session; a throttle, a server's bad minute or no answer for a minute,
+     * and until the network comes back.
+     */
+    @Test
+    fun `a failed logo stays failed as long as the core says`() {
+        app.getvela.wallet.core.marks.LogoMisses.clear()
+        val misses = app.getvela.wallet.core.marks.LogoMisses
+        val t0 = 1_000_000L
+        misses.record("https://x/404.png", 404, nowMs = t0)
+        misses.record("https://x/403.png", 403, nowMs = t0)
+        misses.record("https://x/garbage.png", 200, nowMs = t0)
+        misses.record("https://x/429.png", 429, nowMs = t0)
+        misses.record("https://x/503.png", 503, nowMs = t0)
+        misses.record("https://x/offline.png", null, nowMs = t0)
+        val later = t0 + 60_000L
+        for (session in listOf("404", "403", "garbage")) assertTrue(session, misses.missed("https://x/$session.png", later))
+        for (transient in listOf("429", "503", "offline")) {
+            assertTrue("$transient inside the minute", misses.missed("https://x/$transient.png", t0 + 59_999L))
+            assertFalse("$transient asked again after it", misses.missed("https://x/$transient.png", later))
+        }
+
+        misses.record("https://x/503.png", 503, nowMs = t0)
+        misses.clearTransient()
+        assertFalse("the network came back: a bad minute is forgiven", misses.missed("https://x/503.png", t0))
+        assertTrue("a 404 is not", misses.missed("https://x/404.png", t0))
+        misses.clear()
     }
 }

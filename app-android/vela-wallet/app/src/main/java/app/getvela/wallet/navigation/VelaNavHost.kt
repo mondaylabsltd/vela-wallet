@@ -528,11 +528,21 @@ fun VelaNavHost(
                 // Spec 047 FR-006, under the manifest's rule (no ACCESS_NETWORK_STATE:
                 // "offline" is what the calls did, not what the radio claims): three
                 // calls in a row that never reached a server, cleared by the first
-                // answered one. Coming back refreshes what went stale meanwhile.
+                // answered one — the core's `netHealthStep` (spec 082 RE3). Coming
+                // back refreshes what went stale meanwhile, asks again for the
+                // logos a bad minute lost (RE10), and loads again the page the
+                // network failed (the core's `browserLoadRetryWhenNetworkReturns`).
                 val online by NetHealth.online.collectAsStateWithLifecycle()
                 var wasOffline by remember { mutableStateOf(false) }
                 LaunchedEffect(online) {
-                    if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
+                    if (!online) {
+                        wasOffline = true
+                    } else if (wasOffline) {
+                        wasOffline = false
+                        wallet.refresh()
+                        app.getvela.wallet.core.marks.LogoMisses.clearTransient()
+                        application.container.browser.networkCameBack()
+                    }
                 }
                 // Who the send is for and the money it shows — one definition for
                 // the open below and for a payment request that re-opens a Send
