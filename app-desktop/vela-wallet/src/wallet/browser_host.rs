@@ -637,6 +637,41 @@ pub fn lit_tab(
         .map(|tab| tab.id.clone())
 }
 
+/// What closing a strip tab does to the one webview (RD6, RB2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TabClose {
+    /// A tab in the background: it has no document, nothing on screen moves.
+    Background,
+    /// The tab on screen, and a neighbour with a page to show next.
+    Neighbour { id: String, url: String },
+    /// The tab on screen, and nothing, or a start page, next.
+    StartPage,
+}
+
+impl TabClose {
+    /// Whether the page on screen goes now ([`page_gone_events`]): the
+    /// closed tab's, before a neighbour's load — whose hello, if it ever comes,
+    /// was all that retired it, and a neighbour that fails to load never
+    /// sends one.
+    #[must_use]
+    pub fn page_goes(&self) -> bool {
+        matches!(self, Self::Neighbour { .. } | Self::StartPage)
+    }
+}
+
+/// The rule: only the tab on screen has a document; `next` is the tab the
+/// explore machine selected once the closed one went, with its address.
+#[must_use]
+pub fn tab_close(was_shown: bool, next: Option<(String, Option<String>)>) -> TabClose {
+    if !was_shown {
+        return TabClose::Background;
+    }
+    match next {
+        Some((id, Some(url))) => TabClose::Neighbour { id, url },
+        _ => TabClose::StartPage,
+    }
+}
+
 /// Which tab an address typed or picked opens in (RD6): the page on screen;
 /// over the start page, the selected start-page tab; otherwise `None` — a new
 /// tab, so a restored tab waiting unlit is left intact.
@@ -1476,6 +1511,70 @@ mod tests {
             assert_eq!(cancelled(&out), ["1"]);
             assert!(driver.view().signing.is_none());
         });
+    }
+
+    /// ✕ on the tab on screen while its send waits in the column, with a
+    /// neighbour to show: the closed page's request is settled at the close —
+    /// the column is told to stop, the page gets one 4900 — never at the
+    /// neighbour's hello, which a neighbour that fails to load never sends.
+    /// Until then the column stayed up, approvable, for a tab the person had
+    /// closed, and every other tab was held for it.
+    #[test]
+    fn closing_the_shown_tab_settles_its_page_at_once() {
+        storage::tests::with_temp_state("dbr-host-close-shown", || {
+            seed_grant(DAPP, A1, 100);
+            let mut driver = booted();
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+            let out = ask(
+                &mut driver,
+                DAPP,
+                "d1",
+                "1",
+                "eth_sendTransaction",
+                json!([{}]),
+            );
+            assert_eq!(forwarded(&out).len(), 1);
+            let close = tab_close(
+                true,
+                Some(("t2".to_owned(), Some("https://app.uniswap.org/".to_owned()))),
+            );
+            assert_eq!(
+                close,
+                TabClose::Neighbour {
+                    id: "t2".to_owned(),
+                    url: "https://app.uniswap.org/".to_owned()
+                }
+            );
+            assert!(close.page_goes(), "the closed tab's page goes now");
+            let out: Vec<Outbound> = page_gone_events()
+                .into_iter()
+                .flat_map(|event| driver.dispatch(event))
+                .collect();
+            assert_eq!(cancelled(&out), ["1"], "nothing is signed for it");
+            assert_eq!(answers(&out).len(), 1);
+            assert!(!holds_navigation(&driver.view()), "no tab is held for it");
+            // The neighbour's page never says hello (its load failed): the
+            // closed page, still in the webview, asks again — nothing.
+            let out = ask(
+                &mut driver,
+                DAPP,
+                "d1",
+                "2",
+                "eth_sendTransaction",
+                json!([{}]),
+            );
+            assert!(forwarded(&out).is_empty() && answers(&out).is_empty());
+        });
+        // A background tab has no document: closing it tells the page nothing.
+        assert_eq!(tab_close(false, None), TabClose::Background);
+        assert!(!TabClose::Background.page_goes());
+        assert_eq!(tab_close(true, None), TabClose::StartPage);
+        assert_eq!(
+            tab_close(true, Some(("t3".to_owned(), None))),
+            TabClose::StartPage,
+            "a start-page neighbour"
+        );
+        assert!(TabClose::StartPage.page_goes());
     }
 
     /// Every way the page goes elsewhere is held while a request is open —

@@ -12691,9 +12691,12 @@ impl WalletPage {
     /// the answer. Only the tab on screen has a document behind it: closing
     /// one in the background changes nothing on screen (it used to reload the
     /// page in front, cancelling what it had asked — W14). Closing the tab of
-    /// an open request is never held: its page goes, and the core answers the
-    /// request 4900.
+    /// an open request is never held: its page goes at the close, and the
+    /// core answers the request 4900 and stops its column
+    /// (`browser_host::tab_close`) — not at the neighbour's hello, which a
+    /// neighbour that fails to load never sends.
     fn close_browser_tab(&mut self, id: &str, cx: &mut Context<Self>) {
+        use crate::wallet::browser_host::TabClose;
         let resident = resident::resident::<ExploreSites>(cx);
         let was_shown = self.shown_tab.as_deref() == Some(id)
             || (!self.browsing && resident.read(cx).view().selected_tab.as_deref() == Some(id));
@@ -12703,28 +12706,31 @@ impl WalletPage {
                 cx,
             );
         });
-        if !was_shown {
-            cx.notify();
-            return;
-        }
         let view = resident.read(cx).view();
         let next = view
             .selected_tab
             .as_ref()
             .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
             .map(|tab| (tab.id.clone(), tab.url.clone()));
-        match next {
-            // The neighbour's page replaces this one, and its hello is what
-            // retires the closed page's document in the core.
-            Some((id, Some(url))) => {
+        let close = crate::wallet::browser_host::tab_close(was_shown, next);
+        if close.page_goes()
+            && let Some(host) = self.browser_host.clone()
+        {
+            host.update(cx, BrowserHost::page_gone);
+        }
+        match close {
+            TabClose::Background => {}
+            // The neighbour's page replaces this one.
+            TabClose::Neighbour { id, url } => {
                 self.show_tab(Some(id));
                 self.navigate_to(url);
             }
             // Nothing left, or a start-page tab: the wallet's own screen.
-            _ => {
+            TabClose::StartPage => {
                 self.show_tab(None);
                 self.browsing = false;
-                self.close_browser_page(cx);
+                #[cfg(not(target_os = "linux"))]
+                crate::webview::navigate("about:blank");
             }
         }
         cx.notify();
