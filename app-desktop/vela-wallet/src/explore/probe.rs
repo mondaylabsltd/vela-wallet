@@ -54,6 +54,21 @@ pub fn code_of(error: &ureq::Error, proxy: Option<&ProxyFailure>) -> i64 {
 
 fn io_code(io: &std::io::Error) -> i64 {
     use std::io::ErrorKind;
+    // Spec 082 RJ10 (G45): ureq hands a failed handshake over as an I/O
+    // error of kind `InvalidData` wrapping rustls's own — an expired or
+    // untrusted certificate read as `other`, drew no certificate sentence and
+    // was retried automatically (FR-003). The certificate itself is TLS;
+    // any other rustls error keeps the class its kind gives it.
+    if let Some(tls) = io
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<rustls::Error>())
+        && matches!(
+            tls,
+            rustls::Error::InvalidCertificate(_) | rustls::Error::NoCertificatesPresented
+        )
+    {
+        return probe_code::TLS;
+    }
     match io.kind() {
         ErrorKind::ConnectionRefused => probe_code::REFUSED,
         ErrorKind::TimedOut => probe_code::TIMEOUT,
@@ -171,6 +186,47 @@ mod tests {
             probe_code::CONNECT
         );
         assert_eq!(probe_code_of(&ureq::Error::RedirectFailed), 0);
+    }
+
+    /// Spec 082 RJ10 (G45, L5): an expired certificate reaches the probe as an
+    /// I/O error wrapping rustls's own — and is the certificate class, which
+    /// the core words as such and never retries by itself.
+    #[test]
+    fn an_expired_certificate_is_tls() {
+        use std::io::{Error, ErrorKind};
+        let expired = ureq::Error::Io(Error::new(
+            ErrorKind::InvalidData,
+            rustls::Error::InvalidCertificate(rustls::CertificateError::Expired),
+        ));
+        assert_eq!(probe_code_of(&expired), probe_code::TLS);
+        assert_eq!(verdict_word(Err(probe_code_of(&expired))), "tls");
+        let none = ureq::Error::Io(Error::new(
+            ErrorKind::InvalidData,
+            rustls::Error::NoCertificatesPresented,
+        ));
+        assert_eq!(probe_code_of(&none), probe_code::TLS);
+        // Another rustls error keeps what its kind says.
+        let other = ureq::Error::Io(Error::new(
+            ErrorKind::InvalidData,
+            rustls::Error::DecryptError,
+        ));
+        assert_eq!(probe_code_of(&other), 0);
+        let failure = vela_core::app::browser_load::classify(
+            vela_core::app::browser_load::LoadPlatform::Probe,
+            probe_code_of(&expired),
+            None,
+            false,
+        )
+        .unwrap_or_else(|| unreachable!("a failure"));
+        assert_eq!(
+            failure.class,
+            vela_core::app::browser_load::LoadFailureClass::Certificate
+        );
+        assert!(
+            !failure.auto_retry,
+            "a certificate is never retried by itself"
+        );
+        assert_eq!(failure.reason_key, "explore.loadCertificate");
     }
 
     /// Spec 082 RD9: a proxy that could not be used is the proxy's failure;
