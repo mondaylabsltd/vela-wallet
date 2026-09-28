@@ -950,11 +950,16 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			// tracker gave up at 24 h, and when a message was signed.
 			stillConfirming: k('componentsUi.signing.stillConfirming'),
 			unknownOutcome: k('componentsUi.signing.unknownOutcome'),
-			signed: k('clearSigning.alertSignedTitle')
+			signed: k('clearSigning.alertSignedTitle'),
+			// Spec 082 RA10: a lost reply, its way out, and "not sent".
+			maybeSent: k('componentsUi.signing.maybeSent'),
+			closeBackground: k('send.txCloseBackground'),
+			notSentHint: k('send.txErrorGeneric')
 		},
 		// Spec 079: after the approval — the send receipt's words, as
 		// Android's signing receipt uses them.
 		status: {
+			preparing: k('send.txPreparing'),
 			signing: k('send.txSigning'),
 			submitting: k('send.txSubmitting'),
 			backgroundHint: k('send.txBackgroundHint'),

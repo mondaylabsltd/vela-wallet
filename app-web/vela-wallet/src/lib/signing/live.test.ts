@@ -14,7 +14,9 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { FeeSpeedCore } from '$lib/core/client';
+import { ClearSigningCore, FeeSpeedCore } from '$lib/core/client';
+import { toClearLocale } from './core/clear-types';
+import { shortenAddress } from '$lib/wallet/identity';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
@@ -476,28 +478,48 @@ describe('after the approval the sheet is a status', () => {
 		expect(signingCloseEvent(null)).toBe('reject_tapped');
 	});
 
-	it('approved, waiting for the passkey: "Waiting for biometric…", and the ✕ shut', () => {
+	it('preparing — the precheck, the sponsor, the relay estimate — says so, never "Waiting for biometric" (RA9, G22)', () => {
 		for (const progress of [UNSIGNED, PROMPT_UP]) {
-			// The core's Precheck (is_signing alone) and its Submitting stage
-			// (both flags) before the signature exists read the same.
-			for (const flags of [
-				{ is_signing: true, is_submitting: false },
-				{ is_signing: true, is_submitting: true }
-			]) {
-				const status = signingStatus(at(flags), progress, SUMMARY, m);
-				expect(status).toEqual({
-					stage: 'submitting',
-					title: m.status.signing,
-					captions: [SUMMARY],
-					closable: false
-				});
-				expect(signingCloseEvent(status)).toBeNull();
-			}
+			const status = signingStatus(
+				at({ phase: 'preparing', is_signing: true }),
+				progress,
+				SUMMARY,
+				m
+			);
+			expect(status).toEqual({
+				stage: 'submitting',
+				title: m.status.preparing,
+				captions: [SUMMARY],
+				closable: false
+			});
+			expect(status?.title).not.toBe(m.status.signing);
+			expect(signingCloseEvent(status)).toBeNull();
 		}
 	});
 
+	it('the passkey prompt is up: "Waiting for biometric…", and the ✕ shut', () => {
+		const status = signingStatus(
+			at({ phase: 'awaiting_signature', is_signing: true, is_submitting: true }),
+			PROMPT_UP,
+			SUMMARY,
+			m
+		);
+		expect(status).toEqual({
+			stage: 'submitting',
+			title: m.status.signing,
+			captions: [SUMMARY],
+			closable: false
+		});
+		expect(signingCloseEvent(status)).toBeNull();
+	});
+
 	it('signed, going to the relay: "Submitting to network…" + closing keeps it running; the ✕ closes without refusing', () => {
-		const status = signingStatus(at({ is_signing: true, is_submitting: true }), SIGNED, SUMMARY, m);
+		const status = signingStatus(
+			at({ phase: 'submitting', is_signing: true, is_submitting: true }),
+			SIGNED,
+			SUMMARY,
+			m
+		);
 		expect(status).toEqual({
 			stage: 'submitting',
 			title: m.status.submitting,
@@ -507,19 +529,18 @@ describe('after the approval the sheet is a status', () => {
 		expect(signingCloseEvent(status)).toBe('dismiss_tapped');
 	});
 
-	it('the core’s reactive recovery after a submission counts as signed', () => {
-		const status = signingStatus(
-			at({ is_signing: false, is_submitting: true }),
-			UNSIGNED,
-			SUMMARY,
-			m
+	it('every phase has its own words; idle is no status at all', () => {
+		const titles = (['preparing', 'awaiting_signature', 'submitting'] as const).map(
+			(phase) => signingStatus(at({ phase, is_signing: true }), UNSIGNED, SUMMARY, m)?.title
 		);
-		expect(status).toMatchObject({ title: m.status.submitting, closable: true });
+		expect(titles).toEqual([m.status.preparing, m.status.signing, m.status.submitting]);
+		expect(new Set(titles).size).toBe(3);
+		expect(signingStatus(at({ phase: 'idle', is_signing: true }), SIGNED, SUMMARY, m)).toBeNull();
 	});
 
 	it('a second passkey prompt in the same approval shuts the ✕ again', () => {
 		const status = signingStatus(
-			at({ is_signing: true, is_submitting: true }),
+			at({ phase: 'submitting', is_signing: true, is_submitting: true }),
 			{ signed: true, ceremonyUp: true },
 			SUMMARY,
 			m
@@ -530,15 +551,18 @@ describe('after the approval the sheet is a status', () => {
 
 	it('a message never "submits": "Signing…" throughout', () => {
 		const message = (flags: Partial<SignView>) => at({ request: MESSAGE_REQUEST, ...flags });
-		expect(signingStatus(message({ is_signing: true }), UNSIGNED, undefined, m)).toEqual({
-			stage: 'submitting',
+		expect(signingStatus(message({ phase: 'awaiting_signature' }), UNSIGNED, undefined, m)).toEqual(
+			{
+				stage: 'submitting',
+				title: m.status.messageSigning,
+				captions: [],
+				closable: false
+			}
+		);
+		expect(signingStatus(message({ phase: 'submitting' }), SIGNED, undefined, m)).toMatchObject({
 			title: m.status.messageSigning,
-			captions: [],
-			closable: false
+			closable: true
 		});
-		expect(
-			signingStatus(message({ is_signing: true, is_submitting: true }), SIGNED, undefined, m)
-		).toMatchObject({ title: m.status.messageSigning, closable: true });
 	});
 
 	it('a failed submission says so, with the funds-are-safe line; the ✕ just closes', () => {
@@ -568,7 +592,10 @@ describe('after the approval the sheet is a status', () => {
 
 	it('the sheet carries the status, with the request in one line, and no refused request gets one', () => {
 		const model = buildSigningModel(
-			inputs({ sign: at({ is_signing: true, is_submitting: true }), progress: SIGNED })
+			inputs({
+				sign: at({ phase: 'submitting', is_signing: true, is_submitting: true }),
+				progress: SIGNED
+			})
 		);
 		expect(model?.status).toMatchObject({
 			title: m.status.submitting,
@@ -577,6 +604,7 @@ describe('after the approval the sheet is a status', () => {
 		const blocked = buildSigningModel(
 			inputs({
 				sign: at({
+					phase: 'submitting',
 					is_signing: true,
 					blocked: {
 						function: 'enableModule',
@@ -1286,5 +1314,95 @@ describe("localizedTerms — the core names the word, the sheet says it in the r
 
 	it('every term the core can name has a word in this locale', () => {
 		for (const term of CLEAR_TERMS) expect(zh.terms[term], term).toBeTruthy();
+	});
+});
+
+/**
+ * Spec 082 G14 (RC1–RC6): a dApp's plain value transfer — no calldata — is a
+ * SEND, whatever the recipient. It used to be the red "Blind signature" over
+ * bytes that did not exist.
+ */
+describe('a plain send is a send (G14)', () => {
+	const TO = '0x7687C0bC1dD2B9d7e9a5b1b4e1B0cBd8e0C3D141';
+	const tx = (value: unknown) => ({
+		...OPEN_SIGN,
+		request: {
+			...REQUEST,
+			chain_id: 100,
+			method: 'eth_sendTransaction',
+			params_json: JSON.stringify([{ to: TO, value }])
+		}
+	});
+
+	/** What the REAL clear-signing core says for one transaction. */
+	function coreView(value: unknown): ClearSigningView {
+		const core = new ClearSigningCore();
+		try {
+			const params = JSON.parse(tx(value).request.params_json)[0] as Record<string, unknown>;
+			core.dispatch(
+				JSON.stringify({
+					type: 'resolve_transaction',
+					to: params.to,
+					data: null,
+					value: params.value === undefined ? null : String(params.value),
+					chain_id: 100,
+					locale: toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })
+				})
+			);
+			return JSON.parse(core.view()) as ClearSigningView;
+		} finally {
+			core.free();
+		}
+	}
+
+	it('−0.001 xDAI to the recipient: "Send", the amount card, the party, "Confirm send"', () => {
+		const clear = coreView('0x38d7ea4c68000');
+		expect(clear.surface).toBe('plain_send');
+		const model = buildSigningModel(inputs({ sign: tx('0x38d7ea4c68000'), clear }))!;
+		expect(model.blocks).toEqual([
+			{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
+			{
+				kind: 'amount',
+				line: { sign: '-', value: '0.001', symbol: 'xDAI', tone: 'neutral' }
+			},
+			{
+				kind: 'party',
+				label: m.labelRecipient,
+				name: shortenAddress(clear.plain_send!.to),
+				// The core's EIP-55 spelling of the recipient (RC1).
+				address: clear.plain_send!.to
+			}
+		]);
+		expect(clear.plain_send!.to.toLowerCase()).toBe(TO.toLowerCase());
+		expect(model.blocks.some((b) => b.kind === 'intent' && b.text === m.intentBlind)).toBe(false);
+		expect(model.confirm.action).toBe(m.confirmSend);
+	});
+
+	it('zero moves nothing: the card stays, no minus sign, a neutral Confirm (RC3)', () => {
+		const clear = coreView('0x0');
+		expect(clear.surface).toBe('plain_send');
+		const model = buildSigningModel(inputs({ sign: tx('0x0'), clear }))!;
+		const amount = model.blocks.find((b) => b.kind === 'amount');
+		expect(amount).toMatchObject({ line: { sign: '', value: '0', symbol: 'xDAI' } });
+		expect(model.confirm.action).toBe(m.confirmPlain);
+	});
+
+	it('a value the core cannot read as an amount is the blind card with no amount (RC4, RC6)', () => {
+		const clear = coreView(1000);
+		expect(clear.surface).toBe('blind_transaction');
+		const model = buildSigningModel(inputs({ sign: tx(1000), clear }))!;
+		expect(model.blocks.find((b) => b.kind === 'amount')).toBeUndefined();
+		expect(model.blocks[0]).toMatchObject({ kind: 'intent', text: m.intentBlind });
+	});
+});
+
+describe('the site is named by the core’s label (spec 082 RE7)', () => {
+	it('a name that is its host, in any case, is said once', () => {
+		const named = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, dapp: { name: 'APP.EXAMPLE', url: 'https://app.example' } }
+		};
+		const model = buildSigningModel(inputs({ sign: named }));
+		expect(model?.dapp.host).toBe('');
 	});
 });

@@ -224,6 +224,16 @@ export interface SigningMessages {
 		stillConfirming: string;
 		unknownOutcome: string;
 		signed: string;
+		/**
+		 * Spec 082 RA10: the relay's reply was lost — `componentsUi.signing.
+		 * maybeSent` ("It may have been sent. Vela keeps checking — don't send
+		 * it again."), never "failed — try again".
+		 */
+		maybeSent: string;
+		/** `send.txCloseBackground` — the one way out of a may-have-been-sent op. */
+		closeBackground: string;
+		/** `send.txErrorGeneric` — not sent: nothing left, funds are safe. */
+		notSentHint: string;
 	};
 	/**
 	 * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): what
@@ -231,6 +241,8 @@ export interface SigningMessages {
 	 * as Android's signing receipt says them — never a greyed slide.
 	 */
 	status: {
+		/** `send.txPreparing` — the network work before the passkey (spec 082 RA9). */
+		preparing: string;
 		/** `send.txSigning` — the passkey prompt is up. */
 		signing: string;
 		/** `send.txSubmitting` */

@@ -39,10 +39,10 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { feeRequoteDelayMs } from '$lib/core/kernels';
+import { browserSiteLabel, feeRequoteDelayMs } from '$lib/core/kernels';
 import { exactAmount, trimBalance } from '$lib/wallet/live';
 import { fromBaseUnits } from '$lib/services/eip681';
-import { chainName } from '$lib/services/networks';
+import { chainName, nativeSymbol } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
@@ -414,6 +414,35 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		return blocks;
 	}
 
+	/*
+	 * Spec 082 G14 (RC1–RC6): a call with no calldata is a SEND, whatever the
+	 * recipient — the core decided it and wrote the exact amount. What the
+	 * phones always drew: "Send", the amount card in the coin the fee row
+	 * uses (RC5), and who it goes to. Never the red "Blind signature" over
+	 * bytes that do not exist. A zero value keeps the card, with no minus
+	 * sign (RC3): only a simulation may say that nothing leaves.
+	 */
+	if (clear.surface === 'plain_send' && clear.plain_send && sign.request) {
+		const plain = clear.plain_send;
+		blocks.push({ kind: 'intent', text: m.intentSend, tone: 'neutral' });
+		blocks.push({
+			kind: 'amount',
+			line: {
+				sign: plain.no_value ? '' : '-',
+				value: plain.amount,
+				symbol: nativeSymbol(sign.request.chain_id),
+				tone: 'neutral'
+			}
+		});
+		blocks.push({
+			kind: 'party',
+			label: m.labelRecipient,
+			name: shortenAddress(plain.to),
+			address: plain.to
+		});
+		return blocks;
+	}
+
 	// No decode at all — the deepest rung. The core said so; the sheet says so.
 	if (clear.surface === 'blind_transaction' || clear.surface === 'blind_typed_data') {
 		blocks.push({ kind: 'intent', text: m.intentBlind, tone: 'danger' });
@@ -775,21 +804,23 @@ export function summaryOf(blocks: Block[]): string | undefined {
 /**
  * Spec 079 (F11): once the person has approved, the sheet is a STATUS — never
  * the form with a greyed slide (the owner: "可信签名器签完后，回到签名提示框，
- * 似乎没有任何提示"). Android's signing receipt, word for word:
+ * 似乎没有任何提示"). Spec 082 (RA9, G22): its words follow the core's
+ * `SignView.phase`, the stage the pipeline is really in:
  *
- * - waiting for the signature: "Waiting for biometric…" (`send.txSigning`);
- * - signed, going to the relay: "Submitting to network…" + "closing keeps it
- *   running" (`send.txSubmitting`, `send.txBackgroundHint`);
+ * - `preparing` — the precheck, the sponsor, the relay's estimate:
+ *   "Preparing transaction…" (`send.txPreparing`). Before 082 this said
+ *   "Waiting for biometric…" through ~40 s of network work, while no prompt
+ *   was up;
+ * - `awaiting_signature` — the passkey prompt is up: "Waiting for
+ *   biometric…" (`send.txSigning`);
+ * - `submitting` — signed, going to the relay: "Submitting to network…" +
+ *   "closing keeps it running" (`send.txSubmitting`, `send.txBackgroundHint`);
  * - a message never submits: "Signing…" throughout;
  * - the submission failed: the receipt's "Failed" + "your funds are safe"
  *   (`send.txErrorGeneric`) — the page was told already.
  *
- * Once the relay accepts the operation the host's landing (the receipt with
- * the chain's clock) takes over, as it did before.
- *
- * The core's `is_signing` and `is_submitting` are BOTH true through its
- * `Submitting` stage (passkey and submission are one step there), so "signed"
- * comes from the ceremony itself (`progress.signed`). `null` = still a request.
+ * Once the relay accepts the operation (or may have: MaybeSent) the host's
+ * landing takes over. `null` = still a request.
  */
 export function signingStatus(
 	sign: SignView,
@@ -814,11 +845,11 @@ export function signingStatus(
 			closable: true
 		};
 	}
-	if (!sign.is_signing && !sign.is_submitting) return null;
-	// Past the signature: said by the ceremony, or by the core's own reactive
-	// recovery, which only follows a submission.
-	const signed = progress?.signed === true || (sign.is_submitting && !sign.is_signing);
-	const closable = signed && sign.is_submitting && progress?.ceremonyUp !== true;
+	const phase = sign.phase;
+	if (phase === 'idle') return null;
+	// Past the signature, and no prompt still up (a Trusted Signer page can
+	// outlive its answer by a beat): a plain close, the operation carries on.
+	const closable = phase === 'submitting' && progress?.ceremonyUp !== true;
 	const onChain = request.kind === 'transaction' || request.kind === 'batch';
 	if (!onChain) {
 		return {
@@ -828,20 +859,29 @@ export function signingStatus(
 			closable
 		};
 	}
-	if (!signed) {
-		return {
-			stage: 'submitting',
-			title: m.status.signing,
-			captions: lines(summary),
-			closable: false
-		};
+	switch (phase) {
+		case 'preparing':
+			return {
+				stage: 'submitting',
+				title: m.status.preparing,
+				captions: lines(summary),
+				closable: false
+			};
+		case 'awaiting_signature':
+			return {
+				stage: 'submitting',
+				title: m.status.signing,
+				captions: lines(summary),
+				closable: false
+			};
+		case 'submitting':
+			return {
+				stage: 'submitting',
+				title: m.status.submitting,
+				captions: lines(summary, m.status.backgroundHint),
+				closable
+			};
 	}
-	return {
-		stage: 'submitting',
-		title: m.status.submitting,
-		captions: lines(summary, m.status.backgroundHint),
-		closable
-	};
 }
 
 /**
@@ -874,7 +914,10 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	const request = sign.request;
 	const dapp = request.dapp;
 	const host = new URL(request.origin).host;
-	const name = dapp?.name ?? host;
+	// Spec 082 RE7 (F14): the core's `site_label` — a name that IS its host
+	// is said once, and the host line stays whenever it adds something.
+	const label = browserSiteLabel(dapp?.name ?? '', host);
+	const name = label.name;
 	const own = ownRequest;
 
 	// Rule 1: the gate is an AND. The core may allow the request; the guard may
@@ -895,11 +938,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT, own: true }
 			: {
 					name,
-					// Spec 079 (F14): a site with no name of its own is named by
-					// its host — said once. "127.0.0.1:8137" over "127.0.0.1:8137"
-					// was the header of every extension request (it hands the core
-					// no dApp name). The host line stays whenever it adds something.
-					host: name === host ? '' : host,
+					host: label.host_line ?? '',
 					letter: letterOf(name),
 					tint: NEUTRAL_TINT,
 					iconUrls: siteIconUrls(request.origin)
@@ -932,7 +971,14 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			 * class as 026's `{{bytes}}`). With no intent from the core, the
 			 * generic word is the honest one.
 			 */
-			action: clear.confirm.type === 'confirm_intent' ? clear.confirm.intent : m.confirmPlain,
+			action:
+				clear.surface === 'plain_send' && clear.plain_send
+					? clear.plain_send.no_value
+						? m.confirmPlain
+						: m.confirmSend
+					: clear.confirm.type === 'confirm_intent'
+						? clear.confirm.intent
+						: m.confirmPlain,
 			enabled
 		},
 		closeLabel: m.close,

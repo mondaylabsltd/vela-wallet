@@ -5,12 +5,14 @@
  * words, same three states — so these tests are about the states being the
  * SEND's, not about a second design.
  */
+import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
 import {
 	autoCloseAfterMs,
 	dappReceiptModel,
 	endsOnSignedTick,
-	landingFromEntry,
+	landingFor,
+	landingFromEnding,
 	landingToRaise,
 	receiptProgress,
 	trackEntryFor,
@@ -32,7 +34,10 @@ const copy: DappReceiptCopy = {
 	done: 'Done',
 	stillConfirming: 'Not on-chain yet. Vela keeps checking — don’t send it again.',
 	unknownOutcome: 'Still unconfirmed after 24 hours.',
-	signed: 'Signed!'
+	signed: 'Signed!',
+	maybeSent: "It may have been sent. Vela keeps checking — don't send it again.",
+	closeBackground: 'Close · keep running',
+	notSentHint: 'Your funds are safe.'
 };
 
 const OP = '0x' + 'a1'.repeat(32);
@@ -76,21 +81,40 @@ describe('the receipt a dApp transaction lands on', () => {
 		expect(model.hash?.value).toBe(TX);
 	});
 
-	it('a reverted transaction says so, and still names the operation', () => {
-		const model = dappReceiptModel({ kind: 'failed', opHash: OP }, copy, explorer);
+	it('a reverted transaction says so, with its transaction and explorer (RA10)', () => {
+		const model = dappReceiptModel({ kind: 'reverted', opHash: OP, txHash: TX }, copy, explorer);
 		expect(model.stage).toBe('failed');
+		expect(model.title).toBe(copy.failed);
 		expect(model.captions).toEqual([copy.failedHint]);
-		expect(model.hash?.value).toBe(OP);
+		expect(model.hash?.value).toBe(TX);
+		expect(model.explorer?.url).toBe(explorer(TX));
 	});
 
-	it('every state offers the one way out', () => {
+	it('may have been sent: the clock, the caption, the op hash and no Retry (RA10, G21)', () => {
+		const model = dappReceiptModel({ kind: 'maybe_sent', opHash: OP }, copy, explorer);
+		expect(model.stage).toBe('submitted');
+		expect(model.captions).toEqual([copy.maybeSent]);
+		expect(model.hash).toEqual({ label: copy.opHashLabel, value: OP });
+		expect(model.cta).toBe(copy.closeBackground);
+		expect(model.explorer).toBeUndefined();
+	});
+
+	it('not sent: failed, "your funds are safe", nothing to look up', () => {
+		const model = dappReceiptModel({ kind: 'not_sent', opHash: OP }, copy, explorer);
+		expect(model.stage).toBe('failed');
+		expect(model.captions).toEqual([copy.notSentHint]);
+		expect(model.explorer).toBeUndefined();
+	});
+
+	it('every other state offers Done as the one way out', () => {
 		const states = [
 			{ kind: 'submitting' as const },
 			{ kind: 'submitted' as const, opHash: OP },
 			{ kind: 'still_confirming' as const, opHash: OP },
 			{ kind: 'unknown' as const, opHash: OP },
 			{ kind: 'confirmed' as const, opHash: OP, txHash: TX },
-			{ kind: 'failed' as const, opHash: OP },
+			{ kind: 'reverted' as const, opHash: OP, txHash: TX },
+			{ kind: 'not_sent' as const, opHash: OP },
 			{ kind: 'signed' as const }
 		];
 		for (const state of states) {
@@ -139,7 +163,9 @@ describe('which landings go by themselves (spec 079)', () => {
 			{ kind: 'submitted' as const, opHash: OP },
 			{ kind: 'still_confirming' as const, opHash: OP },
 			{ kind: 'unknown' as const, opHash: OP },
-			{ kind: 'failed' as const, opHash: OP }
+			{ kind: 'maybe_sent' as const, opHash: OP },
+			{ kind: 'not_sent' as const, opHash: OP },
+			{ kind: 'reverted' as const, opHash: OP, txHash: TX }
 		]) {
 			expect(autoCloseAfterMs(state), state.kind).toBeNull();
 		}
@@ -166,7 +192,7 @@ describe('which answer ends on the signed tick', () => {
 	});
 });
 
-describe("the receipt reads the tracker's entry", () => {
+describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 	function entry(over: Partial<TrackEntryView>): TrackEntryView {
 		return {
 			user_op_hash: OP,
@@ -182,36 +208,63 @@ describe("the receipt reads the tracker's entry", () => {
 		};
 	}
 
-	it('keeps what it shows while the tracker holds no entry yet', () => {
-		expect(landingFromEntry(undefined, OP)).toBeNull();
+	it('covers every SignEndingState', () => {
+		expect(landingFromEnding({ type: 'signed' }, OP, false)).toEqual({ kind: 'signed' });
+		expect(landingFromEnding({ type: 'confirmed', tx_hash: TX }, OP, false)).toEqual({
+			kind: 'confirmed',
+			opHash: OP,
+			txHash: TX
+		});
+		expect(landingFromEnding({ type: 'reverted', tx_hash: TX }, OP, false)).toEqual({
+			kind: 'reverted',
+			opHash: OP,
+			txHash: TX
+		});
+		expect(landingFromEnding({ type: 'not_sent' }, OP, false)).toEqual({
+			kind: 'not_sent',
+			opHash: OP
+		});
+		const following = (outcome: TrackEntryView['outcome']) =>
+			landingFromEnding(
+				{ type: 'following', user_op_hash: OP, outcome, fee_held: false },
+				OP,
+				false
+			).kind;
+		expect(following('landing')).toBe('submitted');
+		expect(following('final')).toBe('submitted');
+		expect(following('still_confirming')).toBe('still_confirming');
+		expect(following('unknown')).toBe('unknown');
+		expect(following('maybe_sent')).toBe('maybe_sent');
 	});
 
-	it('inside the window: the ringed wait', () => {
-		expect(landingFromEntry(entry({}), OP)).toEqual({ kind: 'submitted', opHash: OP });
+	it('a lost reply reads "may have been sent" before the tracker has an entry', () => {
+		expect(landingFor(undefined, OP, true)).toEqual({ kind: 'maybe_sent', opHash: OP });
+		expect(landingFor(undefined, OP, false)).toEqual({ kind: 'submitted', opHash: OP });
 	});
 
-	it('confirmed with a hash lands; confirmed without one is still landing', () => {
+	it('judges the tracker entry through the core', () => {
+		expect(landingFor(entry({}), OP, false)).toEqual({ kind: 'submitted', opHash: OP });
 		expect(
-			landingFromEntry(entry({ status: 'confirmed', tx_hash: TX, outcome: 'final' }), OP)
+			landingFor(entry({ status: 'confirmed', tx_hash: TX, outcome: 'final' }), OP, true)
 		).toEqual({ kind: 'confirmed', opHash: OP, txHash: TX });
-		expect(landingFromEntry(entry({ status: 'confirmed', outcome: 'final' }), OP)).toEqual({
-			kind: 'submitted',
+		expect(
+			landingFor(entry({ status: 'dropped', tx_hash: TX, outcome: 'final' }), OP, false)
+		).toEqual({ kind: 'reverted', opHash: OP, txHash: TX });
+		for (const status of ['not_sent', 'rejected'] as const) {
+			expect(landingFor(entry({ status, outcome: 'final' }), OP, true)).toEqual({
+				kind: 'not_sent',
+				opHash: OP
+			});
+		}
+		expect(landingFor(entry({ outcome: 'maybe_sent' }), OP, true)).toEqual({
+			kind: 'maybe_sent',
 			opHash: OP
 		});
 	});
 
-	it('a dropped or refused op is a failure with its hash', () => {
-		for (const status of ['dropped', 'rejected'] as const) {
-			expect(landingFromEntry(entry({ status, outcome: 'final' }), OP)).toEqual({
-				kind: 'failed',
-				opHash: OP
-			});
-		}
-	});
-
 	it('every unlanded status past the window reads still-confirming — time never makes a failure', () => {
 		for (const status of ['pending', 'fee_held', 'unreachable', 'accepted_not_landed'] as const) {
-			expect(landingFromEntry(entry({ status, outcome: 'still_confirming' }), OP)).toEqual({
+			expect(landingFor(entry({ status, outcome: 'still_confirming' }), OP, false)).toEqual({
 				kind: 'still_confirming',
 				opHash: OP
 			});
@@ -220,9 +273,10 @@ describe("the receipt reads the tracker's entry", () => {
 
 	it('abandoned at 24 h reads unknown', () => {
 		expect(
-			landingFromEntry(
+			landingFor(
 				entry({ status: 'accepted_not_landed', outcome: 'unknown', polling: false }),
-				OP
+				OP,
+				false
 			)
 		).toEqual({ kind: 'unknown', opHash: OP });
 	});

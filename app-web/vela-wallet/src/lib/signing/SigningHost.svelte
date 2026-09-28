@@ -32,7 +32,7 @@
 	import {
 		dappReceiptModel,
 		endsOnSignedTick,
-		landingFromEntry,
+		landingFor,
 		landingToRaise,
 		receiptProgress,
 		autoCloseAfterMs,
@@ -108,7 +108,7 @@
 	 * `tracker_handoff` over the moment it appears — so this subscribes to what
 	 * is running rather than starting a second watch of the same hash.
 	 */
-	function watchLanding(opHash: string, chain: number): void {
+	function watchLanding(opHash: string, chain: number, maybeSent: boolean): void {
 		landingChain = chain;
 		landedAtMs = Date.now();
 		// How long this chain usually takes, from the CORE's table — the same
@@ -116,27 +116,24 @@
 		// no estimate for) makes the ring circle instead of filling.
 		landingTypicalS = typicalInclusionSeconds(chain);
 		landing = { kind: 'submitting' };
-		readTracker(opHash);
+		readTracker(opHash, maybeSent);
 		unsubscribeTracker?.();
-		unsubscribeTracker = subscribeTxTracker(() => readTracker(opHash));
+		unsubscribeTracker = subscribeTxTracker(() => readTracker(opHash, maybeSent));
 		onlanding?.();
 	}
 
 	/**
-	 * What the tracker says, as the receipt's own state (`landingFromEntry`).
-	 *
-	 * `dropped` / `rejected` are failures with a hash to look at; `unreachable`
-	 * is NOT — the wallet could not ask, which is not the chain saying no, and
-	 * a cross drawn for it would be a verdict this wallet does not have. Past
-	 * the wait window the entry's `outcome` says "still confirming", and past
-	 * 24 h "unknown" — never "submitted" forever (spec 079, F13).
+	 * What the tracker says, as the core's ending (`landingFor` →
+	 * `signEndingState`, spec 082 RA8): confirmed, reverted, not sent, or
+	 * still followed with its outcome — "may have been sent" while the relay
+	 * never acknowledged it (RA10). Nothing drawn before the tracker has an
+	 * entry, unless the handoff itself said the reply was lost.
 	 */
-	function readTracker(opHash: string): void {
+	function readTracker(opHash: string, maybeSent: boolean): void {
 		const entry = trackEntryFor(txTrackerView().entries, opHash);
-		const next = landingFromEntry(entry, opHash);
-		if (!entry || !next) return;
-		landing = next;
-		if (entry.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
+		if (!entry && !maybeSent) return;
+		landing = landingFor(entry, opHash, maybeSent);
+		if (entry?.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
 	}
 
 	/**
@@ -254,7 +251,7 @@
 		landedOp = op;
 		// Closed after approving: tracked, answered — and not raised again.
 		if (closedInFlight !== null) return;
-		watchLanding(op, handoff.chain_id);
+		watchLanding(op, handoff.chain_id, handoff.maybe_sent);
 	});
 
 	/** The landing goes: Done, or a landed transaction's own beat. */

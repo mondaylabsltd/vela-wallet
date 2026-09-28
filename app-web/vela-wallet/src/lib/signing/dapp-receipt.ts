@@ -19,6 +19,8 @@
 import type { ReceiptStage } from '$lib/flows/model';
 import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
 import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
+import type { SignEndingState } from '$lib/core/generated/SignEndingState';
+import { signEndingState } from '$lib/core/kernels';
 import { ringProgress } from '$lib/flows/ui/ring';
 
 /** The send receipt's words, as the request surface already resolves them. */
@@ -53,6 +55,16 @@ export interface DappReceiptCopy {
 	unknownOutcome: string;
 	/** Spec 079: `clearSigning.alertSignedTitle` — a message was signed ("已签名！"). */
 	signed: string;
+	/**
+	 * Spec 082 RA10: `componentsUi.signing.maybeSent` — the relay's reply was
+	 * lost after the op may have left. Never "failed — try again": that is the
+	 * sentence that makes a person pay twice (G21).
+	 */
+	maybeSent: string;
+	/** `send.txCloseBackground` — the one button while it may have been sent. */
+	closeBackground: string;
+	/** `send.txErrorGeneric` — provably not sent; nothing left, funds are safe. */
+	notSentHint: string;
 }
 
 /** Where the transaction stands, as the tracker reports it. */
@@ -63,8 +75,14 @@ export type DappReceiptState =
 	| { kind: 'still_confirming'; opHash: string }
 	/** Spec 079: abandoned at 24 h — neither landed nor failed, and no longer asked about. */
 	| { kind: 'unknown'; opHash: string }
+	/** The tracker's confirmation; `txHash` is `''` when it named none. */
 	| { kind: 'confirmed'; opHash: string; txHash: string }
-	| { kind: 'failed'; opHash: string }
+	/** Spec 082: the op landed and reverted — the chain said no; its transaction is the proof. */
+	| { kind: 'reverted'; opHash: string; txHash: string }
+	/** Spec 082 RA4: the relay never admitted it (two `not_found` past 60 s) — nothing left. */
+	| { kind: 'not_sent'; opHash: string }
+	/** Spec 082 RA2: the reply was lost; followed under the local hash. */
+	| { kind: 'maybe_sent'; opHash: string }
 	/** Spec 079: a message signature — nothing went to the chain; the tick, then gone. */
 	| { kind: 'signed' };
 
@@ -106,12 +124,52 @@ export function dappReceiptModel(
 				cta: copy.done
 			};
 		case 'confirmed': {
+			if (!state.txHash) {
+				return {
+					stage: 'confirmed',
+					title: copy.confirmed,
+					captions: [],
+					hash: { label: copy.opHashLabel, value: state.opHash },
+					cta: copy.done
+				};
+			}
 			const url = explorerFor(state.txHash);
 			return {
 				stage: 'confirmed',
 				title: copy.confirmed,
 				captions: [],
 				hash: { label: copy.txHashLabel, value: state.txHash },
+				...(url ? { explorer: { label: copy.explorer, url } } : {}),
+				cta: copy.done
+			};
+		}
+		case 'maybe_sent':
+			// The clock, the op hash, and the one way out — no Retry: a second
+			// send of an op that may already be queued is the double payment.
+			return {
+				stage: 'submitted',
+				title: copy.submitted,
+				captions: [copy.maybeSent],
+				hash: { label: copy.opHashLabel, value: state.opHash },
+				cta: copy.closeBackground
+			};
+		case 'not_sent':
+			return {
+				stage: 'failed',
+				title: copy.failed,
+				captions: [copy.notSentHint],
+				hash: { label: copy.opHashLabel, value: state.opHash },
+				cta: copy.done
+			};
+		case 'reverted': {
+			const url = state.txHash ? explorerFor(state.txHash) : null;
+			return {
+				stage: 'failed',
+				title: copy.failed,
+				captions: [copy.failedHint],
+				hash: state.txHash
+					? { label: copy.txHashLabel, value: state.txHash }
+					: { label: copy.opHashLabel, value: state.opHash },
 				...(url ? { explorer: { label: copy.explorer, url } } : {}),
 				cta: copy.done
 			};
@@ -128,61 +186,59 @@ export function dappReceiptModel(
 				hash: { label: copy.opHashLabel, value: state.opHash },
 				cta: copy.done
 			};
-		case 'failed':
-			return {
-				stage: 'failed',
-				title: copy.failed,
-				captions: [copy.failedHint],
-				hash: { label: copy.opHashLabel, value: state.opHash },
-				cta: copy.done
-			};
 		case 'signed':
 			return { stage: 'confirmed', title: copy.signed, captions: [], cta: copy.done };
 	}
 }
 
 /**
- * The receipt state for `opHash`, from the tracker's entry for it — or `null`
- * while the tracker holds no entry yet (the landing keeps what it shows).
- *
- * `dropped` / `rejected` are failures with a hash to look at. Everything else
- * still in flight reads the core's `outcome` (spec 079): `landing` is the
- * ringed wait, `still_confirming` the honest "not on-chain yet, Vela keeps
- * checking", `unknown` the 24-hour end. `unreachable` is NOT a failure — the
- * wallet could not ask, which is not the chain saying no — so it reads
- * whatever its outcome says, like every other unlanded op. Time alone never
- * makes a cross here: the tracker's money rule.
+ * The receipt state for the core's ending (spec 082 RA8): what the sheet
+ * draws is `sign_request::ending_state`'s verdict — confirmed, reverted, not
+ * sent, or still being followed with the tracker's outcome — never a second
+ * reading of the tracker's statuses here. `maybeSent` is the handoff's own
+ * flag, for the moment before the tracker has an entry to say it.
  */
-export function landingFromEntry(
-	entry: TrackEntryView | undefined,
-	opHash: string
-): DappReceiptState | null {
-	if (!entry) return null;
-	switch (entry.status) {
+export function landingFromEnding(
+	ending: SignEndingState,
+	opHash: string,
+	maybeSent: boolean
+): DappReceiptState {
+	switch (ending.type) {
+		case 'signed':
+			return { kind: 'signed' };
 		case 'confirmed':
-			// A confirmation with no transaction hash yet is still landing.
-			return entry.tx_hash
-				? { kind: 'confirmed', opHash, txHash: entry.tx_hash }
-				: { kind: 'submitted', opHash };
-		case 'dropped':
-		case 'rejected':
+			return { kind: 'confirmed', opHash, txHash: ending.tx_hash };
+		case 'reverted':
+			return { kind: 'reverted', opHash, txHash: ending.tx_hash };
 		case 'not_sent':
-			return { kind: 'failed', opHash };
-		case 'pending':
-		case 'fee_held':
-		case 'unreachable':
-		case 'accepted_not_landed':
-			switch (entry.outcome) {
+			return { kind: 'not_sent', opHash };
+		case 'following':
+			switch (ending.outcome) {
+				case 'maybe_sent':
+					return { kind: 'maybe_sent', opHash };
 				case 'still_confirming':
 					return { kind: 'still_confirming', opHash };
 				case 'unknown':
 					return { kind: 'unknown', opHash };
 				case 'landing':
-				case 'maybe_sent':
 				case 'final':
-					return { kind: 'submitted', opHash };
+					return maybeSent ? { kind: 'maybe_sent', opHash } : { kind: 'submitted', opHash };
 			}
 	}
+}
+
+/**
+ * The receipt state for an operation the sheet handed the tracker: the core's
+ * ending for "answered by its operation hash", judged against the tracker's
+ * entry (`signEndingState`). No entry yet → still being followed.
+ */
+export function landingFor(
+	entry: TrackEntryView | undefined,
+	opHash: string,
+	maybeSent: boolean
+): DappReceiptState {
+	const ending = signEndingState({ type: 'still_confirming', user_op_hash: opHash }, entry ?? null);
+	return landingFromEnding(ending, opHash, maybeSent);
 }
 
 /** The tracker's entry for `opHash`, matched as the tracker keys it (lowercase). */
@@ -220,7 +276,9 @@ export function autoCloseAfterMs(state: DappReceiptState): number | null {
 		case 'submitted':
 		case 'still_confirming':
 		case 'unknown':
-		case 'failed':
+		case 'maybe_sent':
+		case 'not_sent':
+		case 'reverted':
 			return null;
 	}
 }
