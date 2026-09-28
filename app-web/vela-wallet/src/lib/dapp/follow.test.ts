@@ -148,6 +148,33 @@ describe('followActiveAccount writes what the core authored', () => {
 		);
 	});
 
+	it('never brings back a grant that changed while it ran', async () => {
+		// The rewrite reads every grant, then writes them one by one. A site
+		// the person disconnects — or one re-pinned to another account — in
+		// between must stay as it now is: writing the spelling of what was read
+		// would reconnect it, or point it back at the old account.
+		const racing = {
+			...local,
+			set: async (items: Record<string, unknown>) => {
+				await local.set(items);
+				if (PERM_PREFIX + 'https://a.example' in items) {
+					store.delete(PERM_PREFIX + 'https://b.example');
+					store.set(PERM_PREFIX + 'https://c.example', grantFor('https://c.example', BOB));
+				}
+			}
+		};
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local: racing } };
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		store.set(PERM_PREFIX + 'https://b.example', grantFor('https://b.example', ALICE));
+		store.set(PERM_PREFIX + 'https://c.example', grantFor('https://c.example', ALICE));
+
+		expect(await normalizeGrantSpelling()).toEqual(['https://a.example']);
+		expect(store.has(PERM_PREFIX + 'https://b.example')).toBe(false);
+		expect(store.get(PERM_PREFIX + 'https://c.example')).toEqual(
+			grantFor('https://c.example', BOB)
+		);
+	});
+
 	it('normalises nothing off the extension', async () => {
 		expect(await normalizeGrantSpelling()).toEqual([]);
 	});

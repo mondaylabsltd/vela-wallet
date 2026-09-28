@@ -17,7 +17,7 @@
 import { loadCore } from '$lib/core/client';
 import { checksumAddress } from '$lib/core/kernels';
 import { listGrants } from './connections';
-import { revokeGrant, setGrant } from './grants';
+import { getGrant, revokeGrant, setGrant } from './grants';
 import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
 
@@ -91,7 +91,13 @@ export async function normalizeGrantSpelling(): Promise<string[]> {
 	if (grants.length === 0) return [];
 	await loadCore();
 	const rewritten: string[] = [];
-	for (const grant of grants) {
+	for (const listed of grants) {
+		// Read again right before the write: the list is a moment old, and a
+		// site disconnected or re-pinned since then must stay as it now is —
+		// writing back the spelling of what was listed would reconnect it, or
+		// point it at the account it was moved off.
+		const grant = await getGrant(listed.origin);
+		if (!grant || grant.address !== listed.address) continue;
 		let spelled: string;
 		try {
 			spelled = checksumAddress(grant.address);
