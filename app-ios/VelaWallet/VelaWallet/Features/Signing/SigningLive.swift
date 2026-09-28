@@ -48,6 +48,13 @@ enum SigningLive {
         /// Spec 079: this account signs on the Trusted Signer's page — its
         /// slide is the one consent.
         var trustedSignerRoute = false
+
+        /// The Trusted Signer's waiting card is up: the account signs on the
+        /// page and the signature is under way. The card speaks for the
+        /// signature then — "签名中…" beside "签名页没能打开" contradicted it.
+        func signerPageOpen(_ sign: SignViewWire) -> Bool {
+            trustedSignerRoute && sign.isSigning
+        }
     }
 
     /// The fee list's id for the chain's own coin (the web's `'native'`).
@@ -198,7 +205,7 @@ enum SigningLive {
         let blocks = refused
             ? statusBlocks(sign: sign, loc: loc)
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
-            : statusBlocks(sign: sign, loc: loc)
+            : statusBlocks(sign: sign, loc: loc, signerPageOpen: context.signerPageOpen(sign))
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
                 + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
                               dataBytes: dataBytes, context: context)
@@ -311,7 +318,9 @@ enum SigningLive {
 
     // MARK: - Status
 
-    static func statusBlocks(sign: SignViewWire, loc: Loc) -> [SigningBlock] {
+    /// `signerPageOpen`: the Trusted Signer's waiting card speaks for the
+    /// signature (spec 079 — "签名中…" above "签名页没能打开" contradicted it).
+    static func statusBlocks(sign: SignViewWire, loc: Loc, signerPageOpen: Bool = false) -> [SigningBlock] {
         var blocks: [SigningBlock] = []
 
         // Spec 081: the core refused this request outright — it would have
@@ -363,6 +372,8 @@ enum SigningLive {
         }
         if sign.pendingOpHash != nil {
             blocks.append(.positive(s(loc, "submitted")))
+        } else if signerPageOpen {
+            // The waiting card says it.
         } else if sign.isSigning || sign.isSubmitting {
             blocks.append(.sentence(text: s(loc, "signing"), tone: .neutral))
         }
@@ -379,6 +390,10 @@ enum SigningLive {
     /// aftercare shows the ending). `nil` while the request is still a request.
     static func receipt(sign: SignViewWire, blocks: [SigningBlock], context: Context) -> SendReceiptModel? {
         let loc = context.loc
+        // The Trusted Signer's waiting card is the status while its page holds
+        // the signature — "等待生物识别…" or "签名中…" under it would say
+        // something else (spec 079; Android draws no receipt under the card).
+        if context.signerPageOpen(sign) { return nil }
         let summary = summaryOf(blocks)
         let header = FlowHeaderModel(title: "", backLabel: "")
         let closeBackground = loc.t("send.txCloseBackground")

@@ -31,6 +31,40 @@ final class TrustedSignerSheetModel {
     /// Only while a page is open on this device.
     var reopen: (() -> Void)?
     var cancel: () -> Void = {}
+    /// Spec 079: the page could not open (the channel's verdict, after a HEAD
+    /// to its address). The card says so, and its button is a retry.
+    var unreachable = false
+
+    /// What the card says, in the corpus's words.
+    struct Copy: Equatable {
+        let title: String
+        /// `nil`: no hint line — a page that could not open needs none.
+        let hint: String?
+        let reopen: String
+        /// The reopen button is the card's primary action (the retry).
+        let reopenPrimary: Bool
+        let cancel: String
+        /// The waiting spinner.
+        let busy: Bool
+    }
+
+    /// The waiting card's words (Android's `SigningLive.trustedSignerWait`):
+    /// waiting for the page, or — the page never opened — "签名页没能打开，
+    /// 请检查网络。" with Retry. Cancel either way; the request stays open.
+    static func copy(unreachable: Bool, loc: Loc) -> Copy {
+        unreachable
+            ? Copy(
+                title: loc.t("componentsUi.signing.signerDown"), hint: nil,
+                reopen: loc.t("connect.browser.retry"), reopenPrimary: true,
+                cancel: loc.t("common.cancel"), busy: false
+            )
+            : Copy(
+                title: loc.t("componentsUi.signing.trustedSignerWaiting"),
+                hint: loc.t("componentsUi.signing.trustedSignerWaitingHint"),
+                reopen: loc.t("componentsUi.signing.trustedSignerReopen"), reopenPrimary: false,
+                cancel: loc.t("common.cancel"), busy: true
+            )
+    }
 }
 
 struct TrustedSignerSheet: View {
@@ -38,33 +72,48 @@ struct TrustedSignerSheet: View {
     let loc: Loc
     @Bindable var model: TrustedSignerSheetModel
 
+    private var copy: TrustedSignerSheetModel.Copy {
+        TrustedSignerSheetModel.copy(unreachable: model.unreachable, loc: loc)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             waiting
             Spacer(minLength: Tokens.Space.s8)
             if let reopen = model.reopen, model.stage == .waiting {
-                VelaButton(title: loc.t("componentsUi.signing.trustedSignerReopen"),
-                           kind: .secondary, action: reopen)
+                VelaButton(title: copy.reopen, kind: copy.reopenPrimary ? .primary : .secondary,
+                           action: reopen)
+                    .accessibilityIdentifier(model.unreachable ? "trustedSigner.retry" : "trustedSigner.reopen")
             }
-            VelaButton(title: loc.t("common.cancel"), kind: .secondary, action: model.cancel)
+            VelaButton(title: copy.cancel, kind: .secondary, action: model.cancel)
         }
         .padding(Tokens.Space.s24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.bgBase.ignoresSafeArea())
     }
 
-        private var waiting: some View {
+    private var waiting: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             HStack(spacing: Tokens.Space.s12) {
-                ProgressView()
-                Text(loc.t("componentsUi.signing.trustedSignerWaiting"))
+                if copy.busy {
+                    ProgressView()
+                } else {
+                    LucideIcon(.triangleAlert, size: LucideIconSize.rowGlyph)
+                        .foregroundStyle(theme.warningBase)
+                        .accessibilityHidden(true)
+                }
+                Text(copy.title)
                     .typeRole(Typography.title)
                     .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier(model.unreachable ? "trustedSigner.signerDown" : "trustedSigner.waiting")
             }
-            Text(loc.t("componentsUi.signing.trustedSignerWaitingHint"))
-                .typeRole(Typography.flowCaption)
-                .foregroundStyle(theme.fgSubtle)
-                .fixedSize(horizontal: false, vertical: true)
+            if let hint = copy.hint {
+                Text(hint)
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.fgSubtle)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
