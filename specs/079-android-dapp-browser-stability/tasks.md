@@ -189,7 +189,7 @@ resets its slide, and opens without the network after one visit.
 - [X] T080 Gates: core (`cargo test --workspace`, clippy `-D warnings`, fmt on own files), Android JVM (`JAVA_HOME` = Android Studio JBR, `-Porg.gradle.java.installations.auto-detect=false`), iOS hermetic on a simulator clone, desktop `cargo test`, web unit + extension e2e, i18n parity, `build-web --check`, the parity rulers in `scripts/check-*.mjs` — done except the iOS device run (see results.md Gates)
 - [X] T081 `specs/079-android-dapp-browser-stability/results.md`: per SC verdict with evidence, per-client matrix after the fix, what was not done and why; D2–D7 hand-off to the owner (relay Arbitrum not mining, dApp tx absent from Activity, fee overcharge, simulation warning, address case, history empty copy) — done: results.md
 - [X] T082 Memory: project note for 079 (rulings, core rules, device recipe incl. chaos proxy and the iOS UI Automation switch), update the Android/iOS device references — done: memory project_079_dapp_browser_stability
-- [ ] T083 Commit by path per client in reviewable steps; push; PR to main with the evidence table
+- [X] T083 Commit by path per client in reviewable steps; push; PR to main with the evidence table — done: PR #327
 
 ---
 
