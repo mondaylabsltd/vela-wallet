@@ -213,11 +213,19 @@ class SignExecutor(
 
     private suspend fun awaitReceipt(chainId: Int, userOpHash: String): String? {
         val deadline = System.currentTimeMillis() + receiptWaitMs
-        while (System.currentTimeMillis() < deadline) {
-            when (val answer = relay.userOpReceipt(chainId, userOpHash)) {
-                is RelayClient.ReceiptAnswer.Resolved -> return answer.txHash
-                else -> delay(receiptPollMs)
-            }
+        while (true) {
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= 0) break
+            // Each poll gets only what is left of the window (spec 079,
+            // device-found): with the relay unreachable a single poll hung for
+            // its own timeouts and retries, and the page waited 268 s for a
+            // two-minute wait. The pool's await is cancellable; a late answer
+            // is dropped, and the tracker keeps following the operation.
+            val answer = withTimeoutOrNull(remaining) { relay.userOpReceipt(chainId, userOpHash) }
+            if (answer is RelayClient.ReceiptAnswer.Resolved) return answer.txHash
+            val left = deadline - System.currentTimeMillis()
+            if (left <= 0) break
+            delay(minOf(receiptPollMs, left))
         }
         return null
     }

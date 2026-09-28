@@ -27,6 +27,7 @@ import app.getvela.wallet.core.platform.Gallery
 import app.getvela.wallet.core.platform.Clipboard
 import app.getvela.wallet.feature.wallet.components.IdenticonViewerSheet
 import app.getvela.wallet.core.identicon.LocalIdenticonViewer
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import app.getvela.wallet.core.net.NetHealth
 import app.getvela.wallet.feature.wallet.components.AccountSwitcherSheet
@@ -652,6 +653,23 @@ fun VelaNavHost(
                 val trustedSignerState by trustedSigner.state.collectAsStateWithLifecycle()
                 val trustedSignerNotice by trustedSigner.notice.collectAsStateWithLifecycle()
                 val trustedSignerWaiting = trustedSignerState is app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel.State.Waiting
+                // Spec 079: the tracker's view (the receipt's clock and outcome),
+                // how the last request ended, and the last sheet drawn — the
+                // aftercare keeps its header once the core has closed it.
+                val trackView by application.container.wallet.tracker.collectAsStateWithLifecycle()
+                val aftercare by application.container.signingAftercare.collectAsStateWithLifecycle()
+                var lastSigning by remember { mutableStateOf<Pair<app.getvela.wallet.feature.signing.SigningScreenModel, app.getvela.wallet.feature.signing.SigningLive.Context>?>(null) }
+                val explorerContext = LocalContext.current
+                fun openExplorer(chainId: Int, txHash: String?) {
+                    val base = networks.networks.firstOrNull { it.chain_id.toInt() == chainId }?.explorer_url?.trimEnd('/')
+                    if (base.isNullOrBlank() || txHash.isNullOrBlank()) return
+                    runCatching {
+                        explorerContext.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("$base/tx/$txHash"))
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }
                 signingController?.let { controller ->
                     val signView by controller.sign.collectAsStateWithLifecycle()
                     val clearView by controller.clear.collectAsStateWithLifecycle()
@@ -675,16 +693,22 @@ fun VelaNavHost(
                         feeOpen = feeOpen,
                         trustedSignerWaiting = trustedSignerWaiting,
                         trustedSignerNotice = trustedSignerNotice,
+                        explorerUrl = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.explorer_url,
+                        track = signView.pending_op_hash?.let { op -> trackView.entries.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) } },
+                        typicalS = uniffi.vela_core_uniffi.networkTypicalInclusionS(signChain.toUInt())?.toInt(),
                     )
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
                             val drawn = remember(strings) { SigningFixtures.build(SigningScreenState.CS1, strings) }
+                            val signingModel = app.getvela.wallet.feature.signing.SigningLive.model(
+                                drawn, request, signView, clearView, guardView, signFee, signCtx, signSim,
+                                speed = SendLive.SpeedInputs(signSpeed, controller::feeViewOf),
+                            )
+                            SideEffect { lastSigning = signingModel to signCtx }
                             app.getvela.wallet.feature.signing.SigningSheet(
-                                model = app.getvela.wallet.feature.signing.SigningLive.model(
-                                    drawn, request, signView, clearView, guardView, signFee, signCtx, signSim,
-                                    speed = SendLive.SpeedInputs(signSpeed, controller::feeViewOf),
-                                ),
-                                // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
+                                model = signingModel,
+                                // The ✕ (spec 079: the ONLY close): a reject before the
+                                // commitment point, a dismiss after — the core routes it.
                                 onDismiss = { controller.swipeDismissed() },
                                 onConfirm = { controller.approve() },
                                 onChip = { id -> app.getvela.wallet.feature.signing.SigningLive.chipMode(id)?.let(controller::guardPreset) },
@@ -700,6 +724,41 @@ fun VelaNavHost(
                             )
                         }
                     }
+                }
+                // Spec 079: the core closed the sheet when it answered the page;
+                // the ending stays on screen — a tick that leaves by itself, or
+                // "not landed yet" until closed or seen landing.
+                val ending = aftercare
+                val endingHeader = lastSigning
+                if (ending != null && endingHeader != null && signingController == null) {
+                    val (headerModel, headerCtx) = endingHeader
+                    val endCtx = headerCtx.copy(
+                        track = (ending as? app.getvela.wallet.feature.signing.SigningAftercare.StillConfirming)?.let { still ->
+                            trackView.entries.firstOrNull { it.user_op_hash.equals(still.userOpHash, ignoreCase = true) }
+                        },
+                    )
+                    val endReceipt = app.getvela.wallet.feature.signing.SigningLive.aftercareReceipt(
+                        ending,
+                        app.getvela.wallet.feature.signing.SigningLive.summaryOf(headerModel.blocks),
+                        endCtx,
+                    )
+                    val close = { application.container.signingAftercare.value = null }
+                    // A tick is seen, then it goes: no one should have to close a success.
+                    LaunchedEffect(ending, endReceipt.stage) {
+                        if (endReceipt.stage == app.getvela.wallet.feature.flows.ReceiptStage.Confirmed) {
+                            kotlinx.coroutines.delay(if (ending is app.getvela.wallet.feature.signing.SigningAftercare.Signed) 1_400L else 2_600L)
+                            if (application.container.signingAftercare.value === ending) close()
+                        }
+                    }
+                    app.getvela.wallet.feature.signing.SigningAftercareSheet(
+                        header = headerModel,
+                        receipt = endReceipt,
+                        onClose = close,
+                        onExplorer = {
+                            val hash = (ending as? app.getvela.wallet.feature.signing.SigningAftercare.Landed)?.txHash ?: endCtx.track?.tx_hash
+                            openExplorer(ending.chainId, hash)
+                        },
+                    )
                 }
                 // …and no sheet to say why nothing was signed: the sentence
                 // goes up as a toast (the dApp sheet shows it in place).

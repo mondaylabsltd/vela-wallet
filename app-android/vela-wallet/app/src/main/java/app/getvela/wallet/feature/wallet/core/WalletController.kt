@@ -503,6 +503,17 @@ class WalletController(
     /** Anything still without a verdict? (the background worker's stop condition) */
     fun trackerHasPending(): Boolean = tracker.value.entries.any { it.status == TrackStatus.Pending }
 
+    /**
+     * Anything the core is still following — in its wait window OR past it
+     * (spec 079). The foreground clock used to stop at the window's end, when
+     * the status turns `accepted_not_landed`: an op still on its way was then
+     * asked about only on the next resume, and "Vela keeps checking" was not
+     * true (device-found: a landed op never showed as landed). The core paces
+     * the asking itself — 3 s, 12 s, then once a minute, then every five — so
+     * ticking while `polling` costs nothing it did not decide to spend.
+     */
+    fun trackerFollowing(): Boolean = tracker.value.entries.any { it.polling }
+
     init {
         // The knot: the executor emits `chain_assets_arrived` as each chain
         // lands, and the machine that consumes those events is built FROM the
@@ -529,11 +540,12 @@ class WalletController(
                 }
             }
             // The foreground clock: 3 s, as the web and desktop residents tick,
-            // only while something is pending and somebody is looking.
+            // while the core is still following something and somebody is
+            // looking (spec 079: not only inside the wait window).
             scope.launch {
                 while (true) {
                     delay(TRACKER_TICK_MS)
-                    if (foreground() && trackerHasPending()) host.dispatch(TrackEvent.Tick, TrackEvent.serializer())
+                    if (foreground() && trackerFollowing()) host.dispatch(TrackEvent.Tick, TrackEvent.serializer())
                 }
             }
         }

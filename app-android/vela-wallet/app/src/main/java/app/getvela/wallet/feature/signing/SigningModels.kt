@@ -241,8 +241,9 @@ data class SigningScreenModel(
     val signerName: String,
     val signerSeed: String,
     /**
-     * The slide. There is no reject button anywhere in this vocabulary:
-     * dismissing the sheet is the rejection (product contract, SPEC 签名).
+     * The slide. There is no reject BUTTON anywhere in this vocabulary; the
+     * header's ✕ is the explicit refusal, and since spec 079 nothing else
+     * closes the sheet (owner ruling: no swipe, scrim or Back rejection).
      *
      * `null` under a refusal: a dead slide reads as an option somebody merely
      * failed to use, rather than one the wallet never offered.
@@ -251,6 +252,14 @@ data class SigningScreenModel(
     val confirmAction: String?,
     val confirmEnabled: Boolean,
     val panelTitle: String,
+    /** Spec 079: the ✕'s label — the sheet's one explicit close. */
+    val closeLabel: String = "",
+    /**
+     * Spec 079: once the person has approved, the sheet stops being a form and
+     * shows this — the send receipt's own model and words, so a dApp
+     * transaction and a send look the same while they land.
+     */
+    val receipt: app.getvela.wallet.feature.flows.SendReceiptModel? = null,
 )
 
 /** The signed-in wallet's identity over the fixture's signer row. */

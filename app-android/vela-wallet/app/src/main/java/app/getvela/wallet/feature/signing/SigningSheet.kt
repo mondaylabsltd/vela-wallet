@@ -22,6 +22,7 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
+import app.getvela.wallet.feature.flows.SendReceiptBody
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
 import app.getvela.wallet.feature.signing.components.TrustedSignerWaiting
 import app.getvela.wallet.feature.signing.components.SigningAmount
@@ -46,8 +47,15 @@ import app.getvela.wallet.feature.signing.components.TechDetails
  * footer — technical details → fee → signer → slide — over the page that asked
  * for the signature, so the site you are dealing with never leaves the screen.
  *
- * Dismissal is rejection. There is no "Reject" button anywhere, because a
- * wallet with one teaches people to reach for it without reading.
+ * The header's ✕ is the one way to refuse (spec 079, owner ruling: "除非用户
+ * 明确关掉，不应该很容易误操作，比如下滑就关掉了" — a stray swipe used to throw
+ * the dApp's request away). No swipe, scrim tap or Back closes it. There is
+ * still no big "Reject" button, because a wallet with one teaches people to
+ * reach for it without reading.
+ *
+ * After the approval the form gives way to the send receipt's own body
+ * ([SigningScreenModel.receipt]); closing then refuses nothing — the core
+ * routes the same close to a plain dismiss once the commitment point passed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,15 +78,20 @@ fun SigningSheet(
     /** Spec 071: the Trusted Signer's waiting card. */
     onTrustedSignerReopen: () -> Unit = {},
     onTrustedSignerCancel: () -> Unit = {},
+    /** Spec 079: the receipt's "view on explorer". */
+    onExplorer: () -> Unit = {},
 ) {
     VelaModalSheet(
         onDismissRequest = onDismiss,
         containerColor = VelaTheme.colors.bgRaised,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = modifier,
+        dismissible = false,
     ) {
         SigningSheetContent(
             model = model,
+            onClose = onDismiss,
+            onExplorer = onExplorer,
             onConfirm = onConfirm,
             onChip = onChip,
             onCustomAmount = onCustomAmount,
@@ -100,6 +113,9 @@ fun SigningSheetContent(
     model: SigningScreenModel,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Spec 079: the header's ✕ — `null` in the gallery, which has nothing to close. */
+    onClose: (() -> Unit)? = null,
+    onExplorer: () -> Unit = {},
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
     onLegChip: (Int, String) -> Unit = { _, _ -> },
@@ -134,7 +150,21 @@ fun SigningSheetContent(
             own = model.dappOwn,
             iconUrls = model.dappIconUrls,
             networkLogoUrl = model.networkLogoUrl,
+            onClose = onClose,
+            closeLabel = model.closeLabel,
         )
+
+        // Spec 079: approved — the receipt replaces the form, unless the
+        // trusted signer's page is open, whose waiting card says more.
+        val receipt = model.receipt
+        if (receipt != null && model.trustedSignerWait == null) {
+            SendReceiptBody(
+                model = receipt,
+                onExplorer = onExplorer,
+                onCta = { onClose?.invoke() },
+            )
+            return@Column
+        }
 
         // The universal renderer: blocks in mock order, out. Nothing here knows
         // what a swap or a permit IS — which is what lets all 33 scenarios, and
@@ -236,5 +266,49 @@ fun TrustedSignerWaitingSheet(model: TrustedSignerWaitModel, onReopen: () -> Uni
             onCancel = onCancel,
             modifier = Modifier.padding(horizontal = VelaSizing.screenPaddingX).padding(bottom = VelaSpacing.xl3),
         )
+    }
+}
+
+/**
+ * Spec 079: the ending of a request whose sheet the core has closed — the same
+ * header, the send receipt's body. Closes only on its ✕ or its button (the
+ * signing sheet's rule), or by itself once the tick has been seen.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SigningAftercareSheet(
+    header: SigningScreenModel,
+    receipt: app.getvela.wallet.feature.flows.SendReceiptModel,
+    onClose: () -> Unit,
+    onExplorer: () -> Unit,
+) {
+    VelaModalSheet(
+        onDismissRequest = onClose,
+        containerColor = VelaTheme.colors.bgRaised,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        dismissible = false,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VelaSizing.screenPaddingX)
+                .padding(bottom = VelaSpacing.xl3),
+            verticalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
+        ) {
+            SigningHeader(
+                name = header.dappName,
+                host = header.dappHost,
+                letter = header.dappLetter,
+                tint = header.dappTint,
+                networkName = header.networkName,
+                networkDot = header.networkDot,
+                own = header.dappOwn,
+                iconUrls = header.dappIconUrls,
+                networkLogoUrl = header.networkLogoUrl,
+                onClose = onClose,
+                closeLabel = header.closeLabel,
+            )
+            SendReceiptBody(model = receipt, onExplorer = onExplorer, onCta = onClose)
+        }
     }
 }

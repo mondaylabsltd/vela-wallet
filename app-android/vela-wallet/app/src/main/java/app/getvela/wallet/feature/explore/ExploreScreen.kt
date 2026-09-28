@@ -269,10 +269,13 @@ fun ExploreScreen(
     }
 
     consent?.let { card ->
+        // Spec 079: like the signing sheet, the consent closes only on its ✕ or
+        // 取消 — a stray swipe must not refuse a connection the person was reading.
         VelaModalSheet(
             onDismissRequest = { live?.onConsent(false) },
             containerColor = colors.bgBase,
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dismissible = false,
         ) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 ConnectionPanel(
