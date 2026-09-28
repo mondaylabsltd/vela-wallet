@@ -227,11 +227,11 @@ Owns `C/browser_load.rs`, `C/net_health.rs`, `C/remote_mark.rs`, `C/balance_dash
 `CT/app_balance_dashboard.rs`. The desktop copy of `LoadWatch` is deleted later, in the desktop
 phase (T058).
 
-- [ ] T029 [P] Move `LoadWatch` into `C/browser_load.rs` (RD4, RX).
+- [x] T029 [P] Move `LoadWatch` into `C/browser_load.rs` (RD4, RX).
   - Take the pure part of `app-desktop/vela-wallet/src/explore/load_watch.rs:34-287`: `LoadWatch`, `Asked`, `Probed`, `RetryAction`, `requested / committed / finished / watchdog / probed / give_up / schedule_retry / retry_fired / take_due / retry / busy`, and `host_of`.
   - Use ms constants `WATCHDOG_MS = 3000`, `PROBE_BUDGET_MS = 5000`, `GIVE_UP_MS = 20000`, `ENGINE_LIVE_PROGRESS = 0.15`. There is no FFI export for `LoadWatch`.
   - Proof: port `load_watch.rs:360-652` (all but the two ureq tests) into `CT/app_browser_load.rs`; they pass unchanged except for the ms units.
-- [ ] T030 `C/browser_load.rs`: the RD3/RD7 extensions (after T029).
+- [x] T030 `C/browser_load.rs`: the RD3/RD7 extensions (after T029).
   - `EngineSample{loading, progress, url}`, `LoadWatch::engine(sample) -> EngineVerdict {Nothing, PageStarted, StoppedWithoutCommit}` and `Asked::Page` for a load the wallet did not start.
   - New fields `engine_loading`, `engine_live` and `page_initiated`.
   - Retries and probes: `Probed::Deferred` for a TLS verdict while the engine loads; `RetryAction::{EngineStillLoading, NotInFront}`; `schedule_retry` returns None when `page_initiated`; give-up at 20 s only if progress never rose above `ENGINE_LIVE_PROGRESS`.
@@ -240,16 +240,16 @@ phase (T058).
     - the engine stopped with no commit → StoppedWithoutCommit;
     - an unasked load → PageStarted with manual retry only (W18);
     - progress 0.4 at 20 s → no give-up (DX5).
-- [ ] T031 `C/browser_load.rs`: `should_give_up(elapsed_ms, committed, progress)`, `stalled()` (class Timeout, `explore.loadOffline`, auto-retry) and `retry_when_network_returns(class)` (true for Offline, Timeout, Refused, Other, Proxy) (RE2, RE3); (after T030).
+- [x] T031 `C/browser_load.rs`: `should_give_up(elapsed_ms, committed, progress)`, `stalled()` (class Timeout, `explore.loadOffline`, auto-retry) and `retry_when_network_returns(class)` (true for Offline, Timeout, Refused, Other, Proxy) (RE2, RE3); (after T030).
   - Proof: `CT/app_browser_load.rs`:
     - 19 s → false; 20 s, no commit, progress 0.1 → true;
     - committed → false; progress 0.2 → false;
     - Certificate and NotFound → no network-back retry.
-- [ ] T032 `C/browser_load.rs`: `LoadFailureClass::Proxy` with `reason_key = "explore.loadProxy"` on the Offline retry schedule, and `probe_code::PROXY = 6` (RD9, RE4, RX); (after T031).
+- [x] T032 `C/browser_load.rs`: `LoadFailureClass::Proxy` with `reason_key = "explore.loadProxy"` on the Offline retry schedule, and `probe_code::PROXY = 6` (RD9, RE4, RX); (after T031).
   - Apple `kCFErrorDomainCFNetwork` 306–310 → Proxy and 311 → Refused; Android -5 → Proxy.
   - Apple `NSURLErrorDomain -1000` → Offline (it was NotFound); -1002, -1003 and -1006 stay NotFound.
   - Proof: `CT/app_browser_load.rs`: every row above, plus the existing -1000 test updated. The doc comment states that a proxy which answered (502, or a CONNECT closed with no reply) speaks for the host.
-- [ ] T033 `C/browser_load.rs`: `BarLock`, `AddressBar{url, host, lock}`, `address_bar(shown, pending, failed)`, `SiteLabel{name, host_line}` and `site_label(title, host)` (RE1, RE7); (after T032).
+- [x] T033 `C/browser_load.rs`: `BarLock`, `AddressBar{url, host, lock}`, `address_bar(shown, pending, failed)`, `SiteLabel{name, host_line}` and `site_label(title, host)` (RE1, RE7); (after T032).
   - `address_bar`: a failure is up → the failed host, no lock; else the committed host, `Closed` / `Open` from `!is_insecure_public_origin`; else a pending load in an empty tab → the pending host, no lock; else empty. A non-default port is kept.
   - `site_label`: an empty title, or one equal to the host ignoring ASCII case → `{host, None}`.
   - Proof: `CT/app_browser_load.rs`:
@@ -258,12 +258,12 @@ phase (T058).
     - loopback and private http → Closed; public http → Open;
     - `127.0.0.1:8137` keeps its port;
     - site_label: "127.0.0.1:8137" == host → one line; "Uniswap" → two lines; case folding.
-- [ ] T034 [P] `C/net_health.rs`: `MISSES_BEFORE_OFFLINE = 3`, `NetHealth{misses, online}`, `NetEdge {WentOffline, CameBack}` and `net_health_step`, moved from `A/core/net/NetHealth.kt:18-47` (RE3).
+- [x] T034 [P] `C/net_health.rs`: `MISSES_BEFORE_OFFLINE = 3`, `NetHealth{misses, online}`, `NetEdge {WentOffline, CameBack}` and `net_health_step`, moved from `A/core/net/NetHealth.kt:18-47` (RE3).
   - Proof: new `CT/app_net_health.rs` ports every case of `AT/NetHealthTest.kt`: the 3rd miss → WentOffline; the first reach after offline → CameBack; no edge while online.
-- [ ] T035 [P] `C/remote_mark.rs`: `MarkMiss`, `mark_miss_of_status(u16)` and `mark_miss_ttl_ms(miss)` (RE10).
+- [x] T035 [P] `C/remote_mark.rs`: `MarkMiss`, `mark_miss_of_status(u16)` and `mark_miss_ttl_ms(miss)` (RE10).
   - NotFound (404/410), Refused (401/403) and NotAnImage → None (session). Throttled, ServerError (5xx/408), Transport and Unknown → 60 000.
   - Proof: new `CT/app_remote_mark.rs` covers every status class.
-- [ ] T036 [P] `C/balance_dashboard.rs`: `ReadKind`, `ReadSlot` and `read_plan(chain_id, stables, wrapped_native, custom)` (RE9).
+- [x] T036 [P] `C/balance_dashboard.rs`: `ReadKind`, `ReadSlot` and `read_plan(chain_id, stables, wrapped_native, custom)` (RE9).
   - Order: native (unless the chain has none, e.g. Tempo 4217), registry stablecoins (`peg_usd = 1.0`, decimals read on chain), the wrapped native unless it is the native, then custom tokens.
   - Deduplicate by lower-case contract; custom metadata wins.
   - Proof: `CT/app_balance_dashboard.rs`:
