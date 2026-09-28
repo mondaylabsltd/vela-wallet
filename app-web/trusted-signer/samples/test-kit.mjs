@@ -24,6 +24,74 @@ export function loadPageLibs(files) {
   return globalThis.VelaCS;
 }
 
+/**
+ * Just enough of a DOM for `render.js` to draw a sheet in Node: elements with
+ * classes, text and children, and a `find('.class')` to read the result. No
+ * layout, no events fired, no styles applied — what it answers is "which lines
+ * did the page draw, and what do they say", nothing about how they look.
+ * Call it BEFORE `loadPageLibs`, since render.js reaches for `document` only
+ * when it draws, but i18n's `setLocale` touches `documentElement`.
+ */
+export function installFakeDom() {
+  class FakeElement {
+    constructor(tag) {
+      this.tagName = String(tag).toUpperCase();
+      this.children = [];
+      this.className = '';
+      this.hidden = false;
+      this.own = '';
+      this.style = { setProperty() {} };
+      const self = this;
+      this.classList = {
+        add(name) { if (!self.classes().includes(name)) self.className = (self.className + ' ' + name).trim(); },
+        remove(name) { self.className = self.classes().filter((c) => c !== name).join(' '); },
+        toggle(name, on) {
+          const want = on === undefined ? !self.classes().includes(name) : !!on;
+          if (want) this.add(name); else this.remove(name);
+        },
+        contains(name) { return self.classes().includes(name); },
+      };
+    }
+    classes() { return String(this.className || '').split(/\s+/).filter(Boolean); }
+    appendChild(child) { this.children.push(child); child.parentNode = this; return child; }
+    insertBefore(child, ref) {
+      const at = ref ? this.children.indexOf(ref) : -1;
+      if (at < 0) this.children.push(child); else this.children.splice(at, 0, child);
+      child.parentNode = this;
+      return child;
+    }
+    removeChild(child) { this.children = this.children.filter((c) => c !== child); return child; }
+    addEventListener() {}
+    setAttribute(name, value) { this[name] = String(value); }
+    set textContent(value) { this.children = []; this.own = value === null || value === undefined ? '' : String(value); }
+    get textContent() { return this.own + this.children.map((c) => c.textContent).join(''); }
+    set innerHTML(value) { this.children = []; this.own = ''; this.html = String(value); }
+    get innerHTML() { return this.html || ''; }
+    /** Every descendant carrying `.name` (one class; the only selector used). */
+    find(selector) {
+      const name = selector.replace(/^\./, '');
+      const out = [];
+      const walk = (node) => {
+        for (const child of node.children || []) {
+          if (child.classes && child.classes().includes(name)) out.push(child);
+          walk(child);
+        }
+      };
+      walk(this);
+      return out;
+    }
+  }
+  const text = (value) => ({ nodeType: 3, textContent: String(value), children: [] });
+  globalThis.document = {
+    createElement: (tag) => new FakeElement(tag),
+    createTextNode: text,
+    documentElement: new FakeElement('html'),
+    body: new FakeElement('body'),
+    execCommand() { return false; },
+  };
+  return globalThis.document;
+}
+
 export function makeChecks() {
   const results = [];
   const check = (name, pass, detail) => {

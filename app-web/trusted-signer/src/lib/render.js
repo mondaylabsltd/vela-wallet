@@ -445,8 +445,10 @@ window.VelaCS = window.VelaCS || {};
     if (view.dapp.nameClaimed) {
       identity.appendChild(el('div', 'dapp-claimed', t('tag.selfReported')));
     }
-    if (view.dapp.origin || view.dapp.originKey) {
-      identity.appendChild(el('div', 'dapp-origin', view.dapp.origin || t(view.dapp.originKey)));
+    // `originShown`, not `origin`: a host the name above already says is not
+    // drawn twice (resolve.js decides; 082 L-HOST).
+    if (view.dapp.originShown || view.dapp.originKey) {
+      identity.appendChild(el('div', 'dapp-origin', view.dapp.originShown ? view.dapp.origin : t(view.dapp.originKey)));
     }
     head.appendChild(identity);
     sheet.appendChild(head);
@@ -487,7 +489,7 @@ window.VelaCS = window.VelaCS || {};
     head.appendChild(remoteLogo(view.dapp.icon, view.dapp.letter, view.dapp.tone));
     var identity = el('div', 'sheet-identity');
     identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
-    if (view.dapp.origin) identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
+    if (view.dapp.originShown) identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
     head.appendChild(identity);
     var chain = el('span', 'chain-pill');
     var dot = el('i', 'chain-dot');

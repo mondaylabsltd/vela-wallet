@@ -166,6 +166,19 @@ window.VelaCS = window.VelaCS || {};
 
   // --- view scaffold ---------------------------------------------------------
 
+  /**
+   * Whether a site's name and its host are the same words, by the apps' rule
+   * (vela-core `browser_load::site_label`, spec 079 F14): both trimmed, then
+   * equal ignoring ASCII case. The wallet names a site it opened by its host,
+   * so without this the head read "127.0.0.1:8137" over "127.0.0.1:8137".
+   */
+  function sameSiteWords(name, host) {
+    var fold = function (text) {
+      return String(text || '').trim().replace(/[A-Z]/g, function (c) { return c.toLowerCase(); });
+    };
+    return fold(name) === fold(host);
+  }
+
   function baseView(intent, ctx) {
     var origin = (intent && intent.origin) || '';
     var host = origin.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -174,7 +187,11 @@ window.VelaCS = window.VelaCS || {};
       dapp: {
         name: (known && known.name) || null,
         nameKey: (known && known.name) ? null : (host ? 'tag.unknownSite' : 'tag.wallet'),
+        // The host, for every judgement about it (`warn.claimedOrigin` reads
+        // this). Whether the head draws it as a line of its own is
+        // `originShown`: not when the name above already says it (082 L-HOST).
         origin: host || null,
+        originShown: !!host && !sameSiteWords((known && known.name) || '', host),
         // The wallet asking itself has no host: its initial is the word's.
         letter: ((known && known.name) || host || ns.i18n.t('tag.wallet') || '?').charAt(0).toUpperCase(),
         tone: (known && known.tone) || '#8a93a5',
@@ -1032,6 +1049,7 @@ window.VelaCS = window.VelaCS || {};
         : null;
     }
     view.dapp.origin = who.origin || null;
+    view.dapp.originShown = !!view.dapp.origin && !sameSiteWords(view.dapp.name || '', view.dapp.origin);
     view.dapp.originKey = who.originKey || null;
     view.dapp.originVerified = who.verified;
 
