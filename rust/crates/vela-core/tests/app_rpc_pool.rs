@@ -2588,6 +2588,51 @@ fn an_optional_method_never_classifies_the_chain() {
     assert!(view.rate_limited_chains.is_empty());
 }
 
+/// Spec 082, the merge of groups A and G: what the sheet says when a node
+/// cannot simulate. The pool hands the crash on as an answer (no chain
+/// notice, T015), the shell passes that endpoint's body to `sim_outcome`, and
+/// the line is the "couldn't check" caution (RG6) — never the danger line,
+/// never "nothing moves". A call the pool gave up on reads the same.
+#[test]
+fn a_node_that_cannot_simulate_reads_could_not_check_without_a_chain_notice() {
+    use vela_core::app::clear_signing::ClearRisk;
+    use vela_core::app::sim_outcome::{classify, notice, SimOutcome, SimReply, KEY_UNAVAILABLE};
+    const ME: &str = "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063";
+
+    let crash = err(Some(-32603), "method handler crashed");
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("s1", "eth_simulateV1", T0 + 1_000.0));
+    let ops = sut.resolve(outcome(
+        "s1",
+        USER,
+        Out::Response {
+            error: Some(crash.clone()),
+        },
+        40.0,
+        T0 + 1_040.0,
+    ));
+    assert_eq!(ops, vec![respond("s1", USER)]);
+    sut.resolve(Res::Concluded);
+    let view = sut.view();
+    assert!(view.failed_chains.is_empty());
+    assert!(view.unreached_chains.is_empty());
+
+    // The body the shell hands on is the one that endpoint sent.
+    let body = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "error": crash }).to_string();
+    let answered = classify(SimReply::from_json(&body), ME);
+    assert_eq!(answered, SimOutcome::NotOffered);
+    let line = notice(&answered).expect("a caution");
+    assert_eq!(line.risk, ClearRisk::Caution);
+    assert_eq!(line.key, KEY_UNAVAILABLE);
+    assert_eq!(line.reason, None);
+
+    // Every endpoint timed out: the pool concluded Failed, no node was
+    // reached, and the sheet says the same.
+    let gave_up = classify(SimReply::Unreachable, ME);
+    assert_eq!(gave_up, SimOutcome::Unreachable);
+    assert_eq!(notice(&gave_up), Some(line));
+}
+
 /// T180 (ruling 8): the range limits the find-event will meet on Gnosis's
 /// providers are answers on `eth_getLogs` — the endpoint is not banned and
 /// the chain is in neither failed nor unreached.
