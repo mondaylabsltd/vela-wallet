@@ -341,11 +341,20 @@ window.VelaCS = window.VelaCS || {};
       return wrap;
     }
 
+    // Spec 079: the explanation folds under the row — the row itself is the
+    // summary a person taps. What must stay in sight stays on the row: the
+    // amount read from the calldata and, for a leg, that "this is the fee" is
+    // the requester's word (the same 自述 tag the chain pill uses).
+    wrap = el('details', 'fee-wrap');
+    row = el('summary', 'fee');
+    row.appendChild(el('span', 'fee-label', t('ui.fee')));
+    if (view.fee.leg) row.appendChild(el('span', 'tag', t('tag.claimed')));
     var headline = view.fee.leg
       ? t('ui.feeLegAmount', { amount: view.fee.leg.amount, symbol: view.fee.leg.symbol })
       : t('ui.feeCeiling', { amount: view.fee.gas.max, symbol: view.fee.gas.symbol });
     var fiat = (view.fee.leg && view.fee.leg.fiat) || (view.fee.gas && view.fee.gas.fiat);
     row.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
+    row.appendChild(el('span', 'fee-chevron', '›'));
     wrap.appendChild(row);
 
     var note = el('div', 'fee-note');
@@ -367,8 +376,9 @@ window.VelaCS = window.VelaCS || {};
         symbol: rateSymbol, currency: view.fee.currency, rate: rate.toLocaleString('en-US'),
       })
       : t('ui.feeNoRate')));
-    if (view.fee.sponsored) note.appendChild(el('div', 'fee-sponsored', t('ui.feeSponsored')));
     wrap.appendChild(note);
+    // Who pays changes the number's meaning: said on the row's level, never folded.
+    if (view.fee.sponsored) wrap.appendChild(el('div', 'fee-sponsored', t('ui.feeSponsored')));
     return wrap;
   }
 

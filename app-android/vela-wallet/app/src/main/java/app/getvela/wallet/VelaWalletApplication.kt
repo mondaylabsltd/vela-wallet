@@ -61,6 +61,7 @@ import app.getvela.wallet.core.platform.Haptics
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.NetworkEndpointSource
 import app.getvela.wallet.feature.wallet.core.RpcPool
+import app.getvela.wallet.core.net.VelaHttp
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
@@ -375,6 +376,21 @@ class AppContainer(private val app: Application) {
             // connected to the same page.
             appName = "Vela Wallet " + BuildConfig.VERSION_NAME,
             appIcon = { appMark() },
+            // Spec 079: the page's address alone — the request rides in the
+            // fragment and never goes to a server, and neither does it here.
+            reachable = { url: String ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        val probe = url.substringBefore('#').substringBefore('?')
+                        VelaHttp.client.newBuilder()
+                            .callTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                            .build()
+                            .newCall(okhttp3.Request.Builder().url(probe).head().build())
+                            .execute()
+                            .use { true }
+                    }.getOrDefault(false)
+                }
+            },
             labels = { chainId, account ->
                 val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
                 TrustedSignerLabels(
@@ -652,12 +668,18 @@ class AppContainer(private val app: Application) {
                 ports = object : SigningController.Ports {
                     override fun respond(transportId: String, id: String, payload: SignResponsePayload) {
                         answer(payload)
-                        signingAftercare.value = SigningAftercare.of(
-                            method = request.method,
-                            chainId = request.chainId,
-                            payload = payload,
-                            submittedUserOp = submittedUserOp,
-                        )
+                        // Closed by the person after approving: the answer still
+                        // goes, the ending does not reappear (spec 079).
+                        signingAftercare.value = if (controller.closedAfterApproval) {
+                            null
+                        } else {
+                            SigningAftercare.of(
+                                method = request.method,
+                                chainId = request.chainId,
+                                payload = payload,
+                                submittedUserOp = submittedUserOp,
+                            )
+                        }
                         // Answered either way: the sheet closes off this, page or no page.
                         controller.markAnswered()
                     }

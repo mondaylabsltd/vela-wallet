@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -70,6 +71,9 @@ data class EngineState(
 /** Where the load hairline starts the moment a load is asked for (spec 079). */
 private const val REQUESTED_PROGRESS = 10
 
+/** A tab card's snapshot width — two cards to a row on a phone, sharp at 3×. */
+private const val SNAPSHOT_WIDTH_PX = 360
+
 /**
  * One tab's engine: a system `WebView` with the core's provider installed
  * (spec 044, rebuilt in 070). Owned by [BrowserController]; composed by
@@ -89,6 +93,8 @@ class BrowserEngine(
         /** Same-document navigation (`pushState`) or a new title: what the tab shows, not a load. */
         fun shown(tab: String, url: String, title: String)
         fun rendererGone(tab: String)
+        /** Spec 079: what the page looked like as it left the screen (the tab switcher's card); `null` clears it. */
+        fun snapshot(tab: String, image: androidx.compose.ui.graphics.ImageBitmap?)
         /** A main-frame link to a scheme this browser does not open itself, followed by a person's tap. */
         fun externalLink(tab: String, uri: Uri)
     }
@@ -305,6 +311,7 @@ class BrowserEngine(
     fun detach() {
         attached = false
         cancelRetry()
+        listener.snapshot(tabId, capture())
         context.baseContext = appContext
         webView.onPause()
     }
@@ -331,6 +338,28 @@ class BrowserEngine(
             webView.reload()
         }
     }
+    /**
+     * The page as it was last seen, scaled to a card (spec 079 — the switcher
+     * drew the same grey bars for every tab). Nothing for a failed page — what
+     * the WebView holds then is the engine's error page, which the person
+     * never saw behind the Vela panel.
+     */
+    private fun capture(): androidx.compose.ui.graphics.ImageBitmap? {
+        val width = webView.width
+        val height = webView.height
+        if (width <= 0 || height <= 0 || _state.value.failure != null || _state.value.url.isBlank()) return null
+        val scale = SNAPSHOT_WIDTH_PX.toFloat() / width
+        return runCatching {
+            val bitmap = android.graphics.Bitmap.createBitmap(SNAPSHOT_WIDTH_PX, (height * scale).toInt().coerceAtLeast(1), android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            canvas.scale(scale, scale)
+            // The WebView scrolls itself: its draw starts at the document's top.
+            canvas.translate(-webView.scrollX.toFloat(), -webView.scrollY.toFloat())
+            webView.draw(canvas)
+            bitmap.asImageBitmap()
+        }.getOrNull()
+    }
+
     fun deliver(json: String) = ProviderBridge.deliver(webView, json)
     fun destroy() {
         attached = false
@@ -377,6 +406,33 @@ class BrowserController(
 
     private val _notices = MutableSharedFlow<Notice>(extraBufferCapacity = 8)
     val notices: SharedFlow<Notice> = _notices
+
+    /** Which chains the pool could not reach on its last try (spec 079 — the page's chain notice reads it). */
+    val poolView: StateFlow<app.getvela.wallet.feature.wallet.core.RpcPoolView> =
+        pool?.view ?: MutableStateFlow(app.getvela.wallet.feature.wallet.core.RpcPoolView())
+
+    private val _chainAsking = MutableStateFlow(false)
+
+    /** A chain-notice retry is in flight. */
+    val chainAsking: StateFlow<Boolean> = _chainAsking
+
+    /**
+     * The chain notice's Retry: one block-number read through the pool. Its
+     * answer is the pool's to judge — a usable answer clears the chain's
+     * failure and the notice goes with it; nothing here decides that.
+     */
+    fun askChain(chainId: Int) {
+        val pool = pool ?: return
+        if (_chainAsking.value) return
+        _chainAsking.value = true
+        scope.launch {
+            try {
+                pool.call(chainId, "eth_blockNumber")
+            } finally {
+                _chainAsking.value = false
+            }
+        }
+    }
 
     /** Set by the container: open the signing sheet for a forwarded request. */
     var onForwardToSigning: ((DbrOperation.ForwardToSigning) -> Unit)? = null
@@ -518,6 +574,11 @@ class BrowserController(
     /** The selected tab's engine, when that tab shows a live page. */
     val current: StateFlow<BrowserEngine?> = _current
 
+    private val _snapshots = MutableStateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap>>(emptyMap())
+
+    /** Spec 079: each tab's page as it last left the screen, for the switcher's cards. */
+    val snapshots: StateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap>> = _snapshots
+
     /**
      * Tabs whose renderer died. They get no new engine until the person asks
      * for a reload — a page that kills its renderer on load would otherwise
@@ -552,6 +613,7 @@ class BrowserController(
             engines.remove(id)?.destroy()
             dispatch(DbrEvent.TabClosed(id))
         }
+        if (_snapshots.value.keys.any { it !in alive }) _snapshots.value = _snapshots.value.filterKeys { it in alive }
         crashed.retainAll(alive)
         val selected = view.tabs.firstOrNull { it.id == view.selected_tab } ?: view.tabs.firstOrNull()
         val engine = selected?.url?.takeIf { selected.id !in crashed }?.let { url ->
@@ -610,9 +672,14 @@ class BrowserController(
 
             override fun rendererGone(tab: String) {
                 crashed += tab
+                _snapshots.value = _snapshots.value - tab
                 engines.remove(tab)?.destroy()
                 if (_current.value?.id == tab) _current.value = null
                 dispatch(DbrEvent.RendererGone(tab))
+            }
+
+            override fun snapshot(tab: String, image: androidx.compose.ui.graphics.ImageBitmap?) {
+                _snapshots.value = if (image == null) _snapshots.value - tab else _snapshots.value + (tab to image)
             }
 
             override fun externalLink(tab: String, uri: Uri) = openExternal(uri)

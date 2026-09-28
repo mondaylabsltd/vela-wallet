@@ -64,6 +64,11 @@ class TrustedSignerChannel(
     private val appIcon: () -> String = { "" },
     /** `Vela Wallet <version>` — what the page shows as the requester, marked there as self-reported. */
     private val appName: String = "vela-android",
+    /**
+     * Spec 079: whether the page's address answers at all (any HTTP status
+     * counts) — asked only when the person is back with no answer.
+     */
+    private val reachable: suspend (url: String) -> Boolean = { true },
 ) : TrustedSigner {
 
     /** The sentences a refusal is told in (`componentsUi.signing.trustedSigner*`). */
@@ -77,8 +82,12 @@ class TrustedSignerChannel(
     sealed interface State {
         data object Idle : State
 
-        /** The page is open (or being opened) at [url] and the socket is listening. */
-        data class Waiting(val url: String) : State
+        /**
+         * The page is open (or being opened) at [url] and the answer is awaited.
+         * [unreachable]: the person came back without one and the page's address
+         * does not answer (spec 079) — the card says so and offers a retry.
+         */
+        data class Waiting(val url: String, val unreachable: Boolean = false) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -118,7 +127,22 @@ class TrustedSignerChannel(
 
     /** "Open the page again" — same port, same token. */
     fun reopen() {
+        (_state.value as? State.Waiting)?.takeIf { it.unreachable }?.let { _state.value = it.copy(unreachable = false) }
         wire?.reopen()
+    }
+
+    /**
+     * Spec 079: the person is back in the wallet and the page has not
+     * answered. A closed tab does not say why — a page that never loaded looks
+     * the same as a mind changed — so ask whether the page's address answers
+     * at all; when it does not, the waiting card says the page could not open.
+     * The request stays open either way: retry, or close the sheet.
+     */
+    suspend fun personReturned() {
+        val waiting = _state.value as? State.Waiting ?: return
+        if (waiting.unreachable || reachable(waiting.url)) return
+        // Still the same visit, still unanswered.
+        if (_state.value == waiting) _state.value = waiting.copy(unreachable = true)
     }
 
     /**

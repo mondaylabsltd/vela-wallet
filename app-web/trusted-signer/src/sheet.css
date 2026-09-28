@@ -408,6 +408,12 @@ body {
 .fee-label { color: var(--muted); }
 .fee-value { margin-left: auto; }
 .fee-chevron { color: var(--faint); }
+/* Spec 079: the fee row is the summary of its own explanation. */
+summary.fee { list-style: none; cursor: pointer; }
+summary.fee::-webkit-details-marker { display: none; }
+summary.fee .fee-chevron { transition: transform 0.15s ease; }
+details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
+.fee-sponsored { margin-top: 6px; padding: 0 4px; color: var(--muted); font-size: 12px; }
 .fee-off .fee-value { color: var(--muted); }
 
 .fee-note {
