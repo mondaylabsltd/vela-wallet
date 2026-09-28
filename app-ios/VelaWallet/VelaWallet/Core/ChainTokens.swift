@@ -32,6 +32,9 @@ final class ChainTokens {
         let stables: [String]
         /// The wrapped native token, when the chain has one.
         let wrappedNative: String?
+        /// The stablecoins with their symbols — what the balance read plan
+        /// (`balanceReadPlan`, spec 082 RE9) counts at their peg.
+        var stableRefs: [(symbol: String, contract: String)] = []
     }
 
     /// The registry is master data that changes on the order of weeks.
@@ -60,11 +63,16 @@ final class ChainTokens {
         )
         guard let object = body as? [String: Any] else { return nil }
 
-        let stables = (object["stables"] as? [[String: Any]] ?? []).compactMap {
+        let rows = object["stables"] as? [[String: Any]] ?? []
+        let stables = rows.compactMap {
             ($0["contract"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         }
+        let refs: [(symbol: String, contract: String)] = rows.compactMap { row in
+            guard let contract = row["contract"] as? String, !contract.isEmpty else { return nil }
+            return (row["symbol"] as? String ?? "", contract)
+        }
         let wrapped = (object["wrappedNativeToken"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        let facts = Facts(stables: stables, wrappedNative: wrapped)
+        let facts = Facts(stables: stables, wrappedNative: wrapped, stableRefs: refs)
         cache[chainId] = (facts, now)
         return facts
     }

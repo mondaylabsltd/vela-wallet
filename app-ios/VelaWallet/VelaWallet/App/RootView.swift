@@ -361,7 +361,10 @@ struct RootView: View {
         // A saved token has to reach the balances, so the core's
         // "invalidate the token cache" becomes a re-read here — there is no
         // cache on this client, only a fetch.
-        let wallet = WalletStore(store: shelf, pool: pool, held: held)
+        // The registry's stablecoins and wrapped coin join every balance
+        // read (spec 082 RE9, G24): USDC on Base is counted, as on the other
+        // clients.
+        let wallet = WalletStore(store: shelf, pool: pool, held: held, registry: ChainTokens(accounts: store))
         _wallet = State(initialValue: wallet)
         // An incoming transfer the feed just found: the hero follows (#188).
         activityStore.onNewItem = { [weak wallet] in wallet?.refresh(pull: false) }

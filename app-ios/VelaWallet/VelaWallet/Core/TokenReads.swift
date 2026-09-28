@@ -48,13 +48,51 @@ enum TokenReads {
         let rateLimited: Bool
     }
 
-    /// Read the native coin and every known ERC-20 for one address, on one
-    /// chain — and price the native coin while the batch is open.
+    /// Which balances one chain's read covers — the core's plan
+    /// (`balanceReadPlan`, spec 082 RE9, G24): the native coin unless the
+    /// chain has none, the registry's stablecoins (worth their peg, decimals
+    /// read on chain), the wrapped native unless it IS the native, then the
+    /// person's own tokens — each contract once, the person's metadata lent
+    /// to a registry entry. This client used to read the native coin and the
+    /// custom tokens only, so USDC on Base was missing from its total.
+    static func plan(
+        chainId: Int,
+        stables: [(symbol: String, contract: String)],
+        wrappedNative: String?,
+        custom: [CustomTokenRef]
+    ) -> [BalanceReadSlot] {
+        let stablesJson = jsonText(stables.map { ["symbol": $0.symbol, "contract": $0.contract] })
+        let customJson = jsonText(custom.map {
+            ["contract": $0.address, "symbol": $0.symbol, "name": $0.name, "decimals": $0.decimals] as [String: Any]
+        })
+        guard let plan = try? balanceReadPlan(
+            chainId: UInt32(clamping: chainId), stablesJson: stablesJson,
+            wrappedNative: wrappedNative, customJson: customJson
+        ) else {
+            // Refused input — the native coin alone, never an invented list.
+            return ChainCatalog.meta(chainId)?.gasModel == .tempo ? [] : [
+                BalanceReadSlot(kind: "native", contract: nil, symbol: "", name: "",
+                                knownDecimals: nil, pegUsd: nil),
+            ]
+        }
+        return plan
+    }
+
+    private static func jsonText(_ value: [[String: Any]]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: value),
+              let text = String(data: data, encoding: .utf8)
+        else { return "[]" }
+        return text
+    }
+
+    /// Read one address's holdings on one chain, slot by slot as the core's
+    /// plan names them — and price the native coin while the batch is open.
     ///
-    /// Two round trips: `eth_getBalance`, and one `aggregate3` carrying every
-    /// token's `balanceOf` plus this chain's Chainlink native feed. A chain
-    /// that fails a BALANCE read is reported failed rather than contributing a
-    /// partial figure the core would have to treat as complete.
+    /// Two round trips: `eth_getBalance`, and one `aggregate3` carrying each
+    /// token slot's `balanceOf` (and `decimals()` where the plan does not know
+    /// them) plus this chain's Chainlink native feed. A chain that fails a
+    /// BALANCE read is reported failed rather than contributing a partial
+    /// figure the core would have to treat as complete.
     ///
     /// `chainlinkPrices` is the Ethereum-mainnet map, fetched once per refresh
     /// and passed in — twelve chains must not each re-read mainnet.
@@ -63,14 +101,18 @@ enum TokenReads {
         chainId: Int,
         tokens: [CustomTokenRef],
         pool: RpcPool,
-        chainlinkPrices: [String: Double] = [:]
+        chainlinkPrices: [String: Double] = [:],
+        stables: [(symbol: String, contract: String)] = [],
+        wrappedNative: String? = nil
     ) async -> ChainResult {
         var out: [[String: Any]] = []
         var failed = false
         var rateLimited = false
 
         let meta = ChainCatalog.meta(chainId)
-        let hasNativeCoin = meta?.gasModel != .tempo
+        let slots = plan(chainId: chainId, stables: stables, wrappedNative: wrappedNative, custom: tokens)
+        let hasNativeCoin = slots.contains { $0.kind == "native" }
+        let tokenSlots = slots.filter { $0.kind != "native" && !($0.contract ?? "").isEmpty }
 
         // 1. The native coin's balance — unless the chain has none.
         var nativeBalance: String?
@@ -97,44 +139,65 @@ enum TokenReads {
             }
         }
 
-        // 2. The ERC-20 balances and this chain's own price feed, in one batch.
+        // 2. The token slots' balances and this chain's own price feed, in one batch.
         let feed = hasNativeCoin ? Prices.nativeFeeds[chainId] : nil
-        let batch = await batch(address: address, chainId: chainId, tokens: tokens,
+        let batch = await batch(address: address, chainId: chainId, slots: tokenSlots,
                                 priceFeed: feed, pool: pool)
 
         // A batch that carried no balances cannot report a balance failure.
         // Marking the chain failed because a PRICE feed did not answer would
         // draw "this network is unreachable" over a network that answered
         // every question about somebody's money.
-        if batch.failed && !tokens.isEmpty {
+        if batch.failed && !tokenSlots.isEmpty {
             failed = true
             rateLimited = rateLimited || batch.rateLimited
         }
 
+        let nativeSymbol = meta?.nativeSymbol ?? ""
+        let nativePrice = Prices.choose(
+            local: batch.localPrice,
+            mainnet: Prices.mainnetPrice(symbol: nativeSymbol, in: chainlinkPrices)
+        )
         if let nativeBalance {
             out.append([
                 "chain_id": chainId,
-                "symbol": meta?.nativeSymbol ?? "",
+                "symbol": nativeSymbol,
                 "name": meta?.displayName ?? "",
                 "balance": nativeBalance,
                 "decimals": 18,
                 "token_address": NSNull(),
-                "price_usd": Prices.choose(
-                    local: batch.localPrice,
-                    mainnet: Prices.mainnetPrice(symbol: meta?.nativeSymbol ?? "",
-                                                 in: chainlinkPrices)
-                ).map { $0 as Any } ?? NSNull(),
+                "price_usd": nativePrice.map { $0 as Any } ?? NSNull(),
                 "spam": false,
             ])
         }
-        out.append(contentsOf: batch.tokens)
+        for read in batch.tokens {
+            var row = read.row
+            switch read.slot.kind {
+            case "stable":
+                // Membership in the curated list is the price (the core's peg).
+                row["price_usd"] = read.slot.pegUsd.map { $0 as Any } ?? NSNull()
+            case "wrapped":
+                // One wrapped coin is one coin: the native's own price.
+                row["symbol"] = "W" + nativeSymbol
+                row["name"] = "Wrapped " + (meta?.displayName ?? nativeSymbol)
+                row["price_usd"] = nativePrice.map { $0 as Any } ?? NSNull()
+            default:
+                // An ERC-20's price needs the DEX quote path, which this cut
+                // does not have. `nil` is the drawn "couldn't be priced" row,
+                // and a guessed $1 for anything that looks like a stablecoin
+                // is exactly the invention the core's unpriced notice exists
+                // to avoid.
+                row["price_usd"] = NSNull()
+            }
+            out.append(row)
+        }
 
         return ChainResult(chainId: chainId, tokens: out, failed: failed, rateLimited: rateLimited)
     }
 
     /// What one chain's batch came back with.
     private struct Batch {
-        var tokens: [[String: Any]] = []
+        var tokens: [(slot: BalanceReadSlot, row: [String: Any])] = []
         /// This chain's own Chainlink native/USD read — the ladder's local
         /// rung. `nil` when the chain has no feed, or the feed did not answer.
         var localPrice: Double?
@@ -142,34 +205,48 @@ enum TokenReads {
         var rateLimited = false
     }
 
-    /// `aggregate3` of one `balanceOf` per token, plus `latestRoundData()` on
-    /// the chain's native feed when it has one.
+    /// `aggregate3` of one `balanceOf` per slot — plus its `decimals()` where
+    /// the plan does not know them — and `latestRoundData()` on the chain's
+    /// native feed when it has one.
     ///
     /// `allowFailure` is `true` on every call: a token that reverts — a proxy
     /// mid-upgrade, a contract that is not really an ERC-20 — must not cost the
     /// others their answer. A reverted entry keeps its slot, which is what lets
-    /// results be matched to tokens by index.
+    /// results be matched to calls by index, recorded as the calls are built.
     private static func batch(
         address: String,
         chainId: Int,
-        tokens: [CustomTokenRef],
+        slots: [BalanceReadSlot],
         priceFeed: String?,
         pool: RpcPool
     ) async -> Batch {
         var calls: [Multicall3Call] = []
-        if !tokens.isEmpty {
-            guard let owner = try? erc20EncodeBalanceOf(ownerHex: address) else {
-                return Batch(failed: true)
+        var positions: [(slot: BalanceReadSlot, balance: Int, decimals: Int?)] = []
+        if !slots.isEmpty {
+            guard let owner = try? erc20EncodeBalanceOf(ownerHex: address),
+                  let decimalsCall = Multicall.selector("decimals()")
+            else { return Batch(failed: true) }
+            for slot in slots {
+                guard let contract = slot.contract else { continue }
+                let balanceIndex = calls.count
+                calls.append(Multicall.call(contract, owner))
+                var decimalsIndex: Int?
+                if slot.knownDecimals == nil {
+                    decimalsIndex = calls.count
+                    calls.append(Multicall.call(contract, decimalsCall))
+                }
+                positions.append((slot, balanceIndex, decimalsIndex))
             }
-            calls = tokens.map { Multicall.call($0.address, owner) }
         }
+        var feedIndex: Int?
         if let priceFeed, let latestRound = Multicall.selector("latestRoundData()") {
+            feedIndex = calls.count
             calls.append(Multicall.call(priceFeed, latestRound))
         }
         guard !calls.isEmpty else { return Batch() }
 
         let outcome = await Multicall.aggregate3(chainId: chainId, calls: calls, pool: pool)
-        guard case .ok(let results) = outcome else {
+        guard case .ok(let results) = outcome, results.count == calls.count else {
             // The chain answered with nothing this build can read. Failed, not
             // empty: "no tokens" is a claim, and this is not evidence for it.
             var refused = Batch(failed: true)
@@ -178,29 +255,39 @@ enum TokenReads {
         }
 
         var out = Batch()
-        for (index, result) in results.enumerated() where index < tokens.count {
-            guard result.success,
-                  let balance = scaled(bytes: result.returnData,
-                                       decimals: tokens[index].decimals)
+        for position in positions {
+            let balanceResult = results[position.balance]
+            guard balanceResult.success else { continue }
+            let decimals: Int
+            if let known = position.slot.knownDecimals {
+                decimals = Int(known)
+            } else if let index = position.decimals, results[index].success,
+                      let read = scaled(bytes: results[index].returnData, decimals: 0).flatMap(Int.init),
+                      (0...36).contains(read) {
+                decimals = read
+            } else {
+                // Decimals nobody could read: no figure rather than a guess.
+                continue
+            }
+            guard let balance = scaled(bytes: balanceResult.returnData, decimals: decimals),
+                  let contract = position.slot.contract
             else { continue }
-            out.tokens.append([
+            // A registry stablecoin or the wrapped coin held at zero is not a
+            // holding; a custom token keeps its row (the person added it).
+            if position.slot.kind != "custom", balance == "0" { continue }
+            out.tokens.append((position.slot, [
                 "chain_id": chainId,
-                "symbol": tokens[index].symbol,
-                "name": tokens[index].name,
+                "symbol": position.slot.symbol,
+                "name": position.slot.name.isEmpty ? position.slot.symbol : position.slot.name,
                 "balance": balance,
-                "decimals": tokens[index].decimals,
-                "token_address": tokens[index].address,
-                // An ERC-20's price needs the DEX quote path, which this cut
-                // does not have. `nil` is the drawn "couldn't be priced" row,
-                // and a guessed $1 for anything that looks like a stablecoin is
-                // exactly the invention the core's unpriced notice exists to
-                // avoid.
+                "decimals": decimals,
+                "token_address": contract,
                 "price_usd": NSNull(),
                 "spam": false,
-            ])
+            ]))
         }
-        if priceFeed != nil, let last = results.last, results.count == calls.count, last.success {
-            out.localPrice = Prices.chainlinkAnswer(last.returnData, decimals: 8)
+        if let feedIndex, results[feedIndex].success {
+            out.localPrice = Prices.chainlinkAnswer(results[feedIndex].returnData, decimals: 8)
         }
         return out
     }
