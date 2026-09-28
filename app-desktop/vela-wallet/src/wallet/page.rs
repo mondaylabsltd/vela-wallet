@@ -13785,9 +13785,16 @@ impl WalletPage {
                 let back_len = crate::webview::engine().and_then(|engine| engine.back_len);
                 self.tab_doc.committed(self.shown_tab.as_deref(), back_len);
                 self.load.committed(&url);
-                self.bar_committed = vela_core::app::dapp_permissions::origin_of(&url)
-                    .is_some()
-                    .then(|| url.clone());
+                // The bar names the shown tab's own document only (RJ5): a
+                // commit of the page a veiled tab is hiding is not its.
+                if !self
+                    .tab_doc
+                    .veiled(self.shown_tab.as_deref(), self.browsing)
+                {
+                    self.bar_committed = vela_core::app::dapp_permissions::origin_of(&url)
+                        .is_some()
+                        .then(|| url.clone());
+                }
                 cx.notify();
                 DbrEvent::NavigationStarted { tab, url }
             }
