@@ -180,7 +180,10 @@ enum FlowsLive {
         return HistoryModel(
             header: header,
             mode: groups.isEmpty ? .empty : .rows,
-            emptyText: model.emptyText,
+            // The core's choice (spec 082 RG5): "no transactions yet" on
+            // every network, "none on this network" under a filter — never
+            // the gallery board's filter sentence on an unfiltered history.
+            emptyText: loc.t(feed.historyEmptyKey),
             groups: groups
         )
     }
@@ -207,10 +210,18 @@ enum FlowsLive {
         loc: Loc
     ) -> TxDetailModel {
         let incoming = item.direction == .in
+        let dapp = item.kind == .dappTx
         let chain = ChainCatalog.meta(item.chainId)
         let counterparty = item.counterparty ?? record?.from ?? ""
 
         var facts: [FactRowModel] = []
+        // Spec 082 RG2: a dApp's transaction says who asked for it.
+        if dapp, let site = item.site, !site.isEmpty {
+            facts.append(FactRowModel(
+                label: loc.t("componentsUi.signing.siweOrigin"),
+                value: site
+            ))
+        }
         if !counterparty.isEmpty {
             facts.append(FactRowModel(
                 label: loc.t(incoming ? "componentsTx.detail.from" : "componentsTx.detail.to"),
@@ -256,13 +267,19 @@ enum FlowsLive {
         }
 
         return TxDetailModel(
-            title: loc.t(incoming ? "history.txLabelReceived" : "history.txLabelSent",
-                         vars: ["symbol": item.symbol]),
-            status: status(record?.status ?? .confirmed, loc: loc),
+            title: dapp
+                ? loc.t("history.txLabelDappTx")
+                : loc.t(incoming ? "history.txLabelReceived" : "history.txLabelSent",
+                        vars: ["symbol": item.symbol]),
+            // The row's own lifecycle, from the core (spec 082 RG1) — never a
+            // record lookup that defaulted a missing one to "succeeded".
+            status: status(item.status, loc: loc),
             closeLabel: model.closeLabel,
-            amount: (incoming ? "+" : "\u{2212}")
-                + WalletLive.compactAmount(item.value, batch: item.batch)
-                + (item.symbol.isEmpty ? "" : " \(item.symbol)"),
+            amount: dapp && item.value == nil
+                ? ""
+                : (incoming ? "+" : "\u{2212}")
+                    + WalletLive.compactAmount(item.value, batch: item.batch)
+                    + (item.symbol.isEmpty ? "" : " \(item.symbol)"),
             // The STORED figure, not a recomputed one: it is what this wallet
             // recorded the transfer was worth when it happened, and re-pricing
             // it today would quietly restate history.

@@ -23,9 +23,11 @@ struct WalletEmptyState: View {
             Text(verbatim: model.title)
                 .typeRole(Typography.emptyTitle.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
-            Text(verbatim: model.caption)
-                .typeRole(Typography.rowSub.scaled(textScale))
-                .foregroundStyle(theme.fgMuted)
+            if !model.caption.isEmpty {
+                Text(verbatim: model.caption)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+            }
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)

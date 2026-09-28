@@ -180,6 +180,10 @@ enum TxRecords {
             "status": statuses.contains(status ?? "") ? status! : "confirmed",
             "kind": rawKind.map { $0 as Any } ?? NSNull(),
             "usd": (record["usd"] as? String).map { $0 as Any } ?? NSNull(),
+            // The site that asked, for a dApp's transaction (spec 082 RG1):
+            // the core names the row by it. Absent for every other kind.
+            "dapp_origin": (record["dappOrigin"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                .map { $0 as Any } ?? NSNull(),
         ]
     }
 
