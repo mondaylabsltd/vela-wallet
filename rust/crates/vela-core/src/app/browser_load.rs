@@ -473,8 +473,8 @@ pub struct LoadWatch {
     /// This load's progress rose above [`ENGINE_LIVE_PROGRESS`]: the site is
     /// answering, and [`GIVE_UP_MS`] does not cut it.
     pub engine_live: bool,
-    /// The engine stopped this load with no commit: a probe that answers now
-    /// means "other", not "wait".
+    /// The engine stopped this load with no commit and has not taken it up
+    /// again: a probe that answers now means "other", not "wait".
     pub engine_stopped: bool,
     /// This load was started by the page, not the wallet: no automatic retry.
     pub page_initiated: bool,
@@ -597,6 +597,8 @@ impl LoadWatch {
     /// - It stops with this load not committed →
     ///   [`EngineVerdict::StoppedWithoutCommit`], unless a probe is already
     ///   running, whose answer then classifies it.
+    /// - It takes this load up again before the probe answers → no longer
+    ///   stopped: that probe's "reachable" is "wait" again.
     pub fn engine(&mut self, sample: &EngineSample, now_ms: f64) -> EngineVerdict {
         let web = sample
             .url
@@ -617,6 +619,11 @@ impl LoadWatch {
         // The wallet's own load (asked, or committed and finishing), or the
         // address already watched starting again.
         if self.busy() || self.url.as_deref() == Some(url) {
+            // A load the engine had stopped and has taken up again is not
+            // stopped any more: a probe that answers now means "wait".
+            if self.loading {
+                self.engine_stopped = false;
+            }
             return EngineVerdict::Nothing;
         }
         self.next_asked = Some(Asked::Page);

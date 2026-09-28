@@ -625,6 +625,41 @@ fn the_engine_stopping_without_a_commit_is_the_failure() {
     assert!(watch.failure.is_none() && !watch.busy());
 }
 
+/// A stop is the failure only while the engine stays stopped: when it takes
+/// the load up again before the probe answers, a site that answers is
+/// "wait", as for any live load — never an "other" panel over a page that
+/// is arriving.
+#[test]
+fn a_stop_the_engine_takes_back_is_not_the_failure() {
+    let (mut watch, generation) = engine_on_site();
+    assert!(matches!(
+        watch.engine(&sample(false, 0.1, SITE), 500.),
+        EngineVerdict::StoppedWithoutCommit { .. }
+    ));
+    assert_eq!(
+        watch.engine(&sample(true, 0.3, SITE), 750.),
+        EngineVerdict::Nothing,
+        "the wallet's own load, taken up again"
+    );
+    assert!(!watch.engine_stopped, "no longer stopped");
+    assert_eq!(
+        watch.probed(generation, Ok(())),
+        Probed::WaitUntil(f64::from(GIVE_UP_MS))
+    );
+    assert!(watch.loading && watch.failure.is_none());
+    // Stopping again is the failure again, and its probe classifies it.
+    let EngineVerdict::StoppedWithoutCommit { .. } =
+        watch.engine(&sample(false, 0.3, SITE), 4_000.)
+    else {
+        unreachable!("stopped again with no commit");
+    };
+    assert_eq!(watch.probed(generation, Ok(())), Probed::Failed);
+    assert_eq!(
+        watch.failure.as_ref().map(|failure| failure.class),
+        Some(C::Other)
+    );
+}
+
 /// W18: a load the page started (a link, a form, a script) is watched like
 /// any other — hairline, watchdog, probe, panel — but only retried by hand.
 #[test]
