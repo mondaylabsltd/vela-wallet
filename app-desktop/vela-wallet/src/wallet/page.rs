@@ -664,6 +664,9 @@ pub struct WalletPage {
     shown_tab: Option<String>,
     /// Spec 082 G54: the tab strip's measure and scroll, kept across frames.
     tab_strip: explore_components::TabStripScroll,
+    /// Spec 082 RJ5: which tab's document the one webview holds, and the
+    /// shown tab's Back floor.
+    tab_doc: crate::wallet::browser_host::TabDoc,
     /// Spec 082 RE1: the web document committed since the shown tab last
     /// changed — what the bar may name. The one webview still holds the
     /// previous tab's page while a new tab's first load is pending, and that
@@ -1204,6 +1207,7 @@ impl WalletPage {
             load: crate::wallet::browser_host::LoadDriver::default(),
             shown_tab: None,
             tab_strip: explore_components::TabStripScroll::default(),
+            tab_doc: crate::wallet::browser_host::TabDoc::default(),
             bar_committed: None,
             nav_enabled: [false; 3],
             engine_polling: false,
@@ -12391,19 +12395,24 @@ impl WalletPage {
                     // address that failed, not the page before it.
                     if self.load.watch.failure.is_some() {
                         self.load_retry(cx);
-                    } else {
+                    } else if self.tab_doc.floor(self.shown_tab.as_deref()).is_some() {
+                        // RJ5: only this tab's own page — while it is veiled
+                        // the webview holds another tab's.
                         #[cfg(not(target_os = "linux"))]
                         crate::webview::reload();
                     }
                 }
-                Go::Back => {
+                // RJ5: never past the shown tab's floor, into another tab's
+                // history — the buttons are dark then, and so is this.
+                Go::Back if self.nav_enabled[0] => {
                     #[cfg(not(target_os = "linux"))]
                     crate::webview::back();
                 }
-                Go::Forward => {
+                Go::Forward if self.nav_enabled[1] => {
                     #[cfg(not(target_os = "linux"))]
                     crate::webview::forward();
                 }
+                Go::Back | Go::Forward => {}
             },
         }
         cx.notify();
@@ -12533,6 +12542,11 @@ impl WalletPage {
     fn show_tab(&mut self, id: Option<String>) {
         if self.shown_tab != id {
             self.bar_committed = None;
+            // RJ5: the new tab has no history of its own until it commits —
+            // Back and Forward go dark now, not at the next engine poll.
+            self.tab_doc.shown_changed();
+            self.nav_enabled[0] = false;
+            self.nav_enabled[1] = false;
         }
         self.shown_tab = id;
     }
@@ -12709,10 +12723,17 @@ impl WalletPage {
         let live_browser = browsing && self.identity.is_some();
         #[cfg(target_os = "linux")]
         let live_browser = false;
+        // Spec 082 RJ5 (G42): the one webview still holds another tab's page
+        // until this tab's own load commits — it is hidden, and nothing from
+        // it (its site, its connection dot, its chain) is drawn as this tab's.
+        let veiled = live_browser
+            && self
+                .tab_doc
+                .veiled(self.shown_tab.as_deref(), self.browsing);
         // What the browser machine says about the page on screen: its site,
         // whether that site is connected, whether its lock may be drawn, and
         // whether its renderer died.
-        let tab_view = if live_browser {
+        let tab_view = if live_browser && !veiled {
             self.browser_host
                 .as_ref()
                 .and_then(|host| host.read(cx).tab().cloned())
@@ -13069,6 +13090,18 @@ impl WalletPage {
             crate::webview::hide();
             self.load_failed_panel(theme, &failure, &url, cx)
                 .into_any_element()
+        } else if veiled {
+            // RJ5: the page background under the hairline until this tab's
+            // own document commits — never the tab before it, live and
+            // clickable, under this tab's host.
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::hide();
+            div()
+                .flex_1()
+                .min_h(px(0.))
+                .w_full()
+                .bg(theme.bg_base)
+                .into_any_element()
         } else if live_browser {
             #[cfg(not(target_os = "linux"))]
             {
@@ -13335,6 +13368,14 @@ impl WalletPage {
     /// address bar's text: what is pinned has to be the document that is
     /// actually open. The star and the site menu's "Add to favorites" both.
     fn pin_current_page(&mut self, cx: &mut Context<Self>) {
+        // RJ5: while the tab is veiled the webview holds another tab's page,
+        // and that is not what the person is pinning.
+        if self
+            .tab_doc
+            .veiled(self.shown_tab.as_deref(), self.browsing)
+        {
+            return;
+        }
         #[cfg(not(target_os = "linux"))]
         if let Some(url) = crate::webview::current_url() {
             // The page's own title when it has reported one; the host
@@ -13512,37 +13553,50 @@ impl WalletPage {
                         ) else {
                             return;
                         };
-                        page.browser_title.clone_from(&visit.title);
                         // The strip follows the document, from the one place
                         // that knows a page settled — into the tab whose page
-                        // it is (spec 082 RD6): the shown tab, else a selected
-                        // start-page tab, else a NEW one. A navigation with no
-                        // tab opens one; a restored tab waiting unlit is never
-                        // the one renamed.
+                        // it is (spec 082 RD6, RJ5): the tab whose document
+                        // the webview holds, never a veiled tab still waiting
+                        // for its own; with no owner known, the shown tab,
+                        // else a selected start-page tab, else a NEW one. A
+                        // restored tab waiting unlit is never the one renamed.
+                        use crate::wallet::browser_host::MetaTarget;
                         let explore = resident::resident::<ExploreSites>(cx);
-                        let target = crate::wallet::browser_host::open_target(
+                        let target = crate::wallet::browser_host::meta_target(
                             &explore.read(cx).view(),
+                            page.tab_doc.doc_tab.as_deref(),
                             page.shown_tab.as_deref(),
                             page.browsing,
                         );
-                        let opened = target.is_none();
+                        if target == MetaTarget::Nobody {
+                            return;
+                        }
+                        page.browser_title.clone_from(&visit.title);
+                        let opened = target == MetaTarget::NewTab;
                         explore.update(cx, |resident, cx| {
                             let event = match target {
-                                Some(id) => vela_core::app::explore_sites::Event::TabNavigated {
-                                    id,
-                                    url: visit.url.clone(),
-                                    title: visit.title.clone(),
-                                },
-                                None => vela_core::app::explore_sites::Event::TabOpened {
-                                    url: Some(visit.url.clone()),
-                                    title: visit.title.clone(),
-                                    now_ms: crate::executor::now_ms(),
-                                },
+                                MetaTarget::Tab(id) => {
+                                    vela_core::app::explore_sites::Event::TabNavigated {
+                                        id,
+                                        url: visit.url.clone(),
+                                        title: visit.title.clone(),
+                                    }
+                                }
+                                MetaTarget::NewTab | MetaTarget::Nobody => {
+                                    vela_core::app::explore_sites::Event::TabOpened {
+                                        url: Some(visit.url.clone()),
+                                        title: visit.title.clone(),
+                                        now_ms: crate::executor::now_ms(),
+                                    }
+                                }
                             };
                             resident.dispatch(event, cx);
                         });
                         if opened {
                             page.shown_tab = explore.read(cx).view().selected_tab;
+                            let back_len =
+                                crate::webview::engine().and_then(|engine| engine.back_len);
+                            page.tab_doc.adopted(page.shown_tab.as_deref(), back_len);
                         }
                         resident::resident::<BrowserHistory>(cx).update(cx, |resident, cx| {
                             resident.dispatch(
@@ -13589,6 +13643,7 @@ impl WalletPage {
         let event = match load {
             // The wallet's own request: the core hears the commit, not this.
             crate::webview::Load::Requested(url) => {
+                self.tab_doc.requested(self.shown_tab.as_deref());
                 let steps = self.load.requested(&url, crate::executor::now_ms());
                 self.run_load_steps(steps, cx);
                 self.ensure_engine_poll(cx);
@@ -13596,6 +13651,10 @@ impl WalletPage {
                 return;
             }
             crate::webview::Load::Started(url) => {
+                // RJ5: whose document this is, and — at the shown tab's first
+                // commit — where its Back stops.
+                let back_len = crate::webview::engine().and_then(|engine| engine.back_len);
+                self.tab_doc.committed(self.shown_tab.as_deref(), back_len);
                 self.load.committed(&url);
                 self.bar_committed = vela_core::app::dapp_permissions::origin_of(&url)
                     .is_some()
@@ -13752,6 +13811,9 @@ impl WalletPage {
                 self.browsing,
                 engine.can_back,
                 engine.can_forward,
+                engine.back_len,
+                self.tab_doc.floor(self.shown_tab.as_deref()),
+                self.load.watch.failure.is_some(),
             );
             if nav != self.nav_enabled {
                 self.nav_enabled = nav;

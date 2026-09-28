@@ -321,6 +321,10 @@ pub struct Engine {
     pub sample: Option<vela_core::app::browser_load::EngineSample>,
     pub can_back: bool,
     pub can_forward: bool,
+    /// How many entries sit behind the current one in WebKit's back list
+    /// (spec 082 RJ5): the per-tab Back floor is read against it. `None`
+    /// where it cannot be read (WebView2).
+    pub back_len: Option<usize>,
 }
 
 /// One poll of the engine. `None` before the webview is built.
@@ -333,8 +337,42 @@ pub fn engine() -> Option<Engine> {
             sample: engine_sample(view),
             can_back: view.can_go_back().unwrap_or(false),
             can_forward: view.can_go_forward().unwrap_or(false),
+            back_len: back_len(view),
         })
     })
+}
+
+/// WKWebView's `backForwardList.backList.count` — what one webview shared
+/// by every tab has behind the page it shows (spec 082 RJ5). Same pointer
+/// and thread as [`engine_sample`]. Same-document entries (an SPA's
+/// `pushState`) count, which a count of commits would miss.
+#[cfg(target_os = "macos")]
+fn back_len(view: &wry::WebView) -> Option<usize> {
+    use wry::WebViewExtMacOS as _;
+    let webview = view.webview();
+    let raw = std::ptr::from_ref(&*webview)
+        .cast::<objc2::runtime::AnyObject>()
+        .cast_mut();
+    // SAFETY: `raw` is the live WKWebView wry owns for as long as `view`;
+    // `backForwardList` never returns nil for a live view (checked anyway),
+    // `backList` is an NSArray, and `count` takes no arguments.
+    unsafe {
+        let list: *mut objc2::runtime::AnyObject = objc2::msg_send![raw, backForwardList];
+        if list.is_null() {
+            return None;
+        }
+        let back: *mut objc2::runtime::AnyObject = objc2::msg_send![list, backList];
+        if back.is_null() {
+            return None;
+        }
+        let count: usize = objc2::msg_send![back, count];
+        Some(count)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn back_len(_view: &wry::WebView) -> Option<usize> {
+    None
 }
 
 /// WKWebView's `isLoading`, `estimatedProgress` and `URL` — the facts wry's

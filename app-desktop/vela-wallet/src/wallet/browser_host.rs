@@ -550,6 +550,36 @@ pub fn open_target(
     lit_tab(view, None, false)
 }
 
+/// Where a page's own report — its title, its address — is filed (RD6, RJ5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MetaTarget {
+    /// Rename this tab: its document sent it.
+    Tab(String),
+    /// No tab has this page: open one for it.
+    NewTab,
+    /// It came from the page of a tab already closed, still in the webview
+    /// until the next tab's load commits: nobody's.
+    Nobody,
+}
+
+/// The tab a page's report belongs to: the tab whose document the webview
+/// holds (RJ5) — never the tab on screen while it is veiled, whose own page
+/// has not committed yet, and never a new tab's start page. With no owner
+/// known, the RD6 rule ([`open_target`]).
+#[must_use]
+pub fn meta_target(
+    view: &vela_core::app::explore_sites::ExploreView,
+    doc_tab: Option<&str>,
+    shown: Option<&str>,
+    browsing: bool,
+) -> MetaTarget {
+    match doc_tab {
+        Some(doc) if view.tabs.iter().any(|tab| tab.id == doc) => MetaTarget::Tab(doc.to_owned()),
+        Some(_) => MetaTarget::Nobody,
+        None => open_target(view, shown, browsing).map_or(MetaTarget::NewTab, MetaTarget::Tab),
+    }
+}
+
 /// What the bar names (RE1): the committed document `shown`, a load pending,
 /// or the failure a panel is up for — the core's `address_bar` over the
 /// watch.
@@ -560,11 +590,121 @@ pub fn bar_of(shown: Option<&str>, watch: &LoadWatch) -> browser_load::AddressBa
     browser_load::address_bar(shown, pending, failed)
 }
 
-/// Back, forward and reload (RD6): what the engine says it can do while a
-/// page is in front; all off on the start page.
+/// Back, forward and reload (RD6, RJ5): what the engine says it can do while
+/// a page is in front; all off on the start page.
+///
+/// One webview serves every tab, so its history is every tab's. `back_floor`
+/// is the shown tab's own floor — the back-list length at its first commit
+/// — and `None` while the tab has no document of its own yet (veiled): then
+/// nothing behind or ahead is this tab's, and a reload would reload another
+/// tab's page. Back acts only above the floor; Forward needs none once the
+/// tab has committed (a new load truncates WebKit's forward list); reload
+/// over a failure panel is its Retry. `back_len` `None` (WebView2 cannot say)
+/// leaves Back to the engine alone.
 #[must_use]
-pub fn nav_enabled(browsing: bool, can_back: bool, can_forward: bool) -> [bool; 3] {
-    [browsing && can_back, browsing && can_forward, browsing]
+pub fn nav_enabled(
+    browsing: bool,
+    can_back: bool,
+    can_forward: bool,
+    back_len: Option<usize>,
+    back_floor: Option<usize>,
+    failed: bool,
+) -> [bool; 3] {
+    let own = back_floor.is_some();
+    let above_floor = match (back_len, back_floor) {
+        (Some(len), Some(floor)) => len > floor,
+        (None, Some(_)) => true,
+        (_, None) => false,
+    };
+    [
+        browsing && can_back && above_floor,
+        browsing && can_forward && own,
+        browsing && (own || failed),
+    ]
+}
+
+/// Whether the column hides the webview (spec 082 RJ5, G42): a page is
+/// wanted, and the one webview still holds another tab's document — a new
+/// or restored tab before its own load commits. Showing that page under
+/// the new tab's host was the G28 class: the bar naming a site the page is
+/// not, with its connection dot. `doc_tab` `None`: nothing of any tab is
+/// there to hide (the view is new, or blank).
+#[must_use]
+pub fn veiled(shown_tab: Option<&str>, doc_tab: Option<&str>, browsing: bool) -> bool {
+    browsing && doc_tab.is_some() && shown_tab != doc_tab
+}
+
+/// Which tab's document the one webview holds, and the shown tab's Back
+/// floor (spec 082 RJ5). Pure: the page reports the wallet's own requests,
+/// the commits and the tab it shows.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TabDoc {
+    /// The tab whose document the webview holds.
+    pub doc_tab: Option<String>,
+    /// The shown tab's floor: the back-list length at its first commit.
+    pub back_floor: Option<usize>,
+    /// The tab the wallet's last own load was asked for, until it commits.
+    asked_for: Option<Option<String>>,
+    /// The shown tab changed: its next commit sets a new floor.
+    floor_due: bool,
+}
+
+impl TabDoc {
+    /// The page shows another tab.
+    pub fn shown_changed(&mut self) {
+        self.floor_due = true;
+    }
+
+    /// The wallet asked the engine for a load (`Load::Requested`) while
+    /// `shown` was on screen. Heard in platform order, so a commit the old
+    /// page reported before this request never counts for `shown`.
+    pub fn requested(&mut self, shown: Option<&str>) {
+        self.asked_for = Some(shown.map(str::to_owned));
+    }
+
+    /// A document committed (`Load::Started`), with the back list as the
+    /// engine has it now. The shown tab owns it when its own load was asked;
+    /// a page's own navigation stays with the tab that already owned the
+    /// document.
+    pub fn committed(&mut self, shown: Option<&str>, back_len: Option<usize>) {
+        let for_shown = self
+            .asked_for
+            .as_ref()
+            .is_some_and(|asked| asked.as_deref() == shown);
+        if !for_shown {
+            return;
+        }
+        self.asked_for = None;
+        if self.doc_tab.as_deref() != shown || self.floor_due {
+            self.doc_tab = shown.map(str::to_owned);
+            self.back_floor = Some(back_len.unwrap_or(0));
+            self.floor_due = false;
+        }
+    }
+
+    /// A page the webview holds was filed under a tab the page opened for
+    /// it, with no load of the wallet's heard (RD6's new tab): that tab owns
+    /// it, from here.
+    pub fn adopted(&mut self, tab: Option<&str>, back_len: Option<usize>) {
+        if self.doc_tab.is_none() && tab.is_some() {
+            self.doc_tab = tab.map(str::to_owned);
+            self.back_floor = Some(back_len.unwrap_or(0));
+            self.floor_due = false;
+        }
+    }
+
+    /// [`veiled`] for this webview.
+    #[must_use]
+    pub fn veiled(&self, shown: Option<&str>, browsing: bool) -> bool {
+        veiled(shown, self.doc_tab.as_deref(), browsing)
+    }
+
+    /// The shown tab's floor, or `None` while it has no document of its own.
+    #[must_use]
+    pub fn floor(&self, shown: Option<&str>) -> Option<usize> {
+        self.back_floor
+            .filter(|_| self.doc_tab.is_some() && self.doc_tab.as_deref() == shown)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1297,7 +1437,11 @@ mod tests {
             None,
             "nothing lit over the start page"
         );
-        assert_eq!(nav_enabled(false, true, true), [false; 3], "all nav off");
+        assert_eq!(
+            nav_enabled(false, true, true, Some(3), Some(0), false),
+            [false; 3],
+            "all nav off"
+        );
         assert_eq!(open_target(&view, None, false), None, "a new tab");
         // A start-page tab selected: lit, and it is where Enter goes.
         let view = explore(
@@ -1309,7 +1453,136 @@ mod tests {
         // A page on screen: its tab, lit, and where Enter goes.
         assert_eq!(lit_tab(&view, Some("t1"), true).as_deref(), Some("t1"));
         assert_eq!(open_target(&view, Some("t1"), true).as_deref(), Some("t1"));
-        assert_eq!(nav_enabled(true, false, true), [false, true, true]);
+        assert_eq!(
+            nav_enabled(true, false, true, Some(0), Some(0), false),
+            [false, true, true]
+        );
+    }
+
+    // -- spec 082 RJ5 (G42): one webview, a veil and a per-tab Back floor ----
+
+    /// DX14: a new tab typed while another tab's connected page is up. The
+    /// webview holds the other tab's page until the new one commits: veiled
+    /// (hidden, no chip, no chain), Back, Forward and reload dark; after the
+    /// commit it is the new tab's, and Back stops at its first page.
+    #[test]
+    fn a_new_tab_is_veiled_until_its_own_page_commits() {
+        let mut doc = TabDoc::default();
+        // The test dApp on tab A, two pages deep.
+        doc.shown_changed();
+        doc.requested(Some("A"));
+        doc.committed(Some("A"), Some(0));
+        assert!(!doc.veiled(Some("A"), true));
+        // + then Enter on app.uniswap.org: tab N is shown, its load asked.
+        doc.shown_changed();
+        doc.requested(Some("N"));
+        assert!(doc.veiled(Some("N"), true), "A's page under N's host");
+        assert_eq!(doc.floor(Some("N")), None);
+        assert_eq!(
+            nav_enabled(true, true, true, Some(2), doc.floor(Some("N")), false),
+            [false, false, false],
+            "nothing behind, ahead or under a veiled tab is its own"
+        );
+        // Over a failure panel reload is the Retry, veiled or not.
+        assert!(nav_enabled(true, true, false, Some(2), None, true)[2]);
+        // Its page commits with three entries behind it — all A's.
+        doc.committed(Some("N"), Some(3));
+        assert!(!doc.veiled(Some("N"), true));
+        assert_eq!(doc.doc_tab.as_deref(), Some("N"));
+        assert_eq!(
+            nav_enabled(true, true, false, Some(3), doc.floor(Some("N")), false),
+            [false, false, true],
+            "Back stops at the tab's first page"
+        );
+        // Not browsing (the start page): nothing is veiled.
+        assert!(!doc.veiled(Some("X"), false));
+    }
+
+    /// DX11: a restored tab clicked while another tab's page is up — veiled
+    /// until its commit, then Back is dark at the floor; an SPA's pushState
+    /// raises the back list above it and Back is this tab's again.
+    #[test]
+    fn a_restored_tab_stops_back_at_its_floor_and_an_spa_lifts_it() {
+        let mut doc = TabDoc::default();
+        doc.requested(Some("test"));
+        doc.committed(Some("test"), Some(0));
+        // Click the restored Uniswap tab.
+        doc.shown_changed();
+        doc.requested(Some("uni"));
+        assert!(doc.veiled(Some("uni"), true));
+        doc.committed(Some("uni"), Some(1));
+        let floor = doc.floor(Some("uni"));
+        assert_eq!(floor, Some(1));
+        assert!(
+            !nav_enabled(true, true, false, Some(1), floor, false)[0],
+            "Back would cross into the test dApp's tab"
+        );
+        // Uniswap pushes a route: one more entry, this tab's own.
+        assert!(nav_enabled(true, true, false, Some(2), floor, false)[0]);
+        // A link inside the page commits without a request of the wallet's:
+        // the tab keeps its document and its floor.
+        doc.committed(Some("uni"), Some(3));
+        assert_eq!(doc.floor(Some("uni")), Some(1));
+        // Back to the test dApp's tab: a new floor at its next commit.
+        doc.shown_changed();
+        doc.requested(Some("test"));
+        assert!(doc.veiled(Some("test"), true));
+        doc.committed(Some("test"), Some(4));
+        assert_eq!(doc.floor(Some("test")), Some(4));
+    }
+
+    /// A commit the old page reported before the wallet asked for the new
+    /// tab's load (heard first, in platform order) is not the new tab's.
+    #[test]
+    fn a_commit_heard_before_the_request_stays_with_the_old_tab() {
+        let mut doc = TabDoc::default();
+        doc.requested(Some("A"));
+        doc.committed(Some("A"), Some(0));
+        doc.shown_changed();
+        // A's own navigation commits; then the wallet's request for B.
+        doc.committed(Some("B"), Some(1));
+        assert_eq!(doc.doc_tab.as_deref(), Some("A"));
+        assert!(doc.veiled(Some("B"), true));
+        doc.requested(Some("B"));
+        doc.committed(Some("B"), Some(2));
+        assert_eq!(doc.doc_tab.as_deref(), Some("B"));
+        // WebView2 cannot read the back list: the floor is there, the engine
+        // alone decides Back.
+        let mut windows = TabDoc::default();
+        windows.requested(Some("A"));
+        windows.committed(Some("A"), None);
+        assert!(nav_enabled(true, true, false, None, windows.floor(Some("A")), false)[0]);
+    }
+
+    /// A page's own report (its title) is filed under the tab whose page it
+    /// is: the document's tab while another is veiled or the start page is
+    /// up; nobody's once that tab is closed; the RD6 rule with no owner known.
+    #[test]
+    fn a_page_report_names_the_tab_whose_document_sent_it() {
+        let view = explore(&[("a", Some("https://a.example/")), ("n", None)], Some("n"));
+        assert_eq!(
+            meta_target(&view, Some("a"), Some("n"), true),
+            MetaTarget::Tab("a".to_owned()),
+            "not the veiled tab"
+        );
+        assert_eq!(
+            meta_target(&view, Some("a"), None, false),
+            MetaTarget::Tab("a".to_owned()),
+            "not the new tab's start page"
+        );
+        assert_eq!(
+            meta_target(&view, Some("gone"), Some("n"), true),
+            MetaTarget::Nobody
+        );
+        assert_eq!(
+            meta_target(&view, None, Some("a"), true),
+            MetaTarget::Tab("a".to_owned())
+        );
+        let restored = explore(&[("t1", Some("https://app.uniswap.org/"))], Some("t1"));
+        assert_eq!(meta_target(&restored, None, None, true), MetaTarget::NewTab);
+        let mut doc = TabDoc::default();
+        doc.adopted(Some("t2"), Some(0));
+        assert_eq!(doc.doc_tab.as_deref(), Some("t2"));
     }
 
     /// G30 (RE1, RD5): a first load that failed names the failed host with NO
