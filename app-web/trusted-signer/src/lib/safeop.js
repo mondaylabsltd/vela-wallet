@@ -163,8 +163,14 @@ window.VelaCS = window.VelaCS || {};
 
   function sameCall(a, b) {
     var address = function (v) { return String(v || '').toLowerCase(); };
-    var amount = function (v) { return BigInt(v || 0).toString(); };
-    var bytes = function (v) { return String(v || '0x').toLowerCase().replace(/^0x/, ''); };
+    // "0x" is zero, as the wallet reads it (vela-core RC4); BigInt('0x') throws.
+    var amount = function (v) { return (v === '0x' ? 0n : BigInt(v || 0)).toString(); };
+    // No calldata by the wallet's own test — absent, "", "0x" or "0X" after
+    // trimming (vela-core `is_empty_calldata`) — is one and the same thing.
+    var bytes = function (v) {
+      if (typeof v === 'string' && /^\s*(0x)?\s*$/i.test(v)) return '';
+      return String(v || '0x').toLowerCase().replace(/^0x/, '');
+    };
     return address(a.to) === address(b.to) &&
       amount(a.value) === amount(b.value) &&
       bytes(a.data) === bytes(b.data);

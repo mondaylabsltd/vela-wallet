@@ -256,12 +256,34 @@ window.VelaCS = window.VelaCS || {};
 
   // --- transactions ----------------------------------------------------------
 
+  /**
+   * Whether a call carries no calldata: absent, "", "0x" or "0X", after
+   * trimming whitespace — the wallet's own test (vela-core
+   * `clear_signing::is_empty_calldata`, 082 RC1). Such a call runs no
+   * function: it is a plain send of the native coin, whatever the recipient
+   * is (RC2) and whatever the value, 0 included (RC8). Only a string can
+   * carry calldata; anything else that is not absent is read as calldata and
+   * goes down the blind ladder, as before.
+   */
+  function isEmptyCalldata(data) {
+    if (data === undefined || data === null) return true;
+    if (typeof data !== 'string') return false;
+    var body = data.trim();
+    return body === '' || body.toLowerCase() === '0x';
+  }
+
+  /** A call's value in wei. Absent, "" and "0x" are zero (vela-core RC4). */
+  function callValue(value) {
+    if (value === undefined || value === null || value === '' || value === '0x') return 0n;
+    return BigInt(value);
+  }
+
   function resolveCall(call, ctx, view, isLeg) {
     var to = call.to || '';
     var data = call.data || '0x';
-    var value = BigInt(call.value || '0x0');
+    var value = callValue(call.value);
     var selector = abi.selectorOf(data);
-    var hasCalldata = !!data && data !== '0x';
+    var hasCalldata = !isEmptyCalldata(call.data);
     var meta = identify(to, ctx, { isCallTarget: hasCalldata });
 
     if (!to) {
@@ -280,10 +302,16 @@ window.VelaCS = window.VelaCS || {};
       return view;
     }
 
-    if (!hasCalldata && value > 0n) {
+    // Every call with no calldata is a send, value 0 included: "Send · 0 xDAI
+    // · Recipient", never the blind ladder's red "nothing decodes" (082 G14,
+    // RC8). The ladder below sees calldata — or a negative value, which no
+    // chain carries and the wallet's own rule refuses to print (RC4).
+    if (!hasCalldata && value >= 0n) {
       var amount = nativeAmount(value, ctx);
+      var moves = value > 0n;
       view.intentKey = 'intent.send';
-      view.hero = { kind: 'amount', amount: amount, direction: 'out' };
+      // Nothing leaves at 0, so the hero is not an outgoing amount.
+      view.hero = { kind: 'amount', amount: amount, direction: moves ? 'out' : 'none' };
       view.fields.push({ label: 'field.recipient', identity: meta, format: 'addressName', role: 'recipient' });
       if (meta.kind === 'own') {
         view.risk = 'safe';
@@ -297,7 +325,11 @@ window.VelaCS = window.VelaCS || {};
       view.tech = techFor(text('value.noCalldata'), null, null, {
         params: [{ name: 'value', value: amount.text + ' ' + amount.symbol }],
         addresses: [{ roleKey: 'field.recipient', name: label(meta), address: to }],
-        sim: text('ui.simNoOther', { delta: '-' + amount.text + ' ' + amount.symbol }),
+        // The "−amount · nothing else changes" line is a statement about what
+        // leaves. At 0 there is no minus to write, and "nothing else changes"
+        // is the simulation's to say, not this page's: a recipient's code
+        // still runs.
+        sim: moves ? text('ui.simNoOther', { delta: '-' + amount.text + ' ' + amount.symbol }) : undefined,
       });
       return view;
     }
