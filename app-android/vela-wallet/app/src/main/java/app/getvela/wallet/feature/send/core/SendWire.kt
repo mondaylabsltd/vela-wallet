@@ -207,6 +207,10 @@ data class SendTxRecord(
     val chain_id: Int,
     val timestamp_s: Double,
     val usd: String? = null,
+    /** Spec 082 RA4/T184: the submit's reply was lost; persisted with the row. */
+    val maybe_sent: Boolean = false,
+    /** The head read before the first submit POST (`u64` → `Long`). */
+    val submit_block: Long? = null,
 )
 
 @Serializable
@@ -405,6 +409,12 @@ enum class SendReceiptStatus {
     @SerialName("confirmed") Confirmed,
 
     @SerialName("failed") Failed,
+
+    /** Spec 082 RA10: the reply was lost — "may have been sent", no Retry. */
+    @SerialName("maybe_sent") MaybeSent,
+
+    /** The relay never had it: "not sent". */
+    @SerialName("not_sent") NotSent,
 }
 
 @Serializable
@@ -451,11 +461,20 @@ sealed class SendReceiptOutcome {
 
     @Serializable
     @SerialName("failed")
-    data class Failed(val rejected: Boolean) : SendReceiptOutcome()
+    data class Failed(
+        val rejected: Boolean,
+        /** Spec 082: the tracker's `NotSent` — "not sent", never the fee-rejected words. */
+        val not_sent: Boolean = false,
+    ) : SendReceiptOutcome()
 
     @Serializable
     @SerialName("fee_held")
     data object FeeHeld : SendReceiptOutcome()
+
+    /** The relay has shown it holds an op whose reply was lost: back to "submitted". */
+    @Serializable
+    @SerialName("acknowledged")
+    data object Acknowledged : SendReceiptOutcome()
 }
 
 @Serializable
@@ -626,6 +645,9 @@ sealed class SendOperation {
         val user_op_hash: String,
         val record_ids: List<String> = emptyList(),
         val chain_id: Int,
+        /** Spec 082: carried into the tracker's `Submitted`. */
+        val maybe_sent: Boolean = false,
+        val submit_block: Long? = null,
     ) : SendOperation()
 
     @Serializable
@@ -704,7 +726,14 @@ sealed class SendShellResult {
 
     @Serializable
     @SerialName("submitted")
-    data class Submitted(val user_op_hash: String, val now_ms: Double) : SendShellResult()
+    data class Submitted(
+        val user_op_hash: String,
+        val now_ms: Double,
+        /** Spec 082 RA4: the reply was lost; [user_op_hash] is the local one. */
+        val maybe_sent: Boolean = false,
+        /** The head read before the first submit POST; `null` = unknown. */
+        val submit_block: Long? = null,
+    ) : SendShellResult()
 
     @Serializable
     @SerialName("submit_failed")

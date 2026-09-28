@@ -100,6 +100,23 @@ enum class SignSettledOutcome {
     @SerialName("rejected") Rejected,
 }
 
+/**
+ * Where a request is between the approve and its answer (spec 082 RA9): the
+ * sheet's words come from this, never from shell flags. `preparing` →
+ * `send.txPreparing`; `awaiting_signature` → `send.txSigning` (a message:
+ * `componentsUi.signing.signing`); `submitting` → `send.txSubmitting`.
+ */
+@Serializable
+enum class SignPhase {
+    @SerialName("idle") Idle,
+
+    @SerialName("preparing") Preparing,
+
+    @SerialName("awaiting_signature") AwaitingSignature,
+
+    @SerialName("submitting") Submitting,
+}
+
 @Serializable
 data class SignAccountRef(val address: String, val credential_id: String)
 
@@ -170,6 +187,10 @@ data class SignRecord(
     val user_op_hash: String,
     val dapp_origin: String,
     val intent: String? = null,
+    /** Spec 082 RA3/T184: the submit's reply was lost; persisted with the row. */
+    val maybe_sent: Boolean = false,
+    /** The head read before the first submit POST (`u64` → `Long`), persisted likewise. */
+    val submit_block: Long? = null,
 )
 
 @Serializable
@@ -242,10 +263,73 @@ sealed class SignSubmitOutcome {
     @Serializable
     @SerialName("failed")
     data class Failed(val message: String) : SignSubmitOutcome()
+
+    /** Spec 082 RB2: the asker is gone — nothing was sent, nobody is answered, nothing is recorded. */
+    @Serializable
+    @SerialName("asker_gone")
+    data object AskerGone : SignSubmitOutcome()
 }
 
 @Serializable
-data class SignTrackerHandoff(val user_op_hash: String, val record_ids: List<String> = emptyList(), val chain_id: Int)
+data class SignTrackerHandoff(
+    val user_op_hash: String,
+    val record_ids: List<String> = emptyList(),
+    val chain_id: Int,
+    /** Spec 082: carried into the tracker's `Submitted`, so a lost reply is followed as one. */
+    val maybe_sent: Boolean = false,
+    val submit_block: Long? = null,
+)
+
+/**
+ * What the answer that went to the page stands for (spec 082 RA8) — the
+ * core's `sign_ending_of`, decoded; never derived here.
+ */
+@Serializable
+sealed class SignEnding {
+    @Serializable
+    @SerialName("signed")
+    data object Signed : SignEnding()
+
+    @Serializable
+    @SerialName("landed")
+    data class Landed(val tx_hash: String, val user_op_hash: String? = null) : SignEnding()
+
+    @Serializable
+    @SerialName("still_confirming")
+    data class StillConfirming(val user_op_hash: String) : SignEnding()
+}
+
+/**
+ * What the sheet draws for an ending once the tracker has had its say — the
+ * core's `sign_ending_state`. A landed op is never drawn confirmed until the
+ * tracker says so (W3).
+ */
+@Serializable
+sealed class SignEndingState {
+    @Serializable
+    @SerialName("signed")
+    data object Signed : SignEndingState()
+
+    @Serializable
+    @SerialName("confirmed")
+    data class Confirmed(val tx_hash: String) : SignEndingState()
+
+    @Serializable
+    @SerialName("reverted")
+    data class Reverted(val tx_hash: String) : SignEndingState()
+
+    @Serializable
+    @SerialName("not_sent")
+    data object NotSent : SignEndingState()
+
+    @Serializable
+    @SerialName("following")
+    data class Following(
+        val user_op_hash: String,
+        val outcome: app.getvela.wallet.feature.send.core.TrackOutcome,
+        val fee_held: Boolean = false,
+    ) : SignEndingState()
+}
 
 @Serializable
 data class SignRequestView(
@@ -265,7 +349,11 @@ data class SignView(
     val request: SignRequestView? = null,
     val is_signing: Boolean = false,
     val is_submitting: Boolean = false,
+    /** Spec 082 RA9: the words' source. */
+    val phase: SignPhase = SignPhase.Idle,
     val pending_op_hash: String? = null,
+    /** Spec 082: the pending op's submit reply was lost. */
+    val pending_op_maybe_sent: Boolean = false,
     val error: SignErrorNotice? = null,
     val funding: SignFundingView? = null,
     val confirm_gate_open: Boolean = false,
@@ -415,7 +503,25 @@ sealed class SignEvent {
 
     @Serializable
     @SerialName("op_submitted")
-    data class OpSubmitted(val id: String, val user_op_hash: String, val now_ms: Double) : SignEvent()
+    data class OpSubmitted(
+        val id: String,
+        val user_op_hash: String,
+        val now_ms: Double,
+        /** Spec 082 RA3: the reply was lost; [user_op_hash] is the local one. */
+        val maybe_sent: Boolean = false,
+        /** The head read before the first submit POST; `null` = unknown. */
+        val submit_block: Long? = null,
+    ) : SignEvent()
+
+    /** Spec 082 RA9: the passkey (or the Trusted Signer's page) is up for request [id]. */
+    @Serializable
+    @SerialName("ceremony_started")
+    data class CeremonyStarted(val id: String) : SignEvent()
+
+    /** It returned a signature. */
+    @Serializable
+    @SerialName("ceremony_done")
+    data class CeremonyDone(val id: String) : SignEvent()
 
     @Serializable
     @SerialName("transport_dropped")

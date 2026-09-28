@@ -114,8 +114,8 @@ object SendLive {
         SendStage.Confirm -> if (feeSheetOpen) FlowState.SD2F else FlowState.SD3
         SendStage.Receipt -> when (view.receipt?.status) {
             SendReceiptStatus.Confirmed -> FlowState.SD4C
-            SendReceiptStatus.Failed -> FlowState.SD4B
-            SendReceiptStatus.Submitted -> FlowState.SD4B
+            SendReceiptStatus.Failed, SendReceiptStatus.NotSent -> FlowState.SD4B
+            SendReceiptStatus.Submitted, SendReceiptStatus.MaybeSent -> FlowState.SD4B
             null -> FlowState.SD4A
         }
     }
@@ -1011,8 +1011,10 @@ object SendLive {
     /** Which fixture the receipt borrows its labels from. */
     fun receiptStage(view: SendView): ReceiptStage = when (view.receipt?.status) {
         SendReceiptStatus.Confirmed -> ReceiptStage.Confirmed
-        SendReceiptStatus.Failed -> ReceiptStage.Failed
+        SendReceiptStatus.Failed, SendReceiptStatus.NotSent -> ReceiptStage.Failed
         SendReceiptStatus.Submitted -> ReceiptStage.Submitted
+        // Spec 082 RA10: still "Submitting…" — it may have been sent.
+        SendReceiptStatus.MaybeSent -> ReceiptStage.Submitting
         null -> ReceiptStage.Submitting
     }
 
@@ -1062,6 +1064,32 @@ object SendLive {
                 },
                 hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS), copyValue = it) },
                 viewOnExplorer = explorer?.let { s.t(I18nKeys.Flows.VIEW_ON_EXPLORER) },
+                cta = s.t(I18nKeys.Flows.DONE),
+                ctaAccent = true,
+            )
+            // Spec 082 RA10: the relay's reply was lost. "Submitting…", it may
+            // have been sent, Vela keeps checking — the op hash, a close that
+            // keeps it running, and no Retry: sending again could pay twice.
+            receipt.status == SendReceiptStatus.MaybeSent -> fallback.copy(
+                header = header,
+                stage = ReceiptStage.Submitting,
+                title = s.t(I18nKeys.Flows.TX_SUBMITTING),
+                captions = listOf(s.t(I18nKeys.Flows.SIGN_MAYBE_SENT)),
+                hash = view.user_op_hash?.takeIf { it.isNotBlank() }?.let {
+                    ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS), copyValue = it)
+                },
+                viewOnExplorer = null,
+                cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
+                ctaAccent = false,
+            )
+            // The relay never had it: nothing was sent — the plain failure.
+            receipt.status == SendReceiptStatus.NotSent -> fallback.copy(
+                header = header,
+                stage = ReceiptStage.Failed,
+                title = s.t(I18nKeys.Flows.STATUS_FAILED),
+                captions = listOf(s.t(I18nKeys.Flows.TX_ERROR_GENERIC)),
+                hash = null,
+                viewOnExplorer = null,
                 cta = s.t(I18nKeys.Flows.DONE),
                 ctaAccent = true,
             )

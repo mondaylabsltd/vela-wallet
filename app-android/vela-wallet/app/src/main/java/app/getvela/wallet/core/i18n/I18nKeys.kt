@@ -679,6 +679,12 @@ object I18nKeys {
         const val CANNOT_CONVERT = "send.warnCannotConvert"
         const val TX_PREPARING = "send.txPreparing"
         const val TX_SIGNING = "send.txSigning"
+        /**
+         * Spec 082 RA10: the caption under "Submitting…" when the relay's reply
+         * was lost — it may have been sent, Vela keeps checking, do not send it
+         * again. Never "failed, try again" (owner ruling 1).
+         */
+        const val SIGN_MAYBE_SENT = "componentsUi.signing.maybeSent"
         const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"
@@ -1037,5 +1043,17 @@ object I18nKeys {
         const val NAV_EXPLORE = "componentsUi.mainNav.explore"
         const val NAV_SETTINGS = "componentsUi.mainNav.settings"
         const val ACTION_SEND = "componentsUi.dock.send"
+    }
+
+    /** The in-app browser's words that code names (the rest arrive as the core's `reason_key`). */
+    object Explore {
+        /**
+         * Spec 082 RD9: the page could not load because the proxy itself could
+         * not be used. The core's `browserLoadClassify` hands this as the
+         * `proxy` class's `reason_key`; named here so a test proves it resolves.
+         */
+        const val LOAD_PROXY = "explore.loadProxy"
+        const val LOAD_OFFLINE = "explore.loadOffline"
+        const val LOAD_RETRYING = "explore.loadRetrying"
     }
 }

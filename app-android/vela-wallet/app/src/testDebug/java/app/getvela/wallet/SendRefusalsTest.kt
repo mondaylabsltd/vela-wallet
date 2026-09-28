@@ -108,7 +108,7 @@ class SendRefusalsTest {
         port.always("eth_estimateUserOperationGas") {
             FakeRelayPort.body(JSONObject().put("verificationGasLimit", "0x186a0").put("callGasLimit", "0x30d40").put("preVerificationGas", "0xc350"))
         }
-        port.always("eth_sendUserOperation") { relaySends += 1; FakeRelayPort.body("0xhash") }
+        port.always("eth_sendUserOperation") { relaySends += 1; FakeRelayPort.body("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1") }
         port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(JSONObject().put("address", "0x1111111111111111111111111111111111111111").put("bootstrapNeeded", false))
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
     }

@@ -64,11 +64,12 @@ class RpcPoolExecutor(
                 // The caller is already gone — a cancelled screen, a superseded
                 // refresh. Report the endpoint as unreachable rather than
                 // leaving the core waiting on a call nobody wants; it will route
-                // on and conclude.
+                // on and conclude. Nothing was posted: `not_connected`, never a
+                // "may have been delivered" (spec 082 RA1).
                 RpcShellResult.PostOutcome(
                     call_id = operation.call_id,
                     url = operation.url,
-                    outcome = RpcTransportOutcome.Network,
+                    outcome = RpcTransportOutcome.NotConnected,
                     latency_ms = 0.0,
                     now_ms = started,
                 )
@@ -312,15 +313,10 @@ class OkHttpTransport : RpcTransport {
                 }
                 RpcPostResult(RpcTransportOutcome.Response(error), json)
             }
-        } catch (timeout: java.io.InterruptedIOException) {
-            // okhttp reports a call timeout as an InterruptedIOException, which
-            // is a subclass of IOException — so it must be caught FIRST or every
-            // timeout would be reported as a generic network failure, and the
-            // core would ban an endpoint that was merely slow.
-            RpcPostResult(RpcTransportOutcome.Timeout)
-        } catch (network: IOException) {
-            NetHealth.unreached()
-            RpcPostResult(RpcTransportOutcome.Network)
+        } catch (failure: IOException) {
+            val outcome = outcomeOf(failure)
+            if (outcome != RpcTransportOutcome.Timeout) NetHealth.unreached()
+            RpcPostResult(outcome)
         }
     }
 
@@ -351,7 +347,37 @@ class OkHttpTransport : RpcTransport {
             })
         }
 
-    private companion object {
+    internal companion object {
         val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * What a failed POST says about delivery (spec 082 RA1, contract §2).
+         *
+         * `NotConnected` only when nothing can have left the device — the name
+         * did not resolve, the connection was refused or unroutable, the TLS
+         * handshake failed, or the connect itself timed out. That is the one
+         * fact that lets a submit say "not sent — try again". A call timeout
+         * after connecting (okhttp's `InterruptedIOException("timeout")`) is a
+         * `Timeout`: the request may have been written and acted on; so is any
+         * other socket failure (`Network`). An `SSLHandshakeException` is
+         * matched before its `IOException` parent, a connect-timeout
+         * `SocketTimeoutException` before the `InterruptedIOException` it is.
+         */
+        fun outcomeOf(failure: IOException): RpcTransportOutcome = when (failure) {
+            is java.net.UnknownHostException,
+            is java.net.ConnectException,
+            is java.net.NoRouteToHostException,
+            is javax.net.ssl.SSLHandshakeException,
+            -> RpcTransportOutcome.NotConnected
+            is java.net.SocketTimeoutException ->
+                if (failure.message.orEmpty().contains("connect", ignoreCase = true)) RpcTransportOutcome.NotConnected
+                else RpcTransportOutcome.Timeout
+            // okhttp reports a call timeout as an InterruptedIOException, which
+            // is a subclass of IOException — so it must be matched before the
+            // generic case or every timeout would be reported as a network
+            // failure, and the core would ban an endpoint that was merely slow.
+            is java.io.InterruptedIOException -> RpcTransportOutcome.Timeout
+            else -> RpcTransportOutcome.Network
+        }
     }
 }

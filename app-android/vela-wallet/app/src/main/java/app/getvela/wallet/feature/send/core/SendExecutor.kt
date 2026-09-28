@@ -133,7 +133,12 @@ class SendExecutor(
         /** Spec 046 US3: a scanned chain the wallet lacks — the settings machine adds it (or does not know it). */
         suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = SendAddNetworkOutcome.NotFound
 
-        fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int)
+        /**
+         * The rows are on disk: follow the hash. [maybeSent] and [submitBlock]
+         * (spec 082) go into the tracker's `Submitted`, so a lost reply is
+         * followed as one and its landing check starts where the submit did.
+         */
+        fun trackSubmitted(handoff: TrackHandoff)
 
         fun haptic(kind: SendHapticKind)
 
@@ -207,7 +212,9 @@ class SendExecutor(
             SendShellResult.RecordsPersisted
         }
         is SendOperation.TrackSubmitted -> {
-            ports.trackSubmitted(operation.user_op_hash, operation.record_ids, operation.chain_id)
+            ports.trackSubmitted(
+                TrackHandoff(operation.user_op_hash, operation.record_ids, operation.chain_id, operation.maybe_sent, operation.submit_block),
+            )
             SendShellResult.TrackHandedOff
         }
         is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(identity(operation.address))
@@ -373,7 +380,13 @@ class SendExecutor(
     private suspend fun submit(op: SendOperation.SubmitUserOp): SendShellResult = coroutineScope {
         signing = currentCoroutineContext().job
         try {
-            SendShellResult.Submitted(user_op_hash = submitInner(op), now_ms = now())
+            val submitted = submitInner(op)
+            SendShellResult.Submitted(
+                user_op_hash = submitted.userOpHash,
+                now_ms = now(),
+                maybe_sent = submitted.maybeSent,
+                submit_block = submitted.submitBlock,
+            )
         } catch (refused: SubmitRefused) {
             VelaLog.event("send.submit", "refused", "why" to refused.failure.toString().take(160))
             SendShellResult.SubmitFailed(refused.failure)
@@ -395,7 +408,7 @@ class SendExecutor(
     }, trustedSigner = trustedSigner)
 
     /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
-    private suspend fun submitInner(op: SendOperation.SubmitUserOp): String = try {
+    private suspend fun submitInner(op: SendOperation.SubmitUserOp): UserOpSpine.Submitted = try {
         spine.submit(
             chainId = op.chain_id,
             account = op.account,
@@ -408,7 +421,9 @@ class SendExecutor(
         throw SubmitRefused(
             when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SendSubmitFailure.PasskeyCancelled
-                UserOpSpine.Failure.RelayerUnavailable -> SendSubmitFailure.RelayerUnavailable
+                // Nothing left the device (spec 082 RA1): "the relayer could not
+                // be reached — try again" is true of exactly this.
+                UserOpSpine.Failure.RelayerUnavailable, UserOpSpine.Failure.NotSent -> SendSubmitFailure.RelayerUnavailable
                 UserOpSpine.Failure.BundlerUnderfunded -> SendSubmitFailure.BundlerUnderfunded
                 is UserOpSpine.Failure.Other -> SendSubmitFailure.Other(failure.message)
             },
@@ -431,6 +446,10 @@ class SendExecutor(
         .put("timestamp", record.timestamp_s)
         .put("usd", record.usd ?: JSONObject.NULL)
         .put("type", "send")
+        // Spec 082 T184: kept with the row, read back into `TrackPendingRecord`
+        // by `LoadPendingTxs` — a restart keeps following a lost reply as one.
+        .put("maybeSent", record.maybe_sent)
+        .put("submitBlock", record.submit_block ?: JSONObject.NULL)
 
     /** What the core hears when an arm threw: nothing was done. */
     fun neutralAnswer(operation: SendOperation): SendShellResult = when (operation) {

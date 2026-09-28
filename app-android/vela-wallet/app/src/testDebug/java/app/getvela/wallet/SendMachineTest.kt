@@ -100,7 +100,7 @@ class SendMachineTest {
             events += "relay.send"
             // Spec 069: the speed the displayed fee was priced at, by name.
             events += "relay.tier:${params.getOrNull(2) ?: "-"}"
-            FakeRelayPort.body("0xhash")
+            FakeRelayPort.body("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1")
         }
         port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(JSONObject().put("address", "0x1111111111111111111111111111111111111111").put("bootstrapNeeded", false))
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
@@ -119,7 +119,10 @@ class SendMachineTest {
         }
     }
 
-    private fun controller(): SendController {
+    /** Every tracker handoff, in order (spec 082: the two submit facts ride along). */
+    private val handoffs = java.util.concurrent.CopyOnWriteArrayList<app.getvela.wallet.feature.send.core.TrackHandoff>()
+
+    private fun controller(expectMaybeSent: Boolean = false): SendController {
         val pool = RpcPool(store = FakeStore(), endpoints = FakeEndpointSource(listOf("https://rpc.test")), scope = scope, transport = FakeRpcTransport { _, _ -> FakeRpcTransport.network() })
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
         val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
@@ -135,12 +138,17 @@ class SendMachineTest {
             haptic = { kind -> events += "haptic:$kind" },
             refreshBalances = { events += "refresh" },
         ).also { controller ->
-            controller.onTrackSubmitted = { hash, ids, chain ->
+            controller.onTrackSubmitted = { handoff ->
                 // Invariant ⑥: the pending row is on disk before tracking begins.
+                val hash = handoff.userOpHash
                 val stored = store.values[KeyValueStore.Keys.TRANSACTIONS].orEmpty()
                 events += if (stored.contains(hash)) "track:$hash:persisted" else "track:$hash:NOT-PERSISTED"
-                assertEquals(100, chain)
-                assertTrue(ids.isNotEmpty())
+                assertEquals(100, handoff.chainId)
+                assertTrue(handoff.recordIds.isNotEmpty())
+                // The relay answered: sent, not "may have been sent" — unless
+                // the test lost its reply (spec 082).
+                assertEquals(expectMaybeSent, handoff.maybeSent)
+                handoffs += handoff
             }
         }
     }
@@ -167,7 +175,7 @@ class SendMachineTest {
         c.slideConfirm()
         val receipt = withTimeout(30_000) { c.send.first { it.stage == SendStage.Receipt && it.receipt != null } }
         assertEquals(SendReceiptStatus.Submitted, receipt.receipt!!.status)
-        assertEquals("0xhash", receipt.user_op_hash)
+        assertEquals("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", receipt.user_op_hash)
         assertEquals("signed exactly once", 1, signs)
         // A record from before the sign-in key: the first key, over its stored route.
         assertEquals(listOf(Triple(fixtureAccounts().first().credentialIdHex, "internal", KeyMethod.Platform)), routes)
@@ -183,13 +191,69 @@ class SendMachineTest {
         val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
         assertEquals(1, rows.length())
         val row = rows.getJSONObject(0)
-        assertEquals("0xhash", row.optString("userOpHash"))
+        assertEquals("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", row.optString("userOpHash"))
         assertEquals("send", row.optString("type"))
         assertEquals("", row.optString("status"))
         assertTrue(row.optString("to").equals(recipient, ignoreCase = true))
-        assertNotNull(events.firstOrNull { it == "track:0xhash:persisted" })
+        assertNotNull(events.firstOrNull { it == "track:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1:persisted" })
         assertTrue(events.indexOf("sign") < events.indexOf("relay.send"))
         trace.cancel()
+    }
+
+    private suspend fun toTheSlide(c: SendController) {
+        c.open(SendAccountRef(id = safe, address = safe, name = "Parallel space"), SendDisplayContext(code = "USD", rate = null, fiat_decimals = 2))
+        val picked = withTimeout(10_000) { c.send.first { it.tokens.isNotEmpty() } }
+        c.selectToken(SendLive.tokenId(picked.tokens.single()))
+        withTimeout(10_000) { c.send.first { it.stage == SendStage.EnterDetails } }
+        c.setRecipient(recipient)
+        c.setAmount("0.001")
+        withTimeout(10_000) { c.send.first { it.can_continue } }
+        c.continueTapped()
+        withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.fee != null && it.can_confirm } }
+        c.slideConfirm()
+    }
+
+    /**
+     * Spec 082 RA1/RA10 (owner ruling 1): the relay's reply was lost after a
+     * POST that may have been acted on. The receipt says "may have been
+     * sent" — never "failed, try again" — the row is kept under the LOCAL
+     * hash with both submit facts (T184), and the tracker is handed it as a
+     * lost reply, from the head read before the POST. Posted once.
+     */
+    @Test
+    fun `a lost reply is may-have-been-sent, kept with the row and handed over as one`() = runBlocking {
+        seedAccount(); scriptRelay()
+        port.always("eth_blockNumber") { FakeRelayPort.body("0x3e8") }
+        port.always("eth_sendUserOperation") { events += "relay.send"; app.getvela.wallet.feature.wallet.core.RpcResult.Failed(rateLimited = false, maybeDelivered = true) }
+        val c = controller(expectMaybeSent = true)
+        toTheSlide(c)
+        val receipt = withTimeout(30_000) { c.send.first { it.stage == SendStage.Receipt && it.receipt != null } }
+        assertEquals(SendReceiptStatus.MaybeSent, receipt.receipt!!.status)
+        val local = receipt.user_op_hash!!
+        assertTrue("the local op hash: $local", local.matches(Regex("^0x[0-9a-f]{64}$")))
+        withTimeout(10_000) { while (handoffs.isEmpty()) kotlinx.coroutines.delay(50) }
+        val row = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0)
+        assertEquals(local, row.optString("userOpHash"))
+        assertTrue("kept with the row for a restart", row.getBoolean("maybeSent"))
+        assertEquals(1000L, row.getLong("submitBlock"))
+        val handoff = handoffs.single()
+        assertEquals(local, handoff.userOpHash)
+        assertEquals(1000L, handoff.submitBlock)
+        assertEquals("posted once: nobody pays twice", 1, events.count { it == "relay.send" })
+    }
+
+    /** Nothing left the device: a plain refusal the person may retry — no row, no tracker. */
+    @Test
+    fun `a relay that was never reached is not sent and leaves nothing to follow`() = runBlocking {
+        seedAccount(); scriptRelay()
+        port.always("eth_sendUserOperation") { events += "relay.send"; app.getvela.wallet.feature.wallet.core.RpcResult.Failed(rateLimited = false, maybeDelivered = false) }
+        val c = controller()
+        toTheSlide(c)
+        val refused = withTimeout(30_000) { c.send.first { it.tx_error != null } }
+        assertTrue("not a receipt: ${refused.receipt}", refused.receipt?.status != SendReceiptStatus.MaybeSent)
+        kotlinx.coroutines.delay(300)
+        assertTrue(store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty() || JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).length() == 0)
+        assertTrue(handoffs.isEmpty())
     }
 
     /**

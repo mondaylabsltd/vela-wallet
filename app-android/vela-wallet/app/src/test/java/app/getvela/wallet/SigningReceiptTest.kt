@@ -13,7 +13,9 @@ import app.getvela.wallet.feature.signing.SigningBlock
 import app.getvela.wallet.feature.signing.SigningLive
 import app.getvela.wallet.feature.signing.SigningTone
 import app.getvela.wallet.feature.signing.AmountLine
+import app.getvela.wallet.feature.signing.core.SignEnding
 import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.SignPhase
 import app.getvela.wallet.feature.signing.core.SignErrorNotice
 import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import app.getvela.wallet.feature.signing.core.SignSurface
@@ -106,11 +108,23 @@ class SigningReceiptTest {
 
     @Test
     fun `the passkey, the submission and the wait are each named in the send's words`() {
-        val signing = SigningLive.receipt(SignView(surface = SignSurface.Sheet, is_signing = true), blocks, ctx)
+        // Spec 082 RA9: the words are the core's phase, never the shell flags —
+        // the network work before the passkey is "preparing", even while the
+        // old `is_signing` flag is up.
+        val preparing = SigningLive.receipt(SignView(surface = SignSurface.Sheet, is_signing = true, phase = SignPhase.Preparing), blocks, ctx)
+        assertEquals(ReceiptStage.Submitting, preparing?.stage)
+        assertEquals(strings.t(I18nKeys.Flows.TX_PREPARING), preparing?.title)
+
+        val signing = SigningLive.receipt(SignView(surface = SignSurface.Sheet, is_signing = true, phase = SignPhase.AwaitingSignature), blocks, ctx)
         assertEquals(ReceiptStage.Submitting, signing?.stage)
         assertEquals(strings.t(I18nKeys.Flows.TX_SIGNING), signing?.title)
 
-        val submitting = SigningLive.receipt(SignView(surface = SignSurface.Sheet, is_submitting = true), blocks, ctx)
+        assertNull(
+            "no phase, no receipt: the flags alone say nothing",
+            SigningLive.receipt(SignView(surface = SignSurface.Sheet, is_signing = true), blocks, ctx),
+        )
+
+        val submitting = SigningLive.receipt(SignView(surface = SignSurface.Sheet, is_submitting = true, phase = SignPhase.Submitting), blocks, ctx)
         assertEquals(strings.t(I18nKeys.Flows.TX_SUBMITTING), submitting?.title)
         assertEquals(strings.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND), submitting?.cta)
 
@@ -143,7 +157,12 @@ class SigningReceiptTest {
             id = "r1", method = "personal_sign", kind = app.getvela.wallet.feature.signing.core.SignMethodKind.PersonalSign,
             params_json = "[]", origin = "http://127.0.0.1:8137", chain_id = 100,
         )
-        val submitting = SigningLive.receipt(SignView(surface = SignSurface.Sheet, request = request, is_submitting = true), blocks, ctx)
+        for (phase in listOf(SignPhase.Preparing, SignPhase.AwaitingSignature, SignPhase.Submitting)) {
+            val submitting = SigningLive.receipt(SignView(surface = SignSurface.Sheet, request = request, phase = phase), blocks, ctx)
+            assertEquals(phase.toString(), strings.t("componentsUi.signing.signing"), submitting?.title)
+            assertTrue(submitting!!.captions.none { it == strings.t(I18nKeys.Flows.TX_BACKGROUND_HINT) })
+        }
+        val submitting = SigningLive.receipt(SignView(surface = SignSurface.Sheet, request = request, phase = SignPhase.Submitting), blocks, ctx)
         assertEquals(strings.t("componentsUi.signing.signing"), submitting?.title)
         assertTrue(submitting!!.captions.none { it == strings.t(I18nKeys.Flows.TX_BACKGROUND_HINT) })
     }
@@ -159,30 +178,52 @@ class SigningReceiptTest {
         assertTrue(failed!!.captions.contains(strings.t("send.txErrorGeneric")))
     }
 
+    /** Spec 082 RA8: the ending is the core's reading of the answer (`sign_ending_of`). */
     @Test
     fun `an answer becomes the ending the aftercare shows`() {
         val signed = SigningAftercare.of("personal_sign", 100, SignResponsePayload.Ok("0xsig"), null)
-        assertEquals(SigningAftercare.Signed(100), signed)
+        assertEquals(SigningAftercare(100, SignEnding.Signed), signed)
         assertEquals(
-            SigningAftercare.Landed(100, tx),
+            SigningAftercare(100, SignEnding.Landed(tx, op)),
             SigningAftercare.of("eth_sendTransaction", 100, SignResponsePayload.Ok(tx), op),
         )
         assertEquals(
             "the wait ran out: the page got the operation hash",
-            SigningAftercare.StillConfirming(100, op),
+            SigningAftercare(100, SignEnding.StillConfirming(op)),
             SigningAftercare.of("eth_sendTransaction", 100, SignResponsePayload.Ok(op.uppercase().replace("0X", "0x")), op),
         )
         assertNull(SigningAftercare.of("eth_sendTransaction", 100, SignResponsePayload.Err(4001, SignErrorKind.UserRejected), op))
     }
 
+    /**
+     * Spec 082 RA8 (W3): a landed request is drawn confirmed only when the
+     * tracker says so — the answer's tx hash is not proof it did what it said;
+     * every `SignEndingState` has its own words.
+     */
     @Test
-    fun `the aftercare ticks for a landing and follows the tracker for an op still on its way`() {
-        val landed = SigningLive.aftercareReceipt(SigningAftercare.Landed(100, tx), "Send · −0.001 XDAI", ctx.copy(explorerUrl = "https://gnosisscan.io"))
-        assertEquals(ReceiptStage.Confirmed, landed.stage)
-        assertEquals(tx, landed.hash?.copyValue)
-        assertEquals(strings.t(I18nKeys.Flows.VIEW_ON_EXPLORER), landed.viewOnExplorer)
+    fun `every ending state is drawn in its own words, and only the tracker confirms`() {
+        val landed = SigningAftercare(100, SignEnding.Landed(tx, op))
+        val explorer = ctx.copy(explorerUrl = "https://gnosisscan.io")
 
-        val still = SigningAftercare.StillConfirming(100, op)
+        val notYet = SigningLive.aftercareReceipt(landed, "Send · −0.001 XDAI", explorer)
+        assertEquals("no tracker entry yet: the ring, never a tick", ReceiptStage.Submitted, notYet.stage)
+
+        val confirmed = SigningLive.aftercareReceipt(landed, null, explorer.copy(track = entry(TrackStatus.Confirmed, TrackOutcome.Final, tx)))
+        assertEquals(ReceiptStage.Confirmed, confirmed.stage)
+        assertEquals(tx, confirmed.hash?.copyValue)
+        assertEquals(strings.t(I18nKeys.Flows.VIEW_ON_EXPLORER), confirmed.viewOnExplorer)
+
+        val reverted = SigningLive.aftercareReceipt(landed, null, explorer.copy(track = entry(TrackStatus.Dropped, TrackOutcome.Final, tx)))
+        assertEquals(ReceiptStage.Failed, reverted.stage)
+        assertTrue("a revert says what it cost: ${reverted.captions}", reverted.captions.contains(strings.t("componentsTx.receipt.failedHint")))
+        assertEquals(tx, reverted.hash?.copyValue)
+        assertEquals(strings.t(I18nKeys.Flows.VIEW_ON_EXPLORER), reverted.viewOnExplorer)
+
+        val still = SigningAftercare(100, SignEnding.StillConfirming(op))
+        val notSent = SigningLive.aftercareReceipt(still, null, ctx.copy(track = entry(TrackStatus.NotSent, TrackOutcome.Final)))
+        assertEquals(ReceiptStage.Failed, notSent.stage)
+        assertTrue(notSent.captions.contains(strings.t("send.txErrorGeneric")))
+
         val waiting = SigningLive.aftercareReceipt(still, null, ctx.copy(track = entry(TrackStatus.AcceptedNotLanded, TrackOutcome.StillConfirming)))
         assertEquals(ReceiptStage.Submitted, waiting.stage)
         assertTrue(waiting.captions.contains(strings.t("componentsUi.signing.stillConfirming")))
@@ -193,7 +234,48 @@ class SigningReceiptTest {
         val unknown = SigningLive.aftercareReceipt(still, null, ctx.copy(track = entry(TrackStatus.AcceptedNotLanded, TrackOutcome.Unknown)))
         assertTrue(unknown.captions.contains(strings.t("componentsUi.signing.unknownOutcome")))
 
-        val signed = SigningLive.aftercareReceipt(SigningAftercare.Signed(100), null, ctx)
+        val maybe = SigningLive.aftercareReceipt(still, null, ctx.copy(track = entry(TrackStatus.Pending, TrackOutcome.MaybeSent)))
+        assertEquals(strings.t("send.txSubmitting"), maybe.title)
+        assertTrue(maybe.captions.contains(strings.t("componentsUi.signing.maybeSent")))
+        assertEquals("the op hash, to quote", op, maybe.hash?.copyValue)
+        assertEquals(strings.t("send.txCloseBackground"), maybe.cta)
+        assertTrue("never failed, never try again", maybe.stage != ReceiptStage.Failed)
+
+        val signed = SigningLive.aftercareReceipt(SigningAftercare(100, SignEnding.Signed), null, ctx)
         assertEquals(strings.t("clearSigning.alertSignedTitle"), signed.title)
+    }
+
+    /**
+     * Spec 082 RA9: the sheet's words are the core's phase — "preparing" until
+     * the passkey is up, "waiting for your signature" while it is,
+     * "submitting" after; never a shell flag's guess.
+     */
+    @Test
+    fun `the sheet's words follow the phase`() {
+        fun title(phase: SignPhase) = SigningLive.receipt(SignView(surface = SignSurface.Sheet, phase = phase), blocks, ctx)?.title
+        assertNull(title(SignPhase.Idle))
+        assertEquals(strings.t("send.txPreparing"), title(SignPhase.Preparing))
+        assertEquals(strings.t("send.txSigning"), title(SignPhase.AwaitingSignature))
+        assertEquals(strings.t("send.txSubmitting"), title(SignPhase.Submitting))
+        val submitting = SigningLive.receipt(SignView(surface = SignSurface.Sheet, phase = SignPhase.Submitting), blocks, ctx)!!
+        assertTrue(submitting.captions.contains(strings.t("send.txBackgroundHint")))
+    }
+
+    /** Spec 082 RA10 (owner ruling 1): a lost reply is "may have been sent" on the live sheet too. */
+    @Test
+    fun `a lost reply reads may have been sent until the relay shows it holds it`() {
+        val sheet = SignView(surface = SignSurface.Sheet, phase = SignPhase.Submitting, pending_op_hash = op, pending_op_maybe_sent = true)
+        val maybe = SigningLive.receipt(sheet, blocks, ctx)!!
+        assertEquals(strings.t("send.txSubmitting"), maybe.title)
+        assertTrue(maybe.captions.contains(strings.t("componentsUi.signing.maybeSent")))
+        assertEquals(op, maybe.hash?.copyValue)
+        assertEquals(strings.t("send.txCloseBackground"), maybe.cta)
+
+        val stillMaybe = SigningLive.receipt(sheet, blocks, ctx.copy(track = entry(TrackStatus.Pending, TrackOutcome.MaybeSent)))!!
+        assertTrue(stillMaybe.captions.contains(strings.t("componentsUi.signing.maybeSent")))
+
+        val acknowledged = SigningLive.receipt(sheet, blocks, ctx.copy(track = entry(TrackStatus.Pending, TrackOutcome.Landing)))!!
+        assertEquals(strings.t("send.txSubmittedTitle"), acknowledged.title)
+        assertTrue(!acknowledged.captions.contains(strings.t("componentsUi.signing.maybeSent")))
     }
 }

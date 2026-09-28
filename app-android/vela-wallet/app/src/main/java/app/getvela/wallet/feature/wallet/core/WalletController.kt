@@ -21,6 +21,9 @@ import app.getvela.wallet.feature.send.core.TrackShellResult
 import app.getvela.wallet.feature.send.core.TrackRecordStatus
 import app.getvela.wallet.feature.send.core.TrackOperation
 import app.getvela.wallet.feature.send.core.TrackEvent
+import app.getvela.wallet.feature.send.core.TrackHandoff
+import app.getvela.wallet.feature.send.core.TrackEntryView
+import app.getvela.wallet.feature.send.core.TrackOutcome
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
@@ -434,6 +437,12 @@ class WalletController(
                         TrustEvent.serializer(),
                     )
                 }
+
+                // Spec 082 RE8: an op of ours landed (or failed with gas
+                // spent) — the balance moved; read it now, not at the next pull.
+                override fun holdingsMoved(chainId: Int) {
+                    refresh(force = true)
+                }
             },
         )
     }
@@ -463,25 +472,32 @@ class WalletController(
     val tracker: StateFlow<TrackView> = trackerHost?.view ?: MutableStateFlow(TrackView())
 
     /**
-     * A verdict for the send that is on screen: the three the send machine
-     * accepts as `ReceiptUpdate`, once per change; a slow or unreachable poll
-     * sends nothing (the desktop's `on_tracker`, invariant ⑤).
+     * A tracked op whose standing changed — its status OR its outcome (spec
+     * 082: a lost reply the relay then acknowledges changes only the outcome).
+     * What that means for the send on screen is the core's
+     * (`sendReceiptOutcomeOf`), not this file's.
      */
-    var onTrackVerdict: (userOpHash: String, status: TrackStatus, txHash: String?) -> Unit = { _, _, _ -> }
+    var onTrackVerdict: (TrackEntryView) -> Unit = { _ -> }
 
-    private val lastVerdict = HashMap<String, TrackStatus>()
+    private val lastVerdict = HashMap<String, Pair<TrackStatus, TrackOutcome>>()
 
-    /** The send machine's `track_submitted`: the row is on disk, follow the hash. */
-    fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) {
+    /**
+     * The send machine's `track_submitted` (or a dApp's `tracker_handoff`):
+     * the rows are on disk, follow the hash — as a lost reply when it was one
+     * (spec 082).
+     */
+    fun trackSubmitted(handoff: TrackHandoff) {
         val host = trackerHost
         if (host == null) {
-            VelaLog.event("tracker", "no relay: not tracking", "hash" to userOpHash.take(12))
+            VelaLog.event("tracker", "no relay: not tracking", "hash" to handoff.userOpHash.take(12))
             return
         }
-        host.dispatch(
-            TrackEvent.Submitted(user_op_hash = userOpHash, record_ids = recordIds, chain_id = chainId),
-            TrackEvent.serializer(),
+        VelaLog.event(
+            "tracker", "handed",
+            "op" to handoff.userOpHash.take(12), "chain" to handoff.chainId,
+            "maybeSent" to handoff.maybeSent, "submitBlock" to handoff.submitBlock,
         )
+        host.dispatch(handoff.event(), TrackEvent.serializer())
         // Device-found (spec 043 phase 4): a person taps confirm and leaves
         // before the relay answers. `backgrounded()` ran with nothing pending,
         // the submit landed afterwards, and no clock ticked until the next
@@ -529,13 +545,10 @@ class WalletController(
                 host.view.collect { view ->
                     view.entries.forEach { entry ->
                         val key = entry.user_op_hash.lowercase()
-                        if (lastVerdict[key] == entry.status) return@forEach
-                        lastVerdict[key] = entry.status
-                        when (entry.status) {
-                            TrackStatus.Confirmed, TrackStatus.Dropped, TrackStatus.Rejected, TrackStatus.FeeHeld ->
-                                onTrackVerdict(entry.user_op_hash, entry.status, entry.tx_hash)
-                            TrackStatus.Pending, TrackStatus.Unreachable, TrackStatus.AcceptedNotLanded -> Unit
-                        }
+                        val standing = entry.status to entry.outcome
+                        if (lastVerdict[key] == standing) return@forEach
+                        lastVerdict[key] = standing
+                        onTrackVerdict(entry)
                     }
                 }
             }

@@ -208,6 +208,23 @@ class I18nEngineSmokeTest {
         }
     }
 
+    /** Spec 082: the two keys the 082 corpus added that this app draws resolve in every locale. */
+    @Test
+    fun the082KeysResolveInEveryLocale() {
+        val runtime = newRuntime()
+        runtime.initialize("en")
+        for (tag in LocaleResolver.SUPPORTED) {
+            runtime.setLocale(tag)
+            for (key in listOf(I18nKeys.Flows.SIGN_MAYBE_SENT, I18nKeys.Explore.LOAD_PROXY)) {
+                val value = runtime.t(key)
+                assertNotEquals("key echoed for locale $tag", key, value)
+                assertTrue("blank translation of $key for locale $tag", value.isNotBlank())
+            }
+        }
+        runtime.setLocale("zh")
+        assertEquals("代理没有响应。", runtime.t(I18nKeys.Explore.LOAD_PROXY))
+    }
+
     @Test
     fun chineseCatalogTranslatesTheWelcomeScreen() {
         val runtime = newRuntime()

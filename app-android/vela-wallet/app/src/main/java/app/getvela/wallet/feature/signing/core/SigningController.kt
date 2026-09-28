@@ -16,6 +16,9 @@ import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.SendExecutor
 import app.getvela.wallet.feature.send.core.SpeedControl
+import app.getvela.wallet.feature.send.core.TrackHandoff
+import app.getvela.wallet.feature.wallet.core.RpcResult
+import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
@@ -84,7 +87,8 @@ class SigningController(
      */
     private val preferredTier: () -> FeeTier = { FeeTier.Fast },
     private val numberPreset: () -> String = { "comma_dot" },
-    receiptWaitMs: Long = 120_000L,
+    /** `null`: the core's answer window (`dappReceiptWaitMs`, spec 082 RA12); tests pin a number. */
+    receiptWaitMs: Long? = null,
     receiptPollMs: Long = 3_000L,
     /** Spec 071: the Trusted Signer, for an account that signed in through it. */
     trustedSigner: () -> TrustedSigner? = { null },
@@ -102,20 +106,38 @@ class SigningController(
      */
     private val handoffLock = Any()
 
-    /** The tracker is handed the hash only once every record it names is on disk (043's ordering invariant). */
+    /**
+     * The tracker is handed the hash only once every record it names is on
+     * disk (043's ordering invariant), and each record only once — by record
+     * id, not by hash: a lost reply's local hash and a later relay hash name
+     * the same record (spec 082).
+     */
     private fun tryHandoff() {
         val handoff = synchronized(handoffLock) {
             val handoff = pendingHandoff ?: return
             if (!handoff.record_ids.all { it in persistedRecords }) return
             pendingHandoff = null
+            if (handedRecords.containsAll(handoff.record_ids)) return
+            handedRecords += handoff.record_ids
             handoff
         }
-        ports.trackSubmitted(handoff.user_op_hash, handoff.record_ids, handoff.chain_id)
+        ports.trackSubmitted(
+            TrackHandoff(
+                userOpHash = handoff.user_op_hash,
+                recordIds = handoff.record_ids,
+                chainId = handoff.chain_id,
+                maybeSent = handoff.maybe_sent,
+                submitBlock = handoff.submit_block,
+            ),
+        )
     }
 
+    /** The records this request has handed the tracker (guarded by [handoffLock]). */
+    private val handedRecords = HashSet<String>()
+
     interface Ports : SignExecutor.Ports {
-        /** The tracker follows the accepted operation to its verdict (043's `trackSubmitted`). */
-        fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int)
+        /** The tracker follows the operation to its verdict (043's `trackSubmitted`; 082's two flags ride along). */
+        fun trackSubmitted(handoff: TrackHandoff)
 
         /** The descriptor endpoint base. */
         fun dataBase(): String
@@ -123,14 +145,26 @@ class SigningController(
         /** `eth_call` through the pool: `(result, reverted)`. */
         suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean>
 
-        /** Spec 046 US1: the simulated balance changes, judged by the trust machine; `null` = could not simulate. */
-        suspend fun simulate(chainId: Int, wallet: String, calls: List<SimDeltas.Call>): List<TrustSimJudgment>? = null
+        /**
+         * Spec 046 US1 / 082 RG6: `eth_simulateV1` with these params, through
+         * the pool — its answer as it came. `null` = this host has no
+         * simulator (nothing is drawn). What the answer MEANS is the core's
+         * (`simOutcome`), never the port's.
+         */
+        suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult? = null
+
+        /** The core's deltas, judged by the trust machine; `null` = could not judge. */
+        suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<TrustAssetDelta>): List<TrustSimJudgment>? = null
     }
 
-    /** What the simulation said (spec 046 US1): pending (`null`), the judgments, or unavailable. */
+    /**
+     * What the simulation said (spec 046 US1, 082 RG6): pending (`null`), the
+     * checked moves ([Ready]; empty = nothing of theirs moves), or the core's
+     * notice — a revert (danger) or "could not check" (caution).
+     */
     sealed class SimOutcome {
         data class Ready(val judgments: List<TrustSimJudgment>) : SimOutcome()
-        data object Unavailable : SimOutcome()
+        data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null) : SimOutcome()
     }
 
     private val _sim = MutableStateFlow<SimOutcome?>(null)
@@ -152,9 +186,30 @@ class SigningController(
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
-            override fun opSubmitted(id: String, userOpHash: String) {
-                ports.opSubmitted(id, userOpHash)
-                dispatchSign(SignEvent.OpSubmitted(id = id, user_op_hash = userOpHash, now_ms = now()))
+            override fun opSubmitted(id: String, submitted: UserOpSpine.Submitted) {
+                ports.opSubmitted(id, submitted)
+                dispatchSign(
+                    SignEvent.OpSubmitted(
+                        id = id,
+                        user_op_hash = submitted.userOpHash,
+                        now_ms = now(),
+                        maybe_sent = submitted.maybeSent,
+                        submit_block = submitted.submitBlock,
+                    ),
+                )
+            }
+
+            // Spec 082 RA9: the sheet's words follow the ceremony — "preparing"
+            // until the passkey is up, "waiting for your signature" while it
+            // is, "submitting" after. The core guards them by request id.
+            override fun ceremonyStarted(id: String) {
+                ports.ceremonyStarted(id)
+                dispatchSign(SignEvent.CeremonyStarted(id))
+            }
+
+            override fun ceremonyDone(id: String) {
+                ports.ceremonyDone(id)
+                dispatchSign(SignEvent.CeremonyDone(id))
             }
 
             override fun recordPersisted(recordId: String) {
@@ -265,7 +320,6 @@ class SigningController(
     /** The request was answered: the sheet may go, and this controller with it. */
     val closed: StateFlow<Boolean> = _closed
 
-    private var handedOff = false
 
     private fun dispatchSign(event: SignEvent) = signHost.dispatch(event, SignEvent.serializer())
 
@@ -303,10 +357,7 @@ class SigningController(
             speedControl.ask(request.chainId, wallet.address, publicKeyAvailable = true, calls = feeCalls, feeToken = null, autoFeeToken = true)
             // Spec 046 US1: the one block a site cannot author. Read only.
             scope.launch {
-                val judged = runCatching { ports.simulate(request.chainId, wallet.address, calls.map { SimDeltas.Call(it.to, it.value, it.data) }) }
-                    .onFailure { VelaLog.failure("signing.sim", "simulation failed", it) }
-                    .getOrNull()
-                _sim.value = judged?.let { SimOutcome.Ready(it) } ?: SimOutcome.Unavailable
+                _sim.value = simulated(request.chainId, calls.map { SimDeltas.Call(it.to, it.value, it.data) }) ?: return@launch
             }
             // A quote goes stale while the person reads (the policy's TTL);
             // while the sheet is still up and nothing is signing, ask again —
@@ -354,14 +405,42 @@ class SigningController(
                 // A free upgrade is decided only while the person can still
                 // choose — never under a slide that has already gone.
                 speedControl.stage(view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting)
-                view.tracker_handoff?.takeIf { !handedOff }?.let { handoff ->
-                    handedOff = true
-                    synchronized(handoffLock) { pendingHandoff = handoff }
-                    tryHandoff()
+                view.tracker_handoff?.let { handoff ->
+                    val fresh = synchronized(handoffLock) {
+                        (!handedRecords.containsAll(handoff.record_ids)).also { if (it) pendingHandoff = handoff }
+                    }
+                    if (fresh) tryHandoff()
                 }
                 if (view.surface == SignSurface.Hidden && view.request == null && _request.value != null && answered) _closed.value = true
             }
         }
+    }
+
+    /**
+     * The simulation, read by the core (spec 082 RG6): the pool's answer goes
+     * to `simOutcome` as it came, and only a `deltas` verdict is judged by the
+     * trust machine. `null` when this host has no simulator.
+     */
+    private suspend fun simulated(chainId: Int, calls: List<SimDeltas.Call>): SimOutcome? {
+        val params = SimDeltas.payload(wallet.address, calls)?.let { array -> (0 until array.length()).map(array::get) }
+        val answer = if (params == null) {
+            null
+        } else {
+            runCatching { ports.simulate(chainId, params) }
+                .onFailure { VelaLog.failure("signing.sim", "simulation failed", it) }
+                .getOrElse { RpcResult.Failed(rateLimited = false) }
+                ?: return null
+        }
+        val record = SimDeltas.outcome(wallet.address, answer)
+        VelaLog.event("signing.sim", "outcome", "chain" to chainId, "kind" to record.kind)
+        val notice = SimDeltas.notice(record)
+        if (notice != null) return notice
+        val deltas = SimDeltas.deltas(record)
+        val judged = runCatching { ports.judgeDeltas(chainId, wallet.address, deltas) }
+            .onFailure { VelaLog.failure("signing.sim", "the trust machine could not judge the deltas", it) }
+            .getOrNull()
+        // Checked, but nothing could say what the moves are: "could not check".
+        return judged?.let { SimOutcome.Ready(it) } ?: SimDeltas.couldNotCheck()
     }
 
     @Volatile
@@ -464,7 +543,10 @@ class SigningController(
         fun firstCall(paramsJson: String): Triple<String?, String?, String?>? {
             val first = runCatching { JSONArray(paramsJson).optJSONObject(0) }.getOrNull() ?: return null
             val call = first.optJSONArray("calls")?.optJSONObject(0) ?: first
-            fun field(name: String) = call.optString(name).ifBlank { null }
+            // A JSON null is absent — `optString` would read it as the text
+            // "null". A present non-string (a number) goes as its text, so the
+            // core refuses it rather than reading a calm "0" (spec 082 RC6).
+            fun field(name: String) = if (call.isNull(name)) null else call.optString(name).ifBlank { null }
             return Triple(field("to"), field("data"), field("value"))
         }
 

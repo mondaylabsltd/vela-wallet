@@ -71,8 +71,8 @@ class SendController(
      */
     private val holdings: HoldingsFeed? = null,
     /** The tracker handoff; the wallet controller binds it (phase 4). */
-    var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
-        VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
+    var onTrackSubmitted: (TrackHandoff) -> Unit = { handoff ->
+        VelaLog.event("send.track", "no tracker bound", "hash" to handoff.userOpHash.take(12))
     },
 ) {
 
@@ -115,8 +115,8 @@ class SendController(
             dispatch(SendEvent.SigningStarted)
         }
 
-        override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) {
-            onTrackSubmitted(userOpHash, recordIds, chainId)
+        override fun trackSubmitted(handoff: TrackHandoff) {
+            onTrackSubmitted(handoff)
         }
 
         override fun haptic(kind: SendHapticKind) {

@@ -54,6 +54,13 @@ enum class TrackStatus {
     @SerialName("unreachable") Unreachable,
 
     @SerialName("accepted_not_landed") AcceptedNotLanded,
+
+    /**
+     * Spec 082 RA4: a may-have-been-sent op the relay never had — two
+     * `not_found` answers past the grace, no receipt. Terminal; its records
+     * are patched `failed`, and it is "not sent", never "fees stayed above…".
+     */
+    @SerialName("not_sent") NotSent,
 }
 
 @Serializable
@@ -72,6 +79,10 @@ data class TrackPendingRecord(
     val user_op_hash: String,
     val chain_id: Int,
     val submitted_at_ms: Double,
+    /** Spec 082 T184: the submit ended "may have been sent" — kept with the row so a restart keeps following it as such. */
+    val maybe_sent: Boolean = false,
+    /** The head read before the first submit POST (`u64` → `Long`); where the landing check starts. `null` = unknown. */
+    val submit_block: Long? = null,
 )
 
 /**
@@ -87,6 +98,9 @@ enum class TrackOutcome {
     @SerialName("unknown") Unknown,
 
     @SerialName("final") Final,
+
+    /** Spec 082: the reply was lost and the relay has not yet shown it holds the op. */
+    @SerialName("maybe_sent") MaybeSent,
 }
 
 @Serializable
@@ -99,6 +113,8 @@ data class TrackEntryView(
     val polling: Boolean = false,
     val submitted_at_ms: Double? = null,
     val outcome: TrackOutcome = TrackOutcome.Landing,
+    /** The relay's bundle tx for an op still pending, when it names one (079 D2). */
+    val relay_tx_hash: String? = null,
 )
 
 @Serializable
@@ -130,6 +146,32 @@ sealed class TrackOperation {
         val user_op_hash: String,
         val chain_id: Int,
         val tx_hash: String,
+    ) : TrackOperation()
+
+    /**
+     * Spec 082 RE8: an op of ours landed (confirmed, or failed with gas
+     * spent) — re-read this chain's balances. Answered `notified`.
+     */
+    @Serializable
+    @SerialName("holdings_moved")
+    data class HoldingsMoved(val chain_id: Int) : TrackOperation()
+
+    /**
+     * Spec 082 ruling 8: the relay-independent landing check. `eth_getLogs`
+     * on the EntryPoint for the op's `UserOperationEvent` (and
+     * `eth_blockNumber` for the head) through the pool, answered as
+     * [TrackShellResult.OpEvent] with what came back. `from_block` `null`
+     * asks for the head only. Blocks are `u64` → `Long`.
+     */
+    @Serializable
+    @SerialName("find_op_event")
+    data class FindOpEvent(
+        val chain_id: Int,
+        val entry_point: String,
+        val topic0: String,
+        val user_op_hash: String,
+        val from_block: Long? = null,
+        val to_block: Long? = null,
     ) : TrackOperation()
 
     @Serializable
@@ -187,6 +229,8 @@ sealed class TrackShellResult {
         val status: TrackLifecycle,
         val stage: String? = null,
         val now_ms: Double,
+        /** The relay's bundle tx, when it names one. */
+        val tx_hash: String? = null,
     ) : TrackShellResult()
 
     @Serializable
@@ -200,6 +244,22 @@ sealed class TrackShellResult {
         val now_ms: Double,
     ) : TrackShellResult()
 
+    /**
+     * The pool's answer to [TrackOperation.FindOpEvent], as it came: the
+     * `eth_getLogs` result ([logs_json]) or the JSON-RPC error member the
+     * pool answered ([error_json] — a range limit is one), plus the head.
+     * Neither = no answer. The core judges a range error, never the shell.
+     */
+    @Serializable
+    @SerialName("op_event")
+    data class OpEvent(
+        val user_op_hash: String,
+        val now_ms: Double,
+        val logs_json: String? = null,
+        val error_json: String? = null,
+        val head_block: Long? = null,
+    ) : TrackShellResult()
+
     @Serializable
     @SerialName("records_patched")
     data object RecordsPatched : TrackShellResult()
@@ -211,6 +271,29 @@ sealed class TrackShellResult {
 
 // -- what the shell tells it -------------------------------------------------
 
+/**
+ * One submit handed to the tracker, from the send machine's `track_submitted`
+ * or the sign machine's `tracker_handoff` — the rows it names are on disk.
+ * [maybeSent] and [submitBlock] (spec 082) ride into [TrackEvent.Submitted]:
+ * a lost reply is followed as one, and its landing check starts where the
+ * submit did. Not a wire type: the shell's own hand-over.
+ */
+data class TrackHandoff(
+    val userOpHash: String,
+    val recordIds: List<String>,
+    val chainId: Int,
+    val maybeSent: Boolean = false,
+    val submitBlock: Long? = null,
+) {
+    fun event(): TrackEvent.Submitted = TrackEvent.Submitted(
+        user_op_hash = userOpHash,
+        record_ids = recordIds,
+        chain_id = chainId,
+        maybe_sent = maybeSent,
+        submit_block = submitBlock,
+    )
+}
+
 @Serializable
 sealed class TrackEvent {
     /** From the send machine's `track_submitted`, after the records are on disk. */
@@ -220,6 +303,10 @@ sealed class TrackEvent {
         val user_op_hash: String,
         val record_ids: List<String>,
         val chain_id: Int,
+        /** Spec 082: the hash is the locally computed one; the relay may never have seen it. */
+        val maybe_sent: Boolean = false,
+        /** The head read before the first submit POST; `null` = unknown. */
+        val submit_block: Long? = null,
     ) : TrackEvent()
 
     @Serializable

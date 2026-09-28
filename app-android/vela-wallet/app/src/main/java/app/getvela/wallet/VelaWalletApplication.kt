@@ -13,13 +13,11 @@ import app.getvela.wallet.core.data.Preferences
 import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.signing.SigningAftercare
-import app.getvela.wallet.feature.signing.core.SimDeltas
 import android.app.Application
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.i18n.I18nKeys
-import app.getvela.wallet.feature.send.core.SendReceiptOutcome
-import app.getvela.wallet.feature.send.core.TrackStatus
+import app.getvela.wallet.feature.send.core.SendReceiptOutcomes
 import app.getvela.wallet.feature.wallet.core.TrackerWorker
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.TrustedSignerLabels
@@ -459,16 +457,13 @@ class AppContainer(private val app: Application) {
             }
             // The two halves of the handoff: the send hands the tracker a
             // hash; the tracker hands the send its verdict.
-            controller.onTrackSubmitted = { hash, ids, chain -> wallet.trackSubmitted(hash, ids, chain) }
-            wallet.onTrackVerdict = { hash, status, tx ->
-                val outcome = when (status) {
-                    TrackStatus.Confirmed -> SendReceiptOutcome.Confirmed(tx_hash = tx.orEmpty())
-                    TrackStatus.Dropped -> SendReceiptOutcome.Failed(rejected = false)
-                    TrackStatus.Rejected -> SendReceiptOutcome.Failed(rejected = true)
-                    TrackStatus.FeeHeld -> SendReceiptOutcome.FeeHeld
-                    else -> null
-                }
-                if (outcome != null) controller.receiptUpdate(hash, outcome)
+            controller.onTrackSubmitted = { handoff -> wallet.trackSubmitted(handoff) }
+            // What a tracker entry means for the receipt on screen is the
+            // core's one mapping (`sendReceiptOutcomeOf`, spec 082): a slow,
+            // unreachable or may-have-been-sent op says nothing; a relay that
+            // acknowledges a lost reply turns it back to "submitted".
+            wallet.onTrackVerdict = { entry ->
+                SendReceiptOutcomes.of(entry)?.let { outcome -> controller.receiptUpdate(entry.user_op_hash, outcome) }
             }
         }
     }
@@ -683,12 +678,16 @@ class AppContainer(private val app: Application) {
                         // Answered either way: the sheet closes off this, page or no page.
                         controller.markAnswered()
                     }
-                    override fun opSubmitted(id: String, userOpHash: String) {
-                        submittedUserOp = userOpHash
-                        rememberUserOp(userOpHash)
+                    override fun opSubmitted(id: String, submitted: app.getvela.wallet.feature.send.core.UserOpSpine.Submitted) {
+                        submittedUserOp = submitted.userOpHash
+                        rememberUserOp(submitted.userOpHash)
                     }
-                    override fun signingStarted() = Unit
-                    override fun recordsPersisted() = wallet.feedReconciled()
+                    // Spec 082 RA9: the ceremony's two edges reach the core
+                    // through the controller (`CeremonyStarted` / `CeremonyDone`),
+                    // so the sheet's words follow the passkey, not a guess.
+                    // Spec 082 RG3: a record write re-reads the feed at once —
+                    // one row resolved, so the dApp's row shows in seconds.
+                    override fun recordsPersisted() = wallet.feedReconciled(1)
                     override fun recordPersisted(recordId: String) = Unit
                     // By address: the machine's row index is not the session's.
                     // `true` only once the session's active address IS it.
@@ -703,14 +702,13 @@ class AppContainer(private val app: Application) {
                     }
                     override fun nativeSymbol(chainId: Int): String =
                         settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }?.native_symbol ?: "ETH"
-                    override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) = wallet.trackSubmitted(userOpHash, recordIds, chainId)
+                    override fun trackSubmitted(handoff: app.getvela.wallet.feature.send.core.TrackHandoff) = wallet.trackSubmitted(handoff)
                     override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
-                    override suspend fun simulate(chainId: Int, wallet: String, calls: List<SimDeltas.Call>): List<TrustSimJudgment>? {
-                        val body = SimDeltas.body(wallet, calls) ?: return null
-                        val answer = (pool.call(chainId, "eth_simulateV1", listOf(body, "latest")) as? RpcResult.Body)?.json ?: return null
-                        val logs = SimDeltas.logsOf(answer) ?: return null
-                        return this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, SimDeltas.deriveDeltas(logs, wallet))
-                    }
+                    // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
+                    override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =
+                        pool.call(chainId, "eth_simulateV1", params)
+                    override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): List<TrustSimJudgment>? =
+                        this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, deltas)
                     override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> {
                         val body = (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)?.json
                             ?: return null to false

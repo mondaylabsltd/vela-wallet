@@ -46,6 +46,7 @@ class TrackerMachineTest {
     private val patched = ArrayList<String>()
     private val notified = ArrayList<String>()
     private val logsSeen = ArrayList<Pair<String, Int>>()
+    private val moved = java.util.concurrent.CopyOnWriteArrayList<Int>()
 
     @After
     fun stop() = scope.cancel()
@@ -66,6 +67,7 @@ class TrackerMachineTest {
                 override fun recordsPatched(ids: List<String>, status: TrackRecordStatus, txHash: String?) { patched += "${ids.size}:$status:$txHash" }
                 override fun notifyConfirmed(userOpHash: String, chainId: Int, txHash: String) { notified += userOpHash }
                 override fun receiptLogsConfirmed(from: String, chainId: Int, logs: List<TrustReceiptLog>) { logsSeen += from to logs.size }
+                override fun holdingsMoved(chainId: Int) { moved += chainId }
             },
         )
         return CoreHost(
@@ -140,5 +142,116 @@ class TrackerMachineTest {
         val view = withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == "0xop3" } } }
         assertEquals(TrackStatus.Pending, view.entries.single().status)
         assertTrue(port.calls.any { it.contains("eth_getUserOperationReceipt") } || true)
+    }
+
+    // -- spec 082: a lost reply (ruling 8, RA4, T128/T184) ---------------------
+
+    private val op = "0x" + "7a".repeat(32)
+    private val found = "0x" + "e1".repeat(32)
+
+    /** The `eth_getLogs` filters the shell sent, in order. */
+    private val filters = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
+
+    /**
+     * A chain whose head is block 1010 and whose logs hold the op's own
+     * `UserOperationEvent` (success word = 1). The log is built from the
+     * filter the shell sent — the entry point and topic are the core's, and
+     * the shell only passes them through.
+     */
+    private fun chainWithTheEvent(success: Boolean = true) {
+        port.always("eth_blockNumber") { FakeRelayPort.body("0x3f2") }
+        port.always("eth_getLogs") { params ->
+            val filter = params.single() as JSONObject
+            filters += filter
+            val word = { n: Int -> n.toString(16).padStart(64, '0') }
+            FakeRelayPort.body(
+                JSONArray().put(
+                    JSONObject()
+                        .put("address", filter.getString("address"))
+                        .put("topics", filter.getJSONArray("topics"))
+                        .put("data", "0x" + word(0) + word(if (success) 1 else 0) + word(21_000) + word(21_000))
+                        .put("transactionHash", found)
+                        .put("blockNumber", "0x3ec"),
+                ),
+            )
+        }
+        port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
+        port.always("pimlico_getUserOperationStatus") { FakeRelayPort.body(JSONObject().put("status", "not_found")) }
+    }
+
+    private fun maybeSentRow(hash: String, submitBlock: Long?) = pendingRow(hash)
+        .put("maybeSent", true)
+        .put("submitBlock", submitBlock ?: JSONObject.NULL)
+
+    /**
+     * Ruling 8: a may-have-been-sent op the relay never acknowledges is found
+     * by its own event on chain — the shell answers `FindOpEvent` with the
+     * pool's logs as they came, starting at the head read before the submit,
+     * and the tracker (alone) closes the record with the event's tx hash. The
+     * balance is re-read (RE8), and no receipt logs reach the trust machine:
+     * there is no receipt behind an event.
+     */
+    @Test
+    fun `a lost reply is found by its own event on chain and closes the record`() = runBlocking {
+        store.values[KeyValueStore.Keys.TRANSACTIONS] = JSONArray().put(maybeSentRow(op, 1000)).toString()
+        chainWithTheEvent()
+        val host = host()
+        host.dispatch(
+            app.getvela.wallet.feature.send.core.TrackHandoff(op, listOf(op), 100, maybeSent = true, submitBlock = 1000).event(),
+            TrackEvent.serializer(),
+        )
+        val entry = withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == op } } }.entries.single()
+        assertEquals("followed as a lost reply", app.getvela.wallet.feature.send.core.TrackOutcome.MaybeSent, entry.outcome)
+
+        repeat(5) { tick(host, 3_500.0) }
+        val settled = withTimeout(15_000) { host.view.first { it.entries.any { e -> e.status == TrackStatus.Confirmed } } }
+        assertEquals(found, settled.entries.single().tx_hash)
+        withTimeout(5_000) { while (patched.isEmpty() || moved.isEmpty()) delay(50) }
+        assertEquals(listOf("1:Confirmed:$found"), patched)
+        assertEquals(listOf(100), moved.distinct())
+        assertTrue("an event is not a receipt: no logs for token auto-add", logsSeen.isEmpty())
+        val filter = filters.first()
+        assertEquals("the scan starts at the head read before the submit", "0x3e8", filter.getString("fromBlock"))
+        assertEquals(op, filter.getJSONArray("topics").getString(1))
+        val row = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0)
+        assertEquals("confirmed", row.optString("status"))
+        assertEquals(found, row.optString("txHash"))
+    }
+
+    /**
+     * T184 (US3 AS2): the two facts a submit wrote with the row come back on a
+     * restart — the op is still followed as a lost reply, from the block it
+     * was submitted at, with no `Submitted` in this process.
+     */
+    @Test
+    fun `a restart keeps a lost reply followed as one, from its submit block`() = runBlocking {
+        store.values[KeyValueStore.Keys.TRANSACTIONS] = JSONArray().put(maybeSentRow(op, 1000)).toString()
+        chainWithTheEvent()
+        val host = host()
+        host.dispatch(TrackEvent.AppResumed, TrackEvent.serializer())
+        val entry = withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == op } } }.entries.single()
+        assertEquals(app.getvela.wallet.feature.send.core.TrackOutcome.MaybeSent, entry.outcome)
+
+        repeat(5) { tick(host, 3_500.0) }
+        withTimeout(15_000) { host.view.first { it.entries.any { e -> e.status == TrackStatus.Confirmed } } }
+        assertEquals("0x3e8", filters.first().getString("fromBlock"))
+    }
+
+    @Test
+    fun `a stored row reads back as the tracker's pending record, old rows included`() {
+        assertEquals(
+            app.getvela.wallet.feature.send.core.TrackPendingRecord(
+                record_id = op, user_op_hash = op, chain_id = 100, submitted_at_ms = clock, maybe_sent = true, submit_block = 1000,
+            ),
+            TrackerExecutor.pendingRecord(maybeSentRow(op, 1000)),
+        )
+        val unknownHead = TrackerExecutor.pendingRecord(maybeSentRow(op, null))!!
+        assertTrue(unknownHead.maybe_sent)
+        assertEquals(null, unknownHead.submit_block)
+        // A row written before 082 carries neither: an ordinary op.
+        val old = TrackerExecutor.pendingRecord(pendingRow(op))!!
+        assertEquals(false, old.maybe_sent)
+        assertEquals(null, old.submit_block)
+        assertEquals(null, TrackerExecutor.pendingRecord(pendingRow(op).put("userOpHash", "")))
     }
 }

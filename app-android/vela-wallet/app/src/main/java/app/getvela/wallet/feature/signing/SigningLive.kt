@@ -37,6 +37,9 @@ import app.getvela.wallet.feature.flows.ReceiptStage
 import app.getvela.wallet.feature.flows.SendReceiptModel
 import app.getvela.wallet.feature.signing.core.SignView
 import app.getvela.wallet.feature.signing.core.SigningController
+import app.getvela.wallet.feature.signing.core.SignPhase
+import app.getvela.wallet.feature.signing.core.SignEndingState
+import app.getvela.wallet.feature.send.core.TrackOutcome
 
 /**
  * The signing sheet from the four machines' views (spec 044 T033; the
@@ -243,7 +246,7 @@ object SigningLive {
         val refused = sign.blocked != null
         val blocks =
             if (refused) statusBlocks(sign, s)
-            else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) +
+            else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
                 simBlocks(sim, ctx) + guardBlocks(guard, s)
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
@@ -425,7 +428,7 @@ object SigningLive {
         // A message never goes to the network: it is signing, then signed —
         // never "submitting" (device-found on the Xiaomi, spec 079).
         val onChain = sign.request?.kind.let { it == null || it == SignMethodKind.Transaction || it == SignMethodKind.Batch }
-        if (!onChain && (sign.is_signing || sign.is_submitting)) {
+        if (!onChain && sign.phase != SignPhase.Idle) {
             return SendReceiptModel(
                 header = header,
                 stage = ReceiptStage.Submitting,
@@ -447,6 +450,20 @@ object SigningLive {
                     cta = s.t(I18nKeys.Flows.DONE),
                     ctaAccent = true,
                 )
+            // Spec 082 RA10: the relay's reply was lost. "Submitting…", it may
+            // have been sent, Vela keeps checking — the op hash, and a close
+            // that keeps it running. Never "failed", never a Retry: a second
+            // attempt could pay twice. Once the relay shows it holds the op,
+            // the ordinary words below take over.
+            sign.pending_op_hash != null && maybeSentNow(sign, ctx) -> SendReceiptModel(
+                header = header,
+                stage = ReceiptStage.Submitting,
+                title = s.t(I18nKeys.Flows.TX_SUBMITTING),
+                captions = listOfNotNull(summary, s.t(I18nKeys.Flows.SIGN_MAYBE_SENT)),
+                hash = opHashRow(sign.pending_op_hash, s),
+                cta = closeBackground,
+                ctaAccent = false,
+            )
             sign.pending_op_hash != null -> {
                 val track = ctx.track?.takeIf { it.user_op_hash.equals(sign.pending_op_hash, ignoreCase = true) }
                 val still = track?.outcome == app.getvela.wallet.feature.send.core.TrackOutcome.StillConfirming
@@ -478,7 +495,10 @@ object SigningLive {
                     eta = eta,
                 )
             }
-            sign.is_submitting -> SendReceiptModel(
+            // Spec 082 RA9: the words are the core's phase — never "waiting
+            // for your signature" through the pre-check and the relay's
+            // estimate, which is what shell flags used to say.
+            sign.phase == SignPhase.Submitting -> SendReceiptModel(
                 header = header,
                 stage = ReceiptStage.Submitting,
                 title = s.t(I18nKeys.Flows.TX_SUBMITTING),
@@ -488,10 +508,18 @@ object SigningLive {
             )
             // The passkey is up (or the trusted signer's page is — its own
             // waiting card wins over this, see the sheet).
-            sign.is_signing -> SendReceiptModel(
+            sign.phase == SignPhase.AwaitingSignature -> SendReceiptModel(
                 header = header,
                 stage = ReceiptStage.Submitting,
                 title = s.t(I18nKeys.Flows.TX_SIGNING),
+                captions = listOfNotNull(summary),
+                cta = s.t(I18nKeys.Flow.CLOSE),
+                ctaAccent = false,
+            )
+            sign.phase == SignPhase.Preparing -> SendReceiptModel(
+                header = header,
+                stage = ReceiptStage.Submitting,
+                title = s.t(I18nKeys.Flows.TX_PREPARING),
                 captions = listOfNotNull(summary),
                 cta = s.t(I18nKeys.Flow.CLOSE),
                 ctaAccent = false,
@@ -501,36 +529,59 @@ object SigningLive {
     }
 
     /**
+     * The lost reply is still unanswered: the machine says the pending op's
+     * reply was lost, and the tracker has not seen the relay hold it yet (no
+     * entry yet reads the same — the tracker has not taken it).
+     */
+    private fun maybeSentNow(sign: SignView, ctx: Context): Boolean {
+        val track = ctx.track?.takeIf { it.user_op_hash.equals(sign.pending_op_hash, ignoreCase = true) }
+        return track?.outcome == TrackOutcome.MaybeSent || (track == null && sign.pending_op_maybe_sent)
+    }
+
+    /** The operation's hash, short, copyable — what a person can quote while it may have been sent. */
+    private fun opHashRow(hash: String, s: VelaStrings) = app.getvela.wallet.feature.flows.ReceiptHashModel(
+        label = s.t(I18nKeys.Flows.TX_HASH),
+        value = "${hash.take(10)}…${hash.takeLast(8)}",
+        copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS),
+        copyValue = hash,
+    )
+
+    /**
      * Spec 079: the ending of a request whose sheet the core has closed — the
      * same receipt, with the tracker's word for an operation still on its way
      * (never "failed" on time alone: a timeout is not a failure).
+     *
+     * Spec 082 RA8/RA10: what the ending stands for is the core's
+     * (`sign_ending_state` over the tracker's entry). Confirmed only when the
+     * tracker saw it land; a revert is "failed" with its hint and the
+     * explorer; "not sent" is the plain failure; a lost reply still unanswered
+     * reads "may have been sent", with no Retry.
      */
     fun aftercareReceipt(
         aftercare: SigningAftercare,
         summary: String?,
         ctx: Context,
+    ): SendReceiptModel = aftercareReceipt(aftercare.state(ctx.track), summary, ctx)
+
+    fun aftercareReceipt(
+        state: SignEndingState,
+        summary: String?,
+        ctx: Context,
     ): SendReceiptModel {
         val s = ctx.strings
         val header = FlowHeaderModel(title = "", backLabel = "")
-        fun landed(txHash: String?) = SendReceiptModel(
-            header = header,
-            stage = ReceiptStage.Confirmed,
-            title = s.t("componentsTx.receipt.statusConfirmed"),
-            captions = listOfNotNull(summary, ctx.chainName.takeIf { it.isNotBlank() }),
-            hash = txHash?.let {
-                app.getvela.wallet.feature.flows.ReceiptHashModel(
-                    label = s.t(I18nKeys.Flows.TX_HASH),
-                    value = "${it.take(10)}…${it.takeLast(8)}",
-                    copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS),
-                    copyValue = it,
-                )
-            },
-            viewOnExplorer = ctx.explorerUrl?.takeIf { txHash != null && it.isNotBlank() }?.let { s.t(I18nKeys.Flows.VIEW_ON_EXPLORER) },
-            cta = s.t(I18nKeys.Flows.DONE),
-            ctaAccent = true,
-        )
-        return when (aftercare) {
-            is SigningAftercare.Signed -> SendReceiptModel(
+        fun hashRow(txHash: String?) = txHash?.takeIf { it.isNotBlank() }?.let {
+            app.getvela.wallet.feature.flows.ReceiptHashModel(
+                label = s.t(I18nKeys.Flows.TX_HASH),
+                value = "${it.take(10)}…${it.takeLast(8)}",
+                copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS),
+                copyValue = it,
+            )
+        }
+        fun explorer(txHash: String?) =
+            ctx.explorerUrl?.takeIf { !txHash.isNullOrBlank() && it.isNotBlank() }?.let { s.t(I18nKeys.Flows.VIEW_ON_EXPLORER) }
+        return when (state) {
+            SignEndingState.Signed -> SendReceiptModel(
                 header = header,
                 stage = ReceiptStage.Confirmed,
                 // "已签名！" — `signHandoff.signed` reads "已发送" in zh, which a
@@ -540,32 +591,73 @@ object SigningLive {
                 cta = s.t(I18nKeys.Flows.DONE),
                 ctaAccent = true,
             )
-            is SigningAftercare.Landed -> landed(aftercare.txHash)
-            is SigningAftercare.StillConfirming -> {
-                val track = ctx.track?.takeIf { it.user_op_hash.equals(aftercare.userOpHash, ignoreCase = true) }
-                when {
-                    track?.status == app.getvela.wallet.feature.send.core.TrackStatus.Confirmed -> landed(track.tx_hash)
-                    track?.status == app.getvela.wallet.feature.send.core.TrackStatus.Dropped ||
-                        track?.status == app.getvela.wallet.feature.send.core.TrackStatus.Rejected -> SendReceiptModel(
-                        header = header,
-                        stage = ReceiptStage.Failed,
-                        title = s.t(I18nKeys.Flows.STATUS_FAILED),
-                        captions = listOfNotNull(summary, s.t("send.txErrorGeneric")),
-                        cta = s.t(I18nKeys.Flows.DONE),
-                        ctaAccent = true,
-                    )
-                    else -> SendReceiptModel(
-                        header = header,
-                        stage = ReceiptStage.Submitted,
-                        title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
-                        captions = listOfNotNull(
-                            summary,
-                            if (track?.outcome == app.getvela.wallet.feature.send.core.TrackOutcome.Unknown) s.s("unknownOutcome") else s.s("stillConfirming"),
-                        ),
-                        cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
-                        ctaAccent = false,
-                    )
-                }
+            is SignEndingState.Confirmed -> SendReceiptModel(
+                header = header,
+                stage = ReceiptStage.Confirmed,
+                title = s.t("componentsTx.receipt.statusConfirmed"),
+                captions = listOfNotNull(summary, ctx.chainName.takeIf { it.isNotBlank() }),
+                hash = hashRow(state.tx_hash),
+                viewOnExplorer = explorer(state.tx_hash),
+                cta = s.t(I18nKeys.Flows.DONE),
+                ctaAccent = true,
+            )
+            // It landed and reverted: gas was spent, nothing else happened.
+            is SignEndingState.Reverted -> SendReceiptModel(
+                header = header,
+                stage = ReceiptStage.Failed,
+                title = s.t(I18nKeys.Flows.STATUS_FAILED),
+                captions = listOfNotNull(summary, s.t(I18nKeys.Flows.TX_FAILED_HINT)),
+                hash = hashRow(state.tx_hash),
+                viewOnExplorer = explorer(state.tx_hash),
+                cta = s.t(I18nKeys.Flows.DONE),
+                ctaAccent = true,
+            )
+            // The relay never had it: nothing was sent, and "try again" is true.
+            SignEndingState.NotSent -> SendReceiptModel(
+                header = header,
+                stage = ReceiptStage.Failed,
+                title = s.t(I18nKeys.Flows.STATUS_FAILED),
+                captions = listOfNotNull(summary, s.t(I18nKeys.Flows.TX_ERROR_GENERIC)),
+                cta = s.t(I18nKeys.Flows.DONE),
+                ctaAccent = true,
+            )
+            is SignEndingState.Following -> when (state.outcome) {
+                TrackOutcome.MaybeSent -> SendReceiptModel(
+                    header = header,
+                    stage = ReceiptStage.Submitting,
+                    title = s.t(I18nKeys.Flows.TX_SUBMITTING),
+                    captions = listOfNotNull(summary, s.t(I18nKeys.Flows.SIGN_MAYBE_SENT)),
+                    hash = opHashRow(state.user_op_hash, s).takeIf { state.user_op_hash.isNotBlank() },
+                    cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
+                    ctaAccent = false,
+                )
+                // The ring: it is on its way inside the chain's usual window.
+                TrackOutcome.Landing -> SendReceiptModel(
+                    header = header,
+                    stage = ReceiptStage.Submitted,
+                    title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
+                    captions = listOfNotNull(
+                        summary,
+                        if (state.fee_held) s.t(I18nKeys.Flows.TX_HELD_FEES) else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
+                    ),
+                    cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
+                    ctaAccent = false,
+                )
+                TrackOutcome.StillConfirming, TrackOutcome.Unknown, TrackOutcome.Final -> SendReceiptModel(
+                    header = header,
+                    stage = ReceiptStage.Submitted,
+                    title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
+                    captions = listOfNotNull(
+                        summary,
+                        when {
+                            state.fee_held -> s.t(I18nKeys.Flows.TX_HELD_FEES)
+                            state.outcome == TrackOutcome.Unknown -> s.s("unknownOutcome")
+                            else -> s.s("stillConfirming")
+                        },
+                    ),
+                    cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
+                    ctaAccent = false,
+                )
             }
         }
     }
@@ -630,38 +722,36 @@ object SigningLive {
         when {
             sign.pending_op_hash != null -> add(SigningBlock.Positive(s.s("submitted")))
             signerPageOpen -> Unit
-            sign.is_signing || sign.is_submitting -> add(SigningBlock.Sentence(s.s("signing"), SigningTone.Neutral))
+            // Spec 082 RA9: the core's phase — the pre-check and the relay's
+            // estimate are "preparing", never "signing".
+            sign.phase == SignPhase.Preparing -> add(SigningBlock.Sentence(s.t(I18nKeys.Flows.TX_PREPARING), SigningTone.Neutral))
+            sign.phase != SignPhase.Idle -> add(SigningBlock.Sentence(s.s("signing"), SigningTone.Neutral))
         }
     }
 
-    fun blocks(clear: ClearSigningView, to: String?, valueHex: String?, dataBytes: Int, ctx: Context): List<SigningBlock> {
-        val s = ctx.strings
-        // A plain native transfer — no calldata — is the one transaction the
-        // core resolves without a descriptor (`ReqKind::TxPlain`: resolved,
-        // no result). The web shows its native transfer UI for it; drawing the
-        // blind "unable to decode (0 bytes)" card here read a dust send as a
-        // contract interaction (device-found).
-        if (clear.resolved && clear.result == null && clear.message == null && clear.blind_typed == null && dataBytes == 0 && to != null) {
-            return plainTransferBlocks(to, valueHex, ctx)
-        }
-        return blocksBySurface(clear, to, dataBytes, s, ctx.origin)
-    }
+    fun blocks(clear: ClearSigningView, to: String?, dataBytes: Int, ctx: Context): List<SigningBlock> =
+        blocksBySurface(clear, to, dataBytes, ctx.strings, ctx)
 
-    private fun plainTransferBlocks(to: String, valueHex: String?, ctx: Context): List<SigningBlock> {
+    /**
+     * Spec 082 RC1–RC5: a dApp's plain value transfer, as the core read it —
+     * the verdict (empty calldata, a readable value) and the amount are the
+     * core's; the coin's symbol is the fee row's. A zero send is "Send · 0"
+     * with no minus. This app used to decide it here from the calldata.
+     */
+    private fun plainSendBlocks(plain: app.getvela.wallet.feature.signing.core.ClearPlainSend, ctx: Context): List<SigningBlock> {
         val s = ctx.strings
-        val wei = valueHex?.removePrefix("0x")?.ifEmpty { "0" }?.toBigIntegerOrNull(16) ?: java.math.BigInteger.ZERO
         return listOf(
             SigningBlock.Intent(s.s("intentSend"), SigningTone.Neutral),
-            SigningBlock.Amount(AmountLine(sign = "−", value = SendLive.fromBase(wei.toString(), 18), symbol = ctx.nativeSymbol), card = true),
-            SigningBlock.Party(s.s("recipientLabel"), ExploreLive.shortAddress(to), to),
+            SigningBlock.Amount(AmountLine(sign = if (plain.no_value) "" else "−", value = plain.amount, symbol = ctx.nativeSymbol), card = true),
+            SigningBlock.Party(s.s("recipientLabel"), ExploreLive.shortAddress(plain.to), plain.to),
         )
     }
 
-    private fun blocksBySurface(clear: ClearSigningView, to: String?, dataBytes: Int, s: VelaStrings, origin: String? = null): List<SigningBlock> = when (clear.surface) {
+    private fun blocksBySurface(clear: ClearSigningView, to: String?, dataBytes: Int, s: VelaStrings, ctx: Context): List<SigningBlock> = when (clear.surface) {
         ClearSurface.None -> emptyList()
         ClearSurface.Loading -> listOf(SigningBlock.Sentence(s.s("loading"), SigningTone.Neutral))
         ClearSurface.ClearSign -> clear.result?.let { resultBlocks(it, s) }.orEmpty()
-        ClearSurface.EthSign, ClearSurface.MessageSign -> clear.message?.let { messageBlocks(it, s, origin) }.orEmpty()
+        ClearSurface.EthSign, ClearSurface.MessageSign -> clear.message?.let { messageBlocks(it, s, ctx.origin) }.orEmpty()
         ClearSurface.BlindTypedData -> clear.blind_typed?.let { typed ->
             buildList {
                 add(SigningBlock.Intent(typed.primary_type ?: s.s("signTypedData"), SigningTone.Caution))
@@ -675,6 +765,7 @@ object SigningLive {
             add(SigningBlock.Warning(SigningTone.Caution, s.s("blindDecodeWarning", mapOf("bytes" to dataBytes.toString()))))
             to?.let { add(SigningBlock.Party(s.s("interactingLabel"), s.s("unverifiedLabel"), it, PartyBadge(s.s("unverifiedLabel"), SigningTone.Caution))) }
         }
+        ClearSurface.PlainSend -> clear.plain_send?.let { plainSendBlocks(it, ctx) }.orEmpty()
     }
 
     private fun toneOf(risk: ClearRisk): SigningTone = when (risk) {
@@ -754,7 +845,15 @@ object SigningLive {
         val s = ctx.strings
         return when (sim) {
             null -> emptyList()
-            SigningController.SimOutcome.Unavailable -> listOf(SigningBlock.Warning(SigningTone.Caution, s.s("simUnavailableWarning")))
+            // Spec 082 RG6: the core's line in the core's tone — a revert is a
+            // danger (with its sanitised reason), a node that could not check
+            // is a caution. Never "nothing changes" for either.
+            is SigningController.SimOutcome.Notice -> listOf(
+                SigningBlock.Warning(
+                    toneOf(sim.risk),
+                    sim.reason?.let { reason -> s.t(sim.key, mapOf("reason" to reason)) } ?: s.t(sim.key),
+                ),
+            )
             is SigningController.SimOutcome.Ready -> {
                 if (sim.judgments.isEmpty()) {
                     return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")))

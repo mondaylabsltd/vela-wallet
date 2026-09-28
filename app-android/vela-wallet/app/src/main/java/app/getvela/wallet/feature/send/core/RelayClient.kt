@@ -24,6 +24,12 @@ import uniffi.vela_core_uniffi.feeSignalsCacheTtlMs
 import uniffi.vela_core_uniffi.functionSelector
 import uniffi.vela_core_uniffi.gasSignalsCacheable
 import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
+import uniffi.vela_core_uniffi.RelayRejection
+import uniffi.vela_core_uniffi.UserOpSubmitReply
+import uniffi.vela_core_uniffi.UserOpSubmitStep
+import uniffi.vela_core_uniffi.parseUserOpStatus
+import uniffi.vela_core_uniffi.userOpStatusMethod
+import uniffi.vela_core_uniffi.userOpSubmitStep
 
 /**
  * The relay (bundler) and the chain, as the send path talks to them —
@@ -54,8 +60,8 @@ class RelayClient(
     /** The configured relay host when the pool names no base for a chain. */
     private val builtinBase: () -> String,
     private val now: () -> Long = System::currentTimeMillis,
-    /** The submit retry's pause; tests set zero. */
-    private val retryDelayMs: Long = SUBMIT_RETRY_DELAY_MS,
+    /** The submit retry's pause; `null` = the core's (`RetryAfter.delay_ms`); tests set zero. */
+    private val retryDelayMs: Long? = null,
 ) {
 
     // -- REST ------------------------------------------------------------------
@@ -379,20 +385,37 @@ class RelayClient(
         )
     }
 
+    /**
+     * How one operation's submit ended — the core's verdict (`user_op::
+     * submit_step`, spec 082 RA1), never this file's.
+     */
     sealed class SubmitAnswer {
+        /** The relay holds it; its hash wins over the local one. */
         data class Accepted(val userOpHash: String) : SubmitAnswer()
 
-        /** The relay's `error` member as JSON — the core turns it into a sentence and a class. */
-        data class Rejected(val errorJson: String) : SubmitAnswer()
+        /**
+         * A POST may have reached the relay and its answer never came back:
+         * followed under the LOCAL hash. Never "failed — try again" (owner
+         * ruling 1): a second attempt could pay twice.
+         */
+        data class MaybeSent(val userOpHash: String) : SubmitAnswer()
 
-        data object Unreachable : SubmitAnswer()
+        /**
+         * Definitely not sent: nothing left the device ([rejection] `null` —
+         * the dApp's detail is the core's fixed sentence), or the relay
+         * refused it and no earlier attempt can have delivered it.
+         */
+        data class NotSent(val rejection: RelayRejection?) : SubmitAnswer()
     }
 
     /**
-     * `eth_sendUserOperation`, retried up to three times while the relay says
-     * it is busy ("currently processing", "Retry later") — the web's loop.
-     */
-    /**
+     * `eth_sendUserOperation`, driven by the core's `userOpSubmitStep`: POST,
+     * OR the pool's `maybe_delivered` into a sticky flag, ask the core, and
+     * either POST the IDENTICAL operation again after the core's pause (the
+     * relay said "currently processing" / "Retry later") or stop with its
+     * verdict. [localHash] is `userOpHash(draft, chain)`, computed before the
+     * first POST — what a lost reply is followed under.
+     *
      * `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
      * about speed (spec 068; Android's since 069). The tier is a NAME, never a
      * wei figure: the relay resolves it at submit time and clamps it between
@@ -400,26 +423,80 @@ class RelayClient(
      * sends the pre-068 two-element params exactly, and the dead `rapid` is
      * never sent — a relay refuses an unknown name with -32602.
      */
-    suspend fun sendUserOp(chainId: Int, opJson: String, tier: FeeTier? = null): SubmitAnswer {
+    suspend fun sendUserOp(chainId: Int, opJson: String, tier: FeeTier? = null, localHash: String = ""): SubmitAnswer {
         val op = JSONObject(opJson)
         VelaLog.event("relay.submit", "sending", "sender" to op.optString("sender"), "nonce" to op.optString("nonce"), "tier" to (tier?.let(::tierKey) ?: "-"))
         val params = submitParams(op, tier)
+        val started = now()
         var attempt = 0
+        var maybeDelivered = false
         while (true) {
-            val body = bundlerCall(chainId, "eth_sendUserOperation", params)
-                ?: return SubmitAnswer.Unreachable
-            body.optString("result").takeIf { it.startsWith("0x") }?.let { return SubmitAnswer.Accepted(it) }
-            val error = body.opt("error")
-            val message = (error as? JSONObject)?.optString("message").orEmpty()
-            val retryable = message.contains("currently processing") || message.contains("Retry later")
-            if (!retryable || attempt == SUBMIT_MAX_RETRIES) {
-                return SubmitAnswer.Rejected(error?.toString() ?: "null")
+            val answer = port.call(chainId, "eth_sendUserOperation", params, RpcKind.Bundler)
+            val reply = when (answer) {
+                is RpcResult.Body -> {
+                    maybeDelivered = maybeDelivered || answer.maybeDelivered
+                    replyOf(answer.json)
+                }
+                is RpcResult.Failed -> {
+                    maybeDelivered = maybeDelivered || answer.maybeDelivered
+                    UserOpSubmitReply.NoAnswer
+                }
+                // Never for this method; nothing answered it either way.
+                is RpcResult.RangeCapped -> UserOpSubmitReply.NoAnswer
             }
-            attempt += 1
-            VelaLog.event("relay.submit", "busy", "retry" to attempt)
-            delay(retryDelayMs)
+            val step = userOpSubmitStep(reply, attempt.toUInt(), maybeDelivered, localHash)
+            val verdict = when (step) {
+                is UserOpSubmitStep.RetryAfter -> {
+                    attempt += 1
+                    VelaLog.event("relay.submit", "busy", "retry" to attempt)
+                    delay(retryDelayMs ?: step.delayMs.toLong())
+                    continue
+                }
+                is UserOpSubmitStep.Accepted -> SubmitAnswer.Accepted(step.userOpHash)
+                is UserOpSubmitStep.MaybeSent -> SubmitAnswer.MaybeSent(step.userOpHash)
+                is UserOpSubmitStep.NotSent -> SubmitAnswer.NotSent(step.rejection)
+            }
+            val hash = (verdict as? SubmitAnswer.Accepted)?.userOpHash ?: (verdict as? SubmitAnswer.MaybeSent)?.userOpHash
+            if (verdict is SubmitAnswer.Accepted && localHash.isNotBlank() && !verdict.userOpHash.equals(localHash, ignoreCase = true)) {
+                // The relay's hash wins; the difference is worth a line.
+                VelaLog.event("userop.hash_mismatch", "relay hash wins", "relay" to verdict.userOpHash.take(12), "local" to localHash.take(12))
+            }
+            VelaLog.event(
+                "relay.submit", "verdict",
+                "verdict" to when (verdict) {
+                    is SubmitAnswer.Accepted -> "accepted"
+                    is SubmitAnswer.MaybeSent -> "maybe_sent"
+                    is SubmitAnswer.NotSent -> "not_sent"
+                },
+                "hash" to hash?.take(12),
+                "attempts" to attempt + 1,
+                "chain" to chainId,
+                "ms" to (now() - started),
+            )
+            return verdict
         }
     }
+
+    /**
+     * One POST's answer as the core reads it: a `result` is the relay's hash
+     * (the core decides whether it is one), an `error` member crosses as JSON
+     * text. A JSON answer with neither is still an answer — handed over as an
+     * empty hash, which the core never accepts as one.
+     */
+    private fun replyOf(body: JSONObject): UserOpSubmitReply {
+        val error = body.opt("error")
+        if (error != null && error != JSONObject.NULL) return UserOpSubmitReply.RpcError(error.toString())
+        val result = body.opt("result")
+        return UserOpSubmitReply.Hash(if (result is String) result else result?.toString().orEmpty())
+    }
+
+    /**
+     * The chain head, read once before the first submit POST (spec 082 ruling
+     * 8): where the tracker's relay-independent landing check starts. `null`
+     * when it could not be read — the core then scans back from the head.
+     */
+    suspend fun headBlock(chainId: Int): Long? =
+        chainCall(chainId, "eth_blockNumber", emptyList())?.let { quantity(it.opt("result")) }
 
     sealed class ReceiptAnswer {
         data object Unreachable : ReceiptAnswer()
@@ -463,23 +540,83 @@ class RelayClient(
         )
     }
 
-    /** `eth_getUserOperationStatus` (a Vela extension): `null` for an older relay or a failure. */
-    suspend fun userOpStatus(chainId: Int, userOpHash: String): Pair<TrackLifecycle, String?>? {
+    /** One parsed relay status: the lifecycle word, the executor stage, the relay's bundle tx. */
+    data class StatusAnswer(val status: TrackLifecycle, val stage: String?, val txHash: String?)
+
+    /**
+     * The relay's view of an op with no receipt (spec 082 RA7, G13): the one
+     * method it serves (`userOpStatusMethod`, `pimlico_getUserOperationStatus`)
+     * and the one parser (`parseUserOpStatus`). `null` for an error, an
+     * unknown status or a failure — never a guess.
+     */
+    suspend fun userOpStatus(chainId: Int, userOpHash: String): StatusAnswer? {
         if (userOpHash.isBlank()) return null
-        val body = bundlerCall(chainId, "eth_getUserOperationStatus", listOf(userOpHash)) ?: return null
-        if (body.has("error")) return null
-        val result = body.optJSONObject("result") ?: return null
-        val status = when (result.optString("status")) {
-            "not_found" -> TrackLifecycle.NotFound
-            "queued" -> TrackLifecycle.Queued
-            "not_submitted" -> TrackLifecycle.NotSubmitted
-            "submitted" -> TrackLifecycle.Submitted
-            "rejected" -> TrackLifecycle.Rejected
-            "included" -> TrackLifecycle.Included
-            "failed" -> TrackLifecycle.Failed
-            else -> return null
+        val body = bundlerCall(chainId, userOpStatusMethod(), listOf(userOpHash)) ?: return null
+        val parsed = parseUserOpStatus(body.toString()) ?: return null
+        val status = runCatching {
+            app.getvela.wallet.core.crux.Wire.json.decodeFromString(TrackLifecycle.serializer(), "\"${parsed.status}\"")
+        }.getOrNull() ?: return null
+        return StatusAnswer(status, parsed.stage, parsed.txHash)
+    }
+
+    /** The pool's answer to the tracker's find-event, as it came (spec 082 ruling 8). */
+    data class OpEventAnswer(val logsJson: String?, val errorJson: String?, val headBlock: Long?)
+
+    /**
+     * The relay-independent landing check's two reads, side by side, through
+     * the pool: `eth_blockNumber`, and — when [fromBlock] is set —
+     * `eth_getLogs{address: entryPoint, topics: [topic0, userOpHash],
+     * fromBlock, toBlock}`. Nothing is judged here: a result goes back as the
+     * log array's JSON, an error member (a range limit is one, T180) as its
+     * JSON, and a call nobody answered as neither. What a range error is, is
+     * the core's (`rpc_pool::is_log_range_error`).
+     */
+    suspend fun findOpEvent(
+        chainId: Int,
+        entryPoint: String,
+        topic0: String,
+        userOpHash: String,
+        fromBlock: Long?,
+        toBlock: Long?,
+    ): OpEventAnswer = coroutineScope {
+        val head = async { headBlock(chainId) }
+        val logs = if (fromBlock == null) {
+            null
+        } else {
+            async {
+                val filter = JSONObject()
+                    .put("address", entryPoint)
+                    .put("topics", JSONArray().put(topic0).put(userOpHash))
+                    .put("fromBlock", "0x" + fromBlock.toString(16))
+                    .put("toBlock", toBlock?.let { "0x" + it.toString(16) } ?: "latest")
+                port.call(chainId, "eth_getLogs", listOf(filter), RpcKind.Rpc)
+            }
         }
-        return status to result.optString("last_executor_stage").takeIf { it.isNotBlank() }
+        val answer = logs?.await()
+        val body = when (answer) {
+            is RpcResult.Body -> answer.json
+            is RpcResult.RangeCapped -> answer.json
+            is RpcResult.Failed, null -> null
+        }
+        val error = body?.opt("error")?.takeIf { it != JSONObject.NULL }
+        val result = body?.opt("result")?.takeIf { it != JSONObject.NULL }
+        val headBlock = head.await()
+        VelaLog.event(
+            "tracker.find", "op event read",
+            "chain" to chainId, "op" to userOpHash.take(12),
+            "from" to fromBlock, "to" to toBlock, "head" to headBlock,
+            "answer" to when {
+                error != null -> "error"
+                result != null -> "logs"
+                fromBlock == null -> "head only"
+                else -> "no answer"
+            },
+        )
+        OpEventAnswer(
+            logsJson = if (error == null) result?.toString() else null,
+            errorJson = error?.toString(),
+            headBlock = headBlock,
+        )
     }
 
     // -- chain reads the send path needs ------------------------------------------
@@ -596,9 +733,6 @@ class RelayClient(
         const val QUOTE_TTL_MS = 8_000L
         const val INFO_TTL_MS = 30_000L
 
-        const val SUBMIT_MAX_RETRIES = 3
-        const val SUBMIT_RETRY_DELAY_MS = 3_000L
-
         fun tierKey(tier: FeeTier) = when (tier) {
             FeeTier.Slow -> "slow"
             FeeTier.Standard -> "standard"
@@ -610,6 +744,12 @@ class RelayClient(
             value != null && value.length == 42 && value.startsWith("0x") && value.drop(2).all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
 
         fun addressWord(address: String): String = address.removePrefix("0x").lowercase().padStart(64, '0')
+
+        /** A hex QUANTITY as a block number; `null` when absent, not hex, or past a `Long`. */
+        fun quantity(value: Any?): Long? {
+            val text = (value as? String)?.takeIf { it.startsWith("0x") } ?: return null
+            return text.removePrefix("0x").ifEmpty { return null }.toLongOrNull(16)?.takeIf { it >= 0 }
+        }
 
         /** `parseBigIntHex`: a `0x` hex, a bare hex, or a JSON number; anything else is zero. */
         fun bigHex(value: Any?): BigInteger = when (value) {

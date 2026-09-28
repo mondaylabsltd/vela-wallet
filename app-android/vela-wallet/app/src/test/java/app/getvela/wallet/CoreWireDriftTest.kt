@@ -173,6 +173,7 @@ import app.getvela.wallet.feature.wallet.core.RpcOperation
 import app.getvela.wallet.feature.wallet.core.RpcPoolView
 import app.getvela.wallet.feature.wallet.core.RpcShellResult
 import app.getvela.wallet.feature.wallet.core.RpcSource
+import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.feature.wallet.core.RpcTransportOutcome
 import app.getvela.wallet.feature.settings.core.CurrencyOperation
 import app.getvela.wallet.feature.settings.core.CurrencyShellResult
@@ -822,6 +823,117 @@ class CoreWireDriftTest {
         assertVariantsExist<MtokEvent>("MtokEvent")
     }
 
+    // -- spec 082: every new variant decodes (T124) ------------------------------
+    //
+    // kotlinx refuses a whole view over ONE value it does not know: a tracker
+    // entry in `not_sent` would have blanked every entry, a plain send the
+    // whole signing sheet. These are the core's own shapes, decoded and
+    // encoded back — the variant must survive the trip, not merely parse.
+
+    private inline fun <reified T> roundTrip(json: String): T {
+        val decoded = Wire.json.decodeFromString(serializer<T>(), json)
+        val again = Wire.json.decodeFromString(serializer<T>(), Wire.json.encodeToString(serializer<T>(), decoded))
+        assertEquals("round trip changed the value", decoded, again)
+        return decoded
+    }
+
+    @Test
+    fun theTrackerViewDecodesTheNewEndsAndOutcomes() {
+        val view = roundTrip<TrackView>(
+            """{"entries":[
+              {"user_op_hash":"0xaa","chain_id":100,"record_ids":["0xaa"],"status":"not_sent","tx_hash":null,"polling":false,"submitted_at_ms":1.0,"outcome":"final","relay_tx_hash":null},
+              {"user_op_hash":"0xbb","chain_id":100,"record_ids":["0xbb"],"status":"pending","tx_hash":null,"polling":true,"submitted_at_ms":2.0,"outcome":"maybe_sent","relay_tx_hash":"0xcc"}
+            ]}""",
+        )
+        assertEquals(TrackStatus.NotSent, view.entries[0].status)
+        assertEquals(TrackOutcome.MaybeSent, view.entries[1].outcome)
+        assertEquals("0xcc", view.entries[1].relay_tx_hash)
+    }
+
+    @Test
+    fun theTrackerOperationsAndAnswersOf082Decode() {
+        val find = roundTrip<TrackOperation>(
+            """{"type":"find_op_event","chain_id":100,"entry_point":"0x0000000071727De22E5E9d8BAf0edAc6f37da032","topic0":"0x49628fd1","user_op_hash":"0xaa","from_block":48478700,"to_block":null}""",
+        )
+        assertEquals(48_478_700L, (find as TrackOperation.FindOpEvent).from_block)
+        assertEquals(TrackOperation.HoldingsMoved(100), roundTrip<TrackOperation>("""{"type":"holdings_moved","chain_id":100}"""))
+        val event = roundTrip<TrackShellResult>(
+            """{"type":"op_event","user_op_hash":"0xaa","now_ms":5.0,"logs_json":"[]","error_json":null,"head_block":48478800}""",
+        )
+        assertEquals(48_478_800L, (event as TrackShellResult.OpEvent).head_block)
+        val status = roundTrip<TrackShellResult>("""{"type":"status","user_op_hash":"0xaa","status":"queued","stage":null,"now_ms":1.0,"tx_hash":"0xdd"}""")
+        assertEquals("0xdd", (status as TrackShellResult.Status).tx_hash)
+        val record = roundTrip<TrackPendingRecord>("""{"record_id":"0xaa","user_op_hash":"0xaa","chain_id":100,"submitted_at_ms":1.0,"maybe_sent":true,"submit_block":42}""")
+        assertTrue(record.maybe_sent)
+        assertEquals(42L, record.submit_block)
+        // A row stored before 082 reads back as "sent" with no start block.
+        val old = roundTrip<TrackPendingRecord>("""{"record_id":"0xaa","user_op_hash":"0xaa","chain_id":100,"submitted_at_ms":1.0}""")
+        assertEquals(false, old.maybe_sent)
+        assertEquals(null, old.submit_block)
+    }
+
+    @Test
+    fun thePoolsNewOutcomeAndViewFieldDecode() {
+        assertEquals(RpcTransportOutcome.NotConnected, roundTrip<RpcTransportOutcome>("""{"type":"not_connected"}"""))
+        val failed = roundTrip<RpcCallVerdict>("""{"type":"failed","rate_limited":false,"maybe_delivered":true}""")
+        assertTrue((failed as RpcCallVerdict.Failed).maybe_delivered)
+        val view = roundTrip<RpcPoolView>("""{"failed_chains":[],"rate_limited_chains":[],"banned":[],"unreached_chains":[100]}""")
+        assertEquals(listOf(100), view.unreached_chains)
+    }
+
+    @Test
+    fun aPlainSendSheetDecodes() {
+        val view = roundTrip<ClearSigningView>(
+            """{"resolving":false,"resolved":true,"result":null,"message":null,"surface":"plain_send","confirm":{"type":"confirm_intent","intent":"send","intent_term":"intentSend"},"blind_typed":null,"danger_haptic":false,
+               "plain_send":{"to":"0x1111111111111111111111111111111111111111","value_wei":"1000000000000000","amount":"0.001","no_value":false}}""",
+        )
+        assertEquals(ClearSurface.PlainSend, view.surface)
+        assertEquals("0.001", view.plain_send?.amount)
+    }
+
+    @Test
+    fun theSignSheetsPhaseAndEndingsDecode() {
+        val view = roundTrip<SignView>("""{"surface":"sheet","phase":"awaiting_signature","pending_op_maybe_sent":true}""")
+        assertEquals(SignPhase.AwaitingSignature, view.phase)
+        assertTrue(view.pending_op_maybe_sent)
+        assertEquals(SignSubmitOutcome.AskerGone, roundTrip<SignSubmitOutcome>("""{"type":"asker_gone"}"""))
+        assertEquals(
+            SignEnding.Landed("0xtx", "0xop"),
+            roundTrip<SignEnding>("""{"type":"landed","tx_hash":"0xtx","user_op_hash":"0xop"}"""),
+        )
+        assertEquals(
+            SignEndingState.Following("0xop", TrackOutcome.MaybeSent, false),
+            roundTrip<SignEndingState>("""{"type":"following","user_op_hash":"0xop","outcome":"maybe_sent","fee_held":false}"""),
+        )
+        val submitted = roundTrip<SignEvent>("""{"type":"op_submitted","id":"1","user_op_hash":"0xop","now_ms":1.0,"maybe_sent":true,"submit_block":7}""")
+        assertEquals(7L, (submitted as SignEvent.OpSubmitted).submit_block)
+        assertEquals(SignEvent.CeremonyStarted("1"), roundTrip<SignEvent>("""{"type":"ceremony_started","id":"1"}"""))
+    }
+
+    @Test
+    fun theSendReceiptsNewWordsDecode() {
+        val receipt = roundTrip<SendReceiptView>("""{"status":"maybe_sent","amount":"1","usd_value":0.0}""")
+        assertEquals(SendReceiptStatus.MaybeSent, receipt.status)
+        assertEquals(SendReceiptOutcome.Acknowledged, roundTrip<SendReceiptOutcome>("""{"type":"acknowledged"}"""))
+        assertEquals(
+            SendReceiptOutcome.Failed(rejected = false, not_sent = true),
+            roundTrip<SendReceiptOutcome>("""{"type":"failed","rejected":false,"not_sent":true}"""),
+        )
+    }
+
+    @Test
+    fun aFeedRowSaysWhatItIs() {
+        val view = roundTrip<FeedView>(
+            """{"rows":[{"type":"item","item":{"id":"0xaa","direction":"out","counterparty":null,"alias":null,"value":null,"symbol":"","decimals":null,"usd_value":0.0,"chain_id":100,"timestamp":1.0,"day_start_ms":0.0,"tx_hash":null,"batch":null,"kind":"dapp_tx","status":"failed","site":"127.0.0.1:8137"}}],
+               "transactions":[],"new_item_id":null,"toast":null,"history_empty_key":"history.emptyFilter","home_empty_key":"home.emptyNoActivityNetwork"}""",
+        )
+        val item = (view.rows.single() as FeedRow.Item).item
+        assertEquals(FeedTxKind.DappTx, item.kind)
+        assertEquals(FeedTxStatus.Failed, item.status)
+        assertEquals("127.0.0.1:8137", item.site)
+        assertEquals("history.emptyFilter", view.history_empty_key)
+    }
+
     // -- assertions ----------------------------------------------------------
 
 
@@ -908,6 +1020,9 @@ class CoreWireDriftTest {
         assertStringUnion<SignRecordKind>("SignRecordKind")
         assertStringUnion<SignRecordStatus>("SignRecordStatus")
         assertStringUnion<SignSettledOutcome>("SignSettledOutcome")
+        assertStringUnion<SignPhase>("SignPhase")
+        assertVariantsExhaustive<SignEnding>("SignEnding")
+        assertVariantsExhaustive<SignEndingState>("SignEndingState")
         assertVariantsExist<SignEvent>("SignEvent")
         assertVariantFields(SignOperation.serializer(), "SignOperation")
         assertVariantFields(SignEvent.serializer(), "SignEvent")
@@ -923,6 +1038,7 @@ class CoreWireDriftTest {
         assertFieldsExist<ClearBlindField>("ClearBlindField")
         assertFieldsExist<ClearSiweFields>("ClearSiweFields")
         assertFieldsExist<ClearLocale>("ClearLocale")
+        assertFieldsExist<ClearPlainSend>("ClearPlainSend")
         assertVariantsExhaustive<ClearOperation>("ClearOperation")
         assertVariantsExhaustive<ClearShellResult>("ClearShellResult")
         assertVariantsExhaustive<ClearConfirm>("ClearConfirm")

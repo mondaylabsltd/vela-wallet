@@ -38,8 +38,23 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.signing.core.SigningController
+import app.getvela.wallet.feature.signing.core.ClearRisk
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.signing.SigningTone
+import app.getvela.wallet.core.crux.CoreHost
+import app.getvela.wallet.core.crux.JsonShell
+import app.getvela.wallet.core.crux.asBridge
+import app.getvela.wallet.feature.signing.core.ClearOperation
+import app.getvela.wallet.feature.signing.core.ClearShellResult
+import app.getvela.wallet.feature.signing.core.ClearSigningEvent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import uniffi.vela_core_uniffi.ClearSigningCore
 import org.junit.Test
 
 /** Spec 044: the signing sheet is the four views, in the corpus's words. */
@@ -53,22 +68,88 @@ class SigningLiveTest {
     private val ctx = SigningLive.Context(strings, "Gnosis", Color.Red, "XDAI", "Parallel space", "0x88cCA0EeDbF2C4426110bbFc998F048689266894")
     private fun request(params: String) = IncomingRequest("r1", "eth_sendTransaction", params, "http://127.0.0.1:8137", "tab-1", 100)
 
+    /**
+     * The REAL `clear_signing` core, kicked off the way the sheet kicks it off
+     * ([SigningController.clearKickoff] and its first-call reader), for one
+     * `eth_sendTransaction` whose first call is [call].
+     */
+    private fun clearOf(call: org.json.JSONObject): ClearSigningView = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val host = CoreHost(
+                bridge = ClearSigningCore().asBridge(), scope = scope, initial = ClearSigningView(), serializer = ClearSigningView.serializer(),
+                perform = JsonShell.perform(ClearOperation.serializer(), ClearShellResult.serializer()) { op ->
+                    when (op) {
+                        is ClearOperation.HttpGet -> ClearShellResult.DescriptorFetched(op.path, null)
+                        is ClearOperation.RpcEthCall -> ClearShellResult.RpcAnswer(op.probe, op.chain_id, op.to, null, true)
+                        is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
+                        is ClearOperation.Timer -> ClearShellResult.TimedOut(op.token)
+                        ClearOperation.Now -> ClearShellResult.Clock(1.0e12)
+                    }
+                },
+                escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },
+            )
+            val params = org.json.JSONArray().put(call).toString()
+            host.dispatch(SigningController.clearKickoff("eth_sendTransaction", params, 100, "http://127.0.0.1:8137")!!, ClearSigningEvent.serializer())
+            withTimeout(10_000) { host.view.first { it.resolved } }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    private fun plainModel(call: org.json.JSONObject) = run {
+        val params = org.json.JSONArray().put(call).toString()
+        val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "http://127.0.0.1:8137", null, 100, null), confirm_gate_open = true)
+        SigningLive.model(drawn, request(params), sign, clearOf(call), GuardView(), FeeView(confirm_fee_ready = true), ctx)
+    }
+
+    /**
+     * Spec 082 RC1 (G14): a dApp's plain value transfer is the CORE's verdict
+     * (`ClearSurface::PlainSend`), drawn with the fee row's symbol — the look
+     * 079 gave it (Send · −0.001 XDAI · Recipient), no longer this app's own
+     * interception of empty calldata.
+     */
     @Test
     fun `a plain native transfer reads as Send, not as a blind contract call`() {
-        val params = """[{"to":"$founder","value":"0x38d7ea4c68000"}]"""
-        val clear = ClearSigningView(resolving = false, resolved = true, result = null, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.ConfirmIntent("send"))
-        val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "http://127.0.0.1:8137", null, 100, null), confirm_gate_open = true)
-        val model = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
+        val model = plainModel(org.json.JSONObject().put("to", founder).put("value", "0x38d7ea4c68000"))
         val intent = model.blocks.filterIsInstance<SigningBlock.Intent>().single()
         assertEquals(strings.t("componentsUi.signing.intentSend"), intent.text)
         val amount = model.blocks.filterIsInstance<SigningBlock.Amount>().single()
+        assertEquals("−", amount.line.sign)
         assertEquals("0.001", amount.line.value)
         assertEquals("XDAI", amount.line.symbol)
         assertEquals(founder, model.blocks.filterIsInstance<SigningBlock.Party>().single().address)
+        assertTrue("no blind warning", model.blocks.none { it is SigningBlock.Warning })
         assertEquals("127.0.0.1:8137", model.dappName)
         assertEquals("the host is said once, as the name (spec 079 F14)", "", model.dappHost)
         assertEquals(strings.t("componentsUi.signing.confirmSend"), model.confirmAction)
         assertTrue(model.confirmEnabled)
+    }
+
+    /** RC3: nothing moves — "Send · 0", no minus, and the neutral confirm, never "Confirm send". */
+    @Test
+    fun `a zero-value empty call is the same card with no minus and a neutral confirm`() {
+        for (call in listOf(
+            org.json.JSONObject().put("to", founder).put("value", "0x0"),
+            org.json.JSONObject().put("to", founder),
+            // A JSON null is absent (RC6: `optString` would have read "null").
+            org.json.JSONObject().put("to", founder).put("value", org.json.JSONObject.NULL),
+        )) {
+            val model = plainModel(call)
+            val amount = model.blocks.filterIsInstance<SigningBlock.Amount>().single()
+            assertEquals(call.toString(), "", amount.line.sign)
+            assertEquals(call.toString(), "0", amount.line.value)
+            assertEquals(call.toString(), strings.t("componentsUi.signing.confirmLabel"), model.confirmAction)
+        }
+    }
+
+    /** RC4/RC6: a value the core cannot print exactly is refused — the blind rung, never a calm "0". */
+    @Test
+    fun `a number where the value should be is blind, never a calm zero`() {
+        val model = plainModel(org.json.JSONObject().put("to", founder).put("value", 1000))
+        assertTrue("blind: ${model.blocks}", model.blocks.none { it is SigningBlock.Amount })
+        assertTrue(model.blocks.any { it is SigningBlock.Warning })
+        assertEquals("the reader passes the number as text", "1000", SigningController.firstCall("""[{"to":"$founder","value":1000}]""")?.third)
     }
 
     @Test
@@ -297,8 +378,12 @@ class SigningLiveTest {
         val none = SigningLive.simBlocks(SigningController.SimOutcome.Ready(emptyList()), ctx).single() as SigningBlock.Balances
         assertEquals(strings.t("componentsUi.signing.simResultNoChange"), none.note)
         assertTrue(none.rows.isEmpty())
-        val unavailable = SigningLive.simBlocks(SigningController.SimOutcome.Unavailable, ctx).single() as SigningBlock.Warning
+        val unavailable = SigningLive.simBlocks(SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning"), ctx).single() as SigningBlock.Warning
         assertEquals(strings.t("componentsUi.signing.simUnavailableWarning"), unavailable.text)
+        assertEquals("could not check is a caution, never a danger", SigningTone.Caution, unavailable.tone)
+        val reverts = SigningLive.simBlocks(SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFailReason", "STF"), ctx).single() as SigningBlock.Warning
+        assertEquals(SigningTone.Danger, reverts.tone)
+        assertEquals(strings.t("componentsUi.signing.simWillFailReason", mapOf("reason" to "STF")), reverts.text)
         assertTrue(SigningLive.simBlocks(null, ctx).isEmpty())
     }
 

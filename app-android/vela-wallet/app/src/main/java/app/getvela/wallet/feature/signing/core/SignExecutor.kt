@@ -14,6 +14,8 @@ import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.UserOpCall
+import uniffi.vela_core_uniffi.dappReceiptWaitMs
+import uniffi.vela_core_uniffi.userOpNotSentDetail
 
 /**
  * The `sign_request` machine's seven arms (spec 044 T029; the desktop's
@@ -37,8 +39,13 @@ class SignExecutor(
     private val feed: FeedExecutor,
     private val ports: Ports,
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
-    /** How long the final answer waits for the receipt (the desktop's `await_receipt`); then the op hash answers. */
-    private val receiptWaitMs: Long = 120_000L,
+    /**
+     * How long the final answer waits for the receipt; then the op hash
+     * answers. `null` (the app): the core's `dappReceiptWaitMs` — what is left
+     * of the 120 s answer window since the approve, never under 10 s (spec 082
+     * RA12). Tests pin a number.
+     */
+    private val receiptWaitMs: Long? = null,
     private val receiptPollMs: Long = 3_000L,
     /** The asking site's origin — what the Trusted Signer names as the requester (spec 071). */
     private val origin: () -> String = { "" },
@@ -56,10 +63,19 @@ class SignExecutor(
          */
         fun respond(transportId: String, id: String, payload: SignResponsePayload)
 
-        /** The relay accepted: the core must hear this BEFORE the submit resolves. */
-        fun opSubmitted(id: String, userOpHash: String)
+        /**
+         * The relay was handed the op: the core must hear this BEFORE the
+         * submit resolves. [submitted] says whether the reply was lost (spec
+         * 082 RA3) — the hash is then the local one — and the head before the
+         * first POST; both go into `OpSubmitted` and on with the record.
+         */
+        fun opSubmitted(id: String, submitted: UserOpSpine.Submitted)
 
-        fun signingStarted()
+        /** Spec 082 RA9: the passkey (or the Trusted Signer's page) is up for request [id]. */
+        fun ceremonyStarted(id: String) {}
+
+        /** …and it returned a signature. */
+        fun ceremonyDone(id: String) {}
 
         /** The feed re-reads its store. */
         fun recordsPersisted()
@@ -162,31 +178,42 @@ class SignExecutor(
         if (op.method == "personal_sign" || op.method == "eth_sign" || op.method.contains("signTypedData")) return signMessage(op)
         val calls = callsOf(op.method, op.params_json)
             ?: return SignSubmitOutcome.Failed("${op.method} carried no transaction this wallet could read")
+        // The answer window runs from the approve (RA12); on this client the
+        // pre-check and sponsorship answer at once, so the approve is now.
+        val approvedAt = System.currentTimeMillis()
         return try {
-            val hash = spine.submit(
+            val submitted = spine.submit(
                 chainId = op.chain_id,
                 account = op.address,
                 calls = calls,
                 gasFeeToken = op.gas_fee_token,
                 quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
-                signingStarted = { ports.signingStarted() },
+                signingStarted = { ports.ceremonyStarted(op.id) },
                 intent = TrustedSignerIntent(op.method, op.params_json, origin(), originSeenByBrowser()),
+                ceremonyDone = { ports.ceremonyDone(op.id) },
             )
-            ports.opSubmitted(op.id, hash)
+            val hash = submitted.userOpHash
+            ports.opSubmitted(op.id, submitted)
             // §4: the durable record precedes anything the dApp could poll —
             // the core persists it on `OpSubmitted`; the answer waits for it.
             withTimeoutOrNull(5_000) { persisted.first { hash.lowercase() in it } }
             // The desktop's `await_receipt`: a dApp's `eth_sendTransaction`
-            // resolves to a TX hash; the op hash only when the receipt is late
-            // — reported as `ReceiptPending` so the core answers the page but
-            // leaves the record pending for the tracker (issue 262).
-            afterReceiptWait(hash, awaitReceipt(op.chain_id, hash))
+            // resolves to a TX hash — a reverted one too (ruling 9); the op
+            // hash only when the receipt is late — reported as `ReceiptPending`
+            // so the core answers the page but leaves the record pending for
+            // the tracker (issue 262). A lost reply (RA2) waits the same way,
+            // polling the local hash: one answer, never "not sent".
+            val wait = receiptWaitMs ?: dappReceiptWaitMs((System.currentTimeMillis() - approvedAt).toDouble()).toLong()
+            afterReceiptWait(hash, awaitReceipt(op.chain_id, hash, wait))
         } catch (refused: UserOpSpine.Refused) {
             VelaLog.event("sign.submit", "refused", "why" to refused.failure.toString().take(120))
             when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
                 UserOpSpine.Failure.BundlerUnderfunded -> SignSubmitOutcome.Underfunded("The relay's gas account is underfunded", null)
                 UserOpSpine.Failure.RelayerUnavailable -> SignSubmitOutcome.Failed("The gas relayer is unavailable right now")
+                // Nothing left the device (RA10): the core's fixed sentence,
+                // never the pool's text.
+                UserOpSpine.Failure.NotSent -> SignSubmitOutcome.Failed(userOpNotSentDetail())
                 is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
             }
         }
@@ -200,8 +227,9 @@ class SignExecutor(
             SignSubmitOutcome.Succeeded(
                 spine.signMessage(
                     op.chain_id, op.address, original,
-                    signingStarted = { ports.signingStarted() },
+                    signingStarted = { ports.ceremonyStarted(op.id) },
                     intent = TrustedSignerIntent(op.method, op.params_json, origin(), originSeenByBrowser()),
+                    ceremonyDone = { ports.ceremonyDone(op.id) },
                 ),
             )
         } catch (refused: UserOpSpine.Refused) {
@@ -213,8 +241,8 @@ class SignExecutor(
         }
     }
 
-    private suspend fun awaitReceipt(chainId: Int, userOpHash: String): String? {
-        val deadline = System.currentTimeMillis() + receiptWaitMs
+    private suspend fun awaitReceipt(chainId: Int, userOpHash: String, waitMs: Long): String? {
+        val deadline = System.currentTimeMillis() + waitMs
         while (true) {
             val remaining = deadline - System.currentTimeMillis()
             if (remaining <= 0) break
@@ -276,16 +304,30 @@ class SignExecutor(
 
         private fun call(raw: JSONObject): UserOpCall? {
             val to = raw.optString("to").ifBlank { return null }
-            val valueHex = raw.optString("value").ifBlank { "0x0" }
+            // Spec 082 RC4/RC6: absent or a JSON null is zero (`optString` would
+            // read the text "null" and refuse the call); a value that is not a
+            // string — a JSON number — is refused, never read as hex text: the
+            // sheet showed no figure for it, and 1000 must not leave as 0x1000.
+            val valueHex = when (val value = raw.opt("value")) {
+                null, JSONObject.NULL -> "0x0"
+                is String -> value.ifBlank { "0x0" }
+                else -> return null
+            }
             val value = valueHex.removePrefix("0x").ifEmpty { "0" }.toBigIntegerOrNull(16) ?: return null
             return UserOpCall(to = to, value = value.toString(), data = raw.optString("data").ifBlank { "0x" })
         }
 
-        /** The feed's row for a dApp's request (the desktop's `persist_record`, field for field). */
+        /**
+         * The feed's row for a dApp's request (the desktop's `persist_record`,
+         * field for field). The call is the request's FIRST call — a
+         * `wallet_sendCalls` batch's first leg, not the batch envelope — read
+         * the way the sheet reads it ([SigningController.firstCall]: a JSON
+         * null is absent, never the text "null").
+         */
         fun recordRow(record: SignRecord, nativeSymbol: String): JSONObject {
-            val first = runCatching { JSONArray(record.params_json).optJSONObject(0) }.getOrNull()
+            val call = SigningController.firstCall(record.params_json)
             val (kind, to, value, symbol, decimals) = when (record.kind) {
-                SignRecordKind.DappTx -> Row("dapp_tx", first?.optString("to").orEmpty(), first?.optString("value")?.ifBlank { null } ?: "0x0", nativeSymbol, 18)
+                SignRecordKind.DappTx -> Row("dapp_tx", call?.first.orEmpty(), call?.third ?: "0x0", nativeSymbol, 18)
                 // A signature moves nothing, and a row that claimed a value and
                 // a symbol would show up in the feed as money.
                 SignRecordKind.SignTypedData -> Row("sign_typed_data", "", "0", "", 0)
@@ -309,6 +351,10 @@ class SignExecutor(
                 .put("signedRequest", if (clipped) record.params_json.take(4096) else record.params_json)
                 .put("requestTruncated", clipped)
                 .apply { record.intent?.let { put("intent", it) } }
+                // Spec 082 T184: kept with the row, read back into the tracker's
+                // pending record — a restart keeps a lost reply followed as one.
+                .put("maybeSent", record.maybe_sent)
+                .put("submitBlock", record.submit_block ?: JSONObject.NULL)
         }
 
         private data class Row(val kind: String, val to: String, val value: String, val symbol: String, val decimals: Int)

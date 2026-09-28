@@ -18,11 +18,12 @@ import uniffi.vela_core_uniffi.TrustedSignerInput
 import uniffi.vela_core_uniffi.trustedSignerRequest
 import uniffi.vela_core_uniffi.eip1271Signature
 import uniffi.vela_core_uniffi.safeMessageHash
-import uniffi.vela_core_uniffi.classifyRelayRejection
 import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
-import uniffi.vela_core_uniffi.parseExistingUserOpHash
 import uniffi.vela_core_uniffi.quotedFeeUsable
-import uniffi.vela_core_uniffi.relayErrorMessage
+import uniffi.vela_core_uniffi.userOpHash
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.signInRoute
 import uniffi.vela_core_uniffi.signRoute
 import uniffi.vela_core_uniffi.userOpApplyEstimate
@@ -159,13 +160,31 @@ class UserOpSpine(
         data object RelayerUnavailable : Failure()
         data object BundlerUnderfunded : Failure()
         data class Other(val message: String?) : Failure()
+
+        /**
+         * Spec 082 RA1: the relay was never reached and nothing left the device
+         * — the one failure after the passkey where "not sent, try again" is
+         * true. A page is told the core's fixed sentence, never the pool's.
+         */
+        data object NotSent : Failure()
     }
+
+    /**
+     * What a submit handed the relay (spec 082): the hash to follow, whether
+     * the reply was lost ([maybeSent] — the hash is then the locally computed
+     * one), and the head read before the first POST ([submitBlock], `null` =
+     * unknown). Both flags go with the record and into the tracker.
+     */
+    data class Submitted(val userOpHash: String, val maybeSent: Boolean = false, val submitBlock: Long? = null)
 
     class Refused(val failure: Failure) : Exception()
 
     private companion object {
         /** `wallet_keys::SIGN_METHODS`' first value: what a record without a sign-in key always did. */
         const val AUTO = "auto"
+
+        /** How long the POST waits for a head read still out; past it the head is unknown. */
+        const val HEAD_WAIT_MS = 1_500L
     }
 
     private fun other(message: String): Nothing = throw Refused(Failure.Other(message))
@@ -210,6 +229,8 @@ class UserOpSpine(
         signingStarted: () -> Unit = {},
         /** The page's own request — what the Trusted Signer shows and re-derives the digest from. */
         intent: TrustedSignerIntent? = null,
+        /** Spec 082 RA9: the ceremony returned a signature (`CeremonyDone`). */
+        ceremonyDone: () -> Unit = {},
     ): String {
         val keys = accounts.keysOf(account)
         if (keys.isEmpty()) other("No passkey credential for the active account")
@@ -233,6 +254,7 @@ class UserOpSpine(
                 null,
             )
         }
+        ceremonyDone()
         val signature = runCatching {
             eip1271Signature(
                 WebAuthnAssertion(
@@ -248,8 +270,9 @@ class UserOpSpine(
     }
 
     /**
-     * Assembles, signs once and submits; returns the accepted user-operation
-     * hash (or the one already pending for this nonce). Throws [Refused].
+     * Assembles, signs once and submits; returns what the relay was handed —
+     * accepted (or the op already pending for this nonce), or may-have-been-
+     * sent under the local hash. Throws [Refused] only when it was NOT sent.
      */
     suspend fun submit(
         chainId: Int,
@@ -260,7 +283,32 @@ class UserOpSpine(
         signingStarted: () -> Unit = {},
         /** A site's request (spec 071); `null` for the wallet's own send. */
         intent: TrustedSignerIntent? = null,
-    ): String {
+        /** Spec 082 RA9: the ceremony returned a signature (`CeremonyDone`). */
+        ceremonyDone: () -> Unit = {},
+    ): Submitted = coroutineScope {
+        // The head before the first POST (ruling 8): read beside the assembly
+        // and the ceremony, taken only if it came back before the POST.
+        val head = async { runCatching { relay.headBlock(chainId) }.getOrNull() }
+        try {
+            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, signingStarted, intent, ceremonyDone) {
+                withTimeoutOrNull(HEAD_WAIT_MS) { head.await() }
+            }
+        } finally {
+            head.cancel()
+        }
+    }
+
+    private suspend fun submitSigned(
+        chainId: Int,
+        account: String,
+        calls: List<UserOpCall>,
+        gasFeeToken: String?,
+        quotedFee: Quoted?,
+        signingStarted: () -> Unit,
+        intent: TrustedSignerIntent?,
+        ceremonyDone: () -> Unit,
+        headBeforePost: suspend () -> Long?,
+    ): Submitted {
         val keys = accounts.keysOf(account)
         if (keys.isEmpty()) other("No passkey credential for the active account")
         // A submit, and the first quote after it, landed or not, measure the
@@ -341,6 +389,7 @@ class UserOpSpine(
                 assembled,
             )
         }
+        ceremonyDone()
         val signed = runCatching {
             userOpSign(
                 draft,
@@ -353,24 +402,26 @@ class UserOpSpine(
                 keys,
             )
         }.getOrElse { other(it.message ?: "Failed to create signature") }
+        // The hash a lost reply is followed under (RA6), known before any POST.
+        val localHash = runCatching { userOpHash(signed, chainId.toUInt()) }
+            .getOrElse { other(it.message ?: "The operation could not be hashed") }
+        val submitBlock = headBeforePost()
         // The speed the displayed fee was priced at, named beside it (spec 069).
-        return when (val answer = relay.sendUserOp(chainId, userOpRelayJson(signed, feeToken.takeIf { tempo }), quoted.tier)) {
-            is RelayClient.SubmitAnswer.Accepted -> answer.userOpHash
-            is RelayClient.SubmitAnswer.Rejected -> {
-                val message = relayErrorMessage(answer.errorJson)
-                parseExistingUserOpHash(message)?.let { existing ->
-                    VelaLog.event("userop.submit", "previous op pending", "hash" to existing.take(12))
-                    return existing
-                }
-                throw Refused(
-                    when (val rejection = classifyRelayRejection(message)) {
-                        RelayRejection.RelayerUnavailable -> Failure.RelayerUnavailable
-                        RelayRejection.BundlerUnderfunded -> Failure.BundlerUnderfunded
-                        is RelayRejection.Other -> Failure.Other(rejection.message.ifBlank { null })
-                    },
-                )
-            }
-            RelayClient.SubmitAnswer.Unreachable -> other("The gas relayer could not be reached. Please try again.")
+        // The verdict is the core's (`userOpSubmitStep`): only "not sent" is a
+        // failure; a lost reply is followed under the local hash, never retried
+        // by the person (owner ruling 1). The nonce is read from the chain on
+        // every attempt, so nothing here advances it.
+        return when (val answer = relay.sendUserOp(chainId, userOpRelayJson(signed, feeToken.takeIf { tempo }), quoted.tier, localHash)) {
+            is RelayClient.SubmitAnswer.Accepted -> Submitted(answer.userOpHash, maybeSent = false, submitBlock = submitBlock)
+            is RelayClient.SubmitAnswer.MaybeSent -> Submitted(answer.userOpHash, maybeSent = true, submitBlock = submitBlock)
+            is RelayClient.SubmitAnswer.NotSent -> throw Refused(
+                when (val rejection = answer.rejection) {
+                    null -> Failure.NotSent
+                    RelayRejection.RelayerUnavailable -> Failure.RelayerUnavailable
+                    RelayRejection.BundlerUnderfunded -> Failure.BundlerUnderfunded
+                    is RelayRejection.Other -> Failure.Other(rejection.message.ifBlank { null })
+                },
+            )
         }
     }
 }

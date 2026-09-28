@@ -30,6 +30,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import app.getvela.wallet.feature.send.core.SendReceiptOutcome
+import app.getvela.wallet.feature.send.core.SendReceiptOutcomes
+import app.getvela.wallet.feature.send.core.TrackEntryView
+import app.getvela.wallet.feature.send.core.TrackOutcome
+import app.getvela.wallet.feature.send.core.TrackStatus
 import org.junit.Test
 
 /**
@@ -144,6 +150,26 @@ class SendControllerTest {
 
         val view = send.awaitView("on the form with Arbitrum ETH") { it.stage == SendStage.EnterDetails && it.selected_token?.chain_id == 42161 }
         assertEquals("ETH", view.selected_token?.symbol)
+    }
+
+    /**
+     * Spec 082 (T128): what a tracker entry means for the send on screen is
+     * the core's one mapping (`sendReceiptOutcomeOf`) — this app's own `when`
+     * over four statuses is gone. A lost reply the relay has not shown it
+     * holds says nothing; once it does, the receipt is "submitted" again; the
+     * relay never having it is "not sent", never the fee-refused words.
+     */
+    @Test
+    fun `a tracker entry reaches the send receipt in the core's words`() {
+        fun entry(status: TrackStatus, outcome: TrackOutcome, tx: String? = null) =
+            TrackEntryView(user_op_hash = "0x" + "7a".repeat(32), chain_id = 100, status = status, tx_hash = tx, outcome = outcome)
+        assertNull("in doubt: nothing yet", SendReceiptOutcomes.of(entry(TrackStatus.Pending, TrackOutcome.MaybeSent)))
+        assertEquals(SendReceiptOutcome.Acknowledged, SendReceiptOutcomes.of(entry(TrackStatus.Pending, TrackOutcome.Landing)))
+        assertEquals(SendReceiptOutcome.Failed(rejected = false, not_sent = true), SendReceiptOutcomes.of(entry(TrackStatus.NotSent, TrackOutcome.Final)))
+        assertEquals(SendReceiptOutcome.Failed(rejected = true), SendReceiptOutcomes.of(entry(TrackStatus.Rejected, TrackOutcome.Final)))
+        assertEquals(SendReceiptOutcome.Confirmed("0xtx"), SendReceiptOutcomes.of(entry(TrackStatus.Confirmed, TrackOutcome.Final, "0xtx")))
+        assertEquals(SendReceiptOutcome.FeeHeld, SendReceiptOutcomes.of(entry(TrackStatus.FeeHeld, TrackOutcome.Landing)))
+        assertNull("slow is not failed (invariant 5)", SendReceiptOutcomes.of(entry(TrackStatus.Unreachable, TrackOutcome.Unknown)))
     }
 
     private companion object {

@@ -189,6 +189,9 @@ class FeedExecutor(
                 else -> null
             },
             usd = row.stringOrNull("usd"),
+            // Spec 082 RG1: the site a dApp's record came from — the core names
+            // the row's `site` from it; nothing here decides what it says.
+            dapp_origin = row.stringOrNull("dappOrigin"),
         )
     }
 

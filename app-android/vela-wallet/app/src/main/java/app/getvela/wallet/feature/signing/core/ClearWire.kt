@@ -101,7 +101,24 @@ enum class ClearSurface {
     @SerialName("blind_typed_data") BlindTypedData,
 
     @SerialName("blind_transaction") BlindTransaction,
+
+    /** Spec 082 RC1: empty calldata — a plain value transfer, drawn from [ClearSigningView.plain_send]. */
+    @SerialName("plain_send") PlainSend,
 }
+
+/**
+ * A dApp's plain value transfer, as the core read it (spec 082 RC1–RC5):
+ * the recipient in EIP-55, the exact wei, the amount scaled by 18 in the
+ * reader's number marks, and whether nothing moves (`no_value`: "Send · 0",
+ * no minus, a neutral confirm). The coin's symbol is the fee row's.
+ */
+@Serializable
+data class ClearPlainSend(
+    val to: String,
+    val value_wei: String,
+    val amount: String,
+    val no_value: Boolean = false,
+)
 
 @Serializable
 enum class ClearProbe {
@@ -289,6 +306,8 @@ data class ClearSigningView(
     val confirm: ClearConfirm = ClearConfirm.Confirm,
     val blind_typed: ClearBlindTyped? = null,
     val danger_haptic: Boolean = false,
+    /** Some iff [surface] is [ClearSurface.PlainSend]. */
+    val plain_send: ClearPlainSend? = null,
 )
 
 @Serializable

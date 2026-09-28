@@ -87,6 +87,8 @@ data class FeedTxRecord(
     /** `null` = a legacy untyped record, which the core reads as a send. */
     val kind: FeedTxKind? = null,
     val usd: String? = null,
+    /** Spec 082 RG1: the stored `dappOrigin` of a dApp's record. */
+    val dapp_origin: String? = null,
 )
 
 @Serializable
@@ -140,6 +142,15 @@ data class FeedItem(
     val day_start_ms: Double,
     val tx_hash: String? = null,
     val batch: FeedBatch? = null,
+    /**
+     * Spec 082 RG1: what the row is — the core decides, the shell never
+     * guesses from a hash. A folded batch is a send.
+     */
+    val kind: FeedTxKind = FeedTxKind.Send,
+    /** The record's status (a batch's first line's). */
+    val status: FeedTxStatus = FeedTxStatus.Confirmed,
+    /** `DappTx` only: `host[:port]` of the asking site. */
+    val site: String? = null,
 )
 
 /**
@@ -283,4 +294,8 @@ data class FeedView(
     val new_item_id: String? = null,
     /** `null` while balance privacy is on — the core enforces that, not the shell. */
     val toast: FeedToast? = null,
+    /** Spec 082 RG5: History's empty line, chosen by the chain filter. */
+    val history_empty_key: String = "history.emptyTitle",
+    /** The home Activity's empty line, chosen the same way. */
+    val home_empty_key: String = "home.emptyNoActivity",
 )
