@@ -1051,6 +1051,7 @@ mod tests {
         );
         let landed = at(TrackStatus::Confirmed, TrackOutcome::Final, Some(TX));
         assert_eq!(landed.stage, ReceiptStage::Confirmed);
+    }
 
     /// 083 H4: a message whose signature failed is not a transaction that
     /// could not be submitted — it went nowhere, and says so.
