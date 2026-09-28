@@ -20,8 +20,16 @@
 //  The accepted user-op hash goes back mid-flight through `op_submitted`, so
 //  the durable record precedes anything the dApp could poll. Then the final
 //  outcome. The page is answered with a **transaction** hash once the receipt
-//  arrives; the op hash only when it is late, and the tracker patches the row
-//  when it lands.
+//  arrives — a reverted one included (ruling 9: the page gets its hash, the
+//  sheet and Activity say it failed) — and with the op hash when it is late;
+//  the tracker alone closes the row.
+//
+//  ## A lost reply is not a failure (spec 082 RA1–RA3)
+//
+//  When the relay's answer never came back after a request that may have
+//  been acted on, the op is reported `op_submitted{maybe_sent: true}` under
+//  its LOCAL hash and waited for exactly like an accepted one: the page gets
+//  ONE answer, a hash, never "-32603, try again" (G21's double payment).
 //
 //  Blocking the page on a receipt is what spec 028 found made
 //  `eth_sendTransaction` time out with -32603 on a real dApp.
@@ -46,11 +54,22 @@ final class SignExecutor {
         /// browser that is `dapp_browser` (spec 070), whose words for a
         /// refusal are the core's rather than a table here.
         var respond: (_ transportId: String, _ id: String, _ payload: [String: Any]) -> Void = { _, _, _ in }
-        /// The relay accepted. The core must hear this **before** the submit
-        /// resolves.
-        var opSubmitted: (_ id: String, _ userOpHash: String) -> Void = { _, _ in }
-        /// A ceremony is about to be raised.
-        var signingStarted: () -> Void = {}
+        /// The relay accepted — or may have: `maybeSent` when its reply was
+        /// lost (RA3). `submitBlock` is the head read before the POST. The
+        /// core must hear this **before** the submit resolves.
+        var opSubmitted: (_ id: String, _ userOpHash: String, _ maybeSent: Bool, _ submitBlock: UInt64?) -> Void
+        = { _, _, _, _ in }
+        /// A ceremony is about to be raised for request `id` (the core's
+        /// `ceremony_started`, RA9).
+        var signingStarted: (_ id: String) -> Void = { _ in }
+        /// The ceremony for request `id` returned a signature (`ceremony_done`).
+        var ceremonyDone: (_ id: String) -> Void = { _ in }
+        /// The page that asked is still there (RB2). Asked before the prompt
+        /// and before the relay POST; `false` ends the request with nothing
+        /// signed, nothing sent and no answer.
+        var askerLive: () -> Bool = { true }
+        /// When the person approved — the answer window's start (RA12).
+        var approvedAtMs: () -> Double? = { nil }
         /// The feed re-reads its store.
         var recordsPersisted: () -> Void = {}
         /// The session's active-account switch.
@@ -75,8 +94,10 @@ final class SignExecutor {
     var ports: Ports
 
     /// How long the final answer waits for a receipt before handing back the
-    /// op hash — the desktop's `await_receipt`.
-    private let receiptWaitMs: Double
+    /// op hash, given how long ago the person approved: the core's
+    /// `dapp_receipt_wait_ms` (RA12) — what is left of its answer window,
+    /// never less than its floor. A test seam, and nothing else.
+    private let receiptWaitMs: (_ elapsedMs: Double) -> Double
     private let receiptPollMs: Double
 
     /// User-op hashes whose pending record is on disk. The response never
@@ -88,7 +109,7 @@ final class SignExecutor {
         relay: RelayClient,
         store: VelaStore,
         ports: Ports = Ports(),
-        receiptWaitMs: Double = 120_000,
+        receiptWaitMs: @escaping (_ elapsedMs: Double) -> Double = { dappReceiptWaitMs(elapsedMs: $0) },
         receiptPollMs: Double = 3_000
     ) {
         self.spine = spine
@@ -170,7 +191,7 @@ final class SignExecutor {
             return CoreJSON.string(["type": "account_switched"])
 
         default:
-            print("[vela-wallet] sign_request: unhandled operation \(operation["type"] ?? "?")")
+            VelaLog.failure(.sign, kind: "unhandled_operation", "\(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)
         }
     }
@@ -202,9 +223,10 @@ final class SignExecutor {
         let paramsJson = operation["params_json"] as? String ?? "[]"
         let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
         let address = operation["address"] as? String ?? ""
+        let id = operation["id"] as? String ?? ""
 
         if method == "personal_sign" || method == "eth_sign" || method.contains("signTypedData") {
-            return await signMessage(method: method, paramsJson: paramsJson, chainId: chainId, address: address)
+            return await signMessage(id: id, method: method, paramsJson: paramsJson, chainId: chainId, address: address)
         }
 
         guard let calls = Self.callsOf(method: method, paramsJson: paramsJson) else {
@@ -221,7 +243,7 @@ final class SignExecutor {
         }
 
         do {
-            let hash = try await spine.submit(
+            let submitted = try await spine.submit(
                 chainId: chainId,
                 account: address,
                 calls: calls,
@@ -233,15 +255,30 @@ final class SignExecutor {
                     method: method, paramsJson: paramsJson, origin: ports.origin(),
                     seenByBrowser: ports.originSeenByBrowser()
                 ),
-                signingStarted: { [ports] in ports.signingStarted() }
+                signingStarted: { [ports] in ports.signingStarted(id) },
+                signingDone: { [ports] in ports.ceremonyDone(id) },
+                askerLive: { [ports] in ports.askerLive() }
             )
-            ports.opSubmitted(operation["id"] as? String ?? "", hash)
+            let hash = submitted.userOpHash
+            VelaLog.notice(
+                .sign,
+                "submit verdict=\(submitted.maybeSent ? "maybe_sent" : "accepted") hash=\(VelaLog.short(hash)) chain=\(chainId)"
+            )
+            ports.opSubmitted(id, hash, submitted.maybeSent, submitted.submitBlock)
             // The durable record precedes anything the dApp could poll: the
             // core persists it on `op_submitted`, and the answer waits for it.
             await waitForRecord(of: hash)
-            return Self.afterReceiptWait(
-                userOpHash: hash, receipt: await awaitReceipt(chainId: chainId, userOpHash: hash)
+            let elapsed = ports.approvedAtMs().map { Date().timeIntervalSince1970 * 1000 - $0 } ?? 0
+            let receipt = await awaitReceipt(
+                chainId: chainId, userOpHash: hash, waitMs: receiptWaitMs(elapsed)
             )
+            if let receipt, !receipt.confirmed {
+                // Landed and reverted: the page still gets its tx hash (ruling
+                // 9); the tracker, polling the same receipt, closes the record
+                // failed and the sheet says so. Nothing here patches it.
+                VelaLog.failure(.sign, kind: "reverted", "hash=\(VelaLog.short(hash)) tx=\(VelaLog.short(receipt.txHash))")
+            }
+            return Self.afterReceiptWait(userOpHash: hash, receipt: receipt?.txHash)
         } catch let refused as UserOpSpine.Refused {
             switch refused.failure {
             case .passkeyCancelled:
@@ -249,6 +286,9 @@ final class SignExecutor {
             case .trustedSigner(let notice):
                 ports.trustedSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
+            case .askerGone:
+                VelaLog.notice(.sign, "asker gone before \(method) was sent — nothing signed or sent")
+                return ["type": "asker_gone"]
             case .bundlerUnderfunded:
                 return [
                     "type": "underfunded",
@@ -257,6 +297,10 @@ final class SignExecutor {
                 ]
             case .relayerUnavailable:
                 return ["type": "failed", "message": "The gas relayer is unavailable right now"]
+            case .notSent:
+                // The core's fixed sentence, never the pool's text (RA10):
+                // true, and nothing in it for a page to misread.
+                return ["type": "failed", "message": userOpNotSentDetail()]
             case .other(let message):
                 return ["type": "failed", "message": message ?? "Signing failed"]
             }
@@ -268,7 +312,7 @@ final class SignExecutor {
     /// A message: hashed the way the page's verifier hashes it, signed once,
     /// answered as the EIP-1271 envelope.
     private func signMessage(
-        method: String, paramsJson: String, chainId: Int, address: String
+        id: String, method: String, paramsJson: String, chainId: Int, address: String
     ) async -> [String: Any] {
         guard let original = Self.messageHash(method: method, paramsJson: paramsJson) else {
             return ["type": "failed", "message": "\(method) carried nothing this wallet could sign"]
@@ -282,11 +326,14 @@ final class SignExecutor {
                     method: method, paramsJson: paramsJson, origin: ports.origin(),
                     seenByBrowser: ports.originSeenByBrowser()
                 ),
-                signingStarted: { [ports] in ports.signingStarted() }
+                signingStarted: { [ports] in ports.signingStarted(id) },
+                signingDone: { [ports] in ports.ceremonyDone(id) },
+                askerLive: { [ports] in ports.askerLive() }
             )
             return ["type": "succeeded", "result": signature]
         } catch let refused as UserOpSpine.Refused {
             if case .passkeyCancelled = refused.failure { return ["type": "passkey_cancelled"] }
+            if case .askerGone = refused.failure { return ["type": "asker_gone"] }
             if case .trustedSigner(let notice) = refused.failure {
                 ports.trustedSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
@@ -310,8 +357,13 @@ final class SignExecutor {
         }
     }
 
-    private func awaitReceipt(chainId: Int, userOpHash: String) async -> String? {
-        let deadline = Date().addingTimeInterval(receiptWaitMs / 1000)
+    /// The receipt, if one comes within `waitMs`: its tx hash and whether the
+    /// op succeeded. `confirmed: false` is kept (RA8) — a revert is still a
+    /// landing, and still the page's hash.
+    private func awaitReceipt(
+        chainId: Int, userOpHash: String, waitMs: Double
+    ) async -> (txHash: String, confirmed: Bool)? {
+        let deadline = Date().addingTimeInterval(waitMs / 1000)
         while true {
             let remaining = deadline.timeIntervalSinceNow
             if remaining <= 0 { break }
@@ -324,8 +376,8 @@ final class SignExecutor {
             let answer = await Self.within(seconds: remaining) {
                 await relay.userOpReceipt(chainId: chainId, userOpHash: userOpHash)
             }
-            if case .resolved(_, let txHash, _, _)? = answer, !txHash.isEmpty {
-                return txHash
+            if case .resolved(let confirmed, let txHash, _, _)? = answer, !txHash.isEmpty {
+                return (txHash, confirmed)
             }
             let left = deadline.timeIntervalSinceNow
             if left <= 0 { break }
@@ -432,6 +484,12 @@ final class SignExecutor {
     ///
     /// A signature carries **no** value and **no** symbol: it moves nothing,
     /// and a row that claimed a value would show up in the feed as money.
+    ///
+    /// A `wallet_sendCalls` row names its first leg, as its sheet does (RC7),
+    /// and the SUM of every leg's value: its `params[0]` is `{calls}`, not a
+    /// transaction, and reading `.value` there recorded every batch as moving
+    /// nothing. `maybeSent` / `submitBlock` are kept with the row (spec 082
+    /// T183), so a relaunch follows a may-have-been-sent op as one.
     static func recordRow(_ record: [String: Any], nativeSymbol: String) -> [String: Any] {
         let paramsJson = record["params_json"] as? String ?? "[]"
         let first = (try? JSONSerialization.jsonObject(
@@ -446,8 +504,12 @@ final class SignExecutor {
         switch record["kind"] as? String ?? "" {
         case "dapp_tx":
             kind = "dapp_tx"
-            to = first?["to"] as? String ?? ""
-            value = (first?["value"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "0x0"
+            let method = record["method"] as? String ?? ""
+            let leg = method == "wallet_sendCalls"
+                ? (first?["calls"] as? [[String: Any]])?.first
+                : first
+            to = leg?["to"] as? String ?? ""
+            value = requestedValueHex(method: method, first: first)
             symbol = nativeSymbol
             decimals = 18
         case "sign_typed_data":
@@ -476,6 +538,30 @@ final class SignExecutor {
             "requestTruncated": clipped,
         ]
         if let intent = record["intent"] as? String, !intent.isEmpty { row["intent"] = intent }
+        if record["maybe_sent"] as? Bool == true { row["maybeSent"] = true }
+        if let block = record["submit_block"] as? NSNumber { row["submitBlock"] = block.uint64Value }
         return row
+    }
+
+    /// The native value a transaction request moves, as hex wei: `value` of an
+    /// `eth_sendTransaction` as written, the sum over every leg of a
+    /// `wallet_sendCalls`. Hex or decimal legs; anything unreadable counts as
+    /// zero (the submit refuses it anyway).
+    static func requestedValueHex(method: String, first: [String: Any]?) -> String {
+        guard method == "wallet_sendCalls" else {
+            return (first?["value"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "0x0"
+        }
+        var total = "0"
+        for call in first?["calls"] as? [[String: Any]] ?? [] {
+            guard let raw = call["value"] as? String, !raw.isEmpty, raw != "0x" else { continue }
+            let decimal: String?
+            if raw.hasPrefix("0x") || raw.hasPrefix("0X") {
+                decimal = TokenReads.scaled(hex: raw, decimals: 0)
+            } else {
+                decimal = raw.allSatisfy { $0.isASCII && $0.isNumber } ? raw : nil
+            }
+            if let decimal { total = TokenReads.addDecimal(total, decimal) }
+        }
+        return RelayClient.hexQuantity(decimal: total)
     }
 }

@@ -483,7 +483,8 @@ struct TrustedSignerSpineTests {
             quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account)
         )
 
-        #expect(hash == opHash)
+        #expect(hash.userOpHash == opHash)
+        #expect(!hash.maybeSent, "the relay answered: accepted, not may-have-been-sent")
         #expect(signer.calls == 0)
         let asked = try #require(page.asked.first)
         #expect(asked.digest.count == 32)

@@ -377,7 +377,10 @@ struct RootView: View {
                 receiptLogs: { [weak trust] from, chain, logs in
                     trust?.receiptLogsConfirmed(from: from, chainId: chain, logs: logs)
                 },
-                recordsPatched: { [weak activityStore] in activityStore?.reconciled() }
+                recordsPatched: { [weak activityStore] in activityStore?.reconciled() },
+                // An op of ours landed — a send or a page's — so the figure on
+                // the home is read again, without a pull (spec 082 RE8, G26).
+                holdingsMoved: { [weak wallet] _ in wallet?.refresh(pull: false) }
             )
         )
         let trackerStore = TrackerStore(executor: trackerExecutor)
@@ -439,9 +442,9 @@ struct RootView: View {
                 // The permission is asked HERE — at the first submit, never at
                 // launch — because this is the first time there is anything to
                 // notify about.
-                trackSubmitted: { [weak trackerStore, weak notify] hash, ids, chain in
+                trackSubmitted: { [weak trackerStore, weak notify] submission in
                     notify?.askOnceIfNeeded()
-                    trackerStore?.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
+                    trackerStore?.submitted(submission)
                 },
                 // The core's `haptic { kind }`: money left, or a refusal the
                 // person should feel. Unwired until 074, so an iPhone sent in
@@ -468,10 +471,12 @@ struct RootView: View {
         // Without this the receipt screen sat on "submitted" while the
         // notification said "confirmed": two answers about one payment, on one
         // phone.
-        trackerExecutor.ports.notifyConfirmed = { [weak notify, weak sendStore] hash, chain, tx in
+        trackerExecutor.ports.notifyConfirmed = { [weak notify] hash, chain, tx in
             notify?.confirmed(userOpHash: hash, chainId: chain, txHash: tx)
-            sendStore?.receiptConfirmed(userOpHash: hash, txHash: tx)
         }
+        // Every verdict — confirmed, failed, not sent, held, acknowledged —
+        // reaches the receipt through the core's one mapping (spec 082), once.
+        trackerStore.onView = { [weak sendStore] view in sendStore?.trackerChanged(view) }
         // The payroll importer. Its fiat column is priced through the DISPLAY
         // machine's own waterfall — chain feed, then endpoint, then nothing —
         // so a currency the wallet cannot price stays unpriced here too. A
@@ -1484,9 +1489,9 @@ struct RootView: View {
         var model = ending.header
         let chain = ending.aftercare.chainId
         var context = signingContext(chain: chain, live: nil)
-        if case .stillConfirming(_, let op) = ending.aftercare {
-            context.track = tracker.view?.entry(userOpHash: op)
-        }
+        // The tracker's entry for the op, whatever the ending: a landed op is
+        // not "confirmed" until the tracker says so (spec 082 RA8).
+        context.track = tracker.view?.entry(userOpHash: ending.aftercare.userOpHash)
         model.receipt = SigningLive.aftercareReceipt(
             ending.aftercare, summary: SigningLive.summaryOf(model.blocks), context: context
         )
@@ -1511,7 +1516,10 @@ struct RootView: View {
         guard let live = signing, live.request?.id == incoming.id, !live.closedByPerson,
               let aftercare = SigningAftercare.of(
                   method: incoming.method, chainId: incoming.chainId,
-                  payload: payload, submittedUserOp: userOpHash
+                  // The op this request handed the tracker, whether or not
+                  // the answer IS it: a landed ending still names the op the
+                  // tracker follows (the core's `signEndingOf`).
+                  payload: payload, submittedUserOp: live.submittedUserOp ?? userOpHash
               )
         else { return }
         var header = signingModel(for: live)
@@ -1535,11 +1543,8 @@ struct RootView: View {
         let chain: Int
         if let ending = signingEnding, liveSigning == nil {
             chain = ending.aftercare.chainId
-            switch ending.aftercare {
-            case .landed(_, let txHash): hash = txHash
-            case .stillConfirming(_, let op): hash = tracker.view?.entry(userOpHash: op)?.txHash
-            case .signed: hash = nil
-            }
+            let track = tracker.view?.entry(userOpHash: ending.aftercare.userOpHash)
+            hash = ending.aftercare.state(track: track).txHash ?? track?.txHash
         } else {
             return
         }
@@ -1641,9 +1646,9 @@ struct RootView: View {
                     respond(transportId, id, payload, userOpHash)
                     signingAnswered(incoming, payload: payload, userOpHash: userOpHash)
                 },
-                trackSubmitted: { [tracker, notifier] hash, ids, chain in
+                trackSubmitted: { [tracker, notifier] submission in
                     notifier.askOnceIfNeeded()
-                    tracker.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
+                    tracker.submitted(submission)
                 },
                 recordsPersisted: { [activity] in activity.reconciled() },
                 nativeSymbol: { chainId in ChainCatalog.meta(chainId)?.nativeSymbol ?? "" },

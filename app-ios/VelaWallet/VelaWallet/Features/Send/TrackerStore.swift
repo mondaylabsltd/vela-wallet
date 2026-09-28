@@ -34,11 +34,28 @@ import VelaCore
 
 extension TxTrackerCore: CoreBridge {}
 
+/// One op handed to the tracker: what it follows, and — for an op whose
+/// submit reply was lost — that it may have been sent and the head read
+/// before its first POST (spec 082 RA4, ruling 8). Written with the record
+/// and read back on a relaunch (T183), so the handoff and a restart say the
+/// same thing.
+struct TrackSubmission: Equatable {
+    let userOpHash: String
+    let recordIds: [String]
+    let chainId: Int
+    var maybeSent = false
+    var submitBlock: Int? = nil
+}
+
 @MainActor
 @Observable
 final class TrackerStore {
 
     private(set) var view: TrackViewWire?
+    /// Every view, to whoever else watches the same operations — the send
+    /// machine's receipt (spec 082: its verdict comes from here, through the
+    /// core's `sendReceiptOutcomeOf`).
+    var onView: ((TrackViewWire) -> Void)?
 
     private var core: CoreStore<TrackViewWire>!
     private let executor: TrackerExecutor
@@ -60,7 +77,7 @@ final class TrackerStore {
             bridge: TxTrackerCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.commit(view) },
-            onFault: { print("[vela-wallet] tx_tracker fault: \($0)") }
+            onFault: { VelaLog.failure(.tracker, kind: "tx_tracker_fault", VelaLog.error($0)) }
         )
     }
 
@@ -72,13 +89,17 @@ final class TrackerStore {
         core.boot(CoreJSON.string(["type": "app_resumed"]))
     }
 
-    /// A send was just accepted by the relay.
-    func submitted(userOpHash: String, recordIds: [String], chainId: Int) {
+    /// A send was just accepted by the relay — or may have been: `maybeSent`
+    /// follows it to its end under the local hash, from `submitBlock`
+    /// (spec 082 RA4, ruling 8).
+    func submitted(_ submission: TrackSubmission) {
         let event = CoreJSON.string([
             "type": "submitted",
-            "user_op_hash": userOpHash,
-            "record_ids": recordIds,
-            "chain_id": chainId,
+            "user_op_hash": submission.userOpHash,
+            "record_ids": submission.recordIds,
+            "chain_id": submission.chainId,
+            "maybe_sent": submission.maybeSent,
+            "submit_block": submission.submitBlock.map { $0 as Any } ?? NSNull(),
         ])
         if !core.boot(event) { core.dispatch(event) }
     }
@@ -88,6 +109,7 @@ final class TrackerStore {
 
     private func commit(_ view: TrackViewWire) {
         self.view = view
+        onView?(view)
         // The tick exists exactly as long as the core follows something —
         // not only inside the wait window (spec 079).
         if view.isFollowing { startTicking() } else { stopTicking() }

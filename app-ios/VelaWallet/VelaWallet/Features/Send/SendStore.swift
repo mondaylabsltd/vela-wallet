@@ -49,7 +49,7 @@ final class SendStore {
             bridge: SendCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.view = view },
-            onFault: { print("[vela-wallet] send fault: \($0)") }
+            onFault: { VelaLog.failure(.sign, kind: "send_fault", VelaLog.error($0)) }
         )
         // Two ports close over this store, so they are installed after it
         // exists rather than passed into the executor's initialiser.
@@ -266,8 +266,29 @@ final class SendStore {
         dispatch([
             "type": "receipt_update",
             "user_op_hash": userOpHash,
-            "outcome": ["type": "failed", "rejected": rejected],
+            "outcome": ["type": "failed", "rejected": rejected, "not_sent": false],
         ])
+    }
+
+    /// The last receipt verdict handed over, by op — so one verdict reaches
+    /// the machine once however often the tracker's view is rebuilt.
+    private var heardOutcome: [String: String] = [:]
+
+    /// The TRACKER's view, as the receipt's verdict (spec 082): the core's
+    /// one mapping (`sendReceiptOutcomeOf`) — confirmed, failed (a revert, a
+    /// fee rejection, or a may-have-been-sent op the relay never had), held
+    /// for fees, or acknowledged — for the op this journey submitted. Deduped
+    /// on the verdict itself, not on the status alone: a fee hold and an
+    /// acknowledgement are both "pending" to the tracker.
+    func trackerChanged(_ view: TrackViewWire) {
+        guard let op = self.view?.userOpHash, !op.isEmpty,
+              let entry = view.entry(userOpHash: op),
+              let json = try? sendReceiptOutcomeOf(trackEntryJson: entry.coreJSON),
+              heardOutcome[op.lowercased()] != json,
+              let outcome = try? CoreJSON.object(json)
+        else { return }
+        heardOutcome[op.lowercased()] = json
+        dispatch(["type": "receipt_update", "user_op_hash": op, "outcome": outcome])
     }
     func retryAfterBootstrap() { dispatch(["type": "retry_after_bootstrap"]) }
     func done() { dispatch(["type": "done"]) }

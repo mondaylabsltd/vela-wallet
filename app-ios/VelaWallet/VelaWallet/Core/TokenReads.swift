@@ -269,7 +269,7 @@ enum TokenReads {
         return result.isEmpty ? "0" : String(result)
     }
 
-    private static func addDecimal(_ value: String, _ other: String) -> String {
+    static func addDecimal(_ value: String, _ other: String) -> String {
         var carry = 0
         var out = ""
         let a = Array(value.reversed()), b = Array(other.reversed())

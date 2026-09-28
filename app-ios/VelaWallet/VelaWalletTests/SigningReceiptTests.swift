@@ -9,6 +9,11 @@
 //  what is left of the wait. The Android twin is `SigningReceiptTest.kt`.
 //  Hermetic: no network, no ceremony, no device.
 //
+//  Spec 082 (T105): the words come from the core's `phase`, the ending from
+//  its `signEndingOf` / `signEndingState` — a reverted dApp transaction never
+//  reads 已确认, and a lost reply reads "may have been sent", never "try
+//  again".
+//
 
 import Foundation
 import SwiftUI
@@ -41,7 +46,8 @@ struct SigningReceiptTests {
 
     private func sign(
         signing: Bool = false, submitting: Bool = false, op: String? = nil,
-        error: SignErrorKind? = nil, kind: SignMethodKind? = nil
+        error: SignErrorKind? = nil, kind: SignMethodKind? = nil,
+        phase: SignPhaseWire = .idle, maybeSent: Bool = false
     ) -> SignViewWire {
         SignViewWire(
             surface: .sheet,
@@ -55,7 +61,8 @@ struct SigningReceiptTests {
             isSigning: signing, isSubmitting: submitting, pendingOpHash: op,
             error: error.map { SignErrorNoticeWire(kind: $0, detail: nil) },
             funding: nil, confirmGateOpen: true, reconcilePending: false, swipeAction: .reject,
-            trackerHandoff: nil, notice: nil, globalChainId: 100, blocked: nil
+            trackerHandoff: nil, notice: nil, globalChainId: 100, blocked: nil,
+            phase: phase, pendingOpMaybeSent: maybeSent
         )
     }
 
@@ -73,11 +80,15 @@ struct SigningReceiptTests {
     }
 
     @Test func thePasskeyTheSubmissionAndTheWaitAreEachNamedInTheSendsWords() {
-        let signing = SigningLive.receipt(sign: sign(signing: true), blocks: blocks, context: context())
+        let signing = SigningLive.receipt(
+            sign: sign(signing: true, phase: .awaitingSignature), blocks: blocks, context: context()
+        )
         #expect(signing?.stage == .submitting)
         #expect(signing?.title == loc.t("send.txSigning"))
 
-        let submitting = SigningLive.receipt(sign: sign(submitting: true), blocks: blocks, context: context())
+        let submitting = SigningLive.receipt(
+            sign: sign(submitting: true, phase: .submitting), blocks: blocks, context: context()
+        )
         #expect(submitting?.title == loc.t("send.txSubmitting"))
         #expect(submitting?.captions.contains(loc.t("send.txBackgroundHint")) == true)
         #expect(submitting?.cta == loc.t("send.txCloseBackground"))
@@ -102,9 +113,46 @@ struct SigningReceiptTests {
         #expect(still?.eta == nil, "no countdown for an op past its window")
     }
 
+    /// G22: the network work before the prompt is "preparing" — never
+    /// "awaiting your biometric" for forty seconds of precheck (RA9). The
+    /// words follow the core's phase, not `is_signing`, which is true from
+    /// the approval on.
+    @Test func theWordsAreThePhasesNotTheSigningFlag() {
+        let preparing = SigningLive.receipt(
+            sign: sign(signing: true, submitting: true, phase: .preparing), blocks: blocks, context: context()
+        )
+        #expect(preparing?.title == loc.t("send.txPreparing"))
+        #expect(preparing?.title != loc.t("send.txSigning"))
+        let awaiting = SigningLive.receipt(
+            sign: sign(signing: true, submitting: true, phase: .awaitingSignature), blocks: blocks,
+            context: context()
+        )
+        #expect(awaiting?.title == loc.t("send.txSigning"))
+        // A message's prompt is the signing sentence, not the send's.
+        let message = SigningLive.receipt(
+            sign: sign(signing: true, kind: .personalSign, phase: .awaitingSignature),
+            blocks: blocks, context: context()
+        )
+        #expect(message?.title == loc.t("componentsUi.signing.signing"))
+        // Idle is no receipt, whatever the flags say.
+        #expect(SigningLive.receipt(sign: sign(phase: .idle), blocks: blocks, context: context()) == nil)
+        // And the phase this build does not know reads as preparing.
+        let unknown = try? CoreJSON.decoder.decode(SignPhaseWire.self, from: Data(#""thinking""#.utf8))
+        #expect(unknown == .preparing)
+    }
+
+    /// The Trusted Signer's card speaks while its page holds the signature —
+    /// the core's `awaiting_signature` — and not through the preparing work.
+    @Test func theSignerCardIsUpOnlyWhileTheSignatureIsAwaited() {
+        var ctx = context()
+        ctx.trustedSignerRoute = true
+        #expect(ctx.signerPageOpen(sign(signing: true, phase: .awaitingSignature)))
+        #expect(!ctx.signerPageOpen(sign(signing: true, phase: .preparing)))
+    }
+
     @Test func aMessageIsSigningThenSignedNeverSubmittedToANetwork() {
         let submitting = SigningLive.receipt(
-            sign: sign(submitting: true, kind: .personalSign), blocks: blocks, context: context()
+            sign: sign(submitting: true, kind: .personalSign, phase: .submitting), blocks: blocks, context: context()
         )
         #expect(submitting?.title == loc.t("componentsUi.signing.signing"))
         #expect(submitting?.captions.contains(loc.t("send.txBackgroundHint")) == false)
@@ -127,11 +175,48 @@ struct SigningReceiptTests {
             origin: "https://x.test", transportId: "tab-1", chainId: 100
         )
         let model = SigningLive.model(
-            fallback: SigningFixtures.build(.cs1, loc: loc), request: request, sign: sign(submitting: true),
+            fallback: SigningFixtures.build(.cs1, loc: loc), request: request,
+            sign: sign(submitting: true, phase: .submitting),
             clear: .empty, guard: .empty, fee: nil, context: context()
         )
         #expect(model.closeLabel == loc.t("onboarding.common.close"))
         #expect(model.receipt?.title == loc.t("send.txSubmitting"))
+    }
+
+    // MARK: - May have been sent (spec 082 RA10)
+
+    /// A lost reply on the live sheet: the submitting title, the caption, the
+    /// op hash to look it up by, a close that leaves it running — and no
+    /// Retry, nowhere, ever.
+    @Test func aLostReplyReadsMayHaveBeenSentWithTheOpHashAndNoRetry() {
+        let receipt = SigningLive.receipt(
+            sign: sign(op: op, phase: .submitting, maybeSent: true), blocks: blocks, context: context()
+        )
+        #expect(receipt?.stage == .submitted)
+        #expect(receipt?.title == loc.t("send.txSubmitting"))
+        #expect(receipt?.captions.contains(loc.t("componentsUi.signing.maybeSent")) == true)
+        #expect(receipt?.hash?.copyValue == op)
+        #expect(receipt?.cta == loc.t("send.txCloseBackground"))
+        #expect(receipt?.captions.contains(loc.t("send.txErrorGeneric")) == false)
+        // Once the relay has shown it holds the op, the ordinary words.
+        let acknowledged = SigningLive.receipt(
+            sign: sign(op: op, phase: .submitting, maybeSent: true), blocks: blocks,
+            context: context(track: entry("pending", "landing"))
+        )
+        #expect(acknowledged?.title == loc.t("send.txSubmittedTitle"))
+    }
+
+    /// RI3's reader test: the new sentence resolves in zh and en and never
+    /// echoes its own key.
+    @Test func theMaybeSentSentenceResolvesInZhAndEn() {
+        let key = "componentsUi.signing.maybeSent"
+        for tag in ["zh", "en"] {
+            let text = Loc(overrideTag: tag, preferredLanguages: []).t(key)
+            #expect(!text.isEmpty)
+            #expect(text != key, "\(tag) echoed the key")
+            #expect(!text.contains("maybeSent"))
+        }
+        #expect(Loc(overrideTag: "zh", preferredLanguages: []).t(key) != loc.t(key))
     }
 
     // MARK: - The ending, after the core closed the sheet
@@ -139,61 +224,140 @@ struct SigningReceiptTests {
     @Test func anAnswerBecomesTheEndingTheAftercareShows() {
         #expect(SigningAftercare.of(
             method: "personal_sign", chainId: 100, payload: ["type": "ok", "result": "0xsig"], submittedUserOp: nil
-        ) == .signed(chainId: 100))
+        )?.ending == .signed)
         #expect(SigningAftercare.of(
-            method: "eth_sendTransaction", chainId: 100, payload: ["type": "ok", "result": tx], submittedUserOp: nil
-        ) == .landed(chainId: 100, txHash: tx))
+            method: "eth_sendTransaction", chainId: 100, payload: ["type": "ok", "result": tx], submittedUserOp: op
+        )?.ending == .landed(txHash: tx, userOpHash: op))
         // The wait ran out: the page got the operation hash.
-        #expect(SigningAftercare.of(
+        let still = SigningAftercare.of(
             method: "eth_sendTransaction", chainId: 100,
             payload: ["type": "ok", "result": op.uppercased().replacingOccurrences(of: "0X", with: "0x")],
             submittedUserOp: op
-        ) == .stillConfirming(chainId: 100, userOpHash: op))
+        )
+        #expect(still?.ending == .stillConfirming(userOpHash: op))
+        #expect(still?.chainId == 100)
         #expect(SigningAftercare.of(
             method: "eth_sendTransaction", chainId: 100,
             payload: ["type": "err", "code": 4001, "kind": "user_rejected"], submittedUserOp: op
         ) == nil, "a refusal has no ending to show")
-        #expect(SigningAftercare.signed(chainId: 1).tickSeconds < SigningAftercare.landed(chainId: 1, txHash: tx).tickSeconds)
+        let signed = SigningAftercare.of(
+            method: "personal_sign", chainId: 1, payload: ["type": "ok", "result": "0xsig"], submittedUserOp: nil
+        )
+        let landed = SigningAftercare.of(
+            method: "eth_sendTransaction", chainId: 1, payload: ["type": "ok", "result": tx], submittedUserOp: op
+        )
+        #expect((signed?.tickSeconds ?? 0) < (landed?.tickSeconds ?? 0))
     }
 
-    @Test func theAftercareTicksForALandingAndFollowsTheTrackerForAnOpStillOnItsWay() {
-        let landed = SigningLive.aftercareReceipt(
-            .landed(chainId: 100, txHash: tx), summary: "Send · −0.001 XDAI",
-            context: context(explorer: "https://gnosisscan.io")
-        )
-        #expect(landed.stage == .confirmed)
-        #expect(landed.hash?.copyValue == tx, "the copy is the whole hash")
-        #expect(landed.hash?.value == "\(tx.prefix(10))…\(tx.suffix(8))", "the line is its short form")
-        #expect(landed.viewOnExplorer == loc.t("history.viewOnExplorer"))
-        #expect(SigningLive.aftercareReceipt(.landed(chainId: 100, txHash: tx), summary: nil, context: context())
-            .viewOnExplorer == nil, "no explorer, no link")
+    private func landed() -> SigningAftercare {
+        SigningAftercare.of(
+            method: "eth_sendTransaction", chainId: 100, payload: ["type": "ok", "result": tx], submittedUserOp: op
+        )!
+    }
 
-        let still = SigningAftercare.stillConfirming(chainId: 100, userOpHash: op)
+    private func stillConfirming() -> SigningAftercare {
+        SigningAftercare.of(
+            method: "eth_sendTransaction", chainId: 100, payload: ["type": "ok", "result": op], submittedUserOp: op
+        )!
+    }
+
+    /// Every `SignEndingState` the core can name, as the core names it.
+    @Test func everyEndingStateIsTheCores() {
+        #expect(landed().state(track: nil) == .following(userOpHash: op, outcome: "landing", feeHeld: false))
+        #expect(landed().state(track: entry("confirmed", "final", txHash: tx)) == .confirmed(txHash: tx))
+        #expect(landed().state(track: entry("dropped", "final", txHash: tx)) == .reverted(txHash: tx))
+        #expect(stillConfirming().state(track: entry("not_sent", "final")) == .notSent)
+        #expect(stillConfirming().state(track: entry("rejected", "final")) == .notSent)
+        #expect(stillConfirming().state(track: entry("pending", "maybe_sent"))
+            == .following(userOpHash: op, outcome: "maybe_sent", feeHeld: false))
+        #expect(stillConfirming().state(track: entry("fee_held", "landing"))
+            == .following(userOpHash: op, outcome: "landing", feeHeld: true))
+        let signed = SigningAftercare.of(
+            method: "personal_sign", chainId: 100, payload: ["type": "ok", "result": "0xsig"], submittedUserOp: nil
+        )
+        #expect(signed?.state(track: nil) == .signed)
+    }
+
+    /// W3: a dApp transaction that landed and reverted is a failure with its
+    /// hash and the explorer — never 已确认, in any language.
+    @Test func aRevertedDappTransactionNeverReadsConfirmed() {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        for language in [loc, zh] {
+            var ctx = SigningLive.Context(
+                loc: language, chainName: "Gnosis", chainDot: .green, nativeSymbol: "XDAI",
+                walletName: "Me", walletAddress: "0x88cca0eedbf2c4426110bbfc998f048689266894"
+            )
+            ctx.track = entry("dropped", "final", txHash: tx)
+            ctx.explorerBase = "https://gnosisscan.io"
+            let reverted = SigningLive.aftercareReceipt(landed(), summary: nil, context: ctx)
+            #expect(reverted.stage == .failed)
+            #expect(reverted.title == language.t("componentsTx.receipt.statusFailed"))
+            #expect(reverted.title != language.t("componentsTx.receipt.statusConfirmed"))
+            #expect(reverted.captions.contains(language.t("componentsTx.receipt.failedHint")))
+            #expect(!reverted.captions.contains(language.t("send.txErrorGeneric")))
+            #expect(reverted.hash?.copyValue == tx)
+            #expect(reverted.viewOnExplorer == language.t("history.viewOnExplorer"))
+        }
+        // And before the tracker has seen it, a landing is on its way — not a tick.
+        let early = SigningLive.aftercareReceipt(landed(), summary: nil, context: context())
+        #expect(early.stage == .submitted)
+    }
+
+    @Test func theAftercareTicksOnlyForWhatTheTrackerConfirmed() {
+        let confirmed = SigningLive.aftercareReceipt(
+            landed(), summary: "Send · −0.001 XDAI",
+            context: context(track: entry("confirmed", "final", txHash: tx), explorer: "https://gnosisscan.io")
+        )
+        #expect(confirmed.stage == .confirmed)
+        #expect(confirmed.hash?.copyValue == tx, "the copy is the whole hash")
+        #expect(confirmed.hash?.value == "\(tx.prefix(10))…\(tx.suffix(8))", "the line is its short form")
+        #expect(confirmed.viewOnExplorer == loc.t("history.viewOnExplorer"))
+        #expect(SigningLive.aftercareReceipt(
+            landed(), summary: nil, context: context(track: entry("confirmed", "final", txHash: tx))
+        ).viewOnExplorer == nil, "no explorer, no link")
+
         let waiting = SigningLive.aftercareReceipt(
-            still, summary: nil, context: context(track: entry("accepted_not_landed", "still_confirming"))
+            stillConfirming(), summary: nil, context: context(track: entry("accepted_not_landed", "still_confirming"))
         )
         #expect(waiting.stage == .submitted)
         #expect(waiting.captions.contains(loc.t("componentsUi.signing.stillConfirming")))
         #expect(waiting.cta == loc.t("send.txCloseBackground"))
 
         let landedLater = SigningLive.aftercareReceipt(
-            still, summary: nil, context: context(track: entry("confirmed", "final", txHash: tx))
+            stillConfirming(), summary: nil, context: context(track: entry("confirmed", "final", txHash: tx))
         )
         #expect(landedLater.stage == .confirmed)
         #expect(landedLater.hash?.copyValue == tx)
 
         let unknown = SigningLive.aftercareReceipt(
-            still, summary: nil, context: context(track: entry("accepted_not_landed", "unknown"))
+            stillConfirming(), summary: nil, context: context(track: entry("accepted_not_landed", "unknown"))
         )
         #expect(unknown.captions.contains(loc.t("componentsUi.signing.unknownOutcome")))
         #expect(unknown.stage == .submitted, "24 hours is not a failure either")
 
-        let dropped = SigningLive.aftercareReceipt(
-            still, summary: nil, context: context(track: entry("dropped", "final"))
+        let maybe = SigningLive.aftercareReceipt(
+            stillConfirming(), summary: nil, context: context(track: entry("pending", "maybe_sent"))
         )
-        #expect(dropped.stage == .failed)
+        #expect(maybe.stage == .submitted)
+        #expect(maybe.captions.contains(loc.t("componentsUi.signing.maybeSent")))
+        #expect(maybe.hash?.copyValue == op)
 
-        let signed = SigningLive.aftercareReceipt(.signed(chainId: 100), summary: nil, context: context())
+        let notSent = SigningLive.aftercareReceipt(
+            stillConfirming(), summary: nil, context: context(track: entry("not_sent", "final"))
+        )
+        #expect(notSent.stage == .failed)
+        #expect(notSent.captions.contains(loc.t("send.txErrorGeneric")))
+
+        let held = SigningLive.aftercareReceipt(
+            stillConfirming(), summary: nil, context: context(track: entry("fee_held", "landing"))
+        )
+        #expect(held.captions.contains(loc.t("send.txHeldFees")))
+
+        let signed = SigningLive.aftercareReceipt(
+            SigningAftercare.of(
+                method: "personal_sign", chainId: 100, payload: ["type": "ok", "result": "0xsig"], submittedUserOp: nil
+            )!, summary: nil, context: context()
+        )
         #expect(signed.title == loc.t("clearSigning.alertSignedTitle"))
         #expect(signed.stage == .confirmed)
     }

@@ -47,7 +47,7 @@ enum SendLive {
         case .receipt:
             switch view.receipt?.status {
             case "confirmed": return .sd4c
-            case "submitted", "failed": return .sd4b
+            case "submitted", "failed", "maybe_sent", "not_sent": return .sd4b
             default: return .sd4a
             }
         }
@@ -1026,11 +1026,15 @@ enum SendLive {
 
     /// Which drawn state the receipt is in. The core's status, never a guess
     /// from whether a hash happens to be present.
+    ///
+    /// Spec 082: `maybe_sent` is a submitted op whose reply was lost — drawn
+    /// as on its way, never as failed; `not_sent` is an op the relay never
+    /// had — failed, with nothing spent.
     static func receiptStage(_ view: SendViewWire) -> ReceiptStage {
         switch view.receipt?.status {
         case "confirmed": return .confirmed
-        case "failed": return .failed
-        case "submitted": return .submitted
+        case "failed", "not_sent": return .failed
+        case "submitted", "maybe_sent": return .submitted
         default: return .submitting
         }
     }
@@ -1070,6 +1074,12 @@ enum SendLive {
             default: title = loc.t("send.txPreparing")
             }
             captions = [loc.t("send.txPreparingBiometric"), loc.t("send.txBackgroundHint")]
+        case .submitted where view.receipt?.status == "maybe_sent":
+            // The reply was lost (spec 082 RA10): it may have been sent, Vela
+            // keeps checking, and it must not be sent again. No clock — the
+            // relay has not shown it holds the op — and no Retry anywhere.
+            title = loc.t("send.txSubmitting")
+            captions = [loc.t("componentsUi.signing.maybeSent")]
         case .submitted:
             title = loc.t("send.txSubmittedTitle")
             // Held for fees: the payment is not stuck and not lost — it goes
@@ -1110,6 +1120,12 @@ enum SendLive {
             // nobody after it was what the single-recipient line read as.
             let to = parts.title ?? view.recipientIdentity?.name ?? AddressText.short(view.recipient)
             captions = ["\(to) · \(chain)"]
+        case .failed where view.receipt?.status == "not_sent":
+            // The relay never had it (RA4): nothing moved, nothing was spent,
+            // and "try again" is true — so the generic sentence, never the
+            // revert's "the fee may still have been taken".
+            title = loc.t("componentsTx.receipt.statusFailed")
+            captions = [loc.t("send.txErrorGeneric")]
         case .failed:
             title = loc.t("componentsTx.receipt.statusFailed")
             // A fee-rejected send is not a failure of the transfer: the fee

@@ -63,9 +63,10 @@ final class SigningController {
         /// receipt polls for it.
         var respond: (_ transportId: String, _ id: String, _ payload: [String: Any], _ userOpHash: String?) -> Void
         = { _, _, _, _ in }
-        /// The tracker follows the accepted operation to its verdict.
-        var trackSubmitted: (_ userOpHash: String, _ recordIds: [String], _ chainId: Int) -> Void
-        = { _, _, _ in }
+        /// The tracker follows the accepted operation to its verdict — or,
+        /// `maybeSent`, the one whose submit reply was lost, from the head
+        /// read before its POST (`submitBlock`, ruling 8).
+        var trackSubmitted: (TrackSubmission) -> Void = { _ in }
         var recordsPersisted: () -> Void = {}
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
         var knownChains: () -> [Int] = { [] }
@@ -150,14 +151,26 @@ final class SigningController {
     /// 052's ordering invariant, which is what makes a force-quit recoverable.
     private var persistedRecords: Set<String> = []
     private var pendingHandoff: SignTrackerHandoffWire?
-    private var handedOff = false
+    /// Handoffs already given to the tracker, by the records they name — not
+    /// by hash (spec 082): a may-have-been-sent op is followed under its
+    /// local hash, and a second attempt at the same nonce hashes the same.
+    private var handedOff: Set<String> = []
     private var answered = false
+    /// The page behind this request is gone (`transportDropped`): nothing
+    /// may be signed or sent for it any more (RB2).
+    private var askerGone = false
+    /// When the slide fired — the start of the answer window (RA12).
+    private var approvedAtMs: Double?
     /// The operation the relay accepted for this request, once it has.
     private var submittedHash: String?
 
     /// The page has its answer. The sheet may still be up (a submitted state
     /// waiting to be dismissed), but nothing more will be said to the page.
     var hasAnswered: Bool { answered }
+
+    /// The operation this request handed the tracker, once it has — what
+    /// the ending's `signEndingOf` names whether or not the answer is it.
+    var submittedUserOp: String? { submittedHash }
 
     /// Past the point of no return: a passkey ceremony or a submit is under
     /// way. A controller in this state is not dropped when its page goes away
@@ -212,19 +225,19 @@ final class SigningController {
             bridge: SignRequestCore(),
             perform: { await signExecutor.perform($0) },
             onView: { [weak self] view in self?.commitSign(view) },
-            onFault: { print("[vela-wallet] sign_request fault: \($0)") }
+            onFault: { VelaLog.failure(.sign, kind: "sign_request_fault", VelaLog.error($0)) }
         )
         clearCore = CoreStore(
             bridge: ClearSigningCore(),
             perform: { await clearExecutor.perform($0) },
             onView: { [weak self] view in self?.clear = view },
-            onFault: { print("[vela-wallet] clear_signing fault: \($0)") }
+            onFault: { VelaLog.failure(.sign, kind: "clear_signing_fault", VelaLog.error($0)) }
         )
         guardCore = CoreStore(
             bridge: ApprovalGuardCore(),
             perform: { await guardExecutor.perform($0) },
             onView: { [weak self] view in self?.guardView = view },
-            onFault: { print("[vela-wallet] approval_guard fault: \($0)") }
+            onFault: { VelaLog.failure(.sign, kind: "approval_guard_fault", VelaLog.error($0)) }
         )
         fees.onInForce = { [weak self] view in self?.commitFee(view) }
 
@@ -236,14 +249,26 @@ final class SigningController {
                 markAnswered()
                 ports.respond(transportId, id, payload, Self.opHashAnswer(payload, submitted: submittedHash))
             },
-            opSubmitted: { [weak self] id, hash in
+            opSubmitted: { [weak self] id, hash, maybeSent, submitBlock in
                 self?.submittedHash = hash
                 self?.dispatchSign([
                     "type": "op_submitted", "id": id, "user_op_hash": hash,
                     "now_ms": Date().timeIntervalSince1970 * 1000,
+                    "maybe_sent": maybeSent,
+                    "submit_block": submitBlock.map { $0 as Any } ?? NSNull(),
                 ])
             },
-            signingStarted: {},
+            // The prompt's own bracket (RA9): the sheet says "awaiting your
+            // signature" only while it is really up — never through the
+            // network work before it.
+            signingStarted: { [weak self] id in
+                self?.dispatchSign(["type": "ceremony_started", "id": id])
+            },
+            ceremonyDone: { [weak self] id in
+                self?.dispatchSign(["type": "ceremony_done", "id": id])
+            },
+            askerLive: { [weak self] in !(self?.askerGone ?? true) },
+            approvedAtMs: { [weak self] in self?.approvedAtMs },
             recordsPersisted: { [weak self] in
                 self?.ports.recordsPersisted()
                 self?.recordLanded()
@@ -443,6 +468,7 @@ final class SigningController {
     func approve() {
         cancelRequote()
         trustedSignerNotice = nil
+        approvedAtMs = Date().timeIntervalSince1970 * 1000
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
             fee: fee, clear: clear, guard: guardView
         )])
@@ -487,6 +513,7 @@ final class SigningController {
     /// already past the commitment keeps running so its record is written.
     func transportDropped() {
         guard let request else { return }
+        askerGone = true
         dispatchSign(["type": "transport_dropped", "transport_id": request.transportId])
     }
 
@@ -557,12 +584,22 @@ final class SigningController {
             fees.speedStage(onForm: onForm)
         }
 
-        if let handoff = view.trackerHandoff, !handedOff {
-            handedOff = true
-            pendingHandoff = handoff
-            tryHandoff()
+        if let handoff = view.trackerHandoff {
+            let key = Self.handoffKey(handoff)
+            if !handedOff.contains(key) {
+                handedOff.insert(key)
+                pendingHandoff = handoff
+                tryHandoff()
+            }
         }
         if view.surface == .hidden, view.request == nil, request != nil, answered {
+            closed = true
+        }
+        // The page left and the pipeline has stopped with nothing sent
+        // (`asker_gone`, RB2): nobody will be answered, so nothing keeps this
+        // request alive either.
+        if askerGone, view.phase == .idle, !view.isSigning, !view.isSubmitting,
+           submittedHash == nil, request != nil {
             closed = true
         }
     }
@@ -646,7 +683,16 @@ final class SigningController {
               handoff.recordIds.allSatisfy({ persistedRecords.contains($0) })
         else { return }
         pendingHandoff = nil
-        ports.trackSubmitted(handoff.userOpHash, handoff.recordIds, handoff.chainId)
+        ports.trackSubmitted(TrackSubmission(
+            userOpHash: handoff.userOpHash, recordIds: handoff.recordIds, chainId: handoff.chainId,
+            maybeSent: handoff.maybeSent, submitBlock: handoff.submitBlock
+        ))
+    }
+
+    /// A handoff's identity: the records it names (the request's own), never
+    /// the op hash alone.
+    static func handoffKey(_ handoff: SignTrackerHandoffWire) -> String {
+        handoff.recordIds.sorted().joined(separator: ",")
     }
 
     private func markAnswered() {

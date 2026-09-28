@@ -24,14 +24,33 @@ final class ScriptedRelayPort: RelayPort {
     var rest: [String: CoreHTTP.RestAnswer] = [:]
     var base: String? = "https://relay.test"
     var bestUrl: String? = "https://rpc.test"
+    /// Spec 082: answers WITH the pool's "may this have been acted on",
+    /// by method, one per call in order (the last repeats). A method scripted
+    /// here wins over `rpc`.
+    var detailed: [String: [RpcCallResult]] = [:]
     /// Every call made, in order — the order IS the contract.
     private(set) var calls: [String] = []
+    private(set) var paramsByCall: [(method: String, params: [Any])] = []
     private(set) var restPaths: [String] = []
     private(set) var xRpcUrls: [String?] = []
 
     func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
+        await callDetailed(chainId: chainId, method: method, params: params, kind: kind).outcome
+    }
+
+    func callDetailed(chainId: Int, method: String, params: [Any], kind: String) async -> RpcCallResult {
         calls.append(method)
-        return rpc[method] ?? .failed(rateLimited: false)
+        paramsByCall.append((method, params))
+        if var queue = detailed[method], let next = queue.first {
+            if queue.count > 1 { queue.removeFirst(); detailed[method] = queue }
+            return next
+        }
+        let outcome = rpc[method] ?? .failed(rateLimited: false)
+        // Unscripted delivery: a give-up may have delivered, an answer did not.
+        if case .failed = outcome {
+            return RpcCallResult(outcome: outcome, maybeDelivered: true, heldErrorJson: nil)
+        }
+        return RpcCallResult(outcome: outcome, maybeDelivered: false, heldErrorJson: nil)
     }
 
     func bundlerBase(chainId: Int) async -> String? { base }
@@ -352,23 +371,6 @@ struct RelayClientTests {
         #expect(port.calls.filter { $0 == "vela_getInBandGasQuote" }.count == 2)
     }
 
-    /// A refusal reaches the caller as the relay's own sentence. Before spec
-    /// 052 the pool flattened a JSON-RPC error to `.ok(nil)` and this sentence
-    /// was lost — which is how "you already have an operation pending" became
-    /// "the relay is unreachable", and a wallet would submit twice.
-    @Test func aRefusalCarriesTheRelaysSentence() async {
-        let port = ScriptedRelayPort()
-        port.rpc["eth_sendUserOperation"] = .rpcError(code: -32521, message: "AA25 invalid account nonce")
-        let answer = await client(port).sendUserOp(chainId: 100, opJson: "{\"sender\":\"0x0\"}")
-        guard case .rejected(let json) = answer else {
-            Issue.record("a refusal must be rejected, not unreachable")
-            return
-        }
-        // And the sentence that reaches the screen is the CORE's, not the
-        // relay's jargon: `relay_error_message` is a translator.
-        #expect(relayErrorMessage(errorJson: json) == "Transaction nonce mismatch. Please try again.")
-    }
-
     /// An operation already pending for this nonce is the SAME operation. Its
     /// hash is answered so the tracker follows what is really on the wire —
     /// submitting again would be a second spend.
@@ -386,29 +388,9 @@ struct RelayClientTests {
         #expect(parseExistingUserOpHash(message: raw) == "0xabc123")
     }
 
-    /// An unreachable relay is NOT a rejection: nothing was refused, so nothing
-    /// is classified, and the screen says try again.
-    @Test func anUnreachableRelayIsNotARejection() async {
-        let port = ScriptedRelayPort()
-        port.rpc["eth_sendUserOperation"] = .failed(rateLimited: false)
-        if case .unreachable = await client(port).sendUserOp(chainId: 100, opJson: "{}") {} else {
-            Issue.record("a swept-clean pool must read as unreachable")
-        }
-    }
-
-    /// "Currently processing" is the relay asking for a moment, not a refusal.
-    /// It is retried up to three times and then reported honestly.
-    @Test func aBusyRelayIsRetriedAndThenReported() async {
-        let port = ScriptedRelayPort()
-        port.rpc["eth_sendUserOperation"] = .rpcError(code: -32000, message: "currently processing")
-        let answer = await client(port).sendUserOp(chainId: 100, opJson: "{}")
-        guard case .rejected = answer else {
-            Issue.record("a busy relay that never frees up is a rejection")
-            return
-        }
-        // One attempt plus three retries.
-        #expect(port.calls.filter { $0 == "eth_sendUserOperation" }.count == 4)
-    }
+    // The submit's verdicts (a refusal, an unreachable relay, a busy one)
+    // moved to `SubmitVerdictTests` with spec 082: the core's `submit_step`
+    // decides them now.
 
     /// A hex quantity becomes a decimal string, in string arithmetic: a nonce
     /// or a balance routinely exceeds what a `Double` can carry, and rounding
@@ -744,11 +726,11 @@ struct SendMachineTests {
             metadata: TokenMetadata(store: store, pool: pool),
             accountStore: accounts,
             balances: { nil }, networks: { nil },
-            ports: SendExecutor.Ports(trackSubmitted: { _, ids, _ in
+            ports: SendExecutor.Ports(trackSubmitted: { submission in
                 // Read the store from INSIDE the handoff: if the write were
                 // asynchronous, this is where it would still be empty.
                 tracked = TxRecords.pending(store: store).compactMap { $0["id"] as? String }
-                _ = ids
+                _ = submission.recordIds
             })
         )
 
@@ -1307,4 +1289,27 @@ final class AskedLog {
     var lines: [String] = []
 }
 
+}
+
+// MARK: - The balance after the app's own op (spec 082 T107, RE8, G26)
+
+@MainActor
+struct HoldingsMovedTests {
+    /// The tracker's `holdings_moved` re-reads the balance — without a pull,
+    /// and answered `notified` so the core is never left waiting.
+    @Test func holdingsMovedReadsTheBalanceAgain() async throws {
+        var moved: [Int] = []
+        let executor = TrackerExecutor(
+            store: VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!),
+            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            ports: TrackerExecutor.Ports(holdingsMoved: { moved.append($0) })
+        )
+        let reply = try CoreJSON.object(await executor.perform(["type": "holdings_moved", "chain_id": 8453]))
+        #expect(reply["type"] as? String == "notified")
+        #expect(moved == [8453])
+        #expect(TrackerExecutor.operations.contains("holdings_moved"))
+        #expect(TrackerExecutor.operations.contains("find_op_event"))
+        let neutral = try CoreJSON.object(TrackerExecutor.neutralAnswer(["type": "holdings_moved"]))
+        #expect(neutral["type"] as? String == "notified")
+    }
 }

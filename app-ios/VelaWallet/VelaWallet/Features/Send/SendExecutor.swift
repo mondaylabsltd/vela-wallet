@@ -31,7 +31,9 @@ final class SendExecutor {
     /// and leaving.
     struct Ports {
         var signingStarted: () -> Void = {}
-        var trackSubmitted: (_ userOpHash: String, _ recordIds: [String], _ chainId: Int) -> Void = { _, _, _ in }
+        /// The op, to the tracker — with the two facts a may-have-been-sent
+        /// op is followed by (spec 082 RA4, T183).
+        var trackSubmitted: (TrackSubmission) -> Void = { _ in }
         var haptic: (String) -> Void = { _ in }
         var alert: ([String: Any]) -> Void = { _ in }
         var closed: () -> Void = {}
@@ -79,7 +81,7 @@ final class SendExecutor {
     var ports: Ports
 
     /// The ceremony in flight, so `cancel_passkey_sign` can end it.
-    private var signing: Task<String, Error>?
+    private var signing: Task<UserOpSpine.Submitted, Error>?
 
     init(
         store: VelaStore,
@@ -185,11 +187,13 @@ final class SendExecutor {
             return CoreJSON.string(["type": "records_persisted"])
 
         case "track_submitted":
-            ports.trackSubmitted(
-                operation["user_op_hash"] as? String ?? "",
-                operation["record_ids"] as? [String] ?? [],
-                (operation["chain_id"] as? NSNumber)?.intValue ?? 0
-            )
+            ports.trackSubmitted(TrackSubmission(
+                userOpHash: operation["user_op_hash"] as? String ?? "",
+                recordIds: operation["record_ids"] as? [String] ?? [],
+                chainId: (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
+                maybeSent: operation["maybe_sent"] as? Bool ?? false,
+                submitBlock: (operation["submit_block"] as? NSNumber)?.intValue
+            ))
             return CoreJSON.string(["type": "track_handed_off"])
 
         case "resolve_identity":
@@ -460,7 +464,7 @@ final class SendExecutor {
                 tier: fee["tier"] as? String
             )
         }
-        let task = Task<String, Error> { [spine, ports] in
+        let task = Task<UserOpSpine.Submitted, Error> { [spine, ports] in
             try await spine.submit(
                 chainId: chainId,
                 account: account,
@@ -473,11 +477,16 @@ final class SendExecutor {
         signing = task
         defer { signing = nil }
         do {
-            let hash = try await task.value
+            let submitted = try await task.value
+            // A lost reply is not a failure (spec 082 RA4): the payment may be
+            // on its way, so it is recorded and followed under the local hash,
+            // and the core words it "may have been sent" with no success buzz.
             return CoreJSON.string([
                 "type": "submitted",
-                "user_op_hash": hash,
+                "user_op_hash": submitted.userOpHash,
                 "now_ms": Date().timeIntervalSince1970 * 1000,
+                "maybe_sent": submitted.maybeSent,
+                "submit_block": submitted.submitBlock.map { $0 as Any } ?? NSNull(),
             ])
         } catch let refused as UserOpSpine.Refused {
             if case .trustedSigner(let notice) = refused.failure { ports.trustedSignerEnded(notice) }
@@ -547,7 +556,7 @@ final class SendExecutor {
 
     /// The feed's own camelCase row for a submitted send (data-model.md).
     static func feedRow(_ record: [String: Any]) -> [String: Any] {
-        [
+        var row: [String: Any] = [
             "id": record["id"] as? String ?? "",
             "userOpHash": record["user_op_hash"] as? String ?? "",
             "txHash": record["tx_hash"] as? String ?? "",
@@ -567,6 +576,17 @@ final class SendExecutor {
             "status": "pending",
             "type": "send",
         ]
+        row.merge(maybeSentFields(record)) { _, new in new }
+        return row
+    }
+
+    /// `maybeSent` / `submitBlock` as the row keeps them (spec 082 T183): only
+    /// when set, so a row from an ordinary submit is byte-for-byte what it was.
+    static func maybeSentFields(_ record: [String: Any]) -> [String: Any] {
+        var fields: [String: Any] = [:]
+        if record["maybe_sent"] as? Bool == true { fields["maybeSent"] = true }
+        if let block = record["submit_block"] as? NSNumber { fields["submitBlock"] = block.uint64Value }
+        return fields
     }
 
     private static func probeWire(_ probe: RelayClient.TreasuryProbe) -> [String: Any] {
@@ -589,6 +609,12 @@ final class SendExecutor {
         case .bundlerUnderfunded: return ["type": "bundler_underfunded"]
         case .other(let message):
             return ["type": "other", "message": message.map { $0 as Any } ?? NSNull()]
+        // Nothing left the device (RA1): the generic refusal is TRUE now,
+        // and the core's fixed sentence is the diagnostics line.
+        case .notSent:
+            return ["type": "other", "message": userOpNotSentDetail()]
+        // The wallet's own send has no page to lose; kept total.
+        case .askerGone: return ["type": "passkey_cancelled"]
         }
     }
 
