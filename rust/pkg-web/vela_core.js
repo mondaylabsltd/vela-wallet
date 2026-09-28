@@ -2863,6 +2863,46 @@ export function attestSafeOpHash(op_json, calls_json, chain_id) {
 }
 
 /**
+ * Which balances one chain's read covers, in order —
+ * `balance_dashboard::read_plan` (RE9): the native coin, the registry
+ * stablecoins, the wrapped native, the person's own tokens, each contract
+ * once. `stables_json` is the chain data's `stables[]` (`[{symbol,
+ * contract}]`), `custom_json` the person's tokens on this chain
+ * (`[{contract, symbol, name?, decimals}]`); `""` is an empty list.
+ * Answers a JSON array of `ReadSlot`
+ * (`{kind, contract, symbol, name, known_decimals, peg_usd}`).
+ * @param {number} chain_id
+ * @param {string} stables_json
+ * @param {string | null | undefined} wrapped_native
+ * @param {string} custom_json
+ * @returns {string}
+ */
+export function balanceReadPlan(chain_id, stables_json, wrapped_native, custom_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(stables_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(wrapped_native) ? 0 : passStringToWasm0(wrapped_native, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(custom_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.balanceReadPlan(chain_id, ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
  * The deepest pool across ALL stable quotes — `best_native_dex_price`, which
  * folds `best_group_price` over each group.
  * @param {NativeQuoteGroups} groups
@@ -2871,6 +2911,31 @@ export function attestSafeOpHash(op_json, calls_json, chain_id) {
 export function bestNativeDexPrice(groups) {
     const ret = wasm.bestNativeDexPrice(groups);
     return ret[0] === 0 ? undefined : ret[1];
+}
+
+/**
+ * A site's name and the line under it — `browser_load::site_label` (RE7):
+ * `{"name","host_line"}`, `host_line` `null` when the name already is the
+ * host, so it is said once.
+ * @param {string} title
+ * @param {string} host
+ * @returns {string}
+ */
+export function browserSiteLabel(title, host) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(title, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(host, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.browserSiteLabel(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -3156,6 +3221,18 @@ export function dappProviderScript(host) {
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
+}
+
+/**
+ * How long to wait for the receipt when the submit answered `elapsed_ms`
+ * after the approve tap: what is left of the 120 s answer window, never less
+ * than 10 s — `sign_request::dapp_receipt_wait_ms` (RA12).
+ * @param {number} elapsed_ms
+ * @returns {number}
+ */
+export function dappReceiptWaitMs(elapsed_ms) {
+    const ret = wasm.dappReceiptWaitMs(elapsed_ms);
+    return ret;
 }
 
 /**
@@ -3701,6 +3778,22 @@ export function keccak256(data) {
 }
 
 /**
+ * How long a logo that did not load stays failed, ms — `undefined` for the
+ * session (asking again will not help), a number for a miss that may heal
+ * (RE10). The web's `<img onerror>` has no status: `markMissTtlMs("unknown")`.
+ * See [`mark_miss_of`] for `kind` and `status`.
+ * @param {string} kind
+ * @param {number | null} [status]
+ * @returns {number | undefined}
+ */
+export function markMissTtlMs(kind, status) {
+    const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.markMissTtlMs(ptr0, len0, isLikeNone(status) ? 0xFFFFFF : status);
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
+}
+
+/**
  * @param {string} sig
  * @param {Uint8Array} calldata
  * @returns {boolean}
@@ -3754,6 +3847,26 @@ export function parsePublicKey(hex) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * The status method's answer — its `result`, or the whole JSON-RPC body —
+ * as the core's `TrackStatusAnswer` JSON (`{"status","stage","tx_hash"}`),
+ * or `undefined` when it is no answer (an error, or a status the core does
+ * not know). `tx_tracker::parse_user_op_status`.
+ * @param {string} json
+ * @returns {string | undefined}
+ */
+export function parseUserOpStatus(json) {
+    const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.parseUserOpStatus(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
 }
 
 /**
@@ -4174,6 +4287,27 @@ export function registryResolveUnitStep(unit_id, source, answers_json) {
 }
 
 /**
+ * How long an endpoint rests after `consecutive_failures` failures in a
+ * row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
+ * `rpc_pool::cooldown_ms`.
+ * @param {number} consecutive_failures
+ * @returns {number}
+ */
+export function rpcCooldownMs(consecutive_failures) {
+    const ret = wasm.rpcCooldownMs(consecutive_failures);
+    return ret;
+}
+
+/**
+ * The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
+ * @returns {number}
+ */
+export function rpcReadTimeoutMs() {
+    const ret = wasm.rpcReadTimeoutMs();
+    return ret >>> 0;
+}
+
+/**
  * @returns {string}
  */
 export function safeProxyRuntimeCode() {
@@ -4206,6 +4340,73 @@ export function sha256(data) {
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
+}
+
+/**
+ * The ending of a request whose answer to the page was `payload_json` (the
+ * core's `SignResponsePayload` JSON) — `sign_request::ending_of`. Answers
+ * the `SignEnding` JSON (`{"type":"signed"}`,
+ * `{"type":"landed","tx_hash","user_op_hash"}`,
+ * `{"type":"still_confirming","user_op_hash"}`), or `undefined` when there is
+ * nothing to show. `submitted_user_op` is the op this request handed the
+ * tracker.
+ * @param {string} method
+ * @param {string} payload_json
+ * @param {string | null} [submitted_user_op]
+ * @returns {string | undefined}
+ */
+export function signEndingOf(method, payload_json, submitted_user_op) {
+    const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(payload_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(submitted_user_op) ? 0 : passStringToWasm0(submitted_user_op, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.signEndingOf(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    let v4;
+    if (ret[0] !== 0) {
+        v4 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v4;
+}
+
+/**
+ * What the sheet draws for `ending_json` (a `SignEnding`) once the tracker
+ * has had its say — `sign_request::ending_state`. `entry_json` is the
+ * tracker's `TrackEntryView` for the op (`null`, `undefined` or `""` = not
+ * taken yet; an entry for another op is ignored). Answers the
+ * `SignEndingState` JSON: `{"type":"signed"}`, `{"type":"confirmed","tx_hash"}`,
+ * `{"type":"reverted","tx_hash"}`, `{"type":"not_sent"}` or
+ * `{"type":"following","user_op_hash","outcome","fee_held"}`.
+ * @param {string} ending_json
+ * @param {string | null} [entry_json]
+ * @returns {string}
+ */
+export function signEndingState(ending_json, entry_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(ending_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(entry_json) ? 0 : passStringToWasm0(entry_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.signEndingState(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
 }
 
 /**
@@ -4248,6 +4449,17 @@ export function signMessageHash(method, params_json) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v3;
+}
+
+/**
+ * A sign request older than this (ms) is never signed —
+ * `sign_request::EXTENSION_REQUEST_TTL_MS`. The extension worker pins its
+ * `REQUEST_TTL_MS` to it (RB2).
+ * @returns {number}
+ */
+export function signRequestTtlMs() {
+    const ret = wasm.signRequestTtlMs();
+    return ret;
 }
 
 /**
@@ -4509,6 +4721,131 @@ export function trustedSignerUsesWalletPasskeys(url) {
 export function typicalInclusionSeconds(chain_id) {
     const ret = wasm.typicalInclusionSeconds(chain_id);
     return ret >>> 0;
+}
+
+/**
+ * `topics[0]` of the `eth_getLogs` filter a `FindOpEvent` asks for (ruling
+ * 8): the EntryPoint's `UserOperationEvent`; `topics[1]` is the op's hash.
+ * @returns {string}
+ */
+export function userOpEventTopic() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpEventTopic();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * The EntryPoint v0.7 `getUserOpHash` of `op_json` on `chain_id`,
+ * 0x-lowercase — `user_op::user_op_hash`. `op_json` is the operation in the
+ * `attestSafeOpHash` shape (gas fields decimal strings, byte fields hex); any
+ * signature is ignored, so the hash is known before the passkey signs.
+ * @param {string} op_json
+ * @param {bigint} chain_id
+ * @returns {string}
+ */
+export function userOpHash(op_json, chain_id) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(op_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.userOpHash(ptr0, len0, chain_id);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The dApp's `-32603` detail for a request that was not sent and has no
+ * relay refusal to quote (RA10) — a fixed sentence, never the pool's text.
+ * @returns {string}
+ */
+export function userOpNotSentDetail() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpNotSentDetail();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * The relay's lifecycle-status method (RA7) — the only spelling it serves.
+ * @returns {string}
+ */
+export function userOpStatusMethod() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpStatusMethod();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * One step of the submit loop — `user_op::submit_step` (RA1). `reply_json`
+ * is what the POST came back with (see [`submit_reply_of`]); `attempt` is the
+ * 0-based count of POSTs of this op, the one just answered included;
+ * `maybe_delivered` is the OR over every POST of this op of the pool's
+ * `maybe_delivered`; `local_hash` is [`user_op_hash`]'s answer.
+ *
+ * Answers the core's `SubmitStep` as JSON:
+ * `{"retry_after":{"delay_ms":3000}}`, or `{"done":<verdict>}` where the
+ * verdict is `{"type":"accepted","user_op_hash":…}`,
+ * `{"type":"maybe_sent","user_op_hash":…}` or
+ * `{"type":"not_sent","rejection":null|"relayer_unavailable"|"bundler_underfunded"|{"other":…}}`.
+ * The local nonce advances on `accepted` only.
+ * @param {string} reply_json
+ * @param {number} attempt
+ * @param {boolean} maybe_delivered
+ * @param {string} local_hash
+ * @returns {string}
+ */
+export function userOpSubmitStep(reply_json, attempt, maybe_delivered, local_hash) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(reply_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(local_hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.userOpSubmitStep(ptr0, len0, attempt, maybe_delivered, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
 }
 
 /**
