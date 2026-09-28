@@ -124,6 +124,11 @@ final class RpcPool {
         var resume: ((RpcCallResult) -> Void)?
     }
 
+    /// Every routed call's outcome, once concluded — the network's health
+    /// is read from these (`NetWatch`, spec 082 RE3): the calls are the only
+    /// witness of a proxy node that hangs while the system path stays up.
+    var onOutcome: ((RpcOutcome) -> Void)?
+
     private let store: VelaStore
     private let accounts: AccountStore
     private var core: CoreStore<RpcPoolViewWire>!
@@ -199,7 +204,7 @@ final class RpcPool {
             return RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
         }
         let callId = mintCallId()
-        return await withCheckedContinuation { continuation in
+        let result = await withCheckedContinuation { continuation in
             var entry = Pending(method: method, params: params)
             var resumed = false
             entry.resume = { result in
@@ -220,6 +225,14 @@ final class RpcPool {
                 "now_ms": Self.nowMs,
             ]))
         }
+        if case .failed(let rateLimited) = result.outcome {
+            VelaLog.failure(
+                .rpc, kind: rateLimited ? "rate_limited" : "gave_up",
+                "chain=\(chainId) method=\(method) kind=\(kind)"
+            )
+        }
+        onOutcome?(result.outcome)
+        return result
     }
 
     /// Somebody changed an endpoint or a provider key.

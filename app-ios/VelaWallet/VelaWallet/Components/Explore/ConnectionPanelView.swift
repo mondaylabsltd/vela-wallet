@@ -6,6 +6,12 @@
 //  is, which account it sees, which network, then the sentence that says a
 //  connection is not a permission to move money.
 //
+//  Spec 082 RE6 (G9, G10): a site ASKING is named once — one header row,
+//  its avatar beside "连接到 {host}" (wrapping, never cut), the lock line
+//  under it and the ✕ — and one sentence, `connect.browser.body`, above the
+//  two answers, with nothing under them. The host used to appear twice (a
+//  title, then the host row) and two explainers said the same thing.
+//
 
 import SwiftUI
 
@@ -27,25 +33,33 @@ struct ConnectionPanelView: View {
 
     @State private var pickingNetwork = false
 
+    /// The header's one line: "连接到 {host}" while a site asks (the host
+    /// said once, in the sentence that asks), the host once connected.
+    static func headline(_ connection: ConnectionModel) -> String {
+        connection.consent != nil && !connection.title.isEmpty ? connection.title : connection.site.host
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
-            // Spec 079: a site ASKING says what it asks — "连接到 {host}" —
-            // the title the model always carried and the panel never drew.
-            if connection.consent != nil, !connection.title.isEmpty {
-                Text(verbatim: connection.title)
-                    .typeRole(Typography.title.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("explore.connection.title")
-            }
-            HStack(spacing: Tokens.Space.s12) {
+            HStack(alignment: .top, spacing: Tokens.Space.s12) {
                 SiteAvatarView(site: connection.site)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                    Text(verbatim: connection.site.host)
-                        .typeRole(Typography.title.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
-                        .lineLimit(1)
+                    // Spec 079: a site ASKING says what it asks — "连接到
+                    // {host}". Spec 082: in the header row, wrapping, in
+                    // place of the host line rather than above it.
+                    if connection.consent != nil {
+                        Text(verbatim: Self.headline(connection))
+                            .typeRole(Typography.title.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier("explore.connection.title")
+                    } else {
+                        Text(verbatim: Self.headline(connection))
+                            .typeRole(Typography.title.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .lineLimit(1)
+                    }
                     HStack(spacing: Tokens.Space.s4) {
                         // The lock follows the SCHEME, not the layout, and
                         // says nothing more (spec 079, owner: "你标记的安全站点
@@ -230,10 +244,12 @@ struct ConnectionPanelView: View {
                 .buttonStyle(.plain)
             }
 
-            Text(verbatim: connection.footnote)
-                .typeRole(Typography.rowSub.scaled(textScale))
-                .foregroundStyle(theme.fgSubtle)
-                .frame(maxWidth: .infinity)
+            if !connection.footnote.isEmpty {
+                Text(verbatim: connection.footnote)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+                    .frame(maxWidth: .infinity)
+            }
         }
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.vertical, Tokens.Space.s16)

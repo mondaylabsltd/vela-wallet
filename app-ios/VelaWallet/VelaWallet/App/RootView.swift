@@ -138,6 +138,12 @@ struct RootView: View {
     /// request stays in flight, and a dApp that reloaded every time somebody
     /// glanced at their balance would lose a half-finished swap.
     @State private var browser: BrowserController
+    /// Whether the network came back (spec 082 RE3): the pool's calls and
+    /// the system path, through the core's `netHealthStep`.
+    @State private var netWatch: NetWatch
+    /// The chain notice's Retry is out (spec 082 RF4): busy until its one
+    /// read settles.
+    @State private var chainRetrying = false
     /// The request a page is asking about right now. Born with the request
     /// and dropped when the page has its answer — four machines that must not
     /// outlive the question they were asked.
@@ -423,6 +429,19 @@ struct RootView: View {
             }
         )
         _browser = State(initialValue: browserController)
+        // The network came back (spec 082 RE3): every failed page starts its
+        // count again and the one in front is asked for again, the logos a
+        // dead network kept away are asked for again, and the balance is
+        // read — nobody has to tap anything.
+        let netWatch = NetWatch()
+        pool.onOutcome = { [weak netWatch] outcome in netWatch?.observe(outcome) }
+        netWatch.onCameBack = { [weak browserController, weak wallet] in
+            browserController?.networkCameBack()
+            LogoStore.networkCameBack()
+            wallet?.refresh(pull: false)
+        }
+        netWatch.watchPath()
+        _netWatch = State(initialValue: netWatch)
         // The send machine, last: it reads the holdings the balance machine
         // found and asks the fee session for a quote, so both must exist.
         let metadata = TokenMetadata(store: shelf, pool: pool)
@@ -1290,9 +1309,11 @@ struct RootView: View {
                         onRefreshFee: { signing?.refreshFee() },
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
-                            failed: pool.failedChains, rateLimited: pool.rateLimitedChains, loc: loc
+                            failed: pool.failedChains, unreached: pool.unreachedChains,
+                            rateLimited: pool.rateLimitedChains, loc: loc
                         ),
                         onChainRetry: { retryPageChain() },
+                        chainRetrying: chainRetrying,
                         controller: browser,
                         camera: camera,
                         onSelectTab: selectTab,
@@ -1555,9 +1576,22 @@ struct RootView: View {
     /// Spec 079 US4: the chain notice's Retry — one read on the page's chain
     /// through the pool. An answer drops the chain from the failed set, and
     /// the notice goes with it.
+    ///
+    /// Spec 082 RF4: busy — spinner, full colour, taps ignored — until that
+    /// one read settles; an answer clears the notice, a failure leaves it.
     private func retryPageChain() {
-        guard let chain = browser.currentTab?.chainId else { return }
-        Task { _ = await pool.call(chainId: chain, method: "eth_blockNumber") }
+        guard let chain = browser.currentTab?.chainId, !chainRetrying else { return }
+        chainRetrying = true
+        VelaLog.notice(.rpc, "chain notice: retry chain=\(chain)")
+        Task {
+            let outcome = await pool.call(chainId: chain, method: "eth_blockNumber")
+            if case .ok = outcome {
+                VelaLog.notice(.rpc, "chain notice: retry → ok chain=\(chain)")
+            } else {
+                VelaLog.failure(.rpc, kind: "chain_retry_failed", "chain=\(chain)")
+            }
+            chainRetrying = false
+        }
     }
 
     /// The sheet's request is over. Drop it, and open the one waiting.

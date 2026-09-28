@@ -11,6 +11,7 @@ import Foundation
 import SwiftUI
 import Testing
 import UIKit
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -129,6 +130,13 @@ struct BrowserChromeTests {
     /// it; merely rate limited → nothing (a 429 is transient); answering
     /// again → gone, because the pool drops it from the failed set.
     @Test func theChainNoticeShowsForAFailedChainOnly() {
+        // Spec 082 RF1: a chain one call's first pass could not reach at all
+        // is named while the dApp still waits — not after three passes.
+        let early = ExploreLive.chainNotice(chainId: 100, failed: [], unreached: [100], rateLimited: [], loc: loc)
+        #expect(early == loc.t("explore.chainDown", vars: ["chain": "Gnosis"]))
+        #expect(ExploreLive.chainNotice(chainId: 100, failed: [], unreached: [100], rateLimited: [100], loc: loc) == nil,
+                "unreached but rate limited: still quiet")
+        #expect(ExploreLive.chainNotice(chainId: 100, failed: [], unreached: [1], rateLimited: [], loc: loc) == nil)
         let down = ExploreLive.chainNotice(chainId: 100, failed: [100], rateLimited: [], loc: loc)
         #expect(down == loc.t("explore.chainDown", vars: ["chain": "Gnosis"]))
         #expect(down?.contains("Gnosis") == true)
@@ -155,5 +163,153 @@ struct BrowserChromeTests {
         } else {
             Issue.record("the site menu is a site menu")
         }
+    }
+
+    // MARK: - Spec 082
+
+    private func engine() -> BrowserEngine {
+        let engine = BrowserEngine(id: "tab-\(UUID().uuidString)")
+        engine.loader = { _ in }
+        engine.stopper = {}
+        return engine
+    }
+
+    /// RE1 (G28): the bar names the page on screen. A typed address over a
+    /// live page keeps the live page until the new one commits; the lock is
+    /// the committed page's.
+    @Test func aTypedAddressKeepsThePageOnScreenUntilItCommits() {
+        let engine = engine()
+        defer { engine.tearDown() }
+        engine.reportedURL = { URL(string: "https://jumper.exchange/") }
+        engine.committed()
+        #expect(engine.bar.host == "jumper.exchange")
+        #expect(engine.bar.lock == "closed")
+
+        engine.load("https://app.uniswap.org/")
+        engine.provisionalStarted(attempt: "https://app.uniswap.org/")
+        // WebKit's own `url` is already the provisional one — the bar is not.
+        engine.reportedURL = { URL(string: "https://app.uniswap.org/") }
+        engine.metaChanged()
+        #expect(engine.bar.host == "jumper.exchange", "the bar never names a page that has not arrived")
+        #expect(engine.bar.lock == "closed")
+        #expect(engine.host == "jumper.exchange")
+        #expect(engine.loading, "the hairline says a load is on its way")
+
+        engine.committed()
+        #expect(engine.bar.host == "app.uniswap.org")
+        #expect(engine.bar.url == "https://app.uniswap.org/")
+    }
+
+    /// A page's own `location.href` to a host that never answers never
+    /// renames the bar over the live page — the spoofing shape (E-G28b);
+    /// when it is given up the panel names the failed host with NO lock.
+    @Test func aPagesOwnNavigationNeverRenamesTheBarAndAFailureHasNoLock() {
+        let engine = engine()
+        defer { engine.tearDown() }
+        engine.reportedURL = { URL(string: "http://192.168.50.9:8137/") }
+        engine.committed()
+        #expect(engine.bar.host == "192.168.50.9:8137")
+
+        // The page navigates itself (what `decidePolicyFor` reports).
+        engine.requested("https://app.uniswap.org/")
+        engine.provisionalStarted(attempt: "https://app.uniswap.org/")
+        engine.reportedURL = { URL(string: "https://app.uniswap.org/") }
+        engine.metaChanged()
+        #expect(engine.bar.host == "192.168.50.9:8137")
+        #expect(engine.bar.lock != "none", "the live page keeps its own lock")
+
+        // Twenty seconds, no commit, WebKit never came alive: given up.
+        engine.reportedProgress = { 0.1 }
+        engine.watchdogFired(elapsedMs: browserLoadGiveUpMs())
+        #expect(engine.failure != nil)
+        #expect(engine.bar.host == "app.uniswap.org", "the panel names where it was going")
+        #expect(engine.bar.lock == "none", "nothing from that host is on screen: no lock")
+    }
+
+    /// A fresh tab has nothing committed: the pending host, and no lock.
+    @Test func aFreshTabNamesItsPendingLoadWithNoLock() {
+        let engine = engine()
+        defer { engine.tearDown() }
+        engine.load("https://app.uniswap.org/swap")
+        #expect(engine.bar.host == "app.uniswap.org")
+        #expect(engine.bar.lock == "none")
+        #expect(engine.bar.url == "https://app.uniswap.org/swap")
+    }
+
+    /// A single-page app moving itself (same origin, nothing pending) moves
+    /// the committed address with it.
+    @Test func aSinglePageAppsOwnMoveFollows() {
+        let engine = engine()
+        defer { engine.tearDown() }
+        engine.reportedURL = { URL(string: "https://app.uniswap.org/swap") }
+        engine.committed()
+        engine.reportedURL = { URL(string: "https://app.uniswap.org/pool") }
+        engine.metaChanged()
+        #expect(engine.bar.url == "https://app.uniswap.org/pool")
+    }
+
+    /// RE5: while a page loads, the site menu's refresh row is Stop.
+    @Test func theRefreshRowIsStopWhileLoading() {
+        let loading = ExploreLive.siteMenuItems(bookmarked: false, connected: false, loading: true, loc: loc)
+        #expect(loading.contains { $0.id == "stop" && $0.label == loc.t("connect.dapp.stop") })
+        #expect(!loading.contains { $0.id == "refresh" })
+        let idle = ExploreLive.siteMenuItems(bookmarked: false, connected: false, loc: loc)
+        #expect(idle.contains { $0.id == "refresh" })
+        #expect(!idle.contains { $0.id == "stop" })
+        #expect(loc.t("connect.dapp.stop") != "connect.dapp.stop")
+    }
+
+    /// RE6 (G9, G10): a site asking is named once — in the header's "连接到
+    /// {host}" — and one sentence, `connect.browser.body`, stands above the
+    /// answers with nothing under them.
+    @Test func theConsentNamesTheSiteOnce() {
+        let asking = connection(consent: true)
+        let headline = ConnectionPanelView.headline(asking)
+        #expect(headline == loc.t("connect.browser.title", vars: ["host": "app.uniswap.org"]))
+        #expect(headline.components(separatedBy: "app.uniswap.org").count == 2, "the host, once")
+        #expect(asking.explainer == loc.t("connect.browser.body"))
+        #expect(asking.footnote.isEmpty, "no second explainer under the buttons")
+        #expect(!asking.explainer.contains("app.uniswap.org"))
+
+        // The connected panel is unchanged.
+        let connected = connection(consent: false)
+        #expect(ConnectionPanelView.headline(connected) == "app.uniswap.org")
+        #expect(connected.explainer == loc.t("explore.connectionExplainer"))
+        #expect(connected.footnote == loc.t("explore.autoRequestHint"))
+    }
+
+    /// RE7 (G8): a Recents row whose title is its host names it once; a
+    /// real title keeps the host under it.
+    @Test func aRecentWhoseTitleIsItsHostIsNamedOnce() {
+        var same = ExploreLive.site(host: "192.168.50.9:8137", name: "192.168.50.9:8137", origin: "http://192.168.50.9:8137")
+        same.subtitle = "192.168.50.9:8137"
+        let once = SiteRowView.lines(same)
+        #expect(once.name == "192.168.50.9:8137")
+        #expect(once.second == nil)
+
+        var titled = ExploreLive.site(host: "app.uniswap.org", name: "Uniswap", origin: "https://app.uniswap.org")
+        titled.subtitle = "app.uniswap.org"
+        let two = SiteRowView.lines(titled)
+        #expect(two.name == "Uniswap")
+        #expect(two.second == "app.uniswap.org")
+
+        // Case alone does not make a second line.
+        let cased = SiteRowView.lines(ExploreLive.site(host: "bscscan.com", name: "BSCSCAN.COM", origin: "https://bscscan.com"))
+        #expect(cased.second == nil)
+    }
+
+    /// RE12 (G25): every card has one skeleton — a tab never shown since the
+    /// launch draws its mark and host, not fake page bars — and the grid is
+    /// top-aligned.
+    @Test func everyTabCardHasOneSkeleton() {
+        let site = ExploreLive.site(host: "app.uniswap.org", name: "Uniswap", origin: "https://app.uniswap.org")
+        let dormant = TabModel(id: "a", title: "Uniswap", site: site, selected: false, startPage: false)
+        #expect(TabPreview.of(dormant) == .site(host: "app.uniswap.org"))
+        var shot = dormant
+        shot.snapshot = UIImage()
+        #expect(TabPreview.of(shot) == .snapshot)
+        let start = TabModel(id: "s", title: "", site: nil, selected: false, startPage: true)
+        #expect(TabPreview.of(start) == .startPage)
+        #expect(ExploreTabsScreen.columns.allSatisfy { $0.alignment == .top })
     }
 }

@@ -281,4 +281,46 @@ struct BrowserMemoryTests {
         #expect(panel.site.name == "app.uniswap.org", "the host IS the name here — a site's own name is a claim")
         #expect(panel.account.seed == "0x88cca0eedbf2c4426110bbfc998f048689266894")
     }
+
+    // MARK: - Logo misses (spec 082 T120, RE10, W20)
+
+    /// A 404 is a miss for the session; a 503 — or a connection that never
+    /// answered — is asked again after the core's minute, and at once when
+    /// the network comes back.
+    @Test func aLogoMissLastsAsLongAsTheCoreSays() {
+        let clock = Clock()
+        LogoStore.now = { clock.ms }
+        defer {
+            LogoStore.now = { Date().timeIntervalSince1970 * 1000 }
+            LogoStore.forgetAll()
+        }
+        let gone = "https://data.example/logos/gone.png"
+        let busy = "https://data.example/logos/busy.png"
+        let silent = "https://data.example/logos/silent.png"
+        LogoStore.recordMiss(gone, status: 404, notAnImage: false)
+        LogoStore.recordMiss(busy, status: 503, notAnImage: false)
+        LogoStore.recordMiss(silent, status: nil, notAnImage: false)
+        #expect(LogoStore.isMissed(gone))
+        #expect(LogoStore.isMissed(busy))
+        #expect(LogoStore.isMissed(silent))
+
+        clock.ms += 60_001
+        #expect(LogoStore.isMissed(gone), "a 404 stays missed for the session")
+        #expect(!LogoStore.isMissed(busy), "a 503 is asked again after a minute")
+        #expect(!LogoStore.isMissed(silent))
+
+        LogoStore.recordMiss(busy, status: 503, notAnImage: false)
+        let epoch = LogoEpoch.shared.value
+        LogoStore.networkCameBack()
+        #expect(!LogoStore.isMissed(busy), "the network came back: asked again at once")
+        #expect(LogoStore.isMissed(gone))
+        #expect(LogoEpoch.shared.value == epoch + 1, "the logos on screen ask again")
+        #expect(markMissTtlMs(kind: "transport", status: 404) == nil)
+        #expect(markMissTtlMs(kind: "transport", status: 503) == 60_000)
+    }
+}
+
+@MainActor
+final class Clock {
+    var ms: Double = 1_757_000_000_000
 }

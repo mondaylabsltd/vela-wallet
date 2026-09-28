@@ -298,6 +298,15 @@ final class BrowserController {
     func goBack() { current?.goBack() }
     func goForward() { current?.goForward() }
     func reload() { current?.reload() }
+    /// Stop the load in flight (spec 082 RE5): the committed page stays.
+    func stop() { current?.stop() }
+
+    /// The network came back (spec 082 RE3): every failed page starts its
+    /// count again, and the one in front is asked for again when its class is
+    /// one a returning network can clear.
+    func networkCameBack() {
+        for engine in engines.values { engine.networkCameBack() }
+    }
 
     // MARK: - What is on screen (spec 079)
 
@@ -363,12 +372,18 @@ final class BrowserController {
 
     /// The star: remove a site that is already a favourite, add one that is
     /// not.
+    ///
+    /// Spec 082 RE1: the star acts on what the bar names — the page on
+    /// screen, never where a load in flight is going.
     func toggleFavorite() {
-        guard let engine = current, !engine.url.isEmpty, !engine.origin.isEmpty else { return }
-        if explore.favorites.contains(where: { $0.origin == engine.origin }) {
-            removeFavorite(origin: engine.origin)
+        guard let engine = current else { return }
+        let url = engine.bar.url
+        let origin = ProviderBridge.origin(of: url)
+        guard !url.isEmpty, !origin.isEmpty else { return }
+        if explore.favorites.contains(where: { $0.origin == origin }) {
+            removeFavorite(origin: origin)
         } else {
-            addFavorite(url: engine.url, title: engine.title.isEmpty ? nil : engine.title)
+            addFavorite(url: url, title: engine.title.isEmpty ? nil : engine.title)
         }
     }
 
