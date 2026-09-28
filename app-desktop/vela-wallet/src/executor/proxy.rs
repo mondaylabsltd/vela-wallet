@@ -214,6 +214,12 @@ struct Route {
     /// another route reached counts: a dead dApp fails every route and says
     /// nothing about the proxy (083 W13 review).
     walked_past: HashSet<String>,
+    /// When this proxy last carried a request. A host counts against it
+    /// only if its request began after that: requests finish out of order,
+    /// and one burst — twenty hosts through fine in a second, three
+    /// black-holed ones timing out to Direct seconds later — is not three
+    /// hosts with nothing carried between (083 W13, review N1).
+    last_carried: Option<Instant>,
 }
 
 /// How many hosts must have walked past a proxy, with none carried by it in
@@ -373,18 +379,30 @@ fn step_past(generation: u64, host: &str, at: usize, route_is_dead: bool) {
     });
 }
 
-/// Route `at` carried `host`, after the proxies at `walked_past` failed it.
-/// The host is pinned to `at`; a success through `at`'s proxy clears the
-/// count against it; and each proxy walked past counts this host against
-/// itself ([`WALKED_PAST_BY`]).
-fn carried(generation: u64, host: &str, at: usize, through_proxy: bool, walked_past: &[usize]) {
+/// Route `at` carried `host`, after the proxies at `walked_past` failed it,
+/// in a request that `began` then. The host is pinned to `at`; a success
+/// through `at`'s proxy clears the count against it; and each proxy walked
+/// past counts this host against itself ([`WALKED_PAST_BY`]) — unless it
+/// carried something since this request began, which a dead proxy could
+/// not have (083 W13, review N1).
+fn carried(
+    generation: u64,
+    host: &str,
+    at: usize,
+    through_proxy: bool,
+    walked_past: &[usize],
+    began: Instant,
+) {
     learn(generation, |candidates| {
         candidates.hosts.insert(host.to_owned(), at);
         if through_proxy && let Some(route) = candidates.routes.get_mut(at) {
             route.walked_past.clear();
+            route.last_carried = Some(Instant::now());
         }
         for &past in walked_past {
-            if let Some(route) = candidates.routes.get_mut(past) {
+            if let Some(route) = candidates.routes.get_mut(past)
+                && route.last_carried.is_none_or(|carried| carried < began)
+            {
                 route.walked_past.insert(host.to_owned());
             }
         }
@@ -665,13 +683,15 @@ fn walk<T>(
     } = begin(host);
     let mut heard = Heard::default();
     // The proxies this request failed through, not dead, before a route
-    // carried it: evidence against each, counted only if one does.
+    // carried it: evidence against each, counted only if one does, and only
+    // if that proxy carried nothing since `began` (083 W13, review N1).
     let mut walked_past = Vec::new();
+    let began = Instant::now();
     for (at, candidate) in list.iter().enumerate().skip(start) {
         let through_proxy = through_proxy(candidate, target).is_some();
         match call(&agent_over(candidate.proxy(), timeout)) {
             Ok(value) => {
-                carried(generation, host, at, through_proxy, &walked_past);
+                carried(generation, host, at, through_proxy, &walked_past, began);
                 return Ok(value);
             }
             Err(error) if is_transport(&error) => {
@@ -1172,6 +1192,13 @@ mod candidates {
         state().lock().unwrap().as_ref().map(|c| c.current)
     }
 
+    /// When a request began that started after every success so far —
+    /// strictly after, even where two readings of the clock tie (083 W13,
+    /// review N1).
+    fn began_after() -> Instant {
+        Instant::now() + Duration::from_micros(1)
+    }
+
     /// Spec 083 W13: a node black-holed behind the proxy timed out once, and
     /// the wallet's every other host went Direct for a minute. A timeout is
     /// about its host: the next host still starts at the proxy.
@@ -1563,13 +1590,13 @@ mod candidates {
         let (_hole, proxy) = black_hole();
         let _serial = install(vec![Candidate::Env(proxy), Candidate::Direct]);
         let generation = generation();
-        carried(generation, "pinned.example", 0, true, &[]);
-        carried(generation, "a.example", 1, false, &[0]);
-        carried(generation, "b.example", 1, false, &[0]);
+        carried(generation, "pinned.example", 0, true, &[], began_after());
+        carried(generation, "a.example", 1, false, &[0], began_after());
+        carried(generation, "b.example", 1, false, &[0], began_after());
         assert_eq!(everyone(), Some(0));
-        carried(generation, "pinned.example", 0, true, &[]);
-        carried(generation, "c.example", 1, false, &[0]);
-        carried(generation, "d.example", 1, false, &[0]);
+        carried(generation, "pinned.example", 0, true, &[], began_after());
+        carried(generation, "c.example", 1, false, &[0], began_after());
+        carried(generation, "d.example", 1, false, &[0], began_after());
         assert_eq!(everyone(), Some(0), "the count restarted at the success");
 
         // A dead dApp: failed through the proxy, then Direct too.
@@ -1577,7 +1604,7 @@ mod candidates {
         exhausted(generation, "dead.example");
         assert_eq!(everyone(), Some(0), "a site down everywhere says nothing");
 
-        carried(generation, "e.example", 1, false, &[0]);
+        carried(generation, "e.example", 1, false, &[0], began_after());
         assert_eq!(everyone(), Some(1));
         assert_eq!(
             begin("pinned.example").start,
@@ -1585,6 +1612,27 @@ mod candidates {
             "its own route, whatever others met"
         );
         assert_eq!(begin("new.example").start, 1);
+        uninstall();
+    }
+
+    /// Spec 083 W13 review N1: one balance read sends a burst through a
+    /// working proxy. Most hosts come back through it in a second; three it
+    /// black-holes time out and reach Direct seconds later, with nothing
+    /// through the proxy after. They began before it carried the others, so
+    /// they are not three hosts with nothing carried between: everyone
+    /// stays on the proxy.
+    #[test]
+    fn a_burst_that_the_proxy_partly_carried_moves_no_one() {
+        let (_hole, proxy) = black_hole();
+        let _serial = install(vec![Candidate::Env(proxy), Candidate::Direct]);
+        let generation = generation();
+        let began = Instant::now();
+        carried(generation, "ok.example", 0, true, &[], began);
+        for host in ["one.example", "two.example", "three.example"] {
+            carried(generation, host, 1, false, &[0], began);
+        }
+        assert_eq!(everyone(), Some(0), "the proxy carried this burst");
+        assert_eq!(begin("new.example").start, 0);
         uninstall();
     }
 
