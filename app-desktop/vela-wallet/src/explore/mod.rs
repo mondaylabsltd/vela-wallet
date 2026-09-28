@@ -8,6 +8,7 @@
 pub mod components;
 pub mod fixtures;
 pub mod live;
+pub mod load_watch;
 
 use gpui::SharedString;
 
@@ -82,6 +83,12 @@ pub struct ExploreStrings {
     /// The page's renderer died (spec 070): said, with a way back.
     pub page_crashed_title: SharedString,
     pub page_crashed_body: SharedString,
+    /// Spec 079 US3: the load-failure panel — its title (the generic line;
+    /// the reason under it is the core's `reason_key`), Retry, and what the
+    /// button says while an attempt runs.
+    pub load_failed: SharedString,
+    pub load_retry: SharedString,
+    pub load_retrying: SharedString,
 }
 
 impl ExploreStrings {
@@ -141,6 +148,9 @@ impl ExploreStrings {
             close: s("explore.close"),
             page_crashed_title: s("explore.pageCrashedTitle"),
             page_crashed_body: s("explore.pageCrashedBody"),
+            load_failed: s("connect.browser.loadFailed"),
+            load_retry: s("connect.browser.retry"),
+            load_retrying: s("explore.loadRetrying"),
         }
     }
 }
@@ -167,6 +177,9 @@ mod tests {
             (s.consent_body.as_ref(), "connect.browser.body"),
             (s.consent_connect.as_ref(), "connect.browser.connect"),
             (s.consent_cancel.as_ref(), "connect.browser.cancel"),
+            (s.load_failed.as_ref(), "connect.browser.loadFailed"),
+            (s.load_retry.as_ref(), "connect.browser.retry"),
+            (s.load_retrying.as_ref(), "explore.loadRetrying"),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");
         }
@@ -178,5 +191,14 @@ mod tests {
             s.site_count.contains("{{n}}"),
             "siteCount must be a template"
         );
+        // Every reason the core's classifier can name resolves here.
+        for key in [
+            "explore.loadOffline",
+            "explore.loadNotFound",
+            "explore.loadCertificate",
+            "connect.browser.loadFailed",
+        ] {
+            assert_ne!(loc.t(key).as_ref(), key, "`{key}` echoed the key");
+        }
     }
 }

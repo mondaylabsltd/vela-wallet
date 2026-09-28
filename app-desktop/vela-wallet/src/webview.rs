@@ -57,15 +57,28 @@ use vela_core::app::dapp_rpc::{ProviderHost, provider_script};
 /// `browser_history` is written to take a second report without clobbering
 /// what the first one captured. Top frame only, like the provider: wry puts
 /// every initialization script into subframes on Windows.
+///
+/// Spec 079 R3: the address, the title and the icon are read in ONE script
+/// from ONE document — the address was read from the webview later, so a late
+/// `load` from the page being left could land under the next page's URL — and
+/// the main document's HTTP status where the engine says (an error page is not
+/// a visit).
 const META_JS: &str = r#"
 (() => {
   if (window.top !== window) return;
   const meta = () => {
     const icon = document.querySelector("link[rel~='icon']");
+    let status = 0;
+    try {
+      const nav = performance.getEntriesByType('navigation')[0];
+      status = (nav && nav.responseStatus) || 0;
+    } catch (_) {}
     window.ipc.postMessage(JSON.stringify({
       vela: 'meta',
+      href: location.href,
       title: document.title || '',
       favicon: icon ? icon.href : '',
+      status,
     }));
   };
   document.addEventListener('DOMContentLoaded', meta);
@@ -91,6 +104,10 @@ type MessageSink = Box<dyn Fn(PageMessage)>;
 
 /// A document load, as the webview reports it.
 pub enum Load {
+    /// The wallet asked the engine to load this address — Go, a tab, a
+    /// favourite, reload, Retry (spec 079: progress from the request, not from
+    /// the engine's commit, which on a slow network is seconds later).
+    Requested(String),
     /// A new document committed (`didCommitNavigation` on macOS,
     /// `NavigationStarting` on Windows). Settles nothing by itself — the new
     /// document's hello is what retires the old one.
@@ -105,13 +122,21 @@ pub enum Load {
 
 type LoadSink = Box<dyn Fn(Load)>;
 
-/// What a page says it is called: `(url, title, favicon)`.
+/// What a page says it is called, read in one script from one document.
 ///
-/// Untrusted, all three, and treated as display text only. The favicon is
-/// stored for the cross-client record and never FETCHED: this shell draws a
-/// letter, and fetching a URL a page handed us would be a beacon it gets for
-/// free every time somebody opens their history.
-type MetaSink = Box<dyn Fn(String, String, String)>;
+/// Untrusted, all of it, and treated as display text only. The address is the
+/// document's own `location.href` when that is the SENDER's origin (the
+/// platform's word, `WKScriptMessage`'s frame), and the sender's URL
+/// otherwise — so a page cannot file itself under another site.
+pub struct PageMeta {
+    pub url: String,
+    pub title: String,
+    pub favicon: String,
+    /// The main document's HTTP status, where the engine reports it.
+    pub status: Option<u16>,
+}
+
+type MetaSink = Box<dyn Fn(PageMeta)>;
 
 thread_local! {
     static MESSAGES: RefCell<Option<MessageSink>> = const { RefCell::new(None) };
@@ -120,6 +145,10 @@ thread_local! {
     /// The origin of the top document as last COMMITTED — `None` before the
     /// first commit, `Some(None)` for a top document with no web origin.
     static COMMITTED: RefCell<Option<Option<String>>> = const { RefCell::new(None) };
+    /// The address of the top document as last committed (spec 079): the
+    /// toolbar's host, which must not move to a site that has not loaded —
+    /// WKWebView's own URL changes the moment a navigation STARTS.
+    static COMMITTED_URL: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 /// Hand the page's strings to the wallet. Called once, when the page builds
@@ -225,9 +254,13 @@ pub fn hide() {
 
 /// Go to a URL the person typed or a link they picked.
 pub fn navigate(url: &str) {
+    let mut asked = false;
     with_view(|view| {
-        let _ = view.load_url(url);
+        asked = view.load_url(url).is_ok();
     });
+    if asked {
+        report(Load::Requested(url.to_owned()));
+    }
 }
 
 /// Back and forward. wry has no native pair, so this is the page's own
@@ -245,9 +278,19 @@ pub fn forward() {
 }
 
 pub fn reload() {
+    let mut asked = false;
     with_view(|view| {
-        let _ = view.reload();
+        asked = view.reload().is_ok();
     });
+    if asked && let Some(url) = committed_url().or_else(current_url) {
+        report(Load::Requested(url));
+    }
+}
+
+/// The address of the document that last committed, whole.
+#[must_use]
+pub fn committed_url() -> Option<String> {
+    COMMITTED_URL.with(|slot| slot.borrow().clone())
 }
 
 /// Forget every site this window has browsed (spec 081 FR-017).
@@ -289,14 +332,17 @@ pub fn current_url() -> Option<String> {
 /// origin, which is the one thing a browser chrome must never get wrong.
 /// `None` before the first page, and the caller keeps drawing what the mock
 /// draws rather than an empty bar.
+///
+/// The COMMITTED document's, since spec 079: the webview's own URL moves to
+/// the next site the moment a navigation starts, so on a slow network the bar
+/// named a site that had not loaded — and, on a failure, never would.
 #[must_use]
 pub fn host() -> Option<String> {
-    BROWSER.with(|slot| {
-        let url = slot.borrow().as_ref()?.view.url().ok()?;
-        let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(&url);
-        let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
-        (!host.is_empty()).then(|| host.to_owned())
-    })
+    let url =
+        committed_url().or_else(|| BROWSER.with(|slot| slot.borrow().as_ref()?.view.url().ok()))?;
+    let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(&url);
+    let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    (!host.is_empty()).then(|| host.to_owned())
 }
 
 /// Hand one message from the core to the page in `tab`.
@@ -416,6 +462,8 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             // webview that flashed into the wallet before its first layout
             // would be visible for exactly one frame in the wrong place.
             let _ = view.set_visible(false);
+            // The first page is a load the wallet asked for, like any other.
+            report(Load::Requested(home.to_owned()));
             Some(view)
         }
         Err(error) => {
@@ -429,6 +477,7 @@ fn report(load: Load) {
     if let Load::Started(url) = &load {
         let origin = vela_core::app::dapp_permissions::origin_of(url);
         COMMITTED.with(|slot| *slot.borrow_mut() = Some(origin));
+        COMMITTED_URL.with(|slot| *slot.borrow_mut() = Some(url.clone()));
     }
     LOADS.with(|slot| {
         if let Some(sink) = slot.borrow().as_ref() {
@@ -456,10 +505,20 @@ fn on_ipc(request: wry::http::Request<String>) {
                 .unwrap_or_default()
                 .to_owned()
         };
-        let url = current_url().unwrap_or_default();
+        let sender = sender_url(&request.uri().to_string(), current_url);
+        let meta = PageMeta {
+            url: meta_url(&text("href"), &sender),
+            title: text("title"),
+            favicon: text("favicon"),
+            status: parsed
+                .get("status")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|status| u16::try_from(status).ok())
+                .filter(|status| *status > 0),
+        };
         META.with(|slot| {
             if let Some(sink) = slot.borrow().as_ref() {
-                sink(url, text("title"), text("favicon"));
+                sink(meta);
             }
         });
         return;
@@ -475,6 +534,19 @@ fn on_ipc(request: wry::http::Request<String>) {
             });
         }
     });
+}
+
+/// The address a meta report is filed under: the document's own
+/// `location.href` — the one document the title and icon came from — when it
+/// is the sender's origin, which is the platform's word and cannot be forged;
+/// the sender's URL when it is not. A page cannot put itself under another
+/// site's name in Recents.
+fn meta_url(href: &str, sender: &str) -> String {
+    let origin_of = vela_core::app::dapp_permissions::origin_of;
+    match origin_of(href) {
+        Some(origin) if Some(&origin) == origin_of(sender).as_ref() => href.to_owned(),
+        _ => sender.to_owned(),
+    }
 }
 
 /// Was this posted by the top document?
@@ -560,6 +632,25 @@ mod tests {
         assert!(top_frame_sent("https://back.example/", || Some(
             "https://back.example/#top".to_owned()
         )));
+    }
+
+    /// Spec 079 R3: the visit's address is the document's own, read in the
+    /// same script as its title — but never another origin than the frame
+    /// the platform says sent it.
+    #[test]
+    fn a_visit_is_filed_under_the_document_that_reported_it() {
+        assert_eq!(
+            meta_url("https://app.example/swap?x=1", "https://app.example/"),
+            "https://app.example/swap?x=1",
+            "a route the page moved to is the page's own address"
+        );
+        assert_eq!(
+            meta_url("https://bank.example/", "https://evil.example/"),
+            "https://evil.example/",
+            "a page cannot file itself under another site"
+        );
+        assert_eq!(meta_url("", "https://app.example/"), "https://app.example/");
+        assert!(META_JS.contains("location.href") && META_JS.contains("responseStatus"));
     }
 
     /// The injected provider is the core's, for THIS host: it posts through

@@ -515,6 +515,35 @@ pub fn address_field(
         )
 }
 
+/// The load's hairline under the toolbar (spec 079 US3): an accent segment
+/// running across while a load is out — asked for and not yet finished. The
+/// row is always 2 px tall, so nothing moves when it starts or stops.
+pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
+    use gpui::{Animation, AnimationExt as _};
+    let track = div()
+        .h(px(2.))
+        .w_full()
+        .flex_none()
+        .relative()
+        .overflow_hidden();
+    if !busy {
+        return track;
+    }
+    track.child(
+        div()
+            .absolute()
+            .top_0()
+            .h_full()
+            .w(gpui::relative(0.3))
+            .bg(theme.accent)
+            .with_animation(
+                "load-hairline",
+                Animation::new(std::time::Duration::from_millis(1200)).repeat(),
+                |bar, delta| bar.left(gpui::relative(delta * 1.3 - 0.3)),
+            ),
+    )
+}
+
 /// The three navigation buttons, live or drawn.
 fn nav_controls(theme: &Theme, icons: &mut IconCache, nav: Option<NavActions>) -> Vec<AnyElement> {
     // Back and reload act; forward is the web's drawn `canForward: false`

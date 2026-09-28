@@ -652,6 +652,9 @@ pub struct WalletPage {
     /// The star pins with THIS rather than the host, because the host is what
     /// a tile falls back to and a page's title is what a person recognises.
     browser_title: Option<String>,
+    /// Spec 079 US3: the shell's own account of the page's load — wry reports
+    /// no failures, so the watchdog, the probe and the retries live here.
+    load_watch: crate::explore::load_watch::LoadWatch,
     /// The browser machine (spec 070): every page's requests, the grants,
     /// each site's chain, the signing line. Born the first time anything needs
     /// it — a page's first message, or Settings listing the connected sites —
@@ -1163,6 +1166,7 @@ impl WalletPage {
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
             browser_title: None,
+            load_watch: crate::explore::load_watch::LoadWatch::default(),
             cap_focus: cx.focus_handle(),
             leg_cap_focus: std::collections::HashMap::new(),
             browser_host: None,
@@ -12504,6 +12508,22 @@ impl WalletPage {
         // screen, the same one that decides whether it may ask to sign.
         let secure = !live_browser || tab_view.as_ref().is_none_or(|tab| tab.secure);
         let crashed = tab_view.as_ref().is_some_and(|tab| tab.crashed);
+        // Spec 079 US3: a load that failed stands where the page was — the bar
+        // names the site that failed (by its address alone: nothing of it
+        // loaded to judge), and its scheme is the only lock there is.
+        let failed_load = self
+            .load_watch
+            .failure
+            .clone()
+            .zip(self.load_watch.url.clone())
+            .filter(|_| live_browser && !crashed);
+        let (host, secure) = match &failed_load {
+            Some((_, url)) => (
+                SharedString::from(crate::explore::load_watch::host_of(url)),
+                url.to_ascii_lowercase().starts_with("https://"),
+            ),
+            None => (host, secure),
+        };
         let bar = explore_components::AddressBar {
             browsing,
             host,
@@ -12604,9 +12624,15 @@ impl WalletPage {
                 Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
                     crate::webview::forward();
                 }),
-                Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
-                    crate::webview::reload();
-                }),
+                // Over the failure panel, reload is its Retry: the address
+                // that failed, not the page before it.
+                Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                    if this.load_watch.failure.is_some() {
+                        this.load_retry(cx);
+                    } else {
+                        crate::webview::reload();
+                    }
+                })),
             ]
         });
         #[cfg(target_os = "linux")]
@@ -12614,6 +12640,23 @@ impl WalletPage {
 
         let toolbar = explore_components::toolbar(theme, &mut self.icons, address, trailing, nav);
 
+        // An automatic attempt that came due while the page was elsewhere
+        // runs now that it is back (never while it is out of sight).
+        #[cfg(not(target_os = "linux"))]
+        if live_browser && self.load_watch.retry_due {
+            cx.spawn(async move |page, cx| {
+                page.update(cx, |this, cx| {
+                    if this.load_in_front()
+                        && let Some(url) = this.load_watch.take_due()
+                    {
+                        crate::webview::navigate(&url);
+                    }
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
         let body: gpui::AnyElement = if live_browser && crashed {
             // The renderer is gone and the page with it; the core has already
             // settled what it asked. Said, with the way back — never a blank
@@ -12621,6 +12664,13 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             crate::webview::hide();
             self.page_crashed(theme, cx).into_any_element()
+        } else if let Some((failure, url)) = failed_load {
+            // The Vela panel covers the page for the whole of a retry: WKWebView
+            // keeps the page before it, and that page is not what failed.
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::hide();
+            self.load_failed_panel(theme, &failure, &url, cx)
+                .into_any_element()
         } else if live_browser {
             #[cfg(not(target_os = "linux"))]
             {
@@ -12674,7 +12724,88 @@ impl WalletPage {
             .bg(theme.bg_base)
             .child(strip)
             .child(toolbar)
+            // Spec 079 US3: the hairline, from the moment a load is asked for
+            // until it finishes or fails. Its 2 px are always there, so the
+            // page never moves when it appears.
+            .children(live_browser.then(|| {
+                crate::explore::components::load_hairline(theme, self.load_watch.busy() && !crashed)
+            }))
             .child(body)
+    }
+
+    /// The load failed (spec 079 US3): the generic line, the core's reason for
+    /// its class under it, the site, and Retry — which says it is trying
+    /// again, and takes no second press, while an attempt runs.
+    fn load_failed_panel(
+        &mut self,
+        theme: &Theme,
+        failure: &vela_core::app::browser_load::LoadFailure,
+        url: &str,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let title = self.explore.load_failed.clone();
+        let reason = self.loc.t(&failure.reason_key);
+        let retrying = self.load_watch.retrying || self.load_watch.loading;
+        let button = outline_button(
+            ElementId::from("load-retry"),
+            theme,
+            &mut self.icons,
+            (!retrying).then_some(Icon::RefreshCw),
+            if retrying {
+                self.explore.load_retrying.clone()
+            } else {
+                self.explore.load_retry.clone()
+            },
+        );
+        let button = if retrying {
+            button.opacity(0.6)
+        } else {
+            button.on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                #[cfg(not(target_os = "linux"))]
+                this.load_retry(cx);
+                #[cfg(target_os = "linux")]
+                let _ = (this, cx);
+            }))
+        };
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(12.))
+            .p(px(32.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::TriangleAlert,
+                false,
+                theme.warning_base,
+                28.,
+            ))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(title.clone()),
+            )
+            .children((reason != title).then(|| {
+                div()
+                    .max_w(px(360.))
+                    .text_center()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(reason)
+            }))
+            .child(
+                div()
+                    .max_w(px(360.))
+                    .text_center()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_subtle)
+                    .child(SharedString::from(crate::explore::load_watch::host_of(url))),
+            )
+            .child(div().pt(px(4.)).child(button))
     }
 
     /// The renderer behind the page died (spec 070 FR-013; macOS reports it).
@@ -12875,12 +13006,27 @@ impl WalletPage {
         // anybody went, and the title only exists once the document parsed.
         let page = cx.entity().downgrade();
         let async_cx = cx.to_async();
-        crate::webview::on_meta_to(Box::new(move |url, title, favicon| {
+        crate::webview::on_meta_to(Box::new(move |meta| {
             let page = page.clone();
             async_cx
                 .spawn(async move |cx| {
                     page.update(cx, |page, cx| {
-                        page.browser_title = (!title.is_empty()).then(|| title.clone());
+                        // Spec 079 R3: the core's visit rule decides — never a
+                        // failed load, an error status or an engine page — and
+                        // the address, title and icon are ONE document's, read
+                        // in one script. Not a visit: the tab keeps its title.
+                        let Some(visit) = vela_core::app::browser_load::visit_to_record(
+                            vela_core::app::browser_load::LoadFinished {
+                                url: meta.url,
+                                title: meta.title,
+                                icon: (!meta.favicon.is_empty()).then_some(meta.favicon),
+                                main_frame_failed: false,
+                                http_status: meta.status,
+                            },
+                        ) else {
+                            return;
+                        };
+                        page.browser_title.clone_from(&visit.title);
                         // The strip follows the document, from the one place
                         // that knows a page settled. A navigation with no tab
                         // OPENS one: the first page a person opens is the
@@ -12893,12 +13039,12 @@ impl WalletPage {
                             let event = match selected {
                                 Some(id) => vela_core::app::explore_sites::Event::TabNavigated {
                                     id,
-                                    url: url.clone(),
-                                    title: (!title.is_empty()).then(|| title.clone()),
+                                    url: visit.url.clone(),
+                                    title: visit.title.clone(),
                                 },
                                 None => vela_core::app::explore_sites::Event::TabOpened {
-                                    url: Some(url.clone()),
-                                    title: (!title.is_empty()).then(|| title.clone()),
+                                    url: Some(visit.url.clone()),
+                                    title: visit.title.clone(),
                                     now_ms: crate::executor::now_ms(),
                                 },
                             };
@@ -12907,13 +13053,12 @@ impl WalletPage {
                         resident::resident::<BrowserHistory>(cx).update(cx, |resident, cx| {
                             resident.dispatch(
                                 vela_core::app::browser_history::Event::VisitRecorded {
-                                    url,
-                                    // Empty is ABSENT, not an empty title: the
-                                    // core's rule is that a report without one
-                                    // must not clobber a title already
-                                    // captured, and "" would clobber it.
-                                    title: (!title.is_empty()).then_some(title),
-                                    favicon: (!favicon.is_empty()).then_some(favicon),
+                                    url: visit.url,
+                                    // Absent, never "": the core's rule is that
+                                    // a report without one must not clobber a
+                                    // title already captured.
+                                    title: visit.title,
+                                    favicon: visit.favicon,
                                     now_ms: crate::executor::now_ms(),
                                 },
                                 cx,
@@ -12948,12 +13093,123 @@ impl WalletPage {
     fn browser_load(&mut self, load: crate::webview::Load, cx: &mut Context<Self>) {
         let tab = BROWSER_TAB.to_owned();
         let event = match load {
-            crate::webview::Load::Started(url) => DbrEvent::NavigationStarted { tab, url },
-            crate::webview::Load::Finished(url) => DbrEvent::LoadFinished { tab, url },
+            // The wallet's own request: the core hears the commit, not this.
+            crate::webview::Load::Requested(url) => {
+                self.load_requested(&url, cx);
+                return;
+            }
+            crate::webview::Load::Started(url) => {
+                self.load_watch.committed();
+                cx.notify();
+                DbrEvent::NavigationStarted { tab, url }
+            }
+            crate::webview::Load::Finished(url) => {
+                self.load_watch.finished();
+                cx.notify();
+                DbrEvent::LoadFinished { tab, url }
+            }
             crate::webview::Load::Crashed => DbrEvent::RendererGone { tab },
         };
         let host = self.browser_host(cx);
         host.update(cx, |host, cx| host.dispatch(event, cx));
+    }
+
+    /// A load the wallet asked for (spec 079 US3): progress from now, and a
+    /// watchdog — wry says nothing when a navigation fails, so a load with no
+    /// commit in three seconds is probed.
+    #[cfg(not(target_os = "linux"))]
+    fn load_requested(&mut self, url: &str, cx: &mut Context<Self>) {
+        use crate::explore::load_watch::WATCHDOG;
+        if let Some(generation) = self.load_watch.requested(url, crate::executor::now_ms()) {
+            cx.spawn(async move |page, cx| {
+                cx.background_executor().timer(WATCHDOG).await;
+                page.update(cx, |this, cx| this.load_watchdog(generation, cx))
+                    .ok();
+            })
+            .detach();
+        }
+        cx.notify();
+    }
+
+    /// Three seconds, no commit: ask the address natively, off the frame.
+    #[cfg(not(target_os = "linux"))]
+    fn load_watchdog(&mut self, generation: u64, cx: &mut Context<Self>) {
+        use crate::explore::load_watch::{PROBE_BUDGET, probe};
+        let Some(url) = self.load_watch.watchdog(generation) else {
+            return;
+        };
+        cx.spawn(async move |page, cx| {
+            let answer = cx
+                .background_executor()
+                .spawn(async move { probe(&url, PROBE_BUDGET) })
+                .await;
+            page.update(cx, |this, cx| this.load_probed(generation, answer, cx))
+                .ok();
+        })
+        .detach();
+    }
+
+    /// The probe answered: a failure is the panel, with its reason; a site
+    /// that answered gets until twenty seconds to commit.
+    #[cfg(not(target_os = "linux"))]
+    fn load_probed(&mut self, generation: u64, answer: Result<(), i64>, cx: &mut Context<Self>) {
+        use crate::explore::load_watch::Probed;
+        match self.load_watch.probed(generation, answer) {
+            Probed::Ignored => return,
+            Probed::WaitUntil(at_ms) => {
+                let wait = (at_ms - crate::executor::now_ms()).max(0.) as u64;
+                cx.spawn(async move |page, cx| {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(wait))
+                        .await;
+                    page.update(cx, |this, cx| {
+                        if this.load_watch.give_up(generation) {
+                            this.load_failed(cx);
+                        }
+                    })
+                    .ok();
+                })
+                .detach();
+            }
+            Probed::Failed => self.load_failed(cx),
+        }
+        cx.notify();
+    }
+
+    /// The panel is up: a network failure is tried again by itself, on the
+    /// core's schedule, while the page is in front.
+    #[cfg(not(target_os = "linux"))]
+    fn load_failed(&mut self, cx: &mut Context<Self>) {
+        if let Some((generation, wait)) = self.load_watch.schedule_retry() {
+            cx.spawn(async move |page, cx| {
+                cx.background_executor().timer(wait).await;
+                page.update(cx, |this, cx| {
+                    let in_front = this.load_in_front();
+                    if let Some(url) = this.load_watch.retry_fired(generation, in_front) {
+                        crate::webview::navigate(&url);
+                    }
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
+        cx.notify();
+    }
+
+    /// The page is what the person is looking at: Explore, a page, signed in.
+    fn load_in_front(&self) -> bool {
+        self.section == Section::Explore && self.browsing && self.identity.is_some()
+    }
+
+    /// The panel's Retry (and the toolbar's reload while it is up): the
+    /// address that failed, again — a reload would load the page before it.
+    #[cfg(not(target_os = "linux"))]
+    fn load_retry(&mut self, cx: &mut Context<Self>) {
+        if let Some(url) = self.load_watch.retry() {
+            crate::webview::navigate(&url);
+        }
+        cx.notify();
     }
 
     /// The browser machine, born the first time anything needs it, and the
