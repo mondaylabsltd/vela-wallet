@@ -27,12 +27,18 @@ pub enum SubmitStep { Done(SubmitVerdict), RetryAfter { delay_ms: u32 } }
 
 pub fn submit_step(reply: &SubmitReply, attempt: u32, maybe_delivered: bool,
                    local_user_op_hash: &str) -> SubmitStep;
+
+/// The dApp's -32603 detail for NotSent{None}: a fixed sentence, never the pool's text [RA10, T012].
+pub const NOT_SENT_DAPP_DETAIL: &str = "relay unreachable; nothing was sent";
+/// keccak of `UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)`,
+/// the topic §3's find-event filters on [T010].
+pub const USER_OPERATION_EVENT_TOPIC: &str;
 ```
 
 Clients loop: POST → OR `maybe_delivered` from the pool verdict → `submit_step` → retry or done.
 Local nonce advances only on `Accepted`. The relay's hash wins; a mismatch logs `userop.hash_mismatch`.
 
-## 2. `app::rpc_pool` — [RA1, RG7, RF1]
+## 2. `app::rpc_pool` — [RA1, RG7, RF1, ruling 8]
 
 ```rust
 RpcTransportOutcome::NotConnected           // new: nothing left the device; routed like Network
@@ -45,6 +51,11 @@ pub fn is_optional_method(method: &str) -> bool;
 // optional method + JSON error: rate-limit signal → fail over; else Route::NotServed →
 // Respond{url}, clear_chain_failure, no score change, no ban; conclude_failed never classifies the chain.
 
+pub fn is_log_range_error(error: &RpcErrorInfo) -> bool; // the message names a block range or a result cap
+// eth_getLogs + JSON error, checked before the ban and fail-over rules [T180]: a rate-limit signal
+// (429, "rate limit exceeded") → fail over; is_log_range_error → Respond{url} carrying the error —
+// no ban, no score change, no chain classification. Other methods keep today's routing.
+
 RpcPoolView { .., pub unreached_chains: Vec<u32> }  // first pass: every endpoint failed on transport, no rate limit
 pub const RPC_READ_TIMEOUT_MS: u32 = 8_000;          // unchanged; now also pinned by the extension (RF2)
 pub fn cooldown_ms(consecutive_failures: u64) -> f64; // 30 s · 2^(n−1), cap 300 s (exposed, rule unchanged)
@@ -52,6 +63,11 @@ pub fn cooldown_ms(consecutive_failures: u64) -> f64; // 30 s · 2^(n−1), cap 
 
 Chain notice (every client with browser chrome): `chain ∈ failed_chains ∪ unreached_chains ∧
 chain ∉ rate_limited_chains`. The home RPC banner keeps `failed_chains` only.
+
+Why the range rule: §3's find-event halves its window on a range error, so the error must reach the
+tracker. Before T180 a message with "exceeded" matched `is_permanent_rpc_error` and banned the
+endpoint for every method, and `-32005` failed over until the chain landed in `failed_chains` — a
+false chain notice while an op may have been sent.
 
 Shell mapping to `NotConnected` — desktop ureq: `HostNotFound`, `ConnectionFailed`,
 `Timeout(Resolve|Connect)`, Io `ConnectionRefused|AddrNotAvailable|HostUnreachable|NetworkUnreachable`,
@@ -63,7 +79,7 @@ TLS handshake, proxy CONNECT failure (exact ureq 3.4 variant to be pinned by a t
 SSLHandshakeException`, `SocketTimeoutException("connect timed out")`; web only when
 `navigator.onLine === false` before the call.
 
-## 3. `app::tx_tracker` — [RA4, RA7, RE8]
+## 3. `app::tx_tracker` — [RA4, RA7, RE8, ruling 8]
 
 ```rust
 pub const USER_OP_STATUS_METHOD: &str = "pimlico_getUserOperationStatus";
@@ -73,30 +89,57 @@ pub fn parse_user_op_status(result_json: &str) -> Option<TrackStatusAnswer>; // 
 pub const NOT_FOUND_GRACE_MS: f64 = 60_000.0;
 pub const NOT_FOUND_CONFIRMATIONS: u32 = 2;
 
-Event::Submitted { user_op_hash, record_ids, chain_id, #[serde(default)] maybe_sent: bool }
-TrackPendingRecord { .., #[serde(default)] maybe_sent: bool }
+Event::Submitted { user_op_hash, record_ids, chain_id, #[serde(default)] maybe_sent: bool,
+                   #[serde(default)] submit_block: Option<u64> }  // head read once before the first POST; None = unknown
+TrackPendingRecord { .., #[serde(default)] maybe_sent: bool, #[serde(default)] submit_block: Option<u64> }
 TrackShellResult::Status { .., #[serde(default)] tx_hash: Option<String> }
 TrackStatus::NotSent                  // new terminal; records patched `failed`
 TrackOutcome::MaybeSent               // new; maybe_sent ∧ ¬acknowledged ∧ ¬terminal ∧ ¬abandoned
 TrackOperation::HoldingsMoved { chain_id: u32 }   // new; answered TrackShellResult::Notified
+
+// The relay-independent landing check [ruling 8, T019]
+pub const FIND_OP_MAX_RANGE: u64;        // the widest eth_getLogs window, in blocks (value set in T019)
+pub const FIND_OP_LOOKBACK_BLOCKS: u64;  // the scan's start below the head when submit_block is unknown (T019)
+TrackOperation::FindOpEvent { chain_id: u32, entry_point: String, user_op_hash: String,
+                              from_block: Option<u64>, to_block: Option<u64> } // from_block None: the head only
+TrackShellResult::OpEvent { user_op_hash, now_ms, logs_json: Option<String>, error_json: Option<String>,
+                            head_block: Option<u64> }  // the pool's answer as it came
 ```
 
-`HoldingsMoved` follows `UpdateTxRecords` + `NotifyConfirmed` on a confirmed receipt, and follows
-the fail patch alone on a failed receipt with a tx hash; never on pending, unreachable, age or
-`NotSent`. Invariant kept: time alone never produces a failure.
+**Find-event.** For an entry with `maybe_sent ∧ ¬acknowledged ∧ ¬terminal ∧ ¬abandoned` the core
+emits `FindOpEvent` on the status-poll cadence. The shell runs `eth_getLogs{address: entry_point,
+topics: [USER_OPERATION_EVENT_TOPIC, user_op_hash], fromBlock, toBlock}` and `eth_blockNumber`
+through the pool and answers `OpEvent` with the result (`logs_json`), or the JSON error the pool now
+returns for a range limit (`error_json`, §2), plus the head; neither means no answer. The shell
+judges nothing. The core:
+
+- steps bounded windows (≤ `FIND_OP_MAX_RANGE`) forward from `submit_block`, clipped to the head;
+  caught up with the head → waits for the next tick;
+- with `submit_block` unknown, asks for the head only first, then scans from
+  `head − FIND_OP_LOOKBACK_BLOCKS`;
+- on a range error (`rpc_pool::is_log_range_error`, never a shell's call, FR-020) halves the window,
+  down to one block; on any other error or no answer retries the same window next tick;
+- parses a found log: `success` → `Confirmed` with the log's `transactionHash` (records confirmed,
+  then `NotifyConfirmed` and `HoldingsMoved`); failure → `Dropped` (reverted) with that tx hash
+  (records failed, then `HoldingsMoved`). A found event wins over any later relay `not_found`.
+
+`HoldingsMoved` follows `UpdateTxRecords` + `NotifyConfirmed` on a confirmed receipt (or found
+event), and follows the fail patch alone on a failed receipt (or found event) with a tx hash; never
+on pending, unreachable, age or `NotSent`. Invariant kept: time alone never produces a failure.
 
 ## 4. `app::sign_request` — [RA2, RA3, RA8, RA9, RA12, RB2]
 
 ```rust
-Event::OpSubmitted { id, user_op_hash, now_ms, #[serde(default)] maybe_sent: bool }
+Event::OpSubmitted { id, user_op_hash, now_ms, #[serde(default)] maybe_sent: bool,
+                     #[serde(default)] submit_block: Option<u64> }
 Event::CeremonyStarted { id: String }   // passkey / Trusted Signer prompt opened
 Event::CeremonyDone { id: String }      // it returned a signature
 Event::TransportDropped { transport_id } // CHANGED behaviour: also stops an inflight of that
                                          // transport in Precheck | Sponsoring | ReactiveSponsoring
 SignSubmitOutcome::AskerGone             // new, serde {"type":"asker_gone"}: nothing sent, no answer, no record
 
-SignTrackerHandoff { .., #[serde(default)] maybe_sent: bool }
-SignRecord { .., #[serde(default)] maybe_sent: bool }
+SignTrackerHandoff { .., #[serde(default)] maybe_sent: bool, #[serde(default)] submit_block: Option<u64> }
+SignRecord { .., #[serde(default)] maybe_sent: bool, #[serde(default)] submit_block: Option<u64> }
 pub enum SignPhase { Idle, Preparing, AwaitingSignature, Submitting }
 SignView { .., pub phase: SignPhase, pub pending_op_maybe_sent: bool } // is_signing / is_submitting kept until every shell reads phase
 
@@ -107,19 +150,21 @@ pub enum SignEndingState { Signed, Confirmed { tx_hash: String }, Reverted { tx_
                            Following { user_op_hash: String, outcome: TrackOutcome, fee_held: bool } }
 pub fn ending_state(ending: &SignEnding, track: Option<&TrackEntryView>) -> SignEndingState;
 
-pub const DAPP_TX_ANSWER_WINDOW_MS: f64 = 120_000.0;   // from ApproveTapped; receipt wait = max(10 s, window − elapsed)
+pub const DAPP_TX_ANSWER_WINDOW_MS: f64 = 120_000.0;   // from ApproveTapped
+pub fn dapp_receipt_wait_ms(elapsed_ms: f64) -> f64;   // max(10_000, DAPP_TX_ANSWER_WINDOW_MS − elapsed_ms) [RA12, T024]
 pub const EXTENSION_REQUEST_TTL_MS: f64 = 300_000.0;   // unchanged; now exported to the extension
 ```
 
 Changed: `on_submit` Succeeded with a record answers the page only — no `UpdateRecord Confirmed`;
 the tracker closes on-chain records. A reverted-in-window op is answered its tx hash on all four
-clients (web: `UserOpRevertedError{txHash}`).
+clients (ruling 9; web: `UserOpRevertedError{txHash}`).
 
 ## 5. `app::send` — [RA4, RA10]
 
 ```rust
-SendShellResult::Submitted { user_op_hash, now_ms, #[serde(default)] maybe_sent: bool }
-SendOperation::TrackSubmitted { .., maybe_sent: bool }
+SendShellResult::Submitted { user_op_hash, now_ms, #[serde(default)] maybe_sent: bool,
+                             #[serde(default)] submit_block: Option<u64> }
+SendOperation::TrackSubmitted { .., maybe_sent: bool, submit_block: Option<u64> }
 SendTxRecord { .., #[serde(default)] maybe_sent: bool }
 SendReceiptStatus::{ MaybeSent, NotSent }           // new
 SendReceiptOutcome::Failed { rejected, #[serde(default)] not_sent: bool }
@@ -241,8 +286,8 @@ pub fn read_plan(chain_id: u32, stables: &[StableRef], wrapped_native: Option<&s
 
 | Surface | New or changed exports |
 |---|---|
-| UniFFI (`vela-core-uniffi/src/lib.rs`) | `userOpHash(draft, chainId)`, `userOpSubmitStep(reply, attempt, maybeDelivered, localHash)`, `userOpStatusMethod()`, `parseUserOpStatus(json)`, `signEndingOf(method, payloadJson, submittedUserOp?)`, `signEndingState(endingJson, trackEntryJson?)`, `simOutcome(user, replyJson)`, `browserLoadGiveUpMs()`, `browserLoadShouldGiveUp(elapsedMs, committed, progress)`, `browserLoadStalled()`, `browserLoadRetryWhenNetworkReturns(class)`, `browserAddressBar(shown?, pending?, failed?)`, `browserSiteLabel(title, host)`, `netHealthStep(misses, online, reached)`, `markMissTtlMs(kind, status?)`, `balanceReadPlan(chainId, stablesJson, wrappedNative?, customJson)`; `browserLoadClassify` gains class `"proxy"` |
-| wasm (`vela-core-wasm/src/lib.rs`) | `userOpHash(opJson, chainId)`, `userOpSubmitStep(replyJson, attempt, maybeDelivered, localHash)`, `userOpStatusMethod()`, `parseUserOpStatus(json)`, `signEndingState(endingJson, entryJson)`, `signRequestTtlMs()`, `rpcReadTimeoutMs()`, `rpcCooldownMs(n)`, `browserSiteLabel(title, host)`, `markMissTtlMs(kind, status?)`, `balanceReadPlan(...)` |
+| UniFFI (`vela-core-uniffi/src/lib.rs`) | `userOpHash(draft, chainId)`, `userOpSubmitStep(reply, attempt, maybeDelivered, localHash)`, `userOpNotSentDetail()`, `userOpStatusMethod()`, `parseUserOpStatus(json)`, `signEndingOf(method, payloadJson, submittedUserOp?)`, `signEndingState(endingJson, trackEntryJson?)`, `dappReceiptWaitMs(elapsedMs)`, `simOutcome(user, replyJson)`, `browserLoadGiveUpMs()`, `browserLoadShouldGiveUp(elapsedMs, committed, progress)`, `browserLoadStalled()`, `browserLoadRetryWhenNetworkReturns(class)`, `browserAddressBar(shown?, pending?, failed?)`, `browserSiteLabel(title, host)`, `netHealthStep(misses, online, reached)`, `markMissTtlMs(kind, status?)`, `balanceReadPlan(chainId, stablesJson, wrappedNative?, customJson)`; `browserLoadClassify` gains class `"proxy"` |
+| wasm (`vela-core-wasm/src/lib.rs`) | `userOpHash(opJson, chainId)`, `userOpSubmitStep(replyJson, attempt, maybeDelivered, localHash)`, `userOpNotSentDetail()`, `userOpStatusMethod()`, `parseUserOpStatus(json)`, `signEndingState(endingJson, entryJson)`, `dappReceiptWaitMs(elapsedMs)`, `signRequestTtlMs()`, `rpcReadTimeoutMs()`, `rpcCooldownMs(n)`, `browserSiteLabel(title, host)`, `markMissTtlMs(kind, status?)`, `balanceReadPlan(...)` |
 | ts-rs (`app-web/vela-wallet/src/lib/core/generated/`) | regenerate: `SignSubmitOutcome`, `SignView`, `TrackOperation`, `TrackEntryView`, `ClearSurface`, `ClearSigningView`, `ClearPlainSend` (new), `FeedItem`, `FeedTxRecord`, `FeedView`, `RpcPoolView`, `TrackOutcome`, `TrackStatus`, `SendReceiptStatus`, `SendReceiptOutcome`, `SendReceiptView` |
 | Rebuilds | `rust/pkg-web` (fingerprint moves) → `extension/dist`; VelaCoreKit xcframework (`check-ios-core-fresh.sh` must print ok); Android `.so` + Kotlin bindings |
 
@@ -303,7 +348,8 @@ params or results, full URLs (paths, queries, fragments), wallet addresses.
 
 ## 16. Corpus keys — [RI2]
 
-New (15 locales): `componentsUi.signing.maybeSent`, `explore.loadProxy`, `explore.requestOpen`.
+New (15 locales): `componentsUi.signing.maybeSent`, `explore.loadProxy`, `explore.requestOpen`
+(ruling 10: zh "请先完成或取消这个请求").
 Reworded: `componentsUi.signing.simUnavailableWarning`. Deleted: `send.txErrorTimeout`. Everything
 else reuses existing keys (list in research RI2). Residency after the change ≈ 138,729 of 138,800.
 
@@ -312,6 +358,8 @@ else reuses existing keys (list in research RI2). Residency after the change ≈
 - **Submit**: loop on `submit_step`; OR `maybe_delivered`; nonce only on Accepted; MaybeSent →
   `OpSubmitted{maybe_sent}` + the same receipt wait → one Ok answer.
 - **Status**: `USER_OP_STATUS_METHOD` + `parse_user_op_status`, no local parser.
+- **Find-event**: run `FindOpEvent` through the pool and answer `OpEvent` as it came; persist
+  `maybe_sent` and `submit_block` with the record and restore both into `TrackPendingRecord`.
 - **Signing sheet**: words from `SignView.phase`; ending from `ending_state`; send `CeremonyStarted`
   / `CeremonyDone` around the passkey; never patch a dApp record Confirmed.
 - **Extension**: claims at approve / sign / submit; `AskerGone` when not live; never Chrome's text.

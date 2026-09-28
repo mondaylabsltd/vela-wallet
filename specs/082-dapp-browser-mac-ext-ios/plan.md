@@ -230,11 +230,13 @@ scripts/device/chaos-proxy.py (optional `stall`)
 ## Risks
 
 **High**
-- **Residual double pay** (RA5). The op lands while the relay stays mute. The person ignores
-  "don't send it again" and re-signs after the 10 s nonce cache expires (desktop, web). The
-  chain nonce is then N+1 and a second payment goes out. Mitigations: the caption, the pending
-  Activity row, and the tracker. Fully closing it needs a relay-independent landing check
-  (Q1).
+- **Residual double pay** (RA5) — **closed by T019** (ruling 8 answered Q1). The path was: the op
+  lands while the relay stays mute, the person ignores "don't send it again" and re-signs after
+  the 10 s nonce cache expires (desktop, web), the chain nonce is then N+1 and a second payment
+  goes out. The tracker now also looks for the op's own `UserOperationEvent` on chain by the local
+  hash (T019, with T180 so range errors reach it), so a landed op turns Confirmed (or Reverted) on
+  the sheet and in Activity without the relay, instead of saying "may have been sent" until the
+  24 h give-up. The caption and the pending Activity row stay as the first guard.
 - **A wrong local userOpHash** would track a hash that never exists: the op lands while the
   sheet says "may have been sent" for 24 h. Mitigations: pin the Gnosis chain vector (phase 0
   gate), log `userop.hash_mismatch`, and compare on the parallel-space rows.
@@ -294,7 +296,7 @@ scripts/device/chaos-proxy.py (optional `stall`)
   - Moving the `tx_call_of` reader into core for the submit builders (RC6).
   - Per-leg batch display (CS26).
   - Android fault rows (RH3).
-  - A relay-independent landing check (Q1).
+  - ~~A relay-independent landing check (Q1).~~ Not deferred: ruling 8 put it in 082 (T019).
 
 ## Questions for the owner — answered 2026-09-28
 

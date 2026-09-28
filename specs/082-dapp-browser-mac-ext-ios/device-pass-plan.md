@@ -44,6 +44,7 @@ log stream --style compact --predicate 'process == "vela-wallet" AND subsystem =
 #    afterwards: log show --start "2026-09-28 15:00:00" --predicate '<same>' --style compact
 # 3. Screenshots with no input (Claude): python3 $S/gui.py shot <name>   (gui.py idle = seconds since last key)
 # 4. Point the Mac at chaos (restore afterwards). Service name from `networksetup -listallnetworkservices`.
+#    SUPERSEDED by quickstart.md (ruling 6, RH1): never change the Mac's system proxy; use VELA_DEV_PROXY.
 networksetup -setwebproxy Wi-Fi 127.0.0.1 8899; networksetup -setsecurewebproxy Wi-Fi 127.0.0.1 8899
 scutil --proxy | egrep 'HTTPS?(Proxy|Port)'
 networksetup -setwebproxy Wi-Fi 127.0.0.1 1088; networksetup -setsecurewebproxy Wi-Fi 127.0.0.1 1088   # restore
@@ -106,7 +107,7 @@ Caveats:
 - **Build and install.** The build must be **Debug**: VELA_* knobs, the parallel space and Web Inspector are DEBUG-only.
   - xcodebuild needs the hardware UDID: `-destination 'platform=iOS,id=00008030-001A75961445802E'`.
   - devicectl install uses the CoreDevice id.
-- **Point the phone at chaos.** Wi-Fi ▸ Configure Proxy ▸ Manual `192.168.50.9:8899`, with **Shadowrocket OFF** for chaos rows. Use Shadowrocket (REJECT and REJECT-DROP rules) only for IX2. Turn the Wi-Fi proxy Off at the end. The Mac's own system proxy should be back on 1088 during iPhone rows.
+- **Point the phone at chaos** — superseded by quickstart.md (ruling 6, RH1). Wi-Fi ▸ Configure Proxy ▸ Manual `192.168.50.9:8899`, with **Shadowrocket OFF** for chaos rows. Use Shadowrocket (REJECT and REJECT-DROP rules) only for IX2. Turn the Wi-Fi proxy Off at the end. The Mac's own system proxy should be back on 1088 during iPhone rows.
 - **Page console.** Safari ▸ Develop ▸ ABC ▸ page (Settings ▸ Safari ▸ Advanced ▸ Web Inspector on the phone).
 - **Screenshots** only work through XCUITest. The scheme skip is not overridden by `-only-testing` on Xcode 26.3, so the copied-`.xctestrun` recipe is needed (Claude-only, IX8).
 - **Parallel space persists.** After any parallel-space launch, relaunch with `"VELA_PARALLEL_SPACE":"0"` before the founder's own-wallet rows.
@@ -131,7 +132,7 @@ Caveats:
 | S3 | Sign → approve | 签名中… → 已签名 → closes itself. The page gets the signature. | 👆 |
 | S4 | Send dust (Gnosis) → approve | 提交至网络… → ring "Gnosis 通常在约 15 秒内确认" → 已确认 with hash and explorer link → closes itself. The page gets the tx hash. `.err` has `relay: submitting sender=…`. | 👆 |
 | T1–T3 | Only if the account signs through the Trusted Signer: Sign → 去签名页确认 → slide on the page → passkey. Then repeat and cancel the prompt (T3). | The app shows a button, not a slide; exactly one slide, on the page. The host is named, with no 未知站点. T3: "你取消了…" and the slide works again. | 👆 |
-| — | Switch the Mac to chaos (§1 step 4). Confirm with `scutil --proxy`. | | |
+| — | **Superseded by quickstart.md (ruling 6, RH1).** Switch the Mac to chaos (§1 step 4). Confirm with `scutil --proxy`. | | |
 | L1 | `latency 6000 example` → type example.com, Enter | Hairline within 0.5 s. The bar keeps the old host until commit. The page arrives at about 6–8 s. | |
 | DX1 | `latency 9000 app\.uniswap\.org` → Go. `gui.py shot` every 2 s for 40 s. | **Spec:** no panel; commit at about 10 s. **W7 to catch:** a 网络不稳定 panel at about 8 s (3 s watchdog + 5 s probe), then a second `loadRequest` in the WebKit log at about 10 s (the auto-retry restarting a working load). **W8:** later probe CONNECTs to app.uniswap.org vanish from chaos.log, meaning the wallet flipped to Direct. Record the first commit time. | |
 | L2 | `drop uniswap` → open app.uniswap.org | A Vela panel with the host and "网络不稳定，页面没能打开。", never WebKit's page. **Record time to panel:** about 3–8 s means the probe failed through the proxy; about 20 s means it fell back Direct and reached the host (W6). | |
@@ -139,7 +140,7 @@ Caveats:
 | L4 | Fault on → tap Retry | The panel stays with 正在重试… for the whole attempt. No WebKit page in any shot. | |
 | L5 | `https://expired.badssl.com/` | The certificate sentence. No auto-retry and no "continue anyway". | |
 | DX2 | `blackhole app\.uniswap\.org` → Go. Wait 60 s, then `pass`. | A panel with the offline or timeout reason (note about 8 s vs about 20 s). Retries at +2, +5 and +10 s. Recents gains nothing. After `pass` the page loads (tap 重试 if the schedule has ended). | |
-| DX3 | Leftover dead proxy: `networksetup -setwebproxy/-setsecurewebproxy … 127.0.0.1 9` → open a dApp you have not visited → restore 8899 | **Ideal:** a prompt failure that points at the proxy. **Likely today (W6):** about 20 s of hairline, then the generic 网络不稳定 panel and retries, while wallet balances still load (the wallet went Direct). The WebKit log shows `didFailProvisionalLoad` early. Record the time and the words. | |
+| DX3 | **Superseded by quickstart.md (ruling 6, RH1).** Leftover dead proxy: `networksetup -setwebproxy/-setsecurewebproxy … 127.0.0.1 9` → open a dApp you have not visited → restore 8899 | **Ideal:** a prompt failure that points at the proxy. **Likely today (W6):** about 20 s of hairline, then the generic 网络不稳定 panel and retries, while wallet balances still load (the wallet went Direct). The WebKit log shows `didFailProvisionalLoad` early. Record the time and the words. | |
 | DX4 | With a page loaded, `blackhole <second host>` → click an in-page link to it. Then toolbar Back/Forward to a black-holed entry. | Known gap (W18): no hairline, no panel, the old page stays. The founder decides whether that is acceptable. | |
 | DX5 | `blackhole googleapis\|gstatic\|googletagmanager` → load app.uniswap.org | The page is usable with no panel. Record how long the hairline stays (W22). | |
 | C1 | Test dApp on Gnosis, `blackhole gnosis\|xdai` → Block number. Time until the notice appears. Tap its Retry twice. | One line naming Gnosis; the chip is unchanged. **Record the delay** (expect a long one, W11). Retry shows no busy state. If the notice never appears, chaos.log shows the RPC went Direct. | |
@@ -205,16 +206,16 @@ Caveats:
 | S4 | Send dust → approve | 提交至网络… → ring "Gnosis 通常在约 15 秒内确认" → 已确认 with short hash → closes itself. The page gets the tx hash. | 👆 |
 | U6 | Two tabs → switcher | Two different snapshots. | |
 | T1–T3 | Trusted-signer route only: Sign → 去签名页确认 → one slide on the page → passkey. T3: cancel the prompt. | The app shows a button, not a slide. The origin names the host, with no 未知站点. Back in the app: 已签名！ T3: "你取消了…" and the slide works again. | 👆 |
-| — | Shadowrocket OFF; Wi-Fi proxy Manual `192.168.50.9:8899` | | |
+| — | **Superseded by quickstart.md (ruling 6, RH1).** Shadowrocket OFF; Wi-Fi proxy Manual `192.168.50.9:8899` | | |
 | L1 (SC-003) | `latency 6000 example` → type example.com → Go, with screen recording on | Hairline within 0.5 s of Go (the first device timing). The old host stays until commit. The page arrives at about 6–7 s. | |
 | L2 | `drop uniswap` → app.uniswap.org | Panel with host and 网络不稳定…. Console: `browser load failed: … → offline` (or refused). | |
 | L3 / L4 | Leave the panel; then tap Retry with the fault on | 正在重试… at about 2, 5 and 10 s, then it stops (`pass` before the third → loads). L4: the panel stays for the whole attempt. | |
 | L5 | `https://expired.badssl.com/` | The certificate line, no retry. | |
 | IX2 | `blackhole example` → new tab → example.com. Stopwatch; stop at 2 min. | **Ideal:** words within seconds. **Code (W5):** white page with a 10% hairline and no words until WebKit gives up (about 60 s? unmeasured), then 网络不稳定. Note whether Retry is ever tappable during an attempt (disabled today). | |
-| IX3 | Wi-Fi proxy Off, Shadowrocket ON with rule `DOMAIN-SUFFIX,uniswap.org,REJECT` → app.uniswap.org. Then REJECT-DROP. Then remove the rule → Retry. | The console line gives domain and code. **If -1200** → "网站证书有问题…" with no retry = the false certificate alarm (W9). REJECT-DROP should look like IX2. After the rule is removed, Retry loads. | |
-| IX4 | Airplane mode ON → open an https dApp → wait 25 s → Airplane OFF → wait 30 s without touching | **Code (W5):** the panel stays until Retry is tapped. **Ideal:** it reloads by itself. | |
-| IX5 | Force-quit. Launch with Shadowrocket off and turn it on within 5 s. Open the network picker, Recents and favourites. Then force-quit and relaunch with a steady network. | **Code (W20):** logos and favicons that failed stay as letters or dots all session and come back after the relaunch. | |
-| — | Back to the Wi-Fi proxy `192.168.50.9:8899`, Shadowrocket OFF | | |
+| IX3 | **Superseded by quickstart.md (ruling 6, RH1).** Wi-Fi proxy Off, Shadowrocket ON with rule `DOMAIN-SUFFIX,uniswap.org,REJECT` → app.uniswap.org. Then REJECT-DROP. Then remove the rule → Retry. | The console line gives domain and code. **If -1200** → "网站证书有问题…" with no retry = the false certificate alarm (W9). REJECT-DROP should look like IX2. After the rule is removed, Retry loads. | |
+| IX4 | **Superseded by quickstart.md (ruling 6, RH1).** Airplane mode ON → open an https dApp → wait 25 s → Airplane OFF → wait 30 s without touching | **Code (W5):** the panel stays until Retry is tapped. **Ideal:** it reloads by itself. | |
+| IX5 | **Superseded by quickstart.md (ruling 6, RH1).** Force-quit. Launch with Shadowrocket off and turn it on within 5 s. Open the network picker, Recents and favourites. Then force-quit and relaunch with a steady network. | **Code (W20):** logos and favicons that failed stay as letters or dots all session and come back after the relaunch. | |
+| — | **Superseded by quickstart.md (ruling 6, RH1).** Back to the Wi-Fi proxy `192.168.50.9:8899`, Shadowrocket OFF | | |
 | C1 | Test dApp on Gnosis, `blackhole gnosis\|xdai` → Block number → tap the notice's Retry | The notice names Gnosis and the chip stays green. Retry gives no busy feedback (W11). | |
 | C2 | `pass` → Block number | The notice clears without a tap, once a call reaches Gnosis. | |
 | IX6 | Relaunch (so isDeployed is not cached) with `blackhole gnosis\|xdai` → Send dust. Watch the fee row for 60 s → `pass`. | **Code (W10):** 估算中… with no reason line and no chevron, slide dark. After `pass` the fee appears within about 15 s. | |

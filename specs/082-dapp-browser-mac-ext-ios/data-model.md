@@ -13,6 +13,7 @@ Held by the submitting executor for the length of one submit; decided by `user_o
 | `local_user_op_hash` | `user_op_hash(op, chain_id)`, computed before the first POST |
 | `attempt` | 0-based POST count for this op (busy retries re-POST the identical op) |
 | `maybe_delivered` | sticky OR over every POST of this op of `may_have_delivered(transport outcome)` |
+| `submit_block` | the chain head from one `eth_blockNumber` before the first POST (best effort; `None` if it failed) |
 
 | Transport outcome of one POST | `may_have_delivered` |
 |---|---|
@@ -38,9 +39,17 @@ POST ─► reply ─► submit_step(reply, attempt, maybe_delivered, local)
 |---|---|---|---|---|---|
 | `Accepted` | bumped (desktop/web cache) | yes | pending, tracked | tx hash (receipt in window) or op hash | 079 states (waiting → landed / still confirming) |
 | `MaybeSent` | **not** bumped | yes, `maybe_sent: true`, local hash | pending, `maybe_sent`, tracked | tx hash if a receipt arrives in the window, else the local op hash (`ReceiptPending`) — never 4900/-32603 | title "Submitting…", caption `maybeSent`, op hash, "Close · keep running", no Retry |
-| `NotSent{rejection}` ("definitely not sent") | not bumped | no | none | -32603: the relay's rejection, or the fixed "relay unreachable; nothing was sent" | cross, `statusFailed` + `txErrorGeneric` (or the rejection's reason) |
+| `NotSent{rejection}` ("definitely not sent") | not bumped | no | none | -32603: the relay's rejection, or the fixed "relay unreachable; nothing was sent" (`NOT_SENT_DAPP_DETAIL`) | cross, `statusFailed` + `txErrorGeneric` (or the rejection's reason) |
 
-## 2. Tracked operation (a `tx_tracker` entry) — [RA4, RA7, RE8]
+**What the record keeps.** A pending record written for an `Accepted` or `MaybeSent` op carries
+`maybe_sent` and `submit_block` (from `SignRecord` / `SendTxRecord`), and every shell persists both
+with the stored row: desktop T181, web and extension panel T182, iOS T183, Android T184. On a
+relaunch the shell's pending-record loader puts them back into `TrackPendingRecord`, and the
+hand-off into the tracker's `Submitted` carries both, so a may-have-been-sent op keeps its
+`MaybeSent` outcome, its `NotSent` end and its find-event (§2) across a restart. A row stored
+before 082 reads back as `false` / `None`.
+
+## 2. Tracked operation (a `tx_tracker` entry) — [RA4, RA7, RE8, ruling 8]
 
 | Field | Meaning |
 |---|---|
@@ -48,6 +57,8 @@ POST ─► reply ─► submit_step(reply, attempt, maybe_delivered, local)
 | `maybe_sent` (new) | the submit ended MaybeSent; restored from `TrackPendingRecord.maybe_sent` on reload |
 | `acknowledged` (new) | any receipt, or any relay status other than `not_found`, has been seen |
 | `not_found_streak` (new) | consecutive `not_found` answers at age ≥ 60 s with no receipt |
+| `submit_block` (new) | the head read before the first POST; where the find-event scan starts. Restored from `TrackPendingRecord.submit_block`; `None` = unknown |
+| find-event window (new) | the next `from_block` and the current window width (≤ `FIND_OP_MAX_RANGE`, halved on a range error) |
 | `status` | `Pending` → terminal `Confirmed` / `Dropped` (reverted, incl. Safe `ExecutionFailure`) / `Rejected` / **`NotSent`** (new) |
 
 `TrackEntryView.outcome`:
@@ -72,10 +83,30 @@ Pending ──StatusUnavailable──► (nothing changes)
 Pending ──age 24 h──► abandoned (outcome Unknown; records untouched)
 ```
 
-Polling: status polls continue past the 120 s window while `maybe_sent ∧ ¬acknowledged`, at
-`receipt_interval_ms(false, age)`; a plain entry's `not_found` stays inert (079 unchanged). Status
-comes from `pimlico_getUserOperationStatus` only (`USER_OP_STATUS_METHOD`); an unknown status string
-parses to nothing. `TrackShellResult::Status` may carry the relay's `tx_hash`.
+**Find-event** (ruling 8, T019): the relay-independent landing check, for an entry with
+`maybe_sent ∧ ¬acknowledged ∧ ¬terminal ∧ ¬abandoned`, on the status-poll cadence:
+
+```
+submit_block unknown ──► FindOpEvent{from_block: None} (head only) ──OpEvent{head}──► from = head − FIND_OP_LOOKBACK_BLOCKS
+tick ──► FindOpEvent{from, to = min(from + width − 1, head)}
+  OpEvent logs: the op's UserOperationEvent, success ──► Confirmed   (log's tx hash; records → confirmed, + NotifyConfirmed + HoldingsMoved)
+  OpEvent logs: the op's UserOperationEvent, failure ──► Dropped     (reverted; log's tx hash; records → failed, + HoldingsMoved)
+  OpEvent logs: none                                 ──► from = to + 1 (caught up with the head → wait for the next tick)
+  OpEvent error, rpc_pool::is_log_range_error        ──► same from, width halved (down to 1 block)
+  OpEvent error (other) / no answer                  ──► same window next tick
+Confirmed / Dropped by a found event ──later relay not_found──► (ignored: the found event wins)
+```
+
+The shell only runs `eth_getLogs` (EntryPoint address, `topics: [USER_OPERATION_EVENT_TOPIC,
+user_op_hash]`) and `eth_blockNumber` through the pool and answers what came back; the core judges
+the range error (FR-020). The pool answers a range error on `eth_getLogs` instead of banning the
+endpoint or classifying the chain (T180), so it reaches this machine.
+
+Polling: status polls (and the find-event) continue past the 120 s window while
+`maybe_sent ∧ ¬acknowledged`, at `receipt_interval_ms(false, age)`; a plain entry's `not_found`
+stays inert (079 unchanged). Status comes from `pimlico_getUserOperationStatus` only
+(`USER_OP_STATUS_METHOD`); an unknown status string parses to nothing. `TrackShellResult::Status`
+may carry the relay's `tx_hash`.
 
 ## 3. Signing request presentation — [RA3, RA8, RA9, RB2, RC1]
 
