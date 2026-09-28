@@ -877,65 +877,65 @@ Chains:
 - browser: T131 → T132; T131 → T133 → T134 (T131, T133 and T134 all edit `AT/ExploreLiveTest.kt`);
 - T137 (gates) last.
 
-- [ ] T124 [P] [US1] Android wire mirrors in `A/feature/signing/core/SignWire.kt`, `A/feature/send/core/TrackerWire.kt`, `A/feature/wallet/core/RpcWire.kt`, `A/feature/signing/core/ClearWire.kt`, `A/feature/wallet/core/FeedWire.kt` and `A/feature/send/core/SendWire.kt`, plus key constants in `A/core/i18n/I18nKeys.kt`; proof: `AT/CoreWireDriftTest.kt`.
+- [x] T124 [P] [US1] Android wire mirrors in `A/feature/signing/core/SignWire.kt`, `A/feature/send/core/TrackerWire.kt`, `A/feature/wallet/core/RpcWire.kt`, `A/feature/signing/core/ClearWire.kt`, `A/feature/wallet/core/FeedWire.kt` and `A/feature/send/core/SendWire.kt`, plus key constants in `A/core/i18n/I18nKeys.kt`; proof: `AT/CoreWireDriftTest.kt`.
   - Wires: `A/feature/signing/core/SignWire.kt`, `A/feature/send/core/TrackerWire.kt` (incl. FindOpEvent / OpEvent / HoldingsMoved), `A/feature/wallet/core/RpcWire.kt`, `A/feature/signing/core/ClearWire.kt`, `A/feature/wallet/core/FeedWire.kt` and `A/feature/send/core/SendWire.kt`.
   - Add `A/core/i18n/I18nKeys.kt` constants for `componentsUi.signing.maybeSent` and `explore.loadProxy`.
   - Proof: `AT/CoreWireDriftTest.kt` round-trips each new variant (kotlinx must not refuse the whole view).
-- [ ] T125 [US1] Submit on Android, in `A/feature/send/core/RelayClient.kt`, `A/feature/wallet/core/RpcPool.kt`, `A/core/net/VelaHttp.kt` and `A/feature/send/core/UserOpSpine.kt` (RA1, RA10, ruling 8); proof: `AT/RelayClientTest.kt`; (after T124).
+- [x] T125 [US1] Submit on Android, in `A/feature/send/core/RelayClient.kt`, `A/feature/wallet/core/RpcPool.kt`, `A/core/net/VelaHttp.kt` and `A/feature/send/core/UserOpSpine.kt` (RA1, RA10, ruling 8); proof: `AT/RelayClientTest.kt`; (after T124).
   - `A/feature/send/core/RelayClient.kt:407-421`: the loop is replaced by `userOpSubmitStep`, with `userOpHash` and `submit_block`.
   - Map exceptions to `NotConnected` (UnknownHost, Connect, NoRouteToHost, SSLHandshake, SocketTimeout "connect timed out") in `A/feature/wallet/core/RpcPool.kt` / `A/core/net/VelaHttp.kt`.
   - `A/feature/send/core/UserOpSpine.kt:373` no longer turns a pool give-up into "unreachable, try again"; NotSent answers the dApp -32603 with `userOpNotSentDetail()`, never the pool's text (RA10). Log the verdict through `A/core/diagnostics/VelaLog.kt`.
   - Proof: `AT/RelayClientTest.kt`: mute → MaybeSent; refused → NotSent with the fixed detail; marker → Accepted.
-- [ ] T126 [US7] Relay status on Android, in `A/feature/send/core/RelayClient.kt` (RA7, G13); proof: `AT/RelayClientTest.kt`; (after T125).
+- [x] T126 [US7] Relay status on Android, in `A/feature/send/core/RelayClient.kt` (RA7, G13); proof: `AT/RelayClientTest.kt`; (after T125).
   - `RelayClient.kt:466-481` uses `userOpStatusMethod` / `parseUserOpStatus`; delete the parser.
   - Proof: `AT/RelayClientTest.kt:217` is fixed to the pimlico method.
-- [ ] T127 [US1] One answer, endings and phase on Android, in `A/feature/signing/core/SignExecutor.kt`, `A/feature/signing/SigningAftercare.kt`, `A/feature/signing/SigningLive.kt` and `A/VelaWalletApplication.kt` (RA2, RA8, RA9, RA10, RA12, ruling 9); proof: `AT/SigningReceiptTest.kt`, `AT/SigningLiveTest.kt`; (after T125, whose verdict it dispatches).
+- [x] T127 [US1] One answer, endings and phase on Android, in `A/feature/signing/core/SignExecutor.kt`, `A/feature/signing/SigningAftercare.kt`, `A/feature/signing/SigningLive.kt` and `A/VelaWalletApplication.kt` (RA2, RA8, RA9, RA10, RA12, ruling 9); proof: `AT/SigningReceiptTest.kt`, `AT/SigningLiveTest.kt`; (after T125, whose verdict it dispatches).
   - `A/feature/signing/core/SignExecutor.kt:41`: the window comes from `dappReceiptWaitMs`; dispatch `OpSubmitted{maybe_sent, submit_block}`; a revert → the tx hash.
   - `A/feature/signing/SigningAftercare.kt:36-44` uses `signEndingOf` / `signEndingState`; delete the local derivation.
   - `A/feature/signing/SigningLive.kt:544-552`: words come from `phase`; MaybeSent → title `send.txSubmitting`, caption `componentsUi.signing.maybeSent` (T124's constant), the op hash, `send.txCloseBackground`, no Retry; NotSent → `statusFailed` + `txErrorGeneric`; Dropped → `failedHint` + explorer (RA10).
   - Wire the no-op dApp `signingStarted` port (`A/VelaWalletApplication.kt:690`) to `CeremonyStarted` / `CeremonyDone`.
   - Proof: `AT/SigningReceiptTest.kt`, `AT/SigningLiveTest.kt`: every `SignEndingState`; phase words.
-- [ ] T128 [US7] Tracker and Send on Android, in `A/feature/send/core/TrackerExecutor.kt`, `A/feature/wallet/core/TrackerWork.kt`, `A/feature/wallet/core/WalletController.kt`, `A/feature/send/core/SendExecutor.kt`, `A/feature/send/SendLive.kt` and `A/feature/send/core/SendController.kt` (ruling 8, RE8, RA10); proof: `AT/TrackerMachineTest.kt`, `AT/SendLiveTest.kt`, `AT/SendControllerTest.kt`; (after T125).
+- [x] T128 [US7] Tracker and Send on Android, in `A/feature/send/core/TrackerExecutor.kt`, `A/feature/wallet/core/TrackerWork.kt`, `A/feature/wallet/core/WalletController.kt`, `A/feature/send/core/SendExecutor.kt`, `A/feature/send/SendLive.kt` and `A/feature/send/core/SendController.kt` (ruling 8, RE8, RA10); proof: `AT/TrackerMachineTest.kt`, `AT/SendLiveTest.kt`, `AT/SendControllerTest.kt`; (after T125).
   - `A/feature/send/core/TrackerExecutor.kt` / `A/feature/wallet/core/TrackerWork.kt` run `FindOpEvent` and answer `OpEvent` with the pool's answer as it came (`logs_json` or `error_json`, plus `head_block`); the core judges a range error (T180), the shell never does.
   - `HoldingsMoved` → `refresh(force=true)` (`A/feature/wallet/core/WalletController.kt`).
   - Send MaybeSent/NotSent in `A/feature/send/SendLive.kt` and `A/feature/send/core/SendController.kt`.
   - Proof: `AT/TrackerMachineTest.kt`, `AT/SendLiveTest.kt`, `AT/SendControllerTest.kt`.
-- [ ] T129 [US4] Plain send on Android, in `A/feature/signing/SigningLive.kt` and `A/feature/signing/core/ClearExecutor.kt` (RC1, RC6, G14); proof: `AT/SigningLiveTest.kt`; (after T127).
+- [x] T129 [US4] Plain send on Android, in `A/feature/signing/SigningLive.kt` and `A/feature/signing/core/ClearExecutor.kt` (RC1, RC6, G14); proof: `AT/SigningLiveTest.kt`; (after T127).
   - Delete the interception at `A/feature/signing/SigningLive.kt:637-658` and draw `PlainSend`.
   - A present non-string `value` goes as text (`optString` → an `isNull` check, in `A/feature/signing/core/ClearExecutor.kt`).
   - Proof: `AT/SigningLiveTest.kt`: the same look for 0.001; zero; a number → blind.
-- [ ] T130 [US4] Simulation severity on Android, in `A/feature/signing/core/SimDeltas.kt` and `A/feature/signing/SigningLive.kt` (RG6); proof: `AT/SimDeltasTest.kt`; (after T129).
+- [x] T130 [US4] Simulation severity on Android, in `A/feature/signing/core/SimDeltas.kt` and `A/feature/signing/SigningLive.kt` (RG6); proof: `AT/SimDeltasTest.kt`; (after T129).
   - Delete the parser in `A/feature/signing/core/SimDeltas.kt` → `simOutcome`. `SigningLive.kt:757` takes its tone from `notice`.
   - Proof: `AT/SimDeltasTest.kt` becomes a mapping test (caution vs danger).
-- [ ] T131 [US1] Browser parity, in `A/feature/browser/ExploreLive.kt`, `A/navigation/VelaNavHost.kt`, `A/feature/browser/core/BrowserController.kt` and `A/feature/explore/components/ExploreSheets.kt` (RE1, RE2, RE5); proof: `AT/BrowserMachineTest.kt`, `AT/ExploreLiveTest.kt`; (after T124).
+- [x] T131 [US1] Browser parity, in `A/feature/browser/ExploreLive.kt`, `A/navigation/VelaNavHost.kt`, `A/feature/browser/core/BrowserController.kt` and `A/feature/explore/components/ExploreSheets.kt` (RE1, RE2, RE5); proof: `AT/BrowserMachineTest.kt`, `AT/ExploreLiveTest.kt`; (after T124).
   - No fixture host or open lock in a fresh tab (`A/feature/browser/ExploreLive.kt:195`, `A/navigation/VelaNavHost.kt:1200-1203`): the bar comes from `browserAddressBar`.
   - The watchdog in `A/feature/browser/core/BrowserController.kt` uses `WebView.getProgress()` with `browserLoadShouldGiveUp` / `browserLoadStalled`.
   - `BrowserNotice` Retry is busy, not dimmed (`A/feature/explore/components/ExploreSheets.kt:621-627`).
   - Proof: `AT/BrowserMachineTest.kt`, `AT/ExploreLiveTest.kt`.
-- [ ] T132 [US1] Network health moved to core, and logo misses, in `A/core/net/NetHealth.kt`, `A/navigation/VelaNavHost.kt` and `A/core/marks/RemoteLogo.kt` (RE3, RE10); proof: `AT/NetHealthTest.kt`, `AT/MarksTest.kt`; (after T131).
+- [x] T132 [US1] Network health moved to core, and logo misses, in `A/core/net/NetHealth.kt`, `A/navigation/VelaNavHost.kt` and `A/core/marks/RemoteLogo.kt` (RE3, RE10); proof: `AT/NetHealthTest.kt`, `AT/MarksTest.kt`; (after T131).
   - `A/core/net/NetHealth.kt:18-47` uses `netHealthStep`; the CameBack behaviour (`VelaNavHost.kt:530-536`) is kept, and it also clears transient misses.
   - `A/core/marks/RemoteLogo.kt` uses `markMissTtlMs`.
   - Proof: `AT/NetHealthTest.kt` becomes a mapping test; `AT/MarksTest.kt`.
-- [ ] T133 [US2] Consent, header, Recents and tabs, in `A/feature/explore/components/ExploreSheets.kt`, `A/feature/signing/components/SigningComponents.kt`, `A/feature/signing/SigningLive.kt`, `A/feature/explore/components/ExploreComponents.kt` and `A/feature/explore/components/ExploreTabs.kt` (RE6, RE7, RE12, RE13); proof: `AT/SigningHeaderAndRouteTest.kt`, `AT/ExploreLiveTest.kt`; (after T130 and T131).
+- [x] T133 [US2] Consent, header, Recents and tabs, in `A/feature/explore/components/ExploreSheets.kt`, `A/feature/signing/components/SigningComponents.kt`, `A/feature/signing/SigningLive.kt`, `A/feature/explore/components/ExploreComponents.kt` and `A/feature/explore/components/ExploreTabs.kt` (RE6, RE7, RE12, RE13); proof: `AT/SigningHeaderAndRouteTest.kt`, `AT/ExploreLiveTest.kt`; (after T130 and T131).
   - `A/feature/explore/components/ExploreSheets.kt`: the title merges into the site row.
   - `A/feature/signing/components/SigningComponents.kt:107-117`: `maxLines = 2` with no ellipsis, and `browserSiteLabel`; delete the copy at `SigningLive.kt:254`.
   - Recents (`A/feature/explore/components/ExploreComponents.kt`) use `site_label`. `A/feature/explore/components/ExploreTabs.kt` cards follow RE12.
   - Proof: `AT/SigningHeaderAndRouteTest.kt`, `AT/ExploreLiveTest.kt`.
-- [ ] T134 [US1] The chain notice reads `unreached_chains`, in `A/feature/browser/ExploreLive.kt` (RF1); proof: `AT/ExploreLiveTest.kt`; (after T133, which also edits `ExploreLiveTest.kt`).
+- [x] T134 [US1] The chain notice reads `unreached_chains`, in `A/feature/browser/ExploreLive.kt` (RF1); proof: `AT/ExploreLiveTest.kt`; (after T133, which also edits `ExploreLiveTest.kt`).
   - `A/feature/browser/ExploreLive.kt`, `chainUnreachable`.
   - Proof: `AT/ExploreLiveTest.kt`: an unreached-only chain shows it; a rate-limited one does not.
-- [ ] T135 [US1] Balance read plan on Android, in `A/feature/wallet/core/BalanceExecutor.kt` (RE9); proof: `AT/BalanceMachineTest.kt`, `AT/WrappedNativeTest.kt`; (after T124).
+- [x] T135 [US1] Balance read plan on Android, in `A/feature/wallet/core/BalanceExecutor.kt` (RE9); proof: `AT/BalanceMachineTest.kt`, `AT/WrappedNativeTest.kt`; (after T124).
   - `A/feature/wallet/core/BalanceExecutor.kt:260-300, 452` uses `balanceReadPlan`; delete the copy.
   - Proof: `AT/BalanceMachineTest.kt`, `AT/WrappedNativeTest.kt`.
-- [ ] T136 [US3] dApp transactions and empty states on Android, in `A/feature/flows/FlowLive.kt`, `A/VelaWalletApplication.kt`, `A/feature/wallet/core/WalletController.kt`, `A/feature/wallet/core/FeedExecutor.kt` and `A/feature/flows/FlowFixtures.kt` (RG1–RG3, RG5); proof: `AT/FlowLiveTest.kt`, `AT/FeedExecutorTest.kt`; (after T127 and T128).
+- [x] T136 [US3] dApp transactions and empty states on Android, in `A/feature/flows/FlowLive.kt`, `A/VelaWalletApplication.kt`, `A/feature/wallet/core/WalletController.kt`, `A/feature/wallet/core/FeedExecutor.kt` and `A/feature/flows/FlowFixtures.kt` (RG1–RG3, RG5); proof: `AT/FlowLiveTest.kt`, `AT/FeedExecutorTest.kt`; (after T127 and T128).
   - Delete the tx-hash heuristic at `A/feature/flows/FlowLive.kt:265`; rows come from `kind/status/site`: title `history.txLabelDappTx`, subtitle site → recipient → chain, `statusPending` / `statusFailed` + " · " when not confirmed, and the detail's "Requested by" fact (`componentsUi.signing.siweOrigin`) (RG2).
   - `A/VelaWalletApplication.kt:691`: `recordsPersisted()` passes 1; `WalletController.kt:722` re-reads the feed. `A/feature/wallet/core/FeedExecutor.kt` maps `dappOrigin`.
   - History and home empty keys: delete the fixture choice at `A/feature/flows/FlowFixtures.kt:298`.
   - Proof: `AT/FlowLiveTest.kt`, `AT/FeedExecutorTest.kt`: a Failed dApp row is now possible; the row appears after one write.
-- [ ] T184 [US7] A may-have-been-sent op survives a restart on Android, in `A/feature/signing/core/SignExecutor.kt` (`recordRow`), `A/feature/send/core/SendExecutor.kt` (`PersistTxRecords`, the `trackSubmitted` port), `A/feature/send/core/SendController.kt`, `A/feature/send/core/TrackerExecutor.kt` (`LoadPendingTxs`) and `A/feature/wallet/core/FeedExecutor.kt` (RA3, RA4, rulings 1 and 8, US3 AS2); proof: a reload case in `AT/TrackerMachineTest.kt`; (after T127, T128 and T136).
+- [x] T184 [US7] A may-have-been-sent op survives a restart on Android, in `A/feature/signing/core/SignExecutor.kt` (`recordRow`), `A/feature/send/core/SendExecutor.kt` (`PersistTxRecords`, the `trackSubmitted` port), `A/feature/send/core/SendController.kt`, `A/feature/send/core/TrackerExecutor.kt` (`LoadPendingTxs`) and `A/feature/wallet/core/FeedExecutor.kt` (RA3, RA4, rulings 1 and 8, US3 AS2); proof: a reload case in `AT/TrackerMachineTest.kt`; (after T127, T128 and T136).
   - Same gap as T181: `LoadPendingTxs` (`TrackerExecutor.kt:50-60`) builds `TrackPendingRecord` from id, hash, chain and time, and `trackSubmitted(userOpHash, recordIds, chainId)` drops both new fields. Write `maybeSent` / `submitBlock` with the row, read them back, and carry them on the handoff into the tracker's `Submitted`.
   - Proof: a stored MaybeSent row → `TrackPendingRecord(maybe_sent = true, submit_block = n)`; an old row → `false` / null.
-- [ ] T137 [US1] Android gates: `./gradlew testDebugUnitTest` in `app-android/vela-wallet`, `scripts/check-android-*.mjs` and `scripts/check-event-payloads.mjs`; (after T124–T136 and T184).
+- [x] T137 [US1] Android gates: `./gradlew testDebugUnitTest` in `app-android/vela-wallet`, `scripts/check-android-*.mjs` and `scripts/check-event-payloads.mjs`; (after T124–T136 and T184).
   - `bash rust/scripts/build-dev-fixtures.sh --host && cd app-android/vela-wallet && ./gradlew testDebugUnitTest` (JAVA_HOME = Android Studio JBR)
   - `node scripts/check-android-dropped-judgement.mjs && node scripts/check-android-event-parity.mjs`
   - `node scripts/check-event-payloads.mjs` reports no Android mismatch (the T047 red is gone for Android)
