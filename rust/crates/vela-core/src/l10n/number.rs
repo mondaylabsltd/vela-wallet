@@ -278,6 +278,73 @@ pub fn format_token_amount(value: f64, preset: NumberPreset, compact: bool) -> S
     }
 }
 
+/// A signed balance change, from a signed base-unit **string**: `−8,450.00`,
+/// `+2.1`, `−0.000000000000001` (spec 082 RJ15, G49).
+///
+/// - `None` for a zero delta (a row that changes nothing is never drawn) and
+///   for text that is not an optionally signed run of ASCII digits (a wrong
+///   number is worse than none);
+/// - otherwise the [`format_token_amount`] ladder (not compact), except that
+///   a non-zero delta the ladder would print as `0` is written **exactly** —
+///   `delta / 10^decimals`, trailing zeros trimmed, in the preset's marks (the
+///   RC5 scaling) — so 1000 wei never reads `−0`;
+/// - the minus is U+2212, as everywhere money is negative in this app; the
+///   plus is written.
+///
+/// The exact form never routes through a float; the ladder's rounding does,
+/// as it does for every other token figure.
+#[must_use]
+pub fn format_signed_token_amount(
+    delta_base_units: &str,
+    decimals: u32,
+    preset: NumberPreset,
+) -> Option<String> {
+    let text = delta_base_units.trim();
+    let (negative, digits) = if let Some(rest) = text.strip_prefix('-') {
+        (true, rest)
+    } else if let Some(rest) = text.strip_prefix('\u{2212}') {
+        (true, rest)
+    } else if let Some(rest) = text.strip_prefix('+') {
+        (false, rest)
+    } else {
+        (false, text)
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let digits = digits.trim_start_matches('0');
+    if digits.is_empty() {
+        return None;
+    }
+    let places = usize::try_from(decimals).ok()?;
+    let (whole, frac) = if digits.len() <= places {
+        ("0".to_owned(), format!("{digits:0>places$}"))
+    } else {
+        let split = digits.len() - places;
+        (digits[..split].to_owned(), digits[split..].to_owned())
+    };
+    let frac = frac.trim_end_matches('0');
+    let plain = if frac.is_empty() {
+        whole.clone()
+    } else {
+        format!("{whole}.{frac}")
+    };
+    let value = plain.parse::<f64>().ok()?;
+    let ladder = format_token_amount(value, preset, false);
+    let body = if ladder == "0" {
+        let grouped = group_digits(&whole, preset);
+        if frac.is_empty() {
+            grouped
+        } else {
+            format!("{grouped}{}{frac}", preset.separators().decimal)
+        }
+    } else {
+        ladder
+    };
+    let sign = if negative { '\u{2212}' } else { '+' };
+    Some(format!("{sign}{body}"))
+}
+
 /// Normalise a user-typed, locale-formatted amount into a **canonical** numeric
 /// string — ASCII digits, `.` decimal, no grouping — that a bigint parser can take.
 ///
@@ -313,5 +380,66 @@ pub fn parse_locale_number(text: &str, preset: NumberPreset) -> String {
         stripped
     } else {
         stripped.replace(sep.decimal, ".")
+    }
+}
+
+#[cfg(test)]
+mod signed_amount_tests {
+    use super::{format_signed_token_amount, NumberPreset};
+
+    const CD: NumberPreset = NumberPreset::CommaDot;
+
+    #[test]
+    fn dust_is_written_exactly_and_never_as_minus_zero() {
+        assert_eq!(
+            format_signed_token_amount("-1000", 18, CD).as_deref(),
+            Some("\u{2212}0.000000000000001")
+        );
+        assert_eq!(
+            format_signed_token_amount("-1", 18, CD).as_deref(),
+            Some("\u{2212}0.000000000000000001")
+        );
+        assert_eq!(
+            format_signed_token_amount("-1000000000000000", 18, CD).as_deref(),
+            Some("\u{2212}0.001")
+        );
+    }
+
+    #[test]
+    fn zero_is_never_drawn() {
+        for zero in ["0", "-0", "+0", "000", "\u{2212}0"] {
+            assert_eq!(format_signed_token_amount(zero, 18, CD), None, "{zero:?}");
+        }
+    }
+
+    #[test]
+    fn a_positive_delta_carries_its_plus() {
+        assert_eq!(
+            format_signed_token_amount("+2100000000000000000", 18, CD).as_deref(),
+            Some("+2.1")
+        );
+        assert_eq!(
+            format_signed_token_amount("2100000000000000000", 18, CD).as_deref(),
+            Some("+2.1")
+        );
+        assert_eq!(
+            format_signed_token_amount("5", 0, CD).as_deref(),
+            Some("+5")
+        );
+    }
+
+    #[test]
+    fn a_uint256_sized_dust_never_overflows() {
+        let huge = format!("-{}", "9".repeat(80));
+        let out = format_signed_token_amount(&huge, 18, CD).unwrap_or_default();
+        assert!(out.starts_with('\u{2212}'), "{out}");
+    }
+
+    #[test]
+    fn the_exact_form_speaks_the_preset() {
+        assert_eq!(
+            format_signed_token_amount("-1000", 18, NumberPreset::SpaceComma).as_deref(),
+            Some("\u{2212}0,000000000000001")
+        );
     }
 }
